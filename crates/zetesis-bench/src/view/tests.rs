@@ -1,15 +1,44 @@
 //! Human views retain the distinctions in typed workload identities.
-use crate::test_writer::BoundedWriter;
 use std::{collections::BTreeMap, io, num::NonZeroUsize};
 use zetesis_presentation::{ColorMode, Layout};
+use zetesis_test_support::io::BoundedWriter;
 use zetesis_validation::{
     examples,
     performance::{matrix, series},
     selected::NativeExecution,
 };
 
-#[path = "benchmark_reports.rs"]
-mod reports;
+/// The published-report samples in `tests/fixtures/`, and the cases and
+/// native profiles they measure. No measurement or solver process runs.
+mod reports {
+    use serde_json::Value;
+    use std::num::NonZeroUsize;
+    use zetesis_validation::selected::{Grounder, NativeExecution};
+
+    pub(super) const CASES: [&str; 2] = ["generated/choice-2.lp", "generated/cycle-2.lp"];
+
+    pub(super) fn profiles() -> [NativeExecution; 2] {
+        [1, 4].map(|workers| NativeExecution {
+            grounder: Grounder::Auto,
+            workers: NonZeroUsize::new(workers).unwrap(),
+            completion_workers: NonZeroUsize::MIN,
+            batch_size: NonZeroUsize::new(64).unwrap(),
+            ..NativeExecution::default()
+        })
+    }
+
+    /// The earlier report has one timed-out cell for each native profile. Its
+    /// later positions remain unattempted; the view must never turn their
+    /// capture durations into a successful timing population. The later report
+    /// passes every cell.
+    pub(super) fn reports() -> [Value; 2] {
+        [
+            include_str!("../../tests/fixtures/earlier-report.json"),
+            include_str!("../../tests/fixtures/later-report.json"),
+        ]
+        .map(|report| serde_json::from_str(report).unwrap())
+    }
+}
 
 fn layout(color: ColorMode) -> Layout {
     Layout::new(NonZeroUsize::new(1024).unwrap(), color)

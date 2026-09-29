@@ -7,7 +7,6 @@ use zetesis_validation::performance::{
 };
 
 #[cfg(test)]
-#[path = "../tests/support/benchmark_views.rs"]
 mod tests;
 
 pub(super) fn comparison(

@@ -4,12 +4,18 @@ use clap::Parser as _;
 use std::{io, num::NonZeroUsize, path::Path};
 use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand, Completion, Error};
 use zetesis_presentation::{ColorMode, Layout};
+use zetesis_test_support::io::BoundedWriter;
 use zetesis_validation::performance::series::{ReadError, ViewError};
 
-#[path = "support/benchmark_reports.rs"]
-mod reports;
-#[path = "support/bounded_writer.rs"]
-mod bounded_writer;
+/// The published-report samples: an earlier report with one timed-out cell for
+/// each native profile, and a later one that passes every cell.
+fn reports() -> [serde_json::Value; 2] {
+    [
+        include_str!("../fixtures/earlier-report.json"),
+        include_str!("../fixtures/later-report.json"),
+    ]
+    .map(|report| serde_json::from_str(report).unwrap())
+}
 
 fn command(directory: &Path, records: &[serde_json::Value; 2], retain: bool) -> BenchCommand {
     with_options(directory, records, retain, &[])
@@ -58,7 +64,7 @@ fn execute(command: &BenchCommand, output: &mut impl io::Write) -> Result<Comple
 #[test]
 fn default_comparison_preserves_nonpassing_campaigns() {
     let directory = tempfile::tempdir().unwrap();
-    let command = command(directory.path(), &reports::reports(), false);
+    let command = command(directory.path(), &reports(), false);
     assert!(!command.json());
     assert_eq!(command.color(), ColorMode::Auto);
     let mut output = Vec::new();
@@ -101,7 +107,7 @@ fn default_comparison_preserves_nonpassing_campaigns() {
 
 #[test]
 fn a_clingo_free_report_shows_clingo_as_not_run() {
-    let [before, mut after] = reports::reports();
+    let [before, mut after] = reports();
     // As a clingo-free campaign writes it: no reference samples, no clingo
     // seal, and the policy recorded as clingo-free.
     after["report"]["plan"]["reference_policy"] = serde_json::json!("clingo_free");
@@ -133,7 +139,7 @@ fn a_clingo_free_report_shows_clingo_as_not_run() {
 #[test]
 fn human_comparison_retains_the_typed_report() {
     let directory = tempfile::tempdir().unwrap();
-    let command = command(directory.path(), &reports::reports(), true);
+    let command = command(directory.path(), &reports(), true);
     let BenchCommand::Compare(options) = &command else {
         panic!("expected comparison")
     };
@@ -154,7 +160,7 @@ fn human_comparison_retains_the_typed_report() {
 #[test]
 fn comparison_does_not_overwrite_retained_evidence() {
     let directory = tempfile::tempdir().unwrap();
-    let command = command(directory.path(), &reports::reports(), true);
+    let command = command(directory.path(), &reports(), true);
     let path = directory.path().join("comparison.json");
     let evidence = b"an earlier report must remain byte-exact\n";
     std::fs::write(&path, evidence).unwrap();
@@ -168,12 +174,12 @@ fn comparison_does_not_overwrite_retained_evidence() {
 #[test]
 fn human_writer_failure_preserves_retained_comparison() {
     let directory = tempfile::tempdir().unwrap();
-    let command = command(directory.path(), &reports::reports(), true);
+    let command = command(directory.path(), &reports(), true);
     let BenchCommand::Compare(options) = &command else {
         panic!("expected comparison")
     };
     let expected = benchmark::compare(options).unwrap();
-    let mut output = bounded_writer::BoundedWriter::new(64);
+    let mut output = BoundedWriter::new(64);
     let error = execute(&command, &mut output).unwrap_err();
     assert!(matches!(error, Error::Io(ref error) if error.kind() == io::ErrorKind::BrokenPipe));
     let retained: serde_json::Value =
@@ -188,7 +194,7 @@ fn human_writer_failure_preserves_retained_comparison() {
 #[test]
 fn incompatible_workloads_refuse_before_publication() {
     let directory = tempfile::tempdir().unwrap();
-    let mut records = reports::reports();
+    let mut records = reports();
     records[1]["report"]["cases"][1] = serde_json::json!("generated/a-different-cycle.lp");
     let command = command(directory.path(), &records, true);
     let mut output = Vec::new();
@@ -206,7 +212,7 @@ fn incompatible_workloads_refuse_before_publication() {
 #[test]
 fn the_tables_show_each_report_against_clingo() {
     let directory = tempfile::tempdir().unwrap();
-    let command = command(directory.path(), &reports::reports(), false);
+    let command = command(directory.path(), &reports(), false);
     let mut output = Vec::new();
     execute(&command, &mut output).unwrap();
     let rows: Vec<_> = String::from_utf8(output)
@@ -231,12 +237,7 @@ fn the_tables_show_each_report_against_clingo() {
 #[test]
 fn markdown_is_the_series_view_of_the_comparison() {
     let directory = tempfile::tempdir().unwrap();
-    let command = with_options(
-        directory.path(),
-        &reports::reports(),
-        false,
-        &["--markdown"],
-    );
+    let command = with_options(directory.path(), &reports(), false, &["--markdown"]);
     let BenchCommand::Compare(options) = &command else {
         panic!("expected comparison")
     };

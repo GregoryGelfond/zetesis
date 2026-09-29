@@ -17,10 +17,6 @@ mod process;
 mod run;
 mod view;
 
-#[cfg(test)]
-#[path = "../tests/support/bounded_writer.rs"]
-mod test_writer;
-
 use clap::{Args, Parser, Subcommand};
 use std::{fmt, io, sync::atomic::AtomicBool};
 use zetesis_presentation::{ColorMode, Layout, TrackedWriter};

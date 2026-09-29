@@ -2,6 +2,7 @@
 use clap::Parser as _;
 use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand, RunOptions};
 use zetesis_presentation::Layout;
+use zetesis_test_support::io::Closed;
 
 fn command(arguments: &[&str]) -> BenchCommand {
     Cli::try_parse_from(
@@ -257,18 +258,9 @@ fn cancelled_run_publishes_unattempted_positions() {
 
 #[test]
 fn failed_failure_publication_retains_preparation() {
-    struct Refuse;
-    impl std::io::Write for Refuse {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("failure sink refused"))
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
     let command = command(&["compare", "not-labelled", "--json"]);
     let Err(benchmark::Error::Reporting { primary, secondary }) =
-        benchmark::execute(&command, Layout::default(), &mut Refuse, &mut Vec::new())
+        benchmark::execute(&command, Layout::default(), &mut Closed, &mut Vec::new())
     else {
         panic!("both failures must survive")
     };

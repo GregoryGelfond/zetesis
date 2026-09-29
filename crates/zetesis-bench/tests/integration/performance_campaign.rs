@@ -8,14 +8,13 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use zetesis_test_support::fixtures::{PHASE_STATISTICS, STAGE_STATISTICS};
 use zetesis_validation::{
     examples,
     performance::{self, Case, Decision, Phase, Producer, Schedule, Suite},
 };
 
-#[path = "support/comparison_extensions.rs"]
 mod comparison_extensions;
-#[path = "support/comparison_memory_exits.rs"]
 mod comparison_memory_exits;
 
 struct Fixture {
@@ -50,11 +49,7 @@ impl Fixture {
         let diagnostics = directory.path().join("statistics.txt");
         fs::write(
             &diagnostics,
-            format!(
-                "{}{}",
-                include_str!("support/phase_statistics.txt"),
-                include_str!("support/stage_statistics.txt")
-            ),
+            format!("{PHASE_STATISTICS}{STAGE_STATISTICS}"),
         )
         .unwrap();
         let mut native_script =
@@ -738,7 +733,7 @@ fn a_phase_record_does_not_substitute_for_exclusive_stages() {
     let fixture = Fixture::new("", |_| {});
     fs::write(
         fixture.directory.path().join("statistics.txt"),
-        include_bytes!("support/phase_statistics.txt"),
+        PHASE_STATISTICS,
     )
     .unwrap();
     let report = fixture.run();
@@ -819,7 +814,7 @@ fn the_default_schedule_preserves_the_qualified_baseline() {
     // Exact slot sequence extracted from the sealed ordinary CPU report whose
     // decompressed SHA-256 is f420be5da474025b194fd0c2fa3f455a74307afd6b6cfca61891643af6d93d03.
     let expected: Value =
-        serde_json::from_str(include_str!("support/baseline_schedule.json")).unwrap();
+        serde_json::from_str(include_str!("../fixtures/baseline_schedule.json")).unwrap();
     let schedule = Schedule::default();
     assert_eq!(serde_json::to_value(schedule.slots()).unwrap(), expected);
     assert_eq!(

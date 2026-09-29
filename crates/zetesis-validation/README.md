@@ -231,7 +231,7 @@ explicit selections; `Schedule::with_memory` appends the separate population.
 only for resource samples. They own bounded acquisition and separate
 report publication. See [performance](src/performance.rs),
 [matrix scheduling](tests/integration/matrix_schedule.rs) and
-[matrix accounting](../zetesis-bench/tests/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
+[matrix accounting](../zetesis-bench/tests/integration/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
 documents reproducible commands, limits and protocol boundaries.
 
 ### Derive explicit parameter workloads
@@ -278,7 +278,7 @@ source/metadata ceilings. Each launched private source closure is sealed before
 and after execution. Derived-workload reports use matrix schema 2; unchanged
 suite reports retain schema 1. No first-answer phase is added by this entry
 point; memory rounds follow the plan when requested. See [workload admission](tests/integration/workload_admission.rs) and
-[matrix acquisition](../zetesis-bench/tests/matrix_campaign.rs) for checked library usage.
+[matrix acquisition](../zetesis-bench/tests/integration/matrix_campaign.rs) for checked library usage.
 The [manual's runnable client](../../docs/book/reference/measurement-protocols.md#compare-a-parameterized-workload)
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
@@ -431,7 +431,7 @@ Maintained tests include [capture](tests/integration/process_capture.rs),
 [clean examples](tests/integration/example_corpus.rs),
 [reported answers](tests/integration/reported_answers.rs),
 [selected runs](tests/integration/selected_campaign.rs) and
-[ordinary timing](../zetesis-bench/tests/performance_campaign.rs).
+[ordinary timing](../zetesis-bench/tests/integration/performance_campaign.rs).
 The [outcome guide](../../docs/book/rust/outcomes.md) explains the corresponding
 semantic distinctions on the solver side.
 
