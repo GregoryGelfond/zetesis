@@ -278,20 +278,36 @@ fn recursive_not_equal_coalesced_tuples_and_extreme_values_match_clingo() {
     }
 }
 
+/// The endpoint probes the README cites as evidence: each case's source, its
+/// exact family, clingo 5.8.2's observed family and their classification.
+const BOUNDARIES: &str = include_str!("../fixtures/extrema-clingo-5.8.2-boundaries.json");
+
 #[test]
 #[ignore = "characterizes six known clingo 5.8.2 endpoint mismatches; these are NOT equivalence passes"]
 fn known_clingo_integer_endpoint_gaps_are_reported_separately() {
-    let exact = Models::from([BTreeSet::new(), BTreeSet::from(["p".to_owned()])]);
-    let observed = Models::from([BTreeSet::from(["p".to_owned()])]);
-    for (extremum, name, weight, comparison, operator) in [
-        (Extremum::Min, "min", i32::MIN, Comparison::Ne, "!="),
-        (Extremum::Min, "min", i32::MAX, Comparison::Ne, "!="),
-        (Extremum::Max, "max", i32::MIN, Comparison::Ne, "!="),
-        (Extremum::Max, "max", i32::MAX, Comparison::Ne, "!="),
-        (Extremum::Min, "min", i32::MAX, Comparison::Gt, ">"),
-        (Extremum::Max, "max", i32::MIN, Comparison::Lt, "<"),
-    ] {
-        let source = format!("p :- #{name} {{{weight},k:not p}} {operator} {weight}.");
+    let record: serde_json::Value = serde_json::from_str(BOUNDARIES).unwrap();
+    let gaps: Vec<_> = record["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["classification"] == "known_mismatch")
+        .collect();
+    assert_eq!(gaps.len(), 6);
+    assert_eq!(record["known_mismatches"], 6);
+    for case in gaps {
+        let source = case["source"].as_str().unwrap();
+        let (extremum, _) = EXTREMA
+            .into_iter()
+            .find(|(_, name)| case["function"] == *name)
+            .unwrap();
+        let (comparison, _) = COMPARISONS
+            .into_iter()
+            .find(|(_, operator)| case["comparison"] == *operator)
+            .unwrap();
+        let weight = i32::try_from(case["weight"].as_i64().unwrap()).unwrap();
+        let guard = i32::try_from(case["guard"].as_i64().unwrap()).unwrap();
+        let exact = recorded(&case["exact_models"]);
+        let observed = recorded(&case["observed_models"]);
         assert_eq!(
             native(
                 &[Element {
@@ -300,20 +316,38 @@ fn known_clingo_integer_endpoint_gaps_are_reported_separately() {
                 }],
                 extremum,
                 comparison,
-                weight.into(),
+                guard.into(),
                 0,
                 false
             ),
-            exact
+            exact,
+            "{source}"
         );
         assert_eq!(
-            clingo(&source),
+            clingo(source),
             observed,
             "The recorded oracle boundary changed; reassess this known compatibility gap: {source}"
         );
         assert_ne!(exact, observed);
-        eprintln!("KNOWN COMPATIBILITY GAP: {source} exact={{empty, p}}, clingo5.8.2={{p}}");
+        eprintln!("KNOWN COMPATIBILITY GAP: {source} exact={exact:?}, clingo5.8.2={observed:?}");
     }
+}
+
+/// A family of models as the boundary record spells it.
+fn recorded(models: &serde_json::Value) -> Models {
+    models
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|model| {
+            model
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|atom| atom.as_str().unwrap().to_owned())
+                .collect()
+        })
+        .collect()
 }
 
 #[test]

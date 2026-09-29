@@ -495,8 +495,9 @@ integer wraparound has been introduced to imitate the observation.
 [The boundary evidence](tests/fixtures/extrema-clingo-5.8.2-boundaries.json)
 retains all 24 endpoint/comparison probes, their exact source, raw clingo output,
 ground text and separate equivalence/mismatch classification.
-`known_clingo_integer_endpoint_gaps_are_reported_separately` checks the six
-observations and requires reassessment if the oracle changes.
+`known_clingo_integer_endpoint_gaps_are_reported_separately` reads the six known
+mismatches from that record, checks each family against the kernel and against
+clingo, and requires reassessment if the oracle changes.
 
 A frontend promising clingo compatibility must refuse evaluated numeric min/max
 guards at `i32::MIN` and `i32::MAX` until an explicit compatibility policy is

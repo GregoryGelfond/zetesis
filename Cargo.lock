@@ -1877,6 +1877,7 @@ version = "0.1.5"
 dependencies = [
  "criterion",
  "proptest",
+ "serde_json",
  "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-cpu",
