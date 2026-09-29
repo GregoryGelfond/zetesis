@@ -71,10 +71,10 @@ pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Fo
 /// limits.
 ///
 /// # Panics
-/// Panics if the admission refuses `source`.
+/// Panics, naming `source` and the refusal, if the admission refuses it.
 #[must_use]
 pub fn formula(source: &str) -> AdmittedFormula {
-    admit(source, &FormulaLimits::default()).expect("admitted test formula")
+    admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 /// Every answer set of `input`, each with its objective's costs: every subset
