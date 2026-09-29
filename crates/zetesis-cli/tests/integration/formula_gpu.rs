@@ -21,9 +21,6 @@ use crate::support::bound_priority_sources;
 #[cfg(feature = "gpu")]
 use crate::support::finite_carrier_sources;
 
-#[cfg(feature = "gpu")]
-use crate::support::bounded_writer;
-
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
         ["zetesis", "--models", "0"]
@@ -542,7 +539,7 @@ mod physical {
         assert_eq!(report.checked, 0);
         assert_eq!(report.formula_execution.unwrap().gpu_batches, 0);
         let mut output = Vec::new();
-        let mut broken = super::bounded_writer::BoundedWriter::new(0);
+        let mut broken = zetesis_test_support::io::BoundedWriter::new(0);
         let error = run_with_diagnostics(
             source.into(),
             &options(&["--backend", backend.argument(), "--oracle", "countermodel"]),

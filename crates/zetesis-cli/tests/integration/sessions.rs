@@ -16,6 +16,7 @@ use zetesis_cli::{
 };
 use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::{CLOSED, Closed};
 use zetesis_themelios::{
     AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
     admit_formula,
@@ -475,16 +476,6 @@ fn empty_exhausted_search_establishes_unsatisfiability() {
     assert!(session.outcome().unwrap().unsatisfiable());
 }
 
-struct Closed;
-impl Write for Closed {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed"))
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
 fn failed_publication_preserves_established_optimum() {
     let failure = run_finalized_with_diagnostics(
@@ -558,7 +549,7 @@ fn reporting_failures_remain_separately_observable() {
     .unwrap_err();
     assert!(output.0.is_empty(), "the complete JSON header was accepted");
     assert!(matches!(*failure.cause, RunError::Expansion(_)));
-    assert_eq!(failure.diagnostics_failure().unwrap().to_string(), "closed");
+    assert_eq!(failure.diagnostics_failure().unwrap().to_string(), CLOSED);
     assert_eq!(
         failure.summary_failure().unwrap().to_string(),
         "summary closed"

@@ -1,17 +1,15 @@
 //! Opt-in stderr statistics preserve answer records and truthful completion.
 
-use crate::support::bounded_writer;
-
 use std::fmt::Write as _;
 use std::io;
 use std::path::PathBuf;
 
-use bounded_writer::BoundedWriter;
 use clap::Parser;
 use zetesis_cli::{
     Completion, Options, Report, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 fn options(arguments: &[&str]) -> Options {

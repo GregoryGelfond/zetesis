@@ -1,6 +1,5 @@
 //! Publication failures retain semantic evidence from real CPU completion batches.
 
-use crate::test_writer::BoundedWriter;
 use crate::{Completion, Options, PublicationFailure, RunError, run_finalized_with_diagnostics};
 use clap::Parser;
 use std::{
@@ -8,6 +7,7 @@ use std::{
     num::NonZeroUsize,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([

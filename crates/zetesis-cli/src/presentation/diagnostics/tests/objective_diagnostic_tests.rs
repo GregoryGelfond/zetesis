@@ -6,8 +6,8 @@
 use std::io::{self, Write};
 
 use crate::presentation::Diagnostics;
-use crate::test_writer::BoundedWriter;
 use crate::{ColorMode, ExecutionObservation, ExecutionObserver};
+use zetesis_test_support::io::{BoundedWriter, FULL};
 
 #[derive(Clone, Copy)]
 enum Refusal {
@@ -57,7 +57,7 @@ fn every_truncation(refusal: Refusal) {
         let mut sink = BoundedWriter::new(capacity);
         let error = refusal.render(&mut sink).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
-        assert_eq!(error.to_string(), "diagnostic sink closed");
+        assert_eq!(error.to_string(), FULL);
         assert_eq!(sink.bytes(), &reference[..capacity]);
     }
 }

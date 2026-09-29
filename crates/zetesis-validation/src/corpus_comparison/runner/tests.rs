@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use crate::corpus_comparison::corpus::{Case, Contract, Loaded, Manifest};
 use crate::corpus_comparison::{NativeOracle, Request as Options};
 use zetesis_backend::{Backend, GpuApi};
+use zetesis_test_support::io::Closed;
 
 const NATIVE: &str = "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n";
 const PHASE_TIMINGS: &str = include_str!("../../../tests/support/phase_statistics.txt");
@@ -1021,24 +1022,12 @@ fn run(request: &Options, loaded: &Loaded) -> (Value, bool) {
 
 #[test]
 fn progress_write_failure_does_not_change_acceptance() {
-    struct ClosedOutput;
-    impl Write for ClosedOutput {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "closed progress view",
-            ))
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
     let directory = tempfile::tempdir().unwrap();
     let options = options(directory.path());
     let loaded = loaded(directory.path(), 94);
     let mut failures = Vec::new();
     let report = super::run(&options, loaded, |case| {
-        if let Err(error) = ClosedOutput.write_all(case.path().as_bytes()) {
+        if let Err(error) = Closed.write_all(case.path().as_bytes()) {
             failures.push(error.kind());
         }
     });

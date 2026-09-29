@@ -5,6 +5,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 use clap::Parser;
 use zetesis_cli::{Backend, Command, Completion, Options, Report, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::Closed;
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(["zetesis"].into_iter().chain(arguments.iter().copied())).unwrap()
@@ -81,21 +82,12 @@ fn diagnostics_are_written_apart_from_the_models() {
 
 #[test]
 fn diagnostics_failure_is_propagated_before_model_output() {
-    struct Broken;
-    impl std::io::Write for Broken {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::ErrorKind::BrokenPipe.into())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
     let mut models = Vec::new();
     let error = run_with_diagnostics(
         "a.".into(),
         &options(&["--backend", "cpu"]),
         &mut models,
-        &mut Broken,
+        &mut Closed,
         &Cancellation::default(),
     )
     .unwrap_err();

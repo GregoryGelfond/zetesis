@@ -8,6 +8,8 @@ use std::{
 
 pub const TABLE: &str = include_str!("../../support/physical-selection.txt");
 pub const VULKAN_TABLE: &str = include_str!("../../support/physical-selection-vulkan.txt");
+/// The sources every coverage report skips: the test-support crates.
+const SUPPORT_SOURCES: &str = "/crates/zetesis-test-support/";
 pub struct Fixture {
     pub directory: tempfile::TempDir,
 }
@@ -237,7 +239,14 @@ impl Fixture {
         if mode == "gate" {
             expected.push(call(
                 "workspace",
-                strings(&["report", "--locked", "--fail-under-lines", floor]),
+                strings(&[
+                    "report",
+                    "--locked",
+                    "--ignore-filename-regex",
+                    SUPPORT_SOURCES,
+                    "--fail-under-lines",
+                    floor,
+                ]),
             ));
             expected.push(call(
                 "cli-cpu",
@@ -248,6 +257,8 @@ impl Fixture {
                     "--package",
                     "zetesis-solve",
                     "--locked",
+                    "--ignore-filename-regex",
+                    SUPPORT_SOURCES,
                     "--fail-under-lines",
                     floor,
                 ]),
@@ -338,6 +349,8 @@ fn report(profile: &str, directory: &Path, html: bool) -> Value {
     }
     args.extend(strings(&[
         "--locked",
+        "--ignore-filename-regex",
+        SUPPORT_SOURCES,
         if html { "--html" } else { "--json" },
         if html {
             "--output-dir"

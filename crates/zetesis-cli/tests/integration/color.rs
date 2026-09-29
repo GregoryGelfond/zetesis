@@ -1,6 +1,6 @@
 //! Styling changes human presentation without changing semantic/publication evidence.
 
-use std::io::{self, Write};
+use std::io;
 use std::process::{Command, Stdio};
 
 use clap::Parser;
@@ -9,6 +9,7 @@ use zetesis_cli::{
     run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 
 /// One worker: the bytes of two runs are compared, and several walkers of
 /// the region tree deliver models in the schedule's order.
@@ -220,10 +221,7 @@ fn partial_status_output_cannot_acknowledge_summary() {
         let start = complete.find("\u{1b}[1;3;90m").unwrap();
         let end = complete[start..].find('\n').unwrap() + start + 1;
         for maximum in start..end {
-            let mut prefix = Prefix {
-                maximum,
-                bytes: Vec::new(),
-            };
+            let mut prefix = BoundedWriter::new(maximum);
             let failure = run_finalized_with_diagnostics(
                 source.into(),
                 &settings,
@@ -238,7 +236,7 @@ fn partial_status_output_cannot_acknowledge_summary() {
                 Some(Completion::Exhausted)
             );
             assert!(!failure.publication().unwrap().summary());
-            assert_eq!(prefix.bytes, complete.as_bytes()[..maximum]);
+            assert_eq!(prefix.bytes(), &complete.as_bytes()[..maximum]);
         }
     }
 }
@@ -268,25 +266,6 @@ fn styling_bytes_obey_the_complete_record_limit() {
     assert_eq!(failure.partial_report.unwrap().published_models, 0);
 }
 
-struct Prefix {
-    maximum: usize,
-    bytes: Vec<u8>,
-}
-
-impl Write for Prefix {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let count = bytes.len().min(self.maximum - self.bytes.len());
-        if count == 0 && !bytes.is_empty() {
-            return Err(io::ErrorKind::BrokenPipe.into());
-        }
-        self.bytes.extend_from_slice(&bytes[..count]);
-        Ok(count)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
 fn interrupted_styled_records_are_not_published_models() {
     let settings = options(&["--color", "always"]);
@@ -295,10 +274,7 @@ fn interrupted_styled_records_are_not_published_models() {
     let marker = "Optimization: 2\u{1b}[0m\n";
     let record_end = complete.find(marker).unwrap() + marker.len();
     for maximum in 0..record_end {
-        let mut prefix = Prefix {
-            maximum,
-            bytes: Vec::new(),
-        };
+        let mut prefix = BoundedWriter::new(maximum);
         let failure = run_detailed_with_diagnostics(
             source.into(),
             &settings,
@@ -309,7 +285,7 @@ fn interrupted_styled_records_are_not_published_models() {
         .unwrap_err();
         assert!(matches!(*failure.cause, RunError::Output(_)));
         assert_eq!(failure.partial_report.unwrap().published_models, 0);
-        assert_eq!(prefix.bytes, complete.as_bytes()[..maximum]);
+        assert_eq!(prefix.bytes(), &complete.as_bytes()[..maximum]);
     }
 }
 

@@ -1,7 +1,6 @@
 //! Helpers shared by the integration test modules.
 
 pub(crate) mod bound_priority_sources;
-pub(crate) mod bounded_writer;
 pub(crate) mod clingo_report;
 pub(crate) mod contribution_sources;
 pub(crate) mod count_objective_sources;

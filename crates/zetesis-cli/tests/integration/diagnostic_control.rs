@@ -1,13 +1,11 @@
 //! Admission cancellation and optional-pruning diagnostics remain fallible.
 
-use crate::support::bounded_writer;
-
 use std::io;
 
-use bounded_writer::BoundedWriter;
 use clap::Parser;
 use zetesis_cli::{Completion, Interruption, Options, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::{BoundedWriter, FULL};
 use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -89,7 +87,7 @@ fn real_optional_plan_and_bound_refusals_propagate_diagnostic_writer_errors() {
                 panic!("expected output failure: {error}");
             };
             assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
-            assert_eq!(error.to_string(), "diagnostic sink closed");
+            assert_eq!(error.to_string(), FULL);
             assert_eq!(diagnostics.bytes(), &complete[..capacity]);
             let output = String::from_utf8(output).unwrap();
             assert!(!output.contains("OPTIMUM FOUND"));

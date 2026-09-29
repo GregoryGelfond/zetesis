@@ -339,16 +339,6 @@ mod physical {
         assert_eq!(value["outcome"]["status"], "incomplete");
     }
 
-    struct BrokenWriter;
-    impl std::io::Write for BrokenWriter {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("injected model sink failure"))
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
     #[test]
     #[ignore = "requires physical Metal through the ordinary lazy solver"]
     fn lazy_writer_failure_preserves_completed_device_work() {
@@ -371,7 +361,7 @@ mod physical {
                 "3",
                 "--stats",
             ]),
-            &mut BrokenWriter,
+            &mut zetesis_test_support::io::Closed,
             &mut Vec::new(),
             &Cancellation::default(),
         )

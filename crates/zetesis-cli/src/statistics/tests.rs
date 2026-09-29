@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use clap::Parser;
 
-use crate::test_writer::BoundedWriter;
 use crate::{
     Backend, Completion, Options, PublicationFailure, Report, RunError,
     run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::{BoundedWriter, FULL};
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
@@ -62,11 +62,7 @@ fn every_prefix(options: &Options, outcome: &Result<Report, PublicationFailure>)
         let error =
             super::write_detailed(&mut sink, options, outcome.as_ref(), elapsed).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe, "cut {capacity}");
-        assert_eq!(
-            error.to_string(),
-            "diagnostic sink closed",
-            "cut {capacity}"
-        );
+        assert_eq!(error.to_string(), FULL, "cut {capacity}");
         assert_eq!(sink.bytes(), &reference[..capacity], "cut {capacity}");
     }
     for capacity in [reference.len(), reference.len() + 1] {

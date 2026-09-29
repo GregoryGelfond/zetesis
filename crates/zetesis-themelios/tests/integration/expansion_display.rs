@@ -6,6 +6,7 @@ use themelios_base::{
     source::SourceId,
     span::{ByteOffset, Location, Span},
 };
+use zetesis_test_support::io::BoundedText;
 use zetesis_themelios::ExpansionFailure;
 
 fn cycle(names: &[&str]) -> ExpansionFailure {
@@ -34,33 +35,16 @@ fn constant_cycle_rendering_preserves_order() {
 
 #[test]
 fn constant_cycle_rendering_respects_the_byte_ceiling() {
-    struct Bounded {
-        text: String,
-        maximum: usize,
-    }
-    impl Write for Bounded {
-        fn write_str(&mut self, text: &str) -> fmt::Result {
-            if text.len() > self.maximum - self.text.len() {
-                return Err(fmt::Error);
-            }
-            self.text.push_str(text);
-            Ok(())
-        }
-    }
-
     let failure = cycle(&["alpha", "β雪", "alpha"]);
     let expected = "constant dependency cycle: alpha -> β雪 -> alpha";
     for maximum in [expected.len() - 1, expected.len()] {
-        let mut sink = Bounded {
-            text: String::new(),
-            maximum,
-        };
+        let mut sink = BoundedText::new(maximum);
         let result = write!(sink, "{failure}");
         assert_eq!(result.is_ok(), maximum == expected.len());
-        assert!(sink.text.len() <= maximum);
-        assert!(expected.starts_with(&sink.text));
+        assert!(sink.text().len() <= maximum);
+        assert!(expected.starts_with(sink.text()));
         if result.is_ok() {
-            assert_eq!(sink.text, expected);
+            assert_eq!(sink.text(), expected);
         }
     }
 }

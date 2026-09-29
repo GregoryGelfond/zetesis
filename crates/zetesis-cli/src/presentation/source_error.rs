@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn every_diagnostic_prefix_preserves_writer_failure() {
-        use crate::test_writer::BoundedWriter;
+        use zetesis_test_support::io::BoundedWriter;
 
         let source = "failed\nerror[syntax::expected]: token\n --> demo.lp:1:1\n1 | a\n  | ^\n  = help: fix\n";
         for mode in [ColorMode::Never, ColorMode::Always] {
@@ -278,8 +278,8 @@ mod tests {
 
     #[test]
     fn sink_failure_stops_rendering_remaining_diagnostics() {
-        use crate::test_writer::BoundedWriter;
         use std::{cell::Cell, fmt};
+        use zetesis_test_support::io::BoundedWriter;
 
         struct Many<'a>(&'a Cell<usize>);
         impl fmt::Display for Many<'_> {

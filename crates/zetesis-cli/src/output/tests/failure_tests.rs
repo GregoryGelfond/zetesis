@@ -2,10 +2,10 @@
 
 use super::document_fixture::Document;
 use super::{Buffer, input_failure, write_interruption};
-use crate::test_writer::BoundedWriter;
 use crate::{Interruption, Options, RunError};
 use clap::Parser;
 use std::io::{self, Write};
+use zetesis_test_support::io::BoundedWriter;
 
 #[test]
 fn displayed_diagnostics_preserve_json_escaping() {

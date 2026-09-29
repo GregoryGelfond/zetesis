@@ -9,8 +9,7 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 
-use crate::support::bounded_writer;
-use bounded_writer::BoundedWriter;
+use zetesis_test_support::io::BoundedWriter;
 
 /// The batched completion and its pool belong to the clause search; the
 /// region walk decides its leaves in its workers.

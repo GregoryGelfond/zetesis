@@ -12,8 +12,7 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-use crate::support::bounded_writer;
-use bounded_writer::BoundedWriter;
+use zetesis_test_support::io::BoundedWriter;
 
 fn options(mode: ColorMode) -> Options {
     let mut options = Options::try_parse_from([

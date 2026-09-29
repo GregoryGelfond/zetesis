@@ -1,16 +1,14 @@
 //! Successful formula warnings use the source palette and a separate fallible sink.
 
-use crate::support::bounded_writer;
-
 use std::{fs, io};
 
-use bounded_writer::BoundedWriter;
 use clap::Parser;
 use zetesis_cli::{
     ColorMode, Completion, Grounder, Options, Oracle, RunError, run_bundle_with_diagnostics,
     run_finalized_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 const SOURCE: &str = "d(0..2).\np(X) :- d(X), 1/X=1.\n";

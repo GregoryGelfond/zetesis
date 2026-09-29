@@ -11,6 +11,7 @@ use zetesis_cli::{
     Completion, Options, Report, RunError, RunFailure, run_detailed_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -529,26 +530,6 @@ fn completion_statistics_retain_worker_request() {
     );
 }
 
-struct PrefixWriter {
-    capacity: usize,
-    bytes: Vec<u8>,
-}
-impl Write for PrefixWriter {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let count = bytes
-            .len()
-            .min(self.capacity.saturating_sub(self.bytes.len()));
-        if count == 0 && !bytes.is_empty() {
-            return Err(io::ErrorKind::BrokenPipe.into());
-        }
-        self.bytes.extend_from_slice(&bytes[..count]);
-        Ok(count)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
 fn write_failure_preserves_the_committed_prefix() {
     // Only complete model records commit; a footer cannot repair an incomplete prefix.
@@ -564,10 +545,7 @@ fn write_failure_preserves_the_committed_prefix() {
     .unwrap();
     let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
     for capacity in 0..reference.len() {
-        let mut output = PrefixWriter {
-            capacity,
-            bytes: Vec::new(),
-        };
+        let mut output = BoundedWriter::new(capacity);
         let failure = run_detailed_with_diagnostics(
             "a.".into(),
             &options,
@@ -580,7 +558,7 @@ fn write_failure_preserves_the_committed_prefix() {
             matches!(*failure.cause, RunError::Output(_)),
             "cut {capacity}"
         );
-        assert_eq!(output.bytes, reference[..capacity], "cut {capacity}");
+        assert_eq!(output.bytes(), &reference[..capacity], "cut {capacity}");
         if let Some(partial) = failure.partial_report {
             assert_eq!(
                 partial.published_models,
@@ -589,7 +567,7 @@ fn write_failure_preserves_the_committed_prefix() {
             );
             assert!(!partial.summary_published);
         }
-        assert!(serde_json::from_slice::<Json>(&output.bytes).is_err());
+        assert!(serde_json::from_slice::<Json>(output.bytes()).is_err());
     }
 }
 
@@ -725,10 +703,7 @@ fn tie_write_failure_preserves_semantic_coverage() {
         usize::midpoint(endings[0], endings[1]),
         endings[1] - 1,
     ] {
-        let mut output = PrefixWriter {
-            capacity,
-            bytes: Vec::new(),
-        };
+        let mut output = BoundedWriter::new(capacity);
         let failure = run_detailed_with_diagnostics(
             source.into(),
             &options,
@@ -742,7 +717,7 @@ fn tie_write_failure_preserves_semantic_coverage() {
         assert_eq!((partial.published_models, partial.verified_models), (1, 2));
         assert_eq!(partial.optimization.unwrap().tied_models, 2);
         assert!(!partial.summary_published);
-        assert_eq!(output.bytes, reference[..capacity]);
+        assert_eq!(output.bytes(), &reference[..capacity]);
     }
 }
 
@@ -1115,10 +1090,7 @@ fn statistics_write_failure(source: String, configured: &Options) -> (RunFailure
     );
     let text = std::str::from_utf8(&reference).unwrap();
     let capacity = text.find("Statistics:").unwrap();
-    let mut diagnostics = PrefixWriter {
-        capacity,
-        bytes: Vec::new(),
-    };
+    let mut diagnostics = BoundedWriter::new(capacity);
     let mut bytes = Vec::new();
     let failure = run_detailed_with_diagnostics(
         source,
@@ -1191,10 +1163,7 @@ fn footer_write_failure_is_secondary() {
     assert!(matches!(*failure.cause, RunError::Expansion(_)));
     let header_end = reference.iter().position(|byte| *byte == b'[').unwrap() + 1;
     for capacity in header_end..reference.len() {
-        let mut output = PrefixWriter {
-            capacity,
-            bytes: Vec::new(),
-        };
+        let mut output = BoundedWriter::new(capacity);
         let failure = run_detailed_with_diagnostics(
             "p(.".into(),
             &configured,
@@ -1212,8 +1181,8 @@ fn footer_write_failure_is_secondary() {
             io::ErrorKind::BrokenPipe
         );
         assert!(failure.partial_report.is_none());
-        assert_eq!(output.bytes, reference[..capacity]);
-        assert!(serde_json::from_slice::<Json>(&output.bytes).is_err());
+        assert_eq!(output.bytes(), &reference[..capacity]);
+        assert!(serde_json::from_slice::<Json>(output.bytes()).is_err());
     }
 }
 

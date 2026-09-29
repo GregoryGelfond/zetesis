@@ -1824,6 +1824,7 @@ dependencies = [
  "zetesis-sat",
  "zetesis-solve",
  "zetesis-telemetry",
+ "zetesis-test-support",
  "zetesis-themelios",
  "zetesis-validation",
  "zetesis-wgpu",
@@ -1931,6 +1932,10 @@ name = "zetesis-telemetry"
 version = "0.1.5"
 
 [[package]]
+name = "zetesis-test-support"
+version = "0.1.5"
+
+[[package]]
 name = "zetesis-themelios"
 version = "0.1.5"
 dependencies = [
@@ -1948,6 +1953,7 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-sat",
+ "zetesis-test-support",
  "zetesis-validation",
 ]
 
@@ -1970,6 +1976,7 @@ dependencies = [
  "themelios-syntax",
  "zetesis-backend",
  "zetesis-core",
+ "zetesis-test-support",
 ]
 
 [[package]]

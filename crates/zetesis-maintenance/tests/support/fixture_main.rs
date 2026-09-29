@@ -52,6 +52,7 @@ fn report_arguments(arguments: &[String]) -> Result<(), String> {
             "--output-path",
             "--output-dir",
             "--fail-under-lines",
+            "--ignore-filename-regex",
         ]
         .contains(&argument.as_str())
             && !rest.is_empty()

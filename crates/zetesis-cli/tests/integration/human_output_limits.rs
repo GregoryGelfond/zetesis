@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use clap::Parser;
 use zetesis_cli::{Options, Report, RunError, RunFailure, run_detailed_with_diagnostics};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 
 fn options(maximum: usize) -> Options {
     let mut options = Options::try_parse_from([
@@ -76,39 +77,17 @@ fn oversized_plain_records_publish_no_prefix() {
     }
 }
 
-struct PrefixWriter {
-    maximum: usize,
-    bytes: Vec<u8>,
-}
-impl Write for PrefixWriter {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if self.bytes.len() == self.maximum {
-            return Err(io::ErrorKind::BrokenPipe.into());
-        }
-        let count = bytes.len().min(self.maximum - self.bytes.len());
-        self.bytes.extend_from_slice(&bytes[..count]);
-        Ok(count)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
 fn partial_plain_records_do_not_count_as_published() {
     for (source, record) in records() {
         for maximum in 0..record.len() {
-            let mut output = PrefixWriter {
-                maximum,
-                bytes: Vec::new(),
-            };
+            let mut output = BoundedWriter::new(maximum);
             let failure = solve(source, &options(record.len()), &mut output).unwrap_err();
             assert!(matches!(*failure.cause, RunError::Output(_)));
             let progress = failure.partial_report.unwrap();
             assert_eq!(progress.verified_models, 1);
             assert_eq!(progress.published_models, 0);
-            assert_eq!(output.bytes, record.as_bytes()[..maximum]);
+            assert_eq!(output.bytes(), &record.as_bytes()[..maximum]);
         }
     }
 }

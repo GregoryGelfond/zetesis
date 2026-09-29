@@ -172,7 +172,13 @@ or weakening a check. Do not suppress
 `dead_code`, its `unused` parent group or `warnings`, whether with `allow` or
 `expect`. Do not manufacture uses or widen visibility to evade these checks.
 Shared test helpers should expose cohesive operations and be compiled only by
-the consumers that need them.
+the consumers that need them. Helpers that several crates' tests share live in
+internal support crates, each over one dependency closure, so a test build
+compiles only what its tests use and no crate's unit tests link a second copy of
+that crate. `zetesis-test-support`, over `zetesis-core`, holds the sinks that
+fail on purpose. A helper that only one crate's tests use stays in that crate's
+`tests/integration/support`. The support crates are not published, and every
+coverage report skips their sources.
 
 The portable gate's `authored_lints` regression checks literal Rust attributes
 throughout the maintained source roots, including inactive `cfg_attr` branches

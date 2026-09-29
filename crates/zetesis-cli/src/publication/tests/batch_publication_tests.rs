@@ -1,6 +1,5 @@
 //! CPU completion batches reach the same publication contracts as scalar sessions.
 
-use crate::test_writer::BoundedWriter;
 use crate::{
     Completion, FormulaExecutionStatistics, Options, PublicationFailure, PublicationReport,
     RunError, run_finalized_with_diagnostics,
@@ -11,6 +10,7 @@ use std::{
     num::NonZeroUsize,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::BoundedWriter;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([

@@ -37,9 +37,6 @@ pub use view::{
     SummaryDelivery, SummaryStage,
 };
 
-#[cfg(test)]
-mod test_writer;
-
 pub use devices::devices;
 pub use driver::{
     Report, RunError, publish_prepared, run, run_bundle_detailed_with_diagnostics,

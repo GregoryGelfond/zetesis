@@ -1,7 +1,7 @@
 //! Every summary output prefix propagates failure; modes retain typed meaning.
-use crate::test_writer::BoundedWriter;
 use std::io;
 use zetesis_telemetry::{SolveStage, StageRecorder};
+use zetesis_test_support::io::BoundedWriter;
 
 #[test]
 fn every_summary_prefix_preserves_writer_failure() {

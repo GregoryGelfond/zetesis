@@ -10,7 +10,7 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_presentation::Layout;
 
-use crate::support::bounded_writer;
+use zetesis_test_support::io::BoundedWriter;
 
 fn solve(source: &str, arguments: &[&str], stats: bool) -> (Options, PublicationOutcome) {
     let mut options = Options::try_parse_from(
@@ -312,7 +312,7 @@ fn statistics_writer_failure_preserves_its_prefix() {
     let mut expected = Vec::new();
     view.write_human(&mut expected, layout).unwrap();
     for capacity in [0, expected.len() / 2, expected.len() - 1] {
-        let mut output = bounded_writer::BoundedWriter::new(capacity);
+        let mut output = BoundedWriter::new(capacity);
         let error = view.write_human(&mut output, layout).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
         assert_eq!(output.bytes(), &expected[..capacity]);

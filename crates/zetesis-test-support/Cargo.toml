@@ -1,0 +1,13 @@
+[package]
+name = "zetesis-test-support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Helpers the zetesis workspace's tests share over zetesis-core alone."
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

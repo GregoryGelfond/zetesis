@@ -1,9 +1,9 @@
 //! Grounding snapshots preserve unavailable values and every failed output prefix.
 
-use crate::test_writer::BoundedWriter;
 use crate::{
     GroundingMeasurement, GroundingOutcome, GroundingPhase, GroundingWork, SolveMeasurements,
 };
+use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::GroundingObserver as _;
 
 #[test]

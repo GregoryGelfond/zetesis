@@ -45,6 +45,10 @@ trap 'exit 143' TERM
 printf '%s\n' incomplete > "$coverage_dir/status.txt"
 : > "$coverage_dir/floors.tsv"
 floor=$(scripts/maintenance.sh coverage-floor --mode "$mode" --path scripts/coverage-floor.txt)
+# The test-support crates hold test code. Every report skips their sources, as
+# cargo-llvm-cov already skips tests/ directories, so the floors measure product
+# code.
+support_sources='/crates/zetesis-test-support/'
 
 tool_version=$(cargo +1.97.1 llvm-cov --version)
 if [ "$tool_version" != 'cargo-llvm-cov 0.8.7' ]; then
@@ -82,9 +86,11 @@ write_report() {
     mkdir -p -- "$destination"
     # In 0.8.7, report rejects build-feature flags despite listing them in help.
     # The separate instrumented directories retain each feature configuration.
-    cargo +1.97.1 llvm-cov report "$@" --locked --json \
+    cargo +1.97.1 llvm-cov report "$@" --locked \
+        --ignore-filename-regex "$support_sources" --json \
         --output-path "$destination/coverage.json"
-    cargo +1.97.1 llvm-cov report "$@" --locked --html --output-dir "$destination"
+    cargo +1.97.1 llvm-cov report "$@" --locked \
+        --ignore-filename-regex "$support_sources" --html --output-dir "$destination"
 }
 
 run_metal_group() {
@@ -173,7 +179,8 @@ if [ "$mode" = gate ]; then
     # Both reports already exist. Retain both independent floor verdicts even
     # when the workspace population has not met its unchanged floor.
     workspace_floor_exit=0
-    if cargo +1.97.1 llvm-cov report --locked --fail-under-lines "$floor"; then
+    if cargo +1.97.1 llvm-cov report --locked \
+        --ignore-filename-regex "$support_sources" --fail-under-lines "$floor"; then
         :
     else
         workspace_floor_exit=$?
@@ -181,7 +188,8 @@ if [ "$mode" = gate ]; then
     printf 'workspace\t%s\n' "$workspace_floor_exit" >> "$coverage_dir/floors.tsv"
     export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-cli-cpu"
     cpu_floor_exit=0
-    if cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --locked --fail-under-lines "$floor"; then
+    if cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --locked \
+        --ignore-filename-regex "$support_sources" --fail-under-lines "$floor"; then
         :
     else
         cpu_floor_exit=$?

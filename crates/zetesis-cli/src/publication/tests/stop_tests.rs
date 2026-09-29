@@ -79,7 +79,7 @@ fn stopped_progress(stopped: &crate::StoppedPublication) -> super::Progress {
 }
 
 fn replay_human_footer(stopped: &crate::StoppedPublication) {
-    use crate::test_writer::BoundedWriter;
+    use zetesis_test_support::io::BoundedWriter;
 
     let progress = stopped_progress(stopped);
     let mut reference = Vec::new();

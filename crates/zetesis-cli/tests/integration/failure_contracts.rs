@@ -8,35 +8,7 @@ use std::process::{Command, Stdio};
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
-
-struct CutWriter {
-    capacity: usize,
-    retained: Vec<u8>,
-}
-impl CutWriter {
-    fn new(capacity: usize) -> Self {
-        Self {
-            capacity,
-            retained: Vec::new(),
-        }
-    }
-}
-impl Write for CutWriter {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let count = bytes.len().min(self.capacity - self.retained.len());
-        if count == 0 && !bytes.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::BrokenPipe,
-                "fixture output closed",
-            ));
-        }
-        self.retained.extend_from_slice(&bytes[..count]);
-        Ok(count)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
+use zetesis_test_support::io::{BoundedWriter, FULL};
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
@@ -60,7 +32,7 @@ fn output_error(error: &RunError) {
         panic!("expected transport failure: {error}")
     };
     assert_eq!(source.kind(), io::ErrorKind::BrokenPipe);
-    assert!(error.to_string().contains("fixture output closed"));
+    assert!(error.to_string().contains(FULL));
     assert_eq!(error.source().unwrap().to_string(), source.to_string());
 }
 
@@ -96,7 +68,7 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
         for capacity in 0..complete.len() {
-            let mut output = CutWriter::new(capacity);
+            let mut output = BoundedWriter::new(capacity);
             let error = run_with_diagnostics(
                 source.into(),
                 &options,
@@ -106,9 +78,9 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
             )
             .unwrap_err();
             output_error(&error);
-            assert_eq!(output.retained, complete[..capacity]);
+            assert_eq!(output.bytes(), &complete[..capacity]);
         }
-        let mut output = CutWriter::new(complete.len());
+        let mut output = BoundedWriter::new(complete.len());
         let report = run_with_diagnostics(
             source.into(),
             &options,
@@ -118,7 +90,7 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
-        assert_eq!(output.retained, complete);
+        assert_eq!(output.bytes(), complete);
     }
 }
 
@@ -140,7 +112,7 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
         )
         .unwrap();
         for capacity in 0..complete.len() {
-            let mut diagnostics = CutWriter::new(capacity);
+            let mut diagnostics = BoundedWriter::new(capacity);
             let mut output = Vec::new();
             let error = run_with_diagnostics(
                 source.into(),
@@ -151,7 +123,7 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
             )
             .unwrap_err();
             output_error(&error);
-            assert_eq!(diagnostics.retained, complete[..capacity]);
+            assert_eq!(diagnostics.bytes(), &complete[..capacity]);
             assert!(
                 !String::from_utf8(output)
                     .unwrap()
@@ -402,7 +374,7 @@ fn process_rejects_non_utf8_and_excessive_stdin_without_claiming_unsat() {
 
 #[test]
 fn device_output_failure_is_reported_before_adapter_discovery() {
-    let error = zetesis_cli::devices(&mut CutWriter::new(0)).unwrap_err();
+    let error = zetesis_cli::devices(&mut BoundedWriter::new(0)).unwrap_err();
     output_error(&error);
 }
 
@@ -429,7 +401,7 @@ fn partial_and_interrupted_summaries_propagate_every_output_failure() {
         assert!(text.contains("Coverage: partial"));
         assert!(!text.contains("UNSATISFIABLE"));
         for capacity in 0..complete.len() {
-            let mut output = CutWriter::new(capacity);
+            let mut output = BoundedWriter::new(capacity);
             let error = run_with_diagnostics(
                 "{a}.".into(),
                 &options,
@@ -439,7 +411,7 @@ fn partial_and_interrupted_summaries_propagate_every_output_failure() {
             )
             .unwrap_err();
             output_error(&error);
-            assert_eq!(output.retained, complete[..capacity]);
+            assert_eq!(output.bytes(), &complete[..capacity]);
         }
     }
 }
@@ -450,10 +422,10 @@ fn cpu_only_inventory_propagates_failures_after_each_capability_record() {
     let mut complete = Vec::new();
     zetesis_cli::devices(&mut complete).unwrap();
     for capacity in 0..complete.len() {
-        let mut output = CutWriter::new(capacity);
+        let mut output = BoundedWriter::new(capacity);
         let error = zetesis_cli::devices(&mut output).unwrap_err();
         output_error(&error);
-        assert_eq!(output.retained, complete[..capacity]);
+        assert_eq!(output.bytes(), &complete[..capacity]);
     }
 }
 

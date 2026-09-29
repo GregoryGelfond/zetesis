@@ -1,10 +1,9 @@
 //! Ordinary consumers can explicitly select shared CPU source rounds.
 
-use std::io::{self, Write};
-
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, SourceBatching, run_with_diagnostics};
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_test_support::io::Closed;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -245,16 +244,6 @@ fn cancelled_solve_does_not_initialize_shared_execution() {
     assert!(report.shared_execution.is_none());
 }
 
-struct RefuseOutput;
-impl Write for RefuseOutput {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::Error::other("consumer refused output"))
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
 fn output_failure_retains_completed_shared_evidence() {
     let mut selected = options(&["--source-batching", "worlds"]);
@@ -262,7 +251,7 @@ fn output_failure_retains_completed_shared_evidence() {
     let error = zetesis_cli::run_detailed_with_diagnostics(
         "a.".into(),
         &selected,
-        &mut RefuseOutput,
+        &mut Closed,
         &mut Vec::new(),
         &Cancellation::default(),
     )

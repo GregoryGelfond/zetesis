@@ -1,7 +1,7 @@
 //! Fault injection through the additive public API; no devices are constructed.
 
 use std::error::Error;
-use std::io::{self, Write};
+use std::io;
 
 use clap::Parser;
 use zetesis_cli::{
@@ -9,6 +9,7 @@ use zetesis_cli::{
     run_detailed_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::{BoundedWriter, FULL, FailAt};
 
 fn options(oracle: &str) -> Options {
     Options::try_parse_from([
@@ -23,66 +24,6 @@ fn options(oracle: &str) -> Options {
         "0",
     ])
     .unwrap()
-}
-
-struct Cut {
-    capacity: usize,
-    bytes: Vec<u8>,
-}
-impl Cut {
-    fn at(capacity: usize) -> Self {
-        Self {
-            capacity,
-            bytes: Vec::new(),
-        }
-    }
-}
-impl Write for Cut {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.is_empty() {
-            return Ok(0);
-        }
-        let length = bytes.len().min(self.capacity - self.bytes.len());
-        if length == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::BrokenPipe,
-                "injected output failure",
-            ));
-        }
-        self.bytes.extend_from_slice(&bytes[..length]);
-        Ok(length)
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-/// This writer fails at a selected diagnostic record without affecting earlier records.
-struct FailAt {
-    marker: &'static [u8],
-    bytes: Vec<u8>,
-    failed: bool,
-}
-impl Write for FailAt {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes
-            .windows(self.marker.len())
-            .any(|window| window == self.marker)
-        {
-            self.failed = true;
-        }
-        if self.failed {
-            return Err(io::Error::new(
-                io::ErrorKind::BrokenPipe,
-                "injected diagnostic failure",
-            ));
-        }
-        self.bytes.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
 }
 
 fn answer_ends(bytes: &[u8], objective: bool) -> Vec<usize> {
@@ -121,7 +62,7 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
         let ends = answer_ends(&reference, false);
         assert_eq!(ends.len(), 2);
         for capacity in 0..reference.len() {
-            let mut output = Cut::at(capacity);
+            let mut output = BoundedWriter::new(capacity);
             let failure = run_detailed(
                 "{a}.".into(),
                 &options,
@@ -132,7 +73,7 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
             assert!(
                 matches!(&*failure.cause, RunError::Output(error) if error.kind() == io::ErrorKind::BrokenPipe)
             );
-            assert_eq!(output.bytes, reference[..capacity]);
+            assert_eq!(output.bytes(), &reference[..capacity]);
             assert!(failure.phase_timings.is_none());
             assert!(failure.secondary_output.is_none());
             let partial = failure.partial_report.unwrap();
@@ -171,7 +112,7 @@ fn exhausted_objective_search_retains_all_hidden_ties_before_failed_cost_publica
     let ends = answer_ends(&reference, true);
     assert_eq!(ends.len(), 2);
     for capacity in 0..=ends[1] {
-        let mut output = Cut::at(capacity);
+        let mut output = BoundedWriter::new(capacity);
         let failure = run_detailed(
             source.into(),
             &options,
@@ -193,7 +134,7 @@ fn exhausted_objective_search_retains_all_hidden_ties_before_failed_cost_publica
         let timings = failure.phase_timings.unwrap();
         assert!(timings.get(SolvePhase::ObservationOutput).unwrap().calls > 0);
         assert!(timings.get(SolvePhase::ExactReductMembership).is_some());
-        assert_eq!(output.bytes, reference[..capacity]);
+        assert_eq!(output.bytes(), &reference[..capacity]);
     }
 }
 
@@ -229,7 +170,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
         "a :- . @".into(),
         &options,
         &mut output,
-        &mut Cut::at(0),
+        &mut BoundedWriter::new(0),
         &Cancellation::default(),
     )
     .unwrap_err();
@@ -260,7 +201,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
         "a :- . @".into(),
         &options,
         &mut output,
-        &mut Cut::at(0),
+        &mut BoundedWriter::new(0),
         &Cancellation::default(),
     )
     .unwrap_err();
@@ -271,11 +212,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
 fn failure_of_post_summary_statistics_preserves_completed_output_and_search() {
     let mut options = options("countermodel");
     options.stats = true;
-    let mut diagnostics = FailAt {
-        marker: b"Statistics:",
-        bytes: Vec::new(),
-        failed: false,
-    };
+    let mut diagnostics = FailAt::new(b"Statistics:");
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
         "a.".into(),
@@ -303,11 +240,7 @@ fn failure_of_post_summary_statistics_preserves_completed_output_and_search() {
 fn failed_restriction_diagnostic_retains_the_committed_restriction_and_incumbent() {
     let mut options = options("countermodel");
     options.stats = true;
-    let mut diagnostics = FailAt {
-        marker: b"Objective pruning:",
-        bytes: Vec::new(),
-        failed: false,
-    };
+    let mut diagnostics = FailAt::new(b"Objective pruning:");
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
         "{a}. #minimize{1:a}.".into(),
@@ -344,7 +277,7 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
     let failure = run_detailed(
         "a.".into(),
         &options("countermodel"),
-        &mut Cut::at(0),
+        &mut BoundedWriter::new(0),
         &cancellation,
     )
     .unwrap_err();
@@ -352,7 +285,7 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
         panic!("summary writer remains the primary failure")
     };
     assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
-    assert_eq!(error.to_string(), "injected output failure");
+    assert_eq!(error.to_string(), FULL);
     let partial = failure.partial_report.unwrap();
     assert_eq!(partial.completion, Some(Completion::Interrupted));
     assert_eq!(
@@ -391,7 +324,7 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(report.models, 3);
     let first = answer_ends(&reference, false)[0];
-    let mut output = Cut::at(first + 4);
+    let mut output = BoundedWriter::new(first + 4);
     let failure = run_detailed(
         source.into(),
         &options,
@@ -411,7 +344,7 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
         partial.completion, None,
         "buffered results were not all consumed"
     );
-    assert_eq!(output.bytes, reference[..first + 4]);
+    assert_eq!(output.bytes(), &reference[..first + 4]);
 
     // A successfully requested stop keeps the established public Report invariant;
     // the observed candidate stop belongs to detailed failure evidence only.
@@ -434,11 +367,7 @@ fn completed_closure_batch_membership_survives_a_later_requested_output_statisti
     options.batch_size = std::num::NonZeroUsize::new(64).unwrap();
     options.models = 2;
     options.stats = true;
-    let mut diagnostics = FailAt {
-        marker: b"Statistics:",
-        bytes: Vec::new(),
-        failed: false,
-    };
+    let mut diagnostics = FailAt::new(b"Statistics:");
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
         source.into(),
