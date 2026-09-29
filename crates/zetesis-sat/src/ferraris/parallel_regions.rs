@@ -1073,5 +1073,4 @@ fn leaf<'a>(
 }
 
 #[cfg(test)]
-#[path = "parallel_regions/tests.rs"]
 mod tests;

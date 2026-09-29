@@ -11,7 +11,6 @@ use crate::ferraris::Decision;
 use crate::search::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::{PreparedReduct, ReductWorkspace};
 
-#[path = "completion_scratch.rs"]
 mod scratch;
 use crate::{Cancellation, Incomplete, PhaseMeasurement, SearchPhaseTimings};
 pub use scratch::CompletionScratch;
@@ -583,7 +582,6 @@ fn merge_timing(progress: &mut CompletionStatistics, worker: Option<SearchPhaseT
 }
 
 #[cfg(test)]
-#[path = "completion/tests.rs"]
 mod tests;
 
 impl PreparedReduct {

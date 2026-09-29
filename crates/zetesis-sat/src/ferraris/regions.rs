@@ -560,5 +560,4 @@ fn narrow_frozen<Q: Quota>(
 }
 
 #[cfg(test)]
-#[path = "regions/tests.rs"]
 mod tests;

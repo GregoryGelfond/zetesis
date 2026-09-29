@@ -54,7 +54,7 @@ separate relational powerset candidate path.
 
 See [construction](../../zetesis-ferraris/src/support.rs),
 [route/family controls](../tests/integration/candidate_support.rs) and
-[accounted optional admission](../src/candidate_support.rs).
+[accounted optional admission](../src/ferraris/candidate_support.rs).
 
 ## Failed-literal probing
 

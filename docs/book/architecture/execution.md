@@ -156,9 +156,9 @@ entire region frontier, thread stacks or process memory.
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original
 formula readings, support conditions, candidate partitions and reduct semantics.
-The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/batch.rs)
+The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/batch.rs)
 owns proposal validation and publication; the
-[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/region_proposals.rs)
+[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/region_proposals.rs)
 owns the bounded parallel frontier. `Frontier` and `BatchAccounting` state the
 coverage and completion laws; concrete synchronization remains a refinement
 obligation.

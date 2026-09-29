@@ -297,7 +297,6 @@ struct State {
 }
 
 #[cfg(test)]
-#[path = "region_proposals/tests.rs"]
 mod tests;
 
 struct Round<'a> {

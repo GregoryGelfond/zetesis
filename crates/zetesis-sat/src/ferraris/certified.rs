@@ -1,8 +1,6 @@
 //! Optional complete-theory certificates under the enumeration budget.
 
-#[path = "certified/positive.rs"]
 mod positive;
-#[path = "certified/types.rs"]
 mod types;
 pub use types::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
@@ -458,5 +456,4 @@ fn check_tight(
 }
 
 #[cfg(test)]
-#[path = "certified/tests.rs"]
 mod tests;

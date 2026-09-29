@@ -165,7 +165,5 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     assert!(!search.exhausted);
 }
 
-#[path = "tests/timing_tests.rs"]
 mod timing_tests;
-#[path = "tests/coordination_tests.rs"]
 mod coordination_tests;

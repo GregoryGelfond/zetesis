@@ -8,35 +8,27 @@ use crate::{
     SearchLimits, SearchStatistics, Solve,
 };
 
-#[path = "batch.rs"]
 mod batch;
 pub use batch::{BatchError, BatchLimits, BatchStatistics, BatchVerdict};
 
-#[path = "completion.rs"]
 mod completion;
 pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics};
 
-#[path = "certified.rs"]
 mod certified;
 pub use certified::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
     CertifiedStatistics,
 };
 
-#[path = "candidate_support.rs"]
 mod candidate_support;
 pub use candidate_support::{SupportStatistics, SupportStatus};
 
-#[path = "reduct_query.rs"]
 mod reduct_query;
 
-#[path = "regions.rs"]
 mod regions;
 
-#[path = "parallel_regions.rs"]
 mod parallel_regions;
 use parallel_regions::ParallelRegions;
-#[path = "region_proposals.rs"]
 mod region_proposals;
 use region_proposals::RegionProposals;
 use regions::RegionSearch;
