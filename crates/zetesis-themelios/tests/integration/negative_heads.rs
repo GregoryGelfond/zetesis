@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_core::Sign;
@@ -10,25 +9,14 @@ use zetesis_reference_support::admit;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceBundle, admit_bundle_formula, admit_formula,
+    SourceBundle, admit_bundle_formula,
 };
-
-type Names = BTreeSet<String>;
-type Models = BTreeSet<Names>;
 
 fn cases() -> Vec<Json> {
     serde_json::from_str(zetesis_test_support::fixtures::NEGATIVE_HEADS).unwrap()
 }
 fn singleton_cases() -> Vec<Json> {
     serde_json::from_str(zetesis_test_support::fixtures::SINGLETON_HEADS).unwrap()
-}
-fn limited(
-    source: &str,
-    options: AdmissionOptions,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, *limits)
 }
 fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
     let atom = atom.into();
@@ -48,17 +36,6 @@ fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
         (1, Some(zetesis_core::ValueNodeRef::Number(number))) => format!("{base}({number})"),
         _ => panic!("fixture has nullary or numeric unary atoms: {atom:?}"),
     }
-}
-fn names(value: &Json) -> Names {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect()
-}
-fn expected(value: &Json) -> Models {
-    value.as_array().unwrap().iter().map(names).collect()
 }
 // Independent topological evaluation: every subtree false in M is falsum in
 // F^M. No production evaluator, reduct mask, SAT search or subset enumeration
@@ -124,52 +101,6 @@ fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
         .unwrap()
         .iter()
         .all(|root| truth(root, tested, frozen))
-}
-
-fn clingo(source: &str) -> Models {
-    let run = oracle::run(
-        source,
-        &["--models=0", "--outf=2"],
-        oracle::Limits {
-            timeout: Duration::from_secs(5),
-            max_output_bytes: 1_048_576 + 65_536,
-        },
-    );
-    let raw = oracle::json(&run);
-    assert!(
-        raw["Solver"]
-            .as_str()
-            .unwrap()
-            .starts_with("clingo version 5.8.")
-    );
-    assert!(matches!(
-        raw["Result"].as_str().unwrap(),
-        "SATISFIABLE" | "UNSATISFIABLE"
-    ));
-    assert_eq!(raw["Models"]["More"], "no");
-    let witnesses: Vec<_> = raw["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        .collect();
-    assert_eq!(
-        raw["Models"]["Number"].as_u64().unwrap(),
-        witnesses.len() as u64
-    );
-    let models: Models = witnesses
-        .iter()
-        .map(|witness| {
-            assert!(witness["Costs"].is_null());
-            names(&witness["Value"])
-        })
-        .collect();
-    assert_eq!(
-        models.len(),
-        witnesses.len(),
-        "fixtures show complete models without projection"
-    );
-    models
 }
 
 fn supported(case: &Json, model: &Names) -> bool {
@@ -369,9 +300,9 @@ fn conditional_negative_disjuncts_require_eligibility() {
         Models::from([Names::from(["c".into()])])
     );
 }
-use crate::support::finite_bindings::{holds, values};
+use crate::support::finite_bindings::{Models, holds, values};
+use crate::support::head_models::{Names, clingo, expected, limited, names};
 use crate::support::objective_boundaries;
-use zetesis_clingo_support as oracle;
 
 #[test]
 fn negative_head_producers_preserve_scored_answers() {

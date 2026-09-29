@@ -1,11 +1,12 @@
 //! Finite signed source disjunctions retain their original reduct.
 //! Hand-written formula trees are independent of source normalization and SAT.
 
+use crate::support::head_models::{Names, expected, names, truth};
 use crate::support::objective_dependency_records as objective_dependencies;
 
-use std::collections::BTreeSet;
 use std::time::Duration;
 
+use crate::support::finite_bindings::Models;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
@@ -18,25 +19,11 @@ use zetesis_themelios::{
     FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_extended, admit_formula,
 };
 
-type Names = BTreeSet<String>;
-type Models = BTreeSet<Names>;
-
 fn cases() -> Vec<Json> {
     serde_json::from_str::<Json>(include_str!("../fixtures/disjunction.json")).unwrap()["cases"]
         .as_array()
         .unwrap()
         .clone()
-}
-fn names(value: &Json) -> Names {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect()
-}
-fn expected(value: &Json) -> Models {
-    value.as_array().unwrap().iter().map(names).collect()
 }
 fn subset(atoms: &[String], mask: usize) -> Names {
     atoms
@@ -49,25 +36,6 @@ fn subset(atoms: &[String], mask: usize) -> Names {
 
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
-fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    if frozen.is_some_and(|outer| !truth(formula, outer, None)) {
-        return false;
-    }
-    if let Some(atom) = formula.as_str() {
-        return tested.contains(atom);
-    }
-    if formula == &Json::Bool(false) {
-        return false;
-    }
-    let left = truth(&formula[1], tested, frozen);
-    let right = truth(&formula[2], tested, frozen);
-    match formula[0].as_str().unwrap() {
-        "and" => left && right,
-        "or" => left || right,
-        "imp" => !left || right,
-        other => panic!("unknown manual formula {other}"),
-    }
-}
 fn holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
     theory["roots"]
         .as_array()

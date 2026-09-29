@@ -2,79 +2,21 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use zetesis_reference_support::{admit, canonical};
+use zetesis_reference_support::admit;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, InputLimit, SourceBundle, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
+    SourceBundle, admit_bundle_formula, admit_extended,
 };
-
-type Names = BTreeSet<String>;
-type Models = BTreeSet<Names>;
 
 fn cases() -> Vec<Json> {
     serde_json::from_str(include_str!("../fixtures/true-heads.json")).unwrap()
 }
-fn limited(
-    source: &str,
-    options: AdmissionOptions,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, *limits)
-}
-fn names(value: &Json) -> Names {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect()
-}
-fn expected(value: &Json) -> Models {
-    value.as_array().unwrap().iter().map(names).collect()
-}
 // Independent topological evaluation: every subtree false in M is falsum in
 // F^M. No production evaluator, reduct mask, SAT search or subset enumeration
 // helper is used to decide these finite stable models.
-fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
-    admitted
-        .atoms()
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, atom)| canonical(atom))
-        .collect()
-}
-fn complete(admitted: &AdmittedFormula) -> Models {
-    assert!(admitted.atoms().len() <= 6, "tiny exhaustive carrier");
-    let mut result = Models::new();
-    for mask in 0..1_usize << admitted.atoms().len() {
-        let outer = values(admitted.theory(), mask, None);
-        if !holds(admitted.theory(), &outer) {
-            continue;
-        }
-        let mut subset = mask;
-        let mut countermodel = false;
-        while subset != 0 {
-            subset = (subset - 1) & mask;
-            if holds(
-                admitted.theory(),
-                &values(admitted.theory(), subset, Some(&outer)),
-            ) {
-                countermodel = true;
-                break;
-            }
-        }
-        if !countermodel {
-            assert!(result.insert(selected(admitted, mask)));
-        }
-    }
-    result
-}
 
 #[test]
 fn complete_models_match_explicit_families_and_recorded_reference_expectations() {
@@ -146,32 +88,6 @@ fn source_expansions_preserve_every_original_and_frozen_pair() {
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
-fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    if frozen.is_some_and(|outer| !truth(formula, outer, None)) {
-        return false;
-    }
-    if let Some(atom) = formula.as_str() {
-        return tested.contains(atom);
-    }
-    if formula == &Json::Bool(false) {
-        return false;
-    }
-    let left = truth(&formula[1], tested, frozen);
-    let right = truth(&formula[2], tested, frozen);
-    match formula[0].as_str().unwrap() {
-        "and" => left && right,
-        "or" => left || right,
-        "imp" => !left || right,
-        other => panic!("unknown manual formula {other}"),
-    }
-}
-fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    theory["roots"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|root| truth(root, tested, frozen))
-}
 #[test]
 fn true_head_range_products_match_handwritten_frozen_formulas() {
     for (source, manual) in [
@@ -235,8 +151,9 @@ fn true_disjuncts_preserve_scored_answers() {
     objective_boundaries::check(source);
 }
 use crate::support::finite_bindings::{holds, remap, values};
+use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
-use zetesis_clingo_support as oracle;
+use crate::support::thresholds::first_success;
 
 #[test]
 fn extended_profile_refuses_true_disjunctions() {
@@ -265,24 +182,6 @@ fn erased_conditions_do_not_bind_or_hide_unsafe_head_arguments() {
             "{source}"
         );
     }
-}
-
-fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
-    let mut high = 1;
-    while !attempt(high) {
-        high *= 2;
-        assert!(high <= 1_048_576);
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = low + (high - low) / 2;
-        if attempt(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
 }
 
 #[test]
@@ -499,51 +398,6 @@ fn duplicate_included_true_heads_retain_each_source_origin() {
     }
 }
 
-fn clingo(source: &str) -> Models {
-    let run = oracle::run(
-        source,
-        &["--models=0", "--outf=2"],
-        oracle::Limits {
-            timeout: Duration::from_secs(5),
-            max_output_bytes: 1_048_576 + 65_536,
-        },
-    );
-    let raw = oracle::json(&run);
-    assert!(
-        raw["Solver"]
-            .as_str()
-            .unwrap()
-            .starts_with("clingo version 5.8.")
-    );
-    assert!(matches!(
-        raw["Result"].as_str().unwrap(),
-        "SATISFIABLE" | "UNSATISFIABLE"
-    ));
-    assert_eq!(raw["Models"]["More"], "no");
-    let witnesses: Vec<_> = raw["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        .collect();
-    assert_eq!(
-        raw["Models"]["Number"].as_u64().unwrap(),
-        witnesses.len() as u64
-    );
-    let models: Models = witnesses
-        .iter()
-        .map(|witness| {
-            assert!(witness["Costs"].is_null());
-            names(&witness["Value"])
-        })
-        .collect();
-    assert_eq!(
-        models.len(),
-        witnesses.len(),
-        "fixtures show complete models without projection"
-    );
-    models
-}
 #[test]
 #[ignore = "requires external clingo 5.8; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {

@@ -2,6 +2,7 @@
 
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
@@ -499,23 +500,6 @@ fn empty_joins_do_not_enumerate_choice_ranges() {
     );
 }
 
-fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
-    let mut high = 1;
-    while !attempt(high) {
-        high *= 2;
-        assert!(high <= 1_048_576, "bounded resource threshold probe");
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = low + (high - low) / 2;
-        if attempt(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
-}
 #[test]
 fn construction_and_streamed_substitution_work_refuse_before_partial_admission() {
     let source = "1{p(1..2,1..2)}1.";

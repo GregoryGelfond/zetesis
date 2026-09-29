@@ -1,7 +1,9 @@
 //! Checked finite tuple/atom count heads preserve complete models and frozen reducts.
 
-use crate::support::finite_bindings::{holds, remap, values};
+use crate::support::finite_bindings::{Models, holds, remap, values};
+use crate::support::head_models::{complete, expected, limited, manual_holds, names, selected};
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
@@ -11,13 +13,10 @@ use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceBundle, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
+    admit_bundle_formula, admit_extended,
 };
-
-type Names = BTreeSet<String>;
-type Models = BTreeSet<Names>;
 
 fn cases() -> Vec<Json> {
     let mut cases: Vec<Json> =
@@ -28,63 +27,9 @@ fn cases() -> Vec<Json> {
     );
     cases
 }
-fn limited(
-    source: &str,
-    options: AdmissionOptions,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, *limits)
-}
-fn names(value: &Json) -> Names {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect()
-}
-fn expected(value: &Json) -> Models {
-    value.as_array().unwrap().iter().map(names).collect()
-}
 // Independent topological evaluation: every subtree false in M is falsum in
 // F^M. No production evaluator, reduct mask, SAT search or subset enumeration
 // helper is used to decide these finite stable models.
-fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
-    admitted
-        .atoms()
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, atom)| canonical(atom))
-        .collect()
-}
-fn complete(admitted: &AdmittedFormula) -> Models {
-    assert!(admitted.atoms().len() <= 6, "tiny exhaustive carrier");
-    let mut result = Models::new();
-    for mask in 0..1_usize << admitted.atoms().len() {
-        let outer = values(admitted.theory(), mask, None);
-        if !holds(admitted.theory(), &outer) {
-            continue;
-        }
-        let mut subset = mask;
-        let mut countermodel = false;
-        while subset != 0 {
-            subset = (subset - 1) & mask;
-            if holds(
-                admitted.theory(),
-                &values(admitted.theory(), subset, Some(&outer)),
-            ) {
-                countermodel = true;
-                break;
-            }
-        }
-        if !countermodel {
-            assert!(result.insert(selected(admitted, mask)));
-        }
-    }
-    result
-}
 
 #[test]
 fn count_heads_preserve_stable_models() {
@@ -197,32 +142,6 @@ fn source_expansions_preserve_every_original_and_frozen_pair() {
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
-fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    if frozen.is_some_and(|outer| !truth(formula, outer, None)) {
-        return false;
-    }
-    if let Some(atom) = formula.as_str() {
-        return tested.contains(atom);
-    }
-    if formula == &Json::Bool(false) {
-        return false;
-    }
-    let left = truth(&formula[1], tested, frozen);
-    let right = truth(&formula[2], tested, frozen);
-    match formula[0].as_str().unwrap() {
-        "and" => left && right,
-        "or" => left || right,
-        "imp" => !left || right,
-        other => panic!("unknown manual formula {other}"),
-    }
-}
-fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    theory["roots"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|root| truth(root, tested, frozen))
-}
 #[test]
 fn count_bounds_preserve_frozen_formulas() {
     for (source, manual) in [
@@ -336,24 +255,6 @@ fn tuples_and_derived_atoms_never_supply_safety() {
             "{source}: {error}"
         );
     }
-}
-
-fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
-    let mut high = 1;
-    while !attempt(high) {
-        high *= 2;
-        assert!(high <= 1_048_576);
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = low + (high - low) / 2;
-        if attempt(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
 }
 
 #[test]
