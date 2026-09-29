@@ -1,9 +1,8 @@
 //! Extended comparisons reuse the ordinary runner with independent fixtures.
-use super::{Fixture, Path, Value, executable, fs};
+use super::{Fixture, NO_PATH, Path, Value, executable, fs};
 use zetesis_validation::performance::{self, Decision, Phase, Schedule};
 
 const SHORTEST: &str = "scenarios/shortest-path/variant-01/01-basic.lp";
-const NO_PATH: &str = "scenarios/shortest-path/variant-01/04-no-path.lp";
 
 fn selected(fixture: &Fixture) -> performance::Request<'_> {
     let mut request = fixture.request();

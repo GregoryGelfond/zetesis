@@ -13,6 +13,10 @@ use zetesis_validation::{
     performance::{self, Case, Decision, Phase, Producer, Schedule, Suite},
 };
 
+/// The shortest-path workload that has no path, which the comparison
+/// submodules both measure.
+const NO_PATH: &str = "scenarios/shortest-path/variant-01/04-no-path.lp";
+
 mod comparison_extensions;
 mod comparison_memory_exits;
 
@@ -67,7 +71,7 @@ impl Fixture {
             .into_iter()
             .chain([
                 Case::Selected("scenarios/shortest-path/variant-01/01-basic.lp".into()),
-                Case::Selected("scenarios/shortest-path/variant-01/04-no-path.lp".into()),
+                Case::Selected(NO_PATH.into()),
             ])
             .enumerate()
         {

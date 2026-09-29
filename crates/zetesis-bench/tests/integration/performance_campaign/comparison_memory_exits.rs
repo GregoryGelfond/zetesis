@@ -1,11 +1,10 @@
 //! Real RSS helpers retain synthetic solver exits; this is not solver qualification.
-use super::{Fixture, Path, Value, fs};
+use super::{Fixture, NO_PATH, Path, Value, fs};
 use zetesis_validation::{
     performance::{self, Decision, Fault, Phase, Producer, Sample, Schedule},
     process,
 };
 
-const NO_PATH: &str = "scenarios/shortest-path/variant-01/04-no-path.lp";
 const COUNT_INVOCATION: &str = r#"rss_calls=0
 if [ -f "$0.calls" ]; then IFS= read -r rss_calls < "$0.calls"; fi
 rss_calls=$((rss_calls + 1))
