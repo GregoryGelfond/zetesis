@@ -314,7 +314,6 @@ fn physical(fields: &[&str]) -> Vec<String> {
     args.extend(strings(&[
         "--locked",
         "--no-report",
-        "--no-clean",
         "--",
         "--ignored",
         "--nocapture",

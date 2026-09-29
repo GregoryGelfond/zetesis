@@ -95,16 +95,17 @@ run_metal_group() {
     # Splitting is intentional: these are fixed libtest identifiers, not input.
     set -- $names
     if [ "$target" = lib ]; then
-        set -- --lib --locked --no-report --no-clean -- --ignored --nocapture \
+        set -- --lib --locked --no-report -- --ignored --nocapture \
             --test-threads=1 --exact "$@"
     else
-        set -- --test "$target" --locked --no-report --no-clean -- --ignored \
+        set -- --test "$target" --locked --no-report -- --ignored \
             --nocapture --test-threads=1 --exact "$@"
     fi
     physical_log="$coverage_dir/workspace/metal-$group.log"
     physical_status="$coverage_dir/workspace/metal-$group-status.txt"
     # Keep workspace feature unification and the existing instrumented target.
-    # --no-clean retains the portable profile; no CLI-CPU data enters this stage.
+    # A run that defers its report never cleans, so the portable profile is
+    # retained; no CLI-CPU data enters this stage.
     if CARGO_TERM_COLOR=never cargo +1.97.1 llvm-cov --workspace --all-features \
         "$@" > "$physical_log" 2>&1; then
         cat "$physical_log"

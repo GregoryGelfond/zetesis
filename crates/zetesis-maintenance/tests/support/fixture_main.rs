@@ -63,6 +63,21 @@ fn report_arguments(arguments: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+fn clean_arguments(arguments: &[String]) -> Result<(), String> {
+    // cargo-llvm-cov refuses `--no-clean` beside `--no-report` or `--no-run`,
+    // which already keep earlier profiles and build artifacts. Options after
+    // `--` belong to the test binary.
+    let own = arguments
+        .iter()
+        .position(|arg| arg == "--")
+        .map_or(arguments, |end| &arguments[..end]);
+    for flag in ["--no-report", "--no-run"] {
+        if has(own, flag) && has(own, "--no-clean") {
+            return fail(&format!("{flag} may not be used together with --no-clean"));
+        }
+    }
+    Ok(())
+}
 fn physical(arguments: &[String]) -> Result<(), String> {
     let target = if has(arguments, "--lib") {
         "lib"
@@ -211,6 +226,7 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
         return fail("unexpected mock Cargo invocation");
     }
     report_arguments(arguments)?;
+    clean_arguments(arguments)?;
     let directory = env::var("CARGO_LLVM_COV_TARGET_DIR").map_err(|error| error.to_string())?;
     let profile = Path::new(&directory).file_name().unwrap().to_str().unwrap();
     let log = env::var("COVERAGE_TEST_LOG").map_err(|error| error.to_string())?;
