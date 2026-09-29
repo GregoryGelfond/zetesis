@@ -4,23 +4,11 @@ use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_core::{Atom, Model, Predicate};
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, ModelConstructionStop, PreparedInput, Session,
     SolveConfig, SolvePhase,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-
-fn formula(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 
 fn config() -> SolveConfig {
     SolveConfig {

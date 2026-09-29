@@ -4,15 +4,13 @@ use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize, syn
 
 use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, Session, SolveConfig,
     SolveError, Subject, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
-    admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -28,16 +26,6 @@ fn normal(source: &str) -> Admitted {
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-    )
-    .unwrap()
-}
-
-fn formula(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
     )
     .unwrap()
 }

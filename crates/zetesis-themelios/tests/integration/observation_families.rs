@@ -6,10 +6,9 @@ use serde_json::Value as Json;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
+use zetesis_reference_support::formula;
+use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
 
 const BASE: &str = "p(1).p(2).e(f(1,2)).e(f(2,1)).{q(1);q(2);hidden}.";
 const TERMS: [&str; 6] = ["X", "X+10", "f(X,(1;2))", "(X,1..2)", "p(X)", "-f(X)"];
@@ -46,17 +45,8 @@ fn cases() -> impl Iterator<Item = Json> {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
 }
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 fn basis() -> (AdmittedFormula, Vec<Model>) {
-    let input = admit(BASE);
+    let input = formula(BASE);
     let mut models = Vec::new();
     for mask in 0..1_usize << input.atoms().len() {
         let candidate = Interpretation::new(
@@ -102,7 +92,7 @@ fn records(witnesses: &Json) -> Vec<Vec<String>> {
 fn finite_queries_preserve_the_original_formula() {
     let (plain, _) = basis();
     for index in 0..CASES {
-        let input = admit(&source(index));
+        let input = formula(&source(index));
         assert_eq!(input.atoms(), plain.atoms(), "case {index}");
         assert_eq!(
             input.theory().nodes(),
@@ -122,7 +112,7 @@ fn complete_observation_multisets_preserve_hidden_family_multiplicity() {
     let mut count = 0;
     for (index, case) in cases().enumerate() {
         assert_eq!(case["source"], source(index));
-        let input = admit(case["source"].as_str().unwrap());
+        let input = formula(case["source"].as_str().unwrap());
         let mut actual: Vec<Vec<String>> = models
             .iter()
             .map(|model| {
@@ -160,7 +150,7 @@ fn complete_observation_multisets_preserve_hidden_family_multiplicity() {
 fn complete_family_evaluations_obey_their_exact_work_boundary() {
     let (_, models) = basis();
     for index in 0..CASES {
-        let input = admit(&source(index));
+        let input = formula(&source(index));
         for model in &models {
             let run = |max_work| {
                 input.metadata().observations().render(

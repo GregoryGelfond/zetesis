@@ -2,20 +2,9 @@
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
+use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource, Symbol};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 
 fn atom(name: &str, sign: Sign, values: &[i32]) -> Atom {
     Atom::new(
@@ -59,7 +48,7 @@ fn unary(model: &Model, name: &str, sign: Sign) -> Vec<i32> {
 
 #[test]
 fn observation_joins_match_full_row_enumeration() {
-    let input = admit("#show (X,Y):p(X),q(Y),X<=Y.");
+    let input = formula("#show (X,Y):p(X),q(Y),X<=Y.");
     let pool: Vec<_> = ["p", "q"]
         .into_iter()
         .flat_map(|name| (0..4).map(move |value| atom(name, Sign::Positive, &[value])))
@@ -94,7 +83,7 @@ fn observation_joins_match_full_row_enumeration() {
 
 #[test]
 fn negative_observations_use_complete_signed_identity() {
-    let input = admit("#show X: -p(X),not q(X).");
+    let input = formula("#show X: -p(X),not q(X).");
     let model = Model::new([
         atom("p", Sign::Negative, &[1]),
         atom("p", Sign::Negative, &[2]),
@@ -109,7 +98,7 @@ fn negative_observations_use_complete_signed_identity() {
 
 #[test]
 fn nested_aggregate_queries_retain_join_bindings() {
-    let input = admit("#show (X,N):p(X),N=#count{Y:q(Y),Y>=X}.");
+    let input = formula("#show (X,N):p(X),N=#count{Y:q(Y),Y>=X}.");
     let model = Model::new([
         atom("p", Sign::Positive, &[1]),
         atom("p", Sign::Positive, &[2]),
@@ -124,7 +113,7 @@ fn nested_aggregate_queries_retain_join_bindings() {
 
 #[test]
 fn tuple_aliases_match_one_complete_row() {
-    let input = admit("#show X:edge(X,X).");
+    let input = formula("#show X:edge(X,X).");
     let model = Model::new([
         atom("edge", Sign::Positive, &[1, 1]),
         atom("edge", Sign::Positive, &[1, 2]),
@@ -137,7 +126,7 @@ fn tuple_aliases_match_one_complete_row() {
 
 #[test]
 fn sparse_query_work_excludes_unrelated_row_products() {
-    let input = admit("#show (X,Y):p(X),q(Y).");
+    let input = formula("#show (X,Y):p(X),q(Y).");
     let model = Model::new(
         (0..256)
             .map(|value| atom("other", Sign::Positive, &[value]))
@@ -167,7 +156,7 @@ fn sparse_query_work_excludes_unrelated_row_products() {
 
 #[test]
 fn query_work_refusals_publish_no_partial_terms() {
-    let input = admit("#show (X,Y):p(X),q(Y).");
+    let input = formula("#show (X,Y):p(X),q(Y).");
     let model = Model::new([
         atom("p", Sign::Positive, &[1]),
         atom("q", Sign::Positive, &[1]),

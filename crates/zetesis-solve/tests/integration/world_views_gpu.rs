@@ -3,15 +3,13 @@
 use std::{collections::BTreeSet, io, num::NonZeroUsize};
 
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
     Subject, WorldViewError, WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
-    admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuErrorKind, GpuOptions, GpuSelection};
 
 /// A physical device on the requested API, and its adapter's own kind, so a
@@ -57,16 +55,6 @@ fn resources(device: Device) -> ExecutionResources {
         context.info().metadata()
     );
     ExecutionResources::with_gpu(&context)
-}
-
-fn formula(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
 }
 
 fn choices() -> Admitted {

@@ -4,22 +4,14 @@ use crate::support::stable_models;
 
 use std::collections::BTreeSet;
 
+use zetesis_reference_support::admit;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, admit_formula, observation::EvaluationError,
+    ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
 };
 
-fn admit(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
-
 fn check(source: &str, warnings: usize, expected: &[&str]) {
-    let admitted = admit(source).unwrap_or_else(|error| panic!("{source}: {error}"));
+    let admitted = admit(source, &FormulaLimits::default())
+        .unwrap_or_else(|error| panic!("{source}: {error}"));
     assert_eq!(admitted.warnings().len(), warnings, "{source}");
     assert!(
         admitted.atoms().len() <= 12,
@@ -30,7 +22,7 @@ fn check(source: &str, warnings: usize, expected: &[&str]) {
         facts.push_str(atom);
         facts.push('.');
     }
-    let expected = admit(&facts).unwrap();
+    let expected = admit(&facts, &FormulaLimits::default()).unwrap();
     assert_eq!(
         stable_models::stable(&admitted),
         BTreeSet::from([expected
@@ -125,7 +117,7 @@ fn projected_consequents_omit_only_undefined_instances() {
 fn wholly_undefined_consequents_still_refuse() {
     for consequent in ["q(1/X)", "not q(1/X)", "not not q(1/X)", "1/X=0"] {
         let source = format!("d(0).p:-{consequent}:d(X).");
-        let failure = admit(&source).unwrap_err();
+        let failure = admit(&source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 failure,

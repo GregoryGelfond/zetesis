@@ -2,24 +2,14 @@
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{
     ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 fn terms(source: &str) -> Vec<String> {
-    let input = admit(source);
+    let input = formula(source);
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input
         .metadata()
@@ -90,7 +80,7 @@ fn invalid_arithmetic_returns_the_pinned_cause() {
         ("-(-2147483647-1)", EvaluationError::Overflow),
         ("|(-2147483647-1)|", EvaluationError::Overflow),
     ] {
-        let input = admit(&format!("#show. #show {expression}."));
+        let input = formula(&format!("#show. #show {expression}."));
         let error = input
             .metadata()
             .observations()
@@ -111,7 +101,7 @@ fn invalid_arithmetic_returns_the_pinned_cause() {
 
 #[test]
 fn comparison_operands_share_the_construction_ceiling() {
-    let input = admit("#show. #show x:1<2.");
+    let input = formula("#show. #show x:1<2.");
     let construction = 4 * std::mem::size_of::<zetesis_themelios::observation::Symbol>();
     let run = |max_bytes| {
         input
@@ -137,8 +127,8 @@ fn comparison_operands_share_the_construction_ceiling() {
 #[test]
 fn expression_observations_preserve_the_logical_theory() {
     let source = "p(2). {q}. #minimize {1@2:q}.";
-    let plain = admit(source);
-    let shown = admit(&format!("{source} #show. #show f(X+10):p(X),X*2>3."));
+    let plain = formula(source);
+    let shown = formula(&format!("{source} #show. #show f(X+10):p(X),X*2>3."));
     assert_eq!(plain.atoms(), shown.atoms());
     assert_eq!(plain.theory().nodes(), shown.theory().nodes());
     assert_eq!(plain.theory().roots(), shown.theory().roots());
@@ -147,8 +137,8 @@ fn expression_observations_preserve_the_logical_theory() {
 #[test]
 fn expression_observations_preserve_source_priority_presence() {
     let source = "p(2). {q}. #minimize {1@2:q}.";
-    let plain = admit(source);
-    let shown = admit(&format!("{source} #show. #show f(X+10):p(X),X*2>3."));
+    let plain = formula(source);
+    let shown = formula(&format!("{source} #show. #show f(X+10):p(X),X*2>3."));
     assert_eq!(
         plain.objectives().priorities(),
         shown.objectives().priorities()
@@ -170,7 +160,7 @@ fn equality_binding_accepts_the_reversed_scalar_side() {
 
 #[test]
 fn generated_bindings_obey_the_live_local_payload_limit() {
-    let input = admit("#show. #show X:X=2.");
+    let input = formula("#show. #show X:X=2.");
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -194,7 +184,7 @@ fn generated_bindings_obey_the_live_local_payload_limit() {
 
 #[test]
 fn completed_directives_release_their_owned_bindings() {
-    let input = admit("#show. #show X:X=2. #show Y:Y=3.");
+    let input = formula("#show. #show X:X=2. #show Y:Y=3.");
     let result = input
         .metadata()
         .observations()
@@ -263,7 +253,7 @@ fn default_negation_tests_nested_patterns_without_rebinding() {
 }
 #[test]
 fn failed_nested_matches_release_their_partial_bindings() {
-    let input = admit("p(f(1,2)).p(f(3,3)). #show. #show X:p(f(X,X)).");
+    let input = formula("p(f(1,2)).p(f(3,3)). #show. #show X:p(f(X,X)).");
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let result = input
         .metadata()
@@ -323,7 +313,7 @@ fn a_pool_comparison_enables_each_matching_source_expansion() {
 }
 #[test]
 fn generated_alternatives_have_an_inclusive_payload_ceiling() {
-    let input = admit("#show. #show (1;2).");
+    let input = formula("#show. #show (1;2).");
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -346,7 +336,7 @@ fn generated_alternatives_have_an_inclusive_payload_ceiling() {
 }
 #[test]
 fn independent_directives_release_their_finite_alternatives() {
-    let input = admit("#show. #show (1;2). #show (3;4).");
+    let input = formula("#show. #show (1;2). #show (3;4).");
     let result = input
         .metadata()
         .observations()
@@ -431,7 +421,7 @@ fn scalar_argument_ranges_can_depend_on_same_atom_captures() {
 
 #[test]
 fn negated_pool_expansions_release_their_owned_alternatives() {
-    let input = admit("p(1). #show. #show x:not p((1;2);3),not p((3;4);5).");
+    let input = formula("p(1). #show. #show x:not p((1;2);3),not p((3;4);5).");
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
@@ -455,7 +445,7 @@ fn negated_pool_expansions_release_their_owned_alternatives() {
 }
 #[test]
 fn failed_pool_rows_release_nested_capture_ownership() {
-    let input = admit("p(f(1),0).p(f(2),1). #show. #show X:p(f(X),9;f(X),1).");
+    let input = formula("p(f(1),0).p(f(2),1). #show. #show X:p(f(X),9;f(X),1).");
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let full = input
         .metadata()
@@ -474,7 +464,7 @@ fn failed_pool_rows_release_nested_capture_ownership() {
 }
 #[test]
 fn an_undefined_pool_branch_refuses_the_complete_observation() {
-    let input = admit("#show. #show (1;1/0).");
+    let input = formula("#show. #show (1;1/0).");
     let failure = input
         .metadata()
         .observations()

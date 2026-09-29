@@ -8,6 +8,7 @@ use themelios_base::source::SourceId;
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, check};
+use zetesis_reference_support::admit;
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -21,14 +22,6 @@ fn cases() -> Vec<Json> {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
-}
-fn admit(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
 }
 fn displayed(text: &str) -> Vec<String> {
     let mut values = Vec::new();
@@ -172,7 +165,8 @@ fn admitted_sources_match_complete_recorded_display_and_cost_multisets() {
         .filter(|case| case["expected_refusal"].is_null())
     {
         let source = case["source"].as_str().unwrap();
-        let input = admit(source).unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
+        let input = admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
         let expected = reference(&case);
         assert_eq!(complete(&input), expected, "{}: {source}", case["name"]);
         records += expected.len();
@@ -188,7 +182,7 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
         .filter(|case| !case["expected_refusal"].is_null())
     {
         if case["expected_refusal"] == "Undefined" {
-            let input = admit(case["source"].as_str().unwrap()).unwrap();
+            let input = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
             let model =
                 Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
             let error = input
@@ -204,7 +198,7 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
             refused += 1;
             continue;
         }
-        let Err(error) = admit(case["source"].as_str().unwrap()) else {
+        let Err(error) = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()) else {
             panic!("{} unexpectedly admitted", case["name"]);
         };
         match case["expected_refusal"].as_str().unwrap() {
@@ -238,7 +232,7 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
 }
 #[test]
 fn metadata_preserves_the_original_formula_and_source_identity() {
-    let plain = admit("p(1). {q}. a:-missing.").unwrap();
+    let plain = admit("p(1). {q}. a:-missing.", &FormulaLimits::default()).unwrap();
     let observed = admit_formula(
         "p(1). {q}. a:-missing. #show f(X):p(X). #show f(X):p(X). #show missing.".into(),
         AdmissionOptions {
@@ -279,7 +273,7 @@ fn metadata_preserves_the_original_formula_and_source_identity() {
 
 fn paired_observations() -> (AdmittedFormula, Model) {
     let source = "p(1;2). #show. #show pair(X,X):p(X).";
-    let input = admit(source).unwrap();
+    let input = admit(source, &FormulaLimits::default()).unwrap();
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     (input, model)
 }
@@ -597,7 +591,7 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
 #[test]
 fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
     for source in ["#show f(1). p(f(1)).", "p(f(1)). #show f(1)."] {
-        let program = admit(source).unwrap();
+        let program = admit(source, &FormulaLimits::default()).unwrap();
         let model =
             Model::from_positions(program.atom_catalog(), 0..program.atoms().len()).unwrap();
         let rendered = program
@@ -640,8 +634,8 @@ fn shared_prefix_signature_lookups_charge_each_compared_name() {
     let last = format!("{prefix}z");
     let source = format!("{first}. {last}. #show {first}/0. #show {last}/0. #show x.");
     let expanded = format!("{source} #show {prefix}b/0. #show {prefix}c/0.");
-    let base = admit(&source).unwrap();
-    let input = admit(&expanded).unwrap();
+    let base = admit(&source, &FormulaLimits::default()).unwrap();
+    let input = admit(&expanded, &FormulaLimits::default()).unwrap();
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let render = |input: &AdmittedFormula, limits| {
         input.metadata().observations().render(

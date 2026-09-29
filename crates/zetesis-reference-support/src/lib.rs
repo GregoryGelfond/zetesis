@@ -2,12 +2,13 @@
 //! every answer set of a small program, found by checking each candidate
 //! against the reduct.
 //!
-//! [`admit`] admits a source under the default options, and [`exhaustive`]
-//! enumerates every subset of its atoms, keeping those the reduct check
-//! (`zetesis_ferraris::check`) accepts, each with its objective's costs; atoms
-//! are spelled as clingo spells them ([`canonical`]). The crate stands above
-//! `zetesis-themelios`, so only the tests that compare a native enumeration
-//! compile it. It is not published or installed.
+//! [`admit`] admits a source under the default options, [`formula`] under
+//! the default limits as well, and [`exhaustive`] enumerates every subset of
+//! its atoms, keeping those the reduct check (`zetesis_ferraris::check`)
+//! accepts, each with its objective's costs; atoms are spelled as clingo
+//! spells them ([`canonical`]). The crate stands above `zetesis-themelios`,
+//! so only the tests that compare a native enumeration compile it. It is not
+//! published or installed.
 
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
@@ -66,6 +67,16 @@ pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Fo
     )
 }
 
+/// `source` admitted as a formula program under the default options and
+/// limits.
+///
+/// # Panics
+/// Panics if the admission refuses `source`.
+#[must_use]
+pub fn formula(source: &str) -> AdmittedFormula {
+    admit(source, &FormulaLimits::default()).expect("admitted test formula")
+}
+
 /// Every answer set of `input`, each with its objective's costs: every subset
 /// of its atoms the reduct check accepts.
 ///
@@ -121,6 +132,12 @@ mod tests {
         let admitted = admit("{a}.", &FormulaLimits::default()).unwrap();
         let expected: Records = [([].into(), None), (["a".to_owned()].into(), None)].into();
         assert_eq!(exhaustive(&admitted), expected);
+    }
+
+    #[test]
+    fn a_formula_is_its_source_admitted_under_the_default_limits() {
+        let admitted = admit("{a}. b :- a.", &FormulaLimits::default()).unwrap();
+        assert_eq!(exhaustive(&formula("{a}. b :- a.")), exhaustive(&admitted));
     }
 
     #[test]

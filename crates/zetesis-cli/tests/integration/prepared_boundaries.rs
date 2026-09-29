@@ -10,10 +10,10 @@ use zetesis_cli::{
 use zetesis_core::{Model, StaticError};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{PositiveError, PositiveResource};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
-    FormulaLimits, SourceBundle, admit_bundle_extended, admit_bundle_formula, admit_extended,
-    admit_formula,
+    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits,
+    SourceBundle, admit_bundle_extended, admit_bundle_formula, admit_extended,
 };
 
 struct Sources(tempfile::TempDir);
@@ -42,16 +42,6 @@ fn config() -> SolveConfig {
         models: 0,
         ..Default::default()
     }
-}
-
-fn formula(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
 }
 
 fn atoms(model: &Model) -> Vec<String> {

@@ -7,14 +7,14 @@ use zetesis_core::{
     relation::{Limits, Relation},
 };
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, GpuApi, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome,
     Session, SolveConfig, SolveError, Subject,
 };
 use zetesis_themelios::{
-    AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
-    admit_formula,
+    AdmissionOptions, Admitted, ExpansionLimits, FormulaLimits, admit_extended,
 };
 use zetesis_wgpu::{
     AdapterBackend, AdapterCategory, GateProjection, GpuContext, GpuError, GpuErrorKind,
@@ -99,16 +99,6 @@ fn normal(source: &str) -> Admitted {
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-    )
-    .unwrap()
-}
-
-fn formula(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
     )
     .unwrap()
 }

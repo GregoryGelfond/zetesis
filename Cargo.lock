@@ -1952,6 +1952,7 @@ dependencies = [
  "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
+ "zetesis-reference-support",
  "zetesis-sat",
  "zetesis-telemetry",
  "zetesis-themelios",

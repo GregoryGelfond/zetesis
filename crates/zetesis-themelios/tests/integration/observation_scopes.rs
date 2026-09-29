@@ -4,23 +4,14 @@ use crate::support::observation_reference;
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_formula,
+    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, admit_formula,
 };
 
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 fn rendered(source: &str) -> String {
-    let input = admit(source);
+    let input = formula(source);
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input
         .metadata()
@@ -196,7 +187,7 @@ fn local_equalities_construct_aggregate_keys() {
 }
 #[test]
 fn independent_aggregate_queries_release_their_keys() {
-    let input = admit("p(1). #show. #show x:#count{X:p(X)}=1,#count{Y:p(Y)}=1.");
+    let input = formula("p(1). #show. #show x:#count{X:p(X)}=1,#count{Y:p(Y)}=1.");
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let result = input
         .metadata()
@@ -214,7 +205,7 @@ fn independent_aggregate_queries_release_their_keys() {
 }
 #[test]
 fn aggregate_keys_obey_the_inclusive_local_payload_ceiling() {
-    let input = admit("p(1). #show. #show x:#count{X:p(X)}=1.");
+    let input = formula("p(1). #show. #show x:#count{X:p(X)}=1.");
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
@@ -238,7 +229,7 @@ fn aggregate_keys_obey_the_inclusive_local_payload_ceiling() {
 }
 #[test]
 fn local_substitutions_share_the_binding_ceiling() {
-    let input = admit("p(1).p(2). #show. #show x:#count{X:p(X)}=2.");
+    let input = formula("p(1).p(2). #show. #show x:#count{X:p(X)}=2.");
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     let run = |max_bindings| {
         input.metadata().observations().evaluate(
@@ -262,7 +253,7 @@ fn local_substitutions_share_the_binding_ceiling() {
 }
 #[test]
 fn cancellation_refuses_the_whole_observation() {
-    let input = admit("p(1). #show. #show x:#count{X:p(X)}=1.");
+    let input = formula("p(1). #show. #show x:#count{X:p(X)}=1.");
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let error = input
@@ -330,7 +321,7 @@ fn scoped_queries_match_recorded_complete_reference_displays() {
 #[test]
 fn wide_observation_measures_agree_with_original_formula_truth() {
     let source = "#sum{2147483647,a;2147483647,b;-1,c}>2147483647";
-    let input = admit(&format!("ok:-{source}."));
+    let input = formula(&format!("ok:-{source}."));
     let candidate =
         zetesis_ferraris::Interpretation::new(input.theory(), 0..input.atoms().len()).unwrap();
     let original = zetesis_ferraris::check(
@@ -453,7 +444,7 @@ fn circular_aggregate_result_dependencies_are_refused() {
 }
 #[test]
 fn aggregate_bindings_check_the_pinned_scalar_width() {
-    let input = admit("#show. #show N:N=#sum{2147483647,a;2147483647,b}.");
+    let input = formula("#show. #show N:N=#sum{2147483647,a;2147483647,b}.");
     let error = input
         .metadata()
         .observations()
@@ -541,7 +532,7 @@ fn matched_atom_keys_share_the_live_scope_ceiling() {
         for value in 1..=count {
             write!(facts, "p({value}).").unwrap();
         }
-        let input = admit(&format!("{facts} #show. #show N:N={{p((X;10))}}."));
+        let input = formula(&format!("{facts} #show. #show N:N={{p((X;10))}}."));
         let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
         // The binding and each retained p(number) key charge two semantic
         // nodes plus the one-byte predicate name. Default negation belongs
@@ -575,7 +566,7 @@ fn matched_atom_keys_share_the_live_scope_ceiling() {
 }
 #[test]
 fn matched_atom_key_construction_checks_child_depth() {
-    let input = admit("p(1). #show N:N={p(_)}.");
+    let input = formula("p(1). #show N:N={p(_)}.");
     let failure = input
         .metadata()
         .observations()

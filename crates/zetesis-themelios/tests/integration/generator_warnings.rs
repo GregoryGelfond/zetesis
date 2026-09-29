@@ -1,22 +1,13 @@
 //! Undefined generated values cannot conceal independent arithmetic faults.
 
 use zetesis_core::Value;
+use zetesis_reference_support::admit;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, admit_formula, observation::EvaluationError,
+    ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
 };
 
-fn admit(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
-
 fn overflow(source: &str) {
-    let Err(failure) = admit(source) else {
+    let Err(failure) = admit(source, &FormulaLimits::default()) else {
         panic!("independent overflow must refuse {source}");
     };
     assert!(
@@ -62,7 +53,11 @@ fn dependent_range_bounds_still_check_independent_branches() {
 
 #[test]
 fn missing_generator_values_do_not_become_inputs() {
-    let admitted = admit("d(0;1).p(Y,Z):-d(X),Y=1/X,Z=Y+2147483646.").unwrap();
+    let admitted = admit(
+        "d(0;1).p(Y,Z):-d(X),Y=1/X,Z=Y+2147483646.",
+        &FormulaLimits::default(),
+    )
+    .unwrap();
     assert_eq!(admitted.warnings().len(), 1);
     let produced: Vec<_> = admitted
         .atoms()
@@ -79,7 +74,11 @@ fn missing_generator_values_do_not_become_inputs() {
 #[test]
 fn empty_generators_leave_no_arithmetic_family() {
     for body in ["Y=1/X,R=(X+1)..X", "R=(X+1)..X,Y=1/X"] {
-        let admitted = admit(&format!("d(0).p(Y,R):-d(X),{body}.")).unwrap();
+        let admitted = admit(
+            &format!("d(0).p(Y,R):-d(X),{body}."),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         assert!(admitted.warnings().is_empty());
         assert!(
             admitted
@@ -92,14 +91,28 @@ fn empty_generators_leave_no_arithmetic_family() {
 
 #[test]
 fn backtracking_discards_unavailable_outputs() {
-    let admitted = admit("p(X,Y,Z):-X=0..2,Y=1/X,Z=1/(X-1).").unwrap();
+    let admitted = admit(
+        "p(X,Y,Z):-X=0..2,Y=1/X,Z=1/(X-1).",
+        &FormulaLimits::default(),
+    )
+    .unwrap();
     assert_eq!(admitted.warnings().len(), 1);
-    assert_eq!(admitted.atoms(), admit("p(2,0,1).").unwrap().atoms());
+    assert_eq!(
+        admitted.atoms(),
+        admit("p(2,0,1).", &FormulaLimits::default())
+            .unwrap()
+            .atoms()
+    );
 }
 
 #[test]
 fn constructors_do_not_publish_unavailable_arguments() {
-    let admitted = admit("p(X,Z):-X=0..1,Y=1/X,Z=g(c,Y).").unwrap();
+    let admitted = admit("p(X,Z):-X=0..1,Y=1/X,Z=g(c,Y).", &FormulaLimits::default()).unwrap();
     assert_eq!(admitted.warnings().len(), 1);
-    assert_eq!(admitted.atoms(), admit("p(1,g(c,1)).").unwrap().atoms());
+    assert_eq!(
+        admitted.atoms(),
+        admit("p(1,g(c,1)).", &FormulaLimits::default())
+            .unwrap()
+            .atoms()
+    );
 }
