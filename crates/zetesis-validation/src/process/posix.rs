@@ -9,6 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+use rustix::io::Errno;
 use rustix::process::{Pid, Signal, WaitId, WaitIdOptions, kill_process_group, waitid};
 
 use super::{
@@ -77,12 +78,7 @@ pub(super) fn invoke(
             Ok(false) => {
                 // A failed helper may have left its solver after closing pipes.
                 // The waitable helper still reserves this group ID.
-                if let Err(error) =
-                    pid(&owned).and_then(|pid| match kill_process_group(pid, Signal::KILL) {
-                        Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
-                        Err(error) => Err(error.into()),
-                    })
-                {
+                if let Err(error) = kill_group(&owned) {
                     capture.failure = Some(Failure::new(Operation::TerminateGroup, error));
                     capture.stop = Stop::Failure;
                 }
@@ -232,6 +228,22 @@ fn observe(child: &PendingChild) -> io::Result<bool> {
     .map_err(Into::into)
 }
 
+/// Send SIGKILL to the child's process group.
+///
+/// kill(2) succeeds when it signals any member of the group, so a refusal
+/// (`EPERM`) or an empty group (`ESRCH`) means no member could be signalled.
+/// Once the waitable leader has exited, that is the expected end, not a failed
+/// termination: macOS refuses a group whose members are all zombies. A member
+/// this process may not signal, such as a set-user-ID descendant, stays
+/// invisible here, as it does to a group kill that succeeds.
+fn kill_group(child: &PendingChild) -> io::Result<()> {
+    match kill_process_group(pid(child)?, Signal::KILL) {
+        Ok(()) => Ok(()),
+        Err(Errno::PERM | Errno::SRCH) if observe(child).unwrap_or(false) => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
 fn helper_succeeded(child: &PendingChild) -> io::Result<bool> {
     waitid(
         WaitId::Pid(pid(child)?),
@@ -300,8 +312,7 @@ fn finish(mut child: PendingChild, timeout: Duration, terminate: bool) -> Cleanu
     let mut failure = None;
     if terminate
         && child.group_owned
-        && let Err(error) =
-            pid(&child).and_then(|pid| kill_process_group(pid, Signal::KILL).map_err(Into::into))
+        && let Err(error) = kill_group(&child)
     {
         failure = Some(Failure::new(Operation::TerminateGroup, error));
     }
@@ -400,6 +411,59 @@ mod tests {
             panic!("fixture cleanup abandoned child {}", pending.abandon());
         }
         assert_eq!(second.exit.unwrap().signal, Some(9));
+    }
+
+    #[test]
+    fn cleanup_after_the_leader_exits_reports_no_termination_failure() {
+        let child = Command::new("/bin/sh")
+            .args(["-c", "exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let exited = PendingChild {
+            child,
+            group_owned: true,
+        };
+        // Wait without reaping: the group's only member is now its waitable
+        // leader, which macOS refuses to signal.
+        let status = waitid(
+            WaitId::Pid(pid(&exited).unwrap()),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+        )
+        .unwrap();
+        assert!(status.is_some_and(|status| status.exit_status() == Some(0)));
+        let settled = cleanup(exited, Duration::from_secs(1));
+        if let Some(pending) = settled.pending {
+            panic!("fixture cleanup abandoned child {}", pending.abandon());
+        }
+        assert!(settled.failure.is_none(), "{:?}", settled.failure);
+        assert_eq!(settled.exit.unwrap().code, Some(0));
+    }
+
+    #[test]
+    fn a_failed_helper_without_descendants_completes_with_its_exit() {
+        // Completion is observed only after the helper has exited, so its group
+        // holds just the waitable leader when the failed helper's group is killed.
+        let arguments: [std::ffi::OsString; 2] = ["-c".into(), "exit 7".into()];
+        let outcome = crate::process::invoke_supervised(
+            Invocation {
+                executable: std::path::Path::new("/bin/sh"),
+                arguments: &arguments,
+                directory: &std::env::temp_dir(),
+            },
+            Limits::default(),
+        )
+        .unwrap();
+        let (capture, pending) = outcome.into_parts();
+        if let Some(pending) = pending {
+            panic!("fixture cleanup abandoned child {}", pending.abandon());
+        }
+        assert_eq!(capture.stop, Stop::Completed, "{capture:?}");
+        assert!(capture.failure.is_none(), "{capture:?}");
+        assert_eq!(capture.exit.unwrap().code, Some(7));
     }
 
     #[test]
