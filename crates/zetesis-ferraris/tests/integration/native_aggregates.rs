@@ -1,5 +1,6 @@
 //! Direct original/frozen aggregate evaluation against existing exact lowering.
 
+use crate::support::aggregate_theories::COMPARISONS;
 use zetesis_core::{Sign, Value as Term, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
@@ -9,14 +10,6 @@ use zetesis_ferraris::{
     native_aggregate::{self as native, Bound, Function, Group, Guard, Tuple},
 };
 
-const COMPARISONS: [Comparison; 6] = [
-    Comparison::Eq,
-    Comparison::Ne,
-    Comparison::Lt,
-    Comparison::Le,
-    Comparison::Gt,
-    Comparison::Ge,
-];
 const FUNCTIONS: [Function; 5] = [
     Function::Count,
     Function::Sum,

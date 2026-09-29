@@ -2,6 +2,8 @@
 
 use std::time::Instant;
 
+use crate::support::aggregate_theories::{COMPARISONS, prefix};
+use crate::support::worlds::{eval, interpretation};
 use proptest::prelude::*;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
@@ -9,31 +11,6 @@ use zetesis_ferraris::{
     AggregateErrorKind as Error, AggregateLimits, AggregateProfile, Interpretation, Limits, Node,
     Theory, append_aggregate, models, models_reduct,
 };
-
-const COMPARISONS: [Comparison; 6] = [
-    Comparison::Eq,
-    Comparison::Ne,
-    Comparison::Lt,
-    Comparison::Le,
-    Comparison::Gt,
-    Comparison::Ge,
-];
-
-fn prefix() -> Vec<Node> {
-    vec![
-        Node::False,
-        Node::Implies(0, 0),
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Implies(2, 0),
-        Node::Implies(4, 0),
-        Node::Implies(3, 0),
-        Node::And(2, 3),
-        Node::Or(2, 3),
-        Node::Implies(2, 3),
-        Node::Or(2, 4),
-    ]
-}
 
 fn holds(comparison: Comparison, sum: i64, bound: i64) -> bool {
     match comparison {
@@ -48,22 +25,6 @@ fn holds(comparison: Comparison, sum: i64, bound: i64) -> bool {
 
 // Recursive interpretation is confined to this fixed shallow test prefix.
 // It does not share the production kernel's topological masks or aggregate DAG.
-fn eval(nodes: &[Node], root: usize, world: u8, frozen: Option<u8>) -> bool {
-    if frozen.is_some_and(|candidate| !eval(nodes, root, candidate, None)) {
-        return false;
-    }
-    match nodes[root] {
-        Node::False => false,
-        Node::Atom(atom) => world & (1 << atom) != 0,
-        Node::And(a, b) => eval(nodes, a, world, frozen) && eval(nodes, b, world, frozen),
-        Node::Or(a, b) => eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
-        Node::Implies(a, b) => !eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
-    }
-}
-
-fn world(theory: &Theory, mask: u8) -> Interpretation {
-    Interpretation::new(theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap()
-}
 
 fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
     let input = prefix();
@@ -85,7 +46,7 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
             .map(|element| i64::from(element.weight))
             .sum();
         let classical = holds(comparison, sum, bound);
-        let candidate = world(&theory, outer);
+        let candidate = interpretation(&theory, outer);
         assert_eq!(
             models(
                 &theory,
@@ -110,7 +71,7 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
                 models_reduct(
                     &theory,
                     &candidate,
-                    &world(&theory, inner),
+                    &interpretation(&theory, inner),
                     Limits::default(),
                     &Cancellation::default()
                 )

@@ -2,6 +2,8 @@
 
 use std::time::Instant;
 
+use crate::support::aggregate_theories::{COMPARISONS, prefix, push};
+use crate::support::worlds::{eval, interpretation};
 use proptest::prelude::*;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
@@ -11,45 +13,8 @@ use zetesis_ferraris::{
     append_aggregate_family, models, models_reduct,
 };
 
-const COMPARISONS: [Comparison; 6] = [
-    Comparison::Eq,
-    Comparison::Ne,
-    Comparison::Lt,
-    Comparison::Le,
-    Comparison::Gt,
-    Comparison::Ge,
-];
-
-fn prefix() -> Vec<Node> {
-    vec![
-        Node::False,
-        Node::Implies(0, 0),
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Implies(2, 0),
-        Node::Implies(4, 0),
-        Node::Implies(3, 0),
-        Node::And(2, 3),
-        Node::Or(2, 3),
-        Node::Implies(2, 3),
-        Node::Or(2, 4),
-    ]
-}
-
 // Recursive evaluation is only the small independent test interpreter. It
 // materializes neither the production topological mask nor its witness formula.
-fn eval(nodes: &[Node], root: usize, world: u8, frozen: Option<u8>) -> bool {
-    if frozen.is_some_and(|candidate| !eval(nodes, root, candidate, None)) {
-        return false;
-    }
-    match nodes[root] {
-        Node::False => false,
-        Node::Atom(atom) => world & (1 << atom) != 0,
-        Node::And(a, b) => eval(nodes, a, world, frozen) && eval(nodes, b, world, frozen),
-        Node::Or(a, b) => eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
-        Node::Implies(a, b) => !eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
-    }
-}
 
 fn holds(comparison: Comparison, value: i128, bound: i64) -> bool {
     let bound = i128::from(bound);
@@ -61,12 +26,6 @@ fn holds(comparison: Comparison, value: i128, bound: i64) -> bool {
         Comparison::Gt => value > bound,
         Comparison::Ge => value >= bound,
     }
-}
-
-fn push(nodes: &mut Vec<Node>, node: Node) -> usize {
-    let index = nodes.len();
-    nodes.push(node);
-    index
 }
 
 fn reference(elements: &[Element], comparison: Comparison, bound: i64) -> (Vec<Node>, usize) {
@@ -96,10 +55,6 @@ fn reference(elements: &[Element], comparison: Comparison, bound: i64) -> (Vec<N
     (nodes, root)
 }
 
-fn world(theory: &Theory, mask: u8) -> Interpretation {
-    Interpretation::new(theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap()
-}
-
 fn verify(elements: &[Element], guards: &[Guard]) {
     let input = prefix();
     let mut nodes = input.clone();
@@ -122,7 +77,7 @@ fn verify(elements: &[Element], guards: &[Guard]) {
                 .map(|element| i128::from(element.weight))
                 .sum();
             let classical = holds(guard.comparison, sum, guard.bound);
-            let candidate = world(&theory, outer);
+            let candidate = interpretation(&theory, outer);
             assert_eq!(eval(&reference, reference_root, outer, None), classical);
             assert_eq!(
                 models(
@@ -149,7 +104,7 @@ fn verify(elements: &[Element], guards: &[Guard]) {
                     models_reduct(
                         &theory,
                         &candidate,
-                        &world(&theory, inner),
+                        &interpretation(&theory, inner),
                         Limits::default(),
                         &Cancellation::default()
                     )

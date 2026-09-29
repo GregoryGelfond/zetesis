@@ -1,5 +1,6 @@
 //! Independent syntax-tree reduct and finite model enumeration.
 
+use crate::support::worlds::interpretation;
 use std::time::Instant;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
@@ -52,9 +53,6 @@ fn theory(formulas: &[Expr]) -> Theory {
     let mut nodes = Vec::new();
     let roots = formulas.iter().map(|expr| expr.emit(&mut nodes)).collect();
     Theory::new(2, nodes, roots, AdmissionLimits::default()).unwrap()
-}
-fn interpretation(theory: &Theory, world: u8) -> Interpretation {
-    Interpretation::new(theory, (0..2).filter(|atom| world & (1 << atom) != 0)).unwrap()
 }
 fn compare(formulas: &[Expr]) {
     let program = theory(formulas);
