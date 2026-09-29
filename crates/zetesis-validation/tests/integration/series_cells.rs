@@ -1,21 +1,10 @@
 //! The audit series measures a fixed, distinct, capture-bounded cell set.
+use crate::support::corpus::corpus;
 use std::collections::BTreeSet;
-use std::path::Path;
-use zetesis_validation::{
-    examples,
-    performance::{
-        matrix::{Workload, WorkloadLimits},
-        series,
-    },
+use zetesis_validation::performance::{
+    matrix::{Workload, WorkloadLimits},
+    series,
 };
-
-fn corpus() -> examples::Corpus {
-    examples::load(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness"),
-        examples::Limits::default(),
-    )
-    .unwrap()
-}
 
 #[test]
 fn the_series_names_its_cells_in_a_fixed_order() {
