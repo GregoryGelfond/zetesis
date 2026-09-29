@@ -92,8 +92,8 @@ The validator loads these examples by default. The Rust regression suite is:
 cargo test --locked -p zetesis-validation --test integration example_corpus::
 ```
 
-For an independent original-versus-clean clingo comparison, set `CLINGO` to the
-absolute path of a clingo 5.8.x executable:
+For an independent original-versus-clean clingo comparison, use clingo 5.8.2 on
+`PATH`, or set `CLINGO` to its absolute path:
 
 ```sh
 CLINGO=/absolute/path/to/clingo cargo test --locked -p zetesis-validation \

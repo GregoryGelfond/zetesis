@@ -4,12 +4,10 @@ use crate::support::objective_boundaries;
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
@@ -489,27 +487,13 @@ fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
 }
 
 fn clingo(source: &str) -> Models {
-    let executable = std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into());
-    let mut child = Command::new(executable)
-        .args(["--outf=2", "--models=0", "--warn=none", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("clingo installed");
-    child
-        .stdin
-        .take()
-        .expect("stdin")
-        .write_all(source.as_bytes())
-        .expect("original oracle source");
-    let output = child.wait_with_output().expect("clingo completed");
-    assert!(
-        matches!(output.status.code(), Some(0 | 10 | 20 | 30)),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+    let run = oracle::run_accepting(
+        source,
+        &["--outf=2", "--models=0", "--warn=none"],
+        &[0, 10, 20, 30],
+        oracle::Limits::default(),
     );
-    let json: Json = serde_json::from_slice(&output.stdout).expect("clingo JSON");
+    let json = oracle::json(&run);
     assert_eq!(json["Models"]["More"], "no", "oracle exhausted");
     let mut models = BTreeSet::new();
     for call in json["Call"].as_array().expect("calls") {

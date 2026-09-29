@@ -28,6 +28,7 @@ signal-hook = { version = "=0.4.4", default-features = false }
 proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
 proptest = "1.11"
 syn = { version = "=2.0.119", features = ["full"] }
+zetesis-clingo-support.workspace = true
 zetesis-test-support.workspace = true
 
 [lints]

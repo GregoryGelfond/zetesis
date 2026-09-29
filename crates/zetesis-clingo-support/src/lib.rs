@@ -1,7 +1,8 @@
 //! Clingo, the external comparison oracle, for the zetesis workspace's tests.
 //!
 //! A test that compares zetesis with clingo finds clingo ([`executable`]),
-//! runs it within bounds ([`run`]) and decodes its JSON report ([`json`],
+//! runs it within bounds on a source ([`run`], [`run_accepting`]) or on
+//! program files ([`run_in`]), and decodes its JSON report ([`json`],
 //! [`model_records`], [`answers()`]); [`records`] does all three for a complete
 //! enumeration. Each test keeps the clingo arguments its comparison needs.
 //!
@@ -11,7 +12,7 @@
 
 use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -83,7 +84,7 @@ pub struct Run {
 }
 
 impl Run {
-    /// The exit code: 10, 20 or 30.
+    /// The exit code, one of those the run accepted.
     #[must_use]
     pub fn code(&self) -> i32 {
         self.code
@@ -102,27 +103,103 @@ impl Run {
     }
 }
 
-/// Run clingo on `source` with `arguments`, within `limits`.
+/// The exit codes of a run that decided its program: satisfiable (10),
+/// unsatisfiable (20), or satisfiable with its search exhausted (30).
+pub const DECIDED: [i32; 3] = [10, 20, 30];
+
+/// Run clingo on `source` with `arguments`, within `limits`, expecting it to
+/// decide the program ([`DECIDED`]).
+///
+/// # Panics
+/// As [`run_accepting`].
+#[must_use]
+pub fn run(source: &str, arguments: &[&str], limits: Limits) -> Run {
+    run_accepting(source, arguments, &DECIDED, limits)
+}
+
+/// Run clingo on `source` with `arguments`, within `limits`, accepting the
+/// exit codes in `exits`: a comparison that expects clingo to refuse a
+/// program accepts its error code, 65.
 ///
 /// The source is written to a file in a fresh temporary directory, where
 /// clingo runs; the file is its last argument.
 ///
 /// # Panics
-/// Panics if clingo cannot start, does not complete within the limits, is
-/// signalled, exits with a code other than 10, 20 or 30, or leaves a child
-/// that cannot be reaped. The message carries clingo's standard error.
+/// As [`run_in`]; the message quotes the source.
 #[must_use]
-pub fn run(source: &str, arguments: &[&str], limits: Limits) -> Run {
+pub fn run_accepting(source: &str, arguments: &[&str], exits: &[i32], limits: Limits) -> Run {
+    run_source(&executable(), source, arguments, exits, limits)
+}
+
+/// Run clingo in `directory` with `arguments`, which name the program files
+/// it reads, within `limits`, accepting the exit codes in `exits`. A relative
+/// file name resolves from `directory`.
+///
+/// # Panics
+/// Panics if clingo cannot start, does not complete within the limits, is
+/// signalled, exits with a code `exits` does not hold, or leaves a child that
+/// cannot be reaped cleanly. The message names the arguments and carries
+/// clingo's standard error.
+#[must_use]
+pub fn run_in<I>(directory: &Path, arguments: I, exits: &[i32], limits: Limits) -> Run
+where
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
+{
+    let arguments: Vec<OsString> = arguments
+        .into_iter()
+        .map(|argument| argument.as_ref().to_owned())
+        .collect();
+    let subject = format!("{arguments:?}");
+    invoke(
+        &executable(),
+        directory,
+        &arguments,
+        exits,
+        limits,
+        &subject,
+    )
+}
+
+/// [`run_accepting`], with `executable` in clingo's place.
+fn run_source(
+    executable: &Path,
+    source: &str,
+    arguments: &[&str],
+    exits: &[i32],
+    limits: Limits,
+) -> Run {
     let directory = tempfile::tempdir().expect("temporary directory for clingo");
     let input = directory.path().join("case.lp");
     std::fs::write(&input, source).expect("clingo input");
     let mut arguments: Vec<OsString> = arguments.iter().map(OsString::from).collect();
     arguments.push(input.into_os_string());
+    invoke(
+        executable,
+        directory.path(),
+        &arguments,
+        exits,
+        limits,
+        source,
+    )
+}
+
+/// One bounded run of `executable` in `directory`; `subject` names its input
+/// in a failure's message. The executable is clingo, except in this crate's
+/// tests of a run's contract.
+fn invoke(
+    executable: &Path,
+    directory: &Path,
+    arguments: &[OsString],
+    exits: &[i32],
+    limits: Limits,
+    subject: &str,
+) -> Run {
     let (capture, pending) = process::invoke(
         process::Invocation {
-            executable: &executable(),
-            arguments: &arguments,
-            directory: directory.path(),
+            executable,
+            arguments,
+            directory,
         },
         process::Limits {
             timeout: limits.timeout,
@@ -141,30 +218,31 @@ pub fn run(source: &str, arguments: &[&str], limits: Limits) -> Run {
                 cleanup.failure
             );
         }
+        assert!(
+            cleanup.failure.is_none(),
+            "clingo's cleanup failed: {:?}",
+            cleanup.failure
+        );
     }
-    let stderr = String::from_utf8_lossy(capture.stderr()).into_owned();
-    assert_eq!(
-        capture.stop(),
-        process::Stop::Completed,
-        "clingo did not complete within its limits: {stderr}"
+    let context = format!(
+        "clingo on {subject}\nstandard error:\n{}",
+        String::from_utf8_lossy(capture.stderr())
     );
+    assert_eq!(capture.stop(), process::Stop::Completed, "{context}");
     assert!(
         capture.failure().is_none(),
-        "{:?}: {stderr}",
+        "{:?}: {context}",
         capture.failure()
     );
     assert!(
         capture.cleanup_failure().is_none(),
-        "{:?}: {stderr}",
+        "{:?}: {context}",
         capture.cleanup_failure()
     );
     let exit = capture.exit().expect("a completed run has an exit");
-    assert!(exit.signal.is_none(), "clingo was signalled: {stderr}");
+    assert!(exit.signal.is_none(), "signalled: {context}");
     let code = exit.code.expect("an unsignalled exit has a code");
-    assert!(
-        matches!(code, 10 | 20 | 30),
-        "clingo exited {code}: {stderr}"
-    );
+    assert!(exits.contains(&code), "exited {code}: {context}");
     Run {
         code,
         stdout: capture.stdout().to_vec(),
@@ -308,6 +386,94 @@ mod tests {
         let empty = tempfile::tempdir().unwrap();
         let search = std::env::join_paths([empty.path()]).unwrap();
         let _ = discover(None, Some(&search));
+    }
+
+    /// The shell stands in for clingo in the tests of a run's contract.
+    #[cfg(unix)]
+    const SHELL: &str = "/bin/sh";
+
+    #[test]
+    #[cfg(unix)]
+    fn a_source_run_passes_the_source_file_last() {
+        let run = run_source(
+            Path::new(SHELL),
+            "p.",
+            &["-c", r#"cat "$1"; exit 10"#, "clingo"],
+            &DECIDED,
+            Limits::default(),
+        );
+        assert_eq!(run.stdout(), b"p.");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_run_takes_place_in_its_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let arguments = ["-c".into(), "pwd -P; exit 20".into()];
+        let run = invoke(
+            Path::new(SHELL),
+            directory.path(),
+            &arguments,
+            &DECIDED,
+            Limits::default(),
+            "pwd",
+        );
+        let reported = std::str::from_utf8(run.stdout()).unwrap().trim_end();
+        assert_eq!(
+            Path::new(reported),
+            directory.path().canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn an_accepted_refusal_returns_its_code_and_diagnostics() {
+        let directory = tempfile::tempdir().unwrap();
+        let arguments = ["-c".into(), "echo refused >&2; exit 65".into()];
+        let run = invoke(
+            Path::new(SHELL),
+            directory.path(),
+            &arguments,
+            &[65],
+            Limits::default(),
+            "refusal",
+        );
+        assert_eq!((run.code(), run.stderr()), (65, b"refused\n".as_slice()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    #[should_panic(expected = "exited 65")]
+    fn an_exit_outside_the_accepted_codes_fails_the_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let arguments = ["-c".into(), "exit 65".into()];
+        let _ = invoke(
+            Path::new(SHELL),
+            directory.path(),
+            &arguments,
+            &DECIDED,
+            Limits::default(),
+            "refusal",
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    #[should_panic(expected = "left: Deadline")]
+    fn a_run_past_its_deadline_fails() {
+        let directory = tempfile::tempdir().unwrap();
+        let arguments = ["-c".into(), "sleep 5".into()];
+        let _ = invoke(
+            Path::new(SHELL),
+            directory.path(),
+            &arguments,
+            &DECIDED,
+            Limits {
+                timeout: Duration::from_millis(100),
+                max_output_bytes: 1024,
+            },
+            "sleep",
+        );
     }
 
     #[test]

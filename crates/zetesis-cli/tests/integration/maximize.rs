@@ -4,8 +4,8 @@ use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use serde_json::Value as Json;
 use zetesis_cli::{Completion, Options, Oracle, Report, RunError, run_with_diagnostics};
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionFailure, ExpansionFailure, FormulaFailure, ProfileFeature};
 
@@ -359,16 +359,8 @@ fn original_stdin_command_proves_normalized_optimum_without_feature_flags() {
 }
 
 fn clingo(case: &Case) -> Records {
-    let output = process(
-        Command::new("clingo").args(["-", "0", "--outf=2", "--opt-mode=enum", "--warn=none"]),
-        case.source,
-    );
-    assert!(
-        matches!(output.status.code(), Some(10 | 20 | 30)),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let json: Json = serde_json::from_slice(&output.stdout).unwrap();
+    let run = oracle::run(case.source, &oracle::ENUMERATION, oracle::Limits::default());
+    let json = oracle::json(&run);
     assert_eq!(json["Models"]["More"].as_str(), Some("no"));
     let mut result = Vec::new();
     for call in json["Call"].as_array().unwrap() {

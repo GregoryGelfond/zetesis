@@ -1,8 +1,7 @@
 //! Independent complete display multisets; observation never changes the reduct.
 
-use std::fs::{self, File};
+use std::fs::{self};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -703,39 +702,17 @@ impl Drop for Directory {
     }
 }
 fn oracle(source: &str) -> Json {
-    let directory = Directory::new();
-    let input = directory.0.join("original.lp");
-    let output = directory.0.join("output.json");
-    let errors = directory.0.join("stderr");
-    fs::write(&input, source).unwrap();
-    let mut child = Command::new("clingo")
-        .args(["--models=0", "--outf=2", "--opt-mode=optN"])
-        .arg(input)
-        .stdout(Stdio::from(File::create(&output).unwrap()))
-        .stderr(Stdio::from(File::create(&errors).unwrap()))
-        .spawn()
-        .unwrap();
-    let start = Instant::now();
-    let status = loop {
-        let stopped = start.elapsed() >= Duration::from_secs(3)
-            || fs::metadata(&output).unwrap().len() > 65_536
-            || fs::metadata(&errors).unwrap().len() > 65_536;
-        if stopped {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            panic!("bounded clingo reference refused");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    assert!(matches!(status.code(), Some(0 | 10 | 20 | 30 | 65)));
-    assert!(
-        fs::metadata(&output).unwrap().len() <= 65_536
-            && fs::metadata(&errors).unwrap().len() <= 65_536
-    );
-    serde_json::from_slice(&fs::read(output).unwrap()).unwrap()
+    // An undecided run (0) and a refusal (65) are reported, not failures: the
+    // caller reads the report's result.
+    zetesis_clingo_support::json(&zetesis_clingo_support::run_accepting(
+        source,
+        &["--models=0", "--outf=2", "--opt-mode=optN"],
+        &[0, 10, 20, 30, 65],
+        zetesis_clingo_support::Limits {
+            timeout: Duration::from_secs(3),
+            max_output_bytes: 2 * 65_536,
+        },
+    ))
 }
 #[test]
 #[ignore = "requires external clingo; complete bounded displayed-symbol multisets"]

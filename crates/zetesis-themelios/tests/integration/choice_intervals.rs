@@ -3,14 +3,14 @@
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
+use std::fs::{self};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
@@ -673,45 +673,17 @@ fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
 }
 
 fn clingo(source: &str) -> Json {
-    use std::io::Write;
-    let directory = Directory::new();
-    let output = directory.0.join("stdout");
-    let errors = directory.0.join("stderr");
-    let mut child = Command::new(std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into()))
-        .args(["--models=0", "--outf=2", "--opt-mode=optN", "-"])
-        .stdin(Stdio::piped())
-        .stdout(File::create(&output).unwrap())
-        .stderr(File::create(&errors).unwrap())
-        .spawn()
-        .expect("external clingo executable");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(source.as_bytes())
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let oversized = [&output, &errors]
-            .iter()
-            .any(|path| fs::metadata(path).unwrap().len() > 65_536);
-        if oversized || Instant::now() >= deadline {
-            let _ = child.kill();
-            child.wait().unwrap();
-            panic!("bounded reference stopped; never compatibility evidence");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            assert!(matches!(status.code(), Some(0 | 10 | 20 | 30 | 65)));
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(
-        [&output, &errors]
-            .iter()
-            .all(|path| fs::metadata(path).unwrap().len() <= 65_536)
-    );
-    serde_json::from_slice(&fs::read(output).unwrap()).unwrap()
+    // An undecided run (0) and a refusal (65) are reported, not failures: the
+    // caller reads the report's result.
+    oracle::json(&oracle::run_accepting(
+        source,
+        &["--models=0", "--outf=2", "--opt-mode=optN"],
+        &[0, 10, 20, 30, 65],
+        oracle::Limits {
+            timeout: Duration::from_secs(3),
+            max_output_bytes: 2 * 65_536,
+        },
+    ))
 }
 #[test]
 #[ignore = "requires external clingo; excludes the recorded i32::MAX deadline"]

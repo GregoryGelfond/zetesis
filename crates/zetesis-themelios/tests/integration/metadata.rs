@@ -2,13 +2,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Program};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 use zetesis_themelios::{
@@ -418,26 +417,12 @@ fn oracle_json(output: &[u8]) -> Displays {
 }
 
 fn external(source: &str) -> Displays {
-    let mut child = Command::new("clingo")
-        .args(["-", "0", "--outf=2", "--warn=none"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("independently installed clingo");
-    child
-        .stdin
-        .take()
-        .expect("oracle input")
-        .write_all(source.as_bytes())
-        .expect("oracle source");
-    let output = child.wait_with_output().expect("oracle completion");
-    assert!(
-        matches!(output.status.code(), Some(10 | 20 | 30)),
-        "clingo error: {}",
-        String::from_utf8_lossy(&output.stderr)
+    let run = oracle::run(
+        source,
+        &["0", "--outf=2", "--warn=none"],
+        oracle::Limits::default(),
     );
-    oracle_json(&output.stdout)
+    oracle_json(run.stdout())
 }
 
 #[test]
@@ -486,15 +471,15 @@ fn included_signature_metadata_matches_clingo_complete_display_multiplicities() 
             ExpansionLimits::default(),
         )
         .expect("metadata bundle");
-        let output = Command::new("clingo")
-            .arg(fixture.directory.join("entry.lp"))
-            .args(["0", "--outf=2", "--warn=none"])
-            .output()
-            .expect("clingo bundle");
-        assert!(matches!(output.status.code(), Some(10 | 20 | 30)));
+        let run = oracle::run_in(
+            &fixture.directory,
+            ["entry.lp", "0", "--outf=2", "--warn=none"],
+            &oracle::DECIDED,
+            oracle::Limits::default(),
+        );
         assert_eq!(
             displays(&models(accepted.program()), accepted.metadata().output()),
-            oracle_json(&output.stdout)
+            oracle_json(run.stdout())
         );
     }
 }

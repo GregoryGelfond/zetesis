@@ -4,11 +4,11 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Program};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 use zetesis_themelios::{
@@ -417,18 +417,14 @@ fn original_required_bundles_report_semantic_refusal_after_include_admission() {
     eprintln!("Original required bundle semantic refusals: {features:?}");
 }
 
-fn external(path: &Path) -> Models {
-    let output = Command::new("clingo")
-        .arg(path.canonicalize().expect("canonical reference entry"))
-        .args(["0", "--outf=2", "--warn=none"])
-        .output()
-        .expect("independently installed clingo");
-    assert!(
-        matches!(output.status.code(), Some(10 | 20 | 30)),
-        "clingo failed: {}",
-        String::from_utf8_lossy(&output.stderr)
+fn external(directory: &Path) -> Models {
+    let run = oracle::run_in(
+        directory,
+        ["entry.lp", "0", "--outf=2", "--warn=none"],
+        &oracle::DECIDED,
+        oracle::Limits::default(),
     );
-    let json: Json = serde_json::from_slice(&output.stdout).expect("clingo JSON");
+    let json = oracle::json(&run);
     assert_eq!(
         json["Models"]["More"], "no",
         "complete external enumeration"
@@ -497,7 +493,7 @@ fn oracle_atom(source: &str) -> Atom {
 
 fn compare(fixture: &Fixture) {
     let input = fixture.admit().expect("supported original bundle");
-    assert_eq!(native(input.program()), external(&fixture.path("entry.lp")));
+    assert_eq!(native(input.program()), external(&fixture.directory));
 }
 
 #[test]

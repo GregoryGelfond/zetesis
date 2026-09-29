@@ -1,11 +1,10 @@
 //! Strong predicate signs remain distinct atoms, with explicit coherence.
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
+use std::fs::{self};
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_core::{Model, Sign};
@@ -460,6 +459,7 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
     assert_eq!(count, 10);
 }
 use crate::support::objective_boundaries;
+use zetesis_clingo_support as oracle;
 
 #[test]
 fn signed_anonymous_projection_has_the_declared_model_view() {
@@ -618,40 +618,17 @@ fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() 
 }
 
 fn clingo(source: &str) -> Json {
-    let directory = Directory::new();
-    let source_path = directory.0.join("source.lp");
-    fs::write(&source_path, source).unwrap();
-    let out = directory.0.join("stdout");
-    let err = directory.0.join("stderr");
-    let mut child = Command::new(std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into()))
-        .args(["--models=0", "--outf=2", "--opt-mode=optN", "-"])
-        .stdin(File::open(source_path).unwrap())
-        .stdout(File::create(&out).unwrap())
-        .stderr(File::create(&err).unwrap())
-        .spawn()
-        .expect("external clingo executable");
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let oversized = [&out, &err]
-            .iter()
-            .any(|path| fs::metadata(path).unwrap().len() > 65_536);
-        if oversized || Instant::now() >= deadline {
-            let _ = child.kill();
-            child.wait().unwrap();
-            panic!("bounded reference incomplete; no compatibility result");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            assert!(matches!(status.code(), Some(0 | 10 | 20 | 30 | 65)));
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(
-        [&out, &err]
-            .iter()
-            .all(|path| fs::metadata(path).unwrap().len() <= 65_536)
-    );
-    serde_json::from_slice(&fs::read(out).unwrap()).unwrap()
+    // An undecided run (0) and a refusal (65) are reported, not failures: the
+    // caller reads the report's result.
+    oracle::json(&oracle::run_accepting(
+        source,
+        &["--models=0", "--outf=2", "--opt-mode=optN"],
+        &[0, 10, 20, 30, 65],
+        oracle::Limits {
+            timeout: Duration::from_secs(3),
+            max_output_bytes: 2 * 65_536,
+        },
+    ))
 }
 
 #[test]

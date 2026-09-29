@@ -1,11 +1,8 @@
 //! Optional independent source oracle; clingo is never a production dependency.
 
 use std::collections::BTreeSet;
-use std::fs::File;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
-use serde_json::Value;
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
@@ -16,43 +13,12 @@ use zetesis_ferraris::{
 type Models = BTreeSet<BTreeSet<String>>;
 
 fn clingo(source: &str) -> Models {
-    let directory = tempfile::tempdir().unwrap();
-    let source_path = directory.path().join("case.lp");
-    let output_path = directory.path().join("out.json");
-    let error_path = directory.path().join("err.txt");
-    std::fs::write(&source_path, source).unwrap();
-    let output = File::create(&output_path).unwrap();
-    let errors = File::create(&error_path).unwrap();
-    let start = Instant::now();
-    let mut child = Command::new("clingo")
-        .args(["0", "--outf=2", "--warn=none"])
-        .arg(&source_path)
-        .stdin(Stdio::null())
-        .stdout(output.try_clone().unwrap())
-        .stderr(errors.try_clone().unwrap())
-        .spawn()
-        .expect("independently installed clingo on PATH");
-    let status = loop {
-        let within_limit = start.elapsed() <= Duration::from_secs(5)
-            && output.metadata().unwrap().len() + errors.metadata().unwrap().len() <= 65_536;
-        if !within_limit {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("oracle exceeded time or output ceiling: {source}");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    assert!(
-        matches!(status.code(), Some(10 | 20 | 30)),
-        "{source}: {}",
-        std::fs::read_to_string(error_path).unwrap()
+    let run = oracle::run(
+        source,
+        &["0", "--outf=2", "--warn=none"],
+        oracle::Limits::default(),
     );
-    let bytes = std::fs::read(output_path).unwrap();
-    assert!(bytes.len() <= 65_536);
-    let json: Value = serde_json::from_slice(&bytes).unwrap();
+    let json = oracle::json(&run);
     assert!(
         matches!(
             json["Result"].as_str(),

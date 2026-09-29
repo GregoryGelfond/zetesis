@@ -2,14 +2,14 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
+use std::fs::{self};
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Sign;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
@@ -452,44 +452,14 @@ impl Drop for Directory {
 }
 
 fn external(source: &str) -> Json {
-    let directory = Directory::new();
-    let source_path = directory.0.join("source.lp");
-    let out = directory.0.join("stdout");
-    let err = directory.0.join("stderr");
-    fs::write(&source_path, source).unwrap();
-    let mut child = Command::new(std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into()))
-        .args(["--models=0", "--outf=2", "-"])
-        .stdin(File::open(source_path).unwrap())
-        .stdout(File::create(&out).unwrap())
-        .stderr(File::create(&err).unwrap())
-        .spawn()
-        .expect("independently installed clingo");
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let oversized = [&out, &err]
-            .iter()
-            .any(|path| fs::metadata(path).unwrap().len() > 65_536);
-        if oversized || Instant::now() >= deadline {
-            let _ = child.kill();
-            child.wait().unwrap();
-            panic!("bounded reference incomplete; no compatibility result");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            assert!(
-                matches!(status.code(), Some(10 | 20 | 30)),
-                "{}",
-                fs::read_to_string(&err).unwrap()
-            );
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(
-        [&out, &err]
-            .iter()
-            .all(|path| fs::metadata(path).unwrap().len() <= 65_536)
-    );
-    serde_json::from_slice(&fs::read(out).unwrap()).unwrap()
+    oracle::json(&oracle::run(
+        source,
+        &["--models=0", "--outf=2"],
+        oracle::Limits {
+            timeout: Duration::from_secs(3),
+            max_output_bytes: 2 * 65_536,
+        },
+    ))
 }
 
 #[test]

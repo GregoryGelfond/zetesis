@@ -2,11 +2,12 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsStr,
     num::NonZeroUsize,
     path::Path,
-    time::Duration,
 };
 
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
@@ -16,13 +17,11 @@ use zetesis_solve::{
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula, observation,
 };
-use zetesis_validation::{answers, process};
 
 mod ordinary_composition;
 mod projected_families;
 
 const REPORT_BYTES: usize = 64 * 1024;
-const CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Record {
@@ -550,55 +549,33 @@ mod physical {
 #[ignore = "requires independently installed clingo"]
 fn original_sources_retain_declared_reference_results() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let executable = zetesis_clingo_support::executable();
     for case in cases() {
         let source = directory
             .join("tests/fixtures/language-consumers")
             .join(case.file);
         assert_eq!(std::fs::read_to_string(&source).unwrap(), case.source);
-        let arguments = [
-            "0".into(),
-            "--outf=2".into(),
-            "--opt-mode=optN".into(),
-            source.into_os_string(),
-        ];
-        let (capture, pending) = process::invoke(
-            process::Invocation {
-                executable: &executable,
-                arguments: &arguments,
-                directory,
-            },
-            process::Limits {
-                timeout: Duration::from_secs(5),
+        let run = oracle::run_in(
+            directory,
+            [
+                OsStr::new("0"),
+                OsStr::new("--outf=2"),
+                OsStr::new("--opt-mode=optN"),
+                source.as_os_str(),
+            ],
+            &oracle::DECIDED,
+            oracle::Limits {
                 max_output_bytes: REPORT_BYTES,
-                cleanup_timeout: CLEANUP_TIMEOUT,
+                ..oracle::Limits::default()
             },
-        )
-        .unwrap()
-        .into_parts();
-        if let Some(pending) = pending {
-            let cleanup = pending.retry(CLEANUP_TIMEOUT);
-            if let Some(pending) = cleanup.pending {
-                panic!("unresolved oracle child {}", pending.abandon());
-            }
-            assert!(cleanup.failure.is_none());
-        }
-        println!(
-            "source={}\nexit={:?}\nstdout={}\nstderr={}",
-            case.file,
-            capture.exit(),
-            capture.stdout_text().unwrap(),
-            capture.stderr_text().unwrap()
         );
-        assert_eq!(capture.stop(), process::Stop::Completed);
-        assert!(capture.failure().is_none());
-        assert!(capture.cleanup_failure().is_none());
-        assert!(matches!(
-            capture.exit().and_then(|exit| exit.code),
-            Some(10 | 20 | 30)
-        ));
-        let report = answers::clingo_json(capture.stdout(), answers::Limits::default()).unwrap();
-        assert_eq!(report.solver(), "clingo version 5.8.2");
+        println!(
+            "source={}\nexit={}\nstdout={}\nstderr={}",
+            case.file,
+            run.code(),
+            std::str::from_utf8(run.stdout()).unwrap(),
+            std::str::from_utf8(run.stderr()).unwrap()
+        );
+        let report = oracle::answers(&run);
         let best = case
             .answers
             .iter()

@@ -5,8 +5,9 @@
 //! interpretations. Its ordinary optN replay rule also applies to the scored
 //! fixture; no alternative report parser or representative-selection rule is used.
 
-use std::{collections::BTreeSet, num::NonZeroUsize, path::Path, time::Duration};
+use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroUsize, path::Path};
 
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
@@ -17,12 +18,11 @@ use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, admit_formula,
     observation::{self, ObservationProgram},
 };
-use zetesis_validation::{answers, process};
+use zetesis_validation::answers;
 
 type Family = BTreeSet<Vec<String>>;
 
 const REPORT_BYTES: usize = 64 * 1024;
-const CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 const FOUR: &[&[&str]] = &[&[], &["p"], &["q"], &["p", "q"]];
 const Q_REQUIRED: &[&[&str]] = &[&["q"], &["p", "q"]];
 const P_IMAGE: &[&[&str]] = &[&[], &["p"]];
@@ -183,58 +183,39 @@ fn records(report: &answers::ReportedAnswers) -> Family {
     result
 }
 
-fn reference(case: &Case, executable: &Path, projected: bool) -> answers::ReportedAnswers {
+fn reference(case: &Case, projected: bool) -> answers::ReportedAnswers {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = directory
         .join("tests/fixtures/projected-reference")
         .join(case.file);
     assert_eq!(std::fs::read_to_string(&source).unwrap(), case.source);
     let mut arguments = vec![
-        "--models=0".into(),
-        "--outf=2".into(),
-        "--opt-mode=optN".into(),
+        OsStr::new("--models=0"),
+        OsStr::new("--outf=2"),
+        OsStr::new("--opt-mode=optN"),
     ];
     if projected {
-        arguments.push("--project=project".into());
+        arguments.push(OsStr::new("--project=project"));
     }
-    arguments.push(source.into_os_string());
-    let (capture, pending) = process::invoke(
-        process::Invocation {
-            executable,
-            arguments: &arguments,
-            directory,
-        },
-        process::Limits {
-            timeout: Duration::from_secs(5),
+    arguments.push(source.as_os_str());
+    let run = oracle::run_in(
+        directory,
+        &arguments,
+        &oracle::DECIDED,
+        oracle::Limits {
             max_output_bytes: REPORT_BYTES,
-            cleanup_timeout: CLEANUP_TIMEOUT,
+            ..oracle::Limits::default()
         },
-    )
-    .unwrap()
-    .into_parts();
-    if let Some(pending) = pending {
-        let cleanup = pending.retry(CLEANUP_TIMEOUT);
-        if let Some(pending) = cleanup.pending {
-            panic!("unresolved oracle child {}", pending.abandon());
-        }
-        assert!(cleanup.failure.is_none());
-    }
-    println!(
-        "source={} projected={projected}\narguments={arguments:?}\nexit={:?}\nstdout={}\nstderr={}",
-        case.file,
-        capture.exit(),
-        capture.stdout_text().unwrap(),
-        capture.stderr_text().unwrap()
     );
-    assert_eq!(capture.stop(), process::Stop::Completed);
-    assert!(capture.failure().is_none());
-    assert!(capture.cleanup_failure().is_none());
-    assert!(matches!(
-        capture.exit().and_then(|exit| exit.code),
-        Some(10 | 20 | 30)
-    ));
+    println!(
+        "source={} projected={projected}\narguments={arguments:?}\nexit={}\nstdout={}\nstderr={}",
+        case.file,
+        run.code(),
+        std::str::from_utf8(run.stdout()).unwrap(),
+        std::str::from_utf8(run.stderr()).unwrap()
+    );
     let report = answers::clingo_json(
-        capture.stdout(),
+        run.stdout(),
         answers::Limits {
             max_input_bytes: REPORT_BYTES,
             max_witnesses: 32,
@@ -243,13 +224,13 @@ fn reference(case: &Case, executable: &Path, projected: bool) -> answers::Report
         },
     )
     .unwrap();
-    assert_eq!(report.solver(), "clingo version 5.8.2");
+    assert_eq!(report.solver(), oracle::VERSION);
     assert_eq!(report.cost(), case.costs);
     report
 }
 
-fn check(case: &Case, executable: &Path) {
-    let selected = records(&reference(case, executable, false));
+fn check(case: &Case) {
+    let selected = records(&reference(case, false));
     assert_eq!(
         selected,
         family(case.selected),
@@ -257,7 +238,7 @@ fn check(case: &Case, executable: &Path) {
         case.file
     );
     let expected = family(case.image);
-    let reference = records(&reference(case, executable, true));
+    let reference = records(&reference(case, true));
     let mut observed = Family::new();
     for model in reference {
         assert!(
@@ -368,9 +349,8 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
 #[test]
 #[ignore = "requires independently installed clingo 5.8.2"]
 fn projected_classes_match_complete_reference_families() {
-    let executable = zetesis_clingo_support::executable();
     for case in CASES {
-        check(case, &executable);
+        check(case);
     }
     println!(
         "complete_sources={} bounded_reference_calls={}",

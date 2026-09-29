@@ -3,13 +3,10 @@
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::fs::{self, File};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
@@ -521,56 +518,17 @@ fn optional_bound_refusals_leave_the_original_available_for_complete_search() {
     assert_eq!(stable(&input), baseline, "refusal is not semantic pruning");
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        loop {
-            let id = NEXT.fetch_add(1, AtomicOrdering::Relaxed);
-            let path = std::env::temp_dir()
-                .join(format!("zetesis-bound-oracle-{}-{id}", std::process::id()));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("oracle directory: {error}"),
-            }
-        }
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("oracle fixture cleanup");
-    }
-}
-
 fn clingo(source: &str) -> Records {
-    let directory = Directory::new();
-    let input = directory.0.join("source.lp");
-    let output = directory.0.join("models.json");
-    let errors = directory.0.join("stderr.txt");
-    fs::write(&input, source).unwrap();
-    let mut child = Command::new("clingo")
-        .args(["--outf=2", "--models=0", "--opt-mode=enum"])
-        .arg(&input)
-        .stdout(Stdio::from(File::create(&output).unwrap()))
-        .stderr(Stdio::from(File::create(&errors).unwrap()))
-        .spawn()
-        .expect("installed optional clingo oracle");
-    let start = Instant::now();
-    loop {
-        if child.try_wait().unwrap().is_some() {
-            break;
-        }
-        if start.elapsed() >= Duration::from_secs(5) {
-            child.kill().unwrap();
-            child.wait().unwrap();
-            panic!("external oracle timed out");
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(fs::metadata(&output).unwrap().len() <= 65_536);
-    assert!(fs::metadata(&errors).unwrap().len() <= 65_536);
-    let value: Json = serde_json::from_slice(&fs::read(&output).unwrap()).unwrap();
+    // A complete enumeration decides the program.
+    let run = oracle::run(
+        source,
+        &["--outf=2", "--models=0", "--opt-mode=enum"],
+        oracle::Limits {
+            timeout: Duration::from_secs(5),
+            max_output_bytes: 2 * 65_536,
+        },
+    );
+    let value = oracle::json(&run);
     assert_eq!(value["Models"]["More"], "no");
     let mut records = Records::new();
     let mut count = 0_u64;

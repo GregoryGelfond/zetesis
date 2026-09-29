@@ -4,8 +4,10 @@
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
@@ -396,62 +398,22 @@ fn disjunction_element_ceiling_is_inclusive_and_independent_of_body_limits() {
     assert!(admit("a.", 0).is_ok());
 }
 
-struct Capture(std::path::PathBuf);
-impl Drop for Capture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
 fn reference(source: &str, mode: &str) -> Json {
-    use std::fs::{self, File};
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{Duration, Instant};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let capture = Capture(std::env::temp_dir().join(format!(
-        "zetesis-disjunction-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    )));
-    fs::create_dir(&capture.0).unwrap();
-    let output = capture.0.join("stdout");
-    let errors = capture.0.join("stderr");
-    let executable = std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into());
-    let mut child = Command::new(executable)
-        .args([
-            "-",
+    // A refusal (65) is a recorded reference outcome, like a decision.
+    oracle::json(&oracle::run_accepting(
+        source,
+        &[
             "--models=0",
             "--outf=2",
             "--warn=none",
             &format!("--opt-mode={mode}"),
-        ])
-        .stdin(Stdio::piped())
-        .stdout(File::create(&output).unwrap())
-        .stderr(File::create(&errors).unwrap())
-        .spawn()
-        .expect("external clingo oracle");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(source.as_bytes())
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let bytes = fs::metadata(&output).unwrap().len() + fs::metadata(&errors).unwrap().len();
-        if Instant::now() >= deadline || bytes > 8 * 1_024 * 1_024 {
-            let _ = child.kill();
-            child.wait().unwrap();
-            panic!("clingo timed out or exceeded bounded capture");
-        }
-        if child.try_wait().unwrap().is_some() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    serde_json::from_slice(&fs::read(output).unwrap())
-        .expect("clingo JSON, including explicit refusal")
+        ],
+        &[10, 20, 30, 65],
+        oracle::Limits {
+            timeout: Duration::from_secs(5),
+            max_output_bytes: 8 * 1_024 * 1_024,
+        },
+    ))
 }
 fn normalized_reference(raw: &Json) -> (String, Models, Option<Vec<i64>>) {
     let result = raw["Result"].as_str().unwrap().to_owned();

@@ -4,13 +4,9 @@
 //! all models and their costs; its Result label is not an optimality certificate.
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
@@ -155,98 +151,12 @@ fn observer_cases_preserve_recorded_contracts() {
     }
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        loop {
-            let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-observer-oracle-{}-{id}",
-                std::process::id()
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("oracle directory: {error}"),
-            }
-        }
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("oracle fixture cleanup");
-    }
-}
-
-fn clingo(source: &str) -> Records {
-    let directory = Directory::new();
-    let input = directory.0.join("case.lp");
-    let output = directory.0.join("models.json");
-    let errors = directory.0.join("stderr.txt");
-    fs::write(&input, source).expect("original source");
-    let stdout = File::create(&output).expect("oracle output");
-    let stderr = File::create(&errors).expect("oracle diagnostics");
-    let start = Instant::now();
-    let mut child = Command::new("clingo")
-        .args(["0", "--outf=2", "--opt-mode=enum", "--warn=none"])
-        .arg(&input)
-        .stdin(Stdio::null())
-        .stdout(stdout.try_clone().expect("output handle"))
-        .stderr(stderr.try_clone().expect("diagnostic handle"))
-        .spawn()
-        .expect("independent clingo on PATH");
-    let status = loop {
-        if start.elapsed() > Duration::from_secs(5)
-            || stdout.metadata().expect("output size").len()
-                + stderr.metadata().expect("diagnostic size").len()
-                > 65_536
-        {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("oracle exceeded time or output limit: {source}");
-        }
-        if let Some(status) = child.try_wait().expect("oracle status") {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    assert!(
-        matches!(status.code(), Some(10 | 20 | 30)),
-        "{}",
-        fs::read_to_string(errors).expect("oracle diagnostics")
-    );
-    let bytes = fs::read(output).expect("oracle JSON");
-    assert!(bytes.len() <= 65_536);
-    let json: Json = serde_json::from_slice(&bytes).expect("complete oracle output");
-    assert_eq!(json["Models"]["More"].as_str(), Some("no"));
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE" | "OPTIMUM FOUND")
-    ));
-    let mut records = Records::new();
-    let mut count = 0;
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                count += 1;
-                assert!(
-                    records.insert((atoms(&witness["Value"]), costs(&witness["Costs"]))),
-                    "duplicate full model"
-                );
-            }
-        }
-    }
-    assert_eq!(json["Models"]["Number"].as_u64(), Some(count));
-    records
-}
-
 #[test]
 #[ignore = "requires independent clingo; 92 bounded all-model/cost reference programs"]
 fn recorded_observer_contracts_match_fresh_clingo() {
     for case in cases() {
         assert_eq!(
-            clingo(&case.source),
+            oracle::records(&case.source),
             case.expected,
             "{}: {}",
             case.name,

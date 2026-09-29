@@ -2,9 +2,8 @@
 //! supplied by the caller, never an execution path of the solver.
 use clap::Parser;
 use std::collections::BTreeSet;
-use std::io::Write;
-use std::process::{Command, Stdio};
 use zetesis_cli::{Completion, Options, run};
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 
 fn canonical(line: &str) -> BTreeSet<String> {
@@ -13,26 +12,8 @@ fn canonical(line: &str) -> BTreeSet<String> {
     line.split_whitespace().map(str::to_owned).collect()
 }
 fn external(source: &str) -> BTreeSet<BTreeSet<String>> {
-    let mut child = Command::new("clingo")
-        .args(["-", "0", "--verbose=0"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("clingo on PATH");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(source.as_bytes())
-        .unwrap();
-    let result = child.wait_with_output().unwrap();
-    assert!(
-        matches!(result.status.code(), Some(10 | 20 | 30)),
-        "clingo failed: {}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let text = String::from_utf8(result.stdout).unwrap();
+    let run = oracle::run(source, &["0", "--verbose=0"], oracle::Limits::default());
+    let text = std::str::from_utf8(run.stdout()).unwrap();
     let mut lines: Vec<_> = text.lines().collect();
     let status = lines.pop().expect("clingo status line");
     assert!(matches!(status, "SATISFIABLE" | "UNSATISFIABLE"));

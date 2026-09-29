@@ -5,13 +5,9 @@
 //! observation campaign separately tests escaping and its richer token parser.
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
@@ -225,67 +221,13 @@ fn generated_joins_preserve_theory_and_complete_observation_multisets() {
     assert!(duplicate_symbols && duplicate_displays);
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        loop {
-            let index = NEXT.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "zetesis-observation-adversarial-{}-{index}",
-                std::process::id()
-            ));
-            match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-                Err(error) => panic!("oracle directory: {error}"),
-            }
-        }
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.0).expect("oracle fixture cleanup");
-    }
-}
-
 fn clingo(source: &str) -> Vec<Record> {
-    let directory = Directory::new();
-    let input = directory.0.join("case.lp");
-    let output = directory.0.join("models.json");
-    let errors = directory.0.join("stderr.txt");
-    fs::write(&input, source).unwrap();
-    let stdout = File::create(&output).unwrap();
-    let stderr = File::create(&errors).unwrap();
-    let start = Instant::now();
-    let mut child = Command::new("clingo")
-        .args(["0", "--outf=2", "--opt-mode=optN", "--warn=none"])
-        .arg(&input)
-        .stdin(Stdio::null())
-        .stdout(stdout.try_clone().unwrap())
-        .stderr(stderr.try_clone().unwrap())
-        .spawn()
-        .expect("independent clingo on PATH");
-    let status = loop {
-        if start.elapsed() > Duration::from_secs(5)
-            || stdout.metadata().unwrap().len() + stderr.metadata().unwrap().len() > 65_536
-        {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("oracle exceeded time or output limit: {source}");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    assert!(
-        matches!(status.code(), Some(10 | 20 | 30)),
-        "{}",
-        fs::read_to_string(&errors).unwrap()
+    let run = oracle::run(
+        source,
+        &["0", "--outf=2", "--opt-mode=optN", "--warn=none"],
+        oracle::Limits::default(),
     );
-    assert!(stdout.metadata().unwrap().len() + stderr.metadata().unwrap().len() <= 65_536);
-    let json: Json = serde_json::from_slice(&fs::read(output).unwrap()).unwrap();
+    let json = oracle::json(&run);
     let witnesses: Vec<_> = json["Call"]
         .as_array()
         .unwrap()

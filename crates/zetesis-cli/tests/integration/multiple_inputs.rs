@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use clap::Parser;
 use serde_json::Value as Json;
 use zetesis_cli::Options;
+use zetesis_clingo_support as oracle;
 
 type Records = Vec<(BTreeSet<String>, Option<Vec<i64>>)>;
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -317,14 +318,13 @@ fn original_file_sets_match_fresh_complete_clingo_optima() {
             .iter()
             .map(|root| root.as_str().unwrap())
             .collect();
-        let result = bounded(
-            Command::new("clingo")
-                .args(["0", "--outf=2", "--opt-mode=enum", "--warn=none"])
-                .args(&roots)
-                .current_dir(&fixture.0),
+        let run = oracle::run_in(
+            &fixture.0,
+            oracle::ENUMERATION.iter().chain(&roots),
+            &oracle::DECIDED,
+            oracle::Limits::default(),
         );
-        assert!(matches!(result.status.code(), Some(10 | 20 | 30)));
-        let json: Json = serde_json::from_slice(&result.stdout).unwrap();
+        let json = oracle::json(&run);
         assert_eq!(json["Models"]["More"], "no");
         let mut records: Records = json["Call"]
             .as_array()

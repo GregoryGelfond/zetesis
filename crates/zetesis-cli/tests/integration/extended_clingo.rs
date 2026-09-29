@@ -4,12 +4,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as FmtWrite;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 use clap::Parser;
-use serde_json::Value as Json;
 use zetesis_cli::{Completion, Options, run};
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ProfileFeature, admit,
@@ -96,26 +94,12 @@ fn native_search(source: &str, search: &str) -> (Models, String) {
 }
 
 fn external(source: &str) -> Models {
-    let mut child = Command::new("clingo")
-        .args(["-", "0", "--outf=2", "--warn=none"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("independently installed clingo on PATH");
-    child
-        .stdin
-        .take()
-        .expect("oracle stdin")
-        .write_all(source.as_bytes())
-        .expect("oracle source");
-    let output = child.wait_with_output().expect("oracle completion");
-    assert!(
-        matches!(output.status.code(), Some(10 | 20 | 30)),
-        "clingo source {source}: {}",
-        String::from_utf8_lossy(&output.stderr)
+    let run = oracle::run(
+        source,
+        &["0", "--outf=2", "--warn=none"],
+        oracle::Limits::default(),
     );
-    let json: Json = serde_json::from_slice(&output.stdout).expect("clingo JSON output");
+    let json = oracle::json(&run);
     assert!(
         matches!(
             json["Result"].as_str(),

@@ -2,11 +2,8 @@
 
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
-use std::fs::{self, File};
-use std::path::PathBuf;
-use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use zetesis_clingo_support as oracle;
 use zetesis_core::catalog::AtomRef;
 use zetesis_core::{Sign, ValueNodeRef};
 use zetesis_cpu::Cancellation;
@@ -120,78 +117,31 @@ pub(crate) fn native(input: &AdmittedFormula) -> Models {
     result
 }
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-struct Directory(PathBuf);
-impl Directory {
-    fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "zetesis-finite-bindings-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir(&path).unwrap();
-        Self(path)
-    }
-}
-impl Drop for Directory {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
 pub(crate) fn external(source: &str, valid: bool) -> Json {
-    let directory = Directory::new();
-    let source_path = directory.0.join("source.lp");
-    let out = directory.0.join("stdout");
-    let err = directory.0.join("stderr");
-    fs::write(&source_path, source).unwrap();
-    let mut child = Command::new(std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into()))
-        .args([
+    let exits: &[i32] = if valid { &oracle::DECIDED } else { &[65] };
+    let run = oracle::run_accepting(
+        source,
+        &[
             "--models=0",
             "--outf=2",
             "--parallel-mode=1",
             "--opt-mode=enum",
-            "-",
-        ])
-        .stdin(File::open(source_path).unwrap())
-        .stdout(File::create(&out).unwrap())
-        .stderr(File::create(&err).unwrap())
-        .spawn()
-        .expect("independently installed clingo");
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        let oversized = [&out, &err]
-            .iter()
-            .any(|path| fs::metadata(path).unwrap().len() > 65_536);
-        if oversized || Instant::now() >= deadline {
-            let _ = child.kill();
-            child.wait().unwrap();
-            panic!("bounded reference incomplete; no compatibility result");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            let diagnostics = fs::read_to_string(&err).unwrap();
-            let stdout = fs::read_to_string(&out).unwrap();
-            println!(
-                "{}",
-                serde_json::json!({"source": source, "valid": valid, "exit": status.code(), "stdout": stdout, "stderr": diagnostics})
-            );
-            assert!(
-                if valid {
-                    matches!(status.code(), Some(10 | 20 | 30))
-                } else {
-                    status.code() == Some(65) && diagnostics.contains("unsafe variables")
-                },
-                "{diagnostics}"
-            );
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(
-        [&out, &err]
-            .iter()
-            .all(|path| fs::metadata(path).unwrap().len() <= 65_536)
+        ],
+        exits,
+        oracle::Limits {
+            timeout: Duration::from_secs(3),
+            max_output_bytes: 2 * 65_536,
+        },
     );
-    let stdout = fs::read_to_string(out).unwrap();
-    serde_json::from_str(&stdout).unwrap()
+    let diagnostics = String::from_utf8_lossy(run.stderr());
+    // A refused source must be refused for its unsafe variables.
+    assert!(
+        valid || diagnostics.contains("unsafe variables"),
+        "{diagnostics}"
+    );
+    println!(
+        "{}",
+        serde_json::json!({"source": source, "valid": valid, "exit": run.code(), "stdout": String::from_utf8_lossy(run.stdout()), "stderr": diagnostics})
+    );
+    oracle::json(&run)
 }

@@ -2,22 +2,21 @@
 
 use crate::support::contribution_sources;
 
+use std::ffi::OsStr;
 use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::Path;
 
 use clap::Parser;
 use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, Session, SolveConfig, run_with_diagnostics,
 };
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-use zetesis_validation::{answers, process};
+use zetesis_validation::answers;
 
 const MAX_REPORT_BYTES: usize = 64 * 1024;
-const ORACLE_TIMEOUT: Duration = Duration::from_secs(5);
-const CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 
 struct Expected {
     models: Vec<Vec<Atom>>,
@@ -208,23 +207,10 @@ fn composed_output_retains_hidden_optimum_multiplicity() {
     }
 }
 
-fn clingo() -> PathBuf {
-    let executable = std::env::var_os("CLINGO")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::split_paths(&std::env::var_os("PATH")?)
-                .map(|path| path.join("clingo"))
-                .find(|path| path.is_file())
-        })
-        .expect("independently installed clingo");
-    executable.canonicalize().unwrap()
-}
-
 #[test]
 #[ignore = "requires an independently installed clingo executable"]
 fn original_sources_preserve_complete_shown_optimum_ties() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let executable = clingo();
     for ((source, filename), expected) in contribution_sources::SOURCES
         .into_iter()
         .zip(["hidden-ties.lp", "recursive-maximum.lp"])
@@ -234,48 +220,25 @@ fn original_sources_preserve_complete_shown_optimum_ties() {
             .join("tests/fixtures/contributions")
             .join(filename);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
-        let arguments = [
-            "0".into(),
-            "--outf=2".into(),
-            "--opt-mode=optN".into(),
-            path.into_os_string(),
-        ];
-        let (capture, pending) = process::invoke(
-            process::Invocation {
-                executable: &executable,
-                arguments: &arguments,
-                directory,
-            },
-            process::Limits {
-                timeout: ORACLE_TIMEOUT,
+        let run = oracle::run_in(
+            directory,
+            [
+                OsStr::new("0"),
+                OsStr::new("--outf=2"),
+                OsStr::new("--opt-mode=optN"),
+                path.as_os_str(),
+            ],
+            &oracle::DECIDED,
+            oracle::Limits {
                 max_output_bytes: MAX_REPORT_BYTES,
-                cleanup_timeout: CLEANUP_TIMEOUT,
+                ..oracle::Limits::default()
             },
-        )
-        .unwrap()
-        .into_parts();
-        if let Some(pending) = pending {
-            let cleanup = pending.retry(CLEANUP_TIMEOUT);
-            if let Some(pending) = cleanup.pending {
-                panic!(
-                    "oracle cleanup remains unresolved for child {}",
-                    pending.abandon()
-                );
-            }
-            assert!(cleanup.failure.is_none());
-        }
+        );
         println!(
             "{}",
-            serde_json::json!({"source": source, "exit": capture.exit(), "stdout": capture.stdout_text().unwrap(), "stderr": capture.stderr_text().unwrap()})
+            serde_json::json!({"source": source, "exit": run.code(), "stdout": std::str::from_utf8(run.stdout()).unwrap(), "stderr": std::str::from_utf8(run.stderr()).unwrap()})
         );
-        assert_eq!(capture.stop(), process::Stop::Completed);
-        assert!(capture.failure().is_none());
-        assert!(capture.cleanup_failure().is_none());
-        assert!(matches!(
-            capture.exit().and_then(|exit| exit.code),
-            Some(10 | 20 | 30)
-        ));
-        let reported = answers::clingo_json(capture.stdout(), answers::Limits::default()).unwrap();
+        let reported = oracle::answers(&run);
         // #show hides semantic atoms: this assertion certifies original-source
         // shown/cost multiplicity. Complete hidden identities are specified above.
         displays(&reported, &expected);

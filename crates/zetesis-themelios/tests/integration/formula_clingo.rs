@@ -10,10 +10,9 @@
 //! without depending on a particular random-generator implementation.
 
 use std::collections::BTreeSet;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Predicate, TemplateTerm, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
@@ -136,32 +135,26 @@ fn native(case: &Case) -> Option<Models> {
 }
 
 fn external(source: &str) -> Option<Models> {
-    let mut child = Command::new("clingo")
-        .args(["-", "0", "--outf=2", "--warn=none"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("independently installed clingo executable");
-    child
-        .stdin
-        .take()
-        .expect("source input pipe")
-        .write_all(source.as_bytes())
-        .expect("write bounded source fixture");
-    let output = child.wait_with_output().expect("complete external process");
-    let json: Json = serde_json::from_slice(&output.stdout).expect("clingo JSON response");
+    // clingo refuses a source it cannot ground (65) and reports it undecided;
+    // it decides every other source.
+    let run = oracle::run_accepting(
+        source,
+        &["0", "--outf=2", "--warn=none"],
+        &[10, 20, 30, 65],
+        oracle::Limits::default(),
+    );
+    let json = oracle::json(&run);
     if json["Result"] == "UNKNOWN" {
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("error:"),
+            String::from_utf8_lossy(run.stderr()).contains("error:"),
             "source refusal requires a reported error: {source}"
         );
         return None;
     }
     assert!(
-        matches!(output.status.code(), Some(10 | 20 | 30)),
+        oracle::DECIDED.contains(&run.code()),
         "clingo failed: {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(run.stderr())
     );
     assert!(matches!(
         json["Result"].as_str(),

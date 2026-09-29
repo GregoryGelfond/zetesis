@@ -12,10 +12,9 @@
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Model};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
@@ -358,34 +357,21 @@ fn possible_producers_preserve_scored_answers() {
 }
 
 fn compare_external(case: &Case) {
-    let mut process = Command::new("clingo")
-        .args(["-", "0", "--outf=2", "--opt-mode=optN"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("independently installed clingo executable");
-    process
-        .stdin
-        .take()
-        .expect("bounded source input")
-        .write_all(case.source.as_bytes())
-        .expect("write reference source");
-    let result = process
-        .wait_with_output()
-        .expect("complete reference process");
-    let json: Json = serde_json::from_slice(&result.stdout).expect("clingo JSON");
+    // clingo refuses an invalid source (65) and reports it undecided; a valid
+    // source is decided.
+    let exits: &[i32] = if case.valid { &oracle::DECIDED } else { &[65] };
+    let run = oracle::run_accepting(
+        &case.source,
+        &["0", "--outf=2", "--opt-mode=optN"],
+        exits,
+        oracle::Limits::default(),
+    );
+    let json = oracle::json(&run);
     if !case.valid {
         assert_eq!(json["Result"], "UNKNOWN", "{}", case.name);
-        assert!(String::from_utf8_lossy(&result.stderr).contains("unsafe variables"));
+        assert!(String::from_utf8_lossy(run.stderr()).contains("unsafe variables"));
         return;
     }
-    assert!(
-        matches!(result.status.code(), Some(10 | 20 | 30)),
-        "{}: {}",
-        case.name,
-        String::from_utf8_lossy(&result.stderr)
-    );
     assert_eq!(json["Models"]["More"], "no", "{}", case.name);
     assert_eq!(costs(&json["Models"]["Costs"]), case.costs, "{}", case.name);
     let witnesses: Vec<_> = json["Call"]

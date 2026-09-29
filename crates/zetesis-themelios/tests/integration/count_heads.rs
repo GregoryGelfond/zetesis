@@ -3,14 +3,13 @@
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::collections::BTreeSet;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs::{self};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::{Value as Json, json};
+use zetesis_clingo_support as oracle;
 use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
@@ -574,51 +573,21 @@ fn duplicate_included_count_groups_retain_each_source_origin() {
 }
 
 fn clingo(source: &str) -> Models {
-    let directory = Directory::new();
-    let output = directory.0.join("stdout");
-    let errors = directory.0.join("stderr");
-    let mut child = Command::new(std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into()))
-        .args(["-", "--models=0", "--outf=2"])
-        .stdin(Stdio::piped())
-        .stdout(File::create(&output).unwrap())
-        .stderr(File::create(&errors).unwrap())
-        .spawn()
-        .expect("external clingo oracle");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(source.as_bytes())
-        .unwrap();
-    let start = Instant::now();
-    let status = loop {
-        if start.elapsed() > Duration::from_secs(5)
-            || fs::metadata(&output).unwrap().len() > 1_048_576
-            || fs::metadata(&errors).unwrap().len() > 65_536
-        {
-            let _ = child.kill();
-            child.wait().unwrap();
-            panic!("bounded clingo capture incomplete");
-        }
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    assert!(
-        matches!(status.code(), Some(10 | 20 | 30)),
-        "{}",
-        fs::read_to_string(&errors).unwrap()
+    let run = oracle::run(
+        source,
+        &["--models=0", "--outf=2"],
+        oracle::Limits {
+            timeout: Duration::from_secs(5),
+            max_output_bytes: 1_048_576 + 65_536,
+        },
     );
-    assert!(fs::metadata(&output).unwrap().len() <= 1_048_576);
-    assert!(fs::metadata(&errors).unwrap().len() <= 65_536);
-    let stdout = fs::read_to_string(output).unwrap();
-    let stderr = fs::read_to_string(errors).unwrap();
+    let stdout = String::from_utf8_lossy(run.stdout());
+    let stderr = String::from_utf8_lossy(run.stderr());
     println!(
         "{}",
-        json!({"source":source,"exit":status.code(),"stdout":stdout,"stderr":stderr})
+        json!({"source":source,"exit":run.code(),"stdout":stdout,"stderr":stderr})
     );
-    let raw: Json = serde_json::from_str(&stdout).unwrap();
+    let raw = oracle::json(&run);
     assert!(
         raw["Solver"]
             .as_str()

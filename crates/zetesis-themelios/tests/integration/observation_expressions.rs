@@ -581,29 +581,24 @@ fn anonymous_projection_keeps_strong_sign_separate_from_default_negation() {
 #[ignore = "requires absolute CLINGO; explicit native extension with retained upstream refusal"]
 fn clingo_refuses_anonymous_strongly_signed_projections() {
     for case in signed_projection_cases() {
-        let capture = observation_reference::capture(case["source"].as_str().unwrap());
-        assert_eq!(
-            capture.exit(),
-            Some(zetesis_validation::process::Exit {
-                code: Some(65),
-                signal: None
-            })
-        );
-        let report: serde_json::Value = serde_json::from_slice(capture.stdout()).unwrap();
+        let run = observation_reference::run(case["source"].as_str().unwrap(), &[65]);
+        let report = zetesis_clingo_support::json(&run);
         assert_eq!(report["Solver"], case["solver"]);
         assert_eq!(report["Result"], "UNKNOWN");
         assert_eq!(report["Models"]["More"], "yes");
         assert_eq!(report["Models"]["Number"], 0);
         assert!(
             zetesis_validation::answers::clingo_json(
-                capture.stdout(),
+                run.stdout(),
                 zetesis_validation::answers::Limits::default()
             )
             .is_err()
         );
         let input = report["Input"][0].as_str().unwrap();
         assert_eq!(
-            capture.stderr_text().unwrap().replace(input, "-"),
+            std::str::from_utf8(run.stderr())
+                .unwrap()
+                .replace(input, "-"),
             case["diagnostics"].as_str().unwrap()
         );
     }

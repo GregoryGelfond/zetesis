@@ -108,49 +108,21 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-#[ignore = "requires CLINGO as an absolute clingo 5.8.x executable path"]
+#[ignore = "requires independent clingo 5.8.2 on PATH or through CLINGO"]
 fn default_authored_families_satisfy_their_contracts() {
-    use std::{ffi::OsString, time::Duration};
-    use zetesis_validation::{answers, process};
-    let clingo = PathBuf::from(std::env::var_os("CLINGO").expect("set CLINGO to an absolute path"));
-    assert!(clingo.is_absolute());
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
     for workload in defaults() {
-        let arguments: Vec<OsString> = ["--models=0", "--outf=2", workload.entry()]
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let outcome = process::invoke(
-            process::Invocation {
-                executable: &clingo,
-                arguments: &arguments,
-                directory: &root(),
-            },
-            process::Limits {
+        let run = oracle::run_in(
+            &root(),
+            ["--models=0", "--outf=2", workload.entry()],
+            &oracle::DECIDED,
+            oracle::Limits {
                 timeout: Duration::from_mins(1),
                 max_output_bytes: 8 * 1024 * 1024,
-                cleanup_timeout: Duration::from_secs(2),
             },
-        )
-        .unwrap();
-        let (capture, pending) = outcome.into_parts();
-        if let Some(child) = pending {
-            let cleanup = child.retry(Duration::from_secs(2));
-            if let Some(child) = cleanup.pending {
-                panic!("unreaped child {}", child.abandon());
-            }
-        }
-        assert_eq!(
-            capture.stop(),
-            process::Stop::Completed,
-            "{}: {capture:?}",
-            workload.entry()
         );
-        assert!(capture.failure().is_none(), "{capture:?}");
-        assert!(capture.cleanup_failure().is_none(), "{capture:?}");
-        let exit = capture.exit().unwrap();
-        assert_eq!(exit.signal, None);
-        assert!(matches!(exit.code, Some(10 | 20 | 30)), "{capture:?}");
-        let answers = answers::clingo_json(capture.stdout(), answers::Limits::default()).unwrap();
+        let answers = oracle::answers(&run);
         workload.contract().unwrap().check(&answers).unwrap();
         println!(
             "pass: {} complete_models={}",

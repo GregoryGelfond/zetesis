@@ -1876,8 +1876,7 @@ version = "0.1.5"
 dependencies = [
  "criterion",
  "proptest",
- "serde_json",
- "tempfile",
+ "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-theory-support",
@@ -2021,6 +2020,7 @@ dependencies = [
  "themelios-program",
  "themelios-syntax",
  "zetesis-backend",
+ "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-test-support",
 ]
