@@ -7,10 +7,7 @@ use super::{ArgumentBounds, Bound, infer};
 use crate::oracle::{PreparationLimits, Work};
 use crate::{Cancellation, Limits, Stop};
 
-#[path = "argument_bounds_tests/programs.rs"]
-mod programs;
-
-use programs::{fact, number, pattern, program};
+use zetesis_test_support::programs::{fact, number, pattern, program};
 
 fn numbers(bounds: &ArgumentBounds, values: &[i32]) -> Bound {
     Bound::Finite(

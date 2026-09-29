@@ -8,6 +8,7 @@ description = "Helpers the zetesis workspace's tests share over zetesis-core alo
 publish = false
 
 [dependencies]
+zetesis-core.workspace = true
 
 [lints]
 workspace = true

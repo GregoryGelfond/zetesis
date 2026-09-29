@@ -12,6 +12,7 @@ zetesis-cpu.workspace = true
 
 [dev-dependencies]
 proptest = "1.11"
+zetesis-test-support.workspace = true
 
 [lints]
 workspace = true

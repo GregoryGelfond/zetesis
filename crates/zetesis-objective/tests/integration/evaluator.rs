@@ -14,10 +14,8 @@ use zetesis_objective::{
     AdmissionError, AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop,
     evaluate,
 };
+use zetesis_test_support::programs::number;
 
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
-}
 fn variable(index: usize) -> Term {
     Term::Variable(index)
 }

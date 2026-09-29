@@ -176,7 +176,7 @@ the consumers that need them. Helpers that several crates' tests share live in
 internal support crates, each over one dependency closure, so a test build
 compiles only what its tests use and no crate's unit tests link a second copy of
 that crate. `zetesis-test-support`, over `zetesis-core`, holds the sinks that
-fail on purpose. A helper that only one crate's tests use stays in that crate's
+fail on purpose and builders of small programs. A helper that only one crate's tests use stays in that crate's
 `tests/integration/support`. The support crates are not published, and every
 coverage report skips their sources.
 

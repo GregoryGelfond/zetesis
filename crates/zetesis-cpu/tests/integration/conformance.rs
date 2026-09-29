@@ -7,29 +7,16 @@
 use std::collections::BTreeSet;
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Filter, GroundProgram, GroundRule, Model, Predicate,
-    Program, Seed, StaticLimits, Template, Term, Value,
+    Atom, Filter, GroundProgram, GroundRule, Model, Predicate, Program, Seed, StaticLimits,
+    Template, Term, Value,
 };
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
+use zetesis_test_support::programs::{fact, number, pattern, program};
 
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    let predicate = Predicate::new(name, terms.len()).expect("nonempty test name");
-    AtomPattern::new(predicate, terms).expect("matching arity")
-}
 fn atom(name: &str, values: Vec<Value>) -> Atom {
     let predicate = Predicate::new(name, values.len()).expect("nonempty test name");
     Atom::new(predicate, values).expect("matching arity")
 }
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
-}
-fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).expect("safe finite test program")
-}
-fn fact(name: &str, values: Vec<Term>) -> Template {
-    Template::new(Some(pattern(name, values)), vec![], vec![], vec![], vec![])
-}
-
 fn bit(id: u32) -> u32 {
     1u32 << id
 }

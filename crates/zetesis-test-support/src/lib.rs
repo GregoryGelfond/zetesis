@@ -6,3 +6,4 @@
 //! published or installed.
 
 pub mod io;
+pub mod programs;

@@ -5,6 +5,7 @@ use zetesis_core::{
     Filter, GroundProgram, Model, Predicate, Program, Seed, SeedError, StaticError, StaticLimits,
     Template, Term, Value, WordError,
 };
+use zetesis_test_support::programs::number;
 
 fn predicate(name: &str, arity: usize) -> Predicate {
     Predicate::new(name, arity).expect("nonempty test predicate")
@@ -14,9 +15,6 @@ fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
 }
 fn atom(name: &str, values: Vec<Value>) -> Atom {
     Atom::new(predicate(name, values.len()), values).expect("matching test arity")
-}
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
 }
 fn fact(name: &str, value: i32) -> Template {
     Template::new(

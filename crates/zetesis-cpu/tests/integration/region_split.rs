@@ -5,9 +5,7 @@
 use zetesis_core::{Program, Seed, Template, Term};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, Stop, check};
 
-use crate::support::programs;
-
-use programs::{fact, number, pattern, program};
+use zetesis_test_support::programs::{fact, number, pattern, program};
 
 /// node(1..n). in(X) :- node(X), not out(X). out(X) :- node(X), not in(X).
 /// With `path`, edge(i,i+1) and :- edge(X,Y), in(X), in(Y).

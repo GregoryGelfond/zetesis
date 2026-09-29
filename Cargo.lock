@@ -1835,6 +1835,7 @@ name = "zetesis-core"
 version = "0.1.5"
 dependencies = [
  "proptest",
+ "zetesis-test-support",
 ]
 
 [[package]]
@@ -1844,6 +1845,7 @@ dependencies = [
  "criterion",
  "rayon",
  "zetesis-core",
+ "zetesis-test-support",
 ]
 
 [[package]]
@@ -1889,6 +1891,7 @@ dependencies = [
  "proptest",
  "zetesis-core",
  "zetesis-cpu",
+ "zetesis-test-support",
 ]
 
 [[package]]
@@ -1934,6 +1937,9 @@ version = "0.1.5"
 [[package]]
 name = "zetesis-test-support"
 version = "0.1.5"
+dependencies = [
+ "zetesis-core",
+]
 
 [[package]]
 name = "zetesis-themelios"

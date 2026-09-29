@@ -7,9 +7,7 @@ use std::collections::BTreeSet;
 use zetesis_core::{Atom, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
 
-use crate::support::programs;
-
-use programs::{fact, number, pattern, program};
+use zetesis_test_support::programs::{fact, number, pattern, program};
 
 fn atom(name: &str, values: Vec<Value>) -> Atom {
     let predicate = Predicate::new(name, values.len()).expect("nonempty test name");
