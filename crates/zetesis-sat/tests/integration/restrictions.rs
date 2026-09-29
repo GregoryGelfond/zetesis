@@ -2,24 +2,12 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::clause_search::by_clauses;
+use crate::support::interpretations::key;
 use proptest::prelude::*;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{Cancellation, Incomplete, Limits, StableModels};
 use zetesis_theory_support::theories::theory;
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn choices(atoms: usize) -> Theory {
     let mut nodes = vec![Node::False];
@@ -34,9 +22,6 @@ fn choices(atoms: usize) -> Theory {
         roots.push(index + 2);
     }
     theory(atoms, nodes, roots)
-}
-fn key(model: &Interpretation) -> Vec<usize> {
-    model.atoms().collect()
 }
 fn remaining(search: &mut StableModels) -> BTreeSet<Vec<usize>> {
     let mut found = BTreeSet::new();

@@ -4,26 +4,14 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
+use crate::support::batching::{batch, residual};
+use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, CompletionScratch,
-    Incomplete, Limits, PreparedReduct, ReductPreparationLimits, SearchLimits, StableModels,
+    BatchError, BatchVerdict, Cancellation, CompletionExecutor, CompletionScratch, Incomplete,
+    Limits, PreparedReduct, ReductPreparationLimits, SearchLimits, StableModels,
 };
 use zetesis_theory_support::theories::theory;
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn choices() -> Theory {
     theory(
@@ -74,23 +62,6 @@ fn retained_query_bytes(theory: &Theory, candidates: usize) -> u64 {
     );
     assert!(actual.peak_scratch_bytes >= actual.requested_scratch_bytes);
     actual.peak_scratch_bytes - required.result_bytes - required.shared_bytes
-}
-
-fn batch(count: usize) -> BatchLimits {
-    BatchLimits {
-        max_candidates: NonZeroUsize::new(count).unwrap(),
-        max_pending_bytes: 1024 * 1024,
-    }
-}
-
-fn residual(
-    _: &Theory,
-    candidates: &[Interpretation],
-) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
-    let mut verdicts = Vec::new();
-    verdicts.try_reserve_exact(candidates.len())?;
-    verdicts.resize(candidates.len(), BatchVerdict::Residual);
-    Ok(verdicts)
 }
 
 fn atoms(models: Vec<Interpretation>) -> Vec<Vec<usize>> {

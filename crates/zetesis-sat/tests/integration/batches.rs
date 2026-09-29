@@ -4,58 +4,20 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
+use crate::support::batching::residual;
+use crate::support::choice_theories::three_choices;
+use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, StableModels,
 };
 use zetesis_theory_support::theories::theory;
 
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
-
-fn choices() -> Theory {
-    theory(
-        3,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Implies(0, 3),
-            Node::Or(0, 4),
-            Node::Implies(1, 3),
-            Node::Or(1, 6),
-            Node::Implies(2, 3),
-            Node::Or(2, 8),
-        ],
-        vec![5, 7, 9],
-    )
-}
 fn limits(count: usize) -> BatchLimits {
     BatchLimits {
         max_candidates: NonZeroUsize::new(count).unwrap(),
         max_pending_bytes: 1024 * 1024,
     }
-}
-fn residual(
-    _: &Theory,
-    candidates: &[Interpretation],
-) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
-    let mut verdicts = Vec::new();
-    verdicts.try_reserve_exact(candidates.len())?;
-    verdicts.resize(candidates.len(), BatchVerdict::Residual);
-    Ok(verdicts)
 }
 fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
     (0..1_usize << theory.atom_count())
@@ -156,8 +118,8 @@ fn generated_original_and_frozen_formulas_match_complete_reference_in_irregular_
         }
     }
     for count in [1, 3, 8, 32] {
-        collect(&choices(), count, false);
-        collect(&choices(), count, true);
+        collect(&three_choices(), count, false);
+        collect(&three_choices(), count, true);
     }
     collect(&theory(0, vec![], vec![]), 3, false);
     collect(&theory(0, vec![Node::False], vec![0]), 3, true);
@@ -165,7 +127,7 @@ fn generated_original_and_frozen_formulas_match_complete_reference_in_irregular_
 
 #[test]
 fn failed_checker_retains_exact_order_and_retries_without_reproposal() {
-    let t = choices();
+    let t = three_choices();
     let mut search = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
     let mut first = Vec::new();
     let result = search.next_batch(limits(3), |_, candidates| {
@@ -199,7 +161,7 @@ fn failed_checker_retains_exact_order_and_retries_without_reproposal() {
 
 #[test]
 fn restrictions_do_not_discard_pending_old_region_candidates_or_change_the_reduct() {
-    let t = choices();
+    let t = three_choices();
     let mut search = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
     let _ = search.next_batch(limits(3), |_, _| Err::<Vec<BatchVerdict>, _>("retry"));
     let restriction = theory(3, vec![Node::False], vec![0]);
@@ -215,7 +177,7 @@ fn restrictions_do_not_discard_pending_old_region_candidates_or_change_the_reduc
 #[test]
 fn short_and_excess_checker_results_are_retryable_but_not_model_is_an_invariant_failure() {
     for length in [0, 4] {
-        let t = choices();
+        let t = three_choices();
         let mut search = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
         let result = search.next_batch(limits(3), |_, _| {
             Ok::<_, Infallible>(vec![BatchVerdict::Residual; length])
@@ -233,7 +195,7 @@ fn short_and_excess_checker_results_are_retryable_but_not_model_is_an_invariant_
         assert_eq!(search.next_batch(limits(3), residual).unwrap().len(), 3);
     }
     let mut search =
-        StableModels::new(&choices(), Limits::default(), Cancellation::default()).unwrap();
+        StableModels::new(&three_choices(), Limits::default(), Cancellation::default()).unwrap();
     let result = search.next_batch(limits(3), |_, c| {
         Ok::<_, Infallible>(vec![BatchVerdict::NotModel; c.len()])
     });
@@ -252,7 +214,7 @@ fn short_and_excess_checker_results_are_retryable_but_not_model_is_an_invariant_
 
 #[test]
 fn candidate_limit_preserves_the_checked_batch_prefix() {
-    let t = choices();
+    let t = three_choices();
     let mut search = StableModels::new(
         &t,
         Limits {
@@ -309,7 +271,7 @@ fn history_limit_preserves_the_checked_batch_prefix() {
 fn cancellation_after_proposal_preserves_pending_and_prevents_partial_commit() {
     let cancellation = Cancellation::default();
     let mut search =
-        StableModels::new(&choices(), Limits::default(), cancellation.clone()).unwrap();
+        StableModels::new(&three_choices(), Limits::default(), cancellation.clone()).unwrap();
     let result = search.next_batch(limits(3), |theory, c| {
         cancellation.cancel();
         residual(theory, c)
@@ -327,7 +289,7 @@ fn cancellation_after_proposal_preserves_pending_and_prevents_partial_commit() {
 #[test]
 fn pending_capacity_and_scalar_mode_refusals_never_claim_completion() {
     let mut search =
-        StableModels::new(&choices(), Limits::default(), Cancellation::default()).unwrap();
+        StableModels::new(&three_choices(), Limits::default(), Cancellation::default()).unwrap();
     let result = search.next_batch(
         BatchLimits {
             max_pending_bytes: 0,
@@ -342,7 +304,7 @@ fn pending_capacity_and_scalar_mode_refusals_never_claim_completion() {
     assert_eq!(search.statistics().candidates, 0);
     assert!(!search.exhausted());
     let mut search =
-        StableModels::new(&choices(), Limits::default(), Cancellation::default()).unwrap();
+        StableModels::new(&three_choices(), Limits::default(), Cancellation::default()).unwrap();
     let _ = search.next_batch(limits(3), |_, _| Err::<Vec<BatchVerdict>, _>("retry"));
     assert!(matches!(search.next(), Some(Err(Incomplete::PendingBatch))));
     assert_eq!(search.batch_statistics().pending, 3);
@@ -354,7 +316,7 @@ fn pending_capacity_and_scalar_mode_refusals_never_claim_completion() {
 fn retry_limits_and_typed_causes_remain_enforced_without_dropping_pending_rows() {
     use std::error::Error as _;
     let mut search =
-        StableModels::new(&choices(), Limits::default(), Cancellation::default()).unwrap();
+        StableModels::new(&three_choices(), Limits::default(), Cancellation::default()).unwrap();
     let failure = search
         .next_batch(limits(3), |_, _| {
             Err::<Vec<BatchVerdict>, _>(std::io::Error::from(std::io::ErrorKind::BrokenPipe))

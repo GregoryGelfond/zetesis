@@ -4,25 +4,12 @@
 use std::collections::BTreeSet;
 use std::time::Instant;
 
+use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
     AdmissionError, AdmissionLimits, Cancellation, Cnf, Incomplete, Limits, Literal, Resource,
     SearchLimits, Solve, StableModels, solve, solve_with_statistics,
 };
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn permutations() -> Vec<[usize; 4]> {
     let mut result = Vec::new();

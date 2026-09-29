@@ -2,25 +2,12 @@
 
 use std::num::NonZeroUsize;
 
+use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, ProjectionLimits,
     ProjectionResource,
 };
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn choices() -> Theory {
     // Two independent choices: every one of the four interpretations is stable.

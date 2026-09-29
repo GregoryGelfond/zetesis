@@ -1,5 +1,6 @@
 //! Parallel region production preserves candidates independently of membership.
 
+use crate::support::batching::residual;
 use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
 use zetesis_theory_support::theories::theory;
@@ -22,16 +23,6 @@ fn batch(count: usize) -> BatchLimits {
         max_candidates: nonzero(count),
         max_pending_bytes: 1024 * 1024,
     }
-}
-
-fn residual(
-    _: &Theory,
-    candidates: &[Interpretation],
-) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
-    let mut verdicts = Vec::new();
-    verdicts.try_reserve_exact(candidates.len())?;
-    verdicts.resize(candidates.len(), BatchVerdict::Residual);
-    Ok(verdicts)
 }
 
 fn proposed(theory: &Theory, limits: Limits) -> StableModels {

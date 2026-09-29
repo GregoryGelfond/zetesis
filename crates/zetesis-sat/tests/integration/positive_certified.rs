@@ -1,5 +1,6 @@
 //! Positive specialization preserves exact full families and bounded setup.
 
+use crate::support::clause_search::by_clauses;
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
@@ -10,20 +11,6 @@ use zetesis_sat::{
     StableModels,
 };
 use zetesis_theory_support::theories::theory;
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn cycle(seed: bool, constraint: bool) -> Theory {
     let mut roots = vec![2, 3];

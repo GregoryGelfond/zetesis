@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
+use crate::support::choice_theories::three_choices;
+use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory, TightError, TightPlanLimits, TightResource};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CertificateError, CompletionExecutor,
@@ -11,38 +13,6 @@ use zetesis_sat::{
 };
 use zetesis_theory_support::theories::theory;
 
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
-
-fn choices() -> Theory {
-    theory(
-        3,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Implies(0, 3),
-            Node::Or(0, 4),
-            Node::Implies(1, 3),
-            Node::Or(1, 6),
-            Node::Implies(2, 3),
-            Node::Or(2, 8),
-        ],
-        vec![5, 7, 9],
-    )
-}
 fn masks(models: impl Iterator<Item = Result<Interpretation, Incomplete>>) -> BTreeSet<Vec<usize>> {
     models.map(|m| m.unwrap().atoms().collect()).collect()
 }
@@ -75,7 +45,7 @@ fn batch_limits(n: usize) -> BatchLimits {
 
 #[test]
 fn external_preparation_does_not_activate_cpu_checking() {
-    let original = choices();
+    let original = three_choices();
     let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     let plan = stream
         .prepare_tight_certificate(TightPlanLimits::default())
@@ -97,7 +67,7 @@ fn external_preparation_does_not_activate_cpu_checking() {
 
 #[test]
 fn cpu_activation_reuses_external_preparation() {
-    let original = choices();
+    let original = three_choices();
     let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     let plan = stream
         .prepare_tight_certificate(TightPlanLimits::default())
@@ -121,7 +91,7 @@ fn cpu_activation_reuses_external_preparation() {
 
 #[test]
 fn external_preparation_retains_optional_refusal() {
-    let original = choices();
+    let original = three_choices();
     let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
@@ -147,7 +117,7 @@ fn external_preparation_retains_optional_refusal() {
 
 #[test]
 fn external_preparation_obeys_cumulative_work() {
-    let original = choices();
+    let original = three_choices();
     let initial = by_clauses(&original, Limits::default(), Cancellation::default())
         .unwrap()
         .statistics()
@@ -167,7 +137,7 @@ fn external_preparation_obeys_cumulative_work() {
 
 #[test]
 fn cpu_activation_refuses_pending_external_candidates() {
-    let original = choices();
+    let original = three_choices();
     let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     stream
         .prepare_tight_certificate(TightPlanLimits::default())
@@ -192,7 +162,7 @@ fn cpu_activation_refuses_pending_external_candidates() {
 #[test]
 fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
     let cases = [
-        choices(),
+        three_choices(),
         // Unsupported carrier atoms are refuted by the support law: every
         // present atom lacks a producer, and no countermodel query is needed.
         theory(3, vec![], vec![]),
@@ -289,7 +259,7 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
 
 #[test]
 fn failed_construction_is_charged_and_cannot_restart_or_reset_search_limits() {
-    let original = choices();
+    let original = three_choices();
     let mut baseline =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let before = baseline.statistics().search.work;
@@ -328,7 +298,7 @@ fn failed_construction_is_charged_and_cannot_restart_or_reset_search_limits() {
 
 #[test]
 fn exact_scalar_work_boundary_includes_certification_and_residual_completion() {
-    for original in [choices(), theory(3, vec![], vec![])] {
+    for original in [three_choices(), theory(3, vec![], vec![])] {
         let run = |ceiling| {
             let mut limits = Limits::default();
             limits.search.max_work = ceiling;
@@ -356,7 +326,7 @@ fn exact_scalar_work_boundary_includes_certification_and_residual_completion() {
 
 #[test]
 fn certificate_failure_retains_pending_candidates_without_reentering_completion() {
-    let original = choices();
+    let original = three_choices();
     // Construction fits, but the per-candidate plan plus scratch does not.
     let probe = zetesis_ferraris::TightPlan::compile(
         &original,
@@ -400,7 +370,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
 
 #[test]
 fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
-    let original = choices();
+    let original = three_choices();
     let restriction = theory(3, vec![Node::Atom(0)], vec![0]);
     let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     stream

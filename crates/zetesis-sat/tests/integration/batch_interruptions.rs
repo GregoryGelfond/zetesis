@@ -2,28 +2,14 @@
 
 use std::collections::BTreeSet;
 use std::convert::Infallible;
-use std::num::NonZeroUsize;
 
+use crate::support::batching::batch;
+use crate::support::clause_search::by_clauses;
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits,
-    StableModels,
+    BatchError, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, StableModels,
 };
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn choices() -> Theory {
     // Three independent a OR NOT a formulas: all eight interpretations are
@@ -46,13 +32,6 @@ fn choices() -> Theory {
         AdmissionLimits::default(),
     )
     .unwrap()
-}
-
-fn batch(count: usize) -> BatchLimits {
-    BatchLimits {
-        max_candidates: NonZeroUsize::new(count).unwrap(),
-        max_pending_bytes: 1024 * 1024,
-    }
 }
 
 fn never_called(_: &Theory, _: &[Interpretation]) -> Result<Vec<BatchVerdict>, Infallible> {

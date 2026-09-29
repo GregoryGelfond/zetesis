@@ -3,25 +3,12 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
+use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, PhaseMeasurement,
     SearchLimits, StableModels,
 };
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn choice() -> Theory {
     // a OR NOT a has both {} and {a} as stable models.

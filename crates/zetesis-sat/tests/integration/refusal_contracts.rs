@@ -4,23 +4,10 @@ use std::collections::BTreeSet;
 use std::error::Error as _;
 use std::time::Instant;
 
+use crate::support::clause_search::by_clauses;
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
-
-/// Enumerate by the clause forms, the subject of the tests below.
-fn by_clauses(
-    theory: &zetesis_ferraris::Theory,
-    limits: zetesis_sat::Limits,
-    cancellation: zetesis_sat::Cancellation,
-) -> Result<zetesis_sat::StableModels, zetesis_sat::Incomplete> {
-    zetesis_sat::StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Clauses,
-        limits,
-        cancellation,
-    )
-}
 
 fn choices() -> Theory {
     Theory::new(

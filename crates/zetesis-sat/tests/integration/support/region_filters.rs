@@ -6,12 +6,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use zetesis_cpu::regions::Region;
-use zetesis_ferraris::{Interpretation, Node, Theory};
+use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
-    BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter,
+    BatchLimits, Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter,
     RegionFilterWorker, StableModels,
 };
 use zetesis_theory_support::theories::theory;
+
+use super::batching::residual;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Route {
@@ -65,16 +67,6 @@ impl Route {
         assert!(search.exhausted());
         answers
     }
-}
-
-fn residual(
-    _: &Theory,
-    candidates: &[Interpretation],
-) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
-    let mut result = Vec::new();
-    result.try_reserve_exact(candidates.len())?;
-    result.resize(candidates.len(), BatchVerdict::Residual);
-    Ok(result)
 }
 
 pub fn choices(atoms: usize) -> Theory {

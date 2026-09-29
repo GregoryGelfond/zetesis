@@ -5,24 +5,17 @@
 //! subsets, and its resources stop it without a verdict.
 
 use crate::support::formula_theories as theories;
+use crate::support::interpretations::interpretation;
 
 use std::collections::BTreeSet;
 
-use zetesis_ferraris::{Interpretation, Node, Theory, Verdict};
+use zetesis_ferraris::{Node, Theory, Verdict};
 use zetesis_sat::{
     Cancellation, Check, Incomplete, Limits, SearchLimits, SearchMethod, check_with,
 };
 
 use theories::mixed;
 use zetesis_theory_support::theories::theory;
-
-fn interpretation(theory: &Theory, mask: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-    )
-    .unwrap()
-}
 
 /// a <- b.  b <- a.  a | b | c.  A positive cycle the support law misses.
 fn cycle() -> Theory {
