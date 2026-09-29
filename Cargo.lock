@@ -1856,29 +1856,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zetesis-experiments"
-version = "0.1.5"
-dependencies = [
- "clap",
- "criterion",
- "rayon",
- "serde",
- "serde_json",
- "sha2",
- "themelios-base",
- "zetesis-backend",
- "zetesis-core",
- "zetesis-cpu",
- "zetesis-ferraris",
- "zetesis-objective",
- "zetesis-sat",
- "zetesis-solve",
- "zetesis-themelios",
- "zetesis-validation",
- "zetesis-wgpu",
-]
-
-[[package]]
 name = "zetesis-ferraris"
 version = "0.1.5"
 dependencies = [

@@ -996,8 +996,7 @@ Row identity connects relational semantics to masks, intersections and gathers.
 Combining two column masks means intersecting positions in the same relation
 snapshot; it must not combine values from different tuples. The bounded
 [`relation` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
-provides the immutable column view used by eager formula support and primitive
-experiments. It borrows canonical `AtomRef` rows or construction descriptions,
+provides the immutable column view used by eager formula support. It borrows canonical `AtomRef` rows or construction descriptions,
 then encodes complete typed values through a dictionary of borrowed references.
 It preserves row occurrences and their order, including duplicate tuples, and
 keeps original catalog indices distinct from local positions. Explicit predicate

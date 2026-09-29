@@ -81,7 +81,7 @@ three established cases. Each authored workload carries its own source seal and
 typed contract; it makes no upstream-cleaning or generated-family proof claim.
 The command adapters use `performance::scalability::run_with_cancellation`; Rust
 consumers can select the same workloads and qualification or measurement plan
-without clap or a separate experiment executable. See the
+without clap. See the
 [command guide](../../docs/book/reference/commands.md#check-conformance) for
 source roots, compact JSON views and preserved refusal diagnostics.
 

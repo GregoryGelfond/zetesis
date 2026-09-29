@@ -24,7 +24,6 @@ pedantic = { level = "deny", priority = -1 }
 zetesis-bench = { path = "crates/zetesis-bench" }
 zetesis-presentation = { path = "crates/zetesis-presentation" }
 zetesis-validation = { path = "crates/zetesis-validation" }
-zetesis-experiments = { path = "crates/zetesis-experiments" }
 zetesis-solve = { path = "crates/zetesis-solve", default-features = false }
 zetesis-telemetry = { path = "crates/zetesis-telemetry" }
 zetesis-core = { path = "crates/zetesis-core" }

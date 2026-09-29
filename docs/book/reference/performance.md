@@ -1,9 +1,7 @@
 # Benchmarks and comparisons
 
 Use a **solver benchmark** to compare the time and memory needed to answer a
-program. Use a **primitive benchmark** to investigate one operation, such as
-filtering a relation. A faster operation does not necessarily make a complete
-solve faster.
+program.
 
 ## What the results show
 
@@ -169,5 +167,4 @@ Those made before benchmarking took its present form spell it as it was then:
 ordinary uninstrumented campaign has no command; `zetesis bench compare`,
 `zetesis-series` and `zetesis-bench series` are now `zetesis-bench compare`,
 whose `--markdown` prints what `series` printed and whose reports, once given
-as `--report LABEL=PATH`, are operands; and the experiment executable then
-named `zetesis-bench` is now `zetesis-experiments`.
+as `--report LABEL=PATH`, are operands.

@@ -319,16 +319,14 @@ or uncompleted obligations remain pending and prevent an exhaustion claim.
 Generator feedback must preserve every answer still to be found. Candidate rows
 cannot share truth by accident. A rejected proposal, a pending query and a committed answer remain
 different states. General subset blocking is not licensed merely by finding an
-answer: for example, `{a}.` admits both the empty answer and `{a}`.
-
-The bounded [`feedback` experiment](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#conditional-countermodel-feedback)
-constructs conditional restrictions from actual checked reduct countermodels.
-Its guard tests both proper inclusion and satisfaction of that particular frozen
-reduct witness. Complete tiny families check the compiler against the
-[`Feedback` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Feedback.lean); the laws do not establish
-Rust compilation or restart correctness. Fixed-candidate replay measures avoided
-membership calls, while a separate pre-acquired-guard replay counts actual native
-restriction restarts. Neither changes the ordinary search protocol.
+answer: for example, `{a}.` admits both the empty answer and `{a}`. The
+[`Feedback` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Feedback.lean)
+prove both: feedback preserves every stable model still to be found
+(`feedback_preserves_stability`, `all_feedback_preserves_stability`), and `{a}.`
+has the empty and the full answer, comparable by inclusion
+(`unit_choice_empty_stable`, `unit_choice_full_stable`,
+`unit_choice_comparable_stable_models`). The laws are denotational; they claim no
+correspondence with Rust.
 
 Objective selection and display follow checked answers. Complete unrestricted
 enumeration plus complete retention can construct a `WorldView`; optimal ties

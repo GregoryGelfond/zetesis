@@ -101,6 +101,4 @@ Physical qualification must exercise the actual selected implementation,
 including aliases, frozen masks, limits and faults. Performance comparison must
 keep candidates and limits matched, preserve scalar/Rayon baselines and separate
 setup from resident calls. Enumeration may already be unrolled by a compiler;
-extra bit operations or table access need not be faster. The
-[experiment guide](../../crates/zetesis-experiments/README.md) describes the
-maintained paired formula-projection measurement.
+extra bit operations or table access need not be faster.

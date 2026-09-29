@@ -320,8 +320,7 @@ mandatory route observations remain in its evidence.
 limits)` provides the same bounded admission independently of the maintained
 selection. It parses through themelios, rejects unsupported source closure and
 checks constant edits before retaining original/derived identities. The shared
-fixture population and its limits belong to the library, not a standalone
-experiment runner. See [authored workload admission](tests/integration/authored_workloads.rs)
+fixture population and its limits belong to the library. See [authored workload admission](tests/integration/authored_workloads.rs)
 and [CLI checks](../zetesis-cli/tests/integration/scalability_commands.rs).
 
 ### Measure a fixed series of cells

@@ -20,7 +20,7 @@ need a specific capability rather than a complete solve.
 | Evaluate costs and source displays | `zetesis_objective`, admitted-owner observation APIs | [Costs and shown terms](costs-and-output.md) |
 | Observe execution without parsing statistics text | `ExecutionObserver`, `SolveMeasurements`, `SemanticOutcome` | [Observations and measurements](measurements.md) |
 | Publish answers through a custom view | `zetesis_cli::{publish_prepared, PublicationConfig, AnswerRenderer}` | [Answer presentation](outcomes.md#replace-answer-presentation) |
-| Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_bench`, `zetesis_experiments`, `zetesis_presentation` | [Command workflows](workflows.md) |
+| Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_bench`, `zetesis_presentation` | [Command workflows](workflows.md) |
 
 `zetesis-themelios` is zetesis's source-admission crate. The underlying themelios
 libraries provide parsing, logical-program construction and analysis; their
@@ -68,7 +68,7 @@ row or locating a gate atom does not establish answer-set membership. See
 | Enumerate formula answers and complete reduct queries | `zetesis_sat::{StableModels, SearchMethod, check_with, PreparedReduct, ReductWorkspace}` | [Sessions](sessions.md) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
-| Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation measurement example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection) |
+| Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation selection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection) |
 
 `PreparedInput` borrows a coherent admitted owner, native program or complete
 ground graph. Keep the theory, atom catalog, objectives and source observations
@@ -91,7 +91,6 @@ answer set a session returns is decided by zetesis's own reduct check.
 | Measure a bounded corpus schedule | `zetesis_validation::performance::{command::run, matrix::Request}` |
 | Derive a compact campaign view | `matrix::Report::summary` |
 | Compare retained measurements | `zetesis_validation::performance::series::{read_compare, compare}` |
-| Measure matched execution primitives | `zetesis_experiments::primitives::{Request, Event, measure}` |
 | Render human tables with explicit styling | `zetesis_presentation::{Table, Row, Column, Layout, ColorMode}` |
 | Check proof records and coverage policy | `zetesis_maintenance::{proofs, coverage}` |
 | Execute and retain a fresh proof check | `zetesis_maintenance::proofs::capture::capture` |

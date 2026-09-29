@@ -18,9 +18,7 @@ explains their place in ordinary solving, and the
 | `GpuRelationExecutor` | One immutable typed relation and equality queries; ordered row masks | Complete pattern matching, source coverage and answer-set checking |
 
 The tight, native aggregate and relation operations are explicit library
-experiments;
-ordinary solver dispatch does not currently select them. A successful primitive
-benchmark is not a complete source-language solve.
+operations; ordinary solver dispatch does not currently select them.
 
 Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
 reproducibility requires a particular backend. Selection distinguishes physical
