@@ -3,9 +3,8 @@
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
 The prepared-grounding changes reduce repeated work in independent CPU closure.
-The measurements here show no general Metal speedup or reduction in GPU
-transport storage. Eager timings include some regressions and substantial block
-variation. These results complement the
+The measurements here show no general Metal speedup. Eager timings include some
+regressions and substantial block variation. These results complement the
 [ordinary CPU timing and RSS comparison](grounding-measurements.md#prepared-grounding-cpu-comparison);
 they use different output and execution profiles.
 
@@ -26,12 +25,10 @@ not establish identical transitive build recipes. These are integrated revision
 comparisons, not isolated algorithm measurements. Native executable identities
 are listed with the [CPU comparison](grounding-measurements.md#prepared-grounding-cpu-comparison).
 
-The acquisition order was Q/A/B/B/A/Q. Eager matrices ran first, followed by
-six lazy-library commands. The complete interval was 18:30:46–18:39:45 UTC;
-the lazy commands occupied its final five seconds. Host load averages changed
-from 2.94/3.78/3.38 to 4.74/4.97/4.55. Small differences and block drift must be
-retained. No kernel timestamps, process RSS or cold-cache guarantee are supplied
-by this acquisition.
+The acquisition order was Q/A/B/B/A/Q. The eager matrices ran within
+18:30:46–18:39:45 UTC. Host load averages changed from 2.94/3.78/3.38 to
+4.74/4.97/4.55. Small differences and block drift must be retained. No kernel
+timestamps, process RSS or cold-cache guarantee are supplied by this acquisition.
 
 ## Complete eager solves
 
@@ -109,78 +106,6 @@ candidate settles and the final 1,176 optimum ties at cost 5 agree. Its roughly
 3.024 billion charged GPU work units are algorithmic accounting, not hardware
 instructions. No reduction in peak process memory follows from these records.
 
-## Lazy library batches
-
-The [exact timed observations](observations/prepared-metal-lazy-20260914.tsv)
-retain all 3,456 integer nanosecond intervals. Their
-[provenance](observations/prepared-metal-lazy-provenance-20260914.tsv) binds the six
-blocks to source revisions, executable hashes and original stream hashes.
-Iteration, position and timed-order fields are zero-based; timed order follows
-the producer's rotated route schedule within each block.
-
-Each block has eight fixtures: sparse/dense families, widths 4/8 and candidate
-batches 1/32. Six routes run on each fixture: scalar, Rayon, portable Union,
-portable Worlds, Metal Union and Metal Worlds. All 4,320 initial, warmup and
-timed slots completed, including 1,440 Metal slots and 1,152 timed Metal slots.
-Before publishing each sample, the maintained producer compares complete
-closures, constraint violations and seed mismatches against its scalar reference.
-The streams retain the successful checks, not the closure contents themselves;
-this is neither an independently reconstructed cross-version closure comparison
-nor complete outer answer-set enumeration.
-
-The following percentages compare medians of each revision's 24 timed samples
-per fixture and route. Negative means B took less time. Unrelated fixtures are
-not pooled.
-
-| Metal route | B faster than Q | B/Q range | B faster than A | B/A range |
-| --- | ---: | ---: | ---: | ---: |
-| Union | 4 of 8 | −6.60% to +2.39% | 4 of 8 | −9.36% to +1.93% |
-| Worlds | 3 of 8 | −0.71% to +3.11% | 2 of 8 | −15.66% to +2.52% |
-
-Every B/Q Metal sample range overlaps. Sparse width-4/batch-1 has both B block
-medians above both Q medians: pooled Union is 0.632042→0.647146 ms and Worlds
-0.627271→0.646750 ms. These are small absolute regressions, not omitted samples.
-Dense width-8/batch-32 Union is 4.040084/4.162833/3.773334 ms for Q/A/B, but B's
-two block medians differ: 3.622041 and 4.144916 ms. This short acquisition does
-not establish a stable small-effect estimate.
-
-Metal Union takes 1.97–25.69 times as long, and Metal Worlds 1.83–30.77 times
-as long, as their matched portable shared-source routes, comparing B medians.
-Metal does not take longer than every CPU strategy. For dense
-width-8/batch-32, B medians are:
-
-| Scalar | Rayon | Portable Union | Portable Worlds | Metal Union | Metal Worlds |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 13.506167 ms | 3.747646 ms | 1.918437 ms | 1.979938 ms | 3.773334 ms | 3.615667 ms |
-
-Device setup is outside these sample timers. Its six observations are
-48.441/42.354/47.270/9.554/8.793/8.479 ms in acquisition order. No particular
-cache or driver cause is inferred. Timed Metal work includes host source
-evaluation, buffer work, dispatch and readback. The reported host wait also
-includes decoding; it is not GPU kernel time.
-
-### Work and storage
-
-All non-time device fields match across Q/A/B and repetitions. A/B source
-receipts match; they count 33 more source-work units per batch than Q. That
-accounting difference is not a count of extra GPU instructions. The GPU paths
-retain their shared source schedule; they do not yet consume the independent
-CPU delta schedule.
-
-Each batch submits three or seven chunks. Uploads range from 1,304 to 53,896
-bytes, decoded outputs from 48 to 22,272 bytes, and named device transport peaks
-from 496 to 25,360 bytes. These populations do not decrease in B. The existing
-Worlds route does reduce sparse width-8/batch-32 work relative to Union:
-1,121→113 instances, seven→three dispatches, 53,896→3,912 uploaded bytes and
-25,360→2,856 transport bytes. Those reductions already occur in Q and A.
-
-Independent CPU closure is different. For dense width-8/batch-32, A→B reduces
-counted work from 2,981,376 to 2,310,016 and bindings from 35,872 to 17,440,
-preserving 96 summed rounds and 17,408 derived-atom occurrences. Maximum
-individual closure capacity increases by 320 bytes, to 138,142 bytes. These
-named capacities exclude other host owners and driver allocations; they neither
-measure RSS nor form additive whole-process memory totals.
-
 ## Reproduction
 
 Use separate checkouts and frozen binaries for Q/A/B, and one fixed performance
@@ -199,17 +124,7 @@ zetesis-perf examples/correctness \
 ```
 
 Repeat with `--suite queens` and another report path. These are finite limits;
-a refusal or partial run remains an outcome rather than a discarded sample.
-Then run each revision's own frozen bench, in the same block order:
-
-```sh
-zetesis-bench lazy --backend metal --widths 4,8 --batches 1,32 \
-  --families sparse,dense --workers 4 --warmups 2 --repetitions 12 \
-  --chunk-rules 256 --max-work 100000000
-```
-
-The lazy producer also applies finite candidate, atom, round, host/device byte
-and GPU wait limits. They do not establish a whole-process wall deadline. Keep
+a refusal or partial run remains an outcome rather than a discarded sample. Keep
 competing builds and measurements stopped and retain actual adapter and work
 observations. Rebuilding the same revision need not reproduce its binary bytes.
 

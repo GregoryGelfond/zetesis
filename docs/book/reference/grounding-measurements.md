@@ -210,63 +210,6 @@ Separate child RSS, MiB. Each cell is **native / clingo**, one fresh-helper obse
 | Task allocation | 15.859 / 19.406 | 15.844 / 19.391 | 15.844 / 21.438 | 15.656 / 21.438 |
 | Shortest path | 13.031 / 5.641 | 13.156 / 5.641 | 13.156 / 5.641 | 12.859 / 5.641 |
 
-### Scalar and shared lazy CPU observations
-
-Separate `zetesis-bench lazy` observations use the same six-source order over
-sparse/dense fixtures, widths 4/8 and candidate batches 1/32/128. Each block has
-one initial, two warmup and twelve timed samples per case/route: **4,320 samples,
-3,456 timed**, all completed. Scalar, four-worker Rayon, PortableUnion and
-PortableWorlds compare full ordered closures, constraint verdicts and seed
-mismatches to an independent scalar reference after timing. The JSONL records
-retain receipts, not the full closures for an independent cross-version
-reconstruction. Repeated seeds are candidate occurrences, not answer-set counts.
-Device fields are absent; the shared portable routes evaluate consequences
-serially, and the Rayon pool serves independent checks. No RSS was sampled.
-
-Use each source's own frozen bench in the six-source order:
-
-```sh
-"$bench" lazy --backend cpu --widths 4,8 --batches 1,32,128 \
-  --families sparse,dense --workers 4 --warmups 2 --repetitions 12 \
-  --chunk-rules 256 --max-work 100000000
-```
-
-The bench SHA-256 values, in earlier/intermediate/latest source order, are
-`ecb21a65cf618bf56f75dc62a165d3b83d8bf61f7856eeec4659805e00cbfad8`,
-`2bc44c92f16999ef29950cfa26c727da0f9479e15c63a1414cba353a1843931d`, and
-`59d568f0e15b99541d5e65bc9fc9da631e98e87c8424a42e1f0307cb6d066678`.
-Scalar creates preparation and workspace per seed inside timing; warmed Rayon
-retains exact-Program preparation and empty capacity across calls. It never
-retains candidate truth. Shared source traversal keeps its full schedule.
-
-Compared with intermediate workspaces, latest inclusive work and enabled
-bindings decrease in every scalar and Rayon fixture. Dense width-8/128 Scalar
-falls from 11,925,504 to 9,240,064 work units and 143,488 to 69,760 bindings, with
-identical closure and round counts. Medians of the 24 timed samples per source
-are 55.951 ms earlier, 65.376 ms intermediate and 55.932 ms latest: recovery to
-roughly the earlier time, not a large gain over it. Latest warmed Rayon reports
-one preparation build per exact program and reuse of every active slot; its
-pool receipts are cumulative snapshots, not additional per-check work.
-
-Small regressions remain. Sparse width-4/32 Scalar rises from 133.209 to
-148.521 microseconds against the earlier source (+11.49%, or 15.312 microseconds);
-both latest block medians exceed both earlier medians, though sample ranges
-overlap. Dense width-4/128 Scalar adds 168.813 microseconds (+2.57%). The largest
-Rayon increase against the earlier source is 5.01% (3.271 microseconds, dense
-width-4/1). Sparse width-4/32 Rayon is 2.83% above the earlier source and 17.39%
-above intermediate workspaces, with opposite directions in its repeated blocks.
-Shared Union/Worlds timings move both ways while intermediate/latest logical
-receipts agree. Dense width-8/128 shared times increase 0.65%/1.76% against the
-earlier source. Fewer bindings do not imply a shared-source speedup.
-
-Latest scalar named peak capacity is 320 bytes above the intermediate value
-in each fixture; this is not RSS or an isolated layout attribution. Earlier
-missing work/cache/probe fields remain unavailable, not zero. These fixtures
-insert predicate rows in canonical waves, favoring append-at-end in the earlier
-sorted representation; they do not measure the new index's avoided-shift
-benefit. The [prepared-query contract](../rust/parallel.md) explains reuse,
-reset and retained-owner admission independently of these timings.
-
 ### Optional domain admission observations
 
 An Indexed off/on/on/off comparison of `grounding::profile` exercises the
@@ -431,76 +374,6 @@ Separate child RSS, MiB. Each cell is **native / clingo**, one fresh-helper obse
 | SEND | 24.188 / 8.500 | 24.250 / 8.500 | 24.297 / 8.500 | 24.172 / 8.500 |
 | Task allocation | 19.641 / 22.750 | 16.016 / 22.375 | 16.016 / 22.516 | 19.531 / 21.688 |
 | Shortest path | 13.156 / 6.062 | 13.234 / 5.891 | 13.344 / 5.891 | 13.156 / 5.891 |
-
-### Shared lazy CPU checks
-
-A separate four-block comparison of the same two sources directly exercises
-shared lazy checking through the maintained `zetesis-bench lazy` command. The
-prior bench hash is `e720983506475d7059198ebf0856e8617eff2e8888a838fd6a33954e42786a9a`;
-the ca10 bench hash is `ecb21a65cf618bf56f75dc62a165d3b83d8bf61f7856eeec4659805e00cbfad8`.
-The acquisition ran from 03:46:21 to 03:46:31 UTC, separately from ordinary
-process timings. It covers sparse/dense fixtures, widths 4/8 and batches
-1/32/128, with Scalar, Rayon, PortableUnion and PortableWorlds routes. Every
-block completes all 720 positions: one initial, two warmup and twelve timed
-checks per case/route, rotating route order. All 2,880 samples pass the
-producer's comparison of complete ordered closures, constraint verdicts and
-seed mismatches against an independent scalar reference after the timer.
-The records retain counts and progress, not full closure payloads for another
-cross-version reconstruction. Repeated seeds are occurrence checks, not unique
-answer sets or an outer enumeration/clingo comparison.
-
-PortableUnion and PortableWorlds actually call the shared source/catalog
-consumer with serial portable consequence evaluation. The four-worker Rayon
-pool runs the independent route; its presence does not mean shared grounding
-runs in parallel. Device fields are null. Batch construction and finalization
-are inside the shared timer; fixture/reference construction, pool setup,
-comparison and JSON publication are outside it. No RSS was sampled here.
-
-Most shared cases slow down: 11 of 12 Union cases and 10 of 12 Worlds cases.
-Changes below compare the two current block medians with the two prior block
-medians. Each block median uses twelve timed observations; this is descriptive,
-not a confidence interval or an average across unrelated fixtures.
-
-| Family / width / worlds | Union change | Worlds change |
-| --- | ---: | ---: |
-| sparse / 4 / 1 | +14.45% | +12.91% |
-| sparse / 4 / 32 | +12.72% | +5.78% |
-| sparse / 4 / 128 | +9.82% | +4.78% |
-| sparse / 8 / 1 | +4.85% | +11.67% |
-| sparse / 8 / 32 | +11.62% | +4.59% |
-| sparse / 8 / 128 | +12.91% | +2.32% |
-| dense / 4 / 1 | +4.68% | +6.02% |
-| dense / 4 / 32 | +2.08% | -2.04% |
-| dense / 4 / 128 | -2.34% | -1.62% |
-| dense / 8 / 1 | +3.85% | +12.97% |
-| dense / 8 / 32 | +3.04% | +2.08% |
-| dense / 8 / 128 | +2.49% | +0.24% |
-
-For example, sparse width-8/128 Union medians rise from 1.0335/1.0891 ms to
-1.2000/1.1967 ms. Dense width-8/1 Worlds rises from 0.7848/0.7751 ms to
-0.8836/0.8786 ms. The small improvements occur in some dense width-4 cases;
-there is no general shared-source speedup. The prior/current change includes
-more than the interner, so these timings do not assign a cause to one operation.
-In particular, formula grounding already owned each emitted atom once before
-its index changed; the removal of duplicated payload applies to the batched
-lazy owner. [Ownership and cost contracts](../architecture/ownership.md) describe
-these different populations and the remaining per-call preparation.
-
-Use each source's matching bench in prior/current/current/prior order, retaining
-all four outputs, with this same command suffix:
-
-```sh
-zetesis-bench lazy --backend cpu --widths 4,8 --batches 1,32,128 \
-  --families sparse,dense --workers 4 --warmups 2 --repetitions 12 \
-  --chunk-rules 256 --max-work 100000000
-```
-
-The recorded shared-source limits also include 1,024 candidates, 4,096 atoms,
-4,097 rounds, 16,384 chunk words, 1 MiB per copied instance and 128 MiB host
-storage. The named host envelope is not RSS. Work counters count documented
-operations, not machine instructions. Fixed interner probes provide separate
-preparation, lookup, append and capacity observations; they cannot substitute
-for the whole-solve or shared-consumer results above.
 
 ### Explicit CPU profile matrix
 
@@ -1059,40 +932,6 @@ variant. Physical regression coverage and release performance are separate
 claims; neither historical throughput nor a requested Metal backend proves
 current device execution.
 
-## Optional finite-table experiment
-
-This retained **historical** population measured source `6bebb980`, before
-ordinary eager grounding had a Table consumer. It compared complete row/domain
-projection with a prepared scan and independent scalar/Rayon queries. All
-2,880 query observations across 90 batches agreed with independent whole-row
-reconstruction, including aliases, duplicate occurrences and restored domains.
-
-Each cell is microseconds for 32 queries: median [minimum, maximum] of three
-timed batches. Preparation and independent validation are excluded; projection
-and common-output conversion are included.
-
-| Fixture | Rows | Prepared scan | Scalar table | Rayon table, 4 workers |
-| --- | ---: | ---: | ---: | ---: |
-| Correlated | 128 | 82.042 [81.417, 108.208] | 43.250 [43.167, 44.667] | 40.417 [38.417, 47.000] |
-| Correlated | 1,024 | 669.500 [644.167, 680.417] | 115.667 [95.250, 117.625] | 67.417 [59.375, 77.125] |
-| Independent | 128 | 181.917 [181.792, 182.292] | 45.417 [44.209, 53.292] | 34.333 [33.709, 51.000] |
-| Independent | 1,024 | 1,868.500 [1,836.292, 1,906.875] | 128.875 [109.667, 142.250] | 90.708 [75.833, 138.167] |
-| Aliased | 128 | 181.875 [180.750, 183.625] | 38.458 [37.417, 45.167] | 30.584 [29.667, 30.917] |
-| Aliased | 1,024 | 1,589.667 [1,570.167, 1,629.708] | 122.417 [121.291, 124.458] | 65.000 [61.041, 115.000] |
-
-The fixed scan/table/Rayon order and three batches do not establish a stable
-parallel crossover. For the independent 1,024-row fixture, the single measured
-preparations were 546.042 µs for the relation and 274.125 µs for the Table index;
-the index retained 9,080 bytes. Named capacities are not RSS.
-
-These earlier projection results motivated the reusable consumer now described
-above. Ordinary grounding uses borrowed row selection, not the experiment's
-complete domain-projection output. Its preparation, live masks and remaining
-grounding work must be measured together. There is still no GPU Table kernel.
-The [historical method and limits](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md#optional-finite-table-experiment)
-remain available with the original standalone commands.
-
-
 ## Reproduce the measurements
 
 Use the [installer](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/install.sh)
@@ -1109,7 +948,6 @@ perf_command=/absolute/path/to/zetesis-perf
 previous_solver=/absolute/path/to/previous/zetesis
 current_solver=/absolute/path/to/current/zetesis
 clingo_command=/absolute/path/to/clingo
-bench_command=/absolute/path/to/current/zetesis-bench
 results_dir=$(mktemp -d "${TMPDIR:-/tmp}/zetesis-perf.XXXXXX")
 
 ordinary() {
@@ -1226,19 +1064,6 @@ captures full native JSON/statistics and retains native model records. It allows
 32 MiB per child/native decoder input, 128 MiB total capture and 256 MiB report
 output, retaining the decoder's other structural limits. There are no RSS
 samples. Each Metal invocation initializes its own GPU context.
-
-For the detailed N=8 profile, run each original source separately:
-
-```sh
-"$bench_command" grounding \
-  examples/correctness/standalone/n-queens/variant-01.lp \
-  --joins table --repetitions 1 > "$results_dir/grounding-q01.json"
-```
-
-Repeat for variants 02–06 with distinct output names. Each command performs the
-unmeasured indexed reference and three observed/unobserved admissions; it is not
-a bare table-kernel timer. The [grounding experiment contract](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-experiments#original-source-grounding)
-defines its default work, capture and complete-model bounds.
 
 The larger screen composes the public
 [`Workload::amended` and `run_workloads` APIs](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-validation#derive-explicit-parameter-workloads).
