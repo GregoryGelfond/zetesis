@@ -1,5 +1,4 @@
-//! Integration tests of `zetesis-objective`, compiled as one test binary; each
-//! module was one test target.
+//! Integration tests of `zetesis-objective`, compiled as one test binary.
 
 mod conditions;
 mod evaluator;

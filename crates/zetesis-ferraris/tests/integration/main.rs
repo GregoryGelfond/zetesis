@@ -1,5 +1,4 @@
-//! Integration tests of `zetesis-ferraris`, compiled as one test binary; each
-//! module was one test target.
+//! Integration tests of `zetesis-ferraris`, compiled as one test binary.
 
 mod aggregate_clingo;
 mod aggregate_families;

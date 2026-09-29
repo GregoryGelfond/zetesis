@@ -1,5 +1,4 @@
-//! Integration tests of `zetesis-solve`, compiled as one test binary; each
-//! module was one test target.
+//! Integration tests of `zetesis-solve`, compiled as one test binary.
 
 mod candidate_restrictions;
 mod closure_receipts;

@@ -1,5 +1,4 @@
-//! Integration tests of `zetesis-domain`, compiled as one test binary; each
-//! module was one test target.
+//! Integration tests of `zetesis-domain`, compiled as one test binary.
 
 mod support;
 mod analysis;
