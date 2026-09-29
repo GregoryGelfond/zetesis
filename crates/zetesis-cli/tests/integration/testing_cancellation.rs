@@ -1,5 +1,4 @@
 //! The installed command owns signal handling; the library owns bounded cleanup.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::{
     fs, io,

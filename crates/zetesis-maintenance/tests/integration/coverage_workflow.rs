@@ -1,5 +1,4 @@
 //! Real shell orchestration with synthetic compilers and physical-test output.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::support::process as subprocess;
 use subprocess::{Command, Output};
 mod fixture;

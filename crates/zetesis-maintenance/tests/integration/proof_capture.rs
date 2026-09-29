@@ -1,5 +1,4 @@
 //! Synthetic execution/publication controls, never evidence of Lean acceptance.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::support::process as subprocess;
 use serde_json::Value;
 use sha2::{Digest, Sha256};

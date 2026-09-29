@@ -63,6 +63,7 @@ mod statistics_views;
 mod stats;
 mod strong_negation;
 mod structural_values;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod testing_cancellation;
 mod testing_commands;
 mod upstream_sources;

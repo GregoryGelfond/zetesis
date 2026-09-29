@@ -1,5 +1,4 @@
 //! The test adapter preserves command identity under bounded library capture.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::support::process as subprocess;
 
 use std::time::Duration;

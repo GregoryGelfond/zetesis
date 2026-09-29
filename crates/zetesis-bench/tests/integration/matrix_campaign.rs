@@ -1,5 +1,4 @@
 //! Synthetic processes exercise matrix accounting; they claim no solver parity.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs;
 use std::num::NonZeroUsize;
 use std::os::unix::fs::PermissionsExt;

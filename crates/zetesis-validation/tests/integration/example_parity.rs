@@ -1,5 +1,4 @@
 //! Opt-in bounded clingo comparison of original and curated sources.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::path::Path;
 use std::time::Duration;

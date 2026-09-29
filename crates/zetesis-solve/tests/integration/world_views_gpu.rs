@@ -1,5 +1,4 @@
 //! Physical formula execution preserves unrestricted family and capture evidence.
-#![cfg(feature = "gpu")]
 
 use std::{collections::BTreeSet, io, num::NonZeroUsize};
 

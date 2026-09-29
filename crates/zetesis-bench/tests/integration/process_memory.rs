@@ -1,5 +1,4 @@
 //! Fresh Rust helpers qualify resource scope independently of solver execution.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::ffi::OsString;
 use std::path::Path;

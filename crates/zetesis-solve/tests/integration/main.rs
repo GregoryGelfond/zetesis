@@ -17,8 +17,10 @@ mod retained_models;
 mod retention_limits;
 mod selection_sessions;
 mod session_builder;
+#[cfg(feature = "gpu")]
 mod session_resources_gpu;
 mod streaming_defaults;
 mod terminal_sessions;
 mod world_views;
+#[cfg(feature = "gpu")]
 mod world_views_gpu;

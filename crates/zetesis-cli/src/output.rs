@@ -1315,7 +1315,6 @@ fn lazy_transport_usage(
 pub(crate) mod fixtures;
 
 #[cfg(test)]
-#[cfg(test)]
 pub(crate) mod document_fixture;
 #[cfg(test)]
 mod lazy_tests {

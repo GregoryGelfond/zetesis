@@ -1,5 +1,4 @@
 //! Public process evidence contracts, using bounded shell fixtures only.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::ffi::OsString;
 use std::path::Path;

@@ -1,5 +1,4 @@
 //! Public campaign contracts exercised through bounded, deliberately fallible producers.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::fmt::Write as _;
 use std::fs;

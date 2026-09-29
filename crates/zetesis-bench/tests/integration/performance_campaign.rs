@@ -1,5 +1,4 @@
 //! Bounded synthetic producers exercise the observation/evidence contracts.
-#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use serde_json::{Value, json};
 use std::error::Error as _;

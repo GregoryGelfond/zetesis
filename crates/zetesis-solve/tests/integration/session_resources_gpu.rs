@@ -1,5 +1,4 @@
 //! Ordinary sessions share device ownership, never search or answer-set evidence.
-#![cfg(feature = "gpu")]
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
