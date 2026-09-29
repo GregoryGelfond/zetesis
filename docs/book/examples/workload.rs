@@ -45,7 +45,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let request = matrix::Request {
         tool: matrix::Tool {
             name: "book-workload".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
+            // Cargo supplies the package version; a build outside Cargo has none.
+            version: option_env!("CARGO_PKG_VERSION")
+                .unwrap_or("unversioned")
+                .into(),
         },
         corpus: corpus_path,
         native,
