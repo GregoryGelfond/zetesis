@@ -3,12 +3,11 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::time::Duration;
 
+use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected, json_model};
 use crate::support::finite_bindings::{Models, exhaustive, native, values};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
-use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Node;
 use zetesis_reference_support::canonical;
@@ -41,50 +40,6 @@ fn cases() -> Vec<Json> {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
-}
-
-fn expected(row: &Json) -> Models {
-    row["models"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(json_model)
-        .collect()
-}
-
-fn json_model(values: &Json) -> BTreeSet<String> {
-    let atoms = values.as_array().unwrap();
-    let result: BTreeSet<_> = atoms
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(result.len(), atoms.len(), "full atom identities are unique");
-    result
-}
-
-fn external(source: &str, valid: bool) -> Json {
-    let exits: &[i32] = if valid { &oracle::DECIDED } else { &[65] };
-    let run = oracle::run_accepting(
-        source,
-        &[
-            "--models=0",
-            "--outf=2",
-            "--parallel-mode=1",
-            "--opt-mode=enum",
-        ],
-        exits,
-        oracle::Limits {
-            timeout: Duration::from_secs(3),
-            max_output_bytes: 2 * 65_536,
-        },
-    );
-    let diagnostics = String::from_utf8_lossy(run.stderr());
-    // A refused source must be refused for its unsafe variables.
-    assert!(
-        valid || diagnostics.contains("unsafe variables"),
-        "{diagnostics}"
-    );
-    oracle::json(&run)
 }
 
 fn refusal(error: &FormulaFailure, expected: &str) {
@@ -451,7 +406,8 @@ fn conditional_body_matches_clingo() {
     let mut valid = 0;
     let mut unsafe_source = 0;
     for row in cases() {
-        let actual = external(row["source"].as_str().unwrap(), row["valid"] == true);
+        let actual =
+            enumerated_or_refused_unsafe(row["source"].as_str().unwrap(), row["valid"] == true);
         if row["valid"] != true {
             assert_eq!(actual["Result"], "UNKNOWN");
             refusal(

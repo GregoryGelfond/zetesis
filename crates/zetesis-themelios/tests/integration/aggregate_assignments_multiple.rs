@@ -2,37 +2,18 @@
 //! in the original formula. The reference evaluator implements the finite
 //! reduct definition without the production reduct masks or countermodel search.
 
+use crate::support::clingo_reports::{enumerated, json_model};
 use crate::support::finite_bindings::{Models, exhaustive, native};
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::sourced_admission::{SOURCE, input, options};
 
 use std::collections::BTreeSet;
-use std::time::Duration;
 
 use serde_json::Value as Json;
-use themelios_base::source::SourceId;
-use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula,
 };
-
-const SOURCE: SourceId = SourceId::new(83);
-
-fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
-}
-
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
 
 fn cases() -> Vec<Json> {
     include_str!("../fixtures/aggregate-assignments-multiple.jsonl")
@@ -43,16 +24,6 @@ fn cases() -> Vec<Json> {
 
 fn expected(row: &Json) -> Models {
     row[2].as_array().unwrap().iter().map(json_model).collect()
-}
-
-fn json_model(values: &Json) -> BTreeSet<String> {
-    let atoms = values.as_array().unwrap();
-    let result: BTreeSet<_> = atoms
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(result.len(), atoms.len(), "full atom identities are unique");
-    result
 }
 
 #[test]
@@ -233,23 +204,12 @@ fn scope_work_is_bounded_and_can_be_retried_without_partial_admission() {
     );
 }
 
-fn external(source: &str) -> Json {
-    oracle::json(&oracle::run(
-        source,
-        &["--models=0", "--outf=2"],
-        oracle::Limits {
-            timeout: Duration::from_secs(3),
-            max_output_bytes: 2 * 65_536,
-        },
-    ))
-}
-
 #[test]
 #[ignore = "requires external clingo; exact original sources and complete full-model replay"]
 fn multiple_aggregate_assignments_match_clingo() {
     for row in cases() {
         let source = row[1].as_str().unwrap();
-        let result = external(source);
+        let result = enumerated(source);
         assert!(
             result["Solver"]
                 .as_str()

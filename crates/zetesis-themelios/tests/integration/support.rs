@@ -1,5 +1,6 @@
 //! Helpers shared by the integration test modules.
 
+pub(crate) mod clingo_reports;
 pub(crate) mod finite_bindings;
 pub(crate) mod head_element_reference;
 pub(crate) mod head_models;
@@ -9,6 +10,7 @@ pub(crate) mod objective_dependency_records;
 pub(crate) mod observation_reference;
 pub(crate) mod priority_contracts;
 pub(crate) mod source_cases;
+pub(crate) mod sourced_admission;
 pub(crate) mod stable_models;
 pub(crate) mod thresholds;
 pub(crate) mod upstream;

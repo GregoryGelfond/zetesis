@@ -3,60 +3,22 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::time::Duration;
 
+use crate::support::clingo_reports::{enumerated, expected, json_model};
 use crate::support::finite_bindings::{Models, exhaustive, holds, native, remap, values};
+use crate::support::sourced_admission::{SOURCE, input, options};
 use serde_json::Value as Json;
-use themelios_base::source::SourceId;
-use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceBundle, admit_bundle_formula, admit_formula,
+    BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
+    admit_formula,
 };
-
-const SOURCE: SourceId = SourceId::new(83);
-
-fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
-}
-
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
 
 fn cases() -> Vec<Json> {
     include_str!("../fixtures/ground-guards.jsonl")
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
-}
-
-fn expected(row: &Json) -> Models {
-    row["models"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(json_model)
-        .collect()
-}
-
-fn json_model(values: &Json) -> BTreeSet<String> {
-    let atoms = values.as_array().unwrap();
-    let result: BTreeSet<_> = atoms
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(result.len(), atoms.len(), "full atom identities are unique");
-    result
 }
 
 #[test]
@@ -308,22 +270,11 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
     );
 }
 
-fn external(source: &str) -> Json {
-    oracle::json(&oracle::run(
-        source,
-        &["--models=0", "--outf=2"],
-        oracle::Limits {
-            timeout: Duration::from_secs(3),
-            max_output_bytes: 2 * 65_536,
-        },
-    ))
-}
-
 #[test]
 #[ignore = "requires external clingo; exact sources and complete full-model replay"]
 fn ground_guards_match_clingo() {
     for row in cases() {
-        let actual = external(row["source"].as_str().unwrap());
+        let actual = enumerated(row["source"].as_str().unwrap());
         assert_eq!(actual["Models"]["More"], "no");
         let witnesses: Vec<_> = actual["Call"]
             .as_array()

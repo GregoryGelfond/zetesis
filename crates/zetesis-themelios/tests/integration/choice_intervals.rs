@@ -1,16 +1,15 @@
 //! Closed choice ranges preserve one group, local products and every reduct.
 
+use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
 use crate::support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::time::Duration;
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
-use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::admit;
@@ -598,25 +597,12 @@ fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
     }
 }
 
-fn clingo(source: &str) -> Json {
-    // An undecided run (0) and a refusal (65) are reported, not failures: the
-    // caller reads the report's result.
-    oracle::json(&oracle::run_accepting(
-        source,
-        &["--models=0", "--outf=2", "--opt-mode=optN"],
-        &[0, 10, 20, 30, 65],
-        oracle::Limits {
-            timeout: Duration::from_secs(3),
-            max_output_bytes: 2 * 65_536,
-        },
-    ))
-}
 #[test]
 #[ignore = "requires external clingo; excludes the recorded i32::MAX deadline"]
 fn fresh_bounded_clingo_replays_complete_contracts_and_explicit_diagnostics() {
     let mut runs = 0;
     for case in cases().iter().filter(|case| !case["reference"].is_null()) {
-        let fresh = clingo(case["source"].as_str().unwrap());
+        let fresh = optimal(case["source"].as_str().unwrap());
         assert_eq!(
             fresh["Result"], case["reference"]["Result"],
             "{}",

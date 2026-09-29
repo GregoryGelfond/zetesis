@@ -2,7 +2,6 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self};
-use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_core::{Model, Sign};
@@ -409,9 +408,9 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
     }
     assert_eq!(count, 10);
 }
+use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
-use zetesis_clingo_support as oracle;
 
 #[test]
 fn signed_anonymous_projection_has_the_declared_model_view() {
@@ -553,25 +552,11 @@ fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() 
     }
 }
 
-fn clingo(source: &str) -> Json {
-    // An undecided run (0) and a refusal (65) are reported, not failures: the
-    // caller reads the report's result.
-    oracle::json(&oracle::run_accepting(
-        source,
-        &["--models=0", "--outf=2", "--opt-mode=optN"],
-        &[0, 10, 20, 30, 65],
-        oracle::Limits {
-            timeout: Duration::from_secs(3),
-            max_output_bytes: 2 * 65_536,
-        },
-    ))
-}
-
 #[test]
 #[ignore = "requires external clingo; independent bounded full reference replay"]
 fn fresh_clingo_replays_signed_models_objectives_and_unsafe_diagnostics() {
     for case in cases() {
-        let fresh = clingo(case["source"].as_str().unwrap());
+        let fresh = optimal(case["source"].as_str().unwrap());
         assert_eq!(fresh["Solver"], case["reference"]["Solver"]);
         assert_eq!(
             fresh["Result"], case["reference"]["Result"],
