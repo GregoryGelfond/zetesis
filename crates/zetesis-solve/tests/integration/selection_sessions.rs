@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
+use crate::support::models::Family;
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Sign, Template, Term, Value,
     ValueLimits, ValueNode,
@@ -15,8 +16,6 @@ use zetesis_solve::{
 const PERMITTED_CANDIDATES: u64 = 24;
 const ANSWERS: usize = 24;
 const CARRIER_ATOMS: usize = 5;
-
-type Family = BTreeSet<Model>;
 
 fn predicate(name: &str, arity: usize, sign: Sign) -> Predicate {
     Predicate::with_sign(name, arity, sign).unwrap()

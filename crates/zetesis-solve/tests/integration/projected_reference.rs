@@ -7,6 +7,7 @@
 
 use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroUsize, path::Path};
 
+use crate::support::reports::REPORT_BYTES;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
@@ -22,7 +23,6 @@ use zetesis_validation::answers;
 
 type Family = BTreeSet<Vec<String>>;
 
-const REPORT_BYTES: usize = 64 * 1024;
 const FOUR: &[&[&str]] = &[&[], &["p"], &["q"], &["p", "q"]];
 const Q_REQUIRED: &[&[&str]] = &[&["q"], &["p", "q"]];
 const P_IMAGE: &[&[&str]] = &[&[], &["p"]];

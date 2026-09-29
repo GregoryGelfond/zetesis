@@ -2,7 +2,8 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use zetesis_core::{Atom, Model, Predicate, Sign, Value};
+use crate::support::models::atom;
+use zetesis_core::{Model, Sign, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
@@ -18,14 +19,6 @@ fn admitted(source: &str) -> AdmittedFormula {
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
-    )
-    .unwrap()
-}
-
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
     )
     .unwrap()
 }

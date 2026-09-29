@@ -1,5 +1,6 @@
 //! Integration tests of `zetesis-solve`, compiled as one test binary.
 
+mod support;
 mod candidate_restrictions;
 mod closure_receipts;
 mod closure_reservation;

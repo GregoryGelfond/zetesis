@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize, sync::Arc};
 
+use crate::support::sessions::normal;
 use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -10,7 +11,6 @@ use zetesis_solve::{
     ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, Session, SolveConfig,
     SolveError, Subject, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
 };
-use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -19,15 +19,6 @@ fn config() -> SolveConfig {
         workers: NonZeroUsize::MIN,
         ..Default::default()
     }
-}
-
-fn normal(source: &str) -> Admitted {
-    admit_extended(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap()
 }
 
 fn names(answer: &AnswerSet) -> Vec<String> {

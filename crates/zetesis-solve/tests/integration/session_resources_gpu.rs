@@ -2,6 +2,8 @@
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
+use crate::support::models::atom;
+use crate::support::sessions::normal;
 use zetesis_core::{
     Atom, Model, Predicate, Sign, Value,
     relation::{Limits, Relation},
@@ -13,9 +15,7 @@ use zetesis_solve::{
     ExecutionResources, GpuApi, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome,
     Session, SolveConfig, SolveError, Subject,
 };
-use zetesis_themelios::{
-    AdmissionOptions, Admitted, ExpansionLimits, FormulaLimits, admit_extended,
-};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits};
 use zetesis_wgpu::{
     AdapterBackend, AdapterCategory, GateProjection, GpuContext, GpuError, GpuErrorKind,
     GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuLimits,
@@ -92,23 +92,6 @@ fn config(backend: Backend, profile: Profile) -> SolveConfig {
         max_optimal_models: 8,
         ..Default::default()
     }
-}
-
-fn normal(source: &str) -> Admitted {
-    admit_extended(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap()
-}
-
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
-    )
-    .unwrap()
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

@@ -3,24 +3,17 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
+use crate::support::sessions::config;
 use zetesis_core::Predicate;
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_solve::{
-    AnswerSet, Backend, Completion, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
+    AnswerSet, Completion, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig,
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const PATH_VERTICES: u32 = 24;
-
-fn config() -> SolveConfig {
-    SolveConfig {
-        backend: Backend::Cpu,
-        models: 0,
-        ..Default::default()
-    }
-}
 
 fn path_family(vertices: u32) -> BTreeSet<u32> {
     // Bit i denotes selected(i+1). Adjacent selected bits violate precisely one

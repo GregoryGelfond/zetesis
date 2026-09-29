@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, io};
 
+use crate::support::sessions::config;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
@@ -20,14 +21,6 @@ fn objective() -> AdmittedFormula {
         FormulaLimits::default(),
     )
     .unwrap()
-}
-
-fn config() -> SolveConfig {
-    SolveConfig {
-        backend: Backend::Cpu,
-        models: 0,
-        ..Default::default()
-    }
 }
 
 #[test]

@@ -7,6 +7,7 @@ use std::{
     path::Path,
 };
 
+use crate::support::reports::REPORT_BYTES;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
@@ -20,8 +21,6 @@ use zetesis_themelios::{
 
 mod ordinary_composition;
 mod projected_families;
-
-const REPORT_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Record {

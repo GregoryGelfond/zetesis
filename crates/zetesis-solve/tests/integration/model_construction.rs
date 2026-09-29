@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use zetesis_core::{Atom, Model, Predicate};
+use crate::support::models::model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::formula;
 use zetesis_solve::{
@@ -21,15 +21,6 @@ fn config() -> SolveConfig {
         stats: true,
         ..SolveConfig::default()
     }
-}
-
-fn model(names: &[&str]) -> Model {
-    Model::new(
-        names
-            .iter()
-            .map(|name| Atom::new(Predicate::new(*name, 0).unwrap(), vec![]).unwrap()),
-    )
-    .unwrap()
 }
 
 #[test]

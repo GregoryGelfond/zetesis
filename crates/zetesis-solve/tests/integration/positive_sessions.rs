@@ -2,7 +2,8 @@
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
-use zetesis_core::{Atom, Model, Predicate};
+use crate::support::models::model;
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, PositiveError, PositiveResource, TightError, TightResource};
 use zetesis_sat::CertificatePlanStatistics;
@@ -93,15 +94,6 @@ fn collect(owner: &AdmittedFormula, config: SolveConfig) -> (WorldView, Observat
     assert_eq!(view.outcome().selection(), Some(AnswerSelection::All));
     assert_eq!(view.outcome().completion(), Some(Completion::Exhausted));
     (view, observations)
-}
-
-fn model(names: &[&str]) -> Model {
-    Model::new(
-        names
-            .iter()
-            .map(|name| Atom::new(Predicate::new(*name, 0).unwrap(), vec![]).unwrap()),
-    )
-    .unwrap()
 }
 
 fn family(view: &WorldView) -> Family {

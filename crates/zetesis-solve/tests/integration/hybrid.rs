@@ -1,8 +1,9 @@
 //! Streamed constraints qualify the full source before an answer is returned.
 
-use std::{collections::BTreeSet, num::NonZeroUsize};
+use std::num::NonZeroUsize;
 
-use zetesis_core::{Atom, Model, Predicate, Sign, Value};
+use crate::support::models::{Family, atom};
+use zetesis_core::{Atom, Model, Sign, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
@@ -17,7 +18,6 @@ use zetesis_themelios::{
 const MONOTONE: &str = include_str!("../fixtures/hybrid/monotone.lp");
 const CORE: &str = "d(1..6). p(X)|q(X):-d(X).";
 const ROOT_CEILING: usize = 32;
-type Family = BTreeSet<Model>;
 
 fn configuration() -> SolveConfig {
     SolveConfig {
@@ -90,14 +90,6 @@ fn capture(input: PreparedInput<'_>, config: SolveConfig) -> (Family, SemanticOu
     }
     assert!(session.next().is_none());
     (family, session.outcome().unwrap())
-}
-
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
-    )
-    .unwrap()
 }
 
 fn number(name: &str, value: i32) -> Atom {
