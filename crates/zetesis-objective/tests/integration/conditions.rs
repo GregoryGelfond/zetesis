@@ -1,5 +1,6 @@
 //! Closed objective conditions read full models without supplying support.
 
+use crate::support::programs::program;
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Sign, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
@@ -20,10 +21,6 @@ fn row(condition: Vec<Node>) -> ObjectiveTemplate {
         vec![],
     )
     .with_condition(Condition::new(condition))
-}
-
-fn program(rows: Vec<ObjectiveTemplate>) -> ObjectiveProgram {
-    ObjectiveProgram::new(rows, AdmissionLimits::default()).unwrap()
 }
 
 #[test]

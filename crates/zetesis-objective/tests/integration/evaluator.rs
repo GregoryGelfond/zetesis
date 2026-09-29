@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
+use crate::support::programs::program;
 use proptest::prelude::*;
 use zetesis_core::{
     Atom, AtomPattern, Filter, Model, TemplateTerm, Term, Value, ValueLimits, ValueNodeRef,
@@ -29,9 +30,6 @@ fn template(
     filters: Vec<Filter>,
 ) -> ObjectiveTemplate {
     ObjectiveTemplate::new(weight, priority, tuple, positive, filters)
-}
-fn program(templates: Vec<ObjectiveTemplate>) -> ObjectiveProgram {
-    ObjectiveProgram::new(templates, AdmissionLimits::default()).unwrap()
 }
 fn cost(weight: i32, priority: i32) -> ObjectiveTemplate {
     template(number(weight), priority, vec![], vec![], vec![])

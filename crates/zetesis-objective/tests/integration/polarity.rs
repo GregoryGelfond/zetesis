@@ -1,10 +1,8 @@
 //! Signed normalization precedes global tuple identity and checked accumulation.
+use crate::support::programs::program;
 use zetesis_core::{AtomPattern, Model, Term, Value};
 use zetesis_cpu::Cancellation;
-use zetesis_objective::{
-    AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop, WeightPolarity,
-    evaluate,
-};
+use zetesis_objective::{ErrorKind, Limits, ObjectiveTemplate, Stop, WeightPolarity, evaluate};
 use zetesis_test_support::programs::{atom, number, pattern};
 
 fn row(weight: Term, priority: i32, key: &str, positive: Vec<AtomPattern>) -> ObjectiveTemplate {
@@ -15,9 +13,6 @@ fn row(weight: Term, priority: i32, key: &str, positive: Vec<AtomPattern>) -> Ob
         positive,
         vec![],
     )
-}
-fn program(rows: Vec<ObjectiveTemplate>) -> ObjectiveProgram {
-    ObjectiveProgram::new(rows, AdmissionLimits::default()).unwrap()
 }
 #[test]
 fn normalization_has_one_checked_machine_boundary_and_keeps_default_api() {
