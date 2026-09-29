@@ -1,22 +1,22 @@
 //! Scalability benchmarks vary only the selected profile axis.
 
 use clap::Parser as _;
-use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand};
+use zetesis_bench::{Cli, Command as BenchCommand, RunOptions};
 use zetesis_validation::{
     performance::{Phase, matrix},
     selected,
 };
 
-fn bench(arguments: &[&str]) -> benchmark::CorpusOptions {
-    let BenchCommand::Corpus(options) = Cli::try_parse_from(
-        ["zetesis-bench", "corpus"]
+fn bench(arguments: &[&str]) -> RunOptions {
+    let BenchCommand::Run(options) = Cli::try_parse_from(
+        ["zetesis-bench", "run"]
             .into_iter()
             .chain(arguments.iter().copied()),
     )
     .unwrap()
     .command
     else {
-        panic!("expected corpus benchmark")
+        panic!("expected a run")
     };
     *options
 }
@@ -68,7 +68,9 @@ fn thread_comparison_varies_only_native_threads() {
 fn thread_comparison_only_qualifies_the_reference() {
     let options = bench(&["--report", "new.json", "--compare-threads", "1,2"]);
     let plan = options.plan().unwrap();
-    let slots = plan.slots(1, Some(options.reference_policy())).unwrap();
+    let slots = plan
+        .slots(1, Some(RunOptions::reference_policy(&plan)))
+        .unwrap();
     let reference = slots
         .iter()
         .filter(|s| s.producer == matrix::Producer::Reference)
@@ -89,22 +91,17 @@ fn authored_options_require_the_scalability_suite() {
 }
 
 #[test]
-fn thread_comparison_refuses_competing_profile_axes() {
-    for competing in [vec!["--threads", "2"], vec!["--compare-grounders"]] {
-        assert!(
-            Cli::try_parse_from(
-                [
-                    "zetesis-bench",
-                    "corpus",
-                    "--report",
-                    "new.json",
-                    "--compare-threads",
-                    "1,2"
-                ]
-                .into_iter()
-                .chain(competing),
-            )
-            .is_err()
-        );
-    }
+fn thread_comparison_refuses_an_explicit_thread_count() {
+    let error = Cli::try_parse_from([
+        "zetesis-bench",
+        "run",
+        "--report",
+        "new.json",
+        "--compare-threads",
+        "1,2",
+        "--threads",
+        "2",
+    ])
+    .unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
 }

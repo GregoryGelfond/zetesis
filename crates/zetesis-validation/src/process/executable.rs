@@ -31,13 +31,13 @@ pub fn resolve_executable(executable: &Path, search_path: Option<&OsStr>) -> io:
     if let Some(search_path) = search_path {
         for directory in std::env::split_paths(search_path) {
             let candidate = directory.join(executable);
-            if eligible(&candidate) {
+            if is_executable_file(&candidate) {
                 return std::path::absolute(candidate);
             }
             #[cfg(windows)]
             if candidate.extension().is_none() {
                 let executable = candidate.with_extension("exe");
-                if eligible(&executable) {
+                if is_executable_file(&executable) {
                     return std::path::absolute(executable);
                 }
             }
@@ -52,7 +52,14 @@ pub fn resolve_executable(executable: &Path, search_path: Option<&OsStr>) -> io:
     ))
 }
 
-fn eligible(path: &Path) -> bool {
+/// Whether `path` names a regular file a process could be started from: after
+/// following symlinks, a regular file, with an execute bit on Unix. Other
+/// platforms have no portable execute-bit check.
+///
+/// This is metadata evidence, not a guarantee that a later spawn succeeds, as
+/// for [`resolve_executable`]'s search.
+#[must_use]
+pub fn is_executable_file(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|metadata| {
         if !metadata.is_file() {
             return false;

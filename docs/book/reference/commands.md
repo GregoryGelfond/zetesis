@@ -251,7 +251,7 @@ Corpus and backend checks accept every backend: `--backend cpu` (the default),
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same nine workloads as `zetesis-bench corpus --suite
+`test scalability` uses the same nine workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
 unchanged queens variant 02, SEND+MORE=MONEY and task allocation. It checks one
 complete clingo family and one native family per requested thread count, with

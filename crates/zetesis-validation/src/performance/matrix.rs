@@ -225,10 +225,11 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 /// follow the plan.
 ///
 /// # Errors
-/// Refuses empty/oversized populations, repeated content identities, foreign
-/// corpus identities, sources outside the allowed suite and resource excess.
-/// Materialization failures are retained in the returned report before any
-/// solver invocation.
+/// Refuses a plan with a case selection, which chooses suite cases rather than
+/// explicit workloads, empty/oversized populations, repeated content
+/// identities, foreign corpus identities, sources outside the allowed suite and
+/// resource excess. Materialization failures are retained in the returned
+/// report before any solver invocation.
 pub fn run_workloads(request: &Request<'_>, workloads: &[Workload]) -> Result<Report, Error> {
     run_workloads_with_invocation(request, workloads, NativeInvocation::Legacy)
 }

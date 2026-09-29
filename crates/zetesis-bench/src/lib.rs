@@ -1,20 +1,20 @@
-//! Measure installed zetesis executables: corpus campaigns against clingo,
-//! comparisons of saved reports, the instrumented profile matrix and the
-//! maintained workload series.
+//! Measure installed zetesis executables: the benchmark suite, beside clingo
+//! when there is one and alone when there is not, and comparisons of saved
+//! reports.
 //!
 //! zetesis-bench measures the `zetesis` it is given, the installed one by
 //! default, as a child process, and links no solver or GPU crate. Reports
-//! record the identity of every executable they measure. Campaigns always
+//! record the identity of every executable they measure and the tool that
+//! produced them. Campaigns always
 //! capture machine answers and statistics; human tables and structured views
 //! consume typed observations independently of the solver's answer renderer.
 //! The library holds the commands and their orchestration; the binary only
 //! calls [`entry`].
 #![forbid(unsafe_code)]
 
-mod corpus;
-mod perf;
+mod compare;
 mod process;
-mod series;
+mod run;
 mod view;
 
 #[cfg(test)]
@@ -22,21 +22,19 @@ mod view;
 mod test_writer;
 
 use clap::{Args, Parser, Subcommand};
-use std::{fmt, io, path::PathBuf, sync::atomic::AtomicBool};
+use std::{fmt, io, sync::atomic::AtomicBool};
 use zetesis_presentation::{ColorMode, Layout, TrackedWriter};
-use zetesis_validation::performance::series::{Comparison, ReportSource};
 
-pub use corpus::{CorpusOptions, Grounder, NativeInterface, Suite};
-pub use perf::PerfOptions;
+pub use compare::{CompareOptions, compare};
 pub use process::entry;
-pub use series::SeriesOptions;
+pub use run::{FormulaJoins, Grounder, NativeInterface, Oracle, RunOptions, Search, Suite};
 
 /// The `zetesis-bench` command line.
 #[derive(Debug, Parser)]
 #[command(
     name = "zetesis-bench",
     version,
-    about = "Measure installed zetesis executables against clingo, and compare saved reports",
+    about = "Measure zetesis on its benchmark suite, beside clingo when there is one, and compare saved runs",
     subcommand_required = true
 )]
 pub struct Cli {
@@ -45,17 +43,14 @@ pub struct Cli {
     pub command: Command,
 }
 
-/// Independently scoped measurement and comparison commands.
+/// The measurement and the comparison.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Compare complete selected answer families, timings and memory with clingo.
-    Corpus(Box<CorpusOptions>),
-    /// Compare saved reports with matching workload and profile identities.
+    /// Measure the benchmark suite: answer families, timings and memory, beside
+    /// clingo when there is one and alone when there is not.
+    Run(Box<RunOptions>),
+    /// Compare saved reports as tables, JSON or Markdown.
     Compare(CompareOptions),
-    /// Measure a suite with the ordinary campaign or the instrumented profile matrix.
-    Perf(Box<PerfOptions>),
-    /// Compare published series reports: medians, ratios, counters and a scoreboard.
-    Series(SeriesOptions),
 }
 
 /// View policy, separate from measurement configuration.
@@ -67,23 +62,6 @@ pub struct ViewOptions {
     /// Terminal styling for human tables; JSON never contains styling.
     #[arg(long, global = true, value_enum, default_value_t)]
     pub color: ColorMode,
-}
-
-/// Inputs to the maintained bounded report comparison.
-#[derive(Debug, Args)]
-pub struct CompareOptions {
-    /// Labelled report path; repeat in comparison order.
-    #[arg(long = "report", value_name = "LABEL=PATH", required = true)]
-    pub reports: Vec<String>,
-    /// Retain the derived structured comparison at a new path.
-    #[arg(long)]
-    pub output: Option<PathBuf>,
-    /// Maximum source bytes read from each report (not decoded allocator RSS).
-    #[arg(long, default_value_t = 4_294_967_296)]
-    pub report_bytes: u64,
-    /// Human or structured presentation.
-    #[command(flatten)]
-    pub view: ViewOptions,
 }
 
 /// Outcome of the requested command, distinct from its individual observations.
@@ -157,50 +135,41 @@ impl Command {
     /// Requested human styling; the process adapter supplies terminal evidence.
     #[must_use]
     pub const fn color(&self) -> ColorMode {
-        match self.view() {
-            Some(view) => view.color,
-            None => ColorMode::Auto,
-        }
+        self.view().color
     }
 
     /// Whether the caller requested structured standard output.
     #[must_use]
     pub const fn json(&self) -> bool {
-        match self.view() {
-            Some(view) => view.json,
-            None => false,
-        }
+        self.view().json
     }
 
-    const fn view(&self) -> Option<&ViewOptions> {
+    const fn view(&self) -> &ViewOptions {
         match self {
-            Self::Corpus(options) => Some(&options.view),
-            Self::Compare(options) => Some(&options.view),
-            Self::Perf(_) | Self::Series(_) => None,
+            Self::Run(options) => &options.view,
+            Self::Compare(options) => &options.view,
         }
     }
 
     const fn name(&self) -> &'static str {
         match self {
-            Self::Corpus(_) => "corpus",
+            Self::Run(_) => "run",
             Self::Compare(_) => "compare",
-            Self::Perf(_) => "perf",
-            Self::Series(_) => "series",
         }
     }
 }
 
 /// Execute one command with injected presentation sinks and terminal layout.
 ///
-/// Corpus execution measures the installed `zetesis` unless `--zetesis` names
-/// another executable. Solver and clingo launches use the maintained bounded
-/// campaign; sources must already exist locally, and nothing is downloaded. A
+/// A run measures the installed `zetesis` unless `--zetesis` names another
+/// executable. Solver and clingo launches use the maintained bounded campaign;
+/// sources must already exist locally, and nothing is downloaded. A
 /// JSON failure before any stdout write attempt publishes one versioned failure
 /// document. No second document is appended after an attempted write, including
 /// a writer that returns an error after modifying its sink.
 ///
 /// # Errors
-/// Returns typed setup, measurement, comparison or publication errors. Corpus
+/// Returns typed setup, measurement, comparison or publication errors. A run's
 /// non-passes remain a successful evidence publication with `NonPass`.
 pub fn execute(
     command: &Command,
@@ -217,9 +186,9 @@ pub fn execute(
     )
 }
 
-/// Execute with caller-owned cancellation of corpus child processes.
+/// Execute with caller-owned cancellation of a run's child processes.
 ///
-/// The corpus campaign polls `cancelled`, settles owned children and preserves
+/// A run polls `cancelled`, settles owned children and preserves
 /// cancelled and unattempted positions in its report. This function installs no
 /// signal handler. Presentation and failure publication follow [`execute`].
 ///
@@ -284,19 +253,8 @@ fn execute_inner(
     cancelled: &AtomicBool,
 ) -> Result<Completion, Error> {
     match command {
-        Command::Corpus(options) => {
-            corpus::execute(options, layout, output, diagnostics, cancelled)
-        }
-        Command::Compare(options) => {
-            let comparison = compare(options)?;
-            if let Some(path) = &options.output {
-                retain(path, &comparison)?;
-            }
-            view::comparison(&comparison, options.view.json, layout, output)?;
-            Ok(Completion::Passed)
-        }
-        Command::Perf(options) => perf::execute(options, output, diagnostics),
-        Command::Series(options) => series::execute(options, output),
+        Command::Run(options) => run::execute(options, layout, output, diagnostics, cancelled),
+        Command::Compare(options) => compare::execute(options, layout, output),
     }
 }
 
@@ -306,46 +264,4 @@ pub(crate) fn tool() -> zetesis_validation::performance::matrix::Tool {
         name: "zetesis-bench".into(),
         version: env!("CARGO_PKG_VERSION").into(),
     }
-}
-
-/// Load and compare retained reports without launching a solver or writing output.
-///
-/// # Errors
-/// Refuses malformed arguments, excessive documents or incompatible identities.
-pub fn compare(options: &CompareOptions) -> Result<Comparison, Error> {
-    read_compare(&options.reports, options.report_bytes)
-}
-
-/// Read labelled `LABEL=PATH` reports, each of at most `report_bytes` source
-/// bytes, and compare them in the given order.
-fn read_compare(reports: &[String], report_bytes: u64) -> Result<Comparison, Error> {
-    let sources: Vec<_> = reports
-        .iter()
-        .map(|argument| {
-            let (label, path) = argument
-                .split_once('=')
-                .filter(|(label, path)| !label.is_empty() && !path.is_empty())
-                .ok_or_else(|| Error::ReportArgument(argument.clone()))?;
-            Ok(ReportSource {
-                label,
-                path: std::path::Path::new(path),
-            })
-        })
-        .collect::<Result<_, Error>>()?;
-    zetesis_validation::performance::series::read_compare(&sources, report_bytes)
-        .map_err(Error::Comparison)
-}
-
-/// Write a derived comparison as JSON to a new file; an existing file is refused.
-fn retain(path: &std::path::Path, comparison: &Comparison) -> Result<(), Error> {
-    use io::Write as _;
-
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(Error::Io)?;
-    serde_json::to_writer_pretty(&mut file, comparison).map_err(Error::Json)?;
-    writeln!(file).map_err(Error::Io)?;
-    file.flush().map_err(Error::Io)
 }

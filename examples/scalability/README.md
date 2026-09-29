@@ -43,7 +43,7 @@ the unchanged source hash, edit and resulting source hash.
 
 ## Check and measure thread scaling
 
-The maintained `zetesis test scalability` and `zetesis-bench corpus --suite
+The maintained `zetesis test scalability` and `zetesis-bench run --suite
 scalability` commands use one library-owned population: queens at n=8/9/10,
 pigeonhole at h=5/6/7, and the established correctness queens variant 02,
 SEND+MORE=MONEY and task-allocation cases. Test qualifications request CPU eager/indexed region
@@ -53,7 +53,7 @@ From the repository root, with zetesis and clingo installed:
 
 ```sh
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
-zetesis-bench corpus --suite scalability --grounder eager \
+zetesis-bench run --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```

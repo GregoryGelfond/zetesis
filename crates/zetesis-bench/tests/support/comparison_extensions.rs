@@ -339,40 +339,6 @@ fn resource_record_must_use_the_host_platform_unit() {
 }
 
 #[test]
-fn cli_selected_memory_campaign_seals_its_runner() {
-    let fixture = Fixture::new("", |_| {});
-    let capture = super::cli_options(
-        &fixture,
-        "1",
-        None,
-        &[
-            "--case".into(),
-            SHORTEST.into(),
-            "--memory-runs".into(),
-            "1".into(),
-        ],
-    );
-    assert_eq!(
-        capture.exit().unwrap().code,
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(capture.stderr())
-    );
-    let report: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
-    assert_eq!(report["passed"], true);
-    assert_eq!(report["schema"], 2);
-    assert_eq!(report["samples"].as_array().unwrap().len(), 7);
-    assert_eq!(report["summary"].as_array().unwrap().len(), 2);
-    assert!(
-        report["before"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|seal| seal["requested"] == env!("CARGO_BIN_EXE_zetesis-bench"))
-    );
-}
-
-#[test]
 fn excessive_memory_populations_are_refused() {
     assert!(Schedule::new(0, 1).unwrap().with_memory(42).is_err());
 }

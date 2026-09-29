@@ -489,6 +489,32 @@ fn a_selected_case_outside_the_suite_is_refused() {
     ));
 }
 
+// Explicit workloads bring their own population, which a selection of suite
+// cases would silently fail to narrow.
+#[test]
+fn a_case_selection_is_refused_beside_explicit_workloads() {
+    let fixture = Fixture::new();
+    let request = Request {
+        plan: Plan::new(
+            Suite::Corpus,
+            vec![crate::selected::NativeExecution::default()],
+            NonZeroUsize::MIN,
+            1,
+            2,
+        )
+        .unwrap()
+        .with_cases(vec![UNSAT_CASES[0].to_owned()])
+        .unwrap(),
+        ..fixture.request()
+    };
+    assert!(matches!(
+        crate::performance::matrix::run_workloads(&request, &[fixture.unchanged()]),
+        Err(crate::performance::Error::Configuration(
+            "a case selection applies to suite cases, not to explicit workloads"
+        ))
+    ));
+}
+
 #[test]
 fn a_report_names_the_tool_that_produced_it() {
     let fixture = Fixture::new();

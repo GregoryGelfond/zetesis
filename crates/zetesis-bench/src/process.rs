@@ -16,7 +16,7 @@ const OUTPUT_BUFFER_BYTES: usize = 8 * 1024;
 /// Exit 0 means the command completed and, for a campaign, every position
 /// passed; 1 means a completed campaign retained non-passing positions; 2 is a
 /// usage, measurement, publication or output error. SIGINT and SIGTERM cancel
-/// a corpus campaign, which then publishes its cancelled positions. Standard
+/// a run, which then publishes its cancelled positions. Standard
 /// output is flushed before returning; a flush failure is an output error.
 #[must_use]
 pub fn entry() -> ExitCode {
@@ -58,7 +58,7 @@ pub fn entry() -> ExitCode {
     );
     let cancelled = Arc::new(AtomicBool::new(false));
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    let _interrupts = if matches!(command, crate::Command::Corpus(_)) {
+    let _interrupts = if matches!(command, crate::Command::Run(_)) {
         match zetesis_validation::process::interrupts::Interrupts::install(&cancelled) {
             Ok(interrupts) => Some(interrupts),
             Err(error) => {

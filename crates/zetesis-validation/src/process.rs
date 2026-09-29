@@ -33,7 +33,7 @@ pub mod interrupts;
 pub mod memory;
 
 mod executable;
-pub use executable::resolve_executable;
+pub use executable::{is_executable_file, resolve_executable};
 
 /// Borrowed process arguments. Both paths must be absolute.
 #[derive(Clone, Copy, Debug)]

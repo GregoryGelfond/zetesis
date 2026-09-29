@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Measure installed zetesis executables against clingo: corpus campaigns, report comparisons and workload series."
+description = "Measure zetesis on its benchmark suite, beside clingo when there is one, and compare saved runs."
 
 [dependencies]
 zetesis-backend = { workspace = true, features = ["clap"] }

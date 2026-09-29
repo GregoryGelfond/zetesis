@@ -59,16 +59,16 @@ mod campaigns {
     use zetesis_bench::{self as benchmark, Command as BenchCommand};
     use zetesis_presentation::Layout;
 
-    fn bench(arguments: &[&str]) -> benchmark::CorpusOptions {
-        let BenchCommand::Corpus(options) = benchmark::Cli::try_parse_from(
-            ["zetesis-bench", "corpus"]
+    fn bench(arguments: &[&str]) -> benchmark::RunOptions {
+        let BenchCommand::Run(options) = benchmark::Cli::try_parse_from(
+            ["zetesis-bench", "run"]
                 .into_iter()
                 .chain(arguments.iter().copied()),
         )
         .unwrap()
         .command
         else {
-            panic!("expected corpus benchmark")
+            panic!("expected a benchmark run")
         };
         *options
     }
@@ -87,7 +87,14 @@ mod campaigns {
             let native = directory.path().join("native");
             let reference = directory.path().join("reference");
             std::fs::write(&native, b"native: cancelled before launch").unwrap();
-            std::fs::write(&reference, b"reference: cancelled before launch").unwrap();
+            // A named clingo must be a runnable file; this one fails if it is
+            // ever run, and cancellation launches nothing.
+            std::fs::write(&reference, b"#!/bin/sh\nexit 99\n").unwrap();
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                std::fs::set_permissions(&reference, std::fs::Permissions::from_mode(0o700))
+                    .unwrap();
+            }
             let examples = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples");
             let corpus = examples.join("correctness");
             Self {
@@ -158,7 +165,7 @@ mod campaigns {
         ]);
         assert_eq!(
             benchmark::execute_with_cancellation(
-                &BenchCommand::Corpus(Box::new(bench(&arguments))),
+                &BenchCommand::Run(Box::new(bench(&arguments))),
                 Layout::default(),
                 &mut Vec::new(),
                 &mut Vec::new(),

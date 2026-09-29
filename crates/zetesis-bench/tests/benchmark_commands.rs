@@ -1,6 +1,6 @@
 //! Bench commands map to bounded library plans and independent views.
 use clap::Parser as _;
-use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand};
+use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand, RunOptions};
 use zetesis_presentation::Layout;
 
 fn command(arguments: &[&str]) -> BenchCommand {
@@ -14,9 +14,9 @@ fn command(arguments: &[&str]) -> BenchCommand {
 }
 
 #[test]
-fn installed_corpus_defaults_to_canonical_solve() {
-    let BenchCommand::Corpus(options) = command(&["corpus", "--report", "new.json"]) else {
-        panic!("expected corpus")
+fn installed_run_defaults_to_canonical_solve() {
+    let BenchCommand::Run(options) = command(&["run", "--report", "new.json"]) else {
+        panic!("expected run")
     };
     assert_eq!(
         options.invocation(),
@@ -38,14 +38,14 @@ fn installed_corpus_defaults_to_canonical_solve() {
 
 #[test]
 fn an_explicit_executable_is_measured_through_solve() {
-    let BenchCommand::Corpus(options) = command(&[
-        "corpus",
+    let BenchCommand::Run(options) = command(&[
+        "run",
         "--zetesis",
         "/opt/zetesis/bin/zetesis",
         "--report",
         "new.json",
     ]) else {
-        panic!("expected corpus")
+        panic!("expected run")
     };
     assert_eq!(
         options.invocation(),
@@ -55,8 +55,8 @@ fn an_explicit_executable_is_measured_through_solve() {
 
 #[test]
 fn the_legacy_interface_is_measured_only_on_request() {
-    let BenchCommand::Corpus(options) = command(&[
-        "corpus",
+    let BenchCommand::Run(options) = command(&[
+        "run",
         "--zetesis",
         "/opt/zetesis/bin/zetesis",
         "--native-interface",
@@ -64,7 +64,7 @@ fn the_legacy_interface_is_measured_only_on_request() {
         "--report",
         "new.json",
     ]) else {
-        panic!("expected corpus")
+        panic!("expected run")
     };
     assert_eq!(
         options.invocation(),
@@ -73,19 +73,19 @@ fn the_legacy_interface_is_measured_only_on_request() {
 }
 
 #[test]
-fn ordinary_corpus_keeps_reference_measurements() {
+fn ordinary_run_keeps_reference_measurements() {
     use zetesis_validation::performance::{Phase, matrix};
-    let BenchCommand::Corpus(options) = command(&["corpus", "--report", "new.json"]) else {
-        panic!("expected corpus")
+    let BenchCommand::Run(options) = command(&["run", "--report", "new.json"]) else {
+        panic!("expected run")
     };
     let plan = options.plan().unwrap();
     assert_eq!(plan.profiles().len(), 1);
     assert_eq!(
-        options.reference_policy(),
+        RunOptions::reference_policy(&plan),
         matrix::ReferencePolicy::AllPhases
     );
     assert!(
-        plan.slots(1, Some(options.reference_policy()))
+        plan.slots(1, Some(RunOptions::reference_policy(&plan)))
             .unwrap()
             .iter()
             .any(|slot| slot.producer == matrix::Producer::Reference && slot.phase == Phase::Timed)
@@ -95,8 +95,8 @@ fn ordinary_corpus_keeps_reference_measurements() {
 #[test]
 fn grounder_comparison_varies_only_materialization() {
     use zetesis_validation::selected::Grounder;
-    let BenchCommand::Corpus(options) = command(&[
-        "corpus",
+    let BenchCommand::Run(options) = command(&[
+        "run",
         "--report",
         "new.json",
         "--compare-grounders",
@@ -107,7 +107,7 @@ fn grounder_comparison_varies_only_materialization() {
         "--batch-size",
         "17",
     ]) else {
-        panic!("expected corpus")
+        panic!("expected run")
     };
     let plan = options.plan().unwrap();
     let [eager, lazy] = plan.profiles() else {
@@ -131,17 +131,19 @@ fn grounder_comparison_varies_only_materialization() {
 #[test]
 fn grounder_comparison_qualifies_reference_once() {
     use zetesis_validation::performance::{Phase, matrix};
-    let BenchCommand::Corpus(options) =
-        command(&["corpus", "--report", "new.json", "--compare-grounders"])
+    let BenchCommand::Run(options) =
+        command(&["run", "--report", "new.json", "--compare-grounders"])
     else {
-        panic!("expected corpus")
+        panic!("expected run")
     };
     let plan = options.plan().unwrap();
     assert_eq!(
-        options.reference_policy(),
+        RunOptions::reference_policy(&plan),
         matrix::ReferencePolicy::QualificationOnly
     );
-    let slots = plan.slots(1, Some(options.reference_policy())).unwrap();
+    let slots = plan
+        .slots(1, Some(RunOptions::reference_policy(&plan)))
+        .unwrap();
     let reference: Vec<_> = slots
         .iter()
         .filter(|slot| slot.producer == matrix::Producer::Reference)
@@ -163,7 +165,7 @@ fn grounder_comparison_refuses_an_explicit_grounder() {
     for grounder in ["auto", "eager", "lazy"] {
         let error = Cli::try_parse_from([
             "zetesis-bench",
-            "corpus",
+            "run",
             "--report",
             "new.json",
             "--compare-grounders",
@@ -177,7 +179,7 @@ fn grounder_comparison_refuses_an_explicit_grounder() {
 
 #[test]
 fn json_preparation_failure_is_one_document() {
-    let command = command(&["compare", "--report", "not-labelled", "--json"]);
+    let command = command(&["compare", "not-labelled", "--json"]);
     let mut output = Vec::new();
     assert!(matches!(
         benchmark::execute(&command, Layout::default(), &mut output, &mut Vec::new()),
@@ -193,17 +195,20 @@ fn json_preparation_failure_is_one_document() {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-fn cancelled_corpus_publishes_unattempted_positions() {
+fn cancelled_run_publishes_unattempted_positions() {
+    use std::os::unix::fs::PermissionsExt as _;
     let directory = tempfile::tempdir().unwrap();
     let executable = directory.path().join("must-not-launch");
     std::fs::write(&executable, b"no executable is needed before cancellation").unwrap();
+    // A named clingo must be a runnable file; this one fails if it is ever run.
     let reference = directory.path().join("reference-must-not-launch");
-    std::fs::write(&reference, b"distinct reference identity; never executable").unwrap();
+    std::fs::write(&reference, b"#!/bin/sh\nexit 99\n").unwrap();
+    std::fs::set_permissions(&reference, std::fs::Permissions::from_mode(0o700)).unwrap();
     let report = directory.path().join("cancelled.json");
     let corpus =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     let command = command(&[
-        "corpus",
+        "run",
         corpus.to_str().unwrap(),
         "--suite",
         "baseline",
@@ -261,7 +266,7 @@ fn failed_failure_publication_retains_preparation() {
             Ok(())
         }
     }
-    let command = command(&["compare", "--report", "not-labelled", "--json"]);
+    let command = command(&["compare", "not-labelled", "--json"]);
     let Err(benchmark::Error::Reporting { primary, secondary }) =
         benchmark::execute(&command, Layout::default(), &mut Refuse, &mut Vec::new())
     else {
@@ -269,4 +274,170 @@ fn failed_failure_publication_retains_preparation() {
     };
     assert!(matches!(*primary, benchmark::Error::ReportArgument(_)));
     assert!(matches!(*secondary, benchmark::Error::Json(_)));
+}
+
+#[test]
+fn a_named_clingo_conflicts_with_measuring_zetesis_alone() {
+    let error = Cli::try_parse_from([
+        "zetesis-bench",
+        "run",
+        "--clingo",
+        "/usr/local/bin/clingo",
+        "--without-clingo",
+    ])
+    .unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn compared_backends_refuse_an_explicit_backend() {
+    let error = Cli::try_parse_from([
+        "zetesis-bench",
+        "run",
+        "--compare-backends",
+        "cpu,gpu",
+        "--backend",
+        "cpu",
+    ])
+    .unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+// Backends vary slowest and thread counts fastest; every other setting is the
+// same in each profile.
+#[test]
+fn profile_axes_combine_into_their_product() {
+    use zetesis_validation::selected::{Backend, Grounder};
+    let BenchCommand::Run(options) = command(&[
+        "run",
+        "--compare-backends",
+        "cpu,gpu",
+        "--compare-grounders",
+        "--compare-threads",
+        "1,2",
+        "--batch-size",
+        "17",
+    ]) else {
+        panic!("expected run")
+    };
+    let plan = options.plan().unwrap();
+    let axes: Vec<_> = plan
+        .profiles()
+        .iter()
+        .map(|profile| (profile.backend, profile.grounder, profile.workers.get()))
+        .collect();
+    let mut expected = Vec::new();
+    for backend in [Backend::Cpu, Backend::Gpu(None)] {
+        for grounder in [Grounder::Eager, Grounder::Lazy] {
+            for workers in [1, 2] {
+                expected.push((backend, grounder, workers));
+            }
+        }
+    }
+    assert_eq!(axes, expected);
+    assert!(
+        plan.profiles()
+            .iter()
+            .all(|profile| profile.batch_size.get() == 17)
+    );
+    assert_eq!(
+        RunOptions::reference_policy(&plan),
+        zetesis_validation::performance::matrix::ReferencePolicy::QualificationOnly
+    );
+}
+
+#[test]
+fn more_than_eight_profiles_are_refused() {
+    let BenchCommand::Run(options) = command(&[
+        "run",
+        "--compare-backends",
+        "cpu,gpu",
+        "--compare-grounders",
+        "--compare-threads",
+        "1,2,4",
+    ]) else {
+        panic!("expected run")
+    };
+    assert!(matches!(
+        options.plan(),
+        Err(zetesis_validation::performance::Error::Configuration(_))
+    ));
+}
+
+#[test]
+fn a_case_selection_joins_the_plan() {
+    let BenchCommand::Run(options) = command(&[
+        "run",
+        "--suite",
+        "baseline",
+        "--case",
+        "standalone/send-money/send-money.lp",
+    ]) else {
+        panic!("expected run")
+    };
+    assert_eq!(
+        options.plan().unwrap().selection(),
+        Some(["standalone/send-money/send-money.lp".to_owned()].as_slice())
+    );
+}
+
+#[test]
+fn the_scalability_suite_defaults_to_indexed_region_search() {
+    use zetesis_validation::selected::{FormulaJoins, SearchMethod};
+    let BenchCommand::Run(options) = command(&["run", "--suite", "scalability"]) else {
+        panic!("expected run")
+    };
+    let plan = options.plan().unwrap();
+    assert_eq!(
+        plan.profiles()[0].formula_joins,
+        Some(FormulaJoins::Indexed)
+    );
+    assert_eq!(plan.profiles()[0].search, Some(SearchMethod::Regions));
+}
+
+#[test]
+fn explicit_search_and_joins_replace_the_suite_defaults() {
+    use zetesis_validation::selected::{FormulaJoins, SearchMethod};
+    let BenchCommand::Run(options) = command(&[
+        "run",
+        "--suite",
+        "scalability",
+        "--formula-joins",
+        "table",
+        "--search",
+        "clauses",
+    ]) else {
+        panic!("expected run")
+    };
+    let plan = options.plan().unwrap();
+    assert_eq!(plan.profiles()[0].formula_joins, Some(FormulaJoins::Table));
+    assert_eq!(plan.profiles()[0].search, Some(SearchMethod::Clauses));
+}
+
+#[test]
+fn compare_takes_its_reports_as_operands() {
+    let BenchCommand::Compare(options) = command(&[
+        "compare",
+        "baseline=old.json",
+        "candidate=new.json",
+        "--input-bytes",
+        "1024",
+    ]) else {
+        panic!("expected compare")
+    };
+    assert_eq!(options.reports, ["baseline=old.json", "candidate=new.json"]);
+    assert_eq!(options.input_bytes, 1024);
+}
+
+#[test]
+fn compare_prints_markdown_or_json_but_not_both() {
+    let error = Cli::try_parse_from([
+        "zetesis-bench",
+        "compare",
+        "a=a.json",
+        "--markdown",
+        "--json",
+    ])
+    .unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
 }

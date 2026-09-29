@@ -29,6 +29,30 @@ fn executable(path: &Path, body: &str) {
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
 }
 impl Fixture {
+    /// `zetesis-bench run` on the baseline suite with one timed round and no
+    /// warmup or memory round, measuring the fixture's native executable.
+    fn run(&self) -> std::process::Command {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"));
+        command
+            .arg("run")
+            .arg(&self.corpus)
+            .arg("--zetesis")
+            .arg(&self.native)
+            .args([
+                "--suite",
+                "baseline",
+                "--warmups",
+                "0",
+                "--repetitions",
+                "1",
+                "--memory-runs",
+                "0",
+            ]);
+        command
+    }
+    fn evidence(&self) -> serde_json::Value {
+        serde_json::from_slice(&fs::read(&self.report).unwrap()).unwrap()
+    }
     fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
         let native = directory.path().join("native");
@@ -510,7 +534,7 @@ fn serialized_byte_ceiling_prevents_partial_publication() {
 fn cli_profiles_preserve_their_execution_arguments() {
     let fixture = Fixture::new();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
-        .arg("perf")
+        .arg("run")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -521,10 +545,14 @@ fn cli_profiles_preserve_their_execution_arguments() {
         .args([
             "--suite",
             "queens",
-            "--profile",
-            "cpu-eager",
-            "--profile",
-            "metal-lazy",
+            "--native-interface",
+            "legacy",
+            "--memory-runs",
+            "0",
+            "--compare-backends",
+            "cpu,metal",
+            "--grounder",
+            "lazy",
             "--workers",
             "2",
             "--completion-workers",
@@ -602,59 +630,10 @@ fn cli_profiles_preserve_their_execution_arguments() {
 }
 
 #[test]
-fn legacy_mode_refuses_silently_ignored_matrix_controls() {
+fn run_records_its_explicit_decoder_ceiling() {
     let fixture = Fixture::new();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
-        .arg("perf")
-        .arg(&fixture.corpus)
-        .arg("--zetesis")
-        .arg(&fixture.native)
-        .arg("--clingo")
-        .arg(&fixture.reference)
-        .arg("--report")
-        .arg(&fixture.report)
-        .args(["--workers", "2"])
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(2));
-    assert!(!fixture.report.exists());
-    assert!(
-        String::from_utf8(output.stderr)
-            .unwrap()
-            .contains("require --profile, --suite corpus or --suite series")
-    );
-}
-
-#[test]
-fn corpus_cli_defaults_to_the_four_explicit_profiles() {
-    let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
-        .arg("perf")
-        .arg(&fixture.corpus)
-        .arg("--zetesis")
-        .arg(&fixture.native)
-        .arg("--clingo")
-        .arg(&fixture.reference)
-        .arg("--report")
-        .arg(&fixture.report)
-        .args(["--suite", "corpus", "--campaign-seconds", "0"])
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(1));
-    let value: serde_json::Value =
-        serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
-    let report = &value["report"];
-    assert_eq!(report["plan"]["profiles"].as_array().unwrap().len(), 4);
-    assert_eq!(report["plan"]["repetitions"], 20);
-    assert_eq!(report["samples"].as_array().unwrap().len(), 94 * 5 * 24);
-    assert_eq!(value["accounted"], true);
-}
-
-#[test]
-fn matrix_cli_records_its_explicit_decoder_ceiling() {
-    let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
-        .arg("perf")
+        .arg("run")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -682,29 +661,10 @@ fn matrix_cli_records_its_explicit_decoder_ceiling() {
 }
 
 #[test]
-fn legacy_cli_refuses_a_matrix_decoder_ceiling() {
+fn run_startup_identifies_the_evidence_destination() {
     let fixture = Fixture::new();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
-        .arg("perf")
-        .arg(&fixture.corpus)
-        .arg("--zetesis")
-        .arg(&fixture.native)
-        .arg("--clingo")
-        .arg(&fixture.reference)
-        .arg("--report")
-        .arg(&fixture.report)
-        .args(["--native-report-bytes", "33554432"])
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(2));
-    assert!(!fixture.report.exists());
-}
-
-#[test]
-fn matrix_startup_identifies_the_evidence_destination() {
-    let fixture = Fixture::new();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
-        .arg("perf")
+        .arg("run")
         .arg(&fixture.corpus)
         .arg("--zetesis")
         .arg(&fixture.native)
@@ -718,7 +678,7 @@ fn matrix_startup_identifies_the_evidence_destination() {
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
         format!(
-            "Recording instrumented solver matrix; evidence will be written to {}\n",
+            "Recording benchmark evidence in {}\n",
             fixture.report.display()
         )
     );
@@ -793,5 +753,173 @@ fn summary_keeps_refusal_out_of_timed_populations() {
             .map(|count| count.positions)
             .sum::<usize>(),
         report.samples().len()
+    );
+}
+
+#[test]
+fn a_run_without_clingo_publishes_a_clingo_free_report() {
+    let fixture = Fixture::new();
+    let output = fixture
+        .run()
+        .arg("--without-clingo")
+        .arg("--report")
+        .arg(&fixture.report)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .starts_with("Measuring zetesis alone, without clingo, as requested\n")
+    );
+    let evidence = fixture.evidence();
+    assert_eq!(
+        evidence["report"]["plan"]["reference_policy"],
+        "clingo_free"
+    );
+    let samples = evidence["report"]["samples"].as_array().unwrap();
+    assert!(!samples.is_empty());
+    assert!(
+        samples
+            .iter()
+            .all(|sample| sample["slot"]["producer"]["solver"] == "native")
+    );
+}
+
+#[test]
+fn a_run_with_no_clingo_on_path_measures_zetesis_alone() {
+    let fixture = Fixture::new();
+    let empty = tempfile::tempdir().unwrap();
+    let output = fixture
+        .run()
+        .arg("--report")
+        .arg(&fixture.report)
+        .env("PATH", empty.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8(output.stderr).unwrap().starts_with(
+        "No clingo on PATH: measuring zetesis alone, each workload qualified by its recorded contract\n"
+    ));
+    assert_eq!(
+        fixture.evidence()["report"]["plan"]["reference_policy"],
+        "clingo_free"
+    );
+}
+
+#[test]
+fn a_run_names_the_tool_that_produced_its_report() {
+    let fixture = Fixture::new();
+    fixture
+        .run()
+        .arg("--clingo")
+        .arg(&fixture.reference)
+        .arg("--report")
+        .arg(&fixture.report)
+        .output()
+        .unwrap();
+    assert_eq!(
+        fixture.evidence()["report"]["tool"],
+        serde_json::json!({"name": "zetesis-bench", "version": env!("CARGO_PKG_VERSION")})
+    );
+}
+
+#[test]
+fn a_run_measures_exactly_the_named_cases() {
+    let fixture = Fixture::new();
+    fixture
+        .run()
+        .arg("--clingo")
+        .arg(&fixture.reference)
+        .arg("--report")
+        .arg(&fixture.report)
+        .args(["--case", "standalone/send-money/send-money.lp"])
+        .output()
+        .unwrap();
+    let evidence = fixture.evidence();
+    assert_eq!(
+        evidence["report"]["cases"],
+        serde_json::json!(["standalone/send-money/send-money.lp"])
+    );
+    assert_eq!(
+        evidence["report"]["plan"]["selection"],
+        serde_json::json!(["standalone/send-money/send-money.lp"])
+    );
+}
+
+#[test]
+fn a_run_without_a_report_names_its_evidence_in_the_working_directory() {
+    let fixture = Fixture::new();
+    let working = tempfile::tempdir().unwrap();
+    let output = fixture
+        .run()
+        .arg("--clingo")
+        .arg(&fixture.reference)
+        .current_dir(working.path())
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    let name = stderr
+        .strip_prefix("Recording benchmark evidence in ")
+        .and_then(|rest| rest.strip_suffix('\n'))
+        .unwrap_or_else(|| panic!("{stderr}"));
+    let stamp = name
+        .strip_prefix("zetesis-bench-baseline-")
+        .and_then(|rest| rest.strip_suffix(".json"))
+        .unwrap_or_else(|| panic!("{name}"));
+    let (date, time) = stamp.split_once('T').unwrap();
+    assert!(date.len() == 8 && date.bytes().all(|byte| byte.is_ascii_digit()));
+    let time = time.strip_suffix('Z').unwrap();
+    assert!(time.len() == 6 && time.bytes().all(|byte| byte.is_ascii_digit()));
+    let evidence: serde_json::Value =
+        serde_json::from_slice(&fs::read(working.path().join(name)).unwrap()).unwrap();
+    assert_eq!(evidence["report"]["plan"]["suite"], "baseline");
+}
+
+#[test]
+fn a_run_publishes_no_evidence_for_an_invalid_schedule() {
+    let fixture = Fixture::new();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("run")
+        .arg(&fixture.corpus)
+        .arg("--zetesis")
+        .arg(&fixture.native)
+        .arg("--clingo")
+        .arg(&fixture.reference)
+        .arg("--report")
+        .arg(&fixture.report)
+        .args(["--suite", "baseline", "--repetitions", "0"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("repetitions 1..=41"), "{stderr}");
+    assert!(!fixture.report.exists());
+}
+
+// The fixture's native executable refuses every source, so qualification fails.
+#[test]
+fn a_run_retains_failed_qualification_as_failed_evidence() {
+    let fixture = Fixture::new();
+    let output = fixture
+        .run()
+        .arg("--clingo")
+        .arg(&fixture.reference)
+        .arg("--report")
+        .arg(&fixture.report)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let evidence = fixture.evidence();
+    assert_eq!(evidence["passed"], false);
+    assert!(
+        evidence["report"]["samples"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|sample| sample["slot"]["phase"] == "qualification"
+                && sample["slot"]["producer"]["solver"] == "native"
+                && sample["decision"] != "pass")
     );
 }

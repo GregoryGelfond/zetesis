@@ -101,7 +101,7 @@ zetesis --grounder eager --oracle countermodel --formula-joins table --stats inp
 The requested strategy alone is not route evidence. Inspect `table_preparations`,
 `table_probes` and `table_rows` in the grounding work report; inapplicable patterns
 still use indexed probes. `zetesis-experiments grounding --joins table` profiles
-this materialization against an indexed reference. `zetesis-bench perf` accepts
+this materialization against an indexed reference. `zetesis-bench run` accepts
 the optional `--formula-joins indexed|table` setting for compatible native
 binaries; omission preserves their default. See the
 [grounding experiment](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-experiments#original-source-grounding)

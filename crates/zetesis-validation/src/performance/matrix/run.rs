@@ -54,6 +54,13 @@ pub(super) fn campaign(
             "memory rounds require an absolute helper executable",
         ));
     }
+    // A selection chooses cases of the suite; explicit workloads bring their
+    // own, so a selection beside them would be silently ignored.
+    if workloads.is_some() && request.plan.selection().is_some() {
+        return Err(Error::Configuration(
+            "a case selection applies to suite cases, not to explicit workloads",
+        ));
+    }
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let cases = prepare(&corpus, request, workloads)?;
     let sources: BTreeSet<_> = cases

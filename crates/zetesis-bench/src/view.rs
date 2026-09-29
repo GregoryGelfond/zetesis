@@ -1,7 +1,10 @@
 use super::Error;
 use std::io;
 use zetesis_presentation::{Alignment, Column, Layout, Row, Table};
-use zetesis_validation::performance::series::{Comparison, Native};
+use zetesis_validation::performance::{
+    matrix::{Producer, Qualification, Summary},
+    series::{Comparison, Native, Scoreboard},
+};
 
 #[cfg(test)]
 #[path = "../tests/support/benchmark_views.rs"]
@@ -64,6 +67,102 @@ pub(super) fn comparison(
             "zetesis SHA-256",
             "clingo SHA-256",
         ],
+        rows,
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)?;
+    for scoreboard in &comparison.scoreboards {
+        scoreboard_tables(comparison, scoreboard, layout, output)?;
+    }
+    Ok(())
+}
+
+/// One report's standing against clingo on one profile: every cell where both
+/// passed, fastest ratio first, and their peak memory when it was measured.
+fn scoreboard_tables(
+    comparison: &Comparison,
+    scoreboard: &Scoreboard,
+    layout: Layout,
+    output: &mut impl io::Write,
+) -> Result<(), Error> {
+    let profile = comparison
+        .cells
+        .first()
+        .map(|cell| profile_name(&cell.profiles[scoreboard.profile].profile))
+        .unwrap_or_default();
+    let standing = if scoreboard.compared == 0 {
+        "no cell where both passed".to_owned()
+    } else {
+        format!(
+            "faster on {} of {} cells where both passed",
+            scoreboard.wins, scoreboard.compared
+        )
+    };
+    let rows = scoreboard
+        .verdicts
+        .iter()
+        .map(|verdict| {
+            Row::new([
+                verdict.cell.clone(),
+                milliseconds(verdict.native_ns),
+                milliseconds(verdict.reference_ns),
+                ratio(verdict.native_ns, verdict.reference_ns),
+                optional_milliseconds(verdict.native.grounding),
+                optional_milliseconds(verdict.native.proposal),
+                optional_milliseconds(verdict.native.membership),
+                optional_milliseconds(verdict.reference_grounding_ns),
+                optional_milliseconds(verdict.reference_solving_ns),
+            ])
+        })
+        .collect();
+    table(
+        &format!(
+            "Against clingo — report {}, profile {}: {profile}, search {}; {standing}",
+            scoreboard.report,
+            scoreboard.profile + 1,
+            scoreboard.method
+        ),
+        &[
+            "Cell",
+            "zetesis ms",
+            "clingo ms",
+            "zetesis/clingo",
+            "grounding ms",
+            "proposal ms",
+            "membership ms",
+            "clingo grounding ms",
+            "clingo solving ms",
+        ],
+        rows,
+    )?
+    .write(output, layout)
+    .map_err(Error::Io)?;
+    if !scoreboard.verdicts.iter().any(|verdict| {
+        verdict.native_peak_rss_bytes.is_some()
+            || verdict.reference_peak_rss_bytes.is_some()
+            || verdict.device_bytes.is_some()
+    }) {
+        return Ok(());
+    }
+    let rows = scoreboard
+        .verdicts
+        .iter()
+        .map(|verdict| {
+            Row::new([
+                verdict.cell.clone(),
+                bytes(verdict.native_peak_rss_bytes),
+                bytes(verdict.reference_peak_rss_bytes),
+                bytes(verdict.device_bytes),
+            ])
+        })
+        .collect();
+    table(
+        &format!(
+            "Peak memory against clingo — report {}, profile {}",
+            scoreboard.report,
+            scoreboard.profile + 1
+        ),
+        &["Cell", "zetesis MiB", "clingo MiB", "device MiB"],
         rows,
     )?
     .write(output, layout)
@@ -179,7 +278,11 @@ pub(super) fn table(title: &str, columns: &[&str], rows: Vec<Row>) -> Result<Tab
             .map(|label| {
                 Column::new(
                     label,
-                    if label.ends_with(" ms") || label.ends_with(" MiB") || *label == "Checked" {
+                    if label.ends_with(" ms")
+                        || label.ends_with(" MiB")
+                        || *label == "Checked"
+                        || *label == "zetesis/clingo"
+                    {
                         Alignment::Right
                     } else {
                         Alignment::Left
@@ -205,6 +308,16 @@ fn profile_name(profile: &serde_json::Value) -> String {
 fn milliseconds(nanos: u64) -> String {
     format!("{}.{:03}", nanos / 1_000_000, nanos % 1_000_000 / 1000)
 }
+fn optional_milliseconds(nanos: Option<u64>) -> String {
+    nanos.map_or_else(|| "—".into(), milliseconds)
+}
+/// `native / reference` to three decimals, rounded half up, by exact integer
+/// arithmetic; a reference of zero reads as one nanosecond.
+fn ratio(native: u64, reference: u64) -> String {
+    let reference = u128::from(reference.max(1));
+    let thousandths = (u128::from(native) * 1000 + reference / 2) / reference;
+    format!("{}.{:03}", thousandths / 1000, thousandths % 1000)
+}
 fn bytes(bytes: Option<u64>) -> String {
     bytes.map_or_else(
         || "—".into(),
@@ -218,8 +331,8 @@ fn bytes(bytes: Option<u64>) -> String {
     )
 }
 
-pub(super) fn corpus(
-    summary: &zetesis_validation::performance::matrix::Summary<'_>,
+pub(super) fn run(
+    summary: &Summary<'_>,
     json: bool,
     layout: Layout,
     output: &mut impl io::Write,
@@ -259,12 +372,13 @@ pub(super) fn corpus(
     )?
     .write(output, layout)
     .map_err(Error::Io)?;
-    let rows = corpus_rows(summary);
+    let rows = run_rows(summary);
     table(
         "Corpus benchmark — successful timed populations",
         &[
             "Workload",
             "Producer",
+            "Qualified by",
             "Median ms",
             "Range ms",
             "RSS MiB",
@@ -284,8 +398,7 @@ pub(super) fn corpus(
     .map_err(Error::Io)
 }
 
-fn corpus_rows(summary: &zetesis_validation::performance::matrix::Summary<'_>) -> Vec<Row> {
-    use zetesis_validation::performance::matrix::Producer;
+fn run_rows(summary: &Summary<'_>) -> Vec<Row> {
     summary
         .cells
         .iter()
@@ -310,6 +423,7 @@ fn corpus_rows(summary: &zetesis_validation::performance::matrix::Summary<'_>) -
                     )
                 ),
                 producer,
+                qualification(cell.qualification).to_owned(),
                 cell.timing
                     .as_ref()
                     .map_or_else(|| "—".into(), |timing| milliseconds(timing.median_ns)),
@@ -333,4 +447,13 @@ fn corpus_rows(summary: &zetesis_validation::performance::matrix::Summary<'_>) -
             ])
         })
         .collect()
+}
+
+/// What qualified a cell's answer family, as the tables name it.
+const fn qualification(qualification: Qualification) -> &'static str {
+    match qualification {
+        Qualification::Clingo => "clingo",
+        Qualification::Contract => "recorded contract",
+        Qualification::NeedsClingo => "needs clingo",
+    }
 }

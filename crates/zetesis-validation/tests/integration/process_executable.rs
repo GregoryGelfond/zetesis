@@ -1,7 +1,7 @@
 //! Executable selection receives its search path without mutating the environment.
 
 use std::path::{Path, PathBuf};
-use zetesis_validation::process::resolve_executable;
+use zetesis_validation::process::{is_executable_file, resolve_executable};
 
 fn candidate(directory: &Path, name: &str) -> PathBuf {
     let path = directory.join(name);
@@ -93,4 +93,27 @@ fn windows_search_retains_the_executable_extension_fallback() {
         resolve_executable(Path::new("solver"), Some(&search)).unwrap(),
         expected
     );
+}
+
+#[test]
+fn an_executable_regular_file_can_start_a_process() {
+    let directory = tempfile::tempdir().unwrap();
+    assert!(is_executable_file(&candidate(directory.path(), "solver")));
+}
+
+#[test]
+#[cfg(unix)]
+fn a_file_without_an_execute_bit_cannot_start_a_process() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let directory = tempfile::tempdir().unwrap();
+    let path = candidate(directory.path(), "solver");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(!is_executable_file(&path));
+}
+
+#[test]
+fn a_directory_or_a_missing_path_cannot_start_a_process() {
+    let directory = tempfile::tempdir().unwrap();
+    assert!(!is_executable_file(directory.path()));
+    assert!(!is_executable_file(&directory.path().join("absent")));
 }

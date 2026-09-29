@@ -12,11 +12,20 @@ mod reports;
 mod bounded_writer;
 
 fn command(directory: &Path, records: &[serde_json::Value; 2], retain: bool) -> BenchCommand {
+    with_options(directory, records, retain, &[])
+}
+
+fn with_options(
+    directory: &Path,
+    records: &[serde_json::Value; 2],
+    retain: bool,
+    options: &[&str],
+) -> BenchCommand {
     let mut arguments = vec!["zetesis-bench".to_owned(), "compare".into()];
     for (label, record) in ["before", "after"].into_iter().zip(records) {
         let path = directory.join(format!("{label}.json"));
         std::fs::write(&path, serde_json::to_vec(record).unwrap()).unwrap();
-        arguments.extend(["--report".into(), format!("{label}={}", path.display())]);
+        arguments.push(format!("{label}={}", path.display()));
     }
     if retain {
         arguments.extend([
@@ -28,6 +37,7 @@ fn command(directory: &Path, records: &[serde_json::Value; 2], retain: bool) -> 
                 .to_owned(),
         ]);
     }
+    arguments.extend(options.iter().map(|&option| option.to_owned()));
     Cli::try_parse_from(arguments).unwrap().command
 }
 
@@ -188,4 +198,50 @@ fn incompatible_workloads_refuse_before_publication() {
     ));
     assert!(output.is_empty());
     assert!(!directory.path().join("comparison.json").exists());
+}
+
+// Each report sealed with clingo stands against it on every profile: a table
+// of the cells where both passed, fastest ratio first, headed by the count of
+// cells zetesis decided faster.
+#[test]
+fn the_tables_show_each_report_against_clingo() {
+    let directory = tempfile::tempdir().unwrap();
+    let command = command(directory.path(), &reports::reports(), false);
+    let mut output = Vec::new();
+    execute(&command, &mut output).unwrap();
+    let rows: Vec<_> = String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+    let heading = rows
+        .iter()
+        .position(|row| row.starts_with("Against clingo — report before, profile 1: cpu/auto (1 threads), search default; faster on 1 of 1 cells where both passed"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert!(rows[heading + 1].starts_with("Cell zetesis ms clingo ms zetesis/clingo"));
+    assert!(rows[heading + 2].starts_with("generated/choice-2 2.000 5.000 0.400 "));
+    let heading = rows
+        .iter()
+        .position(|row| row.starts_with("Against clingo — report after, profile 2: cpu/auto (4 threads), search default; faster on 0 of 2 cells where both passed"))
+        .unwrap_or_else(|| panic!("{rows:#?}"));
+    assert!(rows[heading + 2].starts_with("generated/cycle-2 31.000 18.000 1.722 "));
+    assert!(rows[heading + 3].starts_with("generated/choice-2 21.000 8.000 2.625 "));
+}
+
+#[test]
+fn markdown_is_the_series_view_of_the_comparison() {
+    let directory = tempfile::tempdir().unwrap();
+    let command = with_options(
+        directory.path(),
+        &reports::reports(),
+        false,
+        &["--markdown"],
+    );
+    let BenchCommand::Compare(options) = &command else {
+        panic!("expected comparison")
+    };
+    let expected = benchmark::compare(options).unwrap().markdown();
+    let mut output = Vec::new();
+    execute(&command, &mut output).unwrap();
+    assert_eq!(String::from_utf8(output).unwrap(), expected);
 }

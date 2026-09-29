@@ -120,7 +120,7 @@ fn summary_distinguishes_missing_and_zero_measurements() {
     let profiles = reports::profiles();
     let summary = summary(&cases, &profiles);
     let mut output = Vec::new();
-    super::corpus(&summary, false, layout(ColorMode::Auto), &mut output).unwrap();
+    super::run(&summary, false, layout(ColorMode::Auto), &mut output).unwrap();
     let text = String::from_utf8(output).unwrap();
     assert!(!text.contains('\u{1b}'));
     assert_row(
@@ -131,19 +131,19 @@ fn summary_distinguishes_missing_and_zero_measurements() {
     assert_row(&text, "2 Cpu Auto Auto 4 1 64");
     assert_row(
         &text,
-        "Workload Producer Median ms Range ms RSS MiB All positions Detail",
+        "Workload Producer Qualified by Median ms Range ms RSS MiB All positions Detail",
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp clingo 5.125 4.999–6.250 3.500 Pass: 5",
+        "1: generated/choice-2.lp clingo clingo 5.125 4.999–6.250 3.500 Pass: 5",
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp zetesis profile 1 0.000 0.000–0.000 0.000 Pass: 5",
+        "1: generated/choice-2.lp zetesis profile 1 clingo 0.000 0.000–0.000 0.000 Pass: 5",
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp zetesis profile 2 — — — Pass: 1, Timeout: 1, NotAttempted: 3 Timed: NotAttempted: cell disabled; blocked by sample 1 (Timed, Timeout): process deadline ×3; Timed: Timeout: process deadline ×1",
+        "1: generated/choice-2.lp zetesis profile 2 clingo — — — Pass: 1, Timeout: 1, NotAttempted: 3 Timed: NotAttempted: cell disabled; blocked by sample 1 (Timed, Timeout): process deadline ×3; Timed: Timeout: process deadline ×1",
     );
     assert_row(&text, "All passed Accounted");
     assert_row(&text, "false true");
@@ -154,7 +154,7 @@ fn summary_json_preserves_raw_units_without_styling() {
     let cases = [reports::CASES[0].to_owned()];
     let profiles = reports::profiles();
     let mut output = Vec::new();
-    super::corpus(
+    super::run(
         &summary(&cases, &profiles),
         true,
         layout(ColorMode::Always),
@@ -184,7 +184,7 @@ fn refusal_details_escape_terminal_controls_without_losing_limits() {
         1,
     )]);
     let mut output = Vec::new();
-    super::corpus(&summary, false, layout(ColorMode::Never), &mut output).unwrap();
+    super::run(&summary, false, layout(ColorMode::Never), &mut output).unwrap();
     let text = String::from_utf8(output).unwrap();
     assert!(text.contains("support bytes limit 128; needed 129\\n\\u{1b}[31m"));
     assert!(!text.contains('\u{1b}'));
@@ -201,13 +201,13 @@ fn qualification_only_reference_has_no_measurements_in_either_view() {
     reference.timing = None;
     reference.peak_rss_bytes = None;
     let mut human = Vec::new();
-    super::corpus(&summary, false, layout(ColorMode::Never), &mut human).unwrap();
+    super::run(&summary, false, layout(ColorMode::Never), &mut human).unwrap();
     assert_row(
         &String::from_utf8(human).unwrap(),
-        "1: generated/choice-2.lp clingo — — — Pass: 1",
+        "1: generated/choice-2.lp clingo clingo — — — Pass: 1",
     );
     let mut machine = Vec::new();
-    super::corpus(&summary, true, layout(ColorMode::Never), &mut machine).unwrap();
+    super::run(&summary, true, layout(ColorMode::Never), &mut machine).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&machine).unwrap();
     assert_eq!(value["reference_policy"], "qualification_only");
     assert_eq!(value["cells"][0]["decisions"][0]["positions"], 1);
@@ -339,13 +339,13 @@ fn summary_preserves_a_writer_failure_after_rows() {
     let profiles = reports::profiles();
     let summary = summary(&cases, &profiles);
     let mut complete = Vec::new();
-    super::corpus(&summary, false, layout(ColorMode::Never), &mut complete).unwrap();
+    super::run(&summary, false, layout(ColorMode::Never), &mut complete).unwrap();
     let limit = std::str::from_utf8(&complete)
         .unwrap()
         .find("Campaign outcome")
         .unwrap();
     let mut output = BoundedWriter::new(limit);
-    let error = super::corpus(&summary, false, layout(ColorMode::Never), &mut output).unwrap_err();
+    let error = super::run(&summary, false, layout(ColorMode::Never), &mut output).unwrap_err();
     assert!(
         matches!(error, super::Error::Io(ref error) if error.kind() == io::ErrorKind::BrokenPipe)
     );
@@ -422,7 +422,7 @@ fn amended_workloads_have_distinct_human_labels() {
             .collect(),
     };
     let mut output = Vec::new();
-    super::corpus(
+    super::run(
         &summary,
         false,
         zetesis_presentation::Layout::default(),
@@ -432,4 +432,51 @@ fn amended_workloads_have_distinct_human_labels() {
     let text = String::from_utf8(output).unwrap();
     assert!(text.contains("1: n-queens/variant-01 8→10"), "{text}");
     assert!(text.contains("2: n-queens/variant-01 8→11"), "{text}");
+}
+
+// A clingo-free run qualifies each cell by the workload's recorded contract,
+// or cannot qualify it at all; the table names which.
+#[test]
+fn a_clingo_free_run_names_what_qualified_each_cell() {
+    let cases = reports::CASES.map(str::to_owned);
+    let profiles = reports::profiles();
+    let mut summary = summary(&cases, &profiles);
+    summary.reference_policy = None;
+    summary.cells = vec![
+        matrix::CellSummary {
+            case: 0,
+            producer: matrix::Producer::Native { profile: 0 },
+            qualification: matrix::Qualification::Contract,
+            decisions: vec![matrix::DecisionCount {
+                decision: matrix::Decision::Pass,
+                positions: 5,
+            }],
+            reasons: BTreeMap::new(),
+            timing: None,
+            peak_rss_bytes: None,
+        },
+        matrix::CellSummary {
+            case: 1,
+            producer: matrix::Producer::Native { profile: 0 },
+            qualification: matrix::Qualification::NeedsClingo,
+            decisions: vec![matrix::DecisionCount {
+                decision: matrix::Decision::NeedsClingo,
+                positions: 5,
+            }],
+            reasons: BTreeMap::new(),
+            timing: None,
+            peak_rss_bytes: None,
+        },
+    ];
+    let mut output = Vec::new();
+    super::run(&summary, false, layout(ColorMode::Never), &mut output).unwrap();
+    let text = String::from_utf8(output).unwrap();
+    assert_row(
+        &text,
+        "1: generated/choice-2.lp zetesis profile 1 recorded contract — — — Pass: 5",
+    );
+    assert_row(
+        &text,
+        "2: generated/cycle-2.lp zetesis profile 1 needs clingo — — — NeedsClingo: 5",
+    );
 }
