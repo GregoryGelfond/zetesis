@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 
 use reference::{Models, exhaustive, external, native};
 use themelios_base::source::SourceId;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits,
     InputLimit, ProfileFeature, admit, admit_extended, admit_formula, prepare_formula,
@@ -39,27 +40,21 @@ const CASES: &[(&str, &str)] = &[
     ),
 ];
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
 #[test]
 fn explicit_base_preserves_stable_models() {
     for &(source, implicit) in CASES {
-        assert_eq!(native(&input(source)), native(&input(implicit)), "{source}");
+        assert_eq!(
+            native(&formula(source)),
+            native(&formula(implicit)),
+            "{source}"
+        );
     }
 }
 
 #[test]
 fn explicit_base_matches_exhaustive_reduct_checking() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -88,7 +83,7 @@ fn explicit_base_matches_clingo_full_models() {
             result["Models"]["Number"].as_u64(),
             Some(expected.len() as u64)
         );
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
     }
 }
 
@@ -142,8 +137,8 @@ fn preparation_retains_original_base_sections() {
 
 #[test]
 fn base_delimiters_preserve_objective_templates() {
-    let implicit = input("{a}. #minimize{2@1,k:a}.");
-    let explicit = input("#program base. {a}. #program base. #minimize{2@1,k:a}.");
+    let implicit = formula("{a}. #minimize{2@1,k:a}.");
+    let explicit = formula("#program base. {a}. #program base. #minimize{2@1,k:a}.");
     assert_eq!(
         explicit.objectives().templates().iter().collect::<Vec<_>>(),
         implicit.objectives().templates().iter().collect::<Vec<_>>()

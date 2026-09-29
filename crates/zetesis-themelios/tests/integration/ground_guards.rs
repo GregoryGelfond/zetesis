@@ -8,9 +8,9 @@ use std::time::Duration;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_core::Sign;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -62,33 +62,6 @@ fn json_model(values: &Json) -> BTreeSet<String> {
     result
 }
 
-fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    let name = format!("{sign}{}", atom.predicate().name());
-    if atom.values().is_empty() {
-        return name;
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
-            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
-            zetesis_core::ValueNodeRef::Infimum => "#inf".into(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".into(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-        })
-        .collect();
-    format!("{name}({})", values.join(","))
-}
-
 fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
     let mut result = Vec::new();
     for (index, node) in theory.nodes().iter().enumerate() {
@@ -136,7 +109,7 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
                         .iter()
                         .enumerate()
                         .filter(|(index, _)| mask & (1 << index) != 0)
-                        .map(|(_, atom)| atom_text(atom))
+                        .map(|(_, atom)| canonical(atom))
                         .collect()
                 )
             );
@@ -159,7 +132,7 @@ fn native(input: &AdmittedFormula) -> Models {
                 model
                     .unwrap()
                     .atoms()
-                    .map(|index| atom_text(input.atoms().at(index).unwrap()))
+                    .map(|index| canonical(input.atoms().at(index).unwrap()))
                     .collect()
             )
         );

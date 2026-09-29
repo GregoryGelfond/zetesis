@@ -10,22 +10,10 @@ use crate::support::finite_bindings as formula;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-
-pub(crate) fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
+use zetesis_reference_support::formula;
 
 pub(crate) fn models(source: &str) -> formula::Models {
-    let admitted = input(source);
+    let admitted = formula(source);
     assert_eq!(admitted.source().text(), source);
     let result = formula::native(&admitted);
     assert_eq!(result, formula::exhaustive(&admitted), "{source}");
@@ -68,7 +56,7 @@ pub(crate) fn external(source: &str) {
 }
 
 pub(crate) fn cost_records(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
-    let admitted = input(source);
+    let admitted = formula(source);
     models(source)
         .into_iter()
         .map(|names| {
@@ -265,7 +253,7 @@ impl Selection {
 
     pub fn check_frozen(&self) {
         let source = self.source();
-        let admitted = input(&source);
+        let admitted = formula(&source);
         let names: Vec<_> = admitted.atoms().iter().map(formula::atom_text).collect();
         assert_eq!(
             names.iter().map(String::as_str).collect::<BTreeSet<_>>(),

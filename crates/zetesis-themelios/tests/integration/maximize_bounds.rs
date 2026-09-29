@@ -6,6 +6,7 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
+use zetesis_reference_support::formula;
 use zetesis_sat::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -15,15 +16,6 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> Score {
     let model = Model::from_positions(input.atom_catalog(), selected).unwrap();
     evaluate(
@@ -59,7 +51,7 @@ fn every_candidate_guard_matches_full_normalized_scores_and_keeps_ties() {
         "{a;b}. #maximize{0@1,k:a}. #minimize{0@1,k:b}.",
         "{p(a);p(2);p(\"a\")}. #maximize{X@0,k:p(X)}.",
     ] {
-        let input = input(source);
+        let input = formula(source);
         let plan = plan(&input);
         let masks = 1_usize << input.atoms().len();
         let scores: Vec<_> = (0..masks)
@@ -152,7 +144,7 @@ fn verified_incumbent_pruning_preserves_every_optimal_model_and_original_reduct(
         "{p(-2);p(3)}. #maximize{W@1,k:p(W)}.",
         "1{a;b}1. loop:-loop. #maximize{1@2,k:a;1@2,k:b}.",
     ] {
-        let input = input(source);
+        let input = formula(source);
         let nodes = input.theory().nodes().to_vec();
         let roots = input.theory().roots().to_vec();
         let baseline = search(&input, false);
@@ -164,7 +156,7 @@ fn verified_incumbent_pruning_preserves_every_optimal_model_and_original_reduct(
 
 #[test]
 fn optional_plan_refusal_is_typed_and_preserves_work_and_original_theory() {
-    let input = input("{a}. #maximize{2@7,k:a}.");
+    let input = formula("{a}. #maximize{2@7,k:a}.");
     let plan = plan(&input);
     let limits = ObjectivePlanLimits {
         max_work: plan.statistics().work - 1,
@@ -228,7 +220,7 @@ fn checked_source_arithmetic_reaches_only_eligible_negation_endpoints() {
         "#maximize{(-2147483647-1)@1,k:absent}.",
         "v(-2147483647-1).v(1). #maximize{W@1,k:v(W),W!=(-2147483647-1)}.",
     ] {
-        let input = input(source);
+        let input = formula(source);
         let _ = plan(&input);
     }
     for source in [

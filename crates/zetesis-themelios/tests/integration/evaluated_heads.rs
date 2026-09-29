@@ -5,8 +5,8 @@ use std::fs::{self};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -19,14 +19,6 @@ type Models = BTreeSet<Names>;
 fn cases() -> Vec<Json> {
     serde_json::from_str(include_str!("../fixtures/evaluated-heads.json")).unwrap()
 }
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    limited(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-}
 fn limited(
     source: &str,
     options: AdmissionOptions,
@@ -34,31 +26,6 @@ fn limited(
     limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(source.into(), options, expansion, *limits)
-}
-fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    if atom.values().is_empty() {
-        return format!("{sign}{}", atom.predicate().name());
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::String(string) => serde_json::to_string(string).unwrap(),
-            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
-        })
-        .collect();
-    format!("{sign}{}({})", atom.predicate().name(), values.join(","))
 }
 fn names(value: &Json) -> Names {
     value
@@ -97,7 +64,7 @@ fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
         .iter()
         .enumerate()
         .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, atom)| name(atom))
+        .map(|(_, atom)| canonical(atom))
         .collect()
 }
 fn complete(admitted: &AdmittedFormula) -> Models {
@@ -132,9 +99,13 @@ fn complete_models_match_explicit_source_expansions_and_independent_expected_dat
     let mut model_count = 0;
     for case in cases() {
         let label = case["name"].as_str().unwrap();
-        let admitted = input(case["source"].as_str().unwrap())
+        let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{label}: {error}"));
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         let predicted = expected(&case["models"]);
         assert_eq!(complete(&admitted), predicted, "{label}: original");
         assert_eq!(
@@ -173,8 +144,12 @@ fn remap(
 fn source_expansions_preserve_every_original_and_frozen_pair() {
     let mut pairs = 0;
     for case in cases() {
-        let source = input(case["source"].as_str().unwrap()).unwrap();
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         assert_eq!(
             source.atoms().iter().collect::<BTreeSet<_>>(),
             expanded.atoms().iter().collect::<BTreeSet<_>>(),
@@ -266,7 +241,7 @@ fn cycles_choices_and_interval_distributivity_match_handwritten_frozen_formulas(
         ("p(2..1)|q.", json!({"roots": []})),
     ];
     for (source, manual) in examples {
-        let admitted = input(source).unwrap();
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
         for mask in 0..1_usize << admitted.atoms().len() {
             let outer_names = selected(&admitted, mask);
             let outer = values(admitted.theory(), mask, None);
@@ -302,7 +277,7 @@ fn excluded_head_forms_remain_located_refusals() {
         // Constructor choice heads are covered by finite_values.rs.
         ("{p(a..b)}.", ProfileFeature::Term),
     ] {
-        let error = input(source).expect_err(source);
+        let error = admit(source, &FormulaLimits::default()).expect_err(source);
         assert!(feature(&error, predicted), "{source}: {error:?}");
         assert!(!error.diagnostics().is_empty());
     }
@@ -331,7 +306,7 @@ fn generated_heads_do_not_supply_their_own_dependencies_or_hide_unsafe_slots() {
         "d(1).a(X+1)|b:-#count{X:d(X)}>=1.",
         "{p(1..2,_):d(1)}.d(1).",
     ] {
-        let error = input(source).expect_err(source);
+        let error = admit(source, &FormulaLimits::default()).expect_err(source);
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
             "{source}: {error:?}"
@@ -355,7 +330,7 @@ fn evaluated_undefinedness_and_overflow_remain_whole_input_failures() {
             themelios_program::term::EvalError::Overflow,
         ),
     ] {
-        let error = input(source).expect_err(source);
+        let error = admit(source, &FormulaLimits::default()).expect_err(source);
         assert!(
             matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. }) if error == predicted)
         );
@@ -489,7 +464,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             );
             assert_eq!(
                 complete(&attempt(threshold).unwrap()),
-                complete(&input(source).unwrap())
+                complete(&admit(source, &FormulaLimits::default()).unwrap())
             );
         }
         let attempt = |limit| {
@@ -511,7 +486,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                 ..
             }))
         ));
-        let admitted = input(source).unwrap();
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
         let mut limits = FormulaLimits::default();
         limits.theory.max_nodes = admitted.theory().nodes().len();
         assert!(

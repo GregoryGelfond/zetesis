@@ -2,7 +2,8 @@
 
 use crate::support::head_element_reference as reference;
 
-use reference::{Selection, expected, external, input, models};
+use reference::{Selection, expected, external, models};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     admit_formula,
@@ -115,7 +116,7 @@ fn alias_keys_own_the_element_budget() {
             limits,
         )
         .unwrap();
-        assert_eq!(result.atoms(), input(&shared).atoms());
+        assert_eq!(result.atoms(), formula(&shared).atoms());
         let separate = format!("0{function}{{0,k:a;0,l:a}}0.");
         let error = admit_formula(
             separate,

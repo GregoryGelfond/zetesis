@@ -5,7 +5,8 @@
 
 use crate::support::head_element_reference as reference;
 
-use reference::{Selection, cost_records, expected, external, input, models};
+use reference::{Selection, cost_records, expected, external, models};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionLimits, FormulaLimits,
     prepare_formula,
@@ -62,7 +63,7 @@ fn signed_constants_introduce_no_atoms() {
         "1#count{0:not #false;0:not not #true}1.",
         "0#sum{0:not #false;0:not not #true}0.",
     ] {
-        assert!(input(source).atoms().is_empty(), "{source}");
+        assert!(formula(source).atoms().is_empty(), "{source}");
     }
 }
 
@@ -72,7 +73,7 @@ fn independent_unsigned_groups_keep_count_plans() {
         "2{a;b;c;d}2.{a;b}1.{c;d}1.1{not e}1.",
         "2{a;b;c;d}2.{a;b}1.{c;d}1.1#count{0:not e}1.",
     ] {
-        let ordinary = input(source);
+        let ordinary = formula(source);
         let planned = prepare_formula(
             source.into(),
             AdmissionOptions::default(),

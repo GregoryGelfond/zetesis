@@ -12,6 +12,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::admit;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -26,14 +27,6 @@ fn cases() -> Vec<Json> {
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect()
-}
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
 }
 
 // Independent topological evaluation: every subtree false in M is falsum in
@@ -192,10 +185,13 @@ fn explicit_single_group_expansions_match_complete_models_and_cost_presence() {
     let mut optimum_count = 0;
     for case in cases().iter().filter(|case| case["native"] == "admit") {
         let label = case["name"].as_str().unwrap();
-        let admitted = input(case["source"].as_str().unwrap())
+        let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{label}: {error}"));
-        let expanded = input(case["expanded"].as_str().unwrap())
-            .unwrap_or_else(|error| panic!("{label} explicit expansion: {error}"));
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_or_else(|error| panic!("{label} explicit expansion: {error}"));
         model_count += complete(&admitted).len();
         optimum_count += optimum(complete(&admitted)).len();
         assert_eq!(
@@ -226,8 +222,8 @@ fn explicit_single_group_expansions_match_complete_models_and_cost_presence() {
     assert_eq!((admitted_count, reference_count), (33, 26));
     assert_eq!((model_count, optimum_count), (80, 79));
     assert_ne!(
-        complete(&input("1{p(1..2)}1.").unwrap()),
-        complete(&input("1{p(1)}1.1{p(2)}1.").unwrap()),
+        complete(&admit("1{p(1..2)}1.", &FormulaLimits::default()).unwrap()),
+        complete(&admit("1{p(1)}1.1{p(2)}1.", &FormulaLimits::default()).unwrap()),
         "bounds cannot be distributed"
     );
 }
@@ -248,8 +244,12 @@ fn remap(
 fn tiny_expansions_match_every_frozen_pair_including_non_subsets() {
     let mut worlds = 0;
     for case in cases().iter().filter(|case| case["native"] == "admit") {
-        let source = input(case["source"].as_str().unwrap()).unwrap();
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         assert_eq!(
             source.atoms().iter().collect::<BTreeSet<_>>(),
             expanded.atoms().iter().collect::<BTreeSet<_>>(),
@@ -303,8 +303,8 @@ fn nested_choice_values_retain_one_group() {
         .iter()
         .find(|case| case["name"] == "nested_interval_still_refused")
         .unwrap();
-    let source = input(case["source"].as_str().unwrap()).unwrap();
-    let expanded = input("{p(f(1));p(f(2))}.").unwrap();
+    let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+    let expanded = admit("{p(f(1));p(f(2))}.", &FormulaLimits::default()).unwrap();
     assert_eq!(
         source.atoms().iter().collect::<BTreeSet<_>>(),
         expanded.atoms().iter().collect()
@@ -409,7 +409,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
                     | "nested_interval_still_refused"
             )
     }) {
-        let Err(error) = input(case["source"].as_str().unwrap()) else {
+        let Err(error) = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()) else {
             panic!("unexpected admission: {}", case["name"]);
         };
         assert!(
@@ -444,14 +444,6 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
     );
 }
 
-fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        *limits,
-    )
-}
 #[test]
 fn interval_slots_obey_the_variable_limit() {
     let mut options = AdmissionOptions::default();
@@ -482,9 +474,9 @@ fn generated_choice_values_obey_the_cumulative_limit() {
         max_generated_values: 4,
         ..FormulaLimits::default()
     };
-    assert!(limited(source, &limits).is_ok());
+    assert!(admit(source, &limits).is_ok());
     assert!(matches!(
-        limited(
+        admit(
             source,
             &FormulaLimits {
                 max_generated_values: 3,
@@ -504,7 +496,7 @@ fn oversized_choice_range_is_refused_before_generation() {
     let limits = FormulaLimits::default();
     assert!(
         matches!(
-            limited(
+            admit(
                 "{p((-2147483647-1)..2147483647)}.",
                 &FormulaLimits {
                     max_assignment_values: 3,
@@ -524,7 +516,7 @@ fn oversized_choice_range_is_refused_before_generation() {
 #[test]
 fn empty_joins_do_not_enumerate_choice_ranges() {
     assert!(
-        limited(
+        admit(
             "{p((-2147483647-1)..2147483647)}:-missing.",
             &FormulaLimits {
                 max_assignment_values: 0,
@@ -564,7 +556,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
             } else {
                 limits.max_substitutions = limit;
             }
-            limited(source, &limits)
+            admit(source, &limits)
         };
         let threshold = first_success(|limit| attempt(limit).is_ok());
         assert!(matches!(attempt(threshold - 1), Err(FormulaFailure::Limit {
@@ -590,7 +582,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
             ..
         }))
     ));
-    let admitted = input(source).unwrap();
+    let admitted = admit(source, &FormulaLimits::default()).unwrap();
     for (resource, limit) in [
         (FormulaResource::Atoms, admitted.atoms().len()),
         (FormulaResource::Nodes, admitted.theory().nodes().len()),
@@ -601,10 +593,8 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
         } else {
             limits.theory.max_nodes = limit - 1;
         }
-        assert!(
-            matches!(limited(source, &limits), Err(FormulaFailure::Limit {
-            resource: actual, .. }) if actual == resource)
-        );
+        assert!(matches!(admit(source, &limits), Err(FormulaFailure::Limit {
+            resource: actual, .. }) if actual == resource));
     }
 }
 
@@ -691,7 +681,10 @@ fn fresh_bounded_clingo_replays_complete_contracts_and_explicit_diagnostics() {
             );
             if case["native"] == "admit" {
                 assert_eq!(
-                    optimum(complete(&input(case["source"].as_str().unwrap()).unwrap())),
+                    optimum(complete(
+                        &admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
+                            .unwrap()
+                    )),
                     reference(&fresh),
                     "{}",
                     case["name"]

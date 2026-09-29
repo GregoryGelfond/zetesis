@@ -12,11 +12,7 @@ use zetesis_themelios::{
 use crate::support::source_cases;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
-
-fn input(source: &str) -> AdmittedFormula {
-    reference::admit(source, &FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
+use zetesis_reference_support::formula;
 
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/maximize.jsonl"))
@@ -30,7 +26,7 @@ fn complete_mixed_direction_costs_match_independent_recorded_models() {
     for case in cases {
         count += case.records.len();
         assert_eq!(
-            reference::exhaustive(&input(&case.source)),
+            reference::exhaustive(&formula(&case.source)),
             case.records,
             "{}: {}",
             case.name,
@@ -43,13 +39,13 @@ fn complete_mixed_direction_costs_match_independent_recorded_models() {
 #[test]
 fn objective_directions_leave_the_original_atom_catalog_and_reduct_dag_unchanged() {
     for base in ["{a;b}.", "{a}. b:-a. a:-b.", "{a}. :-a."] {
-        let original = input(base);
+        let original = formula(base);
         for objectives in [
             "#maximize{2@1,k:a}.",
             "#maximize{2@1,k:a}. #minimize{-2@1,k:a}.",
             "#maximize{-2@1,k:a}. :~a.[-2@1,k]",
         ] {
-            let optimized = input(&format!("{base} {objectives}"));
+            let optimized = formula(&format!("{base} {objectives}"));
             assert_eq!(optimized.atoms(), original.atoms());
             assert_eq!(optimized.theory().nodes(), original.theory().nodes());
             assert_eq!(optimized.theory().roots(), original.theory().roots());

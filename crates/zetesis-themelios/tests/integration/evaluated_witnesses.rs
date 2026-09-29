@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -21,15 +22,6 @@ fn limited(
         expansion,
         *limits,
     )
-}
-
-fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 // These independently written finite substitutions retain whole source atoms.
@@ -151,21 +143,25 @@ const CLOSED_NEGATIVE_CASES: &[(&str, &[&str])] = &[
 fn closed_arithmetic_preserves_negative_projection() {
     for &(source, atoms) in CLOSED_NEGATIVE_CASES {
         let expected = Models::from([atoms.iter().map(|&atom| atom.to_owned()).collect()]);
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
     }
 }
 
 #[test]
 fn models_match_finite_substitution() {
     for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
+        assert_eq!(
+            native(&formula(source)),
+            native(&formula(expanded)),
+            "{source}"
+        );
     }
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -174,7 +170,7 @@ fn stability_matches_subset_enumeration() {
 fn frozen_truth_matches_finite_substitution() {
     let mut pairs = 0;
     for &(source, expanded) in CASES {
-        let (left, right) = (input(source), input(expanded));
+        let (left, right) = (formula(source), formula(expanded));
         let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
         let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
         assert_eq!(
@@ -244,7 +240,7 @@ fn original_sources_match_clingo_full_models() {
             }
         }
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
         total += count;
     }
     println!(
@@ -407,7 +403,7 @@ fn checked_arithmetic_preserves_failure_provenance() {
 #[test]
 fn rejected_values_preserve_the_next_row() {
     assert_eq!(
-        native(&input("p(f(1,1),3).p(f(2,2),3).q:-p(f(X,X),X+1):#true.")),
+        native(&formula("p(f(1,1),3).p(f(2,2),3).q:-p(f(X,X),X+1):#true.")),
         Models::from([BTreeSet::from([
             "p(f(1,1),3)".into(),
             "p(f(2,2),3)".into(),
@@ -419,7 +415,7 @@ fn rejected_values_preserve_the_next_row() {
 #[test]
 fn local_evaluation_cannot_create_recursive_support() {
     assert_eq!(
-        native(&input("p(1,2):-q.q:-p(X,X+1):#true.")),
+        native(&formula("p(1,2):-q.q:-p(X,X+1):#true.")),
         Models::from([BTreeSet::new()])
     );
 }
@@ -434,13 +430,16 @@ fn prepared_grounding_preserves_witness_models() {
         FormulaLimits::default(),
     )
     .unwrap();
-    assert_eq!(native(&prepared.ground().unwrap()), native(&input(source)));
+    assert_eq!(
+        native(&prepared.ground().unwrap()),
+        native(&formula(source))
+    );
 }
 
 #[test]
 fn compiled_checks_retain_original_source() {
     let source = "p(1,2).q:-p(X,X+(1;2)):#true.";
-    let admitted = input(source);
+    let admitted = formula(source);
     assert_eq!(admitted.source().text(), source);
     assert!(admitted.formula_origins().iter().flatten().any(|location| {
         admitted.source().slice(location.span).unwrap() == "q:-p(X,X+(1;2)):#true."
@@ -493,7 +492,7 @@ fn first_cap(
     }
     assert!(low > 0);
     assert!(refused(&run(low - 1).unwrap_err()));
-    assert_eq!(native(&run(low).unwrap()), native(&input(BOUNDED)));
+    assert_eq!(native(&run(low).unwrap()), native(&formula(BOUNDED)));
     low
 }
 
@@ -569,7 +568,7 @@ fn substitution_limit_is_inclusive() {
 
 #[test]
 fn work_prefixes_cannot_publish_partial_theories() {
-    let expected = native(&input(CASES[0].0));
+    let expected = native(&formula(CASES[0].0));
     for cap in 0..4096 {
         match limited(
             CASES[0].0,
@@ -619,6 +618,6 @@ proptest::proptest! {
             let satisfies = if reverse { a == b+1 } else { b == a+1 };
             if satisfies && !negative { expected.insert("q".into()); }
         }
-        proptest::prop_assert_eq!(native(&input(&source)), Models::from([expected]));
+        proptest::prop_assert_eq!(native(&formula(&source)), Models::from([expected]));
     }
 }

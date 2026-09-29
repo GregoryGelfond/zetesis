@@ -5,9 +5,7 @@ use crate::support::finite_bindings as reference;
 use std::collections::BTreeSet;
 
 use reference::{Models, exhaustive, external, native};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_reference_support::formula;
 
 const CASES: &[(&str, &[&[&str]])] = &[
     ("{not a}.", &[&[]]),
@@ -41,16 +39,6 @@ const CASES: &[(&str, &[&[&str]])] = &[
     ("2{not #false}2.2{not #false;not #false}2.", &[]),
 ];
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
 fn expected(records: &[&[&str]]) -> Models {
     records
         .iter()
@@ -61,14 +49,14 @@ fn expected(records: &[&[&str]]) -> Models {
 #[test]
 fn complete_answers_preserve_signed_choice_contracts() {
     for &(source, records) in CASES {
-        assert_eq!(native(&input(source)), expected(records), "{source}");
+        assert_eq!(native(&formula(source)), expected(records), "{source}");
     }
 }
 
 #[test]
 fn signed_choices_match_exhaustive_reduct_checking() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -94,6 +82,6 @@ fn original_signed_sources_match_clingo() {
             }
         }
         assert_eq!(actual, expected(records), "{source}");
-        assert_eq!(native(&input(source)), actual, "{source}");
+        assert_eq!(native(&formula(source)), actual, "{source}");
     }
 }

@@ -2,21 +2,11 @@
 use crate::support::finite_bindings as reference;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_reference_support::formula;
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const PROJECTION: &str = "q((1,x),2).\np(A) :- q((A,_),_).\np(B) :- q((A,_),B).\n";
 const EXTREMA_SOURCE: &str = "q((#inf,a)).q((#sup,b)).q((\"#inf\",c)).p(X):-q((X,_)).";
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn models(rows: &[&[&str]]) -> Models {
     rows.iter()
         .map(|row| row.iter().map(|atom| (*atom).to_owned()).collect())
@@ -25,7 +15,7 @@ fn models(rows: &[&[&str]]) -> Models {
 #[test]
 fn projection_bug_retains_the_complete_model() {
     assert_eq!(
-        native(&input(PROJECTION)),
+        native(&formula(PROJECTION)),
         models(&[&["q((1,x),2)", "p(1)", "p(2)"]])
     );
 }
@@ -100,21 +90,25 @@ const CASES: &[(&str, &str)] = &[
 #[test]
 fn complete_models_match_explicit_ground_rules() {
     for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
+        assert_eq!(
+            native(&formula(source)),
+            native(&formula(expanded)),
+            "{source}"
+        );
     }
 }
 #[test]
 fn stable_models_match_independent_subset_enumeration() {
     for &(source, _) in CASES {
-        let input = input(source);
+        let input = formula(source);
         assert_eq!(native(&input), exhaustive(&input), "{source}");
     }
 }
 #[test]
 fn every_frozen_pair_matches_explicit_ground_rules() {
     for &(source, expanded) in CASES {
-        let original = input(source);
-        let reference = input(expanded);
+        let original = formula(source);
+        let reference = formula(expanded);
         let left: Vec<_> = original.atoms().iter().map(atom_text).collect();
         let right: Vec<_> = reference.atoms().iter().map(atom_text).collect();
         assert_eq!(
@@ -186,13 +180,13 @@ fn original_sources_match_clingo_full_models() {
             }
         }
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
     }
 }
 
 #[test]
 fn a_late_mismatch_does_not_bind_the_next_row() {
-    let admitted = input("q((1,2),0).q((2,2),1).p(X,Z):-q((X,X),Z).");
+    let admitted = formula("q((1,2),0).q((2,2),1).p(X,Z):-q((X,X),Z).");
     assert_eq!(
         native(&admitted),
         models(&[&["q((1,2),0)", "q((2,2),1)", "p(2,1)"]])
@@ -200,7 +194,7 @@ fn a_late_mismatch_does_not_bind_the_next_row() {
 }
 #[test]
 fn tuple_shape_distinguishes_scalar_function_and_arity() {
-    let admitted = input(
+    let admitted = formula(
         "q(1).q((1,)).q((1,2)).q(f(1)).q(((),x)).q((#inf,#sup)).q((-f(1),\"s\")).p(X):-q((X,_)).",
     );
     assert_eq!(
@@ -222,7 +216,7 @@ fn tuple_shape_distinguishes_scalar_function_and_arity() {
 }
 #[test]
 fn nested_constants_require_exact_value_identity() {
-    let admitted = input("q((f(1),(2,))).q((-f(1),(3,))).q((f(1),(4,5))).p(X):-q((f(1),(X,))).");
+    let admitted = formula("q((f(1),(2,))).q((-f(1),(3,))).q((f(1),(4,5))).p(X):-q((f(1),(X,))).");
     assert_eq!(
         native(&admitted),
         models(&[&[
@@ -235,12 +229,12 @@ fn nested_constants_require_exact_value_identity() {
 }
 #[test]
 fn anonymous_nodes_have_independent_existential_values() {
-    let admitted = input("q((1,2),3).p:-q((_,_),_).");
+    let admitted = formula("q((1,2),3).p:-q((_,_),_).");
     assert_eq!(native(&admitted), models(&[&["q((1,2),3)", "p"]]));
 }
 #[test]
 fn structural_bindings_can_feed_later_support_rounds() {
-    let admitted = input("q((1,2)).p(X):-q((X,_)).r(X):-p(X).p(X):-r(X).");
+    let admitted = formula("q((1,2)).p(X):-q((X,_)).r(X):-p(X).p(X):-r(X).");
     assert_eq!(native(&admitted), models(&[&["q((1,2))", "p(1)", "r(1)"]]));
 }
 #[test]
@@ -270,7 +264,7 @@ fn an_arithmetic_tuple_pattern_is_not_a_producer() {
 #[test]
 fn a_named_pattern_retains_the_complete_source_atom() {
     assert_eq!(
-        native(&input("q(f(1)).p(X):-q(f(X)).")),
+        native(&formula("q(f(1)).p(X):-q(f(X)).")),
         models(&[&["q(f(1))", "p(1)"]])
     );
 }
@@ -322,7 +316,7 @@ proptest::proptest! {
             expected.insert(format!("q(({a},{b}),{c})"));
             if a==b { expected.insert(format!("p({a},{c})")); }
         }
-        proptest::prop_assert_eq!(native(&input(&source)),BTreeSet::from([expected]));
+        proptest::prop_assert_eq!(native(&formula(&source)),BTreeSet::from([expected]));
     }
     #[test]
     fn prebound_names_project_exactly_the_matching_rows(rows in proptest::collection::vec((-4_i32..=4,-4_i32..=4),0..12), fixed in -4_i32..=4) {
@@ -334,7 +328,7 @@ proptest::proptest! {
             expected.insert(format!("q(({a},{b}))"));
             if a==fixed { expected.insert(format!("p({a},{b})")); }
         }
-        proptest::prop_assert_eq!(native(&input(&source)),BTreeSet::from([expected]));
+        proptest::prop_assert_eq!(native(&formula(&source)),BTreeSet::from([expected]));
     }
 }
 
@@ -391,7 +385,7 @@ fn duplicate_included_patterns_retain_original_spans() {
 #[test]
 fn extracted_extrema_keep_their_complete_value_identity() {
     assert_eq!(
-        native(&input(EXTREMA_SOURCE)),
+        native(&formula(EXTREMA_SOURCE)),
         models(&[&[
             "q((#inf,a))",
             "q((#sup,b))",
@@ -406,7 +400,7 @@ fn extracted_extrema_keep_their_complete_value_identity() {
 fn extracted_extrema_preserve_every_frozen_fact_consequence() {
     // All three q atoms are facts. Their corresponding p atoms are mandatory,
     // so the independent formula is the conjunction of these six atoms.
-    let admitted = input(EXTREMA_SOURCE);
+    let admitted = formula(EXTREMA_SOURCE);
     assert_eq!(admitted.atoms().len(), 6);
     let full = (1 << 6) - 1;
     for outer in 0..=full {

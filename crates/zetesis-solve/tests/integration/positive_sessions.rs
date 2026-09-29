@@ -6,16 +6,14 @@ use crate::support::models::model;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, PositiveError, PositiveResource, TightError, TightResource};
+use zetesis_reference_support::formula;
 use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
     Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig, WorldView,
     WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, FormulaLimits,
-    admit_formula, analysis::classify::HornKind,
-};
+use zetesis_themelios::{AdmittedFormula, AnalysisBasis, analysis::classify::HornKind};
 
 type Family = BTreeSet<(Model, Option<Vec<(i32, i64)>>)>;
 
@@ -53,16 +51,6 @@ impl ExecutionObserver for Observations {
         }
         Ok(())
     }
-}
-
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
 }
 
 /// The completion pool these sessions observe belongs to the clause search;
@@ -147,7 +135,7 @@ fn positive_sessions_return_the_literal_least_families() {
         ("a. b:-a. a:-b.", &["a", "b"][..]),
         ("a. b:-a. c:-c.", &["a", "b"][..]),
     ] {
-        let owner = input(source);
+        let owner = formula(source);
         assert_eq!(owner.analysis_basis(), AnalysisBasis::NormalizedProgram);
         assert!(matches!(
             owner.source_analysis().classes().horn(),
@@ -195,7 +183,7 @@ fn positive_sessions_preserve_original_constraints() {
         (":-.", Family::new()),
         ("a. :-b.", BTreeSet::from([(model(&["a"]), None)])),
     ] {
-        let owner = input(source);
+        let owner = formula(source);
         for workers in [1, 4] {
             let (actual, observations) = collect(&owner, config(workers, Oracle::Auto));
             positive(&actual, &observations, workers);
@@ -213,7 +201,7 @@ fn positive_sessions_preserve_original_constraints() {
 
 #[test]
 fn positive_answers_retain_original_atoms_and_full_scores() {
-    let owner = input("a. b:-a. a:-b. #minimize {2@3,k:b;1@1,k:a}. #show a/0.");
+    let owner = formula("a. b:-a. a:-b. #minimize {2@3,k:b;1@1,k:a}. #show a/0.");
     let catalog = owner.atom_catalog().clone();
     let expected = BTreeSet::from([(model(&["a", "b"]), Some(vec![(3, 2), (1, 1)]))]);
     let mut retained = Vec::new();
@@ -247,7 +235,7 @@ fn positive_answers_retain_original_atoms_and_full_scores() {
 
 #[test]
 fn optional_certificate_byte_refusal_keeps_general_solving() {
-    let owner = input("a. b:-a. a:-b.");
+    let owner = formula("a. b:-a. a:-b.");
     let (actual, observations) = collect(
         &owner,
         SolveConfig {
@@ -280,7 +268,7 @@ fn optional_certificate_byte_refusal_keeps_general_solving() {
 
 #[test]
 fn disjunctive_source_declines_both_atomic_head_plans() {
-    let owner = input("a|b.");
+    let owner = formula("a|b.");
     assert_eq!(owner.analysis_basis(), AnalysisBasis::NormalizedProgram);
     assert!(!matches!(
         owner.source_analysis().classes().horn(),
@@ -320,7 +308,7 @@ fn disjunctive_source_declines_both_atomic_head_plans() {
 
 #[test]
 fn cancellation_after_positive_preparation_is_incomplete() {
-    let owner = input("a. b:-a. a:-b.");
+    let owner = formula("a. b:-a. a:-b.");
     let cancellation = Cancellation::default();
     let mut observations = Observations {
         cancel_after_positive: Some(cancellation.clone()),

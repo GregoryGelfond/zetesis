@@ -5,8 +5,8 @@ use std::fs::{self};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -19,14 +19,6 @@ type Models = BTreeSet<Names>;
 fn cases() -> Vec<Json> {
     serde_json::from_str(include_str!("../fixtures/true-heads.json")).unwrap()
 }
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    limited(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-}
 fn limited(
     source: &str,
     options: AdmissionOptions,
@@ -34,31 +26,6 @@ fn limited(
     limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(source.into(), options, expansion, *limits)
-}
-fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    if atom.values().is_empty() {
-        return format!("{sign}{}", atom.predicate().name());
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::String(string) => serde_json::to_string(string).unwrap(),
-            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
-        })
-        .collect();
-    format!("{sign}{}({})", atom.predicate().name(), values.join(","))
 }
 fn names(value: &Json) -> Names {
     value
@@ -97,7 +64,7 @@ fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
         .iter()
         .enumerate()
         .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, atom)| name(atom))
+        .map(|(_, atom)| canonical(atom))
         .collect()
 }
 fn complete(admitted: &AdmittedFormula) -> Models {
@@ -132,8 +99,12 @@ fn complete_models_match_explicit_families_and_recorded_reference_expectations()
     let cases = cases();
     assert_eq!(cases.len(), 25);
     for case in cases {
-        let source = input(case["source"].as_str().unwrap()).unwrap();
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         let predicted = expected(&case["models"]);
         assert_eq!(complete(&source), predicted, "{}: source", case["name"]);
         assert_eq!(complete(&expanded), predicted, "{}: expanded", case["name"]);
@@ -156,8 +127,12 @@ fn remap(
 fn source_expansions_preserve_every_original_and_frozen_pair() {
     let mut pairs = 0;
     for case in cases() {
-        let source = input(case["source"].as_str().unwrap()).unwrap();
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         assert_eq!(
             source.atoms().iter().collect::<BTreeSet<_>>(),
             expanded.atoms().iter().collect::<BTreeSet<_>>(),
@@ -241,7 +216,7 @@ fn true_head_range_products_match_handwritten_frozen_formulas() {
         ("p(2..1):#true;q:#true.", json!({"roots": []})),
         ("a|b:.", json!({"roots": [["or", "a", "b"]]})),
     ] {
-        let admitted = input(source).unwrap();
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
         for outer in 0..1_usize << admitted.atoms().len() {
             let candidate = selected(&admitted, outer);
             let frozen = values(admitted.theory(), outer, None);
@@ -277,7 +252,7 @@ fn conditional_disjunctions_preserve_finite_families() {
         ("p(X):X=1..2;q:#true.", json!([["p(1)"], ["p(2)"], ["q"]])),
     ] {
         assert_eq!(
-            complete(&input(source).unwrap()),
+            complete(&admit(source, &FormulaLimits::default()).unwrap()),
             expected(&models),
             "{source}"
         );
@@ -312,7 +287,10 @@ fn erased_conditions_do_not_bind_or_hide_unsafe_head_arguments() {
         "p(2..1,X):#true;q:#true.",
     ] {
         assert!(
-            matches!(input(source), Err(FormulaFailure::UnsafeVariable { .. })),
+            matches!(
+                admit(source, &FormulaLimits::default()),
+                Err(FormulaFailure::UnsafeVariable { .. })
+            ),
             "{source}"
         );
     }
@@ -457,7 +435,7 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
         );
         assert_eq!(
             complete(&attempt(threshold).unwrap()),
-            complete(&input(source).unwrap())
+            complete(&admit(source, &FormulaLimits::default()).unwrap())
         );
     }
     let attempt = |limit| {
@@ -479,7 +457,7 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
             ..
         }))
     ));
-    let admitted = input(source).unwrap();
+    let admitted = admit(source, &FormulaLimits::default()).unwrap();
     let mut limits = FormulaLimits::default();
     limits.theory.max_nodes = admitted.theory().nodes().len();
     assert!(

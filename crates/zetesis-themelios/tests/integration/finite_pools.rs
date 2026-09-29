@@ -2,19 +2,12 @@
 use crate::support::finite_bindings as reference;
 use reference::{Models, atom_text, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
-fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn limited(
     source: &str,
     expansion: ExpansionLimits,
@@ -211,8 +204,8 @@ const CASES: &[(&str, &str)] = &[
 #[test]
 fn complete_models_and_every_frozen_pair_match_handwritten_expansions() {
     for &(source, expanded) in CASES {
-        let original = input(source);
-        let reference = input(expanded);
+        let original = formula(source);
+        let reference = formula(expanded);
         assert_eq!(native(&original), native(&reference), "{source}");
         assert_eq!(native(&original), exhaustive(&original), "{source}");
         let left: Vec<_> = original.atoms().iter().map(atom_text).collect();
@@ -263,7 +256,7 @@ fn complete_models_and_every_frozen_pair_match_handwritten_expansions() {
 fn original_manual_formulas_distinguish_cartesian_rules_from_a_flat_head() {
     // This formula is handwritten without compiling a second source. Additional
     // support constraints are tautologies here because both rules have true bodies.
-    let p = input("p(1;2);q.");
+    let p = formula("p(1;2);q.");
     let names: Vec<_> = p.atoms().iter().map(atom_text).collect();
     let bit =
         |mask: usize, name: &str| mask & (1 << names.iter().position(|n| n == name).unwrap()) != 0;
@@ -287,10 +280,10 @@ fn original_manual_formulas_distinguish_cartesian_rules_from_a_flat_head() {
         .map(|row| row.into_iter().map(str::to_owned).collect())
         .collect();
     assert_eq!(native(&p), expected);
-    assert_ne!(native(&p), native(&input("p(1);p(2);q.")));
+    assert_ne!(native(&p), native(&formula("p(1);p(2);q.")));
     assert_ne!(
-        native(&input("1{p(1;2)}1.")),
-        native(&input("1{p(1)}1.1{p(2)}1."))
+        native(&formula("1{p(1;2)}1.")),
+        native(&formula("1{p(1)}1.1{p(2)}1."))
     );
 }
 
@@ -377,7 +370,7 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         );
         assert_eq!(
             native(&limited(source, configured(exact), &FormulaLimits::default()).unwrap()),
-            native(&input(source))
+            native(&formula(source))
         );
     }
     for resource in [
@@ -425,8 +418,8 @@ fn entirely_undefined_conditional_ranges_remain_errors() {
 
 #[test]
 fn mixed_conditional_pools_preserve_the_defined_consequent() {
-    let program = input("d(0).q:-1=(1;1/X):d(X).");
-    let expected = native(&input("d(0).q."));
+    let program = formula("d(0).q:-1=(1;1/X):d(X).");
+    let expected = native(&formula("d(0).q."));
     assert_eq!(program.warnings().len(), 1);
     assert_eq!(native(&program), expected);
     assert_eq!(exhaustive(&program), expected);
@@ -454,7 +447,7 @@ fn local_value_owners_respect_each_expansion_ceiling() {
         "{d(1);d(2)}.q:-f(X)=f(1..2):d(X).",
         "{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.",
     ] {
-        let expected = native(&input(source));
+        let expected = native(&formula(source));
         for resource in [
             ExpansionResource::TermWork,
             ExpansionResource::Values,
@@ -525,7 +518,7 @@ fn pool_cases_match_declared_clingo_families() {
                     .collect()
             })
             .collect();
-        let native = native(&input(source));
+        let native = native(&formula(source));
         if source == BOOLEAN_OCCURRENCE_POOL {
             // The adopted Boolean-choice extension retains one written key
             // across pool alternatives. Clingo splits this pool into two
@@ -655,15 +648,15 @@ fn recursive_pool_growth_obeys_the_round_limit() {
 #[test]
 fn pooled_scalar_equality_preserves_explicit_facts() {
     assert_eq!(
-        native(&input("p(X):-X=(1;2).")),
-        native(&input("p(1).p(2)."))
+        native(&formula("p(X):-X=(1;2).")),
+        native(&formula("p(1).p(2)."))
     );
 }
 
 #[test]
 fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
     use zetesis_cpu::Cancellation;
-    let p = input("1{p(1;2)}1.#minimize{1@1:p(1);1@1:p(2)}.#show.");
+    let p = formula("1{p(1;2)}1.#minimize{1@1:p(1);1@1:p(2)}.#show.");
     let cancellation = Cancellation::default();
     let mut search = zetesis_sat::StableModels::new(
         p.theory(),
@@ -768,7 +761,7 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
         );
         assert_eq!(
             native(&limited(source, configured(exact), &FormulaLimits::default()).unwrap()),
-            native(&input(source))
+            native(&formula(source))
         );
         println!("pool-free inclusive expansion work: {source} => {exact}");
     }

@@ -9,7 +9,8 @@ use crate::support::objective_dependency_records as objective_dependencies;
 
 use crate::support::head_element_reference as reference;
 
-use reference::{Selection, cost_records, expected, external, input, models};
+use reference::{Selection, cost_records, expected, external, models};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, BundleLimits, CountPlanLimits,
     CountPlanStatus, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -91,7 +92,7 @@ fn constant_heads_add_no_catalog_atoms() {
         "1#count{0:#true;0:#false}1.",
         "0#min{0:#true}0.",
     ] {
-        assert!(input(source).atoms().is_empty(), "{source}");
+        assert!(formula(source).atoms().is_empty(), "{source}");
     }
 }
 
@@ -144,7 +145,7 @@ fn boolean_choice_analysis_reports_its_basis() {
         );
     }
     assert_eq!(
-        input("1{a;b}1.").analysis_basis(),
+        formula("1{a;b}1.").analysis_basis(),
         AnalysisBasis::NormalizedProgram
     );
 }
@@ -313,7 +314,7 @@ fn constants_do_not_certify_atom_count_plans() {
         "2{#true;a;b;c;d}2.{a;b}1.{c;d}1.",
         "2#count{0:#true;1:a;2:b;3:c;4:d}2.{a;b}1.{c;d}1.",
     ] {
-        let ordinary = input(source);
+        let ordinary = formula(source);
         let planned = prepare_formula(
             source.into(),
             AdmissionOptions::default(),

@@ -7,6 +7,7 @@ use std::time::Duration;
 use serde_json::Value as Json;
 use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::admit;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -21,14 +22,6 @@ fn cases() -> Vec<Json> {
 }
 fn singleton_cases() -> Vec<Json> {
     serde_json::from_str(zetesis_test_support::fixtures::SINGLETON_HEADS).unwrap()
-}
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    limited(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
 }
 fn limited(
     source: &str,
@@ -210,7 +203,8 @@ fn original_support_augmentation_and_frozen_formulas_are_distinct_contracts() {
     let mut pairs = 0;
     for case in cases() {
         let source = case["source"].as_str().unwrap();
-        let admitted = input(source).unwrap_or_else(|error| panic!("{source}: {error}"));
+        let admitted = admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
         let actual_atoms: Names = admitted.atoms().iter().map(name).collect();
         // A positive join with no possible rows may erase a vacuous source rule;
         // compare it separately through full models, not a fabricated DAG carrier.
@@ -255,7 +249,7 @@ fn complete_signed_models_match_handwritten_theories_and_explicit_expansions() {
     for case in cases() {
         let predicted = expected(&case["models"]);
         for field in ["source", "expanded"] {
-            let admitted = input(case[field].as_str().unwrap()).unwrap();
+            let admitted = admit(case[field].as_str().unwrap(), &FormulaLimits::default()).unwrap();
             assert_eq!(complete(&admitted), predicted, "{}: {field}", case["name"]);
             assert_eq!(
                 admitted.formula_origins().len(),
@@ -293,7 +287,8 @@ fn fresh_clingo_preserves_every_complete_negative_head_contract() {
 fn singleton_heads_preserve_original_formulas() {
     for case in singleton_cases() {
         let source = case["source"].as_str().unwrap();
-        let admitted = input(source).unwrap_or_else(|error| panic!("{source}: {error}"));
+        let admitted = admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
         assert_eq!(
             admitted.atoms().iter().map(name).collect::<Names>(),
             names(&case["atoms"])
@@ -313,7 +308,7 @@ fn singleton_heads_preserve_original_formulas() {
 fn singleton_heads_preserve_frozen_formulas() {
     for case in singleton_cases() {
         let source = case["source"].as_str().unwrap();
-        let admitted = input(source).unwrap();
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
         for mask in 0..1_usize << admitted.atoms().len() {
             let model = selected(&admitted, mask);
             // Added double-negated support guards impose only the outer test.
@@ -341,7 +336,7 @@ fn singleton_heads_preserve_complete_models() {
     let mut records = 0;
     for case in &cases {
         let source = case["source"].as_str().unwrap();
-        let actual = complete(&input(source).unwrap());
+        let actual = complete(&admit(source, &FormulaLimits::default()).unwrap());
         assert_eq!(actual, expected(&case["models"]), "{source}");
         records += actual.len();
     }
@@ -375,7 +370,10 @@ fn negative_heads_do_not_bind_variables() {
         "d(1).not a(Y):-d(X).",
     ] {
         assert!(
-            matches!(input(source), Err(FormulaFailure::UnsafeVariable { .. })),
+            matches!(
+                admit(source, &FormulaLimits::default()),
+                Err(FormulaFailure::UnsafeVariable { .. })
+            ),
             "{source}"
         );
     }
@@ -385,7 +383,7 @@ fn negative_heads_do_not_bind_variables() {
 fn conditional_negative_disjuncts_require_eligibility() {
     let source = "not a:b|c.";
     assert_eq!(
-        complete(&input(source).unwrap()),
+        complete(&admit(source, &FormulaLimits::default()).unwrap()),
         Models::from([Names::from(["c".into()])])
     );
 }
@@ -413,7 +411,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
         "d(1).not a(X+1):-d(X).",
         "not not p(1..2).",
     ] {
-        let admitted = input(source).unwrap();
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
         let mut limits = FormulaLimits::default();
         limits.theory.max_nodes = admitted.theory().nodes().len();
         assert_eq!(

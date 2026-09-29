@@ -4,22 +4,9 @@ use crate::support::finite_bindings as reference;
 
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula,
-};
+use zetesis_reference_support::{admit, formula};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
-fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        *limits,
-    )
-}
-fn input(source: &str) -> AdmittedFormula {
-    limited(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn expected(records: &[&[&str]]) -> Models {
     records
         .iter()
@@ -49,14 +36,14 @@ const CASES: &[(&str, &[&[&str]])] = &[
 #[test]
 fn complete_families_preserve_conditional_eligibility() {
     for &(source, records) in CASES {
-        assert_eq!(native(&input(source)), expected(records), "{source}");
+        assert_eq!(native(&formula(source)), expected(records), "{source}");
     }
 }
 
 #[test]
 fn membership_matches_independent_subset_enumeration() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -64,7 +51,7 @@ fn membership_matches_independent_subset_enumeration() {
 #[test]
 fn original_occurrences_keep_their_source() {
     let source = "{q}.a:q;b.";
-    let admitted = input(source);
+    let admitted = formula(source);
     assert_eq!(admitted.source().text(), source);
     assert!(!admitted.formula_origins().is_empty());
     for origins in admitted.formula_origins() {
@@ -101,7 +88,7 @@ fn original_sources_match_clingo_full_models() {
             }
         }
         assert_eq!(actual, expected(records), "{source}");
-        assert_eq!(native(&input(source)), actual, "{source}");
+        assert_eq!(native(&formula(source)), actual, "{source}");
         models += actual.len();
     }
     println!("complete_sources={} full_models={models}", CASES.len());
@@ -155,7 +142,7 @@ fn conditional_instances_preserve_every_frozen_world() {
                 "{{a;b;q}}.{}a:{condition_source};b.",
                 "not ".repeat(head_sign)
             );
-            let admitted = input(&source);
+            let admitted = formula(&source);
             let actual_names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
             assert_eq!(
                 actual_names
@@ -207,7 +194,7 @@ fn conditional_instances_preserve_every_frozen_world() {
 fn private_head_slots_do_not_capture_outer_suffixes() {
     let source = "d(1..2).{p}.u(1..2)|h(X+10):d(X),X=N+1:-N=#count{1:p}.";
     let expanded = "d(1..2).{p}.u(1)|h(X+10):d(X),X=1:-0=#count{1:p}.u(2)|h(X+10):d(X),X=1:-0=#count{1:p}.u(1)|h(X+10):d(X),X=2:-1=#count{1:p}.u(2)|h(X+10):d(X),X=2:-1=#count{1:p}.";
-    assert_eq!(native(&input(source)), native(&input(expanded)));
+    assert_eq!(native(&formula(source)), native(&formula(expanded)));
 }
 
 #[test]
@@ -215,7 +202,7 @@ fn local_conditions_cannot_bind_the_outer_rule() {
     for source in ["a(X):q(X);b(X).", "a(X):not q(X);b."] {
         assert!(
             matches!(
-                limited(source, &FormulaLimits::default()),
+                admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -226,7 +213,7 @@ fn local_conditions_cannot_bind_the_outer_rule() {
 #[test]
 fn local_instance_limit_is_inclusive() {
     let source = "d(1..3).a(X):d(X).";
-    let admitted = limited(
+    let admitted = admit(
         source,
         &FormulaLimits {
             max_disjunction_elements: 3,
@@ -234,9 +221,9 @@ fn local_instance_limit_is_inclusive() {
         },
     )
     .unwrap();
-    assert_eq!(native(&admitted), native(&input(source)));
+    assert_eq!(native(&admitted), native(&formula(source)));
     assert!(matches!(
-        limited(
+        admit(
             source,
             &FormulaLimits {
                 max_disjunction_elements: 2,
@@ -258,7 +245,7 @@ fn work_refusal_never_publishes_a_prefix() {
     let mut lower = 0;
     let mut upper = 16_384;
     let attempt = |work| {
-        limited(
+        admit(
             source,
             &FormulaLimits {
                 max_work: work,
@@ -276,7 +263,7 @@ fn work_refusal_never_publishes_a_prefix() {
         }
     }
     assert!(lower > 0);
-    assert_eq!(native(&attempt(lower).unwrap()), native(&input(source)));
+    assert_eq!(native(&attempt(lower).unwrap()), native(&formula(source)));
     assert!(
         matches!(attempt(lower-1), Err(FormulaFailure::Limit { resource: FormulaResource::Work, limit, observed, .. })
         if limit == u128::from(lower-1) && observed == u128::from(lower))

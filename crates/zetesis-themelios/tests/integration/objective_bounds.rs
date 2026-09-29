@@ -7,24 +7,14 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
+use zetesis_reference_support::formula;
 use zetesis_sat::StableModels;
+use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn score(input: &AdmittedFormula, mask: usize) -> Score {
     let model = Model::from_positions(
         input.atom_catalog(),
@@ -52,7 +42,7 @@ fn plan(input: &AdmittedFormula) -> ObjectivePlan {
     .expect("complete eligibility plan")
 }
 fn compare_all(source: &str) {
-    let input = input(source);
+    let input = formula(source);
     assert!(input.atoms().len() <= 8);
     let plan = plan(&input);
     let scores: Vec<_> = (0..1 << input.atoms().len())
@@ -139,7 +129,7 @@ fn constant_score(priority: i32, weight: i32) -> Score {
 }
 #[test]
 fn foreign_priority_slots_obey_missing_zero_comparison() {
-    let input = input("{a}.#minimize{2@3,k:a}.");
+    let input = formula("{a}.#minimize{2@3,k:a}.");
     let plan = plan(&input);
     for incumbent in [
         constant_score(4, -1),
@@ -177,7 +167,7 @@ fn foreign_priority_slots_obey_missing_zero_comparison() {
 
 #[test]
 fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
-    let input = input("1{a;b}1.p:-p.#minimize{1@0,k:a;1@0,k:b}.");
+    let input = formula("1{a;b}1.p:-p.#minimize{1@0,k:a;1@0,k:b}.");
     let original_nodes = input.theory().nodes().to_vec();
     let mut baseline = StableModels::new(
         input.theory(),
@@ -234,7 +224,7 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
 
 #[test]
 fn optional_plan_limits_are_typed() {
-    let input = input("{p(1);p(2)}.#minimize{-1@0,X:p(X)}.");
+    let input = formula("{p(1);p(2)}.#minimize{-1@0,X:p(X)}.");
     for (limits, resource) in [
         (
             ObjectivePlanLimits {
@@ -314,7 +304,7 @@ fn optional_plan_limits_are_typed() {
 
 #[test]
 fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
-    let input = input("{p(1);p(2)}.#minimize{-1@0,X:p(X)}.");
+    let input = formula("{p(1);p(2)}.#minimize{-1@0,X:p(X)}.");
     let plan = plan(&input);
     let incumbent = score(&input, 0);
     let limits = ObjectiveBoundLimits {
@@ -369,7 +359,7 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
 
 #[test]
 fn cumulative_accounting_respects_inclusive_work_limits_on_every_return() {
-    let input = input("{a;b}.#minimize{2@3,k:a;1@0,k:b}.");
+    let input = formula("{a;b}.#minimize{2@3,k:a;1@0,k:b}.");
     let complete_plan = plan(&input);
     let plan_work = complete_plan.statistics().work;
     for ceiling in [0, 1, plan_work - 1, plan_work] {

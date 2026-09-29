@@ -2,20 +2,11 @@
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
-fn input(source: &str) -> zetesis_themelios::AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn shown(source: &str) -> Vec<String> {
-    let input = input(source);
+    let input = formula(source);
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input
         .metadata()
@@ -51,7 +42,7 @@ fn one_invertible_occurrence_supplies_one_checked_scalar() {
 }
 #[test]
 fn authored_arithmetic_errors_remain_errors_after_inverse_capture() {
-    let input = input("#show ok.#show X:X+(1/0)=2.");
+    let input = formula("#show ok.#show X:X+(1/0)=2.");
     let error = input
         .metadata()
         .observations()
@@ -118,7 +109,7 @@ fn numeric_aggregate_mismatch_keeps_wide_measures() {
 }
 #[test]
 fn numeric_aggregate_mismatch_preserves_authored_errors() {
-    let input = input("#show ok.#show X:f(X)=#sum{1/0,a}.");
+    let input = formula("#show ok.#show X:f(X)=#sum{1/0,a}.");
     let error = input
         .metadata()
         .observations()
@@ -135,7 +126,7 @@ fn numeric_aggregate_mismatch_preserves_authored_errors() {
 }
 #[test]
 fn inverse_work_admission_is_inclusive() {
-    let input = input("#show ok.#show X:(f(X+1);g(X+1))=f(2).");
+    let input = formula("#show ok.#show X:(f(X+1);g(X+1))=f(2).");
     let evaluate = |max_work| {
         input.metadata().observations().evaluate(
             &Model::default(),

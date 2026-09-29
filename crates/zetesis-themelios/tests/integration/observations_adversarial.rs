@@ -11,9 +11,8 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_reference_support::formula;
+use zetesis_themelios::AdmittedFormula;
 
 type Record = (Vec<String>, Option<Vec<i64>>);
 
@@ -54,18 +53,8 @@ fn expected_source(index: usize) -> String {
     source
 }
 
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}\n{error}"))
-}
-
 fn basis() -> (AdmittedFormula, Vec<Model>) {
-    let input = admit(BASE);
+    let input = formula(BASE);
     assert_eq!(input.atoms().len(), 9);
     let mut models = Vec::new();
     for bits in 0..1_usize << input.atoms().len() {
@@ -198,7 +187,7 @@ fn generated_joins_preserve_theory_and_complete_observation_multisets() {
         let source = case["source"].as_str().unwrap();
         assert_eq!(source, expected_source(index), "{}", case["name"]);
         assert!(sources.insert(source));
-        let input = admit(source);
+        let input = formula(source);
         assert_eq!(input.atoms(), base.atoms(), "{}", case["name"]);
         assert_eq!(input.theory().nodes(), base.theory().nodes());
         assert_eq!(input.theory().roots(), base.theory().roots());
@@ -249,7 +238,7 @@ fn fresh_clingo_matches_recorded_and_native_complete_display_multisets() {
     assert_eq!(cases.len(), 195);
     for case in cases {
         let source = case["source"].as_str().unwrap();
-        let input = admit(source);
+        let input = formula(source);
         assert_eq!(input.atoms(), base.atoms());
         assert_eq!(input.theory().nodes(), base.theory().nodes());
         assert_eq!(input.theory().roots(), base.theory().roots());

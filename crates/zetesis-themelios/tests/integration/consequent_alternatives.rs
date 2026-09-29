@@ -4,6 +4,7 @@ use crate::support::upstream;
 use reference::{Models, atom_text, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, FormulaFailure,
     FormulaLimits, admit_formula, prepare_formula,
@@ -20,14 +21,6 @@ fn limited(
         expansion,
         *limits,
     )
-}
-fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
     upstream::corpus()
@@ -239,7 +232,7 @@ const CASES: &[(&str, &str)] = &[
 fn conjunction_case_matches_retained_models() {
     let case = corpus_case();
     let source = case.source();
-    let actual = native(&input(source));
+    let actual = native(&formula(source));
     assert_eq!(actual.len(), 4);
     assert_eq!(actual, corpus_models());
 }
@@ -247,8 +240,8 @@ fn conjunction_case_matches_retained_models() {
 #[test]
 fn finite_substitutions_preserve_models() {
     for &(source, expanded) in CASES {
-        let actual = input(source);
-        assert_eq!(native(&actual), native(&input(expanded)), "{source}");
+        let actual = formula(source);
+        assert_eq!(native(&actual), native(&formula(expanded)), "{source}");
         assert_eq!(native(&actual), exhaustive(&actual), "{source}");
     }
 }
@@ -343,7 +336,7 @@ fn consequent_rows_preserve_frozen_formulas() {
         {
             let source =
                 format!("{{p(1..3);c(1..2)}}.q:-{sign}p(X;X+1):X=1..2,{condition_sign}c(X).");
-            let program = input(&source);
+            let program = formula(&source);
             let mut rows = Formula::truth();
             for x in [1, 2] {
                 let consequent = Formula::Or(
@@ -391,7 +384,7 @@ fn anonymous_witnesses_are_negated_after_projection() {
         for condition_sign in ["", "not ", "not not "] {
             let source =
                 format!("{{p(1,1);p(2,1);p(1,2);c}}.q:-{sign}p(_,(1;2)):{condition_sign}c.");
-            let program = input(&source);
+            let program = formula(&source);
             let witnesses = Formula::Or(
                 Box::new(Formula::atom("p(1,1)")),
                 Box::new(Formula::atom("p(2,1)")),
@@ -415,7 +408,7 @@ fn empty_witnesses_preserve_signed_false() {
     for (polarity, sign) in [(1, "not "), (2, "not not ")] {
         let source = format!("{{c}}.q:-{sign}p(_):c.");
         compare_root(
-            &input(&source),
+            &formula(&source),
             &Formula::implies(
                 Formula::implies(Formula::atom("c"), Formula::False.sign(polarity)),
                 Formula::atom("q"),
@@ -439,7 +432,7 @@ fn structured_witnesses_preserve_frozen_projection() {
                 Box::new(Formula::atom("p(f(1,2))").sign(polarity)),
             );
             compare_root(
-                &input(&source),
+                &formula(&source),
                 &Formula::implies(
                     Formula::implies(Formula::atom("c"), alternatives),
                     Formula::atom("q"),
@@ -500,14 +493,14 @@ fn absent_witnesses_do_not_hide_value_errors() {
 #[test]
 fn empty_condition_rows_defer_projection_values() {
     assert_eq!(
-        native(&input("q:-not p(f(_,1/X)):X=2..1.")),
-        native(&input("q."))
+        native(&formula("q:-not p(f(_,1/X)):X=2..1.")),
+        native(&formula("q."))
     );
 }
 
 #[test]
 fn positive_witnesses_preserve_frozen_disjunction() {
-    let program = input("{p(1..2)}.q:-p(X):#true.");
+    let program = formula("{p(1..2)}.q:-p(X):#true.");
     let specified = Formula::implies(
         Formula::Or(
             Box::new(Formula::atom("p(1)")),
@@ -521,7 +514,7 @@ fn positive_witnesses_preserve_frozen_disjunction() {
 #[test]
 fn empty_alternatives_preserve_frozen_false() {
     for sign in ["", "not ", "not not "] {
-        let program = input(&format!("{{p(1)}}.q:-{sign}p(2..1):#true."));
+        let program = formula(&format!("{{p(1)}}.q:-{sign}p(2..1):#true."));
         let specified = Formula::implies(Formula::False, Formula::atom("q"));
         assert_eq!(compare_root(&program, &specified), 16);
     }
@@ -595,7 +588,7 @@ fn negative_consequents_require_bound_inputs() {
 #[test]
 fn empty_conditions_defer_value_errors() {
     assert_eq!(
-        native(&input("q:-p((1..2)/X):X=1..0.")),
+        native(&formula("q:-p((1..2)/X):X=1..0.")),
         BTreeSet::from([BTreeSet::from(["q".to_owned()])])
     );
 }
@@ -633,7 +626,7 @@ fn preparation_identifies_dependency_projection() {
         AnalysisBasis::DependencyProjection
     );
     assert_eq!(
-        input("p(1).q:-p(X):#true.").analysis_basis(),
+        formula("p(1).q:-p(X):#true.").analysis_basis(),
         AnalysisBasis::NormalizedProgram
     );
 }
@@ -666,7 +659,7 @@ fn complete_sources_match_clingo() {
             usize::try_from(output["Models"]["Number"].as_u64().unwrap()).unwrap(),
             expected.len()
         );
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
         total += expected.len();
     }
     println!("complete_models={total}");
@@ -731,7 +724,7 @@ fn witness_projection_obeys_the_work_ceiling() {
             )
             .unwrap()
         ),
-        native(&input(PROJECTED))
+        native(&formula(PROJECTED))
     );
 }
 
@@ -774,7 +767,7 @@ fn witness_projection_obeys_the_substitution_ceiling() {
             )
             .unwrap()
         ),
-        native(&input(PROJECTED))
+        native(&formula(PROJECTED))
     );
 }
 
@@ -819,7 +812,7 @@ fn witness_projection_obeys_the_byte_ceiling() {
             )
             .unwrap()
         ),
-        native(&input(PROJECTED))
+        native(&formula(PROJECTED))
     );
 }
 
@@ -865,7 +858,7 @@ fn anonymous_inspections_obey_the_term_work_ceiling() {
             )
             .unwrap()
         ),
-        native(&input("q."))
+        native(&formula("q."))
     );
 }
 
@@ -898,7 +891,7 @@ fn private_witness_slots_obey_the_variable_ceiling() {
             )
             .unwrap()
         ),
-        native(&input("q."))
+        native(&formula("q."))
     );
 }
 
@@ -918,7 +911,7 @@ fn local_substitution_limit_is_inclusive() {
     assert!(
         matches!(run(cap - 1), Err(FormulaFailure::Limit { resource: zetesis_themelios::FormulaResource::Substitutions, observed, limit, .. }) if observed == limit + 1)
     );
-    assert_eq!(native(&run(cap).unwrap()), native(&input(BOUNDED)));
+    assert_eq!(native(&run(cap).unwrap()), native(&formula(BOUNDED)));
 }
 
 #[test]
@@ -1037,7 +1030,7 @@ fn dependency_projection_preserves_edge_modes() {
         ("not not ", DependencyKind::Negative),
     ] {
         let source = format!("q:-{text}-p(1;1,2):d(1),not c.");
-        let program = input(&source);
+        let program = formula(&source);
         assert_eq!(
             program.analysis_basis(),
             AnalysisBasis::DependencyProjection
@@ -1077,7 +1070,7 @@ fn projected_alternatives_retain_parsed_atom_origins() {
         provenance::Origin,
     };
     let source = "q:-not -p(1;1,2):d(1).";
-    let program = input(source);
+    let program = formula(source);
     let mut alternatives = 0;
     for statement in program.analyzed_program().statements() {
         assert!(
@@ -1140,10 +1133,10 @@ fn prepared_bundle_retains_analysis_basis() {
 
 #[test]
 fn outer_pools_preserve_local_alternatives() {
-    let actual = input("{p(1..2)}.q(a;b):-p(1;2):#true.");
+    let actual = formula("{p(1..2)}.q(a;b):-p(1;2):#true.");
     assert_eq!(
         native(&actual),
-        native(&input(
+        native(&formula(
             "{p(1..2)}.q(a):-p(1).q(a):-p(2).q(b):-p(1).q(b):-p(2)."
         ))
     );
@@ -1180,7 +1173,7 @@ proptest::proptest! {
         let source = format!("{choice}q:-p({coefficient}*(X..X+{width})+1):X={lower}.");
         let mut expanded = choice;
         for atom in &atoms { write!(expanded, "q:-{atom}.").unwrap(); }
-        proptest::prop_assert_eq!(native(&input(&source)), native(&input(&expanded)));
+        proptest::prop_assert_eq!(native(&formula(&source)), native(&formula(&expanded)));
     }
 }
 
@@ -1191,7 +1184,7 @@ fn conjunction_matches_bounded_completion() {
         BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Limits, StableModels,
     };
     let case = corpus_case();
-    let admitted = input(case.source());
+    let admitted = formula(case.source());
     let expected = corpus_models();
     assert_eq!(expected.len(), 4);
     for workers in [1, 2] {

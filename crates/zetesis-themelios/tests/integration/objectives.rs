@@ -6,22 +6,14 @@ use std::path::PathBuf;
 use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
+use zetesis_reference_support::formula;
 use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
+    admit_extended, admit_formula,
 };
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn scored(
     theory: &zetesis_ferraris::Theory,
     atoms: &AtomCatalog,
@@ -54,7 +46,7 @@ fn scored(
     result
 }
 fn scores(source: &str) -> Vec<Vec<(i32, i64)>> {
-    let admitted = input(source);
+    let admitted = formula(source);
     let mut scores: Vec<_> = scored(
         admitted.theory(),
         admitted.atom_catalog(),
@@ -203,7 +195,7 @@ fn repeated_enabled_tuples_coalesce_across_source_elements_and_statements() {
 
 #[test]
 fn merged_objective_templates_keep_every_original_declaration_span() {
-    let admitted = input("a. #minimize{1:a}. #minimize{1:a}.");
+    let admitted = formula("a. #minimize{1:a}. #minimize{1:a}.");
     assert_eq!(admitted.objectives().templates().len(), 1);
     assert_eq!(admitted.objective_declarations().len(), 2);
     let spans = &admitted.objective_origins()[0];
@@ -253,12 +245,12 @@ fn objective_declarations_survive_while_unreachable_priority_slots_disappear() {
         "a :- a. #minimize{3@9,x:a}.",
         "d(1). #minimize{3@7,x:d(X),X!=1}.",
     ] {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert!(!admitted.objectives().is_present(), "{source}");
         assert!(admitted.objective_origins().is_empty());
         assert_eq!(admitted.objective_declarations().len(), 1);
     }
-    let admitted = input("a. #minimize{0:a;7@2:b}.");
+    let admitted = formula("a. #minimize{0:a;7@2:b}.");
     assert!(admitted.objectives().is_present());
     assert_eq!(admitted.objectives().priorities(), &[0]);
 }
@@ -269,7 +261,7 @@ fn objective_conditions_bind_scalars_without_adding_logical_support() {
         scores("d(a,2;b,5). {p(X)} :- d(X,C). #minimize{C,X:p(X),d(X,C)}."),
         vec![vec![(0, 0)], vec![(0, 2)], vec![(0, 5)], vec![(0, 7)]]
     );
-    let admitted = input("a :- a. #minimize{1:a}.");
+    let admitted = formula("a :- a. #minimize{1:a}.");
     assert_eq!(
         scored(
             admitted.theory(),

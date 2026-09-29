@@ -1,20 +1,12 @@
 //! Source declarations stay separate from completed fixed-domain projection.
 
 use zetesis_core::{Atom, Predicate, Value};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     SourceDirective, admit_formula,
 };
 
-fn admit(source: &str) -> zetesis_themelios::AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn atom(name: &str, value: i32) -> Atom {
     Atom::new(Predicate::new(name, 1).unwrap(), vec![Value::Number(value)]).unwrap()
 }
@@ -25,8 +17,8 @@ fn selected_pair() -> (
 ) {
     let source = "p(1).{hidden}.#minimize{1@2:hidden}.";
     (
-        admit(source),
-        admit(&format!("{source} #project p/1. #project p(X):p(X).")),
+        formula(source),
+        formula(&format!("{source} #project p/1. #project p(X):p(X).")),
     )
 }
 
@@ -109,13 +101,17 @@ fn source_activity_is_fixed_before_any_answer_is_selected() {
         ("q.{p}.#project p:not q.", 0),
         ("{p}.#project p:2=#count{1}.", 0),
     ] {
-        assert_eq!(admit(source).projection().atoms().len(), count, "{source}");
+        assert_eq!(
+            formula(source).projection().atoms().len(),
+            count,
+            "{source}"
+        );
     }
 }
 
 #[test]
 fn pooled_project_declarations_union_into_the_same_fixed_domain() {
-    let input = admit("p(1;2).#project p((1;2;3)).#project p/1.");
+    let input = formula("p(1;2).#project p((1;2;3)).#project p/1.");
     assert_eq!(
         input.projection().atoms().iter().collect::<Vec<_>>(),
         &[atom("p", 1), atom("p", 2)]
@@ -155,7 +151,7 @@ fn projection_admission_refuses_the_complete_owner_at_its_own_limit() {
             "{error}"
         );
     }
-    assert_eq!(admit(source).projection().atoms().len(), 2);
+    assert_eq!(formula(source).projection().atoms().len(), 2);
 }
 
 #[test]
@@ -182,7 +178,7 @@ fn declaration_bodies_count_authored_occurrences_before_deduplication() {
         }))
     ));
     assert_eq!(
-        admit(source)
+        formula(source)
             .projection()
             .atoms()
             .iter()
@@ -198,7 +194,7 @@ fn project_constants_use_a_separate_domain_allowance() {
         ..FormulaLimits::default()
     };
     let source = "p(1).";
-    let original = admit(source);
+    let original = formula(source);
     let selected = admit_formula(
         format!("{source}#project q((2;3))."),
         AdmissionOptions::default(),
@@ -215,8 +211,8 @@ fn project_constants_use_a_separate_domain_allowance() {
 
 #[test]
 fn project_pools_preserve_the_logical_analysis() {
-    let original = admit("p(1).");
-    let selected = admit("p(1).#project q((2;3)).");
+    let original = formula("p(1).");
+    let selected = formula("p(1).#project q((2;3)).");
     assert_eq!(selected.analysis_basis(), original.analysis_basis());
     assert_eq!(selected.analyzed_program(), original.analyzed_program());
 }

@@ -1,5 +1,6 @@
 //! Rich source activity shares scoped lowering and preserves independent literals.
 
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit_formula,
@@ -14,10 +15,6 @@ fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Formul
     )
 }
 
-fn input(source: &str) -> AdmittedFormula {
-    admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
 #[test]
 fn constant_aggregate_producers_exclude_negative_domains() {
     for producer in [
@@ -26,7 +23,7 @@ fn constant_aggregate_producers_exclude_negative_domains() {
         "q:-2=#min{2}.",
         "q:-2=#max{2}.",
     ] {
-        let admitted = input(&format!("{producer}{{p}}.#project p:not q."));
+        let admitted = formula(&format!("{producer}{{p}}.#project p:not q."));
         assert!(admitted.projection().is_explicit());
         assert!(admitted.projection().atoms().is_empty(), "{producer}");
     }
@@ -35,7 +32,7 @@ fn constant_aggregate_producers_exclude_negative_domains() {
 #[test]
 fn empty_local_obligations_can_establish_source_facts() {
     for producer in ["q:-r(X):missing(X).", "q:-not r(_)."] {
-        let admitted = input(&format!("{producer}{{p}}.#project p:not q."));
+        let admitted = formula(&format!("{producer}{{p}}.#project p:not q."));
         assert!(admitted.projection().atoms().is_empty(), "{producer}");
     }
 }
@@ -43,7 +40,7 @@ fn empty_local_obligations_can_establish_source_facts() {
 #[test]
 fn contradictory_optional_guards_keep_the_fixed_domain() {
     for program in ["{p;q}.", "{p;r}.q:-1=#count{1:r}."] {
-        let admitted = input(&format!("{program}#project p:q,not q."));
+        let admitted = formula(&format!("{program}#project p:q,not q."));
         let domain = admitted.projection().atoms();
         assert_eq!(domain.len(), 1, "{program}");
         assert_eq!(domain.at(0).unwrap().predicate().name(), "p");
@@ -54,8 +51,8 @@ fn contradictory_optional_guards_keep_the_fixed_domain() {
 #[test]
 fn source_activity_keeps_the_original_formula_owner() {
     let source = "{p;r}.q:-1=#count{1:r}.";
-    let original = input(source);
-    let observed = input(&format!("{source}#project p:not q."));
+    let original = formula(source);
+    let observed = formula(&format!("{source}#project p:not q."));
     assert_eq!(original.atoms(), observed.atoms());
     assert_eq!(original.theory().nodes(), observed.theory().nodes());
     assert_eq!(original.theory().roots(), observed.theory().roots());
@@ -105,19 +102,19 @@ fn rich_activity_work_refusal_is_inclusive() {
 
 #[test]
 fn a_fact_remains_required_in_its_positive_cycle() {
-    let admitted = input("q.q:-q.{p}.#project p:not q.");
+    let admitted = formula("q.q:-q.{p}.#project p:not q.");
     assert!(admitted.projection().atoms().is_empty());
 }
 
 #[test]
 fn unsupported_positive_cycles_have_no_source_atoms() {
-    let admitted = input("q:-r.r:-q.{p}.#project p:q.");
+    let admitted = formula("q:-r.r:-q.{p}.#project p:q.");
     assert!(admitted.projection().atoms().is_empty());
 }
 
 #[test]
 fn negative_cycles_remain_optional_without_correlation() {
-    let admitted = input("q:-not r.r:-not q.{p}.#project p:q,not q.");
+    let admitted = formula("q:-not r.r:-not q.{p}.#project p:q,not q.");
     let domain = admitted.projection().atoms();
     assert_eq!(domain.len(), 1);
     assert_eq!(domain.at(0).unwrap().predicate().name(), "p");
@@ -125,12 +122,12 @@ fn negative_cycles_remain_optional_without_correlation() {
 
 #[test]
 fn complete_absence_can_establish_required_negation() {
-    let admitted = input("q:-r.r:-q.s:-not q.{p}.#project p:not s.");
+    let admitted = formula("q:-r.r:-q.s:-not q.{p}.#project p:not s.");
     assert!(admitted.projection().atoms().is_empty());
 }
 
 #[test]
 fn required_cycle_truth_can_eliminate_a_negative_producer() {
-    let admitted = input("q.q:-q.r:-not q.{p}.#project p:r.");
+    let admitted = formula("q.q:-q.r:-not q.{p}.#project p:r.");
     assert!(admitted.projection().atoms().is_empty());
 }

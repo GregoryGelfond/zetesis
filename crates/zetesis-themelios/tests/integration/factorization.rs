@@ -11,22 +11,13 @@ use themelios_base::span::Location;
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
     admit_formula_with_grounding_observer,
 };
-
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 
 fn interpretation(
     input: &AdmittedFormula,
@@ -45,8 +36,8 @@ fn interpretation(
 }
 
 fn equivalent(left: &str, right: &str) {
-    let left = input(left);
-    let right = input(right);
+    let left = formula(left);
+    let right = formula(right);
     let universe: BTreeSet<_> = left.atoms().iter().collect();
     assert_eq!(universe, right.atoms().iter().collect());
     assert!(universe.len() <= 6);
@@ -176,7 +167,7 @@ fn factored_projections_keep_constants_and_independent_bindings_in_each_componen
                     })
                     .collect();
                 assert_eq!(expected.len(), 16, "independent optional blockers");
-                assert_eq!(stable(&input(&source)), expected, "{source}");
+                assert_eq!(stable(&formula(&source)), expected, "{source}");
             }
         }
     }
@@ -184,8 +175,8 @@ fn factored_projections_keep_constants_and_independent_bindings_in_each_componen
 
 #[test]
 fn head_constants_repetition_other_producers_and_negative_projection_remain_exact() {
-    let lifted = input("d(1;2). e(1;2). h(3,3). {p(1,0)}. h(X,X):-d(X),e(Y),not p(X,_).");
-    let expanded = input(
+    let lifted = formula("d(1;2). e(1;2). h(3,3). {p(1,0)}. h(X,X):-d(X),e(Y),not p(X,_).");
+    let expanded = formula(
         "d(1;2). e(1;2). h(3,3). {p(1,0)}. h(1,1):-d(1),e(1),not p(1,_). h(1,1):-d(1),e(2),not p(1,_). h(2,2):-d(2),e(1),not p(2,_). h(2,2):-d(2),e(2),not p(2,_).",
     );
     assert_eq!(stable(&lifted), stable(&expanded));
@@ -202,7 +193,7 @@ fn a_false_component_filter_excludes_the_substitution() {
         atom("a", vec![Value::Number(0)]),
         atom("b", vec![Value::Number(1)]),
     ])]);
-    assert_eq!(stable(&input(source)), expected);
+    assert_eq!(stable(&formula(source)), expected);
 }
 
 const CARTESIAN_SOURCE: &str = "a(1..40). b(1..40). h:-a(X),b(Y).";
@@ -255,13 +246,13 @@ fn factored_cartesian_bodies_visit_only_component_rows() {
     // the 40 + 40*40 row visits of a complete Cartesian join. The compact root
     // ceiling independently prevents publishing that Cartesian formula family.
     assert_eq!(visits.0.get(), 40 + 40);
-    assert_eq!(stable(&admitted), stable(&input("a(1..40).b(1..40).h.")));
+    assert_eq!(stable(&admitted), stable(&formula("a(1..40).b(1..40).h.")));
 }
 
 #[test]
 fn a_factored_root_retains_its_source_location() {
     let source = CARTESIAN_SOURCE;
-    let admitted = input(source);
+    let admitted = formula(source);
     assert!(admitted.formula_origins().iter().flatten().any(|location| {
         let span = location.span;
         &source[usize::try_from(span.start().get()).unwrap()

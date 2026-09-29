@@ -10,11 +10,11 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
+use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
 
-type Records = BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)>;
 struct Case {
     name: String,
     source: String,

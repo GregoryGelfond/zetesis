@@ -8,9 +8,10 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Model, Sign};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
+use zetesis_reference_support::{admit, canonical};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -25,39 +26,6 @@ fn cases() -> Vec<Json> {
         .as_array()
         .unwrap()
         .clone()
-}
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
-fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    if atom.values().is_empty() {
-        return format!("{sign}{}", atom.predicate().name());
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::String(string) => serde_json::to_string(string).unwrap(),
-            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
-        })
-        .collect();
-    format!("{sign}{}({})", atom.predicate().name(), values.join(","))
 }
 fn names(value: &Json) -> Names {
     value
@@ -136,7 +104,7 @@ fn interpretations(input: &AdmittedFormula) -> Vec<Interpretation> {
 fn projected(input: &AdmittedFormula, model: &Interpretation) -> Names {
     model
         .atoms()
-        .map(|i| name(input.atoms().at(i).unwrap()))
+        .map(|i| canonical(input.atoms().at(i).unwrap()))
         .collect()
 }
 
@@ -149,7 +117,7 @@ fn complete_models_match_manual_source_theories_and_recorded_clingo() {
         let label = case["name"].as_str().unwrap();
         let predicted = expected(&case["expected_stable_models"]);
         assert_eq!(manual_models(&case["manual_theory"]), predicted, "{label}");
-        let admitted = input(case["source"].as_str().unwrap())
+        let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{label}: {error}"));
         let mut search = StableModels::new(
             admitted.theory(),
@@ -199,7 +167,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
         .filter(|case| case["expected_native"] == "admit")
     {
         let label = case["name"].as_str().unwrap();
-        let admitted = input(case["source"].as_str().unwrap()).unwrap();
+        let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
         let manual = &case["manual_theory"];
         let all = interpretations(&admitted);
         for candidate in &all {
@@ -253,7 +221,7 @@ fn unrelated_objectives_preserve_presence_priorities_and_tuple_identity() {
         .iter()
         .filter(|case| case["expected_native"] == "admit" && !case["objective"].is_null())
     {
-        let admitted = input(case["source"].as_str().unwrap()).unwrap();
+        let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
         let mut search = StableModels::new(
             admitted.theory(),
             Limits::default(),
@@ -315,8 +283,8 @@ fn unsafe_disjunct_variables_remain_located_refusals() {
         .collect();
     assert_eq!(unsafe_cases.len(), 2);
     for case in unsafe_cases {
-        let error =
-            input(case["source"].as_str().unwrap()).expect_err(case["name"].as_str().unwrap());
+        let error = admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
+            .expect_err(case["name"].as_str().unwrap());
         assert!(!error.diagnostics().is_empty());
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
@@ -351,7 +319,7 @@ fn conditional_head_preserves_the_recorded_complete_family() {
         .unwrap();
     // Preserve the historical refusal label and raw reference. Current source
     // support is checked independently against this complete original family.
-    let admitted = input(case["source"].as_str().unwrap()).unwrap();
+    let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
     let mut search = StableModels::new(
         admitted.theory(),
         Limits::default(),
@@ -504,7 +472,7 @@ fn extremal_head_preserves_the_recorded_complete_family() {
         .find(|case| case["name"] == "infinite-head")
         .unwrap();
     // Keep the historical refusal label and raw clingo capture unchanged.
-    let admitted = input(case["source"].as_str().unwrap()).unwrap();
+    let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
     let mut search = StableModels::new(
         admitted.theory(),
         Limits::default(),

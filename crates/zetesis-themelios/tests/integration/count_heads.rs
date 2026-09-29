@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
-use zetesis_core::Sign;
 use zetesis_ferraris::{Node, Theory};
+use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -28,14 +28,6 @@ fn cases() -> Vec<Json> {
     );
     cases
 }
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    limited(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-}
 fn limited(
     source: &str,
     options: AdmissionOptions,
@@ -43,31 +35,6 @@ fn limited(
     limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(source.into(), options, expansion, *limits)
-}
-fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    if atom.values().is_empty() {
-        return format!("{sign}{}", atom.predicate().name());
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::String(string) => serde_json::to_string(string).unwrap(),
-            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
-        })
-        .collect();
-    format!("{sign}{}({})", atom.predicate().name(), values.join(","))
 }
 fn names(value: &Json) -> Names {
     value
@@ -106,7 +73,7 @@ fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
         .iter()
         .enumerate()
         .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, atom)| name(atom))
+        .map(|(_, atom)| canonical(atom))
         .collect()
 }
 fn complete(admitted: &AdmittedFormula) -> Models {
@@ -140,9 +107,13 @@ fn complete(admitted: &AdmittedFormula) -> Models {
 fn count_heads_preserve_stable_models() {
     assert_eq!(cases().len(), 46);
     for case in cases() {
-        let source = input(case["source"].as_str().unwrap())
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         assert_eq!(
             complete(&source),
             expected(&case["models"]),
@@ -161,7 +132,7 @@ fn count_heads_preserve_stable_models() {
 #[test]
 fn native_count_search_preserves_full_models() {
     for case in cases() {
-        let admitted = input(case["source"].as_str().unwrap()).unwrap();
+        let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
         let mut search = zetesis_sat::StableModels::new(
             admitted.theory(),
             zetesis_sat::Limits::default(),
@@ -175,7 +146,7 @@ fn native_count_search_preserves_full_models() {
                     model
                         .unwrap()
                         .atoms()
-                        .map(|index| name(admitted.atoms().at(index).unwrap()))
+                        .map(|index| canonical(admitted.atoms().at(index).unwrap()))
                         .collect()
                 )
             );
@@ -205,8 +176,12 @@ fn remap(
 fn source_expansions_preserve_every_original_and_frozen_pair() {
     let mut pairs = 0;
     for case in cases() {
-        let source = input(case["source"].as_str().unwrap()).unwrap();
-        let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
         assert_eq!(
             source.atoms().iter().collect::<BTreeSet<_>>(),
             expanded.atoms().iter().collect::<BTreeSet<_>>(),
@@ -318,7 +293,7 @@ fn count_bounds_preserve_frozen_formulas() {
         ("0#count{}0.", json!({"roots": []})),
         ("1#count{1:a}1:-a.", json!({"roots": []})),
     ] {
-        let admitted = input(source).unwrap();
+        let admitted = admit(source, &FormulaLimits::default()).unwrap();
         for outer in 0..1_usize << admitted.atoms().len() {
             let candidate = selected(&admitted, outer);
             let frozen = values(admitted.theory(), outer, None);
@@ -354,7 +329,7 @@ fn count_aliases_admit_complete_groups() {
         "1#count{1:a:b;1:d:c}1.b.c:-b.",
         "d(1).d(2).1#count{X:a:d(X)}1.",
     ] {
-        assert!(input(source).is_ok(), "{source}");
+        assert!(admit(source, &FormulaLimits::default()).is_ok(), "{source}");
     }
 }
 
@@ -384,7 +359,7 @@ fn tuples_and_derived_atoms_never_supply_safety() {
         "N#count{X:p(X):X=1..4}N.",
         "1#count{X:p(X):X=2..1,Y=Y}1.",
     ] {
-        let error = input(source).expect_err(source);
+        let error = admit(source, &FormulaLimits::default()).expect_err(source);
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
             "{source}: {error}"
@@ -466,7 +441,7 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
     ));
     assert_eq!(
         complete(&attempt(threshold).unwrap()),
-        complete(&input(source).unwrap())
+        complete(&admit(source, &FormulaLimits::default()).unwrap())
     );
 }
 
@@ -503,7 +478,7 @@ fn validation_limits(source: &str) {
         );
         assert_eq!(
             complete(&attempt(threshold).unwrap()),
-            complete(&input(source).unwrap())
+            complete(&admit(source, &FormulaLimits::default()).unwrap())
         );
         println!("source={source} inclusive_{resource:?}={threshold}");
     }

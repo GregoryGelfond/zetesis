@@ -3,21 +3,11 @@ use crate::support::finite_bindings as reference;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
-    prepare_formula,
+    AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
-
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
 // selects eligible substitutions; it supplies neither a premise nor an inverse.
@@ -126,14 +116,18 @@ const CASES: &[(&str, &str)] = &[
 #[test]
 fn models_match_explicit_substitution() {
     for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
+        assert_eq!(
+            native(&formula(source)),
+            native(&formula(expanded)),
+            "{source}"
+        );
     }
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -142,8 +136,8 @@ fn stability_matches_subset_enumeration() {
 fn frozen_truth_matches_explicit_substitution() {
     let mut pairs = 0;
     for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
+        let left = formula(source);
+        let right = formula(expanded);
         let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
         let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
         assert_eq!(
@@ -210,7 +204,7 @@ fn original_sources_match_clingo_full_models() {
             }
         }
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
         total += count;
     }
     println!("complete_sources={} full_models={total}", CASES.len());
@@ -300,8 +294,8 @@ fn local_inputs_do_not_make_an_outer_head_safe() {
 #[test]
 fn aggregate_proposals_must_match_captured_arguments() {
     assert_eq!(
-        native(&input("p(2).q(N):-N=#count{},p(N+1).")),
-        native(&input("p(2)."))
+        native(&formula("p(2).q(N):-N=#count{},p(N+1).")),
+        native(&formula("p(2)."))
     );
 }
 
@@ -336,7 +330,7 @@ fn undefined_arithmetic_requires_a_complete_row() {
 fn late_mismatch_preserves_the_next_row() {
     let source = "p(f(1,1),3).p(f(2,2),3).q(X):-p(f(X,X),X+1).";
     assert_eq!(
-        native(&input(source)),
+        native(&formula(source)),
         Models::from([BTreeSet::from([
             "p(f(1,1),3)".into(),
             "p(f(2,2),3)".into(),
@@ -355,7 +349,10 @@ fn prepared_models_match_source_admission() {
         FormulaLimits::default(),
     )
     .unwrap();
-    assert_eq!(native(&prepared.ground().unwrap()), native(&input(source)));
+    assert_eq!(
+        native(&prepared.ground().unwrap()),
+        native(&formula(source))
+    );
 }
 
 #[test]
@@ -364,7 +361,7 @@ fn analysis_retains_source_arithmetic() {
         program::{BodyElement, LiteralInner, Statement},
         term::Term,
     };
-    let admitted = input("d(1).p(2).q(X):-p(X+1),d(X).");
+    let admitted = formula("d(1).p(2).q(X):-p(X+1),d(X).");
     assert_eq!(admitted.analysis_basis(), AnalysisBasis::NormalizedProgram);
     assert!(admitted.analyzed_program().statements().any(|statement| {
         let Statement::Rule(rule) = statement.get() else {
@@ -386,7 +383,7 @@ fn analysis_retains_source_arithmetic() {
 
 #[test]
 fn captured_rules_retain_source_origins() {
-    let admitted = input("d(1).p(2).q(X):-p(X+1),d(X).");
+    let admitted = formula("d(1).p(2).q(X):-p(X+1),d(X).");
     assert!(
         admitted
             .formula_origins()
@@ -464,7 +461,7 @@ fn empty_support_does_not_erase_expression_bytes() {
 #[test]
 fn work_prefixes_refuse_until_complete_admission() {
     let source = "d(1).p(2).q(X):-p(X+1),d(X).";
-    let expected = native(&input(source));
+    let expected = native(&formula(source));
     // The bounded search checks every interrupted prefix, including comparison
     // readiness/evaluation and final formula emission; no prefix is an answer.
     for cap in 0..4096 {
@@ -513,7 +510,7 @@ proptest::proptest! {
             expected.insert(atom);
             if b == a + 1 && !negative { expected.insert(format!("q({a})")); }
         }
-        proptest::prop_assert_eq!(native(&input(&source)),Models::from([expected]));
+        proptest::prop_assert_eq!(native(&formula(&source)),Models::from([expected]));
     }
     #[test]
     fn independent_inputs_select_exact_support_rows(domain in proptest::collection::vec(-3_i32..=3,0..5), rows in proptest::collection::vec(-3_i32..=3,0..5), reverse in proptest::bool::ANY) {
@@ -525,6 +522,6 @@ proptest::proptest! {
             if rows.contains(&(a+1)) { expected.insert(format!("q({a})")); }
         }
         for b in rows { write!(source,"p({b}).").unwrap(); expected.insert(format!("p({b})")); }
-        proptest::prop_assert_eq!(native(&input(&source)),Models::from([expected]));
+        proptest::prop_assert_eq!(native(&formula(&source)),Models::from([expected]));
     }
 }

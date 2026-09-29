@@ -2,6 +2,7 @@
 use crate::support::finite_bindings as reference;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -18,15 +19,6 @@ fn limited(
         expansion,
         *limits,
     )
-}
-
-fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 // Written finite substitutions retain full supporting atoms. A condition row
@@ -147,21 +139,25 @@ const NEGATIVE_ANONYMOUS_CASES: &[(&str, &[&str])] = &[
 fn anonymous_structure_preserves_negative_projection() {
     for &(source, atoms) in NEGATIVE_ANONYMOUS_CASES {
         let expected = Models::from([atoms.iter().map(|&atom| atom.to_owned()).collect()]);
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
     }
 }
 
 #[test]
 fn models_match_finite_substitution() {
     for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
+        assert_eq!(
+            native(&formula(source)),
+            native(&formula(expanded)),
+            "{source}"
+        );
     }
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -170,8 +166,8 @@ fn stability_matches_subset_enumeration() {
 fn frozen_truth_matches_finite_substitution() {
     let mut pairs = 0;
     for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
+        let left = formula(source);
+        let right = formula(expanded);
         let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
         let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
         assert_eq!(
@@ -224,7 +220,7 @@ fn conditional_truth_matches_quantified_witnesses() {
     let mut pairs = 0;
     for (polarity, sign) in ["", "not ", "not not "].into_iter().enumerate() {
         let source = format!("{{p(f(1));p(f(2));p(g(3));c}}.q:-p(f(X)):{sign}c.");
-        let admitted = input(&source);
+        let admitted = formula(&source);
         let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
         assert_eq!(names.len(), 5);
         let index = |name: &str| names.iter().position(|found| found == name).unwrap();
@@ -304,7 +300,7 @@ fn original_sources_match_clingo_full_models() {
             }
         }
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
         total += count;
     }
     println!(
@@ -393,7 +389,7 @@ fn witness_arithmetic_requires_bound_inputs() {
 #[test]
 fn absent_support_cannot_make_a_witness_true() {
     assert_eq!(
-        native(&input("q:-p(f(X)):#true.")),
+        native(&formula("q:-p(f(X)):#true.")),
         Models::from([BTreeSet::new()])
     );
 }
@@ -401,14 +397,14 @@ fn absent_support_cannot_make_a_witness_true() {
 #[test]
 fn a_witness_cannot_create_recursive_support() {
     assert_eq!(
-        native(&input("p(f(1)):-q.q:-p(f(X)):#true.")),
+        native(&formula("p(f(1)):-q.q:-p(f(X)):#true.")),
         Models::from([BTreeSet::new()])
     );
 }
 
 #[test]
 fn late_mismatch_cannot_poison_the_next_witness() {
-    let admitted = input("p(f(1,2),0).p(f(2,2),1).q:-p(f(X,X),_):#true.");
+    let admitted = formula("p(f(1,2),0).p(f(2,2),1).q:-p(f(X,X),_):#true.");
     assert_eq!(
         native(&admitted),
         Models::from([BTreeSet::from([
@@ -502,7 +498,7 @@ fn witness_nodes_obey_the_value_ceiling() {
 #[test]
 fn compiled_witnesses_retain_source_provenance() {
     let source = "p(f(1)).q:-p(f(X)):#true.";
-    let admitted = input(source);
+    let admitted = formula(source);
     assert_eq!(admitted.source().text(), source);
     assert!(
         admitted
@@ -533,7 +529,7 @@ fn first_cap(
     }
     assert!(low > 0);
     assert!(refused(&run(low - 1).unwrap_err()));
-    assert_eq!(native(&run(low).unwrap()), native(&input(BOUNDED)));
+    assert_eq!(native(&run(low).unwrap()), native(&formula(BOUNDED)));
     low
 }
 const BOUNDED: &str = "{p(f(1,2));p(f(2,2));p(f(3,3))}.q:-p(f(X,X)):#true.";

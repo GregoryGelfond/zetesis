@@ -4,18 +4,8 @@ use reference::{Models, exhaustive, native};
 use std::collections::BTreeSet;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|e| panic!("{source}: {e}"))
-}
+use zetesis_reference_support::formula;
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 fn expected(models: &[&[&str]]) -> Models {
     models
         .iter()
@@ -98,7 +88,7 @@ fn cases() -> Vec<(&'static str, Models)> {
 #[test]
 fn closed_sources_match_independent_complete_models() {
     for (source, wanted) in cases() {
-        let p = input(source);
+        let p = formula(source);
         assert_eq!(native(&p), wanted, "{source}");
         assert_eq!(exhaustive(&p), wanted, "{source}");
         assert_eq!(p.source().text(), source);
@@ -106,7 +96,8 @@ fn closed_sources_match_independent_complete_models() {
 }
 #[test]
 fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
-    let p = input("{p(f(1));p(f(2));q((1,))}.#minimize{2@1,X:p(X);2@1,f(1):p(f(2));-1@0,X:q(X)}.");
+    let p =
+        formula("{p(f(1));p(f(2));q((1,))}.#minimize{2@1,X:p(X);2@1,f(1):p(f(2));-1@0,X:q(X)}.");
     let plan = zetesis_themelios::objective_bound::ObjectivePlan::new(
         p.theory(),
         p.atoms(),
@@ -221,14 +212,14 @@ fn closed_structures_match_clingo() {
             })
             .collect();
         assert_eq!(models, wanted, "{source}");
-        assert_eq!(native(&input(source)), wanted);
+        assert_eq!(native(&formula(source)), wanted);
     }
 }
 #[test]
 fn arbitrary_public_structures_are_bounded_before_observation_and_retry_is_exact() {
     use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
     use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
-    let p = input("#show. #show seen(X):p(X).");
+    let p = formula("#show. #show seen(X):p(X).");
     let depth = 80;
     let mut nodes = vec![
         ValueNode::Function {
@@ -350,7 +341,7 @@ fn compound_payload_admission_refuses_with_original_location() {
     ));
     let location = failure.diagnostics()[0].primary().location;
     assert_eq!(location.source, AdmissionOptions::default().source_id);
-    let p = input(source);
+    let p = formula(source);
     assert!(p.source().slice(location.span).unwrap().contains("p("));
     assert_eq!(p.source().text(), source);
     assert_eq!(native(&p), expected(&[&["p(f(1,g(2)))"]]));
@@ -378,7 +369,7 @@ fn formula_values(
 #[test]
 fn signed_structural_choices_match_manual_formulas_in_every_frozen_world() {
     use zetesis_ferraris::{Node, Theory};
-    let p = input("{p(f(1));-p(f(1))}.");
+    let p = formula("{p(f(1));-p(f(1))}.");
     assert_eq!(p.atoms().len(), 2);
     let positive = p
         .atoms()

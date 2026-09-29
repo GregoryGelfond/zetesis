@@ -4,23 +4,11 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionError,
     ProjectionLimits, ProjectionResource, Session, SolveConfig, SolveError, WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -37,7 +25,7 @@ fn config() -> SolveConfig {
 
 #[test]
 fn distinct_keys_retain_full_membership() {
-    let owner = input("{p;q}. #project p/0.");
+    let owner = formula("{p;q}. #project p/0.");
     let full = Session::builder(
         PreparedInput::formula(&owner),
         config(),
@@ -83,7 +71,7 @@ fn distinct_keys_retain_full_membership() {
 
 #[test]
 fn world_view_collection_forces_full_identity() {
-    let owner = input("{p;q}. #project p/0.");
+    let owner = formula("{p;q}. #project p/0.");
     let family = Session::builder(
         PreparedInput::formula(&owner),
         config(),
@@ -101,7 +89,7 @@ fn world_view_collection_forces_full_identity() {
 
 #[test]
 fn empty_projection_has_one_complete_class() {
-    let owner = input("{p;q}. #project absent/0.");
+    let owner = formula("{p;q}. #project absent/0.");
     assert!(owner.projection().atoms().is_empty());
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
@@ -123,7 +111,7 @@ fn empty_projection_has_one_complete_class() {
 
 #[test]
 fn objective_selection_precedes_projection() {
-    let owner = input("{p;q}. #project absent/0. #minimize{1@1:not q}.");
+    let owner = formula("{p;q}. #project absent/0. #minimize{1@1:not q}.");
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
         config(),
@@ -150,7 +138,7 @@ fn objective_selection_precedes_projection() {
 
 #[test]
 fn requested_count_counts_representatives() {
-    let owner = input("{p;q}. #project p/0.");
+    let owner = formula("{p;q}. #project p/0.");
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
@@ -170,7 +158,7 @@ fn requested_count_counts_representatives() {
 
 #[test]
 fn projected_stops_preserve_established_optimum() {
-    let owner = input("{p;q}. #project p/0. #minimize{1@1:not q}.");
+    let owner = formula("{p;q}. #project p/0. #minimize{1@1:not q}.");
     for (models, keys, refused) in [(1, 2, false), (0, 0, true)] {
         let mut session = Session::builder(
             PreparedInput::formula(&owner),
@@ -219,7 +207,7 @@ fn projected_stops_preserve_established_optimum() {
 
 #[test]
 fn refused_key_preserves_verified_evidence() {
-    let owner = input("{p;q}. #project p/0.");
+    let owner = formula("{p;q}. #project p/0.");
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
         config(),
@@ -249,7 +237,7 @@ fn refused_key_preserves_verified_evidence() {
 
 #[test]
 fn projection_requires_an_explicit_domain() {
-    let owner = input("{p}.");
+    let owner = formula("{p}.");
     let error = Session::builder(
         PreparedInput::formula(&owner),
         config(),
@@ -267,7 +255,7 @@ fn projection_requires_an_explicit_domain() {
 
 #[test]
 fn refused_history_setup_retains_attempted_timing() {
-    let owner = input("{p}. #project p/0.");
+    let owner = formula("{p}. #project p/0.");
     let error = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
@@ -305,7 +293,7 @@ fn refused_history_setup_retains_attempted_timing() {
 
 #[test]
 fn cancellation_keeps_the_delivered_projected_prefix() {
-    let owner = input("{p;q}. #project p/0.");
+    let owner = formula("{p;q}. #project p/0.");
     let cancellation = Cancellation::default();
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
@@ -330,7 +318,7 @@ fn cancellation_keeps_the_delivered_projected_prefix() {
 
 #[test]
 fn history_ceilings_are_inclusive() {
-    let owner = input("{p;q}. #project p/0.");
+    let owner = formula("{p;q}. #project p/0.");
     let run = |limits| {
         let mut session = Session::builder(
             PreparedInput::formula(&owner),

@@ -11,16 +11,14 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score};
+use zetesis_reference_support::formula;
 use zetesis_sat::{Limits as SearchLimits, StableModels};
+use zetesis_test_support::records::Records;
+use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-
-type Records = BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)>;
 
 struct Case {
     name: String,
@@ -82,16 +80,6 @@ fn text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
         })
         .collect();
     format!("{predicate}({})", values.join(","))
-}
-
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("source must be admitted: {source}: {error}"))
 }
 
 fn relation(input: &AdmittedFormula, mask: usize) -> Model {
@@ -197,7 +185,7 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
     let mut total = 0;
     let mut nonlexical = false;
     for case in cases {
-        let input = admit(&case.source);
+        let input = formula(&case.source);
         nonlexical |= input
             .atoms()
             .iter()
@@ -270,7 +258,7 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
 #[test]
 fn repeated_strict_incumbent_improvements_keep_all_optimal_ties_without_duplicates() {
     for case in cases() {
-        let input = admit(&case.source);
+        let input = formula(&case.source);
         let exhaustive = stable(&input);
         let optimum = exhaustive
             .iter()
@@ -365,7 +353,7 @@ fn constant_score(values: &[(i32, i32)]) -> Score {
 fn foreign_numeric_score_slots_are_compared_with_missing_priorities_as_zero() {
     // This tests the arithmetic bound contract; foreign scores are deliberately
     // not certified incumbents and are never used here to claim an optimum.
-    let input = admit("{a;b}. #minimize{1@2:a;-3@-1:b}.");
+    let input = formula("{a;b}. #minimize{1@2:a;-3@-1:b}.");
     let plan = plan(&input);
     for values in [
         vec![],
@@ -404,7 +392,7 @@ fn foreign_numeric_score_slots_are_compared_with_missing_priorities_as_zero() {
 
 #[test]
 fn exact_global_key_limits_count_coalesced_keys_and_all_complete_bindings() {
-    let input = admit("{a;b}. #minimize{2@1,k:a;2@1,k:b}.");
+    let input = formula("{a;b}. #minimize{2@1,k:a;2@1,k:b}.");
     let exact = ObjectivePlanLimits {
         max_keys: 1,
         max_bindings: 2,
@@ -478,7 +466,7 @@ fn exact_global_key_limits_count_coalesced_keys_and_all_complete_bindings() {
 
 #[test]
 fn optional_bound_refusals_leave_the_original_available_for_complete_search() {
-    let input = admit("{a;b}. #minimize{2@1,k:a;2@1,k:b}.");
+    let input = formula("{a;b}. #minimize{2@1,k:a;2@1,k:b}.");
     let baseline = stable(&input);
     let plan = plan(&input);
     let cancelled = Cancellation::default();

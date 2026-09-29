@@ -5,6 +5,7 @@ use crate::support::observation_reference;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
+use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{
     AdmissionLimits, ErrorKind, EvaluationError, Feature, Limits, Resource, Symbol,
 };
@@ -75,16 +76,6 @@ const EXTREMA: &[(&str, &[&str])] = &[
     ("p(1).p(2). #show. #show X:f(X)=#min{f(Y):p(Y)}.", &["1"]),
 ];
 
-fn admit(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
 fn display(input: &AdmittedFormula, model: &Model) -> Vec<String> {
     input
         .metadata()
@@ -105,7 +96,7 @@ fn display(input: &AdmittedFormula, model: &Model) -> Vec<String> {
 #[test]
 fn finite_equalities_retain_their_complete_guards() {
     for (source, expected) in CHAINS.iter().chain(STRUCTURES).chain(EXTREMA) {
-        let input = admit(source);
+        let input = formula(source);
         assert_eq!(
             display(
                 &input,
@@ -120,9 +111,9 @@ fn finite_equalities_retain_their_complete_guards() {
 #[test]
 fn equality_queries_preserve_the_original_formula() {
     let base = "{hidden}. p(1).p(2). #minimize{1@3:hidden}.";
-    let original = admit(base);
+    let original = formula(base);
     for (query, _) in CHAINS.iter().chain(STRUCTURES).chain(EXTREMA) {
-        let shown = admit(&format!("{base}{query}"));
+        let shown = formula(&format!("{base}{query}"));
         // Only the fact-free queries leave this base's logical source unchanged.
         if query.starts_with("#show.") {
             assert_eq!(shown.atoms(), original.atoms());
@@ -153,7 +144,7 @@ fn equality_displays_preserve_hidden_family_multiplicity() {
 }
 
 fn assert_hidden_family(source: &str, expected: &[&str]) {
-    let input = admit(source);
+    let input = formula(source);
     let family = family(&input);
     assert_eq!(family.len(), 2);
     assert_eq!(family[0].0, Model::default());
@@ -194,7 +185,7 @@ const EXTREMUM_FAMILY: &str = "{p(1);p(2)}. #show. #show X:f(X)=#min{f(Y):p(Y)}.
 
 #[test]
 fn extremum_capture_uses_each_original_model() {
-    let actual = family(&admit(EXTREMUM_FAMILY));
+    let actual = family(&formula(EXTREMUM_FAMILY));
     let expected: &[(&[i32], &[&str])] = &[
         (&[], &[]),
         (&[1], &["1"]),
@@ -228,7 +219,7 @@ fn equality_evaluation_obeys_its_exact_work_limit() {
 }
 
 fn assert_exact_work(source: &str) {
-    let input = admit(source);
+    let input = formula(source);
     let run = |max_work| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -257,7 +248,7 @@ fn assert_exact_work(source: &str) {
 
 #[test]
 fn chain_bindings_obey_the_live_payload_limit() {
-    let input = admit("#show. #show X:X=Y=1.");
+    let input = formula("#show. #show X:X=Y=1.");
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -289,7 +280,7 @@ fn structural_captures_share_the_complete_value_budget() {
 }
 
 fn assert_complete_value_budget(source: &str, bytes: usize) {
-    let input = admit(source);
+    let input = formula(source);
     let run = |max_local_bytes| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -314,7 +305,7 @@ fn assert_complete_value_budget(source: &str, bytes: usize) {
 
 #[test]
 fn mismatched_structural_choices_release_partial_captures() {
-    let input = admit("#show. #show X:f(X,X)=f((1;2),2).");
+    let input = formula("#show. #show X:f(X,X)=f((1;2),2).");
     // Two expanded f(_,2) values, the selected source value, the complete match
     // value and one captured number coexist. A rejected capture must be released
     // before the second alternative can fit this same ceiling.
@@ -422,7 +413,7 @@ fn structural_generation_refuses_an_undefined_consumer() {
 }
 
 fn assert_undefined(source: &str) {
-    let input = admit(source);
+    let input = formula(source);
     let error = input
         .metadata()
         .observations()
@@ -448,7 +439,7 @@ fn equality_bindings_obey_completed_substitution_limits() {
 
 #[test]
 fn extremum_capture_counts_its_local_substitutions() {
-    let input = admit("#show. #show X:f(X)=#min{f(1);f(2)}.");
+    let input = formula("#show. #show X:f(X)=#min{f(1);f(2)}.");
     let run = |max_bindings| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -470,7 +461,7 @@ fn extremum_capture_counts_its_local_substitutions() {
 }
 
 fn assert_binding_limit(source: &str) {
-    let input = admit(source);
+    let input = formula(source);
     let run = |max_bindings| {
         input.metadata().observations().evaluate(
             &Model::default(),
@@ -493,7 +484,7 @@ fn assert_binding_limit(source: &str) {
 
 #[test]
 fn chain_generation_propagates_arithmetic_failure() {
-    let input = admit("#show ok. #show X:X=Y=1/0.");
+    let input = formula("#show ok. #show X:X=Y=1/0.");
     let error = input
         .metadata()
         .observations()
@@ -522,7 +513,7 @@ fn equality_generation_propagates_cancellation() {
 }
 
 fn assert_cancelled(source: &str) {
-    let input = admit(source);
+    let input = formula(source);
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let error = input
@@ -580,7 +571,7 @@ const FINITE_BINDINGS: &[(&str, &[&str])] = &[
 #[test]
 fn finite_binding_shapes_produce_the_expected_displays() {
     for (source, expected) in FINITE_BINDINGS {
-        let input = admit(source);
+        let input = formula(source);
         assert_eq!(display(&input, &Model::default()), *expected, "{source}");
     }
 }
@@ -590,7 +581,7 @@ fn observation_bindings_preserve_hidden_answer_identity() {
     let singleton =
         Model::new([Atom::new(Predicate::new("hidden", 0).unwrap(), vec![]).unwrap()]).unwrap();
     for (source, _) in FINITE_BINDINGS {
-        let hidden = admit(&format!("{{hidden}}. {source}"));
+        let hidden = formula(&format!("{{hidden}}. {source}"));
         let answers = family(&hidden);
         assert_eq!(answers.len(), 2, "{source}");
         assert!(

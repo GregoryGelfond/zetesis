@@ -5,6 +5,7 @@ use std::path::Path;
 
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -13,15 +14,6 @@ use zetesis_themelios::{
 
 type Models = BTreeSet<BTreeSet<Atom>>;
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn models(input: &AdmittedFormula) -> Models {
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("search admission");
@@ -46,7 +38,7 @@ fn models(input: &AdmittedFormula) -> Models {
     result
 }
 fn native(source: &str) -> Models {
-    models(&input(source))
+    models(&formula(source))
 }
 fn expected(sources: &[&str]) -> Models {
     sources.iter().flat_map(|source| native(source)).collect()
@@ -136,7 +128,7 @@ fn aggregate_local_variables_do_not_bind_globals_and_flat_tuple_filters_are_exac
 #[test]
 fn aggregate_limits_and_original_rule_evidence_are_independent() {
     let source = "{a;b}. q :- #count{1:a;2:b}>=1.";
-    let input = input(source);
+    let input = formula(source);
     assert_eq!(input.source().text(), source);
     assert_eq!(input.formula_origins().len(), input.theory().roots().len());
     assert!(
@@ -197,7 +189,7 @@ fn all_unchanged_queens_encodings_exhaust_the_same_ninety_two_boards() {
         "variant-06.lp",
     ] {
         let source = std::fs::read_to_string(root.join(variant)).expect("vendored original source");
-        let input = input(&source);
+        let input = formula(&source);
         assert_eq!(input.source().text(), source);
         let models = models(&input);
         assert_eq!(models.len(), 92, "{variant}");

@@ -27,15 +27,6 @@ fn cases() -> Vec<Json> {
         .collect()
 }
 
-fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
-
 // This evaluator implements the finite definition independently of the
 // production oracle, reduct mask and SAT search. Signed atoms have ordinary
 // distinct indices; coherence must therefore be present in the supplied roots.
@@ -236,7 +227,8 @@ fn independent_reduct_models_match_signed_reference_models_costs_and_displays() 
     let mut count = 0;
     for case in cases().iter().filter(|case| case["native"] == "admit") {
         let source = case["source"].as_str().unwrap();
-        let admitted = input(source).unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
+        let admitted = zetesis_reference_support::admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
         let models = stable_models(&admitted);
         let mut unique = BTreeSet::new();
         for model in &models {
@@ -280,7 +272,7 @@ fn independent_reduct_models_match_signed_reference_models_costs_and_displays() 
 
 #[test]
 fn coherence_and_signed_choices_match_a_manual_theory_in_every_frozen_world() {
-    let input = input("{p;-p}.").unwrap();
+    let input = zetesis_reference_support::admit("{p;-p}.", &FormulaLimits::default()).unwrap();
     assert_eq!(input.atoms().len(), 2);
     let positive = input
         .atoms()
@@ -340,16 +332,18 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
         "{-p}.p.",
         "-p(1).q(X):- -p(X).",
     ] {
-        let expected: BTreeSet<_> = stable_models(&input(source).unwrap())
-            .into_iter()
-            .map(|model| {
-                model
-                    .atoms()
-                    .iter()
-                    .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                    .collect::<BTreeSet<_>>()
-            })
-            .collect();
+        let expected: BTreeSet<_> = stable_models(
+            &zetesis_reference_support::admit(source, &FormulaLimits::default()).unwrap(),
+        )
+        .into_iter()
+        .map(|model| {
+            model
+                .atoms()
+                .iter()
+                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
+                .collect::<BTreeSet<_>>()
+        })
+        .collect();
         for admitted in [
             admit(source.into(), AdmissionOptions::default()).unwrap(),
             admit_extended(
@@ -445,7 +439,11 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
         {
             continue;
         }
-        let error = input(case["source"].as_str().unwrap()).unwrap_err();
+        let error = zetesis_reference_support::admit(
+            case["source"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             refusal(&error, case["native"].as_str().unwrap()),
             "{}: {error:?}",
@@ -467,8 +465,10 @@ fn signed_anonymous_projection_has_the_declared_model_view() {
             .find(|case| case["source"] == source)
             .unwrap();
         let source = case["source"].as_str().unwrap();
-        let admitted = input(source).unwrap();
-        let original = input(&format!("{atom}.")).unwrap();
+        let admitted = zetesis_reference_support::admit(source, &FormulaLimits::default()).unwrap();
+        let original =
+            zetesis_reference_support::admit(&format!("{atom}."), &FormulaLimits::default())
+                .unwrap();
         assert_eq!(admitted.source().text(), source);
         assert_eq!(admitted.atoms(), original.atoms());
         assert_eq!(admitted.theory().nodes(), original.theory().nodes());
@@ -497,7 +497,7 @@ fn signed_anonymous_projection_has_the_declared_model_view() {
 #[test]
 fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
     let source = "p.\n-p.";
-    let admitted = input(source).unwrap();
+    let admitted = zetesis_reference_support::admit(source, &FormulaLimits::default()).unwrap();
     assert_eq!(admitted.atoms().len(), 2, "signs never alias");
     let origins: BTreeSet<_> = admitted
         .formula_origins()

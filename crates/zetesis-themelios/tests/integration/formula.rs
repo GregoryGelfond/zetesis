@@ -9,24 +9,16 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
+use zetesis_reference_support::formula;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, SourceBundle,
+    admit_bundle_formula, admit_extended, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
 
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
     let mut search = StableModels::new(theory, Limits::default(), Cancellation::default())
         .expect("bounded search");
@@ -50,7 +42,7 @@ fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
     models
 }
 fn native(source: &str) -> Models {
-    let admitted = input(source);
+    let admitted = formula(source);
     models(admitted.theory(), admitted.atoms())
 }
 fn expected(sources: &[&str]) -> Models {
@@ -370,7 +362,7 @@ fn each_formula_resource_refuses_without_returning_a_partial_theory() {
 fn unchanged_queens_source_admits_eighty_original_atoms_with_output_metadata() {
     let source =
         include_str!("../../../../validation/corpus/kr-domains/standalone/n-queens/variant-01.lp");
-    let admitted = input(source);
+    let admitted = formula(source);
     assert_eq!(admitted.source().text(), source);
     assert_eq!(admitted.atoms().len(), 80);
     assert_eq!(admitted.theory().atom_count(), 80);

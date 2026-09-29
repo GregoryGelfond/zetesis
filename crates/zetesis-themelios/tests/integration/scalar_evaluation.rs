@@ -3,9 +3,10 @@ use crate::support::finite_bindings as reference;
 
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, admit_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    admit_formula,
 };
 
 const CASES: &[(&str, &str)] = &[
@@ -38,23 +39,14 @@ const CASES: &[(&str, &str)] = &[
         "d(-f(1)). p(g(-f(1),-f(1)),(-f(1),)):-d(-f(1)).",
     ),
 ];
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 
 #[test]
 fn scalar_sources_keep_complete_models() {
     for &(source, expanded) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(
             reference::native(&admitted),
-            reference::native(&input(expanded)),
+            reference::native(&formula(expanded)),
             "{source}"
         );
         assert_eq!(
@@ -68,8 +60,8 @@ fn scalar_sources_keep_complete_models() {
 #[test]
 fn scalar_sources_keep_every_frozen_pair() {
     for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
+        let left = formula(source);
+        let right = formula(expanded);
         assert_eq!(left.atoms().len(), right.atoms().len());
         let right_indices: Vec<_> = left
             .atoms()
@@ -184,6 +176,6 @@ fn scalar_models_match_clingo() {
             output["Models"]["Number"].as_u64().unwrap(),
             models.len() as u64
         );
-        assert_eq!(reference::native(&input(source)), models, "{source}");
+        assert_eq!(reference::native(&formula(source)), models, "{source}");
     }
 }

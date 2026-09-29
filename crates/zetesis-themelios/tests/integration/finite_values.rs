@@ -4,6 +4,7 @@ use crate::support::upstream;
 use reference::{Models, atom_text, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
@@ -32,14 +33,6 @@ fn limited(
         expansion,
         *limits,
     )
-}
-fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 // Handwritten substitutions preserve whole rule bodies and choice-group scope.
 const CASES: &[(&str, &str)] = &[
@@ -122,8 +115,8 @@ const CASES: &[(&str, &str)] = &[
 #[test]
 fn constructed_models_match_explicit_substitution() {
     for &(source, expanded) in CASES {
-        let source = input(source);
-        let expanded = input(expanded);
+        let source = formula(source);
+        let expanded = formula(expanded);
         assert_eq!(native(&source), native(&expanded));
         assert_eq!(native(&source), exhaustive(&source));
     }
@@ -131,7 +124,7 @@ fn constructed_models_match_explicit_substitution() {
 
 fn construction_admissions(resource: ExpansionResource) {
     let source = "d(1;2).p(Y):-d(X),Y=f(X)=f(1).";
-    let expected = input(source);
+    let expected = formula(source);
     let mut limit = 0;
     // Follow the next required cumulative amount. This exercises each actual
     // admission boundary without assuming allocation capacities or charge sizes.
@@ -229,8 +222,8 @@ fn open_tuple_chains_refuse_whole_value_targets() {
 fn construction_preserves_every_frozen_pair() {
     let mut pairs = 0;
     for &(source, expanded) in CASES {
-        let source = input(source);
-        let expanded = input(expanded);
+        let source = formula(source);
+        let expanded = formula(expanded);
         let atoms: BTreeSet<_> = source
             .atoms()
             .iter()
@@ -281,7 +274,7 @@ fn construction_preserves_every_frozen_pair() {
 
 #[test]
 fn competition_models_match_retained_reference() {
-    let models = native(&input(&competition()));
+    let models = native(&formula(&competition()));
     assert_eq!(models.len(), 12);
     assert!(models.iter().all(|model| model.len() == 17));
     let expected: Models = competition_case()
@@ -371,7 +364,7 @@ fn recursive_construction_cannot_finish_truncated() {
 
 #[test]
 fn construction_preserves_statement_origins() {
-    let admitted = input("d(1).\np(f(X)):-d(X).\n");
+    let admitted = formula("d(1).\np(f(X)):-d(X).\n");
     assert_eq!(
         admitted.formula_origins().len(),
         admitted.theory().roots().len()
@@ -407,7 +400,7 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
     };
     assert_eq!(
         native(&limited(source, expansion, &FormulaLimits::default()).unwrap()),
-        native(&input(source))
+        native(&formula(source))
     );
     let expansion = ExpansionLimits {
         max_scalar_bytes: lower - 1,
@@ -446,7 +439,7 @@ fn complete_models_match_clingo() {
                     .collect()
             })
             .collect();
-        assert_eq!(native(&input(source)), models, "{source}");
+        assert_eq!(native(&formula(source)), models, "{source}");
     }
 }
 
@@ -463,7 +456,7 @@ proptest::proptest! {
         let suffix = children.iter().fold(String::new(), |mut text, value| { write!(text, ",{value}").unwrap(); text });
         let source = format!("d({input_value}).p({sign}{name}(X{suffix})):-d(X).");
         let expected: Models = [BTreeSet::from([format!("d({input_value})"), format!("p({sign}{name}({input_value}{suffix}))")])].into_iter().collect();
-        proptest::prop_assert_eq!(native(&input(&source)), expected);
+        proptest::prop_assert_eq!(native(&formula(&source)), expected);
     }
 }
 
@@ -473,7 +466,7 @@ fn competition_matches_bounded_completion() {
     use zetesis_sat::{
         BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Limits, StableModels,
     };
-    let admitted = input(&competition());
+    let admitted = formula(&competition());
     let expected = native(&admitted);
     for workers in [1, 2] {
         let mut executor = CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
@@ -518,19 +511,19 @@ fn competition_matches_bounded_completion() {
 #[test]
 fn hidden_constructors_retain_semantic_identity() {
     let source = "d(1).p(f(X)):-d(X).#show.";
-    let admitted = input(source);
+    let admitted = formula(source);
     assert!(
         admitted
             .atoms()
             .iter()
             .all(|atom| !admitted.metadata().output().includes(atom))
     );
-    assert_eq!(native(&admitted), native(&input("d(1).p(f(X)):-d(X).")));
+    assert_eq!(native(&admitted), native(&formula("d(1).p(f(X)):-d(X).")));
 }
 
 #[test]
 fn constructed_keys_retain_objective_contributions() {
-    let admitted = input("d(1).{p(f(X)):d(X)}.#minimize{1@0,Y:p(Y)}.");
+    let admitted = formula("d(1).{p(f(X)):d(X)}.#minimize{1@0,Y:p(Y)}.");
     let models = native(&admitted);
     assert_eq!(models.len(), 2);
     let mut costs = Vec::new();
@@ -568,7 +561,7 @@ fn generated_head_value_limit_is_inclusive() {
     };
     assert_eq!(
         native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
-        native(&input(source))
+        native(&formula(source))
     );
     let limits = FormulaLimits {
         max_generated_values: 1,
@@ -632,7 +625,7 @@ fn incomplete_constructor_work_returns_no_admission() {
 
 #[test]
 fn recursive_analysis_cannot_waive_support_limits() {
-    let admitted = input("p(a).p(f(X)):-p(X),X=a.");
+    let admitted = formula("p(a).p(f(X)):-p(X),X=a.");
     assert!(matches!(
         admitted.source_analysis().safety().finiteness(),
         themelios_analysis::Verdict::Unknown { .. }

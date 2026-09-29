@@ -9,33 +9,28 @@ use std::fmt::Write as _;
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    admit_formula, prepare_formula,
+    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    prepare_formula,
 };
-
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 
 #[test]
 fn models_match_separate_permissions() {
     for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
+        assert_eq!(
+            native(&formula(source)),
+            native(&formula(expanded)),
+            "{source}"
+        );
     }
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -44,8 +39,8 @@ fn stability_matches_subset_enumeration() {
 fn frozen_truth_matches_separate_permissions() {
     let mut pairs = 0;
     for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
+        let left = formula(source);
+        let right = formula(expanded);
         let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
         let other: Vec<_> = right.atoms().iter().map(atom_text).collect();
         assert_eq!(
@@ -115,7 +110,7 @@ fn original_sources_match_clingo_full_models() {
             }
         }
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
         total += count;
     }
     println!("complete_sources={} full_models={total}", CASES.len());
@@ -124,16 +119,16 @@ fn original_sources_match_clingo_full_models() {
 #[test]
 fn distinct_tuples_can_share_a_selected_atom() {
     assert_eq!(
-        native(&input("2#count{1:a;2:a}2.")),
+        native(&formula("2#count{1:a;2:a}2.")),
         Models::from([BTreeSet::from(["a".into()])])
     );
-    assert!(native(&input("1#count{1:a;2:a}1.")).is_empty());
+    assert!(native(&formula("1#count{1:a;2:a}1.")).is_empty());
 }
 
 #[test]
 fn distinct_atoms_can_activate_one_tuple() {
     assert_eq!(
-        native(&input("1#count{1:a;1:b}1.")),
+        native(&formula("1#count{1:a;1:b}1.")),
         Models::from([
             BTreeSet::from(["a".into()]),
             BTreeSet::from(["b".into()]),
@@ -145,7 +140,7 @@ fn distinct_atoms_can_activate_one_tuple() {
 #[test]
 fn optional_planning_declines_nonbijective_groups() {
     for &(source, _) in CASES {
-        let ordinary = input(source);
+        let ordinary = formula(source);
         let planned = prepare_formula(
             source.into(),
             AdmissionOptions::default(),
@@ -171,7 +166,7 @@ fn optional_planning_declines_nonbijective_groups() {
 #[test]
 fn alias_groups_preserve_other_count_certificates() {
     let source = "2{a;b;c;d}2.{a;b}1.{c;d}1.1#count{1:e;1:f}1.";
-    let ordinary = input(source);
+    let ordinary = formula(source);
     let planned = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -231,7 +226,7 @@ fn tuple_limits_count_distinct_complete_keys() {
 #[test]
 fn original_sources_remain_owned() {
     for &(source, _) in CASES {
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(formula(source).source().text(), source);
     }
 }
 
@@ -273,7 +268,7 @@ fn alias_work_limits_are_inclusive() {
                 resource: actual, limit, observed, ..
             }) if actual == resource && limit == u128::from(maximum - 1)
                 && observed == u128::from(maximum)));
-            assert_eq!(native(&attempt(maximum).unwrap()), native(&input(source)));
+            assert_eq!(native(&attempt(maximum).unwrap()), native(&formula(source)));
             println!("source={source} inclusive_{resource:?}={maximum}");
         }
     }
@@ -301,7 +296,7 @@ fn alias_storage_limits_are_inclusive() {
             }
         )) if limit == u128::from(maximum - 1) && observed == u128::from(maximum))
         );
-        assert_eq!(native(&attempt(maximum).unwrap()), native(&input(source)));
+        assert_eq!(native(&attempt(maximum).unwrap()), native(&formula(source)));
         println!("source={source} inclusive_ScalarBytes={maximum}");
     }
 }
@@ -336,7 +331,7 @@ proptest::proptest! {
             write!(source, "{key}:{name}{condition}").unwrap();
         }
         write!(source, "}}{upper}.").unwrap();
-        let admitted = input(&source);
+        let admitted = formula(&source);
         let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
         let member = |mask: usize, name: &str| {
             names.iter().position(|atom| atom == name)

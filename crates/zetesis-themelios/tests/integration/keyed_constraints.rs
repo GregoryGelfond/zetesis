@@ -6,9 +6,9 @@ use std::collections::BTreeSet;
 
 use stable_models::stable;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical, exhaustive};
+use zetesis_reference_support::{admit, canonical, exhaustive, formula};
 use zetesis_themelios::{
-    AdmittedFormula, AnalysisBasis, ExpansionFailure, FormulaFailure, FormulaLimits, KeyAnalysis,
+    AnalysisBasis, ExpansionFailure, FormulaFailure, FormulaLimits, KeyAnalysis,
     observation::EvaluationError,
 };
 
@@ -16,13 +16,9 @@ const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
     1 { assign(L,D) : digit(D) } 1 :- letter(L). \
     1 { carry(I,V) : carry_value(V) } 1 :- idx(I). ";
 
-fn admitted(source: &str) -> AdmittedFormula {
-    admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
 /// The two programs ground to theories of the same shape and the same family.
 fn same_shape(left: &str, right: &str) {
-    let (left, right) = (admitted(left), admitted(right));
+    let (left, right) = (formula(left), formula(right));
     assert_eq!(left.atoms(), right.atoms());
     assert_eq!(left.theory().roots().len(), right.theory().roots().len());
     assert_eq!(left.theory().nodes().len(), right.theory().nodes().len());
@@ -36,10 +32,10 @@ fn a_disequality_over_one_keyed_value_asks_for_the_one_atom() {
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
     let asked = format!("{CHOICES} :- assign(b,Y), letter(a), not assign(a, Y + 1).");
     same_shape(&written, &asked);
-    assert_eq!(admitted(&written).keyed_constraints(), 1);
-    assert_eq!(admitted(&asked).keyed_constraints(), 0);
+    assert_eq!(formula(&written).keyed_constraints(), 1);
+    assert_eq!(formula(&asked).keyed_constraints(), 0);
     // Nine pairs with X = Y + 1, times the free letter and the carry.
-    assert_eq!(stable(&admitted(&written)).len(), 9 * 10 * 2);
+    assert_eq!(stable(&formula(&written)).len(), 9 * 10 * 2);
 }
 
 #[test]
@@ -54,7 +50,7 @@ fn a_digit_and_carry_column_asks_for_both_atoms() {
          :- assign(a,A), assign(b,B), letter(c), idx(1), not carry(1, (A + B) / 10)."
     );
     same_shape(&written, &asked);
-    assert_eq!(stable(&admitted(&written)).len(), 100);
+    assert_eq!(stable(&formula(&written)).len(), 100);
 }
 
 #[test]
@@ -82,13 +78,13 @@ fn a_value_read_elsewhere_keeps_the_written_constraint() {
     // digit; the product form stays, and grounds to ninety instances less
     // the ones X > 1 excludes.
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1, X > 1.");
-    let input = admitted(&written);
+    let input = formula(&written);
     assert_eq!(input.keyed_constraints(), 0);
     let constraints = input
         .theory()
         .roots()
         .len()
-        .saturating_sub(admitted(CHOICES).theory().roots().len());
+        .saturating_sub(formula(CHOICES).theory().roots().len());
     assert_eq!(constraints, 8 * 10 - 8);
     // Twenty pairs with X <= 1 and eight with X = Y + 1 > 1 remain, times
     // the free letter and the carry.
@@ -102,10 +98,10 @@ fn an_anonymous_key_keeps_the_written_constraint() {
     // The written constraint forbids a value other than 3 at any key. Asked
     // by key it would read `not assign(_, 3)`, no key at all holding 3, which
     // forbids less: the key must be named for the one atom to be the key's.
-    let anonymous = admitted(&format!("{LETTERS} :- assign(_, Y), Y != 3."));
+    let anonymous = formula(&format!("{LETTERS} :- assign(_, Y), Y != 3."));
     assert_eq!(anonymous.keyed_constraints(), 0);
     // Both letters hold 3, as they do when the key is named.
-    let named = admitted(&format!("{LETTERS} :- assign(K, Y), Y != 3."));
+    let named = formula(&format!("{LETTERS} :- assign(K, Y), Y != 3."));
     assert_eq!(stable(&anonymous).len(), 1);
     assert_eq!(stable(&anonymous), stable(&named));
 }
@@ -119,11 +115,11 @@ fn an_anonymous_key_keeps_the_written_column() {
     // As above for the digit and the carry: 3 = C + 2K over C and K in 0..1
     // has the one solution C = 1, K = 1, and with the digit's key anonymous
     // every letter's digit must be that one, not some letter's.
-    let anonymous = admitted(&format!(
+    let anonymous = formula(&format!(
         "{COLUMN} :- assign(_, C), carry(1, K), 3 != C + 2 * K."
     ));
     assert_eq!(anonymous.keyed_constraints(), 0);
-    let named = admitted(&format!(
+    let named = formula(&format!(
         "{COLUMN} :- assign(L, C), carry(1, K), 3 != C + 2 * K."
     ));
     assert_eq!(stable(&anonymous).len(), 1);
@@ -135,7 +131,7 @@ fn a_relation_with_another_producer_keeps_the_written_constraint() {
     let choices = format!("{CHOICES} assign(a,0) :- not assign(a,1).");
     let written = format!("{choices} :- assign(a,X), assign(b,Y), X != Y + 1.");
     let asked = format!("{choices} :- assign(b,Y), letter(a), not assign(a, Y + 1).");
-    let (written, asked) = (admitted(&written), admitted(&asked));
+    let (written, asked) = (formula(&written), formula(&asked));
     assert_eq!(written.keyed_constraints(), 0);
     assert!(written.theory().roots().len() > asked.theory().roots().len());
 }
@@ -152,7 +148,7 @@ fn a_digit_outside_the_carry_base_keeps_the_written_column() {
         "{choices} :- assign(a,A), assign(b,B), letter(c), idx(1), not assign(c, (A + B) \\ 10). \
          :- assign(a,A), assign(b,B), letter(c), idx(1), not carry(1, (A + B) / 10)."
     );
-    let (written, asked) = (admitted(&written), admitted(&asked));
+    let (written, asked) = (formula(&written), formula(&asked));
     assert_eq!(written.keyed_constraints(), 0);
     assert!(written.theory().roots().len() > asked.theory().roots().len());
     assert_ne!(stable(&written), stable(&asked));
@@ -162,7 +158,7 @@ fn a_digit_outside_the_carry_base_keeps_the_written_column() {
 fn asked_constraints_keep_the_written_constraint_as_their_origin() {
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
     let start = written.find(":- assign(a,X)").unwrap();
-    let input = admitted(&written);
+    let input = formula(&written);
     let spans: BTreeSet<_> = input
         .formula_origins()
         .iter()
@@ -177,7 +173,7 @@ fn asked_constraints_keep_the_written_constraint_as_their_origin() {
 fn every_interpretation_of_a_small_asked_program_matches_clingo() {
     let source = "letter(a;b). digit(0..1). 1 { assign(L,D) : digit(D) } 1 :- letter(L). \
         :- assign(a,X), assign(b,Y), X != Y.";
-    let admitted = admitted(source);
+    let admitted = formula(source);
     assert_eq!(exhaustive(&admitted), oracle::records(source), "{source}");
 }
 
@@ -191,8 +187,8 @@ fn a_constraint_with_an_anonymous_key_matches_clingo_as_written() {
         format!("{LETTERS} :- assign(_, Y), Y != 3."),
         format!("{COLUMN} :- assign(_, C), carry(1, K), 3 != C + 2 * K."),
     ] {
-        assert_eq!(admitted(&source).keyed_constraints(), 0, "{source}");
-        let family: BTreeSet<_> = stable(&admitted(&source))
+        assert_eq!(formula(&source).keyed_constraints(), 0, "{source}");
+        let family: BTreeSet<_> = stable(&formula(&source))
             .into_iter()
             .map(|atoms| (atoms.iter().map(canonical).collect(), None))
             .collect();
@@ -213,8 +209,8 @@ fn asked_constraints_match_clingo() {
         ),
         format!("{choices} :- assign(a,X), carry(1,K), K != X."),
     ] {
-        assert_eq!(admitted(&source).keyed_constraints(), 1, "{source}");
-        let family: BTreeSet<_> = stable(&admitted(&source))
+        assert_eq!(formula(&source).keyed_constraints(), 1, "{source}");
+        let family: BTreeSet<_> = stable(&formula(&source))
             .into_iter()
             .map(|atoms| (atoms.iter().map(canonical).collect(), None))
             .collect();
@@ -230,7 +226,7 @@ fn the_rest_of_a_keyed_program_is_prepared_once() {
     // and the facts and choices are charged once.
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
     let asked = format!("{CHOICES} :- assign(b,Y), letter(a), not assign(a, Y + 1).");
-    let (written, asked) = (admitted(&written), admitted(&asked));
+    let (written, asked) = (formula(&written), formula(&asked));
     assert_eq!(
         written.expansion_usage().origin_locations,
         asked.expansion_usage().origin_locations + 1
@@ -251,7 +247,7 @@ fn a_digit_produced_by_a_rule_keeps_the_written_column() {
         "{choices} :- assign(a,A), assign(b,B), letter(c), idx(1), not assign(c, (A + B) \\ 10). \
          :- assign(a,A), assign(b,B), letter(c), idx(1), not carry(1, (A + B) / 10)."
     );
-    let (written, asked) = (admitted(&written), admitted(&asked));
+    let (written, asked) = (formula(&written), formula(&asked));
     assert_eq!(written.keyed_constraints(), 0);
     assert_eq!(stable(&written), stable(&asked));
 }
@@ -276,7 +272,7 @@ fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
     let stopped = under(3);
     assert_eq!(stopped.keyed_constraints(), 0);
     assert!(matches!(stopped.key_analysis(), KeyAnalysis::Stopped(stop) if stop.limit == 3));
-    let complete = admitted(&written);
+    let complete = formula(&written);
     assert_eq!(complete.keyed_constraints(), 1);
     assert_eq!(complete.key_analysis(), KeyAnalysis::Complete);
     assert_eq!(stable(&stopped), stable(&complete));
@@ -294,7 +290,7 @@ fn a_producer_projected_for_a_pool_yields_no_key() {
     // though the program means one choice.
     let source = "b(1..2). c(1..2). d(1..2). \
         1 { p(K,V) : c(V), d((1;2)) } 1 :- b(K). :- p(K,Y), Y != 1.";
-    let admitted = admitted(source);
+    let admitted = formula(source);
     assert_eq!(
         admitted.analysis_basis(),
         AnalysisBasis::DependencyProjection
@@ -309,7 +305,7 @@ fn a_projection_elsewhere_leaves_the_keyed_constraint_asked() {
     // producer.
     let source = "b(1..2). c(1..2). 1 { p(K,V) : c(V) } 1 :- b(K). \
         { q(K) : b(K), c((1;2)) }. :- p(K,Y), Y != 1.";
-    let admitted = admitted(source);
+    let admitted = formula(source);
     assert_eq!(
         admitted.analysis_basis(),
         AnalysisBasis::DependencyProjection
@@ -381,7 +377,7 @@ fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
         exhaustive(&written),
         BTreeSet::from([(["val(1)", "p(1)", "d(0)"].map(str::to_owned).into(), None,)]),
     );
-    assert_eq!(stable(&admitted(source)), stable(&written));
+    assert_eq!(stable(&formula(source)), stable(&written));
 }
 
 fn same_evaluation_failure(source: &str, expected: &EvaluationError) {
@@ -451,7 +447,7 @@ fn a_safe_column_at_the_integer_boundary_is_asked() {
         },
     )
     .unwrap();
-    let asked = admitted(source);
+    let asked = formula(source);
     assert_eq!(asked.keyed_constraints(), 1);
     assert_eq!(stable(&asked), stable(&written));
     assert_eq!(stable(&asked).len(), 1);
@@ -469,7 +465,7 @@ fn independently_safe_arithmetic_guards_allow_asking() {
         },
     )
     .unwrap();
-    let asked = admitted(source);
+    let asked = formula(source);
     assert_eq!(asked.keyed_constraints(), 1);
     assert_eq!(stable(&asked), stable(&written));
 }
@@ -486,7 +482,7 @@ fn an_arithmetic_bound_from_a_comparison_is_not_assumed() {
         },
     )
     .unwrap();
-    let input = admitted(source);
+    let input = formula(source);
     assert_eq!(input.keyed_constraints(), 0);
     assert_eq!(stable(&input), stable(&written));
 }

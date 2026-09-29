@@ -7,22 +7,13 @@ use std::collections::BTreeSet;
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
-
-fn admitted(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("supported source profile")
-}
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
@@ -105,13 +96,13 @@ fn expected(models: &[&str]) -> Models {
 
 fn assert_models(source: &str, models: &[&str]) {
     let expected = expected(models);
-    assert_eq!(exhaustive(&admitted(source)), expected, "{source}");
+    assert_eq!(exhaustive(&formula(source)), expected, "{source}");
     // Statement order must not determine which support round is sufficient.
     // The fixed grammar below contains no periods inside terms or strings.
     let mut statements: Vec<_> = source.split_terminator('.').collect();
     statements.reverse();
     let reversed = format!("{}.", statements.join("."));
-    assert_eq!(exhaustive(&admitted(&reversed)), expected, "{reversed}");
+    assert_eq!(exhaustive(&formula(&reversed)), expected, "{reversed}");
 }
 
 #[test]
@@ -262,7 +253,7 @@ fn objective_dependency_restrictions_do_not_reject_negative_constraints() {
         ("{a}. :- not a. #minimize {1@7,k:a}.", "a"),
         ("{a}. :- a. #minimize {1@7,k:a}.", ""),
     ] {
-        let input = admitted(source);
+        let input = formula(source);
         assert!(input.objectives().is_present());
         assert_eq!(input.objectives().priorities(), &[7]);
         assert_eq!(exhaustive(&input), expected(&[model]));

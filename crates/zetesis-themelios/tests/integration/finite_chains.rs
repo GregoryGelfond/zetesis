@@ -5,20 +5,11 @@ use crate::support::finite_bindings as reference;
 use proptest::prelude::*;
 use reference::{Models, atom_text, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
-
-fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 
 // Expected assignments are obtained by integer arithmetic, before source
 // admission. Original clingo results corroborate these complete families.
@@ -99,7 +90,7 @@ fn expected(atoms: &[&str]) -> Models {
 #[test]
 fn finite_chains_generate_exact_integer_assignments() {
     for &(source, atoms) in CASES {
-        let program = input(source);
+        let program = formula(source);
         assert_eq!(native(&program), expected(atoms), "{source}");
         assert_eq!(exhaustive(&program), expected(atoms), "{source}");
     }
@@ -126,7 +117,7 @@ fn coupled_endpoints_preserve_checked_integer_values() {
         ),
     ];
     for &(source, atoms) in cases {
-        let program = input(source);
+        let program = formula(source);
         assert_eq!(native(&program), expected(atoms), "{source}");
         assert_eq!(exhaustive(&program), expected(atoms), "{source}");
     }
@@ -135,8 +126,8 @@ fn coupled_endpoints_preserve_checked_integer_values() {
 #[test]
 fn correlated_chains_preserve_every_frozen_pair() {
     let source = "{a;b}.p(X,Y):-a,not b,0<X<Y<3.";
-    let program = input(source);
-    let expanded = input("{a;b}.p(1,2):-a,not b.");
+    let program = formula(source);
+    let expanded = formula("{a;b}.p(1,2):-a,not b.");
     same_frozen(&program, &expanded);
 }
 
@@ -184,8 +175,8 @@ fn same_frozen(program: &AdmittedFormula, expanded: &AdmittedFormula) {
 #[test]
 fn local_chains_preserve_scoped_ground_formulas() {
     for &(source, expanded) in LOCAL_CASES {
-        let program = input(source);
-        let reference = input(expanded);
+        let program = formula(source);
+        let reference = formula(expanded);
         assert_eq!(native(&program), native(&reference), "{source}");
         same_frozen(&program, &reference);
     }
@@ -230,15 +221,15 @@ fn independently_bound_guards_bypass_affine_analysis() {
         "p(X,Y):-X=1..2,Y=1..2,0<X*Y<5.",
         "p(X):-X=0,0<2147483647*(2147483647*(2147483647*X))<2.",
     ] {
-        let program = input(source);
+        let program = formula(source);
         assert_eq!(native(&program), exhaustive(&program));
     }
 }
 
 #[test]
 fn finite_chains_defer_irrelevant_coefficient_capacity() {
-    let program = input("p(X,Y):-(-1)<X<Y<2,0=2147483647*(2147483647*(2147483647*X)).");
-    let reference = input("p(0,1).");
+    let program = formula("p(X,Y):-(-1)<X<Y<2,0=2147483647*(2147483647*(2147483647*X)).");
+    let reference = formula("p(0,1).");
     assert_eq!(native(&program), expected(&["p(0,1)"]));
     same_frozen(&program, &reference);
 }
@@ -304,8 +295,8 @@ fn reached_chain_arithmetic_remains_an_error() {
 
 #[test]
 fn mixed_chain_bindings_preserve_defined_solutions() {
-    let program = input("p(X,Y):-0<=X<Y<3,Y/X>1.");
-    let expected = native(&input("p(1,2)."));
+    let program = formula("p(X,Y):-0<=X<Y<3,Y/X>1.");
+    let expected = native(&formula("p(1,2)."));
     assert_eq!(program.warnings().len(), 1);
     assert_eq!(native(&program), expected);
     assert_eq!(exhaustive(&program), expected);
@@ -349,7 +340,7 @@ fn envelope_storage_and_work_limits_are_inclusive() {
 #[test]
 fn comparison_order_preserves_finite_admission() {
     let comparisons = ["0<X+Y", "X+Y<4", "0<Y", "Y<2"];
-    let expected = input("p(0,1).p(1,1).p(2,1).");
+    let expected = formula("p(0,1).p(1,1).p(2,1).");
     for first in 0..4 {
         for second in 0..4 {
             for third in 0..4 {
@@ -364,7 +355,7 @@ fn comparison_order_preserves_finite_admission() {
                         continue;
                     }
                     let body = order.map(|index| comparisons[index]).join(",");
-                    let program = input(&format!("p(X,Y):-{body}."));
+                    let program = formula(&format!("p(X,Y):-{body}."));
                     same_frozen(&program, &expected);
                 }
             }
@@ -392,11 +383,11 @@ proptest! {
                 }
             }
         }
-        let reference = input(&expanded);
-        let program = input(&source);
+        let reference = formula(&expanded);
+        let program = formula(&source);
         prop_assert_eq!(native(&program), native(&reference));
         same_frozen(&program, &reference);
-        same_frozen(&input(&reversed), &reference);
+        same_frozen(&formula(&reversed), &reference);
     }
 }
 
@@ -420,7 +411,7 @@ fn original_chains_match_complete_clingo_answers() {
             })
             .collect();
         assert_eq!(models, expected(atoms), "{source}");
-        assert_eq!(native(&input(source)), models, "{source}");
+        assert_eq!(native(&formula(source)), models, "{source}");
     }
     for &(source, expanded) in LOCAL_CASES {
         let record = reference::external(source, true);
@@ -442,6 +433,6 @@ fn original_chains_match_complete_clingo_answers() {
                 .collect()
         };
         assert_eq!(answers(&record), answers(&native_record), "{source}");
-        assert_eq!(native(&input(source)), answers(&record), "{source}");
+        assert_eq!(native(&formula(source)), answers(&record), "{source}");
     }
 }

@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use zetesis_core::{Atom, Model};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::admit;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
@@ -11,16 +12,8 @@ use zetesis_themelios::{
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
-fn admit(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-}
 fn input(source: &str) -> AdmittedFormula {
-    admit(source).unwrap_or_else(|error| panic!("{source}: {error}"))
+    admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn models(input: &AdmittedFormula) -> Models {
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
@@ -108,7 +101,10 @@ fn bound_targets_remain_aggregate_tests() {
 fn own_targets_cannot_bind_local_witnesses() {
     for source in ["n(N):-N=#count{X:p(N,X)}.", "n(N):-N=#count{N:p}."] {
         assert!(
-            matches!(admit(source), Err(FormulaFailure::UnsafeVariable { .. })),
+            matches!(
+                admit(source, &FormulaLimits::default()),
+                Err(FormulaFailure::UnsafeVariable { .. })
+            ),
             "{source}"
         );
     }
@@ -171,7 +167,10 @@ fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
         })
     ));
     assert!(matches!(
-        admit("{a;b}.n(N):-N=#sum{2147483647,a:a;2147483647,b:b}."),
+        admit(
+            "{a;b}.n(N):-N=#sum{2147483647,a:a;2147483647,b:b}.",
+            &FormulaLimits::default()
+        ),
         Err(FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { .. }
         ))

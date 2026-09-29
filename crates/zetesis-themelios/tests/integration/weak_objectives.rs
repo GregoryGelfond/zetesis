@@ -8,19 +8,16 @@ use themelios_program::program::Statement;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
-    SourceBundle, admit, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, InputLimit, SourceBundle,
+    admit, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 use crate::support::source_cases;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
+use zetesis_reference_support::formula;
 
-fn input(source: &str) -> AdmittedFormula {
-    reference::admit(source, &FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/weak-objectives.jsonl"))
 }
@@ -32,7 +29,7 @@ fn complete_model_cost_records_match_independent_clingo_evidence() {
     for case in cases {
         count += case.records.len();
         assert_eq!(
-            reference::exhaustive(&input(&case.source)),
+            reference::exhaustive(&formula(&case.source)),
             case.records,
             "{}",
             case.name

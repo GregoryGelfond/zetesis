@@ -5,23 +5,11 @@ use std::{collections::BTreeSet, num::NonZeroUsize};
 use crate::support::models::atom;
 use zetesis_core::{Model, Sign, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
     SolveConfig,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
-
-fn admitted(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -36,7 +24,7 @@ fn config() -> SolveConfig {
 #[test]
 fn formula_answers_retain_the_original_catalog() {
     let (answers, original_catalog) = {
-        let owner = admitted("tag(\"shared\").{p(1);p(\"1\");-q(1)}.");
+        let owner = formula("tag(\"shared\").{p(1);p(\"1\");-q(1)}.");
         let original = owner.atom_catalog().clone();
         let mut session = Session::enumerate(
             PreparedInput::formula(&owner),
@@ -93,7 +81,7 @@ fn formula_answers_retain_the_original_catalog() {
 #[test]
 fn optimum_bytes_include_unselected_catalog_payload() {
     let hidden = "x".repeat(8_192);
-    let owner = admitted(&format!(
+    let owner = formula(&format!(
         "a | hidden(\"{hidden}\"). :-hidden(\"{hidden}\"). #minimize{{0:a}}."
     ));
     let a = atom("a", Sign::Positive, vec![]);

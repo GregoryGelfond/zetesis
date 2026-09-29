@@ -1,6 +1,7 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::{admit, formula};
 
 mod cases;
 mod elements;
@@ -12,23 +13,10 @@ use cases::CASES;
 use proptest::prelude::*;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
+    admit_bundle_formula, admit_formula,
 };
-
-fn input(source: &str) -> AdmittedFormula {
-    limited(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
-fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        *limits,
-    )
-}
 
 fn expected(records: &[&[&str]]) -> Models {
     records
@@ -40,14 +28,14 @@ fn expected(records: &[&[&str]]) -> Models {
 #[test]
 fn complete_models_match_original_contracts() {
     for &(source, records) in CASES {
-        assert_eq!(native(&input(source)), expected(records), "{source}");
+        assert_eq!(native(&formula(source)), expected(records), "{source}");
     }
 }
 
 #[test]
 fn stability_matches_independent_subset_enumeration() {
     for &(source, _) in CASES {
-        let admitted = input(source);
+        let admitted = formula(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
@@ -55,7 +43,7 @@ fn stability_matches_independent_subset_enumeration() {
 #[test]
 fn original_source_text_is_retained() {
     for &(source, _) in CASES {
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(formula(source).source().text(), source);
     }
 }
 
@@ -69,7 +57,7 @@ fn boolean_constants_introduce_no_atoms() {
         "not not #true.",
         "not not #false.",
     ] {
-        assert!(input(source).atoms().is_empty(), "{source}");
+        assert!(formula(source).atoms().is_empty(), "{source}");
     }
 }
 
@@ -102,7 +90,7 @@ fn original_sources_match_clingo_full_models() {
         }
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
         assert_eq!(actual, expected(records), "{source}");
-        assert_eq!(native(&input(source)), actual, "{source}");
+        assert_eq!(native(&formula(source)), actual, "{source}");
         models += count;
     }
     println!("complete_sources={} full_models={models}", CASES.len());
@@ -184,7 +172,7 @@ fn original_rules(heads: &[(u8, u8)], body: (u8, u8)) -> (String, Vec<Formula>) 
 }
 
 fn frozen_pairs(source: &str, theory: &[Formula]) {
-    let admitted = input(source);
+    let admitted = formula(source);
     let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
     assert_eq!(
         names.iter().map(String::as_str).collect::<BTreeSet<_>>(),
@@ -250,7 +238,7 @@ proptest! {
 #[test]
 fn tautologies_preserve_variable_safety() {
     for source in ["#true|p(X).", "#true:-not p(X).", "#true|p(2..1,X)."] {
-        let error = limited(source, &FormulaLimits::default()).unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}");
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
@@ -270,7 +258,7 @@ fn conditional_booleans_preserve_eligibility() {
             .into_iter()
             .map(|row| row.into_iter().map(str::to_owned).collect())
             .collect();
-        assert_eq!(native(&input(source)), expected, "{source}");
+        assert_eq!(native(&formula(source)), expected, "{source}");
     }
 }
 
@@ -292,10 +280,10 @@ fn head_element_limits_count_boolean_operands() {
             max_disjunction_elements: count,
             ..FormulaLimits::default()
         };
-        assert!(limited(source, &limits).is_ok());
+        assert!(admit(source, &limits).is_ok());
         limits.max_disjunction_elements = count - 1;
         assert!(
-            matches!(limited(source, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
+            matches!(admit(source, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
         );
     }
 }
@@ -303,7 +291,7 @@ fn head_element_limits_count_boolean_operands() {
 #[test]
 fn tautologies_preserve_arithmetic_refusals() {
     for source in ["#true|p(1/0).", "#true|p(2147483647+1)."] {
-        let error = limited(source, &FormulaLimits::default()).unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}");
         assert!(
             matches!(
@@ -339,12 +327,12 @@ fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut Formu
     let attempt = |limit| {
         let mut limits = FormulaLimits::default();
         configure(&mut limits, limit);
-        limited(BUDGET_SOURCE, &limits)
+        admit(BUDGET_SOURCE, &limits)
     };
     let threshold = first_success(|limit| attempt(limit).is_ok());
     assert_eq!(
         native(&attempt(threshold).unwrap()),
-        native(&input(BUDGET_SOURCE))
+        native(&formula(BUDGET_SOURCE))
     );
     let error = attempt(threshold - 1).unwrap_err();
     assert!(!error.diagnostics().is_empty());
@@ -400,7 +388,7 @@ fn tautologies_preserve_term_work_accounting() {
     let threshold = first_success(|limit| attempt(limit).is_ok());
     assert_eq!(
         native(&attempt(threshold).unwrap()),
-        native(&input(BUDGET_SOURCE))
+        native(&formula(BUDGET_SOURCE))
     );
     let error = attempt(threshold - 1).unwrap_err();
     assert!(!error.diagnostics().is_empty());
