@@ -350,7 +350,7 @@ construction peak or process RSS. The [ownership chapter](ownership.md) relates
 these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
-[`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
+[`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs).
 It owns one canonical term/atom authority. Authenticated tuple queries reuse that
 store's exact identity index, then an integer-key inverse translates identity to
 discovery. A known same-authority atom ID avoids tuple lookup altogether. An

@@ -15,7 +15,6 @@ mod terms;
 mod term_read;
 mod vocabulary;
 
-#[path = "atom_interner.rs"]
 pub mod interner;
 mod compare;
 

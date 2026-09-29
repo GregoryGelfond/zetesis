@@ -673,5 +673,4 @@ fn node_key<E>(
 }
 
 #[cfg(test)]
-#[path = "intern/tests.rs"]
 mod tests;

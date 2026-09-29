@@ -150,7 +150,7 @@ order. Consuming an interner transfers its discovery map and shares the sealed
 canonical prefix with the immutable catalog; it releases construction indexes. Positions
 belong to their owner and must not be compared across unrelated catalogs as
 semantic identities. The
-[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs)
+[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs)
 documents the entry, borrowing, allocation and final-transfer contracts.
 The bounded
 [`atom_interning` example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#appendable-atom-interning-probe)
@@ -177,7 +177,7 @@ accounts for external owners separately. `prior_publication_metadata_bytes`
 authenticates a publication from the original writer and reports only its
 independent metadata. Equal content or a shared vocabulary is insufficient to
 deduct shared storage. See the
-[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner/closed.rs)
+[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner/closed.rs)
 and [`lookup correspondence`](../lean/correspondence.md).
 
 ## Borrowing and explicit copies

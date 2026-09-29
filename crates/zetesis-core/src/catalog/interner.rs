@@ -7,15 +7,10 @@
 //! [`crate::AtomCatalog::new`] separately preserves arbitrary occurrence order and
 //! duplicate positions, without retaining the supplied description addresses.
 
-#[path = "atom_interner/query.rs"]
 mod query;
-#[path = "atom_interner/terms.rs"]
 mod terms;
-#[path = "atom_interner/discovery.rs"]
 mod discovery;
-#[path = "atom_interner/ordering.rs"]
 mod ordering;
-#[path = "atom_interner/closed.rs"]
 mod closed;
 pub use closed::{CloseFailure, ClosedCatalog};
 pub use terms::{AssignedFailure, TermLookup};
@@ -1547,5 +1542,4 @@ fn reserve<T, E>(
 }
 
 #[cfg(test)]
-#[path = "atom_interner/tests.rs"]
 mod tests;

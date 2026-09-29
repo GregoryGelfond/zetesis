@@ -479,5 +479,4 @@ fn projected_argument<E>(
 }
 
 #[cfg(test)]
-#[path = "terms/tests.rs"]
 mod tests;

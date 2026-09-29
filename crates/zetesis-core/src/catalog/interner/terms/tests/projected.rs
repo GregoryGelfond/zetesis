@@ -720,5 +720,4 @@ fn occupied_projection_refuses_missing_scratch_byte() {
     assert_eq!(fixture.owner.len(), 1);
 }
 
-#[path = "projected_lookup_tests.rs"]
 mod lookup;

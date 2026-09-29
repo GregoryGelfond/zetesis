@@ -691,5 +691,4 @@ impl<E: std::error::Error + 'static> std::error::Error for ModelPublicationFailu
 }
 
 #[cfg(test)]
-#[path = "model/publication_tests.rs"]
 mod publication_tests;

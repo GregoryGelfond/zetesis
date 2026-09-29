@@ -458,5 +458,4 @@ fn assigned_atom_refusal_withholds_discovery() {
     }
 }
 
-#[path = "projected_tests.rs"]
 mod projected;

@@ -1,14 +1,9 @@
 //! Exact denotation, AVL shape, transaction refusal and scoped prefix controls.
 
-#[path = "tests/probes.rs"]
 mod probes;
-#[path = "tests/discovery.rs"]
 mod discovery_tests;
-#[path = "tests/ordering.rs"]
 mod ordering_tests;
-#[path = "tests/prepared.rs"]
 mod prepared_tests;
-#[path = "tests/closed.rs"]
 mod closed_tests;
 
 use super::*;

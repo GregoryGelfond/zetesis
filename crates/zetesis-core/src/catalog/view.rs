@@ -1446,10 +1446,8 @@ fn copy_node(
 }
 
 #[cfg(test)]
-#[path = "equality_tests.rs"]
 mod equality_tests;
 #[cfg(test)]
-#[path = "atom_equality_tests.rs"]
 mod atom_equality_tests;
 
 #[cfg(test)]
