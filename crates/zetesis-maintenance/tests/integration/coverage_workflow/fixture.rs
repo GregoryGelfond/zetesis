@@ -6,8 +6,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const TABLE: &str = include_str!("../../support/physical-selection.txt");
-pub const VULKAN_TABLE: &str = include_str!("../../support/physical-selection-vulkan.txt");
+pub const TABLE: &str = include_str!("../../../src/coverage/physical-selection.txt");
+pub const VULKAN_TABLE: &str = include_str!("../../../src/coverage/physical-selection-vulkan.txt");
 /// The sources every coverage report skips: the test-support crates.
 const SUPPORT_SOURCES: &str = "/crates/zetesis-(test|theory|clingo|reference)-support/";
 pub struct Fixture {

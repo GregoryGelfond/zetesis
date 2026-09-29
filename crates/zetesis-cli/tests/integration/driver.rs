@@ -185,7 +185,7 @@ fn kr_domains_rule_excerpts_complete_with_known_results() {
 
 #[test]
 fn unchanged_shortest_path_encoding_without_an_instance_completes() {
-    let source = include_str!("../fixtures/kr-domains/refused/shortest-path-variant-01.lp");
+    let source = include_str!("../fixtures/kr-domains/unchanged/shortest-path-variant-01.lp");
     let (report, _) = solve(source, &["--models", "0"]);
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);

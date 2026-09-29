@@ -18,8 +18,9 @@ check, objective work, timing or stable-model claim belongs to this trace.
 
 `refined.txt` uses `1 { p(1..4) } 2.` through the refined cursor, including root
 probing. Its complete traversal consumes 2,294 work units and nine decisions.
-`exact.txt` uses precisely those ceilings; `work-short.txt` and
-`decision-short.txt` lower the corresponding ceiling by one. A stopped trace
+A run with precisely those ceilings must reproduce it, so the same record is that
+test's expectation; `work-short.txt` and `decision-short.txt` lower the
+corresponding ceiling by one. A stopped trace
 retains its candidate prefix and complete charged accounting.
 
 The current replacement operation omits binary scans and inspects only the

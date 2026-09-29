@@ -48,22 +48,14 @@ the shortest-path excerpt, including its final LF, is
 The allocation lines with one blank line between them hash to
 `4bad5c8d9cd83776e06a060eb39ddb7544fad28d448dd13fdd7a775bd30af45c`.
 
-## Relational-profile refusal cases
+## Unchanged encoding
 
-`refused/shortest-path-variant-01.lp` is a byte-for-byte copy of the entire
+`unchanged/shortest-path-variant-01.lp` is a byte-for-byte copy of the entire
 `encodings/shortest-path/variant-01.lp`. It includes `#defined`, a conditional
-choice, aggregates, optimization, and `#show`; S0 must refuse it. Its current
-first diagnostic is an unsupported non-rule statement.
-
-The directory name records the original S0 boundary. The current automatic
-frontend admits this encoding through the Ferraris route; the CLI regression
-checks its complete empty-instance result. Complete encoding-plus-instance
-results are covered separately by the snapshots below.
-
-`refused/n-queens-variant-01.lp` is a byte-for-byte copy of the entire
-`standalone/n-queens/variant-01.lp`. It uses intervals, bounded conditional
-choices, ordering, arithmetic, and `#show`; S0 must refuse it. Its current first
-diagnostic is an unsupported non-scalar term/operator.
+choice, aggregates, optimization, and `#show`. The automatic frontend admits it
+through the Ferraris route, and the CLI regression checks its complete
+empty-instance result. Complete encoding-plus-instance results are covered
+separately by the snapshots below.
 
 ## Complete original-source snapshots
 

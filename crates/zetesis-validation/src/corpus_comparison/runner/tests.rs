@@ -534,7 +534,7 @@ fn physical_formula_parity_requires_real_route_telemetry_even_when_answers_match
         directory.path(),
         "native",
         NATIVE,
-        include_str!("../../../tests/support/formula_statistics.txt"),
+        include_str!("../../../tests/fixtures/formula_statistics.txt"),
         0,
     );
     let accepted = check(&options, &loaded, "pass");
@@ -543,7 +543,7 @@ fn physical_formula_parity_requires_real_route_telemetry_even_when_answers_match
         "gpu_exercised"
     );
     assert_eq!(accepted["native_formula_execution"]["gpu_candidates"], 1);
-    let wrong_api = include_str!("../../../tests/support/formula_statistics.txt")
+    let wrong_api = include_str!("../../../tests/fixtures/formula_statistics.txt")
         .replace("Metal; vendor", "Vulkan; vendor");
     options.zetesis = emitting(directory.path(), "native", NATIVE, &wrong_api, 0);
     check(&options, &loaded, "native_execution_unqualified");
@@ -559,7 +559,7 @@ fn full_campaign_separates_answer_parity_device_route_and_exercised_membership()
         directory.path(),
         "native",
         NATIVE,
-        include_str!("../../../tests/support/formula_statistics.txt"),
+        include_str!("../../../tests/fixtures/formula_statistics.txt"),
         0,
     );
     let (report, passed) = run(&options, &loaded(directory.path(), 94));
@@ -585,7 +585,7 @@ fn full_campaign_separates_answer_parity_device_route_and_exercised_membership()
     }
     let reference = json!({"Solver":"synthetic protocol fixture", "Call":[{}], "Result":"UNSATISFIABLE", "Models":{"More":"no", "Number":0}}).to_string();
     options.clingo = emitting(directory.path(), "reference", &reference, "", 20);
-    let stats = include_str!("../../../tests/support/formula_statistics.txt")
+    let stats = include_str!("../../../tests/fixtures/formula_statistics.txt")
         .replace("batches=1; candidates=1; propagation work=12; completed sweeps=1; GPU-decided committed=1", "batches=0; candidates=0; propagation work=0; completed sweeps=0; GPU-decided committed=0")
         .replace("peak authored GPU bytes=128", "peak authored GPU bytes=0")
         .replace("candidates=1; queries=0", "candidates=0; queries=0")
@@ -800,7 +800,7 @@ fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_
     for workers in [1, 2, 4] {
         options.native_completion_workers = workers.try_into().unwrap();
         options.native_max_completion_scratch_bytes = 4096;
-        let stats = include_str!("../../../tests/support/formula_statistics_completion.txt")
+        let stats = include_str!("../../../tests/fixtures/formula_statistics_completion.txt")
             .replace(
                 "CPU completion requested workers=4",
                 &format!("CPU completion requested workers={workers}"),

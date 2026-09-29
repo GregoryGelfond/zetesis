@@ -39,7 +39,7 @@ impl Fixture {
             fs::copy(original.join(name), corpus.join(name)).unwrap();
         }
         let mut records: Vec<Value> =
-            serde_json::from_str(include_str!("../support/selected/reports.json")).unwrap();
+            serde_json::from_str(include_str!("../fixtures/selected/reports.json")).unwrap();
         let mut reference_script = String::from("for input do :; done\n");
         let mut native_script = reference_script.clone();
         for (index, (case, record)) in checked.cases().iter().zip(&mut records).enumerate() {

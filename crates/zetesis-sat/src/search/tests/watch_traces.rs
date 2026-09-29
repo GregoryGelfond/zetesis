@@ -28,7 +28,7 @@ fn choice_work() -> u64 {
     let traced = trace(CHOICES, true, SearchLimits::default());
     assert_eq!(
         traced.record,
-        include_str!("../../../tests/fixtures/watch-traces/exact.txt")
+        include_str!("../../../tests/fixtures/watch-traces/refined.txt")
     );
     2294 - reference_statistics(SearchStatistics::default(), 4, 10, traced.rescanned).work
 }
@@ -271,7 +271,7 @@ fn reduced_work_ceiling_permits_the_complete_trace() {
     };
     assert_eq!(
         trace(CHOICES, true, limits).record,
-        include_str!("../../../tests/fixtures/watch-traces/exact.txt")
+        include_str!("../../../tests/fixtures/watch-traces/refined.txt")
     );
 }
 

@@ -91,8 +91,8 @@ fn physical(arguments: &[String]) -> Result<(), String> {
         .ok_or("missing exact filter")?;
     let filters = &arguments[position + 1..];
     let fields: Vec<_> = [
-        include_str!("physical-selection.txt"),
-        include_str!("physical-selection-vulkan.txt"),
+        include_str!("../../src/coverage/physical-selection.txt"),
+        include_str!("../../src/coverage/physical-selection-vulkan.txt"),
     ]
     .into_iter()
     .flat_map(str::lines)

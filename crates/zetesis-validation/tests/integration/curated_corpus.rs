@@ -51,7 +51,7 @@ fn verification_needs_only_curated_data() {
 #[test]
 fn full_models_match_independently_captured_reference_envelopes() {
     let records: Vec<Value> =
-        serde_json::from_str(include_str!("../support/selected/reports.json")).unwrap();
+        serde_json::from_str(include_str!("../fixtures/selected/reports.json")).unwrap();
     let corpus = verified();
     assert_eq!(records.len(), corpus.cases().len());
     let mut occurrences = 0;
