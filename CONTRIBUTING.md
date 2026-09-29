@@ -187,6 +187,13 @@ program's answer sets through the reduct check. A helper that only one crate's
 tests use stays in that crate's `tests/integration/support`. The support crates
 are not published, and every coverage report skips their sources.
 
+The data a crate's tests read, unit or integration, lives in its
+`tests/fixtures/`. Property tests keep proptest's default failure persistence:
+the integration binary's regression seeds live in
+`tests/proptest-regressions/<module>.txt`, and unit tests' in
+`proptest-regressions/<path>.txt` at the crate root. Commit a seed with the
+change that fixes the failure it records.
+
 The portable gate's `authored_lints` regression checks literal Rust attributes
 throughout the maintained source roots, including inactive `cfg_attr` branches
 and literal macro templates. Quoted examples are not attributes. This complements

@@ -1,7 +1,6 @@
 //! Shrinking generated DAGs checked against an independently materialized tree.
 
 use proptest::prelude::*;
-use proptest::test_runner::FileFailurePersistence;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
@@ -159,13 +158,6 @@ fn interpretation(theory: &Theory, world: u8) -> Interpretation {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig {
-        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(concat!(
-            env!("CARGO_MANIFEST_DIR"), "/tests/regressions/formula-dag.txt"
-        )))),
-        ..ProptestConfig::default()
-    })]
-
     #[test]
     fn generated_shared_and_deep_dags_match_explicit_tree_reduct(case in cases()) {
         let roots: Vec<_> = case.roots.iter().map(|root| Tree::expand(&case.nodes, *root)).collect();
