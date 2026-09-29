@@ -4,8 +4,8 @@ mod cases;
 use crate::support::finite_bindings as reference;
 mod semantics;
 
-use cases::{BOUNDS, RELATIONS, expected, sources};
-use reference::{Models, exhaustive, external, holds, native, values};
+use cases::{BOUNDS, RELATIONS, sources};
+use reference::{Models, exhaustive, expected, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{

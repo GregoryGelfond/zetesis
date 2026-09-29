@@ -1,5 +1,6 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
+use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
@@ -7,19 +8,6 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
-
-fn limited(
-    source: &str,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        expansion,
-        *limits,
-    )
-}
 
 // Written finite substitutions retain full supporting atoms. A condition row
 // quantifies universally; its compatible witness atoms form one disjunction.

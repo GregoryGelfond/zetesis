@@ -1,25 +1,13 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
+use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource,
 };
-
-fn limited(
-    source: &str,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        expansion,
-        *limits,
-    )
-}
 
 // Independently handwritten expansions. The Cartesian family remains a family
 // of rules; element expansion retains one choice and its original bounds.

@@ -5,6 +5,7 @@ use crate::support::objective_dependency_records as objective_dependencies;
 mod cases;
 mod elements;
 use crate::support::finite_bindings as reference;
+use crate::support::finite_bindings::expected;
 
 use std::collections::BTreeSet;
 
@@ -17,13 +18,6 @@ use zetesis_themelios::{
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
     admit_bundle_formula, admit_formula,
 };
-
-fn expected(records: &[&[&str]]) -> Models {
-    records
-        .iter()
-        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
-        .collect()
-}
 
 #[test]
 fn complete_models_match_original_contracts() {

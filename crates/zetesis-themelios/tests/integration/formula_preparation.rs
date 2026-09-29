@@ -1,25 +1,14 @@
 //! Preparation preserves source evidence and budgets before materialization.
 
-use std::cell::RefCell;
 use std::fs;
 
+use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, GroundingObserver, InputLimit, SourceBundle, admit_bundle_formula,
-    admit_formula, prepare_bundle_formula, prepare_formula,
+    FormulaResource, InputLimit, SourceBundle, admit_bundle_formula, admit_formula,
+    prepare_bundle_formula, prepare_formula,
 };
-
-#[derive(Default)]
-struct Observer(RefCell<Vec<bool>>);
-impl GroundingObserver for Observer {
-    fn enter(&self) {
-        self.0.borrow_mut().push(true);
-    }
-    fn exit(&self) {
-        self.0.borrow_mut().push(false);
-    }
-}
 
 #[test]
 fn preparation_exposes_analysis_without_support_completion() {

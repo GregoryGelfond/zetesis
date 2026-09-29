@@ -1,6 +1,8 @@
 //! Universal rows and existential consequent alternatives have separate scopes.
 use crate::support::finite_bindings as reference;
+use crate::support::formula_trees::{Formula, world};
 use crate::support::upstream;
+use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -10,18 +12,6 @@ use zetesis_themelios::{
     FormulaLimits, admit_formula, prepare_formula,
 };
 
-fn limited(
-    source: &str,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        expansion,
-        *limits,
-    )
-}
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
     upstream::corpus()
         .cases()
@@ -246,61 +236,6 @@ fn finite_substitutions_preserve_models() {
     }
 }
 
-/// A separate tree definition, with no production DAG construction or reduct API.
-#[derive(Clone)]
-enum Formula {
-    False,
-    Atom(String),
-    And(Box<Self>, Box<Self>),
-    Or(Box<Self>, Box<Self>),
-    Implies(Box<Self>, Box<Self>),
-}
-impl Formula {
-    fn atom(name: impl Into<String>) -> Self {
-        Self::Atom(name.into())
-    }
-    fn implies(left: Self, right: Self) -> Self {
-        Self::Implies(Box::new(left), Box::new(right))
-    }
-    fn and(left: Self, right: Self) -> Self {
-        Self::And(Box::new(left), Box::new(right))
-    }
-    fn truth() -> Self {
-        Self::implies(Self::False, Self::False)
-    }
-    fn sign(self, count: usize) -> Self {
-        (0..count).fold(self, |value, _| Self::implies(value, Self::False))
-    }
-    fn original(&self, world: &BTreeSet<String>) -> bool {
-        match self {
-            Self::False => false,
-            Self::Atom(atom) => world.contains(atom),
-            Self::And(left, right) => left.original(world) && right.original(world),
-            Self::Or(left, right) => left.original(world) || right.original(world),
-            Self::Implies(left, right) => !left.original(world) || right.original(world),
-        }
-    }
-    fn frozen(&self, outer: &BTreeSet<String>, inner: &BTreeSet<String>) -> bool {
-        if !self.original(outer) {
-            return false;
-        }
-        match self {
-            Self::False => false,
-            Self::Atom(atom) => inner.contains(atom),
-            Self::And(left, right) => left.frozen(outer, inner) && right.frozen(outer, inner),
-            Self::Or(left, right) => left.frozen(outer, inner) || right.frozen(outer, inner),
-            Self::Implies(left, right) => !left.frozen(outer, inner) || right.frozen(outer, inner),
-        }
-    }
-}
-fn world(atoms: zetesis_core::catalog::Atoms<'_>, mask: usize) -> BTreeSet<String> {
-    atoms
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| mask & (1 << index) != 0)
-        .map(|(_, atom)| canonical(atom))
-        .collect()
-}
 fn original_rule(program: &AdmittedFormula, head: &str) -> usize {
     let atom = program
         .atoms()

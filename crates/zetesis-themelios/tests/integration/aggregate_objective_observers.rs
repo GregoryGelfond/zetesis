@@ -5,6 +5,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::unsigned_spellings::atom_text;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
@@ -54,29 +55,6 @@ fn atoms(values: &Json) -> BTreeSet<String> {
 }
 // The fixed source alphabet uses scalar numbers, simple symbols and ordinary
 // quoted strings. Keep infinity and nonnumeric weight identities distinct.
-fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let name = atom.predicate().name();
-    if atom.values().is_empty() {
-        return name.to_owned();
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
-            zetesis_core::ValueNodeRef::String(value) => {
-                serde_json::to_string(value).expect("quoted scalar string")
-            }
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-        })
-        .collect();
-    format!("{name}({})", values.join(","))
-}
 
 fn costs(values: &Json) -> Option<Vec<i64>> {
     values.as_array().map(|values| {

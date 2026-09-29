@@ -1,21 +1,10 @@
 //! Optional materialization observation preserves admission and failure behavior.
 
-use std::cell::RefCell;
+use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingObserver, admit_formula,
+    AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
     admit_formula_with_grounding_observer,
 };
-
-#[derive(Default)]
-struct Observer(RefCell<Vec<bool>>);
-impl GroundingObserver for Observer {
-    fn enter(&self) {
-        self.0.borrow_mut().push(true);
-    }
-    fn exit(&self) {
-        self.0.borrow_mut().push(false);
-    }
-}
 
 #[test]
 fn exact_grounding_boundary_preserves_success_and_retains_failed_attempts() {

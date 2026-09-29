@@ -1,6 +1,7 @@
 //! Signed choice operands keep contribution identity separate from support.
 
 use crate::support::finite_bindings as reference;
+use crate::support::finite_bindings::expected;
 
 use std::collections::BTreeSet;
 
@@ -38,13 +39,6 @@ const CASES: &[(&str, &[&[&str]])] = &[
     ("-a.1{not not -a}1.", &[&["-a"]]),
     ("2{not #false}2.2{not #false;not #false}2.", &[]),
 ];
-
-fn expected(records: &[&[&str]]) -> Models {
-    records
-        .iter()
-        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
-        .collect()
-}
 
 #[test]
 fn complete_answers_preserve_signed_choice_contracts() {

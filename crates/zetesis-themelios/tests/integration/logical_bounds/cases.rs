@@ -1,6 +1,7 @@
 //! Declared complete answers for literal finite logical-bound programs.
 
 use super::Models;
+use crate::support::finite_bindings::expected;
 
 pub const RELATIONS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
 
@@ -14,13 +15,6 @@ pub const BOUNDS: [(&str, [bool; 6]); 7] = [
     ("(1,)", [false, true, true, true, false, false]),
     ("#sup", [false, true, true, true, false, false]),
 ];
-
-pub fn expected(records: &[&[&str]]) -> Models {
-    records
-        .iter()
-        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
-        .collect()
-}
 
 pub fn sources() -> Vec<(String, Models)> {
     let optional = expected(&[&[], &["a"], &["b"], &["a", "b"]]);

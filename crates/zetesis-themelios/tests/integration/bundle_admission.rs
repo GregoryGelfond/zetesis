@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::support::atom_models::Models;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
@@ -15,8 +16,6 @@ use zetesis_themelios::{
     BundleAdmissionFailure, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, InputLimit, SourceBundle, admit, admit_bundle_extended,
 };
-
-type Models = BTreeSet<BTreeSet<Atom>>;
 
 struct Fixture {
     directory: tempfile::TempDir,

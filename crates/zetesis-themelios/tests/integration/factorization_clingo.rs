@@ -6,6 +6,7 @@
 use std::collections::BTreeSet;
 use std::time::Duration;
 
+use crate::support::unsigned_spellings::atom_text;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
@@ -61,28 +62,6 @@ fn cases() -> Vec<Case> {
             }
         })
         .collect()
-}
-
-fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let predicate = atom.predicate().name();
-    if atom.values().is_empty() {
-        return predicate.to_owned();
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-            zetesis_core::ValueNodeRef::Number(value) => value.to_string(),
-            zetesis_core::ValueNodeRef::Symbol(value) => value.to_owned(),
-            zetesis_core::ValueNodeRef::String(value) => serde_json::to_string(value).unwrap(),
-        })
-        .collect();
-    format!("{predicate}({})", values.join(","))
 }
 
 fn record(input: &AdmittedFormula, model: &Interpretation) -> Record {

@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use zetesis_core::Atom;
+use crate::support::atom_models::Models;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_sat::{Limits, StableModels};
@@ -11,8 +11,6 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit_extended, admit_formula,
 };
-
-type Models = BTreeSet<BTreeSet<Atom>>;
 
 fn models(input: &AdmittedFormula) -> Models {
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())

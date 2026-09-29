@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
+use crate::support::atom_models::Models;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
@@ -14,7 +15,6 @@ use zetesis_themelios::{
     SourceDirective, admit, admit_bundle_extended, admit_extended,
 };
 
-type Models = BTreeSet<BTreeSet<Atom>>;
 type Displays = BTreeMap<BTreeSet<Atom>, usize>;
 
 fn input(source: &str) -> Admitted {

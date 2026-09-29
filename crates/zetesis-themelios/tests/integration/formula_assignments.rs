@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::{Atom, Model};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::admit;
 use zetesis_sat::{Limits, StableModels};
@@ -11,7 +11,6 @@ use zetesis_themelios::{
     FormulaLimits, FormulaResource, admit_formula,
 };
 
-type Models = BTreeSet<BTreeSet<Atom>>;
 fn input(source: &str) -> AdmittedFormula {
     admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
@@ -213,6 +212,7 @@ fn assignment_consumers_preserve_scored_answers() {
         objective_boundaries::check(&source);
     }
 }
+use crate::support::atom_models::Models;
 use crate::support::objective_boundaries;
 
 #[test]

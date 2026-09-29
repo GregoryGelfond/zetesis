@@ -3,6 +3,7 @@
 use std::fs::{self};
 use std::time::{Duration, Instant};
 
+use crate::support::answer_records::Record;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_core::Model;
@@ -14,8 +15,6 @@ use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, admit_formula,
 };
-
-type Record = (Vec<String>, Option<Vec<i64>>);
 
 fn cases() -> Vec<Json> {
     include_str!("../fixtures/observations.jsonl")

@@ -1,12 +1,12 @@
 //! Finite source-to-Ferraris admission preserves support, scopes, and evidence.
 
+use crate::support::atom_models::Models;
 use crate::support::objective_boundaries;
 
 use std::collections::BTreeSet;
 use std::fs;
 
 use zetesis_clingo_support as oracle;
-use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 use zetesis_reference_support::formula;
@@ -16,8 +16,6 @@ use zetesis_themelios::{
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, SourceBundle,
     admit_bundle_formula, admit_extended, admit_formula,
 };
-
-type Models = BTreeSet<BTreeSet<Atom>>;
 
 fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
     let mut search = StableModels::new(theory, Limits::default(), Cancellation::default())

@@ -132,3 +132,11 @@ pub(crate) fn remap(
             bits | (1 << to.iter().position(|other| atom == other).unwrap())
         })
 }
+
+/// The models written as lists of atom spellings.
+pub(crate) fn expected(records: &[&[&str]]) -> Models {
+    records
+        .iter()
+        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
+        .collect()
+}

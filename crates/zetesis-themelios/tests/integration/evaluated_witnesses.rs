@@ -1,5 +1,6 @@
 //! Local witness rows distinguish captured inputs from closed evaluated values.
 use crate::support::finite_bindings as reference;
+use crate::support::witnesses::limited;
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -10,19 +11,6 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
-
-fn limited(
-    source: &str,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        expansion,
-        *limits,
-    )
-}
 
 // These independently written finite substitutions retain whole source atoms.
 // Data equality selects alternatives; it contributes no logical support itself.

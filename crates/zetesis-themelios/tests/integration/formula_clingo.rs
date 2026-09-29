@@ -11,6 +11,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::atom_models::Models;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Predicate, TemplateTerm, ValueLimits};
@@ -19,8 +20,6 @@ use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit, admit_formula,
 };
-
-type Models = BTreeSet<BTreeSet<Atom>>;
 
 struct Case {
     source: String,

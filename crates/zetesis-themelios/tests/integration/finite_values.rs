@@ -1,6 +1,7 @@
 //! Constructed values remain data in original and frozen source interpretations.
 use crate::support::finite_bindings as reference;
 use crate::support::upstream;
+use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -22,18 +23,6 @@ fn competition() -> String {
     competition_case().source().to_owned()
 }
 
-fn limited(
-    source: &str,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        expansion,
-        *limits,
-    )
-}
 // Handwritten substitutions preserve whole rule bodies and choice-group scope.
 const CASES: &[(&str, &str)] = &[
     (

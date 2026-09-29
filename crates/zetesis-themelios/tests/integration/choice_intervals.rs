@@ -1,5 +1,6 @@
 //! Closed choice ranges preserve one group, local products and every reduct.
 
+use crate::support::answer_records::Record;
 use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
@@ -19,8 +20,6 @@ use zetesis_themelios::{
     FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended,
     admit_formula,
 };
-
-type Record = (Vec<String>, Option<Vec<i64>>);
 
 fn cases() -> Vec<Json> {
     include_str!("../fixtures/choice-intervals.jsonl")

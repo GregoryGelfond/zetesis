@@ -6,6 +6,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::answer_records::Record;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
@@ -13,8 +14,6 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
 use zetesis_reference_support::formula;
 use zetesis_themelios::AdmittedFormula;
-
-type Record = (Vec<String>, Option<Vec<i64>>);
 
 const BASE: &str = "p(1).p(2).e(1,2).e(2,1).e(2,2). {q(1);q(2);r(1);r(2)}.";
 const BODIES: [&str; 13] = [

@@ -6,6 +6,7 @@
 use std::collections::BTreeSet;
 
 use crate::support::finite_bindings::Models;
+use crate::support::unsigned_spellings::atom_text;
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
 use zetesis_clingo_support as oracle;
@@ -57,29 +58,6 @@ fn atoms(values: &Json) -> BTreeSet<String> {
 // This fixed corpus has scalar numbers, simple symbols and ordinary quoted
 // strings. Preserve their complete identities without reraising clingo's i32
 // minimum spelling, which the pinned source tier itself rejects as a literal.
-fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let name = atom.predicate().name();
-    if atom.values().is_empty() {
-        return name.to_owned();
-    }
-    let values: Vec<_> = atom
-        .values()
-        .iter()
-        .map(|value| match value.descriptor() {
-            zetesis_core::ValueNodeRef::Number(number) => number.to_string(),
-            zetesis_core::ValueNodeRef::Symbol(symbol) => symbol.to_owned(),
-            zetesis_core::ValueNodeRef::String(value) => {
-                serde_json::to_string(value).expect("quoted scalar string")
-            }
-            zetesis_core::ValueNodeRef::Infimum => "#inf".to_owned(),
-            zetesis_core::ValueNodeRef::Supremum => "#sup".to_owned(),
-            zetesis_core::ValueNodeRef::Function { .. }
-            | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
-        })
-        .collect();
-    format!("{name}({})", values.join(","))
-}
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
     assert!(

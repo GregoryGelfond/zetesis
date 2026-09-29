@@ -2,8 +2,6 @@
 //! models were independently checked with clingo 5.8.2; this portable suite
 //! evaluates every finite candidate using the exhaustive Ferraris oracle.
 
-use std::collections::BTreeSet;
-
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
@@ -12,8 +10,6 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit, admit_formula,
 };
-
-type Models = BTreeSet<BTreeSet<Atom>>;
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
@@ -245,6 +241,7 @@ fn negative_producers_preserve_scored_answers() {
         objective_boundaries::check(source);
     }
 }
+use crate::support::atom_models::Models;
 use crate::support::objective_boundaries;
 
 #[test]

@@ -14,7 +14,6 @@ use zetesis_themelios::{
     ProfileFeature, SourceBundle, admit, admit_bundle_formula, admit_extended, admit_formula,
 };
 
-type Record = (Vec<String>, Option<Vec<i64>>);
 const SIGNED_ANONYMOUS_PROJECTIONS: [(&str, &str); 2] = [
     ("p(1). #show x : not -p(_).", "p(1)"),
     ("-p(1). #show x : not not -p(_).", "-p(1)"),
@@ -408,6 +407,7 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
     }
     assert_eq!(count, 10);
 }
+use crate::support::answer_records::Record;
 use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
