@@ -28,21 +28,7 @@ mod normalize;
 mod record;
 mod runner;
 mod view;
-#[cfg_attr(
-    any(target_os = "linux", target_os = "macos"),
-    path = "corpus_comparison/legacy_process.rs"
-)]
-#[cfg_attr(
-    not(any(target_os = "linux", target_os = "macos")),
-    path = "corpus_comparison/process_portable.rs"
-)]
 mod capture;
-
-// Exercise the weaker direct-child adapter on Unix as well as compiling it on
-// its production platforms; it must preserve the same cancellation meaning.
-#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
-#[path = "corpus_comparison/process_portable.rs"]
-mod portable_capture_tests;
 
 pub use crate::selected::Oracle as NativeOracle;
 pub use config::{NativeInvocation, Request};

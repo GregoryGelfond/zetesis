@@ -13,15 +13,15 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::decision::{CaptureStatus, InvocationFailure};
-use super::exit::ExitEvidence;
+use crate::corpus_comparison::decision::{CaptureStatus, InvocationFailure};
+use crate::corpus_comparison::exit::ExitEvidence;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Capture {
     pub(crate) status: CaptureStatus,
     #[serde(flatten)]
-    pub(super) exit: ExitEvidence,
+    pub(in crate::corpus_comparison) exit: ExitEvidence,
     pub(crate) elapsed_ms: u128,
     pub(crate) stdout: String,
     pub(crate) stderr: String,
@@ -39,7 +39,7 @@ impl Capture {
 }
 
 #[cfg(all(test, unix))]
-pub(super) fn invoke(
+pub(in crate::corpus_comparison) fn invoke(
     executable: &Path,
     arguments: &[OsString],
     directory: &Path,
@@ -56,7 +56,7 @@ pub(super) fn invoke(
     )
 }
 
-pub(super) fn invoke_with_cancellation(
+pub(in crate::corpus_comparison) fn invoke_with_cancellation(
     executable: &Path,
     arguments: &[OsString],
     directory: &Path,

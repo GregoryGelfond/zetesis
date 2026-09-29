@@ -5,7 +5,6 @@
 
 use serde::Serialize;
 
-#[path = "execution_completion.rs"]
 mod completion;
 pub(crate) use completion::CompletionRequest;
 

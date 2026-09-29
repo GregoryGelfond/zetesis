@@ -7,18 +7,12 @@
 //! Recorded qualification is evidence from the original producer, not a new
 //! comparison of output streams or hidden interpretations.
 
-#[path = "release_observations/data.rs"]
 mod data;
-#[path = "release_observations/catalog_dataset.rs"]
 mod catalog_dataset;
-#[path = "release_observations/dataset.rs"]
 mod dataset;
-#[path = "release_observations/prepared_dataset.rs"]
 mod prepared_dataset;
-#[path = "release_observations/render.rs"]
 mod render;
 #[cfg(test)]
-#[path = "release_observations/tests.rs"]
 mod tests;
 
 use std::error::Error;
