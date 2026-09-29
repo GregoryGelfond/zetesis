@@ -57,11 +57,11 @@ refuse symbolic links. Confined recorded-file paths do not establish a filesyste
 snapshot or protection against concurrent replacement by another process.
 
 ```sh
-cargo test --locked -p zetesis-maintenance --all-features
-cargo clippy --locked -p zetesis-maintenance --all-targets --all-features -- -D warnings
+cargo test --locked -p zetesis-maintenance
+cargo clippy --locked -p zetesis-maintenance --all-targets -- -D warnings
 ```
 
-The `test-fixtures` feature enables a deterministic Rust subprocess stand-in.
+The `zetesis-maintenance-fixture` binary supplies deterministic Rust subprocess stand-ins.
 Tests execute the actual shell drivers with those stand-ins and inspect command
 order, profiles, status publication, failures and cleanup; they do not compile
 programs, execute Lean, collect coverage or exercise Metal. Real compiler,

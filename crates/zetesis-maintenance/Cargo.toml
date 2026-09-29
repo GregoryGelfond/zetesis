@@ -22,10 +22,6 @@ tempfile = "3"
 [lints]
 workspace = true
 
-[features]
-test-fixtures = []
-
 [[bin]]
 name = "zetesis-maintenance-fixture"
 path = "tests/support/fixture_main.rs"
-required-features = ["test-fixtures"]
