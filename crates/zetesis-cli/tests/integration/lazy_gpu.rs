@@ -1,5 +1,7 @@
 //! Ordinary lazy-device routing and physical qualification boundaries.
 
+#[cfg(feature = "gpu")]
+use crate::support::physical_backend;
 use clap::Parser;
 use zetesis_cli::{Completion, Options, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
@@ -71,9 +73,6 @@ fn physical_fixtures_belong_to_the_lazy_source_profile() {
         assert_eq!(report.completion, Completion::Exhausted);
     }
 }
-
-#[cfg(feature = "gpu")]
-use crate::support::physical_backend;
 
 #[cfg(feature = "gpu")]
 mod physical {

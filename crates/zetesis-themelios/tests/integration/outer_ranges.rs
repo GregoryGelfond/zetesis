@@ -6,6 +6,7 @@ use crate::support::finite_bindings as reference;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use crate::support::objective_boundaries;
 use cases::CASES;
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
@@ -254,7 +255,6 @@ fn range_consumers_preserve_scored_answers() {
         objective_boundaries::check(source);
     }
 }
-use crate::support::objective_boundaries;
 
 #[test]
 fn false_filters_cannot_hide_undefined_endpoints() {

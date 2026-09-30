@@ -6,6 +6,7 @@ mod truth;
 
 use std::collections::BTreeSet;
 
+use crate::support::objective_boundaries;
 use cases::sources;
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
@@ -198,7 +199,6 @@ fn guard_consumers_preserve_scored_answers() {
         objective_boundaries::check(source);
     }
 }
-use crate::support::objective_boundaries;
 
 #[test]
 fn nonbinding_guards_cannot_supply_missing_inputs() {

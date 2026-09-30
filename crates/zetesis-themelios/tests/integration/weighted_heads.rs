@@ -6,6 +6,7 @@ mod alias_semantics;
 
 use std::collections::BTreeSet;
 
+use crate::support::objective_boundaries;
 use cases::CASES;
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
@@ -249,7 +250,6 @@ fn weighted_head_producers_preserve_scored_answers() {
         objective_boundaries::check(&format!("1{function}{{1:a}}1.#minimize{{1:a}}."));
     }
 }
-use crate::support::objective_boundaries;
 
 #[test]
 fn signed_neutral_weights_supply_no_support() {

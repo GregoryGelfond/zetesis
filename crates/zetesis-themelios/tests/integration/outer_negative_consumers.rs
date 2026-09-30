@@ -5,6 +5,7 @@ use crate::support::finite_bindings as reference;
 
 use std::collections::BTreeSet;
 
+use crate::support::objective_boundaries;
 use cases::CASES;
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
@@ -200,7 +201,6 @@ fn negative_consumers_preserve_scored_answers() {
         objective_boundaries::check(source);
     }
 }
-use crate::support::objective_boundaries;
 
 #[test]
 fn false_gates_cannot_hide_undefined_arguments() {

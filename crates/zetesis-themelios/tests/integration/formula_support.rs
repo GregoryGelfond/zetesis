@@ -2,6 +2,8 @@
 //! models were independently checked with clingo 5.8.2; this portable suite
 //! evaluates every finite candidate using the exhaustive Ferraris oracle.
 
+use crate::support::atom_models::Models;
+use crate::support::objective_boundaries;
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
@@ -241,8 +243,6 @@ fn negative_producers_preserve_scored_answers() {
         objective_boundaries::check(source);
     }
 }
-use crate::support::atom_models::Models;
-use crate::support::objective_boundaries;
 
 #[test]
 fn objective_dependency_restrictions_do_not_reject_negative_constraints() {

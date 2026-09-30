@@ -6,6 +6,7 @@ mod logical;
 
 use std::collections::BTreeSet;
 
+use crate::support::objective_boundaries;
 use cases::sources;
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
@@ -459,7 +460,6 @@ fn extrema_producers_preserve_scored_answers() {
         }
     }
 }
-use crate::support::objective_boundaries;
 
 #[test]
 fn signed_extrema_do_not_supply_atom_support() {

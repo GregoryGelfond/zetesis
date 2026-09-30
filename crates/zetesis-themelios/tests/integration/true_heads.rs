@@ -3,6 +3,10 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
+use crate::support::finite_bindings::{holds, remap, values};
+use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
+use crate::support::objective_boundaries;
+use crate::support::thresholds::first_success;
 use serde_json::{Value as Json, json};
 use zetesis_reference_support::admit;
 use zetesis_themelios::{
@@ -150,10 +154,6 @@ fn true_disjuncts_preserve_scored_answers() {
     let source = "p:#true;q:#true.#minimize{1:q}.";
     objective_boundaries::check(source);
 }
-use crate::support::finite_bindings::{holds, remap, values};
-use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
-use crate::support::objective_boundaries;
-use crate::support::thresholds::first_success;
 
 #[test]
 fn extended_profile_refuses_true_disjunctions() {

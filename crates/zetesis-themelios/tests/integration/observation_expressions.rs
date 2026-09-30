@@ -1,5 +1,6 @@
 //! Pure expression evaluation observes full models without extending logical grounding.
 
+use crate::support::observation_reference;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -526,7 +527,6 @@ fn structural_pool_products_are_charged_before_materialization() {
         );
     }
 }
-use crate::support::observation_reference;
 #[test]
 #[ignore = "requires absolute CLINGO; bounded structural-pool reference cases"]
 fn atom_pattern_cases_match_complete_clingo_displays() {

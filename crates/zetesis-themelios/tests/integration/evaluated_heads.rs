@@ -3,6 +3,10 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
+use crate::support::finite_bindings::{holds, remap, values};
+use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
+use crate::support::objective_boundaries;
+use crate::support::thresholds::first_success;
 use serde_json::{Value as Json, json};
 use zetesis_reference_support::admit;
 use zetesis_themelios::{
@@ -168,10 +172,6 @@ fn excluded_head_forms_remain_located_refusals() {
         assert!(!error.diagnostics().is_empty());
     }
 }
-use crate::support::finite_bindings::{holds, remap, values};
-use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
-use crate::support::objective_boundaries;
-use crate::support::thresholds::first_success;
 
 #[test]
 fn evaluated_producers_preserve_scored_answers() {

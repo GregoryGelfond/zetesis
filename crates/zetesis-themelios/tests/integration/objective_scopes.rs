@@ -2,6 +2,8 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
+use zetesis_reference_support as reference;
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-scopes.jsonl");
 
@@ -16,9 +18,6 @@ fn scoped_objectives_preserve_full_scored_answers() {
 fn scoped_objectives_match_fresh_raw_clingo() {
     priority_contracts::fresh(CASES);
 }
-
-use zetesis_reference_support as reference;
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[test]
 fn scoped_objectives_keep_the_original_reduct_subject() {

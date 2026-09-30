@@ -2,6 +2,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::atom_models::Models;
+use crate::support::objective_boundaries;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::admit;
@@ -212,8 +214,6 @@ fn assignment_consumers_preserve_scored_answers() {
         objective_boundaries::check(&source);
     }
 }
-use crate::support::atom_models::Models;
-use crate::support::objective_boundaries;
 
 #[test]
 fn generated_positions_union_across_producers_without_changing_full_model_identity() {

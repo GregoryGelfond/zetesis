@@ -3,6 +3,9 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
+use crate::support::finite_bindings::{Models, holds, values};
+use crate::support::head_models::{Names, clingo, expected, limited, names};
+use crate::support::objective_boundaries;
 use serde_json::Value as Json;
 use zetesis_core::Sign;
 use zetesis_reference_support::admit;
@@ -300,9 +303,6 @@ fn conditional_negative_disjuncts_require_eligibility() {
         Models::from([Names::from(["c".into()])])
     );
 }
-use crate::support::finite_bindings::{Models, holds, values};
-use crate::support::head_models::{Names, clingo, expected, limited, names};
-use crate::support::objective_boundaries;
 
 #[test]
 fn negative_head_producers_preserve_scored_answers() {

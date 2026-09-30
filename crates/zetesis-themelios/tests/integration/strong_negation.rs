@@ -3,6 +3,10 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
+use crate::support::answer_records::Record;
+use crate::support::clingo_reports::optimal;
+use crate::support::finite_bindings::{holds, values};
+use crate::support::objective_boundaries;
 use serde_json::Value as Json;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
@@ -407,10 +411,6 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
     }
     assert_eq!(count, 10);
 }
-use crate::support::answer_records::Record;
-use crate::support::clingo_reports::optimal;
-use crate::support::finite_bindings::{holds, values};
-use crate::support::objective_boundaries;
 
 #[test]
 fn signed_anonymous_projection_has_the_declared_model_view() {

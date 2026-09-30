@@ -19,7 +19,13 @@ use crate::support::contribution_sources;
 use crate::support::bound_priority_sources;
 
 #[cfg(feature = "gpu")]
+use crate::support::count_objective_sources;
+#[cfg(feature = "gpu")]
 use crate::support::finite_carrier_sources;
+#[cfg(feature = "gpu")]
+use crate::support::language_value_sources;
+#[cfg(feature = "gpu")]
+use crate::support::physical_backend;
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
@@ -276,15 +282,6 @@ fn cpu_only_formula_hardware_request_is_explicitly_unavailable() {
     assert!(matches!(error, RunError::BackendUnavailable));
     assert!(output.is_empty());
 }
-
-#[cfg(feature = "gpu")]
-use crate::support::physical_backend;
-
-#[cfg(feature = "gpu")]
-use crate::support::count_objective_sources;
-
-#[cfg(feature = "gpu")]
-use crate::support::language_value_sources;
 
 #[cfg(feature = "gpu")]
 mod physical {
