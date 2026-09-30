@@ -99,7 +99,7 @@ pub struct Plan {
     /// Separate child-resource rounds per producer and case, after the
     /// timed rounds; zero unless requested.
     pub(super) memory_runs: usize,
-    /// Manifest-relative cases of the suite to run, in caller order; the
+    /// Relative entry paths of the suite to run, in caller order; the
     /// whole suite when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) selection: Option<Vec<String>>,
@@ -175,10 +175,12 @@ impl Plan {
     pub const fn memory_runs(&self) -> usize {
         self.memory_runs
     }
-    /// Run exactly `paths`, one through 94 distinct manifest-relative cases of
-    /// the plan's suite, in the order given, instead of the whole suite. The
-    /// campaign refuses a path that is not a case of the suite before launching
-    /// anything.
+    /// Run exactly `paths`, one through 94 distinct relative entry paths of
+    /// the plan's suite, in the order given, instead of the whole suite.
+    /// The ordinary matrix runner selects corpus cases. When
+    /// [`super::super::command::run`] expands the series, paths name workload
+    /// entries, including generated paths, and one entry can select several
+    /// amended cells. An unknown path is refused before launching anything.
     ///
     /// # Errors
     /// Refuses empty or oversized selections, duplicates and escaping or empty paths.

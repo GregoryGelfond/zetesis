@@ -303,3 +303,46 @@ pub fn run_workloads_with_cancellation(
 ) -> Result<Report, Error> {
     run::campaign(request, Some(workloads), invocation, cancelled)
 }
+
+/// Expand a selection over the maintained series' workload entries before
+/// invoking the explicit-workload runner. One entry can name several amended
+/// cells; every match keeps its identity and its order within that entry.
+/// Only this command-owned expansion consumes a selection: the public
+/// explicit-workload operations still refuse one. The returned report records
+/// both the original request and the actual expanded population.
+pub(super) fn run_series_with_cancellation(
+    request: &Request<'_>,
+    workloads: &[Workload],
+    invocation: NativeInvocation,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Report, Error> {
+    let Some(selection) = request.plan.selection() else {
+        return run_workloads_with_cancellation(request, workloads, invocation, cancelled);
+    };
+    let mut selected = Vec::with_capacity(workloads.len());
+    for path in selection {
+        let previous = selected.len();
+        selected.extend(
+            workloads
+                .iter()
+                .filter(|workload| workload.entry() == path.as_str())
+                .cloned(),
+        );
+        if selected.len() == previous {
+            return Err(Error::Configuration(
+                "a selected case is not a workload of the series",
+            ));
+        }
+    }
+    let expanded = Request {
+        tool: request.tool.clone(),
+        plan: Plan {
+            selection: None,
+            ..request.plan.clone()
+        },
+        ..*request
+    };
+    let mut report = run::campaign(&expanded, Some(&selected), invocation, cancelled)?;
+    report.plan.plan = request.plan.clone();
+    Ok(report)
+}

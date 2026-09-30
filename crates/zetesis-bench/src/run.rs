@@ -160,8 +160,10 @@ pub struct RunOptions {
     /// Maintained workload selection.
     #[arg(long, value_enum, default_value_t)]
     pub suite: Suite,
-    /// A case of the suite to measure, relative to the corpus directory; repeat
-    /// for several, in order. Omitted, the whole suite is measured.
+    /// A case of the suite to measure; repeat for several, in order. Series
+    /// paths name workload entries, including generated paths, and select every
+    /// amended cell of that entry. Corpus case paths are corpus-relative.
+    /// Omitted, the whole suite is measured.
     #[arg(long = "case", value_name = "PATH")]
     pub cases: Vec<String>,
     /// Authored examples root for --suite scalability; defaults to examples.

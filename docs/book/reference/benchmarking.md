@@ -63,8 +63,11 @@ inputs.
 | `scalability` | Nine authored and corpus workloads, with indexed formula joins and region search |
 
 `--case PATH` measures one case of the suite, named relative to the corpus
-directory; repeat it to measure several, in the order given. A case outside the
-suite is refused before anything launches. The scalability suite measures its
+directory; repeat it to measure several, in the order given. For `series`, use
+the workload entry path (including `generated/...`); a repeated amended entry
+such as `standalone/n-queens/variant-01.lp` selects both its ten- and eleven-queen
+cells in their series order. A case outside the suite is refused before anything
+launches. The scalability suite measures its
 own workloads and accepts no `--case`; it alone accepts `--examples`, its
 authored root, which defaults to `examples`, and `--include-einstein`, which
 adds the unchanged Einstein riddle. The series suite raises the per-invocation,

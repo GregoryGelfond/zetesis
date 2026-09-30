@@ -847,6 +847,84 @@ fn a_run_measures_exactly_the_named_cases() {
     );
 }
 
+fn selected_series(fixture: &Fixture, paths: &[&str]) -> matrix::Report {
+    let mut request = fixture.request(Suite::Series);
+    request.plan = request
+        .plan
+        .with_cases(paths.iter().map(|path| (*path).to_owned()).collect())
+        .unwrap();
+    performance::command::run_with_cancellation(
+        &request,
+        matrix::NativeInvocation::Solve,
+        &std::sync::atomic::AtomicBool::new(true),
+    )
+    .unwrap()
+}
+
+#[test]
+fn series_selection_keeps_requested_entry_order() {
+    let fixture = Fixture::new();
+    let selected = [
+        "standalone/send-money/send-money.lp",
+        "generated/chain-1000.lp",
+    ];
+    let report = selected_series(&fixture, &selected);
+    assert_eq!(report.cases(), selected);
+    assert_eq!(report.plan().selection().unwrap(), selected);
+    let workloads = report.workloads().unwrap();
+    assert!(!workloads[0].is_generated());
+    assert!(workloads[1].is_generated());
+    assert!(report.accounted());
+    assert_eq!(report.samples().len(), 8);
+    assert_eq!(report.metadata().len(), 0);
+    assert!(report.samples().iter().all(|sample| {
+        sample.decision() == Decision::NotAttempted && sample.capture().is_none()
+    }));
+}
+
+#[test]
+fn series_selection_expands_every_amended_cell() {
+    let fixture = Fixture::new();
+    let path = "standalone/n-queens/variant-01.lp";
+    let report = selected_series(&fixture, &[path]);
+    assert_eq!(report.cases(), [path, path]);
+    let workloads = report.workloads().unwrap();
+    assert_ne!(workloads[0].identity(), workloads[1].identity());
+    assert!(workloads.iter().all(matrix::Workload::is_amended));
+    let amendments: Vec<_> = workloads
+        .iter()
+        .map(|workload| {
+            serde_json::to_value(workload).unwrap()["sources"][0]["edits"][0]["after"].clone()
+        })
+        .collect();
+    assert_eq!(amendments, ["10", "11"]);
+}
+
+#[test]
+fn series_selection_refuses_unknown_entries_before_launch() {
+    let fixture = Fixture::new();
+    let script = "#!/bin/sh\n: > \"$0.launched\"\nexit 99\n";
+    fs::write(&fixture.native, script).unwrap();
+    fs::write(&fixture.reference, script).unwrap();
+    let mut request = fixture.request(Suite::Series);
+    request.plan = request
+        .plan
+        .with_cases(vec![
+            "standalone/send-money/send-money.lp".to_owned(),
+            "not-a-series-workload.lp".to_owned(),
+        ])
+        .unwrap();
+    assert!(matches!(
+        performance::command::run(&request, matrix::NativeInvocation::Solve),
+        Err(performance::Error::Configuration(
+            "a selected case is not a workload of the series"
+        ))
+    ));
+    assert!(!fixture.native.with_extension("launched").exists());
+    assert!(!fixture.reference.with_extension("launched").exists());
+    assert!(!fixture.report.exists());
+}
+
 #[test]
 fn a_run_without_a_report_names_its_evidence_in_the_working_directory() {
     let fixture = Fixture::new();
