@@ -86,10 +86,13 @@ export PATH="$(dirname "$CLINGO"):$PATH"
 ```
 
 The gate verifies the version and that both names identify the same executable.
-Its 15 independent Cargo campaigns retain arguments and exit statuses under a
-fresh `target/oracle-checks/run.*` directory. A test failure does not skip later
-campaigns; setup or receipt-write failures stop the run. The gate returns the
-first failed campaign's status. Capture stdout and stderr with the command log.
+Its 15 independent Cargo campaigns retain arguments, exit statuses and the
+harness's report of the tests each ran under a fresh `target/oracle-checks/run.*`
+directory. A test failure does not skip later campaigns; setup or receipt-write
+failures stop the run. After the campaigns, the gate requires each to have run
+at least one test, and exactly the ignored tests its filters select among the
+sources. The gate returns the first failed campaign's status, or that check's.
+Capture stdout and stderr with the command log.
 
 The script lists each campaign's selection explicitly: its test targets and,
 within a crate's `integration` target, test-name filters naming the modules it

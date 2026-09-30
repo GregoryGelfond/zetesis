@@ -16,7 +16,7 @@ use syn::{Expr, Item, ItemFn, Lit, Meta, Token};
 
 /// A test target whose harness can run an ignored test.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum Target {
+pub enum Target {
     /// The package's library, rooted at `src/lib.rs`.
     Lib,
     /// The integration test target of this name.
@@ -24,7 +24,7 @@ pub(super) enum Target {
 }
 
 /// One ignored test.
-pub(super) struct Ignored {
+pub struct Ignored {
     /// The package whose sources hold the test.
     pub package: String,
     /// The target compiling the test, when one does.
@@ -58,6 +58,15 @@ impl fmt::Display for Ignored {
     }
 }
 
+/// The largest source the reading takes.
+const MAX_SOURCE_BYTES: usize = 1_048_576;
+
+/// A source's text, read through the inventory's bounded reader.
+fn read(path: &Path) -> io::Result<String> {
+    let bytes = crate::inventory::read(path, MAX_SOURCE_BYTES).map_err(io::Error::other)?;
+    String::from_utf8(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
 /// What one source file holds: its ignored tests and its module declarations.
 #[derive(Default)]
 struct Scan {
@@ -89,12 +98,12 @@ struct Declaration {
 /// with no source or two among `sources`, circular module declarations, a
 /// module declared inside an inline module, an ignored function that is not a
 /// test, or a source in no package.
-pub(super) fn ignored(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Ignored>> {
+pub fn ignored(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Ignored>> {
     let root = normalize(root);
     let root = root.as_path();
     let mut scans = BTreeMap::new();
     for source in sources {
-        let text = crate::support::source(source)?;
+        let text = read(source)?;
         let scan = scan(&text)
             .map_err(|error| invalid(source, &format!("{}: {error}", error.span().start().line)))?;
         scans.insert(normalize(source), scan);
@@ -264,7 +273,7 @@ fn package_name(
             if let Some(name) = names.get(package) {
                 return Ok(name.clone());
             }
-            let name = manifest_name(&crate::support::source(&manifest)?)
+            let name = manifest_name(&read(&manifest)?)
                 .ok_or_else(|| invalid(&manifest, "the manifest names no package"))?;
             names.insert(package.to_path_buf(), name.clone());
             return Ok(name);

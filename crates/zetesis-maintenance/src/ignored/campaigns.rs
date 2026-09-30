@@ -2,10 +2,12 @@
 //! `oracle_test` call is one `cargo test` campaign over the test targets it
 //! names, run with `--ignored` for the clingo tests the portable gate skips.
 //! The gate's list is written by hand; this reading lets the portable gate
-//! check it against the sources.
+//! check it against the sources, and the oracle gate check each run against it.
+
+use crate::Error;
 
 /// One `oracle_test` call of the gate script.
-pub(super) struct Campaign {
+pub struct Campaign {
     /// The script line, from one.
     pub line: usize,
     /// The package `-p` selects.
@@ -24,7 +26,8 @@ pub(super) struct Campaign {
 impl Campaign {
     /// Whether this campaign runs the ignored test `name` of `target` in
     /// `package`, `name` as the target's harness lists it.
-    pub(super) fn runs(&self, package: &str, target: &str, name: &str) -> bool {
+    #[must_use]
+    pub fn runs(&self, package: &str, target: &str, name: &str) -> bool {
         self.ignored
             && self.package == package
             && self.targets.iter().any(|named| named == target)
@@ -45,12 +48,12 @@ const HARNESS: [&str; 2] = ["--ignored", "--nocapture"];
 /// further filters of its own.
 ///
 /// # Errors
-/// Returns a description of the first campaign line whose shape the gate
+/// Returns [`Error::Invalid`] describing the first campaign line whose shape the gate
 /// does not use: no package, no test target, two packages or two cargo
 /// filters, an option other than `-p`, `--test` and the neutral ones, such as
 /// `--lib`, or a harness option other than `--ignored` and `--nocapture`,
 /// such as `--exact`.
-pub(super) fn campaigns(script: &str) -> Result<Vec<Campaign>, String> {
+pub fn campaigns(script: &str) -> Result<Vec<Campaign>, Error> {
     let mut found = Vec::new();
     for (index, text) in script.lines().enumerate() {
         let line = index + 1;
@@ -71,8 +74,9 @@ pub(super) fn campaigns(script: &str) -> Result<Vec<Campaign>, String> {
                 } else if HARNESS.contains(&word) {
                     ignored |= word == "--ignored";
                 } else {
-                    return Err(format!(
-                        "line {line}: the oracle gate does not pass {word} to the harness"
+                    return Err(refused(
+                        line,
+                        &format!("the oracle gate does not pass {word} to the harness"),
                     ));
                 }
                 continue;
@@ -82,35 +86,36 @@ pub(super) fn campaigns(script: &str) -> Result<Vec<Campaign>, String> {
                 "-p" | "--package" => {
                     let name = words
                         .next()
-                        .ok_or_else(|| format!("line {line}: -p names no package"))?;
+                        .ok_or_else(|| refused(line, "-p names no package"))?;
                     if package.replace(name.to_owned()).is_some() {
-                        return Err(format!("line {line}: two packages"));
+                        return Err(refused(line, "two packages"));
                     }
                 }
                 "--test" => {
                     let name = words
                         .next()
-                        .ok_or_else(|| format!("line {line}: --test names no target"))?;
+                        .ok_or_else(|| refused(line, "--test names no target"))?;
                     targets.push(name.to_owned());
                 }
                 neutral if NEUTRAL.contains(&neutral) => {}
                 option if option.starts_with('-') => {
-                    return Err(format!(
-                        "line {line}: the oracle gate does not use {option}"
+                    return Err(refused(
+                        line,
+                        &format!("the oracle gate does not use {option}"),
                     ));
                 }
                 name => {
                     if cargo_filter {
-                        return Err(format!("line {line}: two test-name filters before --"));
+                        return Err(refused(line, "two test-name filters before --"));
                     }
                     cargo_filter = true;
                     filters.push(name.to_owned());
                 }
             }
         }
-        let package = package.ok_or_else(|| format!("line {line}: no package"))?;
+        let package = package.ok_or_else(|| refused(line, "no package"))?;
         if targets.is_empty() {
-            return Err(format!("line {line}: no test target"));
+            return Err(refused(line, "no test target"));
         }
         found.push(Campaign {
             line,
@@ -121,4 +126,9 @@ pub(super) fn campaigns(script: &str) -> Result<Vec<Campaign>, String> {
         });
     }
     Ok(found)
+}
+
+/// The refusal of the campaign on script line `line`.
+fn refused(line: usize, reason: &str) -> Error {
+    Error::Invalid(format!("line {line}: {reason}"))
 }

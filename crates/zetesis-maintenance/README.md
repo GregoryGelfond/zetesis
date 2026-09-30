@@ -55,6 +55,9 @@ complete dependency or source-to-binary seal. `inventory::authored` lists the
 maintained Rust sources for the repository audits in this crate's tests: the
 authored-lint audit, and the ignored-test check, which refuses an ignore that
 names no resource and a clingo, Metal or Vulkan test its gate does not select.
+`ignored` reads those ignored tests and the oracle gate's campaigns, and
+`ignored::check_runs` holds each campaign's recorded run to exactly the ignored
+tests its filters select; the oracle gate calls it through `oracle-runs`.
 
 Policy input and physical logs have a 16 MiB inclusive ceiling. LLVM executable
 identity reads have a 256 MiB ceiling. Proof/source reads expose their own limits;

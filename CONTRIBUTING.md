@@ -217,9 +217,13 @@ selection by exact name. zetesis-maintenance's `ignored_tests` check, which the
 portable gate runs, reads the reasons, the campaigns and the selections. It fails
 when an ignore names no resource, when a clingo test is selected by no campaign
 or a campaign's selection holds none, and when a Metal or Vulkan test is missing
-from its backend's selection or a selection entry names no such test. Select a
-new clingo test's module in a campaign, and a new hardware test in its
-backend's reviewed selection, when the test is written.
+from its backend's selection or a selection entry names no such test. After its
+campaigns, the oracle gate checks each campaign's run against that same reading:
+a campaign must run at least one test, and exactly the ignored tests its filters
+select, so a filter matching nothing, or a selected test the campaign's features
+compile out, fails the gate. Select a new clingo test's module in a campaign,
+and a new hardware test in its backend's reviewed selection, when the test is
+written.
 
 A foreign API can require a signature or field name that conflicts with a style
 lint. Such an exception must use a narrow `expect` on the required declaration,

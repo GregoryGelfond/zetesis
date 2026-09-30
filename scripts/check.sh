@@ -111,12 +111,16 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     oracle_test() {
         oracle_index=$((oracle_index + 1))
         printf '%s\n' cargo test "$@" > "$oracle_records/$oracle_index.argv"
-        if cargo test "$@"; then
-            oracle_exit=0
-        else
-            oracle_exit=$?
-        fi
-        printf '%s\n' "$oracle_exit" > "$oracle_records/$oracle_index.exit"
+        # The harness's report of the tests it ran is kept beside the exit
+        # status, for the check of every campaign's run below.
+        {
+            if cargo test "$@"; then
+                printf '%s\n' 0 > "$oracle_records/$oracle_index.exit"
+            else
+                printf '%s\n' "$?" > "$oracle_records/$oracle_index.exit"
+            fi
+        } | tee "$oracle_records/$oracle_index.log"
+        oracle_exit=$(cat "$oracle_records/$oracle_index.exit")
         printf 'Oracle campaign %s exited %s\n' "$oracle_index" "$oracle_exit"
         if [ "$oracle_first_failure" -eq 0 ] && [ "$oracle_exit" -ne 0 ]; then
             oracle_first_failure=$oracle_exit
@@ -137,6 +141,18 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --nocapture extrema_clingo::
     oracle_test --locked --no-fail-fast -p zetesis-cli --test integration -- --ignored --nocapture clingo:: extended_clingo:: multiple_inputs:: maximize:: language_value_sessions:: contribution_sessions:: bound_priority_sessions:: finite_carrier_sessions:: count_objective_sessions:: strong_negation::
     oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture bundle_admission:: metadata:: formula:: formula_clingo:: aggregate_clingo:: aggregate_assignments_multiple:: aggregate_objective_observers:: extrema_source:: scalar_bindings_clingo:: objective_bounds_adversarial:: factorization_clingo:: comparison_reuse:: disjunction:: sum_profiles:: weak_objectives:: maximize_clingo:: observations:: observations_adversarial:: choice_intervals:: ground_guards:: conditional_body:: comparison_generators:: finite_bindings:: evaluated_heads:: negative_heads:: structural_values:: finite_pools:: true_heads:: count_heads:: value_extrema:: structural_bindings:: finite_values:: consequent_alternatives:: function_patterns:: positive_arguments:: scalar_evaluation::
+    # Each campaign ran at least one test, and exactly the ignored tests its
+    # filters select among the sources: a filter matching nothing, or a
+    # selected test the campaign's features compile out, fails the gate.
+    if scripts/maintenance.sh oracle-runs --root . --records "$oracle_records"; then
+        oracle_runs_exit=0
+    else
+        oracle_runs_exit=$?
+    fi
+    printf '%s\n' "$oracle_runs_exit" > "$oracle_records/runs.exit"
+    if [ "$oracle_first_failure" -eq 0 ] && [ "$oracle_runs_exit" -ne 0 ]; then
+        oracle_first_failure=$oracle_runs_exit
+    fi
     printf 'Oracle campaign records: %s\n' "$oracle_records"
     if [ "$oracle_first_failure" -ne 0 ]; then
         printf '%s\n' failed > "$oracle_records/status.txt"

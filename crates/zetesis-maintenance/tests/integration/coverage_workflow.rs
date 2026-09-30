@@ -556,11 +556,16 @@ fn oracle_campaigns_continue_after_independent_failures() {
         ("projected_reference", &[3][..]),
     ] {
         let fixture = Fixture::new();
+        fixture.tool("bin/maintenance", "maintenance");
         let result = fixture
             .command("scripts/check.sh")
             .arg("oracle")
             .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
             .env("CHECK_TEST_ORACLE_FAILURE", failed)
+            .env(
+                "ZETESIS_MAINTENANCE",
+                fixture.root().join("bin/maintenance"),
+            )
             .bounded_output();
         assert_eq!(
             result.status.code(),
@@ -598,7 +603,20 @@ fn oracle_campaigns_continue_after_independent_failures() {
                 arguments.lines().collect::<Vec<_>>().join(" "),
                 campaigns[index - 1]
             );
+            assert!(records[0].join(format!("{index}.log")).is_file());
         }
+        // Every run is checked against the campaigns' selection, failed or not.
+        let records_argument = format!("--records {}", records[0].display());
+        assert!(
+            trace
+                .lines()
+                .any(|line| line.starts_with("maintenance oracle-runs --root . ")
+                    && line.ends_with(&records_argument))
+        );
+        assert_eq!(
+            fs::read_to_string(records[0].join("runs.exit")).unwrap(),
+            "0\n"
+        );
         assert_eq!(
             fs::read_to_string(records[0].join("status.txt")).unwrap(),
             if failed.is_empty() {
@@ -608,6 +626,36 @@ fn oracle_campaigns_continue_after_independent_failures() {
             }
         );
     }
+}
+
+#[test]
+fn a_run_its_selection_refuses_fails_the_oracle_gate() {
+    let fixture = Fixture::new();
+    fixture.tool("bin/maintenance", "maintenance");
+    let result = fixture
+        .command("scripts/check.sh")
+        .arg("oracle")
+        .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+        .env("CHECK_TEST_FAILURE", "oracle-runs")
+        .env(
+            "ZETESIS_MAINTENANCE",
+            fixture.root().join("bin/maintenance"),
+        )
+        .bounded_output();
+    assert_eq!(result.status.code(), Some(23));
+    let records: Vec<_> = fs::read_dir(fixture.root().join("target/oracle-checks"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        fs::read_to_string(records[0].join("runs.exit")).unwrap(),
+        "23\n"
+    );
+    assert_eq!(
+        fs::read_to_string(records[0].join("status.txt")).unwrap(),
+        "failed\n"
+    );
 }
 
 #[test]

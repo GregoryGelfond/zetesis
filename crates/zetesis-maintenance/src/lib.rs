@@ -13,6 +13,7 @@ mod markdown;
 mod workspace;
 pub mod book;
 pub mod coverage;
+pub mod ignored;
 pub mod install;
 pub mod inventory;
 pub mod invocations;

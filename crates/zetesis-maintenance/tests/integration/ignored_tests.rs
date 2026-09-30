@@ -7,16 +7,14 @@
 //! integration target, by module filter; the hardware gate runs each backend's
 //! reviewed selection by exact name. A test no gate selects is run by nothing.
 
-mod oracle_campaigns;
-mod sources;
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use oracle_campaigns::{Campaign, campaigns};
-use sources::{Ignored, Target, ignored};
 use zetesis_backend::GpuApi;
 use zetesis_maintenance::coverage;
+use zetesis_maintenance::ignored::{
+    Campaign, Ignored, Target, campaigns, check_runs, ignored, ran,
+};
 
 use crate::support::{authored_sources, repository};
 
@@ -745,4 +743,99 @@ fn a_declared_module_without_a_file_is_refused() {
     package(root, "crates/example", "example");
     let alpha = write(root, "crates/example/tests/alpha.rs", "mod missing;\n");
     assert!(ignored(root, &[alpha]).is_err());
+}
+
+/// A clingo comparison of package `example`'s integration target.
+fn comparison(name: &str) -> Ignored {
+    Ignored {
+        package: "example".into(),
+        target: Some(Target::Test("integration".into())),
+        name: name.into(),
+        reason: "requires clingo: compares a complete family".into(),
+        path: PathBuf::from("crates/example/tests/integration/alpha.rs"),
+        line: 1,
+    }
+}
+
+/// One campaign over the `alpha` module of `example`'s integration target.
+const ALPHA: &str = "oracle_test --locked -p example --test integration -- --ignored alpha::\n";
+
+/// The harness output of a run of `tests`, each passing.
+fn run_of(tests: &[&str]) -> String {
+    use std::fmt::Write as _;
+    let mut lines = String::new();
+    for name in tests {
+        writeln!(lines, "test {name} ... ok").unwrap();
+    }
+    format!(
+        "\nrunning {count} tests\n{lines}\ntest result: ok. {count} passed; 0 failed\n",
+        count = tests.len()
+    )
+}
+
+#[test]
+fn the_harness_output_names_the_tests_that_ran() {
+    let output = "running 3 tests\ntest alpha::first ... ok\ntest alpha::second ... FAILED\n\
+        test alpha::third ... ignored\nprinted test alpha::fake ... ok\n\n\
+        test result: FAILED. 1 passed; 1 failed; 1 ignored\n";
+    assert_eq!(
+        ran(output),
+        std::collections::BTreeSet::from(["alpha::first", "alpha::second"])
+    );
+}
+
+#[test]
+fn a_campaign_that_ran_exactly_its_selection_is_accepted() {
+    let gate = campaigns(ALPHA).unwrap();
+    let tests = [
+        comparison("alpha::first"),
+        comparison("alpha::second"),
+        comparison("beta::other"),
+    ];
+    check_runs(&gate, &tests, &[run_of(&["alpha::first", "alpha::second"])]).unwrap();
+}
+
+#[test]
+fn a_campaign_that_ran_no_test_is_refused() {
+    let gate = campaigns(ALPHA).unwrap();
+    let refusal = check_runs(&gate, &[], &[run_of(&[])])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refusal.contains("campaign 1 (line 1) ran no test"),
+        "{refusal}"
+    );
+}
+
+#[test]
+fn a_selected_test_its_campaign_did_not_run_is_refused() {
+    // As when the campaign's features compile the test out.
+    let gate = campaigns(ALPHA).unwrap();
+    let tests = [comparison("alpha::first"), comparison("alpha::second")];
+    let refusal = check_runs(&gate, &tests, &[run_of(&["alpha::first"])])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refusal.contains("campaign 1 (line 1) did not run alpha::second"),
+        "{refusal}"
+    );
+}
+
+#[test]
+fn a_test_its_campaign_ran_without_selecting_it_is_refused() {
+    let gate = campaigns(ALPHA).unwrap();
+    let tests = [comparison("alpha::first")];
+    let refusal = check_runs(&gate, &tests, &[run_of(&["alpha::first", "alpha::extra"])])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refusal.contains("ran alpha::extra, which its filters do not select"),
+        "{refusal}"
+    );
+}
+
+#[test]
+fn every_campaign_needs_its_recorded_run() {
+    let gate = campaigns(ALPHA).unwrap();
+    assert!(check_runs(&gate, &[comparison("alpha::first")], &[]).is_err());
 }

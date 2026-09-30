@@ -9,7 +9,7 @@ use zetesis_backend::GpuApi;
 use zetesis_maintenance::{
     Error, book,
     coverage::{self, Floor, Metadata, Mode, Observation, Physical, Tool},
-    inventory, proofs,
+    ignored, inventory, proofs,
 };
 
 #[derive(Parser)]
@@ -142,6 +142,38 @@ enum Action {
         #[arg(long)]
         root: PathBuf,
     },
+    /// Require each oracle campaign's recorded run to have run at least one
+    /// test, and exactly the ignored tests its filters select.
+    OracleRuns {
+        /// The repository whose gate script and sources the campaigns ran.
+        #[arg(long)]
+        root: PathBuf,
+        /// Each campaign's harness output, `N.log` for campaign N from one.
+        #[arg(long)]
+        records: PathBuf,
+    },
+}
+/// Check the oracle gate's recorded runs against the campaigns of `root`'s
+/// gate script and the ignored tests of its sources.
+fn oracle_runs(root: &std::path::Path, records: &std::path::Path) -> Result<Vec<u8>, Error> {
+    let campaigns = ignored::campaigns(&text(&root.join("scripts/check.sh"))?)?;
+    let sources: Vec<PathBuf> = inventory::authored(root, inventory::Limits::default())?
+        .into_iter()
+        .map(|source| root.join(source))
+        .collect();
+    let tests = ignored::ignored(root, &sources).map_err(|source| Error::Io {
+        path: root.to_path_buf(),
+        source,
+    })?;
+    let outputs = (1..=campaigns.len())
+        .map(|index| text(&records.join(format!("{index}.log"))))
+        .collect::<Result<Vec<_>, _>>()?;
+    ignored::check_runs(&campaigns, &tests, &outputs)?;
+    Ok(format!(
+        "oracle campaigns: each of {} ran exactly the tests it selects\n",
+        campaigns.len()
+    )
+    .into_bytes())
 }
 fn text(path: &std::path::Path) -> Result<String, Error> {
     String::from_utf8(inventory::read(path, 16_777_216)?)
@@ -308,6 +340,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             let sources = inventory::sources(&root, inventory::Limits::default())?;
             coverage::render(&serde_json::to_value(sources).map_err(Error::Json)?)?
         }
+        Action::OracleRuns { root, records } => oracle_runs(&root, &records)?,
     };
     output.write_all(&value).map_err(|source| Error::Io {
         path: "<stdout>".into(),

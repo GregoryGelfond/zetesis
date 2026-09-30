@@ -269,6 +269,17 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+/// Whether `CHECK_TEST_FAILURE` asks this call of `role` to fail: a Lean build
+/// or audit, the proof record, or the check of the oracle campaigns' runs.
+fn simulated_failure(role: &str, arguments: &[String]) -> bool {
+    let failure = variable("CHECK_TEST_FAILURE", "");
+    let command = arguments.first().map(String::as_str);
+    (role == "lake"
+        && ((arguments == ["build"] && failure == "build")
+            || (has(arguments, "Audit.lean") && failure == "audit")))
+        || (role == "maintenance" && command == Some("proof-record") && failure == "record")
+        || (role == "maintenance" && command == Some("oracle-runs") && failure == "oracle-runs")
+}
 fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     trace(role, arguments);
     if let Some(expected) = env::var_os("CHECK_TEST_EXPECT_DIRECTORY")
@@ -289,16 +300,7 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     {
         eprintln!("synthetic unexpected Audit stderr");
     }
-    let failure = variable("CHECK_TEST_FAILURE", "");
-    if (role == "lake"
-        && ((arguments == ["build"] && failure == "build")
-            || (has(arguments, "Audit.lean") && failure == "audit")))
-        || (role == "maintenance"
-            && arguments
-                .first()
-                .is_some_and(|argument| argument == "proof-record")
-            && failure == "record")
-    {
+    if simulated_failure(role, arguments) {
         return fail("simulated check failure");
     }
     match role {
