@@ -1,6 +1,7 @@
 //! Pure policy tests with independently authored protocol observations.
 use std::{fmt::Write as _, path::Path};
-use zetesis_maintenance::coverage::{self, Floor, Metadata, Mode, Observation, Tool};
+use zetesis_backend::GpuApi;
+use zetesis_maintenance::coverage::{self, Floor, Metadata, Mode, Observation, Physical, Tool};
 
 const TABLE: &str = include_str!("../../src/coverage/physical-selection.txt");
 const VULKAN_TABLE: &str = include_str!("../../src/coverage/physical-selection-vulkan.txt");
@@ -291,12 +292,16 @@ fn metadata_with_cargo(
     physical: bool,
     cargo_llvm_cov: &str,
 ) -> Result<serde_json::Value, zetesis_maintenance::Error> {
-    metadata_over(version, physical.then_some(TABLE), cargo_llvm_cov)
+    let metal = Physical {
+        api: GpuApi::Metal,
+        table: TABLE,
+    };
+    metadata_over(version, physical.then_some(metal), cargo_llvm_cov)
 }
 
 fn metadata_over(
     version: &str,
-    physical_table: Option<&str>,
+    physical: Option<Physical<'_>>,
     cargo_llvm_cov: &str,
 ) -> Result<serde_json::Value, zetesis_maintenance::Error> {
     let digest = "a".repeat(64);
@@ -308,7 +313,7 @@ fn metadata_over(
     coverage::metadata(Metadata {
         mode: Mode::Gate,
         floor: "91",
-        physical_table,
+        physical,
         observation: Observation {
             rustc: "rustc 1.97.1\nhost: fixture\nLLVM version: 22.1.6",
             cargo_llvm_cov,
@@ -505,16 +510,42 @@ fn a_selection_names_the_backend_of_its_table() {
 }
 
 #[test]
-fn coverage_metadata_refuses_the_vulkan_selection() {
-    // The recorded coverage scope is the Metal qualification; a Vulkan
-    // table would be recorded as Metal tests.
-    assert!(
-        metadata_over(
+fn a_physical_stage_refuses_another_backends_selection() {
+    // Each stage records its own backend's reviewed selection; another
+    // backend's table would be recorded as this backend's tests.
+    for (api, table) in [(GpuApi::Metal, VULKAN_TABLE), (GpuApi::Vulkan, TABLE)] {
+        let physical = Physical { api, table };
+        assert!(
+            metadata_over(
+                "LLVM version 22.1.6",
+                Some(physical),
+                "cargo-llvm-cov 0.8.7"
+            )
+            .is_err(),
+            "{api:?}"
+        );
+    }
+}
+
+#[test]
+fn each_physical_stage_names_its_backend() {
+    for (api, table) in [(GpuApi::Metal, TABLE), (GpuApi::Vulkan, VULKAN_TABLE)] {
+        let physical = Physical { api, table };
+        let record = metadata_over(
             "LLVM version 22.1.6",
-            Some(VULKAN_TABLE),
-            "cargo-llvm-cov 0.8.7"
+            Some(physical),
+            "cargo-llvm-cov 0.8.7",
         )
-        .is_err()
-    );
-    assert!(metadata_over("LLVM version 22.1.6", Some(TABLE), "cargo-llvm-cov 0.8.7").is_ok());
+        .unwrap();
+        let label = api.label();
+        assert_eq!(record["workspace_execution"], format!("portable+{label}"));
+        assert_eq!(
+            record["workspace_stages"],
+            serde_json::json!(["portable", label])
+        );
+        assert_eq!(record["expected_physical_tests"], 58);
+        let scope = record["physical_scope"].as_str().unwrap();
+        assert!(scope.starts_with(&format!("58 exact {} tests: ", api.name())));
+        assert!(scope.contains(&format!("complete CPU/{} answer families", api.name())));
+    }
 }

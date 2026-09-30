@@ -61,17 +61,25 @@ impl Fixture {
         for name in ["llvm-cov", "llvm-profdata"] {
             fixture.tool(&format!("sysroot/lib/rustlib/fake-host/bin/{name}"), "llvm");
         }
-        for fields in groups() {
+        for backend in BACKENDS {
+            for fields in groups_of(backend) {
+                fixture.write(
+                    &format!(
+                        "target/coverage/workspace/{backend}-{}-status.txt",
+                        fields[0]
+                    ),
+                    b"passed\n",
+                );
+                fixture.write(
+                    &format!("target/coverage/workspace/{backend}-{}.log", fields[0]),
+                    b"old physical log\n",
+                );
+            }
             fixture.write(
-                &format!("target/coverage/workspace/metal-{}-status.txt", fields[0]),
+                &format!("target/coverage/workspace/{backend}-status.txt"),
                 b"passed\n",
             );
-            fixture.write(
-                &format!("target/coverage/workspace/metal-{}.log", fields[0]),
-                b"old physical log\n",
-            );
         }
-        fixture.write("target/coverage/workspace/metal-status.txt", b"passed\n");
         fixture
     }
     pub fn root(&self) -> &Path {
@@ -125,14 +133,16 @@ impl Fixture {
             .env("COVERAGE_TEST_LOG", self.root().join("calls.jsonl"));
         command
     }
-    pub fn coverage(&self, mode: &str, metal: bool, changes: &[(&str, &str)]) -> Output {
+    /// Run the coverage script in `mode`, with the physical stage of
+    /// `backend`, `metal` or `vulkan`, when one is named.
+    pub fn coverage(&self, mode: &str, backend: Option<&str>, changes: &[(&str, &str)]) -> Output {
         let mut command = self.command("scripts/coverage.sh");
         command.arg(mode);
         for &(key, value) in changes {
             command.env(key, value);
         }
-        if metal {
-            command.arg("--metal");
+        if let Some(backend) = backend {
+            command.arg(format!("--{backend}"));
         }
         command.bounded_output()
     }
@@ -161,7 +171,7 @@ impl Fixture {
         assert!(self.calls().is_empty());
         assert!(self.read("target/coverage/floors.tsv").is_empty());
     }
-    pub fn assert_physical_failure(&self, group: &str) {
+    pub fn assert_physical_failure(&self, backend: &str, group: &str) {
         self.assert_status("incomplete");
         assert!(
             self.root()
@@ -175,18 +185,18 @@ impl Fixture {
                 .exists()
         );
         let mut failed = false;
-        for fields in groups() {
+        for fields in groups_of(backend) {
             failed |= fields[0] == group;
             let status = if failed { "incomplete\n" } else { "passed\n" };
             assert_eq!(
                 self.read(&format!(
-                    "target/coverage/workspace/metal-{}-status.txt",
+                    "target/coverage/workspace/{backend}-{}-status.txt",
                     fields[0]
                 )),
                 status
             );
             let log = self.read(&format!(
-                "target/coverage/workspace/metal-{}.log",
+                "target/coverage/workspace/{backend}-{}.log",
                 fields[0]
             ));
             assert!(!log.contains("old physical log"));
@@ -195,7 +205,7 @@ impl Fixture {
             }
         }
         let mut expected = profile_prefix(self.root(), true);
-        for fields in groups() {
+        for fields in groups_of(backend) {
             expected.push(call("workspace", physical(&fields)));
             if fields[0] == group {
                 break;
@@ -203,7 +213,7 @@ impl Fixture {
         }
         assert_eq!(self.calls(), expected);
     }
-    pub fn assert_complete_schedule(&self, mode: &str, metal: bool, floor: &str) {
+    pub fn assert_complete_schedule(&self, mode: &str, backend: Option<&str>, floor: &str) {
         assert_eq!(
             self.read("target/coverage/floors.tsv"),
             if mode == "gate" {
@@ -212,9 +222,9 @@ impl Fixture {
                 ""
             }
         );
-        let mut expected = profile_prefix(self.root(), metal);
-        if metal {
-            for fields in groups() {
+        let mut expected = profile_prefix(self.root(), backend.is_some());
+        if let Some(backend) = backend {
+            for fields in groups_of(backend) {
                 expected.push(call("workspace", physical(&fields)));
             }
         }
@@ -265,23 +275,7 @@ impl Fixture {
             ));
         }
         assert_eq!(self.calls(), expected);
-        let metadata: Value =
-            serde_json::from_str(&self.read("target/coverage/toolchain.json")).unwrap();
-        assert_eq!(metadata["mode"], mode);
-        assert_eq!(metadata["committed_floor"], floor);
-        assert_eq!(metadata["profiles_merged"], false);
-        assert_eq!(
-            metadata["supplemental"],
-            "--package zetesis-cli --package zetesis-solve --no-default-features"
-        );
-        assert_eq!(metadata["floor_profiles"], json!(["workspace", "cli-cpu"]));
-        assert_eq!(metadata["project_added_filename_filters"], json!([]));
-        let expected_groups: Vec<_> = if metal {
-            groups().iter().map(|fields|json!({"group":fields[0],"target_kind":if fields[1]=="lib"{"lib"}else{"test"},"target":if fields[1]=="lib"{"workspace libraries"}else{fields[1]},"tests":fields[3].split_whitespace().collect::<Vec<_>>(),"expected_tests":fields[2].parse::<usize>().unwrap()})).collect()
-        } else {
-            Vec::new()
-        };
-        assert_eq!(metadata["physical_test_groups"], json!(expected_groups));
+        self.assert_metadata(mode, backend, floor);
         for profile in ["workspace", "cli-cpu"] {
             for report in ["coverage.json", "html/index.html"] {
                 assert!(
@@ -297,9 +291,61 @@ impl Fixture {
             "baseline-complete (nongating)"
         });
     }
+
+    /// The recorded coverage metadata of a completed run.
+    fn assert_metadata(&self, mode: &str, backend: Option<&str>, floor: &str) {
+        let metadata: Value =
+            serde_json::from_str(&self.read("target/coverage/toolchain.json")).unwrap();
+        assert_eq!(metadata["mode"], mode);
+        assert_eq!(metadata["committed_floor"], floor);
+        assert_eq!(metadata["profiles_merged"], false);
+        assert_eq!(
+            metadata["supplemental"],
+            "--package zetesis-cli --package zetesis-solve --no-default-features"
+        );
+        assert_eq!(metadata["floor_profiles"], json!(["workspace", "cli-cpu"]));
+        assert_eq!(metadata["project_added_filename_filters"], json!([]));
+        let expected_groups: Vec<_> = if let Some(backend) = backend {
+            groups_of(backend).iter().map(|fields|json!({"group":fields[0],"target_kind":if fields[1]=="lib"{"lib"}else{"test"},"target":if fields[1]=="lib"{"workspace libraries"}else{fields[1]},"tests":fields[3].split_whitespace().collect::<Vec<_>>(),"expected_tests":fields[2].parse::<usize>().unwrap()})).collect()
+        } else {
+            Vec::new()
+        };
+        assert_eq!(metadata["physical_test_groups"], json!(expected_groups));
+        assert_eq!(
+            metadata["workspace_stages"],
+            match backend {
+                Some(backend) => json!(["portable", backend]),
+                None => json!(["portable"]),
+            }
+        );
+        if let Some(backend) = backend {
+            assert_eq!(
+                self.read(&format!("target/coverage/workspace/{backend}-status.txt")),
+                "passed\n"
+            );
+        }
+    }
 }
+/// The backends a physical stage can run.
+pub const BACKENDS: [&str; 2] = ["metal", "vulkan"];
 pub fn groups() -> Vec<Vec<&'static str>> {
     TABLE.lines().map(|row| row.split('|').collect()).collect()
+}
+/// The reviewed selection's rows of `backend`.
+pub fn groups_of(backend: &str) -> Vec<Vec<&'static str>> {
+    match backend {
+        "metal" => groups(),
+        "vulkan" => vulkan_groups(),
+        other => panic!("no reviewed selection for {other}"),
+    }
+}
+/// Where the fixture keeps `backend`'s reviewed selection.
+pub fn table_path(backend: &str) -> &'static str {
+    match backend {
+        "metal" => "crates/zetesis-maintenance/src/coverage/physical-selection.txt",
+        "vulkan" => "crates/zetesis-maintenance/src/coverage/physical-selection-vulkan.txt",
+        other => panic!("no reviewed selection for {other}"),
+    }
 }
 pub fn vulkan_groups() -> Vec<Vec<&'static str>> {
     VULKAN_TABLE

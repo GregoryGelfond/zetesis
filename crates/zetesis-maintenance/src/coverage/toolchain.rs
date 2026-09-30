@@ -31,15 +31,25 @@ pub struct Observation<'a> {
     /// Observed LLVM profile executable.
     pub llvm_profdata: Tool<'a>,
 }
-/// Requested coverage policy and optional reviewed physical selection.
+/// A physical coverage stage: the backend it runs and that backend's reviewed
+/// selection, as the shell table the stage reads.
+#[derive(Clone, Copy, Debug)]
+pub struct Physical<'a> {
+    /// The backend whose physical tests the stage runs.
+    pub api: zetesis_backend::GpuApi,
+    /// The backend's reviewed selection.
+    pub table: &'a str,
+}
+/// Requested coverage policy and optional physical stage.
 #[derive(Clone, Copy, Debug)]
 pub struct Metadata<'a> {
     /// Whether this run will gate or establish a baseline.
     pub mode: Mode,
     /// The exact committed file spelling after whitespace removal.
     pub floor: &'a str,
-    /// Shell table when physical tests are selected; absence means portable only.
-    pub physical_table: Option<&'a str>,
+    /// The physical stage, when physical tests are selected; absence means
+    /// portable only.
+    pub physical: Option<Physical<'a>>,
     /// Versions and hashes observed at the command boundary.
     pub observation: Observation<'a>,
 }
@@ -79,10 +89,21 @@ fn tools(observation: Observation<'_>) -> Result<Value, Error> {
     }
     Ok(Value::Object(result))
 }
+/// What a physical stage's 58 exact tests of `api` cover.
+fn physical_scope(api: zetesis_backend::GpuApi) -> String {
+    let (name, other) = match api {
+        zetesis_backend::GpuApi::Metal => ("Metal", "Vulkan"),
+        zetesis_backend::GpuApi::Vulkan => ("Vulkan", "Metal"),
+    };
+    format!(
+        "58 exact {name} tests: native aggregate reduction, static constructor and complete closure/reference checks, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic materialization and automatic CPU policy, complete-world-view collection, bounded relation equality filtering, shared-context composition, contention and shared failure handling, caller-supplied session resources with policy and observer failures, observed complete collection on supplied contexts, explicit compiled formula profiles with independent oracle state and compilation identity, and combined language-consumer families with scored observations and optimum ties. Cooperative device control, interrupted preparation reuse and actual submission receipts are included, alongside completed-support table joins with actual GPU candidates and complete CPU/{name} answer families. Ordinary automatic membership sessions check complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch. Terminal sessions check complete reconstruction from device-verified base answers. Unlisted tests and {other} are not selected."
+    )
+}
 /// Compose the established metadata schema from explicit validated observations.
 /// # Errors
-/// Refuses invalid policy, altered physical selection, incompatible LLVM version
-/// strings or malformed executable identities. This does not attest tool execution.
+/// Refuses invalid policy, an altered physical selection or one of another
+/// backend, incompatible LLVM version strings or malformed executable identities.
+/// This does not attest tool execution.
 pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
     for value in [
         request.floor,
@@ -102,20 +123,24 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         .strip_prefix("cargo-llvm-cov ")
         .ok_or_else(|| Error::Invalid("invalid cargo-llvm-cov banner".into()))?;
     Floor::parse(request.floor)?.admit(request.mode)?;
-    // The recorded coverage scope is the Metal qualification.
-    let groups: Vec<Group> = match request.physical_table {
+    // A stage records the reviewed selection of the backend it runs.
+    let groups: Vec<Group> = match request.physical {
         None => Vec::new(),
-        Some(table) => {
-            let selection = selection(table)?;
+        Some(physical) => {
+            let selection = selection(physical.table)?;
             require(
-                selection.api == zetesis_backend::GpuApi::Metal,
-                "coverage metadata records the Metal qualification only",
+                selection.api == physical.api,
+                format!(
+                    "the {} stage records the {} reviewed selection only",
+                    physical.api.name(),
+                    physical.api.name()
+                ),
             )?;
             selection.groups
         }
     };
     let tests: Vec<_> = groups.iter().flat_map(|group| group.tests.iter()).collect();
-    let physical = !tests.is_empty();
+    let api = request.physical.map(|physical| physical.api);
     Ok(json!({
         "mode":request.mode.label(),"committed_floor":request.floor,
         "rustc":request.observation.rustc.trim(),"cargo_llvm_cov":version,"cargo_llvm_cov_observation":cargo_version,"llvm_tools":tools(request.observation)?,
@@ -124,10 +149,10 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         "default_filename_filters":"cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
         "project_added_filename_filters":[],"profiles_merged":false,
         "profile_merge_scope":"profiles_merged describes floor profiles; raw execution profiles combine only within their own floor profile",
-        "workspace_execution":if physical {"portable+metal"} else {"portable"},
-        "workspace_stages":if physical {vec!["portable","metal"]} else {vec!["portable"]},
+        "workspace_execution":api.map_or_else(|| "portable".to_owned(), |api| format!("portable+{}", api.label())),
+        "workspace_stages":api.map_or_else(|| vec!["portable"], |api| vec!["portable", api.label()]),
         "physical_test_groups":groups,"physical_tests":tests,"expected_physical_tests":tests.len(),
-        "physical_scope":if physical {Some("58 exact Metal tests: native aggregate reduction, static constructor and complete closure/reference checks, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic materialization and automatic CPU policy, complete-world-view collection, bounded relation equality filtering, shared-context composition, contention and shared failure handling, caller-supplied session resources with policy and observer failures, observed complete collection on supplied contexts, explicit compiled formula profiles with independent oracle state and compilation identity, and combined language-consumer families with scored observations and optimum ties. Cooperative device control, interrupted preparation reuse and actual submission receipts are included, alongside completed-support table joins with actual GPU candidates and complete CPU/Metal answer families. Ordinary automatic membership sessions check complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch. Terminal sessions check complete reconstruction from device-verified base answers. Unlisted tests and Vulkan are not selected.")} else {None}
+        "physical_scope":api.map(physical_scope)
     }))
 }
 /// Read one executable identity with the maintenance file ceiling.

@@ -2,43 +2,45 @@
 use crate::support::process as subprocess;
 use subprocess::{Command, Output};
 mod fixture;
-use fixture::{Fixture, groups, vulkan_groups};
+use fixture::{BACKENDS, Fixture, groups_of, table_path, vulkan_groups};
 use std::fs;
 
 #[test]
 fn portable_profiles_keep_the_exact_separate_schedule() {
     let f = Fixture::new();
-    let result = f.coverage("gate", false, &[]);
+    let result = f.coverage("gate", None, &[]);
     assert!(
         result.status.success(),
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    f.assert_complete_schedule("gate", false, "91");
+    f.assert_complete_schedule("gate", None, "91");
 }
 #[test]
 fn physical_profiles_keep_the_exact_separate_schedule() {
-    let f = Fixture::new();
-    let result = f.coverage("gate", true, &[]);
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    f.assert_complete_schedule("gate", true, "91");
+    for backend in BACKENDS {
+        let f = Fixture::new();
+        let result = f.coverage("gate", Some(backend), &[]);
+        assert!(
+            result.status.success(),
+            "{backend}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        f.assert_complete_schedule("gate", Some(backend), "91");
+    }
 }
 #[test]
 fn baseline_measurements_never_apply_a_floor() {
-    for metal in [false, true] {
+    for backend in [None, Some("metal"), Some("vulkan")] {
         let f = Fixture::new();
         f.write("scripts/coverage-floor.txt", b"UNMEASURED\n");
-        let result = f.coverage("baseline", metal, &[]);
+        let result = f.coverage("baseline", backend, &[]);
         assert!(
             result.status.success(),
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        f.assert_complete_schedule("baseline", metal, "UNMEASURED");
+        f.assert_complete_schedule("baseline", backend, "UNMEASURED");
     }
 }
 #[test]
@@ -48,7 +50,7 @@ fn incomplete_tool_versions_cannot_reuse_success() {
         ("COVERAGE_TEST_LLVM_VERSION", "22.1.5"),
     ] {
         let f = Fixture::new();
-        let result = f.coverage("gate", false, &[(key, value)]);
+        let result = f.coverage("gate", None, &[(key, value)]);
         f.assert_preflight_failure(&result);
     }
 }
@@ -57,7 +59,7 @@ fn invalid_floor_cannot_reuse_success() {
     for (mode, floor) in [("gate", "UNMEASURED"), ("baseline", "NaN")] {
         let f = Fixture::new();
         f.write("scripts/coverage-floor.txt", floor.as_bytes());
-        let result = f.coverage(mode, false, &[]);
+        let result = f.coverage(mode, None, &[]);
         f.assert_preflight_failure(&result);
     }
 }
@@ -65,7 +67,7 @@ fn invalid_floor_cannot_reuse_success() {
 fn llvm_overrides_require_both_tools() {
     for key in ["LLVM_COV", "LLVM_PROFDATA"] {
         let f = Fixture::new();
-        let result = f.coverage("gate", false, &[(key, "/missing")]);
+        let result = f.coverage("gate", None, &[(key, "/missing")]);
         f.assert_preflight_failure(&result);
     }
 }
@@ -78,67 +80,81 @@ fn paired_llvm_overrides_preserve_schedule() {
         .join("sysroot/lib/rustlib/fake-host/bin/llvm-profdata");
     let result = f.coverage(
         "gate",
-        false,
+        None,
         &[
             ("LLVM_COV", cov.to_str().unwrap()),
             ("LLVM_PROFDATA", prof.to_str().unwrap()),
         ],
     );
     assert!(result.status.success());
-    f.assert_complete_schedule("gate", false, "91");
+    f.assert_complete_schedule("gate", None, "91");
 }
 #[test]
 fn bundled_llvm_versions_preserve_schedule() {
     let f = Fixture::new();
     let result = f.coverage(
         "gate",
-        false,
+        None,
         &[("COVERAGE_TEST_LLVM_VERSION", "22.1.6-rust-1.97.1-stable")],
     );
     assert!(result.status.success());
-    f.assert_complete_schedule("gate", false, "91");
+    f.assert_complete_schedule("gate", None, "91");
 }
 #[test]
 fn omitted_physical_group_prevents_instrumentation() {
-    for group in [
-        "lazy",
-        "relation",
-        "context",
-        "solve-context",
-        "session-resources",
-        "language-consumers",
-        "static",
-    ] {
+    for backend in BACKENDS {
+        for group in [
+            "lazy",
+            "relation",
+            "context",
+            "solve-context",
+            "session-resources",
+            "language-consumers",
+            "static",
+        ] {
+            let f = Fixture::new();
+            let row = groups_of(backend)
+                .into_iter()
+                .find(|fields| fields[0] == group)
+                .unwrap()
+                .join("|");
+            // Remove the record from the reviewed table the stage reads,
+            // including when the omitted group is the final row.
+            let original = f.read(table_path(backend));
+            let table = original.replacen(&format!("{row}\n"), "", 1);
+            assert_ne!(table, original);
+            f.write(table_path(backend), table.as_bytes());
+            let result = f.coverage("gate", Some(backend), &[]);
+            f.assert_preflight_failure(&result);
+        }
+    }
+}
+#[test]
+fn a_stage_reading_another_backends_table_is_refused() {
+    for (backend, other) in [("metal", "vulkan"), ("vulkan", "metal")] {
         let f = Fixture::new();
-        let row = groups()
-            .into_iter()
-            .find(|fields| fields[0] == group)
-            .unwrap()
-            .join("|");
-        // Remove the record while preserving the shell literal's closing quote,
-        // including when the omitted group is the final table row.
-        let original = f.read("scripts/coverage.sh");
-        let script = original.replacen(&format!("\n{row}"), "", 1);
-        assert_ne!(script, original);
-        f.write("scripts/coverage.sh", script.as_bytes());
-        let result = f.coverage("gate", true, &[]);
+        let foreign = f.read(table_path(other));
+        f.write(table_path(backend), foreign.as_bytes());
+        let result = f.coverage("gate", Some(backend), &[]);
         f.assert_preflight_failure(&result);
     }
 }
 #[test]
 fn every_physical_group_rejects_zero_matches() {
-    for fields in groups() {
-        let f = Fixture::new();
-        let result = f.coverage(
-            "gate",
-            true,
-            &[
-                ("COVERAGE_TEST_PHYSICAL", "empty"),
-                ("COVERAGE_TEST_PHYSICAL_GROUP", fields[0]),
-            ],
-        );
-        assert!(!result.status.success());
-        f.assert_physical_failure(fields[0]);
+    for backend in BACKENDS {
+        for fields in groups_of(backend) {
+            let f = Fixture::new();
+            let result = f.coverage(
+                "gate",
+                Some(backend),
+                &[
+                    ("COVERAGE_TEST_PHYSICAL", "empty"),
+                    ("COVERAGE_TEST_PHYSICAL_GROUP", fields[0]),
+                ],
+            );
+            assert!(!result.status.success());
+            f.assert_physical_failure(backend, fields[0]);
+        }
     }
 }
 #[test]
@@ -154,10 +170,12 @@ fn altered_physical_records_prevent_completion() {
         "extra-summary",
         "failed-summary",
     ] {
-        let f = Fixture::new();
-        let result = f.coverage("gate", true, &[("COVERAGE_TEST_PHYSICAL", mode)]);
-        assert!(!result.status.success(), "{mode}");
-        f.assert_physical_failure("wgpu-lib");
+        for backend in BACKENDS {
+            let f = Fixture::new();
+            let result = f.coverage("gate", Some(backend), &[("COVERAGE_TEST_PHYSICAL", mode)]);
+            assert!(!result.status.success(), "{backend} {mode}");
+            f.assert_physical_failure(backend, "wgpu-lib");
+        }
     }
 }
 #[test]
@@ -170,17 +188,19 @@ fn failed_physical_execution_preserves_its_exit_code() {
         "language-consumers",
         "static",
     ] {
-        let f = Fixture::new();
-        let result = f.coverage(
-            "gate",
-            true,
-            &[
-                ("COVERAGE_TEST_PHYSICAL", "failed"),
-                ("COVERAGE_TEST_PHYSICAL_GROUP", group),
-            ],
-        );
-        assert_eq!(result.status.code(), Some(37));
-        f.assert_physical_failure(group);
+        for backend in BACKENDS {
+            let f = Fixture::new();
+            let result = f.coverage(
+                "gate",
+                Some(backend),
+                &[
+                    ("COVERAGE_TEST_PHYSICAL", "failed"),
+                    ("COVERAGE_TEST_PHYSICAL_GROUP", group),
+                ],
+            );
+            assert_eq!(result.status.code(), Some(37));
+            f.assert_physical_failure(backend, group);
+        }
     }
 }
 #[test]
@@ -195,7 +215,7 @@ fn every_instrumentation_failure_keeps_status_incomplete() {
         "build-cli-cpu:gate",
     ] {
         let f = Fixture::new();
-        let result = f.coverage("gate", false, &[("COVERAGE_TEST_FAIL", phase)]);
+        let result = f.coverage("gate", None, &[("COVERAGE_TEST_FAIL", phase)]);
         assert_eq!(result.status.code(), Some(37));
         f.assert_status("incomplete");
     }
@@ -215,7 +235,7 @@ fn final_output_failure_keeps_coverage_incomplete() {
                 .replacen(completion, &format!("exec 1>&-\n{completion}"), 1)
                 .as_bytes(),
         );
-        let result = f.coverage(mode, false, &[]);
+        let result = f.coverage(mode, None, &[]);
         assert!(!result.status.success());
         f.assert_status("incomplete");
         for profile in ["workspace", "cli-cpu"] {
@@ -233,7 +253,7 @@ fn final_output_failure_keeps_coverage_incomplete() {
 fn concurrent_run_preserves_the_existing_owner() {
     let f = Fixture::new();
     fs::create_dir(f.root().join("target/coverage/.lock")).unwrap();
-    let result = f.coverage("gate", false, &[]);
+    let result = f.coverage("gate", None, &[]);
     assert_eq!(result.status.code(), Some(2));
     assert_eq!(f.read("target/coverage/status.txt"), "gate-passed\n");
     assert!(f.root().join("target/coverage/.lock").is_dir());
@@ -246,6 +266,8 @@ fn invalid_coverage_arguments_are_refused() {
         vec!["gate", "--bad"],
         vec!["gate", ""],
         vec!["gate", "--metal", "extra"],
+        vec!["gate", "--vulkan", "extra"],
+        vec!["gate", "--cpu"],
     ] {
         let f = Fixture::new();
         let result = f.command("scripts/coverage.sh").args(args).bounded_output();
@@ -256,10 +278,12 @@ fn invalid_coverage_arguments_are_refused() {
 fn invalid_check_arguments_are_refused() {
     for args in [
         vec!["portable", "--metal"],
+        vec!["portable", "--vulkan"],
         vec!["full", "--metal"],
         vec!["coverage", "--bad"],
         vec!["coverage", ""],
         vec!["coverage", "--metal", "extra"],
+        vec!["coverage", "--vulkan", "extra"],
     ] {
         let f = Fixture::new();
         let result = f.command("scripts/check.sh").args(args).bounded_output();
@@ -268,17 +292,19 @@ fn invalid_check_arguments_are_refused() {
 }
 #[test]
 fn optional_coverage_gate_forwards_failure() {
-    let f = Fixture::new();
-    f.write(
-        "scripts/coverage.sh",
-        b"#!/bin/sh\nprintf '<%s>\\n' \"$@\"\nexit 37\n",
-    );
-    let result = f
-        .command("scripts/check.sh")
-        .args(["coverage", "--metal"])
-        .bounded_output();
-    assert_eq!(result.status.code(), Some(37));
-    assert_eq!(result.stdout, b"<gate>\n<--metal>\n");
+    for backend in ["--metal", "--vulkan"] {
+        let f = Fixture::new();
+        f.write(
+            "scripts/coverage.sh",
+            b"#!/bin/sh\nprintf '<%s>\\n' \"$@\"\nexit 37\n",
+        );
+        let result = f
+            .command("scripts/check.sh")
+            .args(["coverage", backend])
+            .bounded_output();
+        assert_eq!(result.status.code(), Some(37));
+        assert_eq!(result.stdout, format!("<gate>\n<{backend}>\n").as_bytes());
+    }
 }
 #[test]
 fn record_gate_follows_actual_lean_commands() {
@@ -700,7 +726,7 @@ fn coverage_retains_both_independent_floor_failures() {
         ("gate", 37, 37),
     ] {
         let fixture = Fixture::new();
-        let result = fixture.coverage("gate", false, &[("COVERAGE_TEST_FAIL", failed)]);
+        let result = fixture.coverage("gate", None, &[("COVERAGE_TEST_FAIL", failed)]);
         assert_eq!(result.status.code(), Some(37));
         fixture.assert_status("incomplete");
         assert_eq!(

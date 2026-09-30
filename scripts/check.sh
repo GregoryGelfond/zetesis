@@ -3,14 +3,14 @@
 set -eu
 mode=${1:-portable}
 coverage_option=${2:-}
-usage='Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|hardware|full]; scripts/check.sh coverage --metal; scripts/check.sh hardware [--metal|--vulkan]'
+usage='Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|hardware|full]; scripts/check.sh coverage [--metal|--vulkan]; scripts/check.sh hardware [--metal|--vulkan]'
 if [ "$#" -gt 2 ]; then
     printf '%s\n' "$usage" >&2
     exit 2
 fi
 if [ "$#" -eq 2 ]; then
     case "$mode $coverage_option" in
-        'coverage --metal'|'hardware --metal'|'hardware --vulkan') ;;
+        'coverage --metal'|'coverage --vulkan'|'hardware --metal'|'hardware --vulkan') ;;
         *)
             printf '%s\n' "$usage" >&2
             exit 2 ;;
@@ -167,8 +167,9 @@ if [ "$mode" = proofs ] || [ "$mode" = full ]; then
     scripts/maintenance.sh proof-record --live-audit "$proof_check/audit.stdout"
 fi
 if [ "$mode" = coverage ] || [ "$mode" = full ]; then
-    if [ "$coverage_option" = --metal ]; then
-        ./scripts/coverage.sh gate --metal
+    # A physical stage only when a backend is named.
+    if [ -n "$coverage_option" ]; then
+        ./scripts/coverage.sh gate "$coverage_option"
     else
         ./scripts/coverage.sh
     fi

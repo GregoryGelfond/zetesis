@@ -1,8 +1,8 @@
 #!/bin/sh
 # Physical qualification of one device backend: every reviewed group of exact
 # hardware tests must pass on this host, checking complete CPU/device families
-# and explicit failure boundaries. No coverage instrumentation; coverage has its own
-# Metal population.
+# and explicit failure boundaries. No coverage instrumentation; the coverage
+# gate's physical stage runs the same reviewed selection instrumented.
 set -eu
 
 backend=${1:-}

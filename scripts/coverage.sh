@@ -3,32 +3,25 @@
 set -eu
 
 mode=${1:-gate}
-metal=${2:-}
-if [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && [ "$metal" != --metal ]; }; then
-    printf '%s\n' 'Usage: scripts/coverage.sh [gate|baseline] [--metal]' >&2
+usage='Usage: scripts/coverage.sh [gate|baseline] [--metal|--vulkan]'
+backend=
+if [ "$#" -gt 2 ]; then
+    printf '%s\n' "$usage" >&2
     exit 2
 fi
+if [ "$#" -eq 2 ]; then
+    case "$2" in
+        --metal) backend=metal ;;
+        --vulkan) backend=vulkan ;;
+        *)
+            printf '%s\n' "$usage" >&2
+            exit 2 ;;
+    esac
+fi
 case "$mode" in gate|baseline) ;; *)
-    printf '%s\n' 'Usage: scripts/coverage.sh [gate|baseline] [--metal]' >&2
+    printf '%s\n' "$usage" >&2
     exit 2 ;;
 esac
-# Each row names a report group, Cargo target, required count and exact tests.
-# All invocations keep workspace feature unification, including the library
-# selection: narrowing to one package can change instrumented dependency builds.
-metal_groups='wgpu-lib|lib|14|aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work lazy::transport_tests::metal_lazy_transport_reuse_preserves_round_truth lazy::transport_tests::metal_input_slack_preserves_exact_admission lazy::transport_tests::metal_lazy_transport_refusal_preserves_reuse lazy::transport_tests::metal_lazy_transport_cancelled_read_discards_capacity formula::device::tests::metal_busy_refusal_preserves_formula_state aggregate::device::tests::metal_readback_failure_invalidates_context_peers formula::device::tests::metal_profile_starts_fresh_formula_oracles formula::device::tests::metal_profiles_identify_exact_compilations formula::device::tests::metal_profile_reuse_checks_context_lifecycle relation::device::tests::metal_interrupted_preparation_preserves_context context::tests::control_tests::metal_controlled_calls_preserve_stop_identity formula::device::tests::metal_formula_submission_receipt_survives_interruption lazy::transport_tests::metal_lazy_uploads_reuse_only_current_batch_inputs
-tight|integration|4|hardware_tight::metal_support_matches_exact_reduct_semantics hardware_tight::metal_support_preserves_batch_isolation hardware_tight::metal_support_refusals_preserve_reusable_residency hardware_tight::metal_support_residency_tracks_theory_identity
-formula|integration|2|hardware_formula::metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit hardware_formula::metal_formula_queries_preserve_exact_frozen_semantics_and_residency
-aggregate|integration|3|hardware_aggregate::metal_aggregate_reductions_match_native_occurrences hardware_aggregate::metal_aggregate_guards_preserve_numeric_boundaries hardware_aggregate::metal_aggregate_exact_admission_preserves_cache_lifecycle
-lazy|integration|4|hardware_lazy::metal_lazy_worlds_match_exact_frozen_cpu_closures hardware_lazy::metal_lazy_growth_preserves_previous_round_truth hardware_lazy::metal_lazy_catalog_fits_when_static_carrier_refuses hardware_lazy::metal_source_selections_preserve_each_frozen_closure
-cli-lazy|integration|5|lazy_gpu::physical::ordinary_lazy_metal_preserves_complete_cpu_models lazy_gpu::physical::metal_automatic_grounder_keeps_source_joins lazy_gpu::physical::requested_model_limit_retains_completed_lazy_candidates lazy_gpu::physical::lazy_source_stop_preserves_unfinished_candidate_counts lazy_gpu::physical::lazy_writer_failure_preserves_completed_device_work
-cli-formula|integration|3|formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers
-world-views|integration|4|world_views_gpu::metal_world_view_preserves_nonoptimal_answers world_views_gpu::metal_collection_limit_retains_checked_accounting world_views_gpu::metal_collection_refuses_a_foreign_context world_views_gpu::metal_resources_leave_a_cpu_collection_on_the_cpu
-relation|integration|2|hardware_relation::metal_relation_masks_match_typed_rows hardware_relation::metal_relation_refusals_preserve_prepared_view
-context|integration|1|hardware_context::metal_formula_executes_while_relation_columns_remain_prepared
-solve-context|lib|3|engine::resource_tests::metal_closure_retains_the_supplied_context formula_execution::tests::resource_tests::metal_formula_retains_the_supplied_context formula_execution::tests::resource_tests::metal_formula_sessions_reuse_the_supplied_profile
-session-resources|integration|9|session_resources_gpu::metal_resources_preserve_independent_sessions session_resources_gpu::metal_resource_policy_refusal_preserves_reuse session_resources_gpu::metal_resources_preserve_cpu_policies session_resources_gpu::metal_observer_failure_preserves_resource_reuse session_resources_gpu::metal_formula_profiles_preserve_independent_sessions session_resources_gpu::metal_tight_sessions_preserve_complete_families session_resources_gpu::metal_general_formulas_keep_device_execution session_resources_gpu::metal_tight_refusal_preserves_pending_coverage session_resources_gpu::metal_terminal_sessions_preserve_complete_families
-language-consumers|integration|2|language_consumers::physical::metal_families_retain_scored_observations language_consumers::physical::metal_optimum_ties_retain_full_answers
-static|integration|2|hardware::metal_constructor_executes_resident_batches_without_fallback hardware::metal_static_oracle_matches_independent_closures'
 
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"
@@ -45,6 +38,16 @@ trap 'exit 143' TERM
 printf '%s\n' incomplete > "$coverage_dir/status.txt"
 : > "$coverage_dir/floors.tsv"
 floor=$(scripts/maintenance.sh coverage-floor --mode "$mode" --path scripts/coverage-floor.txt)
+# The physical stage runs its backend's reviewed selection, read from the file
+# the hardware gate reads; the checker refuses any other table. Each row names a
+# report group, Cargo target, required count and exact tests. All invocations
+# keep workspace feature unification, including the library selection:
+# narrowing to one package can change instrumented dependency builds.
+case "$backend" in
+    metal) table=$(cat crates/zetesis-maintenance/src/coverage/physical-selection.txt) ;;
+    vulkan) table=$(cat crates/zetesis-maintenance/src/coverage/physical-selection-vulkan.txt) ;;
+    *) table= ;;
+esac
 # The test-support crates hold test code. Every report skips their sources, as
 # cargo-llvm-cov already skips tests/ directories, so the floors measure product
 # code.
@@ -75,8 +78,8 @@ set -- coverage-metadata --mode "$mode" --floor "$floor" \
     --llvm-cov "$LLVM_COV" \
     --llvm-cov-version "$cov_version" --llvm-profdata "$LLVM_PROFDATA" \
     --llvm-profdata-version "$profdata_version"
-if [ "$metal" = --metal ]; then
-    set -- "$@" --metal-groups "$metal_groups"
+if [ -n "$backend" ]; then
+    set -- "$@" --physical-backend "$backend" --physical-table "$table"
 fi
 scripts/maintenance.sh "$@" > "$coverage_dir/toolchain.json"
 
@@ -93,7 +96,7 @@ write_report() {
         --ignore-filename-regex "$support_sources" --html --output-dir "$destination"
 }
 
-run_metal_group() {
+run_physical_group() {
     group=$1
     target=$2
     expected=$3
@@ -107,8 +110,8 @@ run_metal_group() {
         set -- --test "$target" --locked --no-report -- --ignored \
             --nocapture --test-threads=1 --exact "$@"
     fi
-    physical_log="$coverage_dir/workspace/metal-$group.log"
-    physical_status="$coverage_dir/workspace/metal-$group-status.txt"
+    physical_log="$coverage_dir/workspace/$backend-$group.log"
+    physical_status="$coverage_dir/workspace/$backend-$group-status.txt"
     # Keep workspace feature unification and the existing instrumented target.
     # A run that defers its report never cleans, so the portable profile is
     # retained; no CLI-CPU data enters this stage.
@@ -124,29 +127,29 @@ run_metal_group() {
     # records and pinned libtest summaries; output within a test may share its
     # first line under --nocapture. Other workspace libraries may report zero.
     if ! scripts/maintenance.sh coverage-physical --log "$physical_log" \
-        --group "$group" --table "$metal_groups"
+        --group "$group" --table "$table"
     then
         return 1
     fi
     printf '%s\n' passed > "$physical_status"
 }
 
-run_metal() {
-    printf '%s\n' incomplete > "$coverage_dir/workspace/metal-status.txt"
+run_physical() {
+    printf '%s\n' incomplete > "$coverage_dir/workspace/$backend-status.txt"
     # Reset every group before any execution, including groups an early failure
     # would leave unvisited. Old logs and status markers cannot certify this run.
     while IFS='|' read -r group target expected names; do
-        printf '%s\n' incomplete > "$coverage_dir/workspace/metal-$group-status.txt"
-        : > "$coverage_dir/workspace/metal-$group.log"
+        printf '%s\n' incomplete > "$coverage_dir/workspace/$backend-$group-status.txt"
+        : > "$coverage_dir/workspace/$backend-$group.log"
     done <<EOF
-$metal_groups
+$table
 EOF
     while IFS='|' read -r group target expected names; do
-        run_metal_group "$group" "$target" "$expected" "$names"
+        run_physical_group "$group" "$target" "$expected" "$names"
     done <<EOF
-$metal_groups
+$table
 EOF
-    printf '%s\n' passed > "$coverage_dir/workspace/metal-status.txt"
+    printf '%s\n' passed > "$coverage_dir/workspace/$backend-status.txt"
 }
 
 run_profile() {
@@ -158,9 +161,9 @@ run_profile() {
     cargo +1.97.1 llvm-cov clean --workspace --locked
     if [ "$profile" = workspace ]; then
         cargo +1.97.1 llvm-cov --workspace "$@" --locked --no-report
-        if [ "$metal" = --metal ]; then
+        if [ -n "$backend" ]; then
             write_report "$report_dir/portable"
-            run_metal
+            run_physical
         fi
         set --
     else

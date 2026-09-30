@@ -7,7 +7,7 @@
 mod physical;
 mod toolchain;
 pub use physical::{Group, Selection, physical_result, selection};
-pub use toolchain::{Metadata, Observation, Tool, executable_identity, metadata};
+pub use toolchain::{Metadata, Observation, Physical, Tool, executable_identity, metadata};
 
 use crate::{Error, json, require};
 use serde_json::Value;

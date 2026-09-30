@@ -176,13 +176,15 @@ This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.
 
-To include the physical Metal tests in coverage, run:
+To include a backend's physical tests in coverage, run:
 
 ```sh
 scripts/check.sh coverage --metal
+scripts/check.sh coverage --vulkan
 ```
 
-This requires an available Metal adapter. The selection includes static-oracle
+Each requires an available adapter of its backend, and each reads the reviewed
+selection the hardware gate reads. The selection includes static-oracle
 construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
@@ -194,7 +196,7 @@ Coverage always has two separately instrumented populations:
 
 | Population | Report directory |
 | --- | --- |
-| Workspace, portable tests; also the named physical tests with `--metal` | `target/coverage/workspace` |
+| Workspace, portable tests; also the named physical tests with `--metal` or `--vulkan` | `target/coverage/workspace` |
 | CPU-only `zetesis-solve` and `zetesis-cli` | `target/coverage/cli-cpu` |
 
 The historical directory name `cli-cpu` includes both crates. A portable-only
@@ -314,8 +316,8 @@ using the [verification tools](#prepare-verification-tools). At `3b06e479`, run
 `scripts/check.sh hardware --metal` for the 60 device tests and
 `zetesis test backend --device metal --json` for the three CLI checks.
 Retain the coverage JSON and HTML reports and the hardware logs separately.
-Running `scripts/check.sh coverage --metal` creates a different, combined
-measurement; it is not the population reported above.
+Running `scripts/check.sh coverage --metal` or `--vulkan` creates a different,
+combined measurement; it is not the population reported above.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion
 strength, WGSL instruction coverage or formal correctness.

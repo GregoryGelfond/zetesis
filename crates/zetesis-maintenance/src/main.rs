@@ -5,9 +5,10 @@ use std::{
     path::PathBuf,
     process::ExitCode,
 };
+use zetesis_backend::GpuApi;
 use zetesis_maintenance::{
     Error, book,
-    coverage::{self, Floor, Metadata, Mode, Observation, Tool},
+    coverage::{self, Floor, Metadata, Mode, Observation, Physical, Tool},
     inventory, proofs,
 };
 
@@ -19,6 +20,30 @@ use zetesis_maintenance::{
 struct Options {
     #[command(subcommand)]
     command: Action,
+}
+
+/// The backend of a physical coverage stage.
+#[derive(Clone, Copy, ValueEnum)]
+enum PhysicalBackend {
+    Metal,
+    Vulkan,
+}
+impl PhysicalBackend {
+    const fn api(self) -> GpuApi {
+        match self {
+            Self::Metal => GpuApi::Metal,
+            Self::Vulkan => GpuApi::Vulkan,
+        }
+    }
+}
+
+/// The physical stage a coverage run names: its backend with its table, both or
+/// neither, as the command's arguments require.
+fn physical_stage(backend: Option<PhysicalBackend>, table: Option<&str>) -> Option<Physical<'_>> {
+    Some(Physical {
+        api: backend?.api(),
+        table: table?,
+    })
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -108,8 +133,12 @@ enum Action {
         llvm_profdata: PathBuf,
         #[arg(long)]
         llvm_profdata_version: String,
-        #[arg(long)]
-        metal_groups: Option<String>,
+        /// The backend of the physical stage.
+        #[arg(long, value_enum, requires = "physical_table")]
+        physical_backend: Option<PhysicalBackend>,
+        /// The backend's reviewed selection, as the stage reads it.
+        #[arg(long, requires = "physical_backend")]
+        physical_table: Option<String>,
     },
     /// Require every selected physical test and its complete passing summary.
     CoveragePhysical {
@@ -250,14 +279,15 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             llvm_cov_version,
             llvm_profdata,
             llvm_profdata_version,
-            metal_groups,
+            physical_backend,
+            physical_table,
         } => {
             let (cov_path, cov_hash) = coverage::executable_identity(&llvm_cov)?;
             let (prof_path, prof_hash) = coverage::executable_identity(&llvm_profdata)?;
             let request = Metadata {
                 mode: Mode::parse(&mode)?,
                 floor: &floor,
-                physical_table: metal_groups.as_deref(),
+                physical: physical_stage(physical_backend, physical_table.as_deref()),
                 observation: Observation {
                     rustc: &rustc_version,
                     cargo_llvm_cov: &cargo_llvm_cov_version,

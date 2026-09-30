@@ -242,7 +242,7 @@ cargo test --locked -p zetesis-wgpu --all-features --test integration -- --ignor
 
 The [test sources](tests) contain the separate static, lazy, tight, formula,
 aggregate and relation controls. Vulkan tests use their explicit Vulkan filters;
-a Metal pass does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`
-checks the selected physical groups with the matching instrumented binaries and
+a Metal pass does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`,
+or `--vulkan`, checks that backend's selected physical groups with the matching instrumented binaries and
 keeps CPU-only CLI coverage separate. See [Contributing](../../CONTRIBUTING.md)
 for the complete gate discipline.

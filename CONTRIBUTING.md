@@ -235,8 +235,8 @@ Their checks remain separate from the workspace coverage population. Run
 `scripts/check.sh oracle` for the relevant external
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
-Local `scripts/check.sh coverage --metal` adds 58 exact physical tests within
-workspace coverage: static constructor and complete closure/reference checks,
+Local `scripts/check.sh coverage --metal`, or `coverage --vulkan` on a Vulkan
+host, adds that backend's 58 exact physical tests within workspace coverage: static constructor and complete closure/reference checks,
 native aggregate reduction, lazy transport
 and source closure, typed relation masks, tight and formula
 oracles, shared-context composition and failure handling, and ordinary
@@ -249,7 +249,7 @@ device checking for non-tight theories, and tight work refusal before dispatch.
 These are the current required tests, not a claim that a newer source has been
 physically qualified; recorded coverage remains bound to its stated source.
 The formula CLI group also checks completed-support table joins with actual table
-probes and GPU candidates against complete CPU/Metal answer families.
+probes and GPU candidates against complete CPU/device answer families.
 Every target group must report its
 expected named passing tests. `scripts/check.sh hardware` qualifies the host's
 own device backend without instrumentation, Metal on macOS and Vulkan
