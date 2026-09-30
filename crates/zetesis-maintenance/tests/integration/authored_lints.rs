@@ -3,7 +3,8 @@
 //! below does not name, and every entry naming no present `#[expect]`, so the
 //! list cannot outlive its code. Compiler-generated attributes and procedural
 //! macro expansions are outside this token audit; Rust's deny gate still applies
-//! to the compiled code.
+//! to the compiled code. Nor can a manifest set lints of its own: every
+//! workspace member's `[lints]` table hands its policy to the workspace's.
 
 mod lint_attributes;
 
@@ -86,6 +87,60 @@ fn authored_code_suppresses_no_lint_outside_the_named_exceptions() {
     let violations = violations(&found, EXCEPTIONS);
     assert!(violations.is_empty(), "{}", violations.join("\n"));
     println!("authored_rust_sources={}", sources.len());
+}
+
+/// Whether `manifest` hands its lint policy to the workspace: its `[lints]`
+/// table is `workspace = true` alone, and it has no lint table of its own.
+fn inherits_the_workspace_lints(manifest: &str) -> bool {
+    let mut table = "";
+    let mut inherited = false;
+    for line in manifest.lines().map(str::trim) {
+        if line.starts_with('[') {
+            table = line;
+            if table.starts_with("[lints.") {
+                return false;
+            }
+        } else if table == "[lints]" && !line.is_empty() && !line.starts_with('#') {
+            if line.split_whitespace().collect::<String>() != "workspace=true" {
+                return false;
+            }
+            inherited = true;
+        }
+    }
+    inherited
+}
+
+#[test]
+fn every_member_manifest_inherits_the_workspace_lints() {
+    let members: Vec<_> = std::fs::read_dir(repository().join("crates"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("Cargo.toml"))
+        .filter(|manifest| manifest.is_file())
+        .collect();
+    assert!(!members.is_empty(), "the workspace members must be present");
+    let outside: Vec<_> = members
+        .iter()
+        .filter(|manifest| !inherits_the_workspace_lints(&source(manifest).unwrap()))
+        .map(|manifest| manifest.display().to_string())
+        .collect();
+    assert!(outside.is_empty(), "{}", outside.join("\n"));
+}
+
+#[test]
+fn a_manifest_with_lints_of_its_own_is_refused() {
+    let package = "[package]\nname = \"member\"\n";
+    assert!(inherits_the_workspace_lints(&format!(
+        "{package}\n[lints]\nworkspace = true\n"
+    )));
+    for lints in [
+        "",
+        "\n[lints]\nworkspace = false\n",
+        "\n[lints.clippy]\npedantic = \"allow\"\n",
+        "\n[lints]\nworkspace = true\n\n[lints.rust]\nunused = \"allow\"\n",
+    ] {
+        let manifest = format!("{package}{lints}");
+        assert!(!inherits_the_workspace_lints(&manifest), "{manifest}");
+    }
 }
 
 /// An exception of the shape CONTRIBUTING describes, for the fixtures below.
