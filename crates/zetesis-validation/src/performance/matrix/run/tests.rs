@@ -116,6 +116,7 @@ fn native_memory_round_requires_a_successful_solver_exit() {
         Some(&contract()),
         Some(&reference()),
         &request(),
+        Curtailed::default(),
     );
     assert!(
         matches!(&result, Err((Decision::InvocationFailure, _))),
@@ -131,6 +132,7 @@ fn reference_memory_round_requires_a_successful_solver_exit() {
         Some(&contract()),
         Some(&reference()),
         &request(),
+        Curtailed::default(),
     );
     assert!(
         matches!(&result, Err((Decision::InvocationFailure, _))),
@@ -146,7 +148,8 @@ fn native_memory_round_accepts_solver_success() {
             &mut sample,
             Some(&contract()),
             Some(&reference()),
-            &request()
+            &request(),
+            Curtailed::default()
         )
         .is_ok()
     );
@@ -161,6 +164,7 @@ fn reference_memory_round_accepts_reference_exit_codes() {
             Some(&contract()),
             Some(&reference()),
             &request(),
+            Curtailed::default(),
         );
         assert!(result.is_ok(), "reference exit {code}: {result:?}");
     }
@@ -181,7 +185,8 @@ fn memory_round_refuses_a_signalled_solver() {
                 &mut sample,
                 Some(&contract()),
                 Some(&reference()),
-                &request()
+                &request(),
+                Curtailed::default()
             ),
             Err((Decision::InvocationFailure, _))
         ));
@@ -199,7 +204,8 @@ fn memory_round_requires_helper_success() {
                 &mut sample,
                 Some(&contract()),
                 Some(&reference()),
-                &request()
+                &request(),
+                Curtailed::default()
             ),
             Err((Decision::InvocationFailure, _))
         ));
@@ -215,7 +221,8 @@ fn memory_round_requires_a_solver_resource_record() {
             &mut sample,
             Some(&contract()),
             Some(&reference()),
-            &request()
+            &request(),
+            Curtailed::default()
         ),
         Err((Decision::InvalidMemory, _))
     ));
@@ -230,7 +237,8 @@ fn memory_round_refuses_an_invalid_solver_resource_record() {
             &mut sample,
             Some(&contract()),
             Some(&reference()),
-            &request()
+            &request(),
+            Curtailed::default()
         ),
         Err((Decision::InvalidMemory, _))
     ));
@@ -249,7 +257,8 @@ fn memory_round_keeps_the_solver_outcome_classification() {
                 &mut sample,
                 Some(&contract()),
                 Some(&reference()),
-                &request()
+                &request(),
+                Curtailed::default()
             )
             .unwrap_err()
             .0,
@@ -266,6 +275,7 @@ fn complete_answers_require_the_actual_requested_route() {
         Some(&contract()),
         Some(&reference()),
         &request(),
+        Curtailed::default(),
     )
     .unwrap();
     assert!(!answer.display.satisfiable());
@@ -274,18 +284,30 @@ fn complete_answers_require_the_actual_requested_route() {
     request.plan.profiles[0].backend =
         crate::selected::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     assert_eq!(
-        qualify(&mut sample, Some(&contract()), Some(&reference()), &request)
-            .unwrap_err()
-            .0,
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request,
+            Curtailed::default()
+        )
+        .unwrap_err()
+        .0,
         Decision::InvalidTelemetry
     );
 }
 #[test]
 fn complete_native_answers_cannot_replace_a_failed_reference() {
     assert_eq!(
-        qualify(&mut sample(), Some(&contract()), None, &request())
-            .unwrap_err()
-            .0,
+        qualify(
+            &mut sample(),
+            Some(&contract()),
+            None,
+            &request(),
+            Curtailed::default()
+        )
+        .unwrap_err()
+        .0,
         Decision::ReferenceUnavailable
     );
 }
@@ -293,12 +315,21 @@ fn complete_native_answers_cannot_replace_a_failed_reference() {
 #[test]
 fn derived_answers_require_a_complete_reference() {
     assert_eq!(
-        qualify(&mut sample(), None, None, &request())
+        qualify(&mut sample(), None, None, &request(), Curtailed::default())
             .unwrap_err()
             .0,
         Decision::ReferenceUnavailable
     );
-    assert!(qualify(&mut sample(), None, Some(&reference()), &request()).is_ok());
+    assert!(
+        qualify(
+            &mut sample(),
+            None,
+            Some(&reference()),
+            &request(),
+            Curtailed::default()
+        )
+        .is_ok()
+    );
 }
 
 #[test]
@@ -308,9 +339,15 @@ fn derived_answers_must_match_the_complete_reference() {
         answers::Limits::default(),
     ).unwrap();
     assert_eq!(
-        qualify(&mut sample(), None, Some(&different), &request())
-            .unwrap_err()
-            .0,
+        qualify(
+            &mut sample(),
+            None,
+            Some(&different),
+            &request(),
+            Curtailed::default()
+        )
+        .unwrap_err()
+        .0,
         Decision::ParityMismatch
     );
 }
@@ -326,7 +363,8 @@ fn complete_capture_with_failed_exit_cannot_pass() {
             &mut sample,
             Some(&contract()),
             Some(&reference()),
-            &request()
+            &request(),
+            Curtailed::default()
         )
         .unwrap_err()
         .0,
@@ -528,7 +566,8 @@ fn complete_capture_cannot_hide_a_timeout_stop() {
             &mut sample,
             Some(&contract()),
             Some(&reference()),
-            &request()
+            &request(),
+            Curtailed::default()
         )
         .unwrap_err()
         .0,
@@ -544,12 +583,99 @@ fn complete_capture_cannot_hide_a_capture_stop() {
             &mut sample,
             Some(&contract()),
             Some(&reference()),
-            &request()
+            &request(),
+            Curtailed::default()
         )
         .unwrap_err()
         .0,
         Decision::CaptureLimit
     );
+}
+
+#[test]
+fn a_stop_at_the_campaign_deadline_is_the_campaigns() {
+    let mut sample = sample();
+    sample.capture.as_mut().unwrap().0.stop = Some(process::Stop::Deadline);
+    let curtailed = Curtailed {
+        time: true,
+        bytes: false,
+    };
+    assert_eq!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request(),
+            curtailed
+        )
+        .unwrap_err()
+        .0,
+        Decision::CampaignDeadline
+    );
+}
+
+#[test]
+fn a_stop_at_the_campaign_capture_budget_is_the_campaigns() {
+    let mut sample = sample();
+    sample.capture.as_mut().unwrap().0.stop = Some(process::Stop::OutputLimit);
+    let curtailed = Curtailed {
+        time: false,
+        bytes: true,
+    };
+    assert_eq!(
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request(),
+            curtailed
+        )
+        .unwrap_err()
+        .0,
+        Decision::CampaignCaptureBudget
+    );
+}
+
+#[test]
+fn the_campaign_lowers_only_the_limits_it_has_less_of() {
+    let authored = process::Limits {
+        timeout: Duration::from_secs(10),
+        max_output_bytes: 1024,
+        ..process::Limits::default()
+    };
+    let (limits, curtailed) = within_campaign(authored, Duration::from_secs(3), 4096);
+    assert_eq!(
+        (limits.timeout, limits.max_output_bytes),
+        (Duration::from_secs(3), 1024)
+    );
+    assert_eq!(
+        curtailed,
+        Curtailed {
+            time: true,
+            bytes: false
+        }
+    );
+    let (limits, curtailed) = within_campaign(authored, Duration::from_secs(20), 512);
+    assert_eq!(
+        (limits.timeout, limits.max_output_bytes),
+        (Duration::from_secs(10), 512)
+    );
+    assert_eq!(
+        curtailed,
+        Curtailed {
+            time: false,
+            bytes: true
+        }
+    );
+}
+
+#[test]
+fn a_remainder_equal_to_an_authored_limit_leaves_that_limit_authored() {
+    let authored = process::Limits::default();
+    let (limits, curtailed) =
+        within_campaign(authored, authored.timeout, authored.max_output_bytes);
+    assert_eq!(limits.timeout, authored.timeout);
+    assert_eq!(curtailed, Curtailed::default());
 }
 
 #[test]

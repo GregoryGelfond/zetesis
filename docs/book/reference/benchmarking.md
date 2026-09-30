@@ -179,7 +179,10 @@ duration. Validated memory rounds have their own median and may be unavailable.
 Non-pass summaries include the recorded reason and schedule phase. If a failed
 qualification prevented later samples, those slots identify the original
 blocker. A refusal, timeout or process failure never counts as an UNSAT result
-or a successful timing sample.
+or a successful timing sample. A child stopped by the campaign's own deadline
+or retained-capture budget, before its per-child timeout or sample limit, is
+recorded as `campaign_deadline` or `campaign_capture_budget`, never as its own
+`timeout` or `capture_limit`: it says nothing of the workload.
 
 On Linux and macOS, SIGINT and SIGTERM stop a run cooperatively: it launches
 nothing further, settles its children under the cleanup bounds and publishes

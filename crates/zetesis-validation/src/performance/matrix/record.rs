@@ -25,6 +25,12 @@ pub enum Decision {
     Cancelled,
     /// Authored capture ceiling was reached.
     CaptureLimit,
+    /// The campaign's deadline, earlier than the authored process timeout,
+    /// stopped this invocation; it says nothing of the workload's own time.
+    CampaignDeadline,
+    /// The campaign's remaining capture budget, smaller than the authored
+    /// ceiling, stopped this invocation's capture.
+    CampaignCaptureBudget,
     /// Spawn/exit/capture/cleanup failed; a GPU error is not assumed to mean absence.
     InvocationFailure,
     /// Captured producer output is malformed or contradictory.
@@ -56,6 +62,8 @@ impl Decision {
             Self::Timeout => "timeout",
             Self::Cancelled => "cancelled",
             Self::CaptureLimit => "capture_limit",
+            Self::CampaignDeadline => "campaign_deadline",
+            Self::CampaignCaptureBudget => "campaign_capture_budget",
             Self::InvocationFailure => "invocation_failure",
             Self::InvalidReport => "invalid_report",
             Self::ParityMismatch => "parity_mismatch",

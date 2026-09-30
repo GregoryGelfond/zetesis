@@ -108,6 +108,8 @@ fn every_decision_label_is_its_recorded_spelling() {
         Decision::Timeout,
         Decision::Cancelled,
         Decision::CaptureLimit,
+        Decision::CampaignDeadline,
+        Decision::CampaignCaptureBudget,
         Decision::InvocationFailure,
         Decision::InvalidReport,
         Decision::ParityMismatch,

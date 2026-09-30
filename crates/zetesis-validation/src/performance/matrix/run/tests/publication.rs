@@ -26,9 +26,15 @@ fn exhausted_search_with_stopped_delivery_never_becomes_complete_parity() {
             capture.stdout = serde_json::to_vec(&document).unwrap();
             capture.exit = Some(exit(3));
             assert_eq!(
-                qualify(&mut observed, None, Some(&reference()), &request())
-                    .unwrap_err()
-                    .0,
+                qualify(
+                    &mut observed,
+                    None,
+                    Some(&reference()),
+                    &request(),
+                    Curtailed::default()
+                )
+                .unwrap_err()
+                .0,
                 Decision::Incomplete
             );
             assert!(observed.observation.is_none());

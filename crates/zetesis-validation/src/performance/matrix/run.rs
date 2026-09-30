@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::super::{Capture, Error, Fault, Phase, capture};
 use super::{
@@ -452,7 +452,7 @@ fn capture_metadata(
     .into_iter()
     .chain(reference)
     {
-        let Some(observed) = invoke(executable, arguments, false, directory, schedule, report)
+        let Some((observed, _)) = invoke(executable, arguments, false, directory, schedule, report)
         else {
             return false;
         };
@@ -531,7 +531,7 @@ fn execute(
             schedule,
             report,
         );
-        let Some(capture) = launched else {
+        let Some((capture, curtailed)) = launched else {
             stopped = true;
             report.samples.push(unattempted(
                 slot,
@@ -558,7 +558,9 @@ fn execute(
             continue;
         }
         let contract = selected.input.contract();
-        if let Err((decision, detail)) = censuses[slot.case].check(&mut sample, contract, request) {
+        if let Err((decision, detail)) =
+            censuses[slot.case].check(&mut sample, contract, request, curtailed)
+        {
             sample.decision = decision;
             sample.detail = Some(detail);
             blocked[cell] = Some(report.samples.len());
@@ -625,8 +627,15 @@ impl Census {
         sample: &mut Sample,
         contract: Option<&examples::Contract>,
         request: &Request<'_>,
+        curtailed: Curtailed,
     ) -> Result<(), (Decision, String)> {
-        let answer = qualify(sample, contract, self.reference.as_ref(), request)?;
+        let answer = qualify(
+            sample,
+            contract,
+            self.reference.as_ref(),
+            request,
+            curtailed,
+        )?;
         if let Some(native) = answer.native {
             super::native_family::accept(&mut self.native, native)?;
         }
@@ -638,11 +647,32 @@ impl Census {
     }
 }
 
+/// The decision a capture that stopped at a limit earns, or `None` for one
+/// that did not. A stop at a limit the campaign lowered is the campaign's;
+/// only a stop at the authored limit says something of the workload.
+fn limit_stop(capture: &Capture, curtailed: Curtailed) -> Option<(Decision, String)> {
+    match capture.stop() {
+        Some(process::Stop::Deadline) if curtailed.time => {
+            Some((Decision::CampaignDeadline, "campaign deadline".into()))
+        }
+        Some(process::Stop::Deadline) => Some((Decision::Timeout, "process deadline".into())),
+        Some(process::Stop::OutputLimit) if curtailed.bytes => Some((
+            Decision::CampaignCaptureBudget,
+            "campaign capture budget".into(),
+        )),
+        Some(process::Stop::OutputLimit) => {
+            Some((Decision::CaptureLimit, "capture byte ceiling".into()))
+        }
+        _ => None,
+    }
+}
+
 fn qualify(
     sample: &mut Sample,
     contract: Option<&examples::Contract>,
     reference: Option<&answers::ReportedAnswers>,
     request: &Request<'_>,
+    curtailed: Curtailed,
 ) -> Result<Qualified, (Decision, String)> {
     let capture = sample
         .capture()
@@ -650,11 +680,8 @@ fn qualify(
     if cancelled_capture(capture) {
         return Err((Decision::Cancelled, "campaign cancelled".into()));
     }
-    if capture.stop() == Some(process::Stop::Deadline) {
-        return Err((Decision::Timeout, "process deadline".into()));
-    }
-    if capture.stop() == Some(process::Stop::OutputLimit) {
-        return Err((Decision::CaptureLimit, "capture byte ceiling".into()));
+    if let Some(stop) = limit_stop(capture, curtailed) {
+        return Err(stop);
     }
     if capture.stop() != Some(process::Stop::Completed)
         || capture.failure().is_some()
@@ -779,7 +806,7 @@ fn launch(
     directory: &Path,
     schedule: Schedule<'_>,
     report: &mut Report,
-) -> Option<Capture> {
+) -> Option<(Capture, Curtailed)> {
     if phase != Phase::Memory {
         return invoke(executable, arguments, false, directory, schedule, report);
     }
@@ -818,9 +845,38 @@ fn measured(sample: &mut Sample, record: &Path, report: &mut Report) -> bool {
     }
 }
 
+/// Which of a launch's limits the campaign's remainder set below the authored
+/// one, so that a stop at that limit is the campaign's, not the workload's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Curtailed {
+    /// The campaign's remaining time was shorter than the process timeout.
+    time: bool,
+    /// The campaign's remaining capture budget was smaller than the ceiling.
+    bytes: bool,
+}
+
+/// The limits of one launch: each authored limit, lowered to the `time` and
+/// `bytes` the campaign has left, with which of them the campaign lowered.
+fn within_campaign(
+    authored: process::Limits,
+    time: Duration,
+    bytes: usize,
+) -> (process::Limits, Curtailed) {
+    let curtailed = Curtailed {
+        time: time < authored.timeout,
+        bytes: bytes < authored.max_output_bytes,
+    };
+    let limits = process::Limits {
+        timeout: authored.timeout.min(time),
+        max_output_bytes: authored.max_output_bytes.min(bytes),
+        ..authored
+    };
+    (limits, curtailed)
+}
+
 /// Launch one bounded process within the campaign's remaining time and
-/// capture; a supervised launch is the memory helper's, whose child is
-/// reaped separately.
+/// capture, reporting which limits the campaign lowered; a supervised launch
+/// is the memory helper's, whose child is reaped separately.
 fn invoke(
     executable: &Path,
     arguments: Vec<OsString>,
@@ -828,7 +884,7 @@ fn invoke(
     directory: &Path,
     schedule: Schedule<'_>,
     report: &mut Report,
-) -> Option<Capture> {
+) -> Option<(Capture, Curtailed)> {
     if schedule.stopped(report) {
         return None;
     }
@@ -845,11 +901,7 @@ fn invoke(
         report.faults.push(Fault::CaptureBudget);
         return None;
     }
-    let limits = process::Limits {
-        timeout: report.limits.process.timeout.min(time),
-        max_output_bytes: report.limits.process.max_output_bytes.min(bytes),
-        ..report.limits.process
-    };
+    let (limits, curtailed) = within_campaign(report.limits.process, time, bytes);
     let (capture, fault) = if supervised {
         capture::supervised_with_cancellation(
             executable,
@@ -877,7 +929,7 @@ fn invoke(
     if let Some(id) = capture.unresolved_child {
         report.unresolved_children.push(id);
     }
-    Some(capture)
+    Some((capture, curtailed))
 }
 
 fn cancelled_capture(capture: &Capture) -> bool {

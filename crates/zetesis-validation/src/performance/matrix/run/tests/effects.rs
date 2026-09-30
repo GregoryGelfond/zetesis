@@ -787,6 +787,35 @@ fn exact_metadata_budget_cannot_launch_a_replacement_sample() {
 }
 
 #[test]
+fn a_child_stopped_at_the_campaign_deadline_is_recorded_as_the_campaigns() {
+    let fixture = Fixture::new();
+    // The reference answers its version query and then outlasts the
+    // campaign, far inside its own thirty-second timeout.
+    executable(
+        &fixture.reference,
+        "if [ \"$1\" = --version ]; then printf 'clingo version 5.8.2'; else exec sleep 30; fi",
+    );
+    let mut request = fixture.request();
+    request.limits.campaign_timeout = std::time::Duration::from_secs(2);
+    let report = fixture.run(&request);
+    let stopped: Vec<_> = report
+        .samples()
+        .iter()
+        .filter(|sample| sample.capture().is_some())
+        .filter(|sample| sample.slot().producer == Producer::Reference)
+        .collect();
+    assert_eq!(stopped.len(), 1);
+    assert_eq!(stopped[0].decision(), Decision::CampaignDeadline);
+    assert_eq!(stopped[0].detail(), Some("campaign deadline"));
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.decision() != Decision::Timeout)
+    );
+}
+
+#[test]
 fn cancelled_matrix_launches_no_metadata() {
     let fixture = Fixture::new();
     let report = crate::performance::matrix::run_workloads_with_cancellation(
