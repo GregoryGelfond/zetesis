@@ -1,33 +1,189 @@
-//! Authored source cannot suppress the project's dead-code diagnostics.
-//! Compiler-generated attributes and procedural macro expansions are outside
-//! this token audit. Rust's deny gate still applies to the compiled code.
+//! Authored source suppresses no lint outside its named foreign-interface
+//! exceptions. Every `#[allow]` is refused, as is every `#[expect]` the list
+//! below does not name, and every entry naming no present `#[expect]`, so the
+//! list cannot outlive its code. Compiler-generated attributes and procedural
+//! macro expansions are outside this token audit; Rust's deny gate still applies
+//! to the compiled code.
 
 mod lint_attributes;
 
+use lint_attributes::Suppression;
+
 use crate::support::{authored_sources, repository, source};
 
+/// An `#[expect]` a foreign interface requires: the file, the item it
+/// annotates and the lint, with the interface constraint that requires it, as
+/// CONTRIBUTING asks. Adding one is a change to this audit, reviewed with the
+/// code that needs it.
+struct Exception {
+    file: &'static str,
+    item: &'static str,
+    lint: &'static str,
+    constraint: &'static str,
+}
+
+/// The named exceptions.
+const EXCEPTIONS: &[Exception] = &[];
+
+/// Whether `exception` names `suppression`, found in `file`.
+fn names(exception: &Exception, file: &str, suppression: &Suppression) -> bool {
+    exception.file == file
+        && suppression.item.as_deref() == Some(exception.item)
+        && suppression.lint == exception.lint
+}
+
+/// The suppressions among `found`, each with its file, that the policy refuses,
+/// and the entries of `exceptions` naming no present `#[expect]`.
+fn violations(found: &[(String, Suppression)], exceptions: &[Exception]) -> Vec<String> {
+    let mut violations: Vec<String> = found
+        .iter()
+        .filter(|(file, suppression)| {
+            suppression.level == "allow"
+                || !exceptions
+                    .iter()
+                    .any(|exception| names(exception, file, suppression))
+        })
+        .map(|(file, suppression)| format!("{file}:{suppression} is outside the named exceptions"))
+        .collect();
+    violations.extend(
+        exceptions
+            .iter()
+            .filter(|exception| {
+                !found.iter().any(|(file, suppression)| {
+                    suppression.level == "expect" && names(exception, file, suppression)
+                })
+            })
+            .map(|exception| {
+                format!(
+                    "{}: the exception for {} on `{}` ({}) names no present #[expect]",
+                    exception.file, exception.lint, exception.item, exception.constraint
+                )
+            }),
+    );
+    violations
+}
+
 #[test]
-fn authored_code_preserves_dead_code_diagnostics() {
+fn authored_code_suppresses_no_lint_outside_the_named_exceptions() {
     let root = repository();
     let sources = authored_sources(&root);
     assert!(
         !sources.is_empty(),
         "the maintained inventory must be present"
     );
-    let mut violations = Vec::new();
+    let mut found = Vec::new();
     for path in &sources {
         let text = source(path).unwrap();
-        let findings = lint_attributes::suppressions(&text)
-            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        for finding in findings {
-            violations.push(format!(
-                "{}:{finding}",
-                path.strip_prefix(&root).unwrap().display()
-            ));
-        }
+        let file = path.strip_prefix(&root).unwrap().display().to_string();
+        let suppressions =
+            lint_attributes::suppressions(&text).unwrap_or_else(|error| panic!("{file}: {error}"));
+        found.extend(
+            suppressions
+                .into_iter()
+                .map(|suppression| (file.clone(), suppression)),
+        );
     }
+    let violations = violations(&found, EXCEPTIONS);
     assert!(violations.is_empty(), "{}", violations.join("\n"));
     println!("authored_rust_sources={}", sources.len());
+}
+
+/// An exception of the shape CONTRIBUTING describes, for the fixtures below.
+const INTERFACE: Exception = Exception {
+    file: "src/interface.rs",
+    item: "field_name",
+    lint: "clippy::struct_field_names",
+    constraint: "the foreign schema names the field",
+};
+
+fn located(source: &str) -> Vec<(String, Suppression)> {
+    lint_attributes::suppressions(source)
+        .unwrap()
+        .into_iter()
+        .map(|suppression| (INTERFACE.file.to_owned(), suppression))
+        .collect()
+}
+
+#[test]
+fn an_expect_its_exception_names_is_accepted() {
+    let found = located(
+        "struct Record {\n    #[expect(clippy::struct_field_names, reason = \"schema\")]\n    field_name: u8,\n}",
+    );
+    assert!(violations(&found, &[INTERFACE]).is_empty());
+}
+
+#[test]
+fn an_allow_is_refused_where_an_exception_names_its_lint() {
+    let found = located(
+        "struct Record {\n    #[allow(clippy::struct_field_names)]\n    field_name: u8,\n}",
+    );
+    // The allow itself, and the exception, which names no present expect.
+    assert_eq!(violations(&found, &[INTERFACE]).len(), 2);
+}
+
+#[test]
+fn an_expect_no_exception_names_is_refused() {
+    let found = located("#[expect(clippy::too_many_lines, reason = \"long\")]\nfn long() {}");
+    assert_eq!(violations(&found, &[]).len(), 1);
+    // An exception for another item does not cover it.
+    let found = located(
+        "struct Record {\n    #[expect(clippy::struct_field_names)]\n    other_name: u8,\n}",
+    );
+    assert_eq!(violations(&found, &[INTERFACE]).len(), 2);
+}
+
+#[test]
+fn an_exception_naming_no_present_expect_is_refused() {
+    let violations = violations(&[], &[INTERFACE]);
+    assert_eq!(violations.len(), 1);
+    assert!(violations[0].contains("names no present #[expect]"));
+}
+
+#[test]
+fn a_suppression_names_the_item_it_annotates() {
+    let source = r#"#![expect(clippy::module_name_repetitions)]
+#[expect(clippy::too_many_lines)]
+pub(crate) async fn run() {}
+#[doc = "a record"]
+#[expect(clippy::struct_field_names)]
+pub struct Record {
+    #[expect(clippy::struct_field_names)]
+    pub(super) record_name: u8,
+}
+#[expect(improper_ctypes_definitions)]
+extern "C" fn callback() {}
+fn body() {
+    #[expect(clippy::cast_possible_truncation)]
+    let mut narrow = 0;
+}
+#[expect(clippy::use_self)]
+impl<T> Trait for Record {}"#;
+    let items: Vec<(String, Option<String>)> = lint_attributes::suppressions(source)
+        .unwrap()
+        .into_iter()
+        .map(|suppression| (suppression.lint, suppression.item))
+        .collect();
+    assert_eq!(
+        items,
+        [
+            ("clippy::module_name_repetitions".into(), None),
+            ("clippy::too_many_lines".into(), Some("run".into())),
+            ("clippy::struct_field_names".into(), Some("Record".into())),
+            (
+                "clippy::struct_field_names".into(),
+                Some("record_name".into())
+            ),
+            (
+                "improper_ctypes_definitions".into(),
+                Some("callback".into())
+            ),
+            (
+                "clippy::cast_possible_truncation".into(),
+                Some("narrow".into())
+            ),
+            ("clippy::use_self".into(), None),
+        ]
+    );
 }
 
 #[test]
@@ -53,7 +209,10 @@ fn inactive_configuration_cannot_hide_suppression() {
     let source = r#"#[cfg_attr(any(), cfg_attr(feature = "future", allow(dead_code)), expect(warnings))] fn f() {}"#;
     let found = lint_attributes::suppressions(source).unwrap();
     assert_eq!(
-        found.iter().map(|row| row.lint).collect::<Vec<_>>(),
+        found
+            .iter()
+            .map(|row| row.lint.as_str())
+            .collect::<Vec<_>>(),
         ["dead_code", "warnings"]
     );
 }
@@ -64,7 +223,10 @@ fn literal_macro_attributes_remain_visible() {
 macro_rules! inner { () => { #![expect(dead_code)] }; }";
     let found = lint_attributes::suppressions(source).unwrap();
     assert_eq!(
-        found.iter().map(|row| row.lint).collect::<Vec<_>>(),
+        found
+            .iter()
+            .map(|row| row.lint.as_str())
+            .collect::<Vec<_>>(),
         ["unused", "dead_code"]
     );
 }
@@ -90,12 +252,22 @@ fn quoted_attributes_are_not_authored_suppressions() {
 }
 
 #[test]
-fn unrelated_specific_lints_remain_outside_this_policy() {
+fn specific_lints_are_suppressions_too() {
     let source = r#"#[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip callback receives a borrowed field")]
     fn serialize() {}
     #[expect(clippy::struct_field_names, reason = "Preserve the established serialized field names")]
     struct Record {}"#;
-    assert!(lint_attributes::suppressions(source).unwrap().is_empty());
+    let found = lint_attributes::suppressions(source).unwrap();
+    assert_eq!(
+        found
+            .iter()
+            .map(|row| (row.lint.as_str(), row.item.as_deref()))
+            .collect::<Vec<_>>(),
+        [
+            ("clippy::trivially_copy_pass_by_ref", Some("serialize")),
+            ("clippy::struct_field_names", Some("Record")),
+        ]
+    );
 }
 
 #[test]
