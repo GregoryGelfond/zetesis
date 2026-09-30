@@ -4,13 +4,15 @@
 //! repository's main branch (`blob/main/…` or `tree/main/…`) must name a file
 //! or directory of the working tree. The manual's links into the Rust API
 //! reference, which rustdoc generates beside the built manual, must name a
-//! workspace crate. A dated record ([`invocations::is_record`]) is not checked:
-//! its links name what it recorded. Nor are links pinned to a commit, links to
-//! other sites, a link's fragment or query, or anything inside code.
+//! workspace crate. A dated record's links are checked like any other: a
+//! record pins a link to the commit it recorded when what the link names may
+//! move. Links pinned to a commit, links to other sites, a link's fragment or
+//! query, and anything inside code, fenced or inline, are not checked.
 
 use std::path::{Component, Path, PathBuf};
 
-use crate::{Error, invocations, require};
+use crate::markdown::{self, Line};
+use crate::{Error, require};
 
 /// The repository whose main-branch links name the working tree; the manual's
 /// `git-repository-url`.
@@ -49,9 +51,6 @@ pub fn check<'a>(
 ) -> Result<(), Error> {
     let mut dead = Vec::new();
     for (path, text) in documents {
-        if invocations::is_record(text) {
-            continue;
-        }
         let document = Path::new(path);
         for (line, link) in links(text) {
             let held = match target(document, link) {
@@ -78,16 +77,10 @@ pub fn check<'a>(
 /// repository's main branch, whether or not it is written as a link.
 fn links(text: &str) -> Vec<(usize, &str)> {
     let mut links = Vec::new();
-    let mut fence = false;
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            fence = !fence;
+    for (number, line) in markdown::lines(text) {
+        let Line::Prose(line) = line else {
             continue;
-        }
-        if fence {
-            continue;
-        }
+        };
         // Backticks alternate between prose and code spans.
         for (segment, prose) in line.split('`').step_by(2).enumerate() {
             let definition = if segment == 0 {
@@ -100,9 +93,9 @@ fn links(text: &str) -> Vec<(usize, &str)> {
             links.extend(
                 written
                     .filter(|target| main_branch_path(target).is_none())
-                    .map(|target| (index + 1, target)),
+                    .map(|target| (number, target)),
             );
-            links.extend(main_branch_links(prose).map(|link| (index + 1, link)));
+            links.extend(main_branch_links(prose).map(|link| (number, link)));
         }
     }
     links

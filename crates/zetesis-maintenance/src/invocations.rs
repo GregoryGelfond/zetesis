@@ -4,24 +4,29 @@
 //! whose first word is a zetesis executable must name a binary or package of
 //! the workspace, and `zetesis bench` is not a command. A document with
 //! [`RECORD`] on a line of its own is a dated measurement record: its commands
-//! keep the spellings of the binaries it records, so it is not checked. Prose
-//! is not checked; it may name an executable's former spelling on purpose.
+//! keep the spellings of the binaries it records, so they are not checked.
+//! Prose is not checked; it may name an executable's former spelling on
+//! purpose. Code blocks are fenced with backticks or tildes alike.
 
 use std::collections::BTreeSet;
 
+use crate::markdown::{self, Line};
 use crate::{Error, require, workspace};
 
 /// Marks a dated measurement record, whose commands keep the spellings of the
-/// binaries it records. A record carries it on a line of its own.
+/// binaries it records. A record carries it on a line of its own, outside any
+/// code block.
 pub const RECORD: &str =
     "<!-- A dated record: its commands keep the spellings of the binaries it records. -->";
 
-/// Whether `text` is a dated measurement record: a line of it is exactly
-/// [`RECORD`]. A document that quotes the marker, as the contributor guide
-/// does in prose, is not a record.
+/// Whether `text` is a dated measurement record: a line of it outside every
+/// code block is exactly [`RECORD`]. A document that quotes the marker, as
+/// the contributor guide does in prose, or shows it in a code block, is not a
+/// record.
 #[must_use]
 pub fn is_record(text: &str) -> bool {
-    text.lines().any(|line| line.trim() == RECORD)
+    markdown::lines(text)
+        .any(|(_, line)| matches!(line, Line::Prose(prose) if prose.trim() == RECORD))
 }
 
 /// Code-block languages whose lines are shell commands.
@@ -70,47 +75,41 @@ pub fn check<'a>(
 /// its one-based line number.
 fn commands(text: &str) -> Vec<(usize, &str)> {
     let mut commands = Vec::new();
-    // Outside a fence: None; inside one: whether its lines are shell commands.
-    let mut fence = None;
     let mut continued = false;
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim_start();
-        if let Some(info) = trimmed.strip_prefix("```") {
-            fence = match fence {
-                Some(_) => None,
-                None => Some(
-                    info.split([',', ' '])
-                        .next()
-                        .is_some_and(|language| SHELLS.contains(&language)),
-                ),
-            };
-            continued = false;
-            continue;
-        }
-        match fence {
-            Some(true) => {
+    for (number, line) in markdown::lines(text) {
+        match line {
+            Line::Code { text, info } if shell(info) => {
                 // A line continuing the previous one carries arguments only.
                 let starts = !continued;
-                continued = line.trim_end().ends_with('\\');
+                continued = text.trim_end().ends_with('\\');
+                let trimmed = text.trim_start();
                 if starts && !trimmed.starts_with('#') {
                     commands.extend(
                         trimmed
                             .split([';', '|', '&'])
                             .map(str::trim)
                             .filter(|segment| !segment.is_empty())
-                            .map(|segment| (index + 1, segment)),
+                            .map(|segment| (number, segment)),
                     );
                 }
             }
-            Some(false) => {}
-            None => {
-                if let Some(cell) = table_cell(trimmed) {
-                    commands.push((index + 1, cell));
+            Line::Prose(text) => {
+                if let Some(cell) = table_cell(text.trim_start()) {
+                    commands.push((number, cell));
                 }
             }
+            Line::Opening(_) | Line::Closing => continued = false,
+            Line::Code { .. } => {}
         }
     }
     commands
+}
+
+/// Whether a code block's info string names a shell language.
+fn shell(info: &str) -> bool {
+    info.split([',', ' '])
+        .next()
+        .is_some_and(|language| SHELLS.contains(&language))
 }
 
 /// The code span filling a table row's first cell, as in "| `zetesis-bench` |".

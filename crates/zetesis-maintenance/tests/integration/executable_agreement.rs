@@ -124,6 +124,15 @@ fn a_command_running_a_removed_executable_is_refused() {
 }
 
 #[test]
+fn a_tilde_fenced_command_running_a_removed_executable_is_refused() {
+    let refusal = invocation_refusal("~~~sh\nzetesis-perf examples/correctness\n~~~\n");
+    assert!(
+        refusal.contains("fixture.md:2: `zetesis-perf` is not a binary or package"),
+        "{refusal}"
+    );
+}
+
+#[test]
 fn a_tool_table_listing_a_removed_executable_is_refused() {
     let refusal = invocation_refusal(
         "| Command | Purpose |\n|---|---|\n| `zetesis-series` | Compare reports. |\n",
@@ -151,6 +160,20 @@ fn a_dated_record_keeps_the_spellings_it_records() {
         invocations::RECORD
     );
     invocations::check([("record.md", record.as_str())], &metadata()).unwrap();
+}
+
+#[test]
+fn a_marker_inside_a_code_block_does_not_make_a_record() {
+    // A document showing the marker in a code block, as a guide might, is
+    // still a live document.
+    let refusal = invocation_refusal(&format!(
+        "# Records\n\n```md\n{}\n```\n\n```sh\nzetesis-perf examples/correctness\n```\n",
+        invocations::RECORD
+    ));
+    assert!(
+        refusal.contains("fixture.md:8: `zetesis-perf`"),
+        "{refusal}"
+    );
 }
 
 #[test]

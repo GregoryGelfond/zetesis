@@ -9,6 +9,7 @@
 
 mod files;
 mod json;
+mod markdown;
 mod workspace;
 pub mod book;
 pub mod coverage;

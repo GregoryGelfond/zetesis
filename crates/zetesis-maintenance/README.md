@@ -181,10 +181,19 @@ hard-link publication does not read or duplicate those payloads.
 its Cargo commands must name exactly the installer's packages, and those
 packages' binary targets, as `cargo metadata` reports them, must be exactly the
 tools. `invocations::check` holds live documentation to what the workspace
-builds: a command in a shell code block, or a tool table's first cell, that
-begins with a zetesis executable must name a binary or package of the workspace,
-and `zetesis bench` is not a command. A page beginning with `invocations::RECORD`
-records a dated measurement and keeps the spellings of the binaries it records;
-prose is not checked. Both take text their caller has read and build nothing.
-The portable gate runs them over the repository in the `executable_agreement`
+builds: a command in a shell code block, fenced with backticks or tildes, or a
+tool table's first cell, that begins with a zetesis executable must name a
+binary or package of the workspace, and `zetesis bench` is not a command. A
+page carrying `invocations::RECORD` on a line of its own, outside any code
+block, records a dated measurement and keeps the spellings of the binaries it
+records; prose is not checked. Both take text their caller has read and build
+nothing. The portable gate runs them over the repository in the
+`executable_agreement` tests.
+
+`links::check` holds live documentation's links to the working tree: every
+relative link, and every link to the repository's main branch, must name a file
+or directory the repository holds, and a manual link into the API reference
+must name a workspace crate. A dated record's links are checked like any other;
+links pinned to a commit, links to other sites and anything inside code are
+not. The portable gate runs it over the repository in the `documentation_links`
 tests.

@@ -103,12 +103,18 @@ fn an_api_reference_link_names_a_workspace_crate() {
 }
 
 #[test]
-fn a_dated_record_keeps_the_links_it_recorded() {
+fn a_dated_records_links_must_resolve_like_any_others() {
+    // A record keeps its commands' spellings, not dead links: it pins a link
+    // to the commit it recorded when what the link names may move.
     let record = format!(
         "# A measurement\n\n{}\n\n[run](../gone.rs)\n",
         invocations::RECORD
     );
-    checked("docs/record.md", &record, &[]).unwrap();
+    let refusal = checked("docs/record.md", &record, &[]).unwrap_err();
+    assert!(
+        refusal.contains("docs/record.md:5: ../gone.rs"),
+        "{refusal}"
+    );
 }
 
 #[test]
