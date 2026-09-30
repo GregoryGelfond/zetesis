@@ -9,10 +9,10 @@ comparison and performance measurements. The main command provides:
 | `zetesis test backend` | Check a device against known complete answer families. |
 | `zetesis test scalability` | Qualify maintained authored/corpus workloads across CPU thread counts. |
 
-The separate `zetesis-bench` tool composes this crate's campaigns: `corpus`
-measures ordinary solver processes, `compare` compares retained measurement
-reports, `perf` compares ordinary runs or measures a grounding/backend matrix,
-and `series` compares published series reports. See the
+The separate `zetesis-bench` tool composes this crate's campaigns: `run`
+measures a suite's answer families, timings and memory, beside clingo when
+there is one and alone when there is not, and `compare` compares saved reports
+as tables, JSON or Markdown. See the
 [command guide](../../docs/book/reference/commands.md) and the
 [benchmarking guide](../../docs/book/reference/benchmarking.md) for these
 interfaces.
