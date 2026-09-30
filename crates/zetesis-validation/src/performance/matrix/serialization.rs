@@ -3,11 +3,12 @@
 //! UTF-8 validation scans each stream once per serialization pass, without copying
 //! its bytes. Bounded publication preflights and then writes the same view.
 //! Serde writes the borrowed text or byte sequence through the existing bounded
-//! publication writer. The legacy capture serializer remains unchanged.
+//! publication writer. The legacy capture serializer remains the ordinary
+//! campaign's.
 use std::ffi::OsString;
 use std::path::Path;
 
-use serde::{Serialize, Serializer, ser::SerializeSeq};
+use serde::{Serialize, Serializer};
 
 use super::super::Capture;
 use crate::{process, selected::InvocationFailure};
@@ -64,25 +65,15 @@ impl<'a> View<'a> {
     }
 }
 
-pub(super) fn captures<S: Serializer>(
-    values: &[Capture],
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let mut sequence = serializer.serialize_seq(Some(values.len()))?;
-    for capture in values {
-        sequence.serialize_element(&View::new(capture))?;
+/// A launched process's capture as a matrix report records it: serialized as
+/// the lossless stream view, each stream as its UTF-8 text or, failing that,
+/// its bytes.
+#[derive(Debug)]
+pub(super) struct MatrixCapture(pub(super) Capture);
+impl Serialize for MatrixCapture {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        View::new(&self.0).serialize(serializer)
     }
-    sequence.end()
-}
-#[expect(
-    clippy::ref_option,
-    reason = "serde's field serializer receives a borrowed Option"
-)]
-pub(super) fn optional_capture<S: Serializer>(
-    value: &Option<Capture>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    value.as_ref().map(View::new).serialize(serializer)
 }
 
 #[cfg(test)]

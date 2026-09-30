@@ -75,8 +75,7 @@ pub struct Report {
     peak_rss: &'static str,
     before: Vec<FileSeal>,
     after: Vec<Change>,
-    #[serde(serialize_with = "serialization::captures")]
-    metadata: Vec<Capture>,
+    metadata: Vec<serialization::MatrixCapture>,
     samples: Vec<Sample>,
     total_capture_bytes: usize,
     faults: Vec<Fault>,
@@ -113,7 +112,7 @@ impl Report {
         self.accounted()
             && self.samples.iter().all(|s| s.decision == Decision::Pass)
             && self.metadata.len() == owed
-            && self.metadata.iter().all(|c| c.complete(false))
+            && self.metadata.iter().all(|c| c.0.complete(false))
             && self.after.iter().all(Change::unchanged)
             && self.faults.is_empty()
             && self.unresolved_children.is_empty()
@@ -166,8 +165,8 @@ impl Report {
     }
     /// Retained executable version/help captures outside solve observations.
     #[must_use]
-    pub fn metadata(&self) -> &[Capture] {
-        &self.metadata
+    pub fn metadata(&self) -> impl ExactSizeIterator<Item = &Capture> {
+        self.metadata.iter().map(|capture| &capture.0)
     }
     /// Direct child IDs explicitly abandoned after bounded cleanup failed.
     #[must_use]

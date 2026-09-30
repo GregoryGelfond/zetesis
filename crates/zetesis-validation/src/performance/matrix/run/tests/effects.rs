@@ -36,7 +36,7 @@ impl Fixture {
         let native = directory.path().join("native");
         let reference = directory.path().join("reference");
         let report = directory.path().join("report.json");
-        let accepted = sample().capture.unwrap();
+        let accepted = sample().capture.unwrap().0;
         executable(
             &native,
             &format!(
@@ -142,7 +142,6 @@ fn completed_matrix_publishes_its_exact_schedule_and_capture_total() {
     assert_eq!(report.metadata().len(), 3);
     let retained: usize = report
         .metadata()
-        .iter()
         .chain(
             report
                 .samples()
@@ -240,7 +239,7 @@ fn cancelled_scalability_keeps_every_workload_and_requested_position() {
     .unwrap();
     assert!(report.accounted());
     assert!(!report.passed());
-    assert!(report.metadata().is_empty());
+    assert!(report.metadata().next().is_none());
     assert_eq!(report.workloads().unwrap().len(), 10);
     assert_eq!(
         report
@@ -775,12 +774,7 @@ fn exact_metadata_budget_cannot_launch_a_replacement_sample() {
     let report = fixture.run(&request);
     assert!(report.accounted());
     assert_eq!(report.metadata().len(), 3);
-    assert!(
-        report
-            .metadata()
-            .iter()
-            .all(|capture| capture.complete(false))
-    );
+    assert!(report.metadata().all(|capture| capture.complete(false)));
     assert_eq!(report.total_capture_bytes(), 3);
     assert!(matches!(report.faults(), [Fault::CaptureBudget]));
     assert!(report.samples().iter().all(|sample| {
@@ -802,7 +796,7 @@ fn cancelled_matrix_launches_no_metadata() {
         &AtomicBool::new(true),
     )
     .unwrap();
-    assert!(report.metadata().is_empty());
+    assert!(report.metadata().next().is_none());
     assert!(report.accounted());
     assert!(!report.passed());
     assert!(matches!(report.faults(), [Fault::Cancelled]));

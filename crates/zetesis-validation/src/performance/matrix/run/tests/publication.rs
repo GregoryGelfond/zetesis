@@ -22,7 +22,7 @@ fn exhausted_search_with_stopped_delivery_never_becomes_complete_parity() {
                 Decision::Incomplete
             );
             let mut observed = sample();
-            let capture = observed.capture.as_mut().unwrap();
+            let capture = &mut observed.capture.as_mut().unwrap().0;
             capture.stdout = serde_json::to_vec(&document).unwrap();
             capture.exit = Some(exit(3));
             assert_eq!(

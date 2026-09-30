@@ -72,3 +72,27 @@ fn matrix_capture_view_preserves_invocation_metadata() {
         assert_eq!(legacy, compact);
     }
 }
+
+#[test]
+fn a_matrix_capture_serializes_as_its_stream_view() {
+    let capture = Capture {
+        helper_child_id: None,
+        executable: "/sealed/zetesis".into(),
+        arguments: vec!["--json".into()],
+        directory: "/private/source".into(),
+        started_unix_ns: Some(7),
+        elapsed_ns: Some(11),
+        stop: Some(process::Stop::Completed),
+        exit: Some(process::Exit {
+            code: Some(0),
+            signal: None,
+        }),
+        stdout: b"text".to_vec(),
+        stderr: vec![0xff],
+        failure: None,
+        cleanup_failure: None,
+        unresolved_child: None,
+    };
+    let view = serde_json::to_value(View::new(&capture)).unwrap();
+    assert_eq!(serde_json::to_value(MatrixCapture(capture)).unwrap(), view);
+}

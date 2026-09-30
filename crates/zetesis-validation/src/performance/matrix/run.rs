@@ -8,7 +8,7 @@ use std::time::Instant;
 use super::super::{Capture, Error, Fault, Phase, capture};
 use super::{
     Decision, NativeInvocation, Plan, Producer, RecordedPlan, Report, Request, Sample, Slot, Suite,
-    Workload, outcome,
+    Workload, outcome, serialization::MatrixCapture,
 };
 use crate::selected::{identity, publication};
 use crate::{answers, examples, process};
@@ -457,7 +457,7 @@ fn capture_metadata(
             return false;
         };
         let completed = observed.complete(false);
-        report.metadata.push(observed);
+        report.metadata.push(MatrixCapture(observed));
         if !completed {
             report.faults.push(Fault::Metadata);
             return false;
@@ -542,7 +542,7 @@ fn execute(
         };
         let mut sample = Sample {
             slot,
-            capture: Some(capture),
+            capture: Some(MatrixCapture(capture)),
             decision: Decision::Pass,
             detail: None,
             blocked_by: None,
@@ -552,7 +552,7 @@ fn execute(
             memory: None,
         };
         if slot.phase == Phase::Memory
-            && !cancelled_capture(sample.capture.as_ref().unwrap())
+            && !cancelled_capture(sample.capture().unwrap())
             && !measured(&mut sample, &record, report)
         {
             continue;
@@ -645,8 +645,7 @@ fn qualify(
     request: &Request<'_>,
 ) -> Result<Qualified, (Decision, String)> {
     let capture = sample
-        .capture
-        .as_ref()
+        .capture()
         .expect("qualification follows a launched capture");
     if cancelled_capture(capture) {
         return Err((Decision::Cancelled, "campaign cancelled".into()));
@@ -743,10 +742,7 @@ fn qualify(
 /// A memory capture belongs to the helper. Require its success separately,
 /// then use the measured solver exit for the producer's outcome contract.
 fn solver_exit(sample: &Sample) -> Result<Option<process::Exit>, (Decision, String)> {
-    let capture = sample
-        .capture
-        .as_ref()
-        .expect("a launched sample has a capture");
+    let capture = sample.capture().expect("a launched sample has a capture");
     if sample.slot.phase != Phase::Memory {
         return Ok(capture.exit());
     }
@@ -803,7 +799,7 @@ fn launch(
 /// contradictory record decides the sample and is retained with a fault;
 /// the campaign goes on, since the rounds are independent invocations.
 fn measured(sample: &mut Sample, record: &Path, report: &mut Report) -> bool {
-    let helper_child = sample.capture.as_ref().and_then(Capture::helper_child_id);
+    let helper_child = sample.capture().and_then(Capture::helper_child_id);
     match super::super::run::memory::read(record, helper_child).1 {
         Ok(measurement) => {
             sample.memory = Some(measurement);

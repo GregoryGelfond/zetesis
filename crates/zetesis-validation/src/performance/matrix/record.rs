@@ -2,6 +2,7 @@
 use super::{
     super::{Capture, Diagnostics},
     Slot,
+    serialization::MatrixCapture,
 };
 use crate::selected::Backend;
 use serde::Serialize;
@@ -237,8 +238,7 @@ impl Observation {
 #[derive(Debug, Serialize)]
 pub struct Sample {
     pub(super) slot: Slot,
-    #[serde(serialize_with = "super::serialization::optional_capture")]
-    pub(super) capture: Option<Capture>,
+    pub(super) capture: Option<MatrixCapture>,
     pub(super) decision: Decision,
     pub(super) detail: Option<String>,
     pub(super) blocked_by: Option<usize>,
@@ -285,7 +285,10 @@ impl Sample {
     /// Exact launched process record, absent for a skipped position.
     #[must_use]
     pub const fn capture(&self) -> Option<&Capture> {
-        self.capture.as_ref()
+        match &self.capture {
+            Some(capture) => Some(&capture.0),
+            None => None,
+        }
     }
     /// Earlier failed sample disabling this cell, when applicable.
     #[must_use]

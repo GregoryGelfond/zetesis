@@ -127,7 +127,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
                 }
                 if sample.slot.phase == Phase::Timed {
                     let duration = (sample.decision == Decision::Pass)
-                        .then(|| sample.capture.as_ref()?.elapsed_ns()?.try_into().ok())
+                        .then(|| sample.capture()?.elapsed_ns()?.try_into().ok())
                         .flatten();
                     match (&mut intervals, duration) {
                         (Some(intervals), Some(duration)) => intervals.push(duration),

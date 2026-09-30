@@ -49,7 +49,7 @@ fn sample() -> Sample {
             round: 0,
             producer: Producer::Native { profile: 0 },
         },
-        capture: Some(Capture {
+        capture: Some(MatrixCapture(Capture {
             executable: "/unused/native".into(),
             arguments: vec![],
             directory: "/unused".into(),
@@ -66,7 +66,7 @@ fn sample() -> Sample {
             cleanup_failure: None,
             unresolved_child: None,
             helper_child_id: None,
-        }),
+        })),
         decision: Decision::Pass,
         detail: None,
         blocked_by: None,
@@ -91,9 +91,9 @@ fn memory_sample(producer: Producer, exit: process::Exit) -> Sample {
     let mut sample = sample();
     sample.slot.phase = Phase::Memory;
     sample.slot.producer = producer;
-    sample.capture.as_mut().unwrap().helper_child_id = Some(2);
+    sample.capture.as_mut().unwrap().0.helper_child_id = Some(2);
     if producer == Producer::Reference {
-        sample.capture.as_mut().unwrap().stdout =
+        sample.capture.as_mut().unwrap().0.stdout =
             br#"{"Result":"UNSATISFIABLE","Models":{"More":"no","Number":0},"Call":[{}]}"#.to_vec();
     }
     sample.memory = Some(process::memory::Measurement {
@@ -193,7 +193,7 @@ fn memory_round_requires_helper_success() {
     for producer in [Producer::Native { profile: 0 }, Producer::Reference] {
         let mut sample = memory_sample(producer, exit(0));
         // A helper is not clingo; even a reference-specific exit is a failure.
-        sample.capture.as_mut().unwrap().exit = Some(exit(10));
+        sample.capture.as_mut().unwrap().0.exit = Some(exit(10));
         assert!(matches!(
             qualify(
                 &mut sample,
@@ -243,7 +243,7 @@ fn memory_round_keeps_the_solver_outcome_classification() {
         (interrupted(), 3, Decision::Incomplete),
     ] {
         let mut sample = memory_sample(Producer::Native { profile: 0 }, exit(code));
-        sample.capture.as_mut().unwrap().stdout = serde_json::to_vec(&document).unwrap();
+        sample.capture.as_mut().unwrap().0.stdout = serde_json::to_vec(&document).unwrap();
         assert_eq!(
             qualify(
                 &mut sample,
@@ -317,7 +317,7 @@ fn derived_answers_must_match_the_complete_reference() {
 #[test]
 fn complete_capture_with_failed_exit_cannot_pass() {
     let mut sample = sample();
-    sample.capture.as_mut().unwrap().exit = Some(process::Exit {
+    sample.capture.as_mut().unwrap().0.exit = Some(process::Exit {
         code: Some(2),
         signal: None,
     });
@@ -462,8 +462,7 @@ fn incomplete_census_keeps_the_validated_typed_reason() {
 
 #[test]
 fn successful_status_cannot_classify_an_embedded_refusal() {
-    let mut value: Value =
-        serde_json::from_slice(sample().capture.as_ref().unwrap().stdout()).unwrap();
+    let mut value: Value = serde_json::from_slice(sample().capture().unwrap().stdout()).unwrap();
     value["outcome"]["error"] =
         json!({"kind":"unsupported_combination","secondary_output_failure":false});
     assert_eq!(
@@ -523,7 +522,7 @@ fn coverage_contradictions_do_not_enter_the_refusal_census() {
 #[test]
 fn complete_capture_cannot_hide_a_timeout_stop() {
     let mut sample = sample();
-    sample.capture.as_mut().unwrap().stop = Some(process::Stop::Deadline);
+    sample.capture.as_mut().unwrap().0.stop = Some(process::Stop::Deadline);
     assert_eq!(
         qualify(
             &mut sample,
@@ -539,7 +538,7 @@ fn complete_capture_cannot_hide_a_timeout_stop() {
 #[test]
 fn complete_capture_cannot_hide_a_capture_stop() {
     let mut sample = sample();
-    sample.capture.as_mut().unwrap().stop = Some(process::Stop::OutputLimit);
+    sample.capture.as_mut().unwrap().0.stop = Some(process::Stop::OutputLimit);
     assert_eq!(
         qualify(
             &mut sample,
