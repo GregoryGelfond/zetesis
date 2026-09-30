@@ -137,6 +137,42 @@ fn a_clingo_free_report_shows_clingo_as_not_run() {
 }
 
 #[test]
+fn a_census_only_report_shows_clingo_as_not_timed() {
+    let [before, mut after] = reports();
+    // As a campaign comparing profiles writes it: clingo sealed and run to
+    // qualify each cell, but never timed.
+    after["report"]["plan"]["reference_policy"] = serde_json::json!("qualification_only");
+    let cases = after["report"]["cases"].as_array().unwrap().len();
+    let samples = after["report"]["samples"].as_array_mut().unwrap();
+    samples.retain(|sample| sample["slot"]["producer"]["solver"] != "reference");
+    for case in 0..cases {
+        samples.push(serde_json::json!({
+            "slot": {"case": case, "phase": "qualification", "round": 0,
+                     "producer": {"solver": "reference"}},
+            "decision": "pass"
+        }));
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let command = command(directory.path(), &[before, after], false);
+    let mut output = Vec::new();
+    execute(&command, &mut output).unwrap();
+    let rows: Vec<_> = String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect();
+    // Clingo's time and memory columns, apart from a missing value's dash.
+    assert!(rows.iter().any(|row| row
+        == "after generated/choice-2 1: cpu/auto (1 threads) 20.000 not timed — not measured pass"));
+    // The identity table: the campaign sealed clingo.
+    assert!(rows.contains(&format!(
+        "after true true {} {}",
+        "22".repeat(32),
+        "33".repeat(32)
+    )));
+}
+
+#[test]
 fn human_comparison_retains_the_typed_report() {
     let directory = tempfile::tempdir().unwrap();
     let command = command(directory.path(), &reports(), true);

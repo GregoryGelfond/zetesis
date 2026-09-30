@@ -309,6 +309,10 @@ pub struct Provenance {
     /// SHA-256 of the reference executable the report sealed; none for a
     /// clingo-free campaign, which seals no reference.
     pub reference_sha256: Option<String>,
+    /// Whether the report timed the reference: some timed position ran
+    /// clingo. A campaign that ran clingo only to qualify its cells, or ran
+    /// without it, did not.
+    pub reference_timed: bool,
     /// SHA-256 of the corpus manifest the report sealed.
     pub manifest_sha256: String,
     /// When the campaign started, Unix nanoseconds.
@@ -437,10 +441,11 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             failure_reasons,
         });
     }
-    // A scoreboard stands a report against clingo, so a clingo-free report has none.
+    // A scoreboard stands a report against clingo's times, so a report that
+    // did not time clingo has none.
     let with_clingo: Vec<String> = labels
         .iter()
-        .filter(|label| provenance[*label].reference_sha256.is_some())
+        .filter(|label| provenance[*label].reference_timed)
         .cloned()
         .collect();
     let scoreboards = scoreboards(&with_clingo, &methods, &cells);
@@ -666,6 +671,7 @@ impl fmt::Display for Markdown<'_> {
                     match ratio {
                         Some(ratio) => write!(f, " {ratio} |")?,
                         None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
+                        None if !clingo_timed(comparison, label) => write!(f, " not timed |")?,
                         None => write!(f, " n/a |")?,
                     }
                 }
@@ -708,7 +714,8 @@ impl fmt::Display for Markdown<'_> {
 }
 
 /// Clingo's wall time per cell and report: "not passed" where it failed,
-/// "not run" where the report's campaign ran without it.
+/// "not timed" where the report's campaign ran it only to qualify the cells,
+/// and "not run" where the campaign ran without it.
 fn reference_table(f: &mut fmt::Formatter<'_>, comparison: &Comparison) -> fmt::Result {
     write!(f, "Reference wall time, ms, same notation.\n\n| Cell |")?;
     for label in &comparison.labels {
@@ -725,6 +732,7 @@ fn reference_table(f: &mut fmt::Formatter<'_>, comparison: &Comparison) -> fmt::
             match cell.reference.get(label) {
                 Some(record) => write!(f, " {} |", timing_cell(&record.timing))?,
                 None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
+                None if !clingo_timed(comparison, label) => write!(f, " not timed |")?,
                 None => write!(f, " not passed |")?,
             }
         }
@@ -739,6 +747,14 @@ fn clingo_ran(comparison: &Comparison, label: &str) -> bool {
         .provenance
         .get(label)
         .is_some_and(|provenance| provenance.reference_sha256.is_some())
+}
+
+/// Whether the report labelled `label` timed clingo.
+fn clingo_timed(comparison: &Comparison, label: &str) -> bool {
+    comparison
+        .provenance
+        .get(label)
+        .is_some_and(|provenance| provenance.reference_timed)
 }
 
 /// Every retained non-pass phase, independently of the timed population.
@@ -1151,6 +1167,9 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
             .ok_or(malformed(field))
     };
     let clingo_free = clingo_free(labelled);
+    let reference_timed = samples(labelled)?.iter().any(|sample| {
+        sample["slot"]["phase"] == "timed" && sample["slot"]["producer"]["solver"] == "reference"
+    });
     Ok(Provenance {
         native_sha256: seal(0, "report.before[0].sha256")?,
         reference_sha256: if clingo_free {
@@ -1158,6 +1177,7 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
         } else {
             Some(seal(1, "report.before[1].sha256")?)
         },
+        reference_timed,
         manifest_sha256: if clingo_free {
             seal(1, "report.before[1].sha256")?
         } else {

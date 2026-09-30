@@ -1153,6 +1153,77 @@ fn only_reports_with_clingo_have_scoreboards() {
     );
 }
 
+/// A report whose campaign ran clingo only to qualify the cells: clingo's
+/// seal and a passing census of each case, but no timed clingo position.
+fn census_only(mut report: Value) -> Value {
+    report["report"]["plan"]["reference_policy"] = json!("qualification_only");
+    let samples = report["report"]["samples"].as_array_mut().unwrap();
+    samples.retain(|sample| sample["slot"]["producer"]["solver"] != "reference");
+    let cases = report["report"]["cases"].as_array().unwrap().len();
+    let samples = report["report"]["samples"].as_array_mut().unwrap();
+    for case in 0..cases {
+        samples.push(json!({
+            "slot": {"case": case, "phase": "qualification", "round": 0,
+                     "producer": {"solver": "reference"}},
+            "decision": "pass",
+            "capture": {"elapsed_ns": 1, "stdout": {"encoding": "utf8", "data": "{}"},
+                        "stderr": {"encoding": "utf8", "data": ""}}
+        }));
+    }
+    report
+}
+
+/// A report with clingo timed and one with clingo qualifying the same cells
+/// only, compared in that order.
+fn compare_census() -> zetesis_validation::performance::series::Comparison {
+    let (with_clingo, _) = mixed();
+    let cases = [
+        "generated/chain-1000.lp",
+        "standalone/send-money/send-money.lp",
+    ];
+    let native: &[&[u64]] = &[
+        &[3_000_000, 1_000_000, 2_000_000],
+        &[4_000_000, 4_000_000, 4_000_000],
+    ];
+    let census = census_only(report(&cases, native, &[8_000_000, 15_000_000], None));
+    compare(&[
+        Labelled {
+            label: "clingo",
+            report: &with_clingo,
+        },
+        Labelled {
+            label: "census",
+            report: &census,
+        },
+    ])
+    .unwrap()
+}
+
+#[test]
+fn a_census_only_report_ran_clingo_without_timing_it() {
+    let comparison = compare_census();
+    assert!(comparison.provenance["census"].reference_sha256.is_some());
+    assert!(!comparison.provenance["census"].reference_timed);
+    assert!(comparison.provenance["clingo"].reference_timed);
+    assert!(
+        comparison
+            .scoreboards
+            .iter()
+            .all(|board| board.report == "clingo")
+    );
+}
+
+#[test]
+fn markdown_says_clingo_was_not_timed_for_a_census_only_report() {
+    let markdown = compare_census().markdown();
+    assert!(
+        markdown.contains("| generated/chain-1000 | 8.000 [8.000, 8.000] | not timed |"),
+        "{markdown}"
+    );
+    assert!(markdown.contains(" | 0.250 | not timed |"), "{markdown}");
+    assert!(!markdown.contains("not passed"), "{markdown}");
+}
+
 #[test]
 fn markdown_says_clingo_did_not_run_for_a_clingo_free_report() {
     let (with_clingo, without) = mixed();
