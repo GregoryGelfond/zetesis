@@ -1,6 +1,10 @@
 //! The series view derives per-cell medians, ratios and counters from reports.
+use crate::support::corpus::corpus;
 use serde_json::{Value, json};
-use zetesis_validation::performance::series::{Labelled, ViewError, compare};
+use zetesis_validation::performance::{
+    matrix::{Qualification, Workload, WorkloadLimits},
+    series::{self, Labelled, ViewError, compare},
+};
 
 /// A minimal published matrix report with one profile, timed rounds whose
 /// native elapsed values are `native[case][round]`, reference values of
@@ -1154,6 +1158,51 @@ fn a_cell_needing_clingo_records_that_it_does() {
 }
 
 #[test]
+fn unattempted_workloads_keep_their_qualification() {
+    let workloads = series::workloads(&corpus(), WorkloadLimits::default()).unwrap();
+    let entries: Vec<_> = workloads.iter().map(Workload::entry).collect();
+    let rounds = vec![&[1][..]; entries.len()];
+    let mut stopped = clingo_free(report(&entries, &rounds, &vec![1; entries.len()], None));
+    stopped["passed"] = json!(false);
+    stopped["report"]["schema"] = json!(2);
+    stopped["report"]["workloads"] = serde_json::to_value(&workloads).unwrap();
+    // Cancellation or a campaign deadline before the first launch leaves no
+    // needs_clingo decision from which to infer a workload's qualification.
+    for sample in stopped["report"]["samples"].as_array_mut().unwrap() {
+        sample["decision"] = json!("not_attempted");
+        sample["capture"] = Value::Null;
+        sample["observation"] = Value::Null;
+    }
+    // These are the same typed contracts the run summary consults. Amended
+    // entries keep their original contract as provenance, not qualification.
+    let expected: Vec<_> = workloads
+        .iter()
+        .map(|workload| {
+            if workload.contract().is_some() {
+                Qualification::Contract
+            } else {
+                Qualification::NeedsClingo
+            }
+        })
+        .collect();
+    assert!(expected.contains(&Qualification::Contract));
+    assert!(expected.contains(&Qualification::NeedsClingo));
+    let comparison = compare(&[Labelled {
+        label: "stopped",
+        report: &stopped,
+    }])
+    .unwrap();
+    assert_eq!(
+        comparison
+            .cells
+            .iter()
+            .map(|cell| cell.qualification["stopped"])
+            .collect::<Vec<_>>(),
+        expected
+    );
+}
+
+#[test]
 fn a_clingo_free_report_is_sealed_without_clingo() {
     let (with_clingo, without) = mixed();
     let comparison = compare_mixed(&with_clingo, &without);
@@ -1163,6 +1212,26 @@ fn a_clingo_free_report_is_sealed_without_clingo() {
         comparison.provenance["free"].manifest_sha256,
         "ef".repeat(32)
     );
+}
+
+#[test]
+fn malformed_workload_amendments_are_refused() {
+    for amended in [None, Some(Value::Null), Some(json!("true")), Some(json!(1))] {
+        let mut report = clingo_free(derived_report());
+        if let Some(amended) = amended {
+            report["report"]["workloads"][0]["amended"] = amended;
+        }
+        assert!(matches!(
+            compare(&[Labelled {
+                label: "malformed",
+                report: &report,
+            }]),
+            Err(ViewError::Malformed {
+                field: "workload.amended",
+                ..
+            })
+        ));
+    }
 }
 
 #[test]

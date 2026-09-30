@@ -1133,12 +1133,27 @@ fn clingo_free(labelled: &Labelled<'_>) -> bool {
     labelled.report["report"]["plan"]["reference_policy"].as_str() == Some("clingo_free")
 }
 
-/// What qualified a case in one report: clingo where it took part; without
-/// it, the recorded contract, unless the campaign recorded that the case
-/// needs clingo.
+/// What can qualify a case in one report: clingo where it took part; without
+/// it, the workload's contract, which amendments invalidate even when no
+/// position ran. Older corpus reports without workload metadata retain the
+/// reading from their recorded decisions.
 fn qualification(labelled: &Labelled<'_>, case: usize) -> Result<Qualification, ViewError> {
     if !clingo_free(labelled) {
         return Ok(Qualification::Clingo);
+    }
+    if let Some(workloads) = labelled.report["report"].get("workloads") {
+        let amended = workloads
+            .get(case)
+            .and_then(|workload| workload["amended"].as_bool())
+            .ok_or(ViewError::Malformed {
+                label: labelled.label.into(),
+                field: "workload.amended",
+            })?;
+        return Ok(if amended {
+            Qualification::NeedsClingo
+        } else {
+            Qualification::Contract
+        });
     }
     let needs_clingo = samples(labelled)?
         .iter()
