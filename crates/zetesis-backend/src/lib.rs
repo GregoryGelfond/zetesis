@@ -126,7 +126,9 @@ impl Backend {
                 "A GPU through the platform's native API: Metal on macOS, Vulkan elsewhere"
             }
             Self::Gpu(Some(GpuApi::Metal)) => "A GPU through Metal (macOS)",
-            Self::Gpu(Some(GpuApi::Vulkan)) => "A GPU through Vulkan (Linux)",
+            Self::Gpu(Some(GpuApi::Vulkan)) => {
+                "A GPU through Vulkan (Linux; also other platforms with a Vulkan driver, unqualified there)"
+            }
         }
     }
 
