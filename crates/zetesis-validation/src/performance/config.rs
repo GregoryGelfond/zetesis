@@ -86,13 +86,6 @@ impl Suite {
             ],
         }
     }
-    #[expect(
-        clippy::trivially_copy_pass_by_ref,
-        reason = "serde's skip callback receives a borrowed field"
-    )]
-    const fn is_baseline(&self) -> bool {
-        matches!(self, Self::Baseline)
-    }
 }
 /// Invocation population; only `Timed` belongs to the wall-time distribution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -135,7 +128,7 @@ pub struct Slot {
 pub struct Schedule {
     // Preserve the schema-1 baseline representation and its historical `queens`
     // case identifier. Non-baseline schedules state their suite explicitly.
-    #[serde(skip_serializing_if = "Suite::is_baseline")]
+    #[serde(skip_serializing_if = "is_default")]
     suite: Suite,
     warmups: usize,
     repetitions: usize,
@@ -154,6 +147,10 @@ impl Default for Schedule {
             memory_runs: None,
         }
     }
+}
+/// Whether `value` is its type's default, which the schedule leaves unwritten.
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
 }
 /// Check an explicit selection of manifest-relative cases: one through 94
 /// distinct normal relative paths of 1..=1024 bytes each. Whether each names a
