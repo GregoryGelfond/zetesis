@@ -1,5 +1,5 @@
-//! Exact ratios of median intervals.
-use super::Ratio;
+//! Exact ratios of median intervals and the reference's reported seconds.
+use super::{Ratio, decimal_seconds_ns};
 
 #[test]
 fn ratios_order_by_their_exact_quotients() {
@@ -42,4 +42,33 @@ fn a_zero_reference_median_reads_as_one_nanosecond() {
 fn a_ratio_between_reports_needs_a_positive_earlier_median() {
     assert!(Ratio::between(7, 0).is_none());
     assert_eq!(Ratio::between(3, 8).unwrap().to_string(), "0.375");
+}
+
+#[test]
+fn reported_seconds_convert_exactly_to_nanoseconds() {
+    for (text, nanoseconds) in [
+        ("0.012", 12_000_000),
+        ("12.5", 12_500_000_000),
+        ("0", 0),
+        ("0.000000001", 1),
+        ("0.1000000000", 100_000_000),
+        ("18446744073.709551615", u64::MAX),
+    ] {
+        assert_eq!(decimal_seconds_ns(text), Some(nanoseconds), "{text}");
+    }
+}
+
+#[test]
+fn other_spellings_of_seconds_read_as_no_time() {
+    for text in [
+        "1e-3",
+        "-0.001",
+        "0.0000000001",
+        "18446744074",
+        "\"0.012\"",
+        "",
+        ".5",
+    ] {
+        assert_eq!(decimal_seconds_ns(text), None, "{text}");
+    }
 }

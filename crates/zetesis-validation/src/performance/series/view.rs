@@ -18,8 +18,9 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::value::RawValue;
 
 use super::super::matrix::Qualification;
 
@@ -1397,14 +1398,13 @@ fn reference(labelled: &Labelled<'_>, case: usize) -> Result<Option<Reference>, 
     for record in &records {
         let Some(times) = record["capture"]["stdout"]["data"]
             .as_str()
-            .and_then(|text| serde_json::from_str::<Value>(text).ok())
-            .map(|document| document["Time"].clone())
+            .and_then(|text| serde_json::from_str::<ReportedTimes<'_>>(text).ok())
         else {
             continue;
         };
         if let (Some(total), Some(solve)) = (
-            times["Total"].as_f64().and_then(seconds_to_ns),
-            times["Solve"].as_f64().and_then(seconds_to_ns),
+            decimal_seconds_ns(times.time.total.get()),
+            decimal_seconds_ns(times.time.solve.get()),
         ) {
             grounding.push(total.saturating_sub(solve));
             solving.push(solve);
@@ -1479,18 +1479,46 @@ pub(crate) fn median(values: &mut [u64]) -> Option<u64> {
     }
 }
 
-/// Seconds as the reference prints them to whole nanoseconds; a negative
-/// or non-finite value is not a duration.
-fn seconds_to_ns(seconds: f64) -> Option<u64> {
-    if !seconds.is_finite() || seconds < 0.0 {
+/// The times in the reference's saved report, as the text it wrote them in.
+#[derive(Deserialize)]
+struct ReportedTimes<'a> {
+    #[serde(rename = "Time", borrow)]
+    time: Times<'a>,
+}
+
+#[derive(Deserialize)]
+struct Times<'a> {
+    #[serde(rename = "Total", borrow)]
+    total: &'a RawValue,
+    #[serde(rename = "Solve", borrow)]
+    solve: &'a RawValue,
+}
+
+/// Seconds written as the reference writes them, a plain decimal such as
+/// `0.012`, as whole nanoseconds, exactly. Any other spelling, such as a sign
+/// or an exponent, or a nonzero digit beyond the ninth fractional one, reads as
+/// no time rather than an approximation.
+fn decimal_seconds_ns(text: &str) -> Option<u64> {
+    let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
+    let digits = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+    if whole.is_empty() || !digits(whole) || !digits(fraction) {
         return None;
     }
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "the value is finite and non-negative, and rounded to whole nanoseconds"
-    )]
-    Some((seconds * 1e9).round() as u64)
+    if fraction.bytes().skip(9).any(|byte| byte != b'0') {
+        return None;
+    }
+    let nanoseconds = (0..9).fold(0, |value: u64, position| {
+        let digit = fraction
+            .as_bytes()
+            .get(position)
+            .map_or(0, |byte| byte - b'0');
+        value * 10 + u64::from(digit)
+    });
+    whole
+        .parse::<u64>()
+        .ok()?
+        .checked_mul(1_000_000_000)?
+        .checked_add(nanoseconds)
 }
 
 #[cfg(test)]
