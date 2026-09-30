@@ -658,22 +658,11 @@ resource-accounting refinement obligations.
 
 A test-only [posting diagnostic](src/formula_support/postings.rs) compares a
 streaming intersection of bound-column row IDs with independent full-row equality.
-It observes the production shortest-posting probe without replacing its result.
-The fixed corpus selection includes all six queens encodings, SEND and selected
-shortest-path/task-allocation sources:
-
-```sh
-cargo test --locked -p zetesis-themelios --lib \
-  formula_support::postings::tests::corpus_postings_preserve_full_row_equalities \
-  -- --ignored --exact --nocapture --test-threads=1
-```
-
-Each JSON record names its source and diagnostic ceilings. `complete` describes
-observation coverage; it does not establish answer-set enumeration. Grounding
-still uses the ordinary finite formula limits. A diagnostic limit stops recording
-without changing admission and makes this test fail after printing the partial
-record. Missing relations are excluded from observed probes and remain included
-in the existing grounding observer's actual probe count.
+It observes the production shortest-posting probe without replacing its result,
+and the module's tests check both on synthetic relations. Grounding still uses
+the ordinary finite formula limits; a diagnostic limit stops recording without
+changing admission. Missing relations are excluded from observed probes and
+remain included in the existing grounding observer's actual probe count.
 
 Shortest-posting and intersection row counts describe eligible lists at each
 probe opening. A join can stop before visiting all of a list, so these counts

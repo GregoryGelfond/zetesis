@@ -1,20 +1,14 @@
 //! Selectivity observations retain the original formula grounding route.
 
-use std::cell::Cell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::Path;
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
 
-use super::{Limits, Report, Stop, begin_support, record};
+use super::{Limits, Stop, begin_support, record};
 use crate::formula_support::{Counters, SupportCatalog};
-use crate::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, SourceBundle,
-    admit_bundle_formula_with_grounding_observer, admit_formula,
-};
+use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
     let mut support = SupportCatalog::default();
@@ -316,110 +310,5 @@ fn observation_preserves_the_compiled_subject() {
             assert!(left.filters().iter().eq(right.filters()));
             assert_eq!(left.condition(), right.condition());
         }
-    }
-}
-
-#[derive(Default)]
-struct Observer(Cell<GroundingWork>);
-
-impl GroundingObserver for Observer {
-    fn enter(&self) {}
-    fn exit(&self) {}
-    fn details_enabled(&self) -> bool {
-        true
-    }
-    fn phase_exit(
-        &self,
-        _phase: GroundingPhase,
-        _location: Option<Location>,
-        _outcome: GroundingOutcome,
-        work: GroundingWork,
-    ) {
-        self.0.set(self.0.get().checked_sum(work));
-    }
-}
-
-fn report_json(
-    path: &str,
-    report: &Report,
-    work: &GroundingWork,
-    admission_completed: bool,
-) -> serde_json::Value {
-    let limits = Limits::default();
-    serde_json::json!({
-        "case": path,
-        "route": "eager-formula-possible-support",
-        "admission_completed": admission_completed,
-        "complete": report.stop.is_none(),
-        "stop": report.stop.map(|stop| format!("{stop:?}")),
-        "support_builds": report.support_builds,
-        "observed_existing_relation_probes": report.totals.probes,
-        "bound_probes": report.totals.bound,
-        "multiple_bound_columns": report.totals.multiple,
-        "shortest_posting_rows": report.totals.shortest_rows,
-        "intersection_rows": report.totals.intersection_rows,
-        "reduced_probes": report.totals.reduced_probes,
-        "repeated_snapshot_queries": report.totals.repeated_probes,
-        "repeated_bound_snapshot_queries": report.totals.repeated_bound_probes,
-        "posting_comparisons": report.totals.posting_comparisons,
-        "diagnostic_work": report.work,
-        "retained_query_keys": report.keys,
-        "retained_key_payload_bytes": report.key_bytes,
-        "actual_join_probes": work.join_probes,
-        "actual_join_rows": work.join_rows,
-        "actual_support_rounds": work.support_rounds,
-        "actual_binding_snapshots": work.binding_snapshots,
-        "limits": {
-            "probes": limits.probes,
-            "rows_per_relation": limits.rows,
-            "columns": limits.columns,
-            "retained_keys": limits.keys,
-            "key_payload_bytes": limits.key_bytes,
-            "work": limits.work,
-        },
-    })
-}
-
-#[test]
-#[ignore = "explicit bounded corpus diagnostic; these observations are not timings"]
-fn corpus_postings_preserve_full_row_equalities() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
-    let paths = [
-        "standalone/n-queens/variant-01.lp",
-        "standalone/n-queens/variant-02.lp",
-        "standalone/n-queens/variant-03.lp",
-        "standalone/n-queens/variant-04.lp",
-        "standalone/n-queens/variant-05.lp",
-        "standalone/n-queens/variant-06.lp",
-        "standalone/send-money/send-money.lp",
-        "scenarios/shortest-path/variant-01/07-cycles.lp",
-        "scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp",
-        "scenarios/shortest-path/variant-03/05-budget-unsat.lp",
-        "scenarios/task-allocation/variant-01/05-larger-mix.lp",
-        "scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp",
-        "scenarios/task-allocation/variant-04/05-larger-mix.lp",
-    ];
-    for path in paths {
-        let bundle = SourceBundle::load(root.join(path), BundleLimits::default()).unwrap();
-        let observer = Observer::default();
-        let (result, report) = record(Limits::default(), || {
-            admit_bundle_formula_with_grounding_observer(
-                bundle,
-                BundleAdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-                Some(&observer),
-            )
-        });
-        println!(
-            "{}",
-            report_json(path, &report, &observer.0.get(), result.is_ok())
-        );
-        result.unwrap_or_else(|error| panic!("{path}: {error}"));
-        assert_eq!(report.stop, None, "{path}: incomplete diagnostic");
-        assert_eq!(
-            report.support_builds, 1,
-            "one support builder owns row identity"
-        );
     }
 }

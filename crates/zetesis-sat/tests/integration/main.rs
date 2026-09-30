@@ -13,7 +13,6 @@ mod parallel_region_receipts;
 mod parallel_regions;
 mod parallel_stress;
 mod partition;
-mod partition_corpus;
 mod partition_search;
 mod phase_timing;
 mod positive_certified;

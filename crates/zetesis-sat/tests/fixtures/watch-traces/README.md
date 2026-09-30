@@ -35,8 +35,7 @@ The records intentionally capture implementation order and work, in addition to
 semantic identities. A later justified search or encoding change may require
 new expectations; updating them requires independent evidence and review, not
 regenerating them from a failing implementation. The test helper contains no
-fixture-update mode. A separate ignored diagnostic prints bounded watch-storage
-dimensions without measuring time or RSS.
+fixture-update mode.
 
 Witness completion no longer rescans the base clauses: a complete assignment
 that propagation left without conflict satisfies every clause, which a debug

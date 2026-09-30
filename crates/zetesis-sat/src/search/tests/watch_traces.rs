@@ -57,51 +57,6 @@ fn rescan_charges(cnf: &crate::Cnf, assignment: &crate::Assignment) -> u64 {
         .sum()
 }
 
-#[test]
-#[ignore = "bounded storage report; no clock, RSS or solver-performance measurement"]
-fn report_queens_watch_storage() {
-    for (index, source) in QUEENS.into_iter().enumerate() {
-        let admitted = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
-        let cancellation = Cancellation::default();
-        let mut charged = Budget {
-            quota: LocalQuota,
-            limits: SearchLimits::default(),
-            cancellation: &cancellation,
-            statistics: SearchStatistics::default(),
-        };
-        let cnf = encoding::encode(
-            admitted.theory(),
-            None,
-            AdmissionLimits::default(),
-            &mut charged,
-        )
-        .unwrap();
-        let state = super::State::new(&cnf, &mut charged).unwrap();
-        let requested = std::mem::size_of_val(state.heads.as_slice())
-            + std::mem::size_of_val(state.next.as_slice());
-        let cell_bytes = std::mem::size_of_val(&state.heads[0]);
-        let capacity_bytes = (state.heads.capacity() + state.next.capacity()) * cell_bytes;
-        assert_eq!(state.heads.len(), 2 * cnf.variables());
-        assert_eq!(state.next.len(), 2 * cnf.clauses().len());
-        println!(
-            "WATCH_STORAGE variant={:02} variables={} clauses={} cell_bytes={} requested_bytes={} capacity_bytes={} search_scratch_bytes={}",
-            index + 1,
-            cnf.variables(),
-            cnf.clauses().len(),
-            cell_bytes,
-            requested,
-            capacity_bytes,
-            super::scratch_bytes(cnf.variables() as u128, cnf.clauses().len() as u128)
-        );
-    }
-}
-
 // Historical fixtures scan both watched positions in every binary replacement
 // attempt, and a prefix of the three positions in every ternary attempt.
 // Restore omitted positions under that cost map; solver statistics stay intact.
@@ -225,16 +180,6 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
         }
     }
     panic!("bounded fixture must terminate within 93 observations");
-}
-
-#[test]
-#[ignore = "bounded refined-cursor work profile; no clock or stable-model claim"]
-fn profile_refined_choice_trace() {
-    let record = trace(CHOICES, true, SearchLimits::default()).record;
-    println!(
-        "REFERENCE_COST_TRACE (omitted watched positions restored)\n{record}PROFILE {:?}",
-        super::propagation_profile::snapshot()
-    );
 }
 
 #[test]

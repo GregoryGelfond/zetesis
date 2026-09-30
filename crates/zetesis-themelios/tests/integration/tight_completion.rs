@@ -4,7 +4,6 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
-use std::path::Path;
 
 use zetesis_core::{AtomCatalog, Model};
 use zetesis_cpu::{Cancellation, Stop};
@@ -13,10 +12,7 @@ use zetesis_ferraris::{
 };
 use zetesis_objective::{ObjectiveProgram, Score, evaluate};
 use zetesis_sat::{BatchLimits, BatchVerdict, CompletionExecutor, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits,
-    SourceBundle, admit_bundle_formula, admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 type ScoredModels = BTreeMap<Vec<usize>, Score>;
 
@@ -24,7 +20,6 @@ struct Run {
     models: ScoredModels,
     statistics: zetesis_sat::Statistics,
     batch: zetesis_sat::BatchStatistics,
-    certificate_work: u64,
 }
 
 fn run(
@@ -109,7 +104,6 @@ fn run(
         models,
         statistics,
         batch,
-        certificate_work,
     }
 }
 
@@ -183,57 +177,5 @@ fn complete_models_scores_ties_and_cyclic_fallback_match_with_one_two_four_worke
             assert_eq!(actual.models.len(), count, "{source}");
             assert_eq!(optimum(&actual.models).len(), ties, "{source}");
         }
-    }
-}
-
-#[test]
-#[ignore = "records complete native model/score/tie parity and avoided reduct queries on corpus inputs"]
-fn unchanged_corpus_complete_batch_experiment() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
-    let cases = [
-        "standalone/n-queens/variant-01.lp",
-        "standalone/n-queens/variant-02.lp",
-        "standalone/n-queens/variant-03.lp",
-        "standalone/n-queens/variant-04.lp",
-        "standalone/n-queens/variant-05.lp",
-        "standalone/n-queens/variant-06.lp",
-        "standalone/send-money/send-money.lp",
-        "scenarios/task-allocation/variant-01/01-basic.lp",
-        "scenarios/task-allocation/variant-01/02-agent-reuse.lp",
-        "scenarios/task-allocation/variant-01/03-selective-compatibility.lp",
-        "scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp",
-        "scenarios/task-allocation/variant-01/05-larger-mix.lp",
-        "scenarios/shortest-path/variant-01/01-basic.lp",
-    ];
-    for source in cases {
-        let bundle = SourceBundle::load(root.join(source), BundleLimits::default()).unwrap();
-        let admitted = admit_bundle_formula(
-            bundle,
-            BundleAdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
-        let (baseline, certified) = compare(
-            admitted.theory(),
-            admitted.atom_catalog(),
-            admitted.objectives(),
-            4,
-        );
-        println!(
-            "{}",
-            serde_json::json!({
-                "source": source, "complete": true, "models": certified.models.len(),
-                "optimal_ties": optimum(&certified.models).len(),
-                "baseline_workers": 1, "certified_workers": 4, "batch_size": 17,
-                "candidates": certified.statistics.candidates,
-                "baseline_countermodel_queries": baseline.statistics.countermodel_queries,
-                "certified_countermodel_queries": certified.statistics.countermodel_queries,
-                "avoided_countermodel_queries": certified.batch.propagated,
-                "certificate_work": certified.certificate_work,
-                "models_with_costs": certified.models.iter().map(|(atoms, score)|
-                    serde_json::json!({"atoms": atoms, "costs": score.costs()})).collect::<Vec<_>>(),
-            })
-        );
     }
 }
