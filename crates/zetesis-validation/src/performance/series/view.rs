@@ -1,9 +1,10 @@
 //! Derived comparison of published matrix reports over the same cells.
 //!
 //! The view reads the retained records and computes exact integer medians of
-//! the timed native and reference intervals per cell and profile, ratios of
-//! those medians between reports in the order given, and the counters the
-//! native records carry. For each report and profile it also keeps a
+//! the timed native and reference intervals per cell and profile, and the
+//! counters the native records carry; its tables divide those medians between
+//! reports in the order given and against the reference, exactly, and its JSON
+//! publishes the medians alone. For each report and profile it also keeps a
 //! scoreboard against the reference solver: the cells where both passed,
 //! which of them the native solver decided faster, and each cell's time
 //! split into grounding, candidate proposal and membership on the native
@@ -13,6 +14,7 @@
 //! report's native executable seal so that a published comparison names
 //! what it compared.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -239,8 +241,6 @@ pub struct Verdict {
     pub native_ns: u64,
     /// Reference median wall interval.
     pub reference_ns: u64,
-    /// `native_ns / reference_ns`; below one is a win.
-    pub ratio: f64,
     /// The native intervals by part.
     pub native: Breakdown,
     /// The reference's own grounding and preprocessing time.
@@ -267,19 +267,13 @@ pub struct PhaseTiming {
     pub median_ns: u64,
 }
 
-/// One profile's records across the reports, and the ratios between them.
+/// One profile's records across the reports.
 #[derive(Clone, Debug, Serialize)]
 pub struct ProfileRow {
     /// The requested profile, as the reports serialize it.
     pub profile: Value,
     /// Records by report label.
     pub reports: BTreeMap<String, Native>,
-    /// `later/earlier` median ratios between consecutive reports and between
-    /// the last and the first, present only where both cells passed.
-    pub ratios: BTreeMap<String, f64>,
-    /// Each report's native median over the reference solver's median on the
-    /// same cell, by report label, present only where both passed.
-    pub reference_ratios: BTreeMap<String, f64>,
 }
 
 /// One cell across the reports.
@@ -428,13 +422,9 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             for labelled in reports {
                 records.insert(labelled.label.to_owned(), native(labelled, index, profile)?);
             }
-            let ratios = ratios(&labels, &records);
-            let reference_ratios = reference_ratios(&records, &reference);
             rows.push(ProfileRow {
                 profile: request.clone(),
                 reports: records,
-                ratios,
-                reference_ratios,
             });
         }
         cells.push(Cell {
@@ -484,7 +474,9 @@ fn scoreboards(
                     Some(verdict(&cell.label, passed, reference))
                 })
                 .collect();
-            verdicts.sort_by(|a, b| a.ratio.total_cmp(&b.ratio));
+            verdicts.sort_by_key(|verdict| {
+                Ratio::against_reference(verdict.native_ns, verdict.reference_ns)
+            });
             scoreboards.push(Scoreboard {
                 report: label.clone(),
                 profile,
@@ -504,24 +496,70 @@ fn scoreboards(
     scoreboards
 }
 
-/// The native median over the reference median; a reference median of zero
-/// reads as one nanosecond, so the ratio is always a number.
-fn ratio(native_ns: u64, reference_ns: u64) -> f64 {
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "a ratio of intervals is reported to three decimals"
-    )]
-    let ratio = native_ns as f64 / reference_ns.max(1) as f64;
-    ratio
+/// One median interval over another, exact: ordered by cross-multiplication
+/// and shown to three decimals, rounded half up by integer arithmetic, as
+/// `milliseconds` shows an interval.
+#[derive(Clone, Copy, Debug)]
+struct Ratio {
+    numerator: u64,
+    denominator: u64,
+}
+
+impl Ratio {
+    /// A native median over the reference's; a reference median of zero reads
+    /// as one nanosecond, so the ratio is always a number.
+    fn against_reference(native_ns: u64, reference_ns: u64) -> Self {
+        Self {
+            numerator: native_ns,
+            denominator: reference_ns.max(1),
+        }
+    }
+    /// A later report's median over an earlier one's, when the earlier is positive.
+    fn between(later_ns: u64, earlier_ns: u64) -> Option<Self> {
+        (earlier_ns > 0).then_some(Self {
+            numerator: later_ns,
+            denominator: earlier_ns,
+        })
+    }
+}
+
+impl Ord for Ratio {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Each product of two u64 values fits in a u128.
+        (u128::from(self.numerator) * u128::from(other.denominator))
+            .cmp(&(u128::from(other.numerator) * u128::from(self.denominator)))
+    }
+}
+
+impl PartialOrd for Ratio {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Ratio {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Ratio {}
+
+impl fmt::Display for Ratio {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Thousandths rounded half up, floor((2000 n + d) / 2d), exact in u128.
+        let numerator = u128::from(self.numerator);
+        let denominator = u128::from(self.denominator);
+        let thousandths = (2_000 * numerator + denominator) / (2 * denominator);
+        write!(f, "{}.{:03}", thousandths / 1_000, thousandths % 1_000)
+    }
 }
 
 fn verdict(cell: &str, passed: &Passed, reference: &Reference) -> Verdict {
-    let ratio = ratio(passed.timing.median_ns, reference.timing.median_ns);
     Verdict {
         cell: cell.to_owned(),
         native_ns: passed.timing.median_ns,
         reference_ns: reference.timing.median_ns,
-        ratio,
         native: passed.breakdown.clone(),
         reference_grounding_ns: reference.grounding_ns,
         reference_solving_ns: reference.solving_ns,
@@ -587,19 +625,19 @@ impl fmt::Display for Markdown<'_> {
         for profile in 0..profile_count {
             let first = &comparison.cells[0].profiles[profile];
             heading(f, comparison, &first.profile)?;
-            let ratio_names: Vec<&String> = first.ratios.keys().collect();
+            let pairs = report_pairs(&comparison.labels);
             write!(f, "| Cell |")?;
             for label in &comparison.labels {
                 write!(f, " {label} |")?;
             }
-            for name in &ratio_names {
-                write!(f, " {name} |")?;
+            for (earlier, later) in &pairs {
+                write!(f, " {later}/{earlier} |")?;
             }
             for label in &comparison.labels {
                 write!(f, " {label}/reference |")?;
             }
             write!(f, "\n|---|")?;
-            for _ in 0..2 * comparison.labels.len() + ratio_names.len() {
+            for _ in 0..2 * comparison.labels.len() + pairs.len() {
                 write!(f, "---:|")?;
             }
             writeln!(f)?;
@@ -609,15 +647,23 @@ impl fmt::Display for Markdown<'_> {
                 for label in &comparison.labels {
                     write!(f, " {} |", native_cell(row.reports.get(label)))?;
                 }
-                for name in &ratio_names {
-                    match row.ratios.get(*name) {
-                        Some(ratio) => write!(f, " {ratio:.3} |")?,
+                for (earlier, later) in &pairs {
+                    let ratio = passed_median(row.reports.get(*later))
+                        .zip(passed_median(row.reports.get(*earlier)))
+                        .and_then(|(later, earlier)| Ratio::between(later, earlier));
+                    match ratio {
+                        Some(ratio) => write!(f, " {ratio} |")?,
                         None => write!(f, " n/a |")?,
                     }
                 }
                 for label in &comparison.labels {
-                    match row.reference_ratios.get(label) {
-                        Some(ratio) => write!(f, " {ratio:.3} |")?,
+                    let ratio = passed_median(row.reports.get(label))
+                        .zip(cell.reference.get(label))
+                        .map(|(native, reference)| {
+                            Ratio::against_reference(native, reference.timing.median_ns)
+                        });
+                    match ratio {
+                        Some(ratio) => write!(f, " {ratio} |")?,
                         None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
                         None => write!(f, " n/a |")?,
                     }
@@ -773,11 +819,11 @@ fn scoreboard_tables(
         for verdict in verdicts {
             writeln!(
                 f,
-                "| {} | {} | {} | {:.3} | {} | {} | {} | {} | {} |",
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {} |",
                 verdict.cell,
                 milliseconds(verdict.native_ns),
                 milliseconds(verdict.reference_ns),
-                verdict.ratio,
+                Ratio::against_reference(verdict.native_ns, verdict.reference_ns),
                 optional_ms(verdict.native.grounding),
                 optional_ms(verdict.native.proposal),
                 optional_ms(verdict.native.membership),
@@ -931,48 +977,23 @@ fn milliseconds(nanoseconds: u64) -> String {
     format!("{}.{:03}", microseconds / 1_000, microseconds % 1_000)
 }
 
-fn ratios(labels: &[String], records: &BTreeMap<String, Native>) -> BTreeMap<String, f64> {
-    let median = |label: &String| match records.get(label) {
-        Some(Native::Passed(passed)) => Some(passed.timing.median_ns),
-        _ => None,
-    };
-    let mut ratios = BTreeMap::new();
+/// The reports the tables divide, as `(earlier, later)`: each report after the
+/// first over its predecessor, and the last over the first when there are more
+/// than two.
+fn report_pairs(labels: &[String]) -> Vec<(&String, &String)> {
     let mut pairs: Vec<(&String, &String)> = labels.windows(2).map(|w| (&w[0], &w[1])).collect();
     if labels.len() > 2 {
         pairs.push((&labels[0], &labels[labels.len() - 1]));
     }
-    for (earlier, later) in pairs {
-        if let (Some(before), Some(after)) = (median(earlier), median(later))
-            && before > 0
-        {
-            // Precision loss beyond 2^53 nanoseconds (over a hundred days) is
-            // irrelevant to a solver interval.
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "a ratio of intervals is reported to three decimals"
-            )]
-            let ratio = after as f64 / before as f64;
-            ratios.insert(format!("{later}/{earlier}"), ratio);
-        }
-    }
-    ratios
+    pairs
 }
 
-/// The native median over the reference median, per report, where both passed.
-fn reference_ratios(
-    records: &BTreeMap<String, Native>,
-    reference: &BTreeMap<String, Reference>,
-) -> BTreeMap<String, f64> {
-    let mut ratios = BTreeMap::new();
-    for (label, record) in records {
-        if let (Native::Passed(passed), Some(other)) = (record, reference.get(label)) {
-            ratios.insert(
-                label.clone(),
-                ratio(passed.timing.median_ns, other.timing.median_ns),
-            );
-        }
+/// The median interval of a native record that passed.
+fn passed_median(record: Option<&Native>) -> Option<u64> {
+    match record {
+        Some(Native::Passed(passed)) => Some(passed.timing.median_ns),
+        _ => None,
     }
-    ratios
 }
 
 fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
@@ -1471,3 +1492,6 @@ fn seconds_to_ns(seconds: f64) -> Option<u64> {
     )]
     Some((seconds * 1e9).round() as u64)
 }
+
+#[cfg(test)]
+mod tests;

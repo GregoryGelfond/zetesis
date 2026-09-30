@@ -121,19 +121,64 @@ fn medians_are_taken_per_cell_profile_and_report() {
     assert_eq!(native["before"]["samples"], 3);
     assert_eq!(native["after"]["median_ns"], 750_000);
     assert_eq!(chain["reference"]["after"]["median_ns"], 8_100_000);
-    // Ratios are of medians, later report over earlier, in label order.
-    assert_eq!(chain["profiles"][0]["ratios"]["after/before"], 0.375);
-    // Each report's native median over the reference solver's median on the
-    // same cell: the standing of the build against clingo, per step.
-    assert_eq!(chain["profiles"][0]["reference_ratios"]["before"], 0.25);
-    assert_eq!(
-        chain["profiles"][0]["reference_ratios"]["after"],
-        750_000.0 / 8_100_000.0
-    );
+    // The JSON publishes the exact medians and no ratio of them.
+    assert!(chain["profiles"][0].get("ratios").is_none());
+    assert!(chain["profiles"][0].get("reference_ratios").is_none());
     assert_eq!(encoded["labels"], json!(["before", "after"]));
+    // The tables divide them: the later report over the earlier, in label
+    // order, then each report's native median over the reference solver's on
+    // the same cell, the standing of the build against clingo, per step.
     let markdown = comparison.markdown();
-    assert!(markdown.contains("| before/reference | after/reference |"));
-    assert!(markdown.contains("| 0.250 | 0.093 |"));
+    assert!(markdown.contains("| after/before | before/reference | after/reference |"));
+    assert!(markdown.contains("| 0.375 | 0.250 | 0.093 |"));
+}
+
+#[test]
+fn three_reports_divide_in_order_and_last_over_first() {
+    // Each report over its predecessor, then the last over the first; a
+    // column stands for every pair, even where the first cell cannot fill it.
+    let cases = &[
+        "generated/chain-1000.lp",
+        "standalone/send-money/send-money.lp",
+    ];
+    let first = report(
+        cases,
+        &[&[4_000_000], &[1_000_000]],
+        &[1_000_000, 1_000_000],
+        Some(0),
+    );
+    let second = report(
+        cases,
+        &[&[2_000_000], &[2_000_000]],
+        &[1_000_000, 1_000_000],
+        None,
+    );
+    let third = report(
+        cases,
+        &[&[1_000_000], &[3_000_000]],
+        &[1_000_000, 1_000_000],
+        None,
+    );
+    let comparison = compare(&[
+        Labelled {
+            label: "first",
+            report: &first,
+        },
+        Labelled {
+            label: "second",
+            report: &second,
+        },
+        Labelled {
+            label: "third",
+            report: &third,
+        },
+    ])
+    .unwrap();
+    let markdown = comparison.markdown();
+    assert!(markdown.contains("| second/first | third/second | third/first |"));
+    // The chain's first report was refused, so no ratio over it exists.
+    assert!(markdown.contains("| n/a | 0.500 | n/a |"));
+    assert!(markdown.contains("| 2.000 | 1.500 | 3.000 |"));
 }
 
 #[test]
@@ -192,7 +237,7 @@ fn failure_appendix_preserves_causes_outside_timed_samples() {
         1_000_000
     );
     assert_eq!(cell["reference"]["only"]["median_ns"], 2_000_000);
-    assert_eq!(cell["profiles"][0]["reference_ratios"]["only"], 0.5);
+    assert!(cell["profiles"][0].get("reference_ratios").is_none());
     let native = format!("native profile index 0: memory: incomplete: {detail}");
     let reference = "reference: diagnostics: timeout: reason unavailable in retained sample";
     assert_eq!(
@@ -200,6 +245,7 @@ fn failure_appendix_preserves_causes_outside_timed_samples() {
         json!({(native): 2, (reference): 1})
     );
     let markdown = comparison.markdown();
+    assert!(markdown.contains("| case | 1.000 [1.000, 1.000] | 0.500 |"));
     assert!(markdown.contains("Recorded failure reasons across all scheduled phases."));
     assert!(markdown.contains("memory: incomplete: native reported incomplete kind=model\\_construction code=bytes\\_limit: model construction requires 129 bytes, allowance is 128"));
     assert!(markdown.contains(&format!("| only | case | {reference} | 1 |")));
@@ -230,11 +276,18 @@ fn scoreboards_count_the_cells_the_native_solver_decided_faster() {
     // An equal median is not a win.
     assert_eq!(board["wins"], 1);
     let verdicts = board["verdicts"].as_array().unwrap();
+    // Fastest ratio first; each verdict carries the medians its ratio
+    // derives from, and no ratio.
     assert_eq!(verdicts[0]["cell"], "send-money/send-money");
-    assert_eq!(verdicts[0]["ratio"], 0.5);
+    assert_eq!(verdicts[0]["native_ns"], 500_000);
+    assert_eq!(verdicts[0]["reference_ns"], 1_000_000);
     assert_eq!(verdicts[1]["cell"], "generated/queens-11");
     assert_eq!(verdicts[2]["cell"], "generated/chain-1000");
-    assert_eq!(verdicts[2]["ratio"], 2.0);
+    assert!(
+        verdicts
+            .iter()
+            .all(|verdict| verdict.get("ratio").is_none())
+    );
     let markdown = comparison.markdown();
     assert!(markdown.contains("faster on 1 of 3 cells where both passed (33.3%)."));
     assert!(markdown.contains("| send-money/send-money | 0.500 | 1.000 | 0.500 |"));
@@ -449,8 +502,14 @@ fn non_pass_cells_are_reported_by_decision_not_averaged() {
             "timed: refused: formula support bytes limit 128; needed 130": 1,
         })
     );
-    assert!(encoded["cells"][0]["profiles"][0]["reference_ratios"]["main"].is_null());
+    assert!(
+        encoded["cells"][0]["profiles"][0]
+            .get("reference_ratios")
+            .is_none()
+    );
     let markdown = comparison.markdown();
+    // A refused native cell has no ratio against the reference.
+    assert!(markdown.contains("needed 130 ×1 | n/a |"));
     assert!(markdown.contains("producer-chain-700"));
     assert!(markdown.contains("refused"));
     assert!(markdown.contains("support bytes limit 128; needed 129"));

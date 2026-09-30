@@ -354,10 +354,12 @@ set: their typed decisions are the observation.
 
 `zetesis-bench compare LABEL=PATH … --markdown` derives one comparison from published
 reports over the same cells and profiles: exact integer medians of the timed
-native and reference intervals, later-over-earlier ratios of medians in the
-order given, the counters the native records carry (published models,
-candidates examined, charged search work, driver and phase medians), and each
-report's native executable seal. A cell that did not pass is listed by its
+native and reference intervals, the counters the native records carry (published
+models, candidates examined, charged search work, driver and phase medians), and
+each report's native executable seal. Its tables divide the medians, later over
+earlier in the order given and each against the reference, exactly and to three
+decimals rounded half up; its JSON publishes the medians and no rounded ratio.
+A cell that did not pass is listed by its
 decisions, never averaged. The reports may differ in the search method
 alone, which a profile spells as `search`, or as `candidates` in a report
 written before that field, with `region_workers` beside it in one
