@@ -8,6 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use zetesis_test_support::fixtures::{PHASE_STATISTICS, STAGE_STATISTICS};
+use zetesis_test_support::repository;
 use zetesis_test_support::scripts::{executable, quote};
 use zetesis_validation::{
     examples,
@@ -31,7 +32,7 @@ struct Fixture {
 impl Fixture {
     fn new(native_prefix: &str, mutate: impl Fn(&mut String)) -> Self {
         let directory = tempfile::tempdir().unwrap();
-        let original = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
+        let original = repository::correctness();
         let corpus = directory.path().join("corpus");
         fs::create_dir(&corpus).unwrap();
         for file in ["manifest.json", "LICENSE"] {

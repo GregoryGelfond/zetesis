@@ -2,15 +2,14 @@
 
 use clap::Parser;
 use serde_json::Value;
-use std::path::Path;
 use zetesis_cli::{Completion, Options, run_detailed_with_diagnostics};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::repository;
 use zetesis_validation::curated::{self, Limits};
 
 #[test]
 fn upstream_admissions_preserve_complete_models_on_both_reduct_routes() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/upstream/clingo-5.8.2/curated");
+    let root = repository::upstream().join("curated");
     let corpus = curated::open(&root, Limits::default()).unwrap();
     replay(
         corpus.cases().iter().map(|case| Reference {

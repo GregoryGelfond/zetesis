@@ -10,6 +10,7 @@ use zetesis_cli::{
     run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::repository;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 use zetesis_test_support::io::BoundedWriter;
@@ -36,10 +37,7 @@ fn options(mode: ColorMode) -> Options {
 
 fn bundle() -> SourceBundle {
     SourceBundle::load(
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../examples/network-repair.lp"
-        ),
+        repository::examples().join("network-repair.lp"),
         BundleLimits::default(),
     )
     .unwrap()
@@ -178,10 +176,7 @@ fn redirected_process_diagnostics_remain_plain() {
     for (no_color, term) in [("", "xterm-256color"), ("1", "xterm"), ("", "dumb")] {
         let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
             .args(["--backend", "cpu", "--grounder", "lazy", "--models", "0"])
-            .arg(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../examples/network-repair.lp"
-            ))
+            .arg(repository::examples().join("network-repair.lp"))
             .env("NO_COLOR", no_color)
             .env("TERM", term)
             .stdin(Stdio::null())

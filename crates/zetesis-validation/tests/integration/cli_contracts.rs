@@ -3,7 +3,7 @@
 use std::process::Command;
 
 use serde_json::Value;
-use zetesis_test_support::repository::root as repository;
+use zetesis_test_support::repository::{correctness, kr_domains, root as repository};
 
 fn command() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_zetesis-validate"));
@@ -183,7 +183,7 @@ fn default_campaign_reports_clean_source_provenance() {
         zetesis_validation::examples::MANIFEST_SHA256
     );
     let expected = zetesis_validation::examples::load(
-        &repository().join("examples/correctness"),
+        &correctness(),
         zetesis_validation::examples::Limits::default(),
     )
     .unwrap();
@@ -208,7 +208,7 @@ fn corpus_override_retains_original_provenance() {
     let directory = tempfile::tempdir().unwrap();
     let output = command()
         .arg("--corpus")
-        .arg(repository().join("validation/corpus/kr-domains"))
+        .arg(kr_domains())
         .arg("--clingo")
         .arg(directory.path().join("absent-reference"))
         .arg("--reference-only")
@@ -231,7 +231,7 @@ fn corpus_override_retains_original_provenance() {
 fn example_verification_does_not_claim_solver_execution() {
     let output = corpus_command()
         .arg("verify-examples")
-        .arg(repository().join("examples/correctness"))
+        .arg(correctness())
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -251,9 +251,9 @@ fn example_verification_does_not_claim_solver_execution() {
 fn original_audit_is_explicit_in_the_integrity_report() {
     let output = corpus_command()
         .arg("verify-examples")
-        .arg(repository().join("examples/correctness"))
+        .arg(correctness())
         .arg("--originals")
-        .arg(repository().join("validation/corpus/kr-domains"))
+        .arg(kr_domains())
         .output()
         .unwrap();
     assert!(output.status.success());
@@ -267,7 +267,7 @@ fn failed_original_audit_emits_no_verified_report() {
     let directory = tempfile::tempdir().unwrap();
     let output = corpus_command()
         .arg("verify-examples")
-        .arg(repository().join("examples/correctness"))
+        .arg(correctness())
         .arg("--originals")
         .arg(directory.path())
         .output()

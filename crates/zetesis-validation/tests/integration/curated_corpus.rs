@@ -4,11 +4,9 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use zetesis_test_support::repository::upstream as upstream_root;
 use zetesis_validation::curated::{self, Corpus, Error, Limits, Resource};
 
-fn upstream_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/upstream/clingo-5.8.2")
-}
 fn curated_root() -> PathBuf {
     upstream_root().join("curated")
 }

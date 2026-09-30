@@ -1,12 +1,12 @@
 //! Finite aggregate admission retains reduct conditions, scopes, and bounded evidence.
 
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use crate::support::atom_models::Models;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_sat::{Limits, StableModels};
+use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit_extended, admit_formula,
@@ -175,8 +175,7 @@ fn aggregate_limits_and_original_rule_evidence_are_independent() {
 
 #[test]
 fn all_queens_encodings_exhaust_the_same_ninety_two_boards() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness/standalone/n-queens");
+    let root = repository::correctness().join("standalone/n-queens");
     let mut reference = None;
     for variant in [
         "variant-01.lp",

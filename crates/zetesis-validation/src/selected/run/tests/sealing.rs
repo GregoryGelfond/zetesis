@@ -2,6 +2,7 @@
 
 use super::*;
 use std::{fs, path::PathBuf};
+use zetesis_test_support::repository;
 
 struct Fixture {
     _directory: tempfile::TempDir,
@@ -14,8 +15,7 @@ struct Fixture {
 impl Fixture {
     fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
-        let original = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../validation/upstream/clingo-5.8.2/curated");
+        let original = repository::upstream().join("curated");
         let admitted = curated::open(&original, curated::Limits::default()).unwrap();
         let root = directory.path().join("corpus");
         fs::create_dir(&root).unwrap();

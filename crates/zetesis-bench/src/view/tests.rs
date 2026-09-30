@@ -2,6 +2,7 @@
 use std::{collections::BTreeMap, io, num::NonZeroUsize};
 use zetesis_presentation::{ColorMode, Layout};
 use zetesis_test_support::io::BoundedWriter;
+use zetesis_test_support::repository;
 use zetesis_validation::{
     examples,
     performance::{matrix, series},
@@ -401,7 +402,7 @@ fn comparison_preserves_a_writer_failure_after_rows() {
 
 #[test]
 fn amended_workloads_have_distinct_human_labels() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
+    let root = repository::correctness();
     let corpus = examples::load(&root, examples::Limits::default()).unwrap();
     let entry = "standalone/n-queens/variant-01.lp";
     let workloads: Vec<_> = [10, 11]

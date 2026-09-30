@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use zetesis_test_support::repository;
 use zetesis_test_support::scripts::{executable, quote};
 use zetesis_validation::{curated, selected};
 
@@ -23,8 +24,7 @@ impl Fixture {
         let directory = tempfile::tempdir().unwrap();
         let corpus = directory.path().join("corpus");
         fs::create_dir(&corpus).unwrap();
-        let original = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../validation/upstream/clingo-5.8.2/curated");
+        let original = repository::upstream().join("curated");
         let checked = curated::open(&original, curated::Limits::default()).unwrap();
         for name in ["manifest.json", "LICENSE.md"] {
             fs::copy(original.join(name), corpus.join(name)).unwrap();

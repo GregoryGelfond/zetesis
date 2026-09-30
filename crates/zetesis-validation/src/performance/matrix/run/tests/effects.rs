@@ -4,6 +4,7 @@ use super::*;
 use crate::performance::matrix::{Reference, ReferencePolicy, WorkloadLimits};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use zetesis_test_support::repository;
 
 const UNSAT: &str = r#"{"Result":"UNSATISFIABLE","Models":{"More":"no","Number":0},"Call":[{}]}"#;
 const SAT: &str = r#"{"Result":"SATISFIABLE","Models":{"More":"no","Number":1},"Call":[{"Witnesses":[{"Value":[]}]}]}"#;
@@ -46,7 +47,7 @@ impl Fixture {
             ),
         );
         executable(&reference, &format!("printf '%s' {}", quote(UNSAT)));
-        let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
+        let corpus = repository::correctness();
         let checked = examples::load(&corpus, examples::Limits::default()).unwrap();
         let path = "standalone/n-queens/variant-01.lp";
         // An amended workload takes its complete family from the independent
@@ -228,7 +229,7 @@ fn cancelled_scalability_keeps_every_workload_and_requested_position() {
         NonZeroUsize::MIN,
     )
     .unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let root = repository::examples();
     let report = crate::performance::scalability::run_with_cancellation(
         &request,
         &root,
@@ -278,7 +279,7 @@ fn scalability_wrapper_preserves_explicit_admission_limits() {
     )
     .unwrap();
     request.limits.corpus.manifest_bytes = 1;
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let root = repository::examples();
     assert!(matches!(
         crate::performance::scalability::run_with_cancellation(
             &request,

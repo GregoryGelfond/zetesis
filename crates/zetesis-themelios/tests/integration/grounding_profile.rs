@@ -5,6 +5,7 @@ mod lending_rows;
 use std::cell::{Cell, RefCell};
 
 use themelios_base::span::Location;
+use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
@@ -385,8 +386,7 @@ fn bundle_rule_locations_identify_retained_sources() {
         admit_bundle_formula_with_grounding_observer,
     };
 
-    let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/reachability.lp");
+    let path = repository::examples().join("reachability.lp");
     let bundle = SourceBundle::load(path, BundleLimits::default()).unwrap();
     let observer = Observer::default();
     let admitted = admit_bundle_formula_with_grounding_observer(

@@ -10,6 +10,7 @@ use zetesis_cli::{
 };
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
+use zetesis_test_support::repository;
 
 /// One worker: the bytes of two runs are compared, and several walkers of
 /// the region tree deliver models in the schedule's order.
@@ -293,10 +294,7 @@ fn interrupted_styled_records_are_not_published_models() {
 fn redirected_process_output_defaults_to_plain_text() {
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--backend", "cpu", "--models", "0"])
-        .arg(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../examples/network-repair.lp"
-        ))
+        .arg(repository::examples().join("network-repair.lp"))
         .env_remove("NO_COLOR")
         .env("TERM", "xterm-256color")
         .stdin(Stdio::null())

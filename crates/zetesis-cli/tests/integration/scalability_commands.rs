@@ -4,6 +4,7 @@ use zetesis_cli::{
     Invocation,
     testing::{self, TestCommand},
 };
+use zetesis_test_support::repository;
 use zetesis_validation::{
     performance::{Phase, matrix::ReferencePolicy},
     selected,
@@ -95,7 +96,7 @@ mod campaigns {
                 std::fs::set_permissions(&reference, std::fs::Permissions::from_mode(0o700))
                     .unwrap();
             }
-            let examples = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+            let examples = repository::examples();
             let corpus = examples.join("correctness");
             Self {
                 directory,

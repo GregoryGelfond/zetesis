@@ -11,6 +11,7 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Program};
 use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
+use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedBundle, BundleAdmissionError,
     BundleAdmissionFailure, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
@@ -370,7 +371,7 @@ fn correctness_bundles_report_semantic_refusal_after_include_admission() {
         "../../../../examples/correctness/manifest.json"
     ))
     .expect("correctness manifest");
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
+    let root = repository::correctness();
     let cases = manifest["cases"].as_array().expect("required case entries");
     assert_eq!(cases.len(), 94);
     let mut features = std::collections::BTreeMap::<String, usize>::new();

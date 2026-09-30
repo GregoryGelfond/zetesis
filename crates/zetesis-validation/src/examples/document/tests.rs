@@ -1,12 +1,10 @@
 //! Structural contracts remain enforced independently of the outer manifest seal.
 
 use super::*;
+use zetesis_test_support::repository::{self, kr_domains as original_root};
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness")
-        .canonicalize()
-        .unwrap()
+    repository::correctness().canonicalize().unwrap()
 }
 fn document() -> Document {
     serde_json::from_slice(&std::fs::read(root().join("manifest.json")).unwrap()).unwrap()
@@ -139,10 +137,6 @@ fn positive_model_claims_cannot_require_zero_models() {
     let mut contract = document().cases.remove(0).contract;
     contract.model_count = Some(0);
     assert!(validate_contract(&contract).is_err());
-}
-
-fn original_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains")
 }
 
 fn provenance_case() -> Corpus {

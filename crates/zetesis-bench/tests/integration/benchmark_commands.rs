@@ -3,6 +3,7 @@ use clap::Parser as _;
 use zetesis_bench::{self as benchmark, Cli, Command as BenchCommand, RunOptions};
 use zetesis_presentation::Layout;
 use zetesis_test_support::io::Closed;
+use zetesis_test_support::repository;
 
 fn command(arguments: &[&str]) -> BenchCommand {
     Cli::try_parse_from(
@@ -206,8 +207,7 @@ fn cancelled_run_publishes_unattempted_positions() {
     std::fs::write(&reference, b"#!/bin/sh\nexit 99\n").unwrap();
     std::fs::set_permissions(&reference, std::fs::Permissions::from_mode(0o700)).unwrap();
     let report = directory.path().join("cancelled.json");
-    let corpus =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
+    let corpus = repository::correctness();
     let command = command(&[
         "run",
         corpus.to_str().unwrap(),

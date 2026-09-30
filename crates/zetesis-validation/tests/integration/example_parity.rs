@@ -4,6 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use zetesis_clingo_support as oracle;
+use zetesis_test_support::repository;
 use zetesis_validation::{answers, examples};
 
 fn run(root: &Path, source: &str) -> answers::ReportedAnswers {
@@ -21,10 +22,7 @@ fn run(root: &Path, source: &str) -> answers::ReportedAnswers {
 #[test]
 #[ignore = "requires clingo: original and clean selected displays agree"]
 fn original_and_clean_selected_displays_agree() {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .unwrap();
+    let repo = repository::root().canonicalize().unwrap();
     let originals = repo.join("validation/corpus/kr-domains");
     let corpus = examples::load(
         &repo.join("examples/correctness"),

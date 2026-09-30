@@ -1,12 +1,12 @@
 //! The corpus comparison is consumable without clap or command progress I/O.
-use std::path::PathBuf;
+use zetesis_test_support::repository;
 use zetesis_validation::corpus_comparison::{
     self, Decision, Error, PhysicalStatus, Producer, Request,
 };
 
 fn request(directory: &std::path::Path) -> Request {
     Request {
-        repo: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        repo: repository::root(),
         clingo: directory.join("missing-reference"),
         zetesis: directory.join("must-not-run"),
         ..Request::default()

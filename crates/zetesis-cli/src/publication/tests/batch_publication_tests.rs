@@ -11,6 +11,7 @@ use std::{
 };
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
+use zetesis_test_support::repository;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([
@@ -378,7 +379,7 @@ fn every_correctness_case(search: crate::SearchMethod, workers: usize) {
     .unwrap();
     let cases = fixture["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 94);
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
+    let root = repository::correctness();
     for case in cases {
         correctness_case(&root, case, search, workers);
     }

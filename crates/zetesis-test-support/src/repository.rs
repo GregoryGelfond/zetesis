@@ -14,6 +14,24 @@ pub fn examples() -> PathBuf {
     root().join("examples")
 }
 
+/// The repository's correctness suite, the curated examples the tests load.
+#[must_use]
+pub fn correctness() -> PathBuf {
+    examples().join("correctness")
+}
+
+/// The vendored clingo 5.8.2 upstream sources.
+#[must_use]
+pub fn upstream() -> PathBuf {
+    root().join("validation/upstream/clingo-5.8.2")
+}
+
+/// The kr-domains originals the correctness suite was adapted from.
+#[must_use]
+pub fn kr_domains() -> PathBuf {
+    root().join("validation/corpus/kr-domains")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -25,7 +43,17 @@ mod tests {
     }
 
     #[test]
-    fn the_examples_directory_holds_the_correctness_suite() {
-        assert!(examples().join("correctness/manifest.json").is_file());
+    fn the_correctness_suite_holds_its_manifest() {
+        assert!(correctness().join("manifest.json").is_file());
+    }
+
+    #[test]
+    fn the_upstream_sources_hold_the_curated_corpus() {
+        assert!(upstream().join("curated/manifest.json").is_file());
+    }
+
+    #[test]
+    fn the_kr_domains_originals_keep_their_license() {
+        assert!(kr_domains().join("LICENSE").is_file());
     }
 }

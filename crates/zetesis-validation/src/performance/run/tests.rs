@@ -1,12 +1,9 @@
 //! Private source preparation refuses partial or changed execution inputs.
 use super::*;
+use zetesis_test_support::repository;
 
 fn corpus() -> examples::Corpus {
-    examples::load(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness"),
-        examples::Limits::default(),
-    )
-    .unwrap()
+    examples::load(&repository::correctness(), examples::Limits::default()).unwrap()
 }
 
 #[test]

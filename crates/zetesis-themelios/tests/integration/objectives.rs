@@ -1,13 +1,13 @@
 //! Lifted objectives score verified stable models without supplying support.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
 use zetesis_reference_support::formula;
 use zetesis_sat::{Limits as SearchLimits, StableModels};
+use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
@@ -82,8 +82,7 @@ fn expected_model(facts: &str) -> BTreeSet<Atom> {
 
 #[test]
 fn task_allocation_graphs_have_complete_optimal_contracts() {
-    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness/scenarios/task-allocation/variant-01");
+    let base = repository::correctness().join("scenarios/task-allocation/variant-01");
     let cases = [
         (
             "01-basic.lp",

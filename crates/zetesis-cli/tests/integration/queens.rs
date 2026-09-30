@@ -2,8 +2,8 @@
 //! model coverage.
 
 use std::collections::BTreeSet;
-use std::path::Path;
 use std::process::Command;
+use zetesis_test_support::repository;
 
 #[test]
 fn every_queens_variant_accepts_the_same_board_parameter() {
@@ -21,8 +21,7 @@ fn every_queens_variant_accepts_the_same_board_parameter() {
         "0",
     ])
     .unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness/standalone/n-queens");
+    let root = repository::correctness().join("standalone/n-queens");
     for variant in 1..=6 {
         let source =
             std::fs::read_to_string(root.join(format!("variant-{variant:02}.lp"))).unwrap();
@@ -71,8 +70,7 @@ fn every_queens_variant_accepts_the_same_board_parameter() {
 
 #[test]
 fn queens_variant_one_completes_all_92_boards() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness/standalone/n-queens/variant-01.lp");
+    let path = repository::correctness().join("standalone/n-queens/variant-01.lp");
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--backend", "cpu", "--models", "0"])
         .arg(path)

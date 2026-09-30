@@ -8,6 +8,7 @@ use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::admit;
 use zetesis_sat::{Limits, StableModels};
+use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula,
@@ -254,8 +255,8 @@ fn input_source(source: &str) -> Models {
 
 #[test]
 fn layered_dag_shares_sum_thresholds_within_original_default_budgets() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp");
+    let path =
+        repository::correctness().join("scenarios/shortest-path/variant-01/06-layered-dag.lp");
     let bundle =
         zetesis_themelios::SourceBundle::load(&path, zetesis_themelios::BundleLimits::default())
             .expect("correctness include graph");
@@ -310,8 +311,8 @@ fn one_threshold_family_per_binding_meets_the_original_cli_work_ceiling() {
         ("variant-04/06-layered-dag-ordering-cap.lp", [8, 4], 2),
         ("variant-04/07-layered-dag-combined.lp", [10, 4], 1),
     ] {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../examples/correctness/scenarios/shortest-path")
+        let path = repository::correctness()
+            .join("scenarios/shortest-path")
             .join(path);
         let bundle = zetesis_themelios::SourceBundle::load(
             &path,

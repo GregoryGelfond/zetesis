@@ -1,21 +1,17 @@
 //! Integrity and reported-display contracts for the self-contained correctness examples.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::{Value, json};
-use zetesis_test_support::repository::root as repo;
+use zetesis_test_support::repository::{
+    correctness as clean_root, kr_domains as originals, root as repo,
+};
 use zetesis_validation::answers::{self, ReportedAnswers};
 use zetesis_validation::examples::{
     self, Contract, ContractMismatch, Corpus, Error, Family, Limits, Resource, Satisfiability,
 };
 
-fn clean_root() -> PathBuf {
-    repo().join("examples/correctness")
-}
-fn originals() -> PathBuf {
-    repo().join("validation/corpus/kr-domains")
-}
 fn verified() -> Corpus {
     examples::load(&clean_root(), Limits::default()).unwrap()
 }

@@ -6,6 +6,7 @@ use std::sync::atomic::AtomicBool;
 
 use zetesis_cli::testing::{self, Completion, Error};
 use zetesis_presentation::{ColorMode, Layout};
+use zetesis_test_support::repository;
 
 fn backend(stats: bool) -> testing::TestCommand {
     let mut arguments = vec![
@@ -135,7 +136,7 @@ fn unlaunched_backend_case_is_recorded_without_a_completed_case_claim() {
 
 #[test]
 fn corpus_report_distinguishes_captured_reference_time_from_unavailable_native_time() {
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let repo = repository::root();
     let directory = tempfile::tempdir().unwrap();
     let report = directory.path().join("report.json");
     // /usr/bin/false is a controlled refusal producer, not a reference solver.

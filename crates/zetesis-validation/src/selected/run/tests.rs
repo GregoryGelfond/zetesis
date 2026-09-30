@@ -1,6 +1,7 @@
 //! Acceptance depends on capture and cleanup evidence, not plausible solver text.
 
 use super::*;
+use zetesis_test_support::repository;
 
 mod sealing;
 
@@ -110,8 +111,7 @@ fn start_failures_keep_their_typed_origin() {
 
 #[test]
 fn absent_native_capture_cannot_pass_a_case() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/upstream/clingo-5.8.2/curated");
+    let root = repository::upstream().join("curated");
     let corpus = curated::open(&root, curated::Limits::default()).unwrap();
     let (decision, detail) =
         compare::case(&corpus.cases()[0], &complete(0), None, Limits::default());

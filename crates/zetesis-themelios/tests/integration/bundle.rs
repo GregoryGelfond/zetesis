@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use themelios_base::source::{SourceId, Sources, check_sources_laws};
+use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleError, BundleLimits, BundleResource, BundleSource, SourceBundle, admit,
 };
@@ -943,8 +944,7 @@ const CORPUS_CASES: &[(&str, &[&str])] = &[
 #[test]
 fn correctness_entry_graphs_load_with_original_source_identity() {
     use std::collections::BTreeSet;
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/correctness")
+    let root = repository::correctness()
         .canonicalize()
         .expect("correctness examples root");
     assert_eq!(CORPUS_CASES.len(), 94);
