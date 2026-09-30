@@ -81,9 +81,9 @@ fn expected_model(facts: &str) -> BTreeSet<Atom> {
 }
 
 #[test]
-fn unchanged_task_allocation_graphs_have_complete_optimal_contracts() {
+fn task_allocation_graphs_have_complete_optimal_contracts() {
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/corpus/kr-domains/scenarios/task-allocation/variant-01");
+        .join("../../examples/correctness/scenarios/task-allocation/variant-01");
     let cases = [
         (
             "01-basic.lp",
@@ -117,7 +117,7 @@ fn unchanged_task_allocation_graphs_have_complete_optimal_contracts() {
     ];
     for (path, count, cost, possible, expected) in cases {
         let bundle = SourceBundle::load(base.join(path), BundleLimits::default())
-            .expect("unchanged original graph");
+            .expect("correctness include graph");
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
@@ -171,7 +171,7 @@ fn unchanged_task_allocation_graphs_have_complete_optimal_contracts() {
             assert_eq!(
                 shown,
                 expected_model(expected),
-                "{path}: full original optimal display contract"
+                "{path}: full optimal display contract"
             );
         } else {
             assert!(models.is_empty());

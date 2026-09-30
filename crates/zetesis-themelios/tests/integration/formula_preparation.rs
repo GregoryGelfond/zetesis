@@ -43,9 +43,8 @@ fn preparation_exposes_analysis_without_support_completion() {
 
 #[test]
 fn send_analysis_precedes_grounding() {
-    let source = include_str!(
-        "../../../../validation/corpus/kr-domains/standalone/send-money/send-money.lp"
-    );
+    let source =
+        include_str!("../../../../examples/correctness/standalone/send-money/send-money.lp");
     let prepared = prepare_formula(
         source.into(),
         AdmissionOptions::default(),

@@ -253,20 +253,19 @@ fn input_source(source: &str) -> Models {
 }
 
 #[test]
-fn unchanged_layered_dag_shares_sum_thresholds_within_original_default_budgets() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
-        "../../validation/corpus/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp",
-    );
+fn layered_dag_shares_sum_thresholds_within_original_default_budgets() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp");
     let bundle =
         zetesis_themelios::SourceBundle::load(&path, zetesis_themelios::BundleLimits::default())
-            .expect("original include graph");
+            .expect("correctness include graph");
     let input = zetesis_themelios::admit_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
-    .expect("bounded original aggregate assignment");
+    .expect("bounded aggregate assignment");
     assert_eq!(bundle_optimum(&input), (vec![4, 4], 1));
     assert_eq!(input.bundle().sources().len(), 2);
 }
@@ -312,13 +311,13 @@ fn one_threshold_family_per_binding_meets_the_original_cli_work_ceiling() {
         ("variant-04/07-layered-dag-combined.lp", [10, 4], 1),
     ] {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../validation/corpus/kr-domains/scenarios/shortest-path")
+            .join("../../examples/correctness/scenarios/shortest-path")
             .join(path);
         let bundle = zetesis_themelios::SourceBundle::load(
             &path,
             zetesis_themelios::BundleLimits::default(),
         )
-        .expect("original include graph");
+        .expect("correctness include graph");
         let input = zetesis_themelios::admit_bundle_formula(
             bundle,
             zetesis_themelios::BundleAdmissionOptions::default(),

@@ -174,9 +174,9 @@ fn aggregate_limits_and_original_rule_evidence_are_independent() {
 }
 
 #[test]
-fn all_unchanged_queens_encodings_exhaust_the_same_ninety_two_boards() {
+fn all_queens_encodings_exhaust_the_same_ninety_two_boards() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/corpus/kr-domains/standalone/n-queens");
+        .join("../../examples/correctness/standalone/n-queens");
     let mut reference = None;
     for variant in [
         "variant-01.lp",
@@ -186,7 +186,8 @@ fn all_unchanged_queens_encodings_exhaust_the_same_ninety_two_boards() {
         "variant-05.lp",
         "variant-06.lp",
     ] {
-        let source = std::fs::read_to_string(root.join(variant)).expect("vendored original source");
+        let source =
+            std::fs::read_to_string(root.join(variant)).expect("correctness example source");
         let input = formula(&source);
         assert_eq!(input.source().text(), source);
         let models = models(&input);

@@ -357,9 +357,8 @@ fn each_formula_resource_refuses_without_returning_a_partial_theory() {
 }
 
 #[test]
-fn unchanged_queens_source_admits_eighty_original_atoms_with_output_metadata() {
-    let source =
-        include_str!("../../../../validation/corpus/kr-domains/standalone/n-queens/variant-01.lp");
+fn queens_source_admits_eighty_original_atoms_with_output_metadata() {
+    let source = include_str!("../../../../examples/correctness/standalone/n-queens/variant-01.lp");
     let admitted = formula(source);
     assert_eq!(admitted.source().text(), source);
     assert_eq!(admitted.atoms().len(), 80);

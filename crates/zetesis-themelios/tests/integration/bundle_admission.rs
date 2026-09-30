@@ -365,38 +365,39 @@ fn expansion_and_provenance_budgets_remain_global_across_files() {
 }
 
 #[test]
-fn original_required_bundles_report_semantic_refusal_after_include_admission() {
-    let manifest: Json =
-        serde_json::from_str(include_str!("../../../../validation/corpus/manifest.json"))
-            .expect("vendored target manifest");
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
+fn correctness_bundles_report_semantic_refusal_after_include_admission() {
+    let manifest: Json = serde_json::from_str(include_str!(
+        "../../../../examples/correctness/manifest.json"
+    ))
+    .expect("correctness manifest");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     let cases = manifest["cases"].as_array().expect("required case entries");
     assert_eq!(cases.len(), 94);
     let mut features = std::collections::BTreeMap::<String, usize>::new();
     for case in cases {
-        let path = case["path"].as_str().expect("original entry path");
+        let path = case["path"].as_str().expect("entry path");
         let bundle = SourceBundle::load(root.join(path), BundleLimits::default())
-            .expect("unchanged original include graph");
+            .expect("correctness include graph");
         let error = admit_bundle_extended(
             bundle,
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
         )
-        .expect_err("broader original programs remain outside this semantic slice");
+        .expect_err("the correctness programs remain outside this semantic slice");
         match error.error() {
             BundleAdmissionError::Expansion(ExpansionFailure::Admission(
                 AdmissionFailure::Profile { feature, location },
             )) => {
                 assert!(
                     error.bundle().get(location.source).is_some(),
-                    "original refusal source: {path}"
+                    "refusal source: {path}"
                 );
                 *features.entry(format!("{feature:?}")).or_default() += 1;
             }
             other => panic!("unexpected semantic boundary for {path}: {other}"),
         }
     }
-    eprintln!("Original required bundle semantic refusals: {features:?}");
+    eprintln!("Correctness bundle semantic refusals: {features:?}");
 }
 
 fn external(directory: &Path) -> Models {

@@ -297,10 +297,9 @@ fn absolute_include_paths_remain_absolute() {
     );
 }
 
-// Snapshot of cases and include closures from
-// validation/corpus/manifest.json at the revision below.
+// Snapshot of the correctness examples' cases and include closures, as
+// examples/correctness/manifest.json records them.
 // This deliberately uses no JSON/runtime dependency in the source boundary.
-// Upstream revision: 38f0660ded448ed268c5a68759ceb0e2840dd497.
 const CORPUS_CASES: &[(&str, &[&str])] = &[
     (
         "scenarios/equality-generalized-tsp/01-basic.lp",
@@ -942,12 +941,12 @@ const CORPUS_CASES: &[(&str, &[&str])] = &[
 ];
 
 #[test]
-fn vendored_original_entry_graphs_load_with_original_source_identity() {
+fn correctness_entry_graphs_load_with_original_source_identity() {
     use std::collections::BTreeSet;
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/corpus/kr-domains")
+        .join("../../examples/correctness")
         .canonicalize()
-        .expect("vendored original corpus root");
+        .expect("correctness examples root");
     assert_eq!(CORPUS_CASES.len(), 94);
     let mut all_sources = BTreeSet::new();
     for &(entry, expected_paths) in CORPUS_CASES {
@@ -987,9 +986,5 @@ fn vendored_original_entry_graphs_load_with_original_source_identity() {
         }
         all_sources.extend(actual);
     }
-    assert_eq!(
-        all_sources.len(),
-        108,
-        "all original required sources loaded"
-    );
+    assert_eq!(all_sources.len(), 108, "all correctness sources loaded");
 }
