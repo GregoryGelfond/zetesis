@@ -96,3 +96,41 @@ fn a_matrix_capture_serializes_as_its_stream_view() {
     let view = serde_json::to_value(View::new(&capture)).unwrap();
     assert_eq!(serde_json::to_value(MatrixCapture(capture)).unwrap(), view);
 }
+
+#[test]
+fn every_decision_label_is_its_recorded_spelling() {
+    use crate::performance::matrix::Decision;
+    for decision in [
+        Decision::Pass,
+        Decision::Refused,
+        Decision::BackendUnavailable,
+        Decision::Incomplete,
+        Decision::Timeout,
+        Decision::Cancelled,
+        Decision::CaptureLimit,
+        Decision::InvocationFailure,
+        Decision::InvalidReport,
+        Decision::ParityMismatch,
+        Decision::InvalidTelemetry,
+        Decision::ReferenceUnavailable,
+        Decision::NeedsClingo,
+        Decision::NotAttempted,
+        Decision::InvalidMemory,
+    ] {
+        assert_eq!(serde_json::to_value(decision).unwrap(), decision.label());
+    }
+}
+
+#[test]
+fn every_phase_label_is_its_recorded_spelling() {
+    use crate::performance::Phase;
+    for phase in [
+        Phase::Qualification,
+        Phase::Warmup,
+        Phase::Timed,
+        Phase::Diagnostics,
+        Phase::Memory,
+    ] {
+        assert_eq!(serde_json::to_value(phase).unwrap(), phase.label());
+    }
+}

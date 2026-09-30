@@ -44,6 +44,29 @@ pub enum Decision {
     /// contradicted the helper's evidence.
     InvalidMemory,
 }
+impl Decision {
+    /// The spelling records carry for this decision.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::Refused => "refused",
+            Self::BackendUnavailable => "backend_unavailable",
+            Self::Incomplete => "incomplete",
+            Self::Timeout => "timeout",
+            Self::Cancelled => "cancelled",
+            Self::CaptureLimit => "capture_limit",
+            Self::InvocationFailure => "invocation_failure",
+            Self::InvalidReport => "invalid_report",
+            Self::ParityMismatch => "parity_mismatch",
+            Self::InvalidTelemetry => "invalid_telemetry",
+            Self::ReferenceUnavailable => "reference_unavailable",
+            Self::NeedsClingo => "needs_clingo",
+            Self::NotAttempted => "not_attempted",
+            Self::InvalidMemory => "invalid_memory",
+        }
+    }
+}
 /// Actual reported semantic checker, including certified specializations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

@@ -62,7 +62,9 @@ pub enum Oracle {
     Countermodel,
 }
 impl Oracle {
-    pub(super) const fn label(self) -> &'static str {
+    /// Stable spelling, as the command line and records take it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Auto => "auto",
             Self::Closure => "closure",
@@ -84,7 +86,9 @@ pub enum Grounder {
     Auto,
 }
 impl Grounder {
-    pub(super) const fn label(self) -> &'static str {
+    /// Stable spelling, as the command line and records take it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Eager => "eager",
             Self::Lazy => "lazy",

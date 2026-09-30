@@ -118,8 +118,8 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
                     },
                 ],
                 reasons: BTreeMap::from([
-                    ("Timed: Timeout: process deadline".into(), 1),
-                    ("Timed: NotAttempted: cell disabled; blocked by sample 1 (Timed, Timeout): process deadline".into(), 3),
+                    ("timed: timeout: process deadline".into(), 1),
+                    ("timed: not_attempted: cell disabled; blocked by sample 1 (timed, timeout): process deadline".into(), 3),
                 ]),
                 timing: None,
                 peak_rss_bytes: None,
@@ -154,25 +154,25 @@ fn summary_distinguishes_missing_and_zero_measurements() {
     assert!(!text.contains('\u{1b}'));
     assert_row(
         &text,
-        "Profile Device Grounder Oracle Threads Completion Batch",
+        "Profile Backend Grounder Oracle Threads Completion Batch",
     );
-    assert_row(&text, "1 Cpu Auto Auto 1 1 64");
-    assert_row(&text, "2 Cpu Auto Auto 4 1 64");
+    assert_row(&text, "1 cpu auto auto 1 1 64");
+    assert_row(&text, "2 cpu auto auto 4 1 64");
     assert_row(
         &text,
         "Workload Producer Qualified by Median ms Range ms RSS MiB All positions Detail",
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp clingo clingo 5.125 4.999–6.250 3.500 Pass: 5",
+        "1: generated/choice-2.lp clingo clingo 5.125 4.999–6.250 3.500 pass: 5",
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp zetesis profile 1 clingo 0.000 0.000–0.000 0.000 Pass: 5",
+        "1: generated/choice-2.lp zetesis profile 1 clingo 0.000 0.000–0.000 0.000 pass: 5",
     );
     assert_row(
         &text,
-        "1: generated/choice-2.lp zetesis profile 2 clingo — — — Pass: 1, Timeout: 1, NotAttempted: 3 Timed: NotAttempted: cell disabled; blocked by sample 1 (Timed, Timeout): process deadline ×3; Timed: Timeout: process deadline ×1",
+        "1: generated/choice-2.lp zetesis profile 2 clingo — — — pass: 1, timeout: 1, not_attempted: 3 timed: not_attempted: cell disabled; blocked by sample 1 (timed, timeout): process deadline ×3; timed: timeout: process deadline ×1",
     );
     assert_row(&text, "All passed Accounted");
     assert_row(&text, "false true");
@@ -197,7 +197,7 @@ fn summary_json_preserves_raw_units_without_styling() {
     assert_eq!(value["cells"][1]["peak_rss_bytes"], 0);
     assert!(value["cells"][2]["timing"].is_null());
     assert_eq!(
-        value["cells"][2]["reasons"]["Timed: Timeout: process deadline"],
+        value["cells"][2]["reasons"]["timed: timeout: process deadline"],
         1
     );
     assert!(!output.contains(&0x1b));
@@ -209,7 +209,7 @@ fn refusal_details_escape_terminal_controls_without_losing_limits() {
     let profiles = reports::profiles();
     let mut summary = summary(&cases, &profiles);
     summary.cells[2].reasons = std::collections::BTreeMap::from([(
-        "Qualification: Refused: support bytes limit 128; needed 129\n\u{1b}[31m".into(),
+        "qualification: refused: support bytes limit 128; needed 129\n\u{1b}[31m".into(),
         1,
     )]);
     let mut output = Vec::new();
@@ -233,7 +233,7 @@ fn qualification_only_reference_has_no_measurements_in_either_view() {
     super::run(&summary, false, layout(ColorMode::Never), &mut human).unwrap();
     assert_row(
         &String::from_utf8(human).unwrap(),
-        "1: generated/choice-2.lp clingo clingo — — — Pass: 1",
+        "1: generated/choice-2.lp clingo clingo — — — pass: 1",
     );
     let mut machine = Vec::new();
     super::run(&summary, true, layout(ColorMode::Never), &mut machine).unwrap();
@@ -442,7 +442,7 @@ fn amended_workloads_have_distinct_human_labels() {
                     positions: 1,
                 }],
                 reasons: std::collections::BTreeMap::from([(
-                    "Qualification: NotAttempted: campaign setup prevented execution".into(),
+                    "qualification: not_attempted: campaign setup prevented execution".into(),
                     1,
                 )]),
                 timing: None,
@@ -502,10 +502,10 @@ fn a_clingo_free_run_names_what_qualified_each_cell() {
     let text = String::from_utf8(output).unwrap();
     assert_row(
         &text,
-        "1: generated/choice-2.lp zetesis profile 1 recorded contract — — — Pass: 5",
+        "1: generated/choice-2.lp zetesis profile 1 recorded contract — — — pass: 5",
     );
     assert_row(
         &text,
-        "2: generated/cycle-2.lp zetesis profile 1 needs clingo — — — NeedsClingo: 5",
+        "2: generated/cycle-2.lp zetesis profile 1 needs clingo — — — needs_clingo: 5",
     );
 }

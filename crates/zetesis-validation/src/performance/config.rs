@@ -102,6 +102,19 @@ pub enum Phase {
     /// Separate fresh-helper child RSS observation, excluded from timed summaries.
     Memory,
 }
+impl Phase {
+    /// The spelling records carry for this phase.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Qualification => "qualification",
+            Self::Warmup => "warmup",
+            Self::Timed => "timed",
+            Self::Diagnostics => "diagnostics",
+            Self::Memory => "memory",
+        }
+    }
+}
 /// Producer identity within a paired semantic task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

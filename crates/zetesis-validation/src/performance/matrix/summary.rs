@@ -177,15 +177,19 @@ fn reason(sample: &super::Sample, samples: &[super::Sample]) -> String {
         .detail
         .as_deref()
         .unwrap_or("reason unavailable in retained sample");
-    let mut reason = format!("{:?}: {:?}: {detail}", sample.slot.phase, sample.decision);
+    let mut reason = format!(
+        "{}: {}: {detail}",
+        sample.slot.phase.label(),
+        sample.decision.label()
+    );
     if let Some(index) = sample.blocked_by {
         use std::fmt::Write;
         if let Some(blocker) = samples.get(index) {
             write!(
                 reason,
-                "; blocked by sample {index} ({:?}, {:?}): {}",
-                blocker.slot.phase,
-                blocker.decision,
+                "; blocked by sample {index} ({}, {}): {}",
+                blocker.slot.phase.label(),
+                blocker.decision.label(),
                 blocker
                     .detail
                     .as_deref()

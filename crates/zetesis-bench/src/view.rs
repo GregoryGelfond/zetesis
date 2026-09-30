@@ -347,9 +347,9 @@ pub(super) fn run(
         .map(|(index, profile)| {
             Row::new([
                 (index + 1).to_string(),
-                format!("{:?}", profile.backend),
-                format!("{:?}", profile.grounder),
-                format!("{:?}", profile.oracle),
+                profile.backend.to_string(),
+                profile.grounder.label().to_owned(),
+                profile.oracle.label().to_owned(),
                 profile.workers.to_string(),
                 profile.completion_workers.to_string(),
                 profile.batch_size.to_string(),
@@ -360,7 +360,7 @@ pub(super) fn run(
         "Requested native profiles",
         &[
             "Profile",
-            "Device",
+            "Backend",
             "Grounder",
             "Oracle",
             "Threads",
@@ -409,7 +409,7 @@ fn run_rows(summary: &Summary<'_>) -> Vec<Row> {
             let decisions = cell
                 .decisions
                 .iter()
-                .map(|count| format!("{:?}: {}", count.decision, count.positions))
+                .map(|count| format!("{}: {}", count.decision.label(), count.positions))
                 .collect::<Vec<_>>()
                 .join(", ");
             Row::new([

@@ -706,11 +706,11 @@ fn summary_keeps_refusal_out_of_timed_populations() {
         .unwrap();
     let reason = refused.detail().unwrap();
     assert_eq!(
-        native.reasons[&format!("Qualification: Refused: {reason}")],
+        native.reasons[&format!("qualification: refused: {reason}")],
         1
     );
     assert!(native.reasons.keys().any(|detail| detail.contains(&format!(
-        "blocked by sample {index} (Qualification, Refused): {reason}"
+        "blocked by sample {index} (qualification, refused): {reason}"
     ))));
     assert!(
         native
