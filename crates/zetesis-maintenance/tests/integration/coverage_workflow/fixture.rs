@@ -228,10 +228,7 @@ impl Fixture {
             }
         }
         expected.extend(reports(self.root(), "workspace"));
-        expected.push(call(
-            "cli-cpu",
-            strings(&["clean", "--workspace", "--locked"]),
-        ));
+        expected.push(call("cli-cpu", strings(&["clean", "--locked"])));
         expected.push(call(
             "cli-cpu",
             strings(&[
@@ -427,7 +424,7 @@ fn reports(root: &Path, profile: &str) -> [Value; 2] {
 }
 fn profile_prefix(root: &Path, metal: bool) -> Vec<Value> {
     let mut expected = vec![
-        call("workspace", strings(&["clean", "--workspace", "--locked"])),
+        call("workspace", strings(&["clean", "--locked"])),
         call(
             "workspace",
             strings(&["--workspace", "--all-features", "--locked", "--no-report"]),

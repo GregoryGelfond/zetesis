@@ -213,6 +213,8 @@ floor does not skip the CPU-only check. `target/coverage/status.txt` stays
 `incomplete` unless both pass. Setup, test or report-generation failures stop
 before those floor checks. Keep the command log to distinguish these outcomes.
 
+The coverage command clears each instrumented build directory before rebuilding
+it, including obsolete test executables. It retains the ordinary build directory.
 Use fresh instrumentation for the source under review. Matching executable
 names do not prove matching builds. Coverage does not measure assertion strength
 or replace review.

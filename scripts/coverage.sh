@@ -159,7 +159,8 @@ run_profile() {
     report_dir="$coverage_dir/$profile"
     export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-$profile"
     mkdir -p -- "$report_dir"
-    cargo +1.97.1 llvm-cov clean --workspace --locked
+    # Full cleaning also removes artifacts from deleted or renamed test targets.
+    cargo +1.97.1 llvm-cov clean --locked
     if [ "$profile" = workspace ]; then
         cargo +1.97.1 llvm-cov --workspace "$@" --locked --no-report
         if [ -n "$backend" ]; then
