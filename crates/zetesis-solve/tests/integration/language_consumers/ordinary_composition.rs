@@ -2,6 +2,7 @@
 
 use super::{Case, Record, atom};
 use zetesis_core::{Atom, Model, Sign, Value, ValueLimits, ValueNode};
+use zetesis_test_support::programs::unary as number;
 
 fn function(value: i32) -> Value {
     Value::from_nodes(
@@ -16,10 +17,6 @@ fn function(value: i32) -> Value {
         ValueLimits::default(),
     )
     .unwrap()
-}
-
-fn number(name: &str, value: i32) -> Atom {
-    atom(name, vec![Value::Number(value)])
 }
 
 fn record(mut atoms: Vec<Atom>, cost: i64, display: String) -> Record {

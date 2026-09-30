@@ -1,22 +1,13 @@
 //! Objective lookup preserves typed keys and checks only matching predicate rows.
 //! Work controls distinguish complete absence from a refused comparison prefix.
 
-use zetesis_core::{
-    Atom, AtomPattern, Model, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
-};
+use zetesis_core::{AtomPattern, Model, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionLimits, Condition, ConditionNode, ErrorKind, Limits, ObjectiveProgram,
     ObjectiveTemplate, Stop, evaluate,
 };
-
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
-    )
-    .unwrap()
-}
+use zetesis_test_support::programs::signed as atom;
 
 fn values() -> Vec<Value> {
     vec![

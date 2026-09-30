@@ -1,15 +1,11 @@
 //! World-mask selection against independent per-seed reduct closure.
 
-use zetesis_core::{Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value};
+use zetesis_core::{AtomPattern, Model, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{Cancellation, Limits, Stop, check, lazy};
-use zetesis_test_support::programs::{pattern, program};
+use zetesis_test_support::programs::{pattern, program, unary as atom};
 
 fn constant(name: &str, value: i32) -> AtomPattern {
     pattern(name, vec![Term::Constant(Value::Number(value))])
-}
-
-fn atom(name: &str, value: i32) -> Atom {
-    Atom::new(Predicate::new(name, 1).unwrap(), vec![Value::Number(value)]).unwrap()
 }
 
 fn rule(

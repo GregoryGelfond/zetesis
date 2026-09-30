@@ -13,18 +13,13 @@ use std::sync::Arc;
 
 use zetesis_backend::GpuApi;
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
-    StaticLimits, Template,
+    AdmissionLimits, GroundProgram, Program, Seed, SeedSelection, StaticLimits, Template,
 };
+use zetesis_test_support::programs::nullary_pattern as atom;
 use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, GpuSelection};
 
 // Complete powersets stay bounded at 256 candidate occurrences per fixture.
 const MAX_FIXTURE_GATES: usize = 8;
-
-fn atom(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).expect("valid signature"), vec![])
-        .expect("nullary pattern")
-}
 
 fn rule(
     head: Option<&str>,

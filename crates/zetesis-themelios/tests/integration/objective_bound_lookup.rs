@@ -7,18 +7,11 @@ use zetesis_core::{
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, models};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate, evaluate};
+use zetesis_test_support::programs::signed as atom;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
-    )
-    .unwrap()
-}
 
 fn theory(count: usize) -> Theory {
     Theory::new(

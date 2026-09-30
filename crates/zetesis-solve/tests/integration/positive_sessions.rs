@@ -2,7 +2,6 @@
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
-use crate::support::models::model;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, PositiveError, PositiveResource, TightError, TightResource};
@@ -13,6 +12,7 @@ use zetesis_solve::{
     Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig, WorldView,
     WorldViewLimits,
 };
+use zetesis_test_support::programs::model;
 use zetesis_themelios::{AdmittedFormula, AnalysisBasis, analysis::classify::HornKind};
 
 type Family = BTreeSet<(Model, Option<Vec<(i32, i64)>>)>;

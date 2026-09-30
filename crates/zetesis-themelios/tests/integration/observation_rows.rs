@@ -1,18 +1,11 @@
 //! Predicate-local traversal preserves the whole-model observation relation.
 
-use zetesis_core::{Atom, Model, Predicate, Sign, Value};
+use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
+use zetesis_test_support::programs::signed_numbered as atom;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource, Symbol};
-
-fn atom(name: &str, sign: Sign, values: &[i32]) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values.iter().copied().map(Value::Number).collect(),
-    )
-    .unwrap()
-}
 
 fn symbols(input: &AdmittedFormula, model: &Model) -> Vec<Symbol> {
     input

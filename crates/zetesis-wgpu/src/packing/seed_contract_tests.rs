@@ -5,6 +5,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
     Sign, StaticLimits, Template, Term, Value, ValueLimits, ValueNode,
 };
+use zetesis_test_support::programs::unary;
 
 use super::{BatchPlan, PackedSeeds};
 use crate::{GpuErrorKind, GpuLimits};
@@ -24,9 +25,6 @@ fn graph(atoms: Vec<Atom>) -> GroundProgram {
     let program = Program::new(templates, AdmissionLimits::default()).unwrap();
     GroundProgram::compile(&program, StaticLimits::default()).unwrap()
 }
-fn number(value: i32) -> Atom {
-    Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(value)]).unwrap()
-}
 fn plan(graph: &GroundProgram, worlds: usize) -> BatchPlan {
     BatchPlan::new(
         graph,
@@ -42,9 +40,14 @@ fn selected(graph: &GroundProgram, atoms: impl IntoIterator<Item = Atom>) -> See
 
 #[test]
 fn selected_views_pack_exact_word_boundaries() {
-    let graph = graph((0..70).map(number).collect());
+    let graph = graph((0..70).map(|value| unary("p", value)).collect());
     assert_eq!(graph.word_count(), 3);
-    let selected = selected(&graph, [69, 0, 64, 32, 31, 0].into_iter().map(number));
+    let selected = selected(
+        &graph,
+        [69, 0, 64, 32, 31, 0]
+            .into_iter()
+            .map(|value| unary("p", value)),
+    );
     let empty = Seed::new(graph.program(), []).unwrap();
     let batch = PackedSeeds::new(
         &graph,
@@ -119,9 +122,9 @@ fn selected_views_keep_complete_typed_identity() {
 
 #[test]
 fn a_foreign_selection_is_refused() {
-    let other = graph(vec![number(1)]);
-    let graph = graph(vec![number(1)]);
-    let selection = selected(&other, [number(1)]);
+    let other = graph(vec![unary("p", 1)]);
+    let graph = graph(vec![unary("p", 1)]);
+    let selection = selected(&other, [unary("p", 1)]);
     assert!(
         matches!(PackedSeeds::new(&graph, [selection.view()].into_iter(), &plan(&graph, 1)), Err(error) if error.kind() == GpuErrorKind::Seed)
     );
@@ -142,7 +145,7 @@ fn empty_graph_views_keep_the_dummy_word() {
 
 #[test]
 fn packing_refuses_an_incomplete_candidate_sequence() {
-    let graph = graph(vec![number(1)]);
+    let graph = graph(vec![unary("p", 1)]);
     let selection = selected(&graph, []);
     assert!(
         matches!(PackedSeeds::new(&graph, [selection.view()].into_iter(), &plan(&graph, 2)), Err(error) if error.kind() == GpuErrorKind::Seed)
@@ -151,7 +154,7 @@ fn packing_refuses_an_incomplete_candidate_sequence() {
 
 #[test]
 fn packing_refuses_an_excess_candidate_sequence() {
-    let graph = graph(vec![number(1)]);
+    let graph = graph(vec![unary("p", 1)]);
     let selection = selected(&graph, []);
     assert!(
         matches!(PackedSeeds::new(&graph, [selection.view(), selection.view()].into_iter(), &plan(&graph, 1)), Err(error) if error.kind() == GpuErrorKind::Seed)

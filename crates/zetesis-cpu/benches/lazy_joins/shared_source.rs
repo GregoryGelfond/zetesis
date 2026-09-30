@@ -8,18 +8,10 @@ use std::{
     num::NonZeroUsize,
     time::{Duration, Instant},
 };
-use zetesis_core::{AdmissionLimits, Atom, Model, Predicate, Program, Seed, Template, Term, Value};
+use zetesis_core::{AdmissionLimits, Model, Program, Seed, Template, Term, Value};
 use zetesis_cpu::lazy::{SourceSelection, shared};
 use zetesis_cpu::{BatchOracle, Cancellation, Limits};
-use zetesis_test_support::programs::pattern;
-
-fn atom(name: &str, values: &[i32]) -> Atom {
-    Atom::new(
-        Predicate::new(name, values.len()).unwrap(),
-        values.iter().copied().map(Value::Number).collect(),
-    )
-    .unwrap()
-}
+use zetesis_test_support::programs::{numbered as atom, pattern};
 
 struct Case {
     program: Program,

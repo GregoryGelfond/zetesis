@@ -7,21 +7,15 @@ use std::time::{Duration, Instant};
 use crate::support::programs::program;
 use proptest::prelude::*;
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, TemplateTerm, Term, Value, ValueLimits, ValueNodeRef,
+    AtomPattern, Filter, Model, TemplateTerm, Term, Value, ValueLimits, ValueNodeRef,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop,
     evaluate,
 };
-use zetesis_test_support::programs::{atom, number, pattern};
+use zetesis_test_support::programs::{atom, number, numbered as fact, pattern, variable};
 
-fn variable(index: usize) -> Term {
-    Term::Variable(index)
-}
-fn fact(name: &str, numbers: &[i32]) -> Atom {
-    atom(name, numbers.iter().copied().map(Value::Number).collect())
-}
 fn template(
     weight: Term,
     priority: i32,

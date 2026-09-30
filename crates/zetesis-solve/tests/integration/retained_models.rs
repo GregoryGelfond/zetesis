@@ -2,7 +2,6 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use crate::support::models::atom;
 use zetesis_core::{Model, Sign, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -10,6 +9,7 @@ use zetesis_solve::{
     Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
     SolveConfig,
 };
+use zetesis_test_support::programs::signed as atom;
 
 fn config() -> SolveConfig {
     SolveConfig {

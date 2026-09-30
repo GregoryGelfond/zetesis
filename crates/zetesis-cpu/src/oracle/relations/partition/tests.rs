@@ -10,10 +10,7 @@ use crate::{
     oracle::{Limits, Statistics},
 };
 use zetesis_core::{Atom, Model, Predicate, Value};
-
-fn atom(value: i32) -> Atom {
-    Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(value)]).unwrap()
-}
+use zetesis_test_support::programs::unary;
 
 fn work(cancellation: &Cancellation) -> Work<'_> {
     let mut work = Work::source(cancellation, Limits::default().max_work);
@@ -22,14 +19,14 @@ fn work(cancellation: &Cancellation) -> Work<'_> {
 }
 
 fn mixed(work: &mut Work<'_>) -> Catalogs {
-    let mut catalogs = fixture(&[1, 2, 3, 4, 9].map(atom), work);
+    let mut catalogs = fixture(&[1, 2, 3, 4, 9].map(|value| unary("p", value)), work);
     for value in [4, 2] {
-        insert(&mut catalogs, &atom(value), work);
+        insert(&mut catalogs, &unary("p", value), work);
     }
     catalogs.prepare_delta(work).unwrap();
     catalogs.advance(work).unwrap();
     for value in [3, 1] {
-        insert(&mut catalogs, &atom(value), work);
+        insert(&mut catalogs, &unary("p", value), work);
     }
     // The partition control starts with a real published, canonically ordered
     // extent. It measures only the additional derived old/new ID preparation.
@@ -54,7 +51,7 @@ fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) 
             let id = source.iter().position(|atom| atom == row).unwrap();
             assert_eq!(
                 row,
-                atom(values[ids.iter().position(|&i| i == id).unwrap()])
+                unary("p", values[ids.iter().position(|&i| i == id).unwrap()])
             );
             id
         })
@@ -102,15 +99,15 @@ fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
     // unavailable, and the merge succeeds once the ceiling is raised.
     let cancellation = Cancellation::default();
     let mut work = work(&cancellation);
-    let mut catalogs = fixture(&[1, 2, 3, 4, 9].map(atom), &mut work);
+    let mut catalogs = fixture(&[1, 2, 3, 4, 9].map(|value| unary("p", value)), &mut work);
     for value in [4, 2] {
-        insert(&mut catalogs, &atom(value), &mut work);
+        insert(&mut catalogs, &unary("p", value), &mut work);
     }
     catalogs.prepare_delta(&mut work).unwrap();
     catalogs.advance(&mut work).unwrap();
     let retained = catalogs.owned_bytes();
     for value in [3, 1] {
-        insert(&mut catalogs, &atom(value), &mut work);
+        insert(&mut catalogs, &unary("p", value), &mut work);
     }
     let appended = catalogs.owned_bytes();
     work.limits.max_closure_bytes = usize::try_from(appended).unwrap();
@@ -166,13 +163,19 @@ fn publication_resets_truth_and_preserves_retained_models() {
     catalogs.prepare_delta(&mut work).unwrap();
     let predicate = Predicate::new("p", 1).unwrap();
     let model = catalogs.take_model(&mut work).unwrap();
-    assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)).unwrap());
+    assert_eq!(
+        model,
+        Model::new([1, 2, 3, 4].map(|value| unary("p", value))).unwrap()
+    );
     assert_eq!(catalogs.relation(&predicate).partition().old_end, 0);
-    insert(&mut catalogs, &atom(9), &mut work);
+    insert(&mut catalogs, &unary("p", 9), &mut work);
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[], &[]);
     assert_rows(&catalogs, RowSet::New, &[0], &[9]);
-    assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)).unwrap());
+    assert_eq!(
+        model,
+        Model::new([1, 2, 3, 4].map(|value| unary("p", value))).unwrap()
+    );
 }
 
 #[test]

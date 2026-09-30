@@ -2,7 +2,6 @@
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
-use crate::support::models::atom;
 use crate::support::sessions::normal;
 use zetesis_core::{
     Atom, Model, Predicate, Sign, Value,
@@ -15,6 +14,7 @@ use zetesis_solve::{
     ExecutionResources, GpuApi, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome,
     Session, SolveConfig, SolveError, Subject,
 };
+use zetesis_test_support::programs::signed as atom;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits};
 use zetesis_wgpu::{
     AdapterBackend, AdapterCategory, GateProjection, GpuContext, GpuError, GpuErrorKind,

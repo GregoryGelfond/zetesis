@@ -2,13 +2,13 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use crate::support::models::model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, ModelConstructionStop, PreparedInput, Session,
     SolveConfig, SolvePhase,
 };
+use zetesis_test_support::programs::model;
 
 fn config() -> SolveConfig {
     SolveConfig {

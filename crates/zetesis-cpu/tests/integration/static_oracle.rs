@@ -4,14 +4,13 @@ use std::num::NonZeroUsize;
 use std::time::Instant;
 
 use zetesis_core::{
-    Atom, AtomPattern, Filter, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
-    Term, Value,
+    AtomPattern, Filter, GroundProgram, Program, Seed, StaticLimits, Template, Term, Value,
 };
 use zetesis_cpu::{
     BatchError, BatchOracle, Cancellation, CandidateLimits, Candidates, Limits, StaticCheck, Stop,
     check, check_static,
 };
-use zetesis_test_support::programs::{pattern, program};
+use zetesis_test_support::programs::{pattern, program, unary};
 
 fn compile(source: &Program) -> GroundProgram {
     GroundProgram::compile(source, StaticLimits::default()).unwrap()
@@ -105,10 +104,6 @@ fn numbered(index: i32) -> AtomPattern {
     pattern("p", vec![Term::Constant(Value::Number(index))])
 }
 
-fn number_atom(index: i32) -> Atom {
-    Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(index)]).unwrap()
-}
-
 fn choices(count: i32) -> Program {
     program(
         (0..count)
@@ -133,11 +128,11 @@ fn word_boundaries_and_tail_bits_match_exact_seed_closures() {
         let selected = [0, 31, 32, 63, 64, count - 1]
             .into_iter()
             .filter(|index| *index < count)
-            .map(number_atom);
+            .map(|value| unary("p", value));
         for seed in [
             empty(&source),
             Seed::new(&source, selected).unwrap(),
-            Seed::new(&source, (0..count).map(number_atom)).unwrap(),
+            Seed::new(&source, (0..count).map(|value| unary("p", value))).unwrap(),
         ] {
             compare(&graph, &seed);
             let dense = run(&graph, &seed);
@@ -170,7 +165,7 @@ fn filtered_out_gate_atoms_and_contradictory_gates_are_rejected_exactly() {
     ]);
     compare_all(&source);
     let graph = compile(&source);
-    let unsupported = Seed::new(&source, [number_atom(1)]).unwrap();
+    let unsupported = Seed::new(&source, [unary("p", 1)]).unwrap();
     assert!(run(&graph, &unsupported).seed_mismatch());
     assert!(run(&graph, &empty(&source)).accepted());
 }
@@ -201,7 +196,7 @@ fn constraints_preserve_full_closure_and_empty_constraint_rejects() {
 fn limits_identity_and_control_remain_incomplete_stops() {
     let source = choices(33);
     let graph = compile(&source);
-    let seed = Seed::new(&source, (0..33).map(number_atom)).unwrap();
+    let seed = Seed::new(&source, (0..33).map(|value| unary("p", value))).unwrap();
     let limits = Limits::default();
     let completed = run(&graph, &seed);
     let exact = Limits {
@@ -274,10 +269,10 @@ fn batch_preserves_input_order_and_individual_stops() {
     let source = choices(33);
     let graph = compile(&source);
     let seeds = vec![
-        Seed::new(&source, [number_atom(32)]).unwrap(),
+        Seed::new(&source, [unary("p", 32)]).unwrap(),
         empty(&source),
         empty(&choices(33)),
-        Seed::new(&source, [number_atom(0), number_atom(31)]).unwrap(),
+        Seed::new(&source, [unary("p", 0), unary("p", 31)]).unwrap(),
     ];
     let pool =
         BatchOracle::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(4).unwrap()).unwrap();

@@ -149,13 +149,10 @@ mod tests {
     use super::*;
     use crate::oracle::argument_bounds::Bound;
     use crate::oracle::relations::Layout;
+    use zetesis_test_support::programs::variable as var;
 
     fn pattern(name: &str, terms: &[Term]) -> AtomPattern {
         AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms.to_vec()).unwrap()
-    }
-
-    fn var(variable: usize) -> Term {
-        Term::Variable(variable)
     }
 
     fn numbers(program: &Program, values: std::ops::RangeInclusive<i32>) -> Bound {

@@ -1,6 +1,8 @@
 //! Builders of small test atoms and programs.
 
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template, Term, Value};
+use zetesis_core::{
+    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Sign, Template, Term, Value,
+};
 
 /// The atom `name(values…)`, whose arity is the number of values.
 ///
@@ -22,6 +24,47 @@ pub fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(predicate, terms).expect("matching arity")
 }
 
+/// The atom `name(values…)` over numbers, whose arity is the number of values.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn numbered(name: &str, values: &[i32]) -> Atom {
+    atom(name, values.iter().copied().map(Value::Number).collect())
+}
+
+/// The atom `name(value)` over one number.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn unary(name: &str, value: i32) -> Atom {
+    numbered(name, &[value])
+}
+
+/// The atom `name(values…)` whose predicate carries `sign`.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn signed(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
+    let predicate = Predicate::with_sign(name, values.len(), sign).expect("nonempty test name");
+    Atom::new(predicate, values).expect("matching arity")
+}
+
+/// The atom `name(values…)` over numbers whose predicate carries `sign`.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn signed_numbered(name: &str, sign: Sign, values: &[i32]) -> Atom {
+    signed(
+        name,
+        sign,
+        values.iter().copied().map(Value::Number).collect(),
+    )
+}
+
 /// The nullary atom `name`.
 ///
 /// # Panics
@@ -38,6 +81,21 @@ pub fn nullary(name: &str) -> Atom {
 #[must_use]
 pub fn nullary_pattern(name: &str) -> AtomPattern {
     pattern(name, Vec::new())
+}
+
+/// The model holding the nullary atoms `names`.
+///
+/// # Panics
+/// Panics if a name is empty.
+#[must_use]
+pub fn model(names: &[&str]) -> Model {
+    Model::new(names.iter().map(|name| nullary(name))).expect("distinct test atoms")
+}
+
+/// The variable numbered `index` as a term.
+#[must_use]
+pub fn variable(index: usize) -> Term {
+    Term::Variable(index)
 }
 
 /// The number `value` as a constant term.
@@ -83,6 +141,36 @@ mod tests {
         assert_eq!(nullary("a").predicate().arity(), 0);
         assert!(nullary("a").values().is_empty());
         assert_eq!(nullary_pattern("a").predicate().arity(), 0);
+    }
+
+    #[test]
+    fn numbered_atoms_carry_their_numbers() {
+        let built = numbered("p", &[1, 2]);
+        assert_eq!(built.predicate().arity(), 2);
+        assert_eq!(built.values(), [Value::Number(1), Value::Number(2)]);
+        assert_eq!(unary("p", 3), numbered("p", &[3]));
+    }
+
+    #[test]
+    fn signed_atoms_carry_their_sign() {
+        let negative = signed("q", Sign::Negative, vec![Value::Number(1)]);
+        assert_eq!(negative.predicate().sign(), Sign::Negative);
+        assert_eq!(negative.values(), [Value::Number(1)]);
+        assert_eq!(signed_numbered("q", Sign::Negative, &[1]), negative);
+        assert_eq!(unary("q", 1).predicate().sign(), Sign::Positive);
+    }
+
+    #[test]
+    fn a_model_holds_its_nullary_atoms() {
+        let built = model(&["a", "b"]);
+        assert_eq!(built.atoms().len(), 2);
+        assert!(built.contains(&nullary("a")));
+        assert!(built.contains(&nullary("b")));
+    }
+
+    #[test]
+    fn a_variable_term_carries_its_index() {
+        assert_eq!(variable(2), Term::Variable(2));
     }
 
     #[test]

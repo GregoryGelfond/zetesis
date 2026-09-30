@@ -3,18 +3,10 @@
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
-use zetesis_core::{AdmissionLimits, Atom, Model, Predicate, Program, Seed, Template, Term, Value};
+use zetesis_core::{AdmissionLimits, Model, Program, Seed, Template, Term, Value};
 use zetesis_cpu::lazy::{SourceSelection, shared};
 use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits, Stop};
-use zetesis_test_support::programs::pattern;
-
-fn atom(name: &str, values: &[i32]) -> Atom {
-    Atom::new(
-        Predicate::new(name, values.len()).unwrap(),
-        values.iter().copied().map(Value::Number).collect(),
-    )
-    .unwrap()
-}
+use zetesis_test_support::programs::{numbered as atom, pattern};
 
 fn fixture(masks: &[u8]) -> (Program, Vec<Seed>) {
     let mut rules: Vec<_> = (0..4)

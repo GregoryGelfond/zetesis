@@ -127,7 +127,10 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
         assert_eq!(stats.candidates, candidates.len() as u64);
         assert_eq!(
             stats.work,
-            results.iter().map(zetesis_wgpu::TightGpuCheck::work).sum()
+            results
+                .iter()
+                .map(zetesis_wgpu::TightGpuCheck::work)
+                .sum::<u64>()
         );
         assert_eq!(stats.theory_uploaded, repeat == 0);
         assert_eq!(stats.transport_allocated, repeat == 0);

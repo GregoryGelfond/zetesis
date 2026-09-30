@@ -1,7 +1,8 @@
 use super::super::super::{ConstructionLimits, ErrorKind, Limits, Resource, Statistics};
 use super::{ModelRows, Work};
-use zetesis_core::{Atom, AtomCatalog, Model, Predicate, Sign, Value, catalog::ReadError};
+use zetesis_core::{AtomCatalog, Model, Sign, catalog::ReadError};
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_test_support::programs::signed_numbered as atom;
 
 fn work(cancellation: &Cancellation) -> Work<'_> {
     Work {
@@ -12,14 +13,6 @@ fn work(cancellation: &Cancellation) -> Work<'_> {
         location: None,
         local_bytes: 0,
     }
-}
-
-fn atom(name: &str, sign: Sign, arguments: &[i32]) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, arguments.len(), sign).unwrap(),
-        arguments.iter().copied().map(Value::Number).collect(),
-    )
-    .unwrap()
 }
 
 #[test]

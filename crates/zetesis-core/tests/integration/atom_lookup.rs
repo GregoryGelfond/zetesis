@@ -8,14 +8,7 @@ use zetesis_core::{
     Atom, AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, Model, Predicate, Sign, Term, Value,
     ValueLimits, ValueNode,
 };
-
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
-    )
-    .unwrap()
-}
+use zetesis_test_support::programs::signed as atom;
 
 // The owned-input index still borrows its ingress payload. Canonical catalogs
 // intentionally have a different physical representation; this helper is used

@@ -6,7 +6,8 @@ use zetesis_core::relation::{
     Canonical, Catalog as Rows, CatalogFailure, Failure, Insertion, Limits, Lookup, Preparation,
     Resource, Runs, Storage,
 };
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::{Atom, Predicate};
+use zetesis_test_support::programs::unary;
 
 // Each fixture has one explicit canonical authority; the measured operations
 // below cover only its metadata relation and ordered-run preparation.
@@ -64,28 +65,22 @@ impl Catalog {
     }
 }
 
-fn atom(value: i32) -> Atom {
-    Atom::new(
-        Predicate::new("row", 1).unwrap(),
-        vec![Value::Number(value)],
-    )
-    .unwrap()
-}
-
 /// Two prepared two-row runs, followed by one append. The next preparation
 /// must compact the two old runs before publishing its new one-row tail.
 fn before_third_preparation() -> (Catalog, Storage) {
     let mut catalog = Catalog::new(&Predicate::new("row", 1).unwrap(), Limits::default()).unwrap();
     for values in [[4, 2], [3, 1]] {
         for value in values {
-            catalog.insert(&atom(value), Limits::default()).unwrap();
+            catalog
+                .insert(&unary("row", value), Limits::default())
+                .unwrap();
         }
         catalog.prepare_ordered(Limits::default()).unwrap();
     }
     let runs = catalog.ordered().unwrap();
     assert_eq!(runs.levels().iter().map(Vec::len).collect::<Vec<_>>(), [2]);
     assert_eq!(runs.tail().len(), 2);
-    let insertion = catalog.insert(&atom(0), Limits::default()).unwrap();
+    let insertion = catalog.insert(&unary("row", 0), Limits::default()).unwrap();
     assert_eq!(insertion.row, 4);
     (catalog, insertion.storage)
 }
@@ -95,11 +90,20 @@ fn assert_prepared_contract(catalog: &Catalog, refused_limit: Limits) {
     // view. Stable insertion identities and canonical order remain exact.
     assert_eq!(
         catalog.atoms(),
-        [atom(4), atom(2), atom(3), atom(1), atom(0)]
+        [
+            unary("row", 4),
+            unary("row", 2),
+            unary("row", 3),
+            unary("row", 1),
+            unary("row", 0)
+        ]
     );
     for (row, value) in [4, 2, 3, 1, 0].into_iter().enumerate() {
         assert_eq!(
-            catalog.lookup(&atom(value), Limits::default()).unwrap().row,
+            catalog
+                .lookup(&unary("row", value), Limits::default())
+                .unwrap()
+                .row,
             Some(row)
         );
     }
@@ -195,7 +199,9 @@ fn before_two_merges() -> Catalog {
     let mut catalog = Catalog::new(&Predicate::new("row", 1).unwrap(), Limits::default()).unwrap();
     for values in [&[13, 12, 11, 10, 9, 8, 7, 6][..], &[5, 4, 3], &[2, 1]] {
         for &value in values {
-            catalog.insert(&atom(value), Limits::default()).unwrap();
+            catalog
+                .insert(&unary("row", value), Limits::default())
+                .unwrap();
         }
         catalog.prepare_ordered(Limits::default()).unwrap();
     }
@@ -205,7 +211,7 @@ fn before_two_merges() -> Catalog {
         [8, 3]
     );
     assert_eq!(runs.tail().len(), 2);
-    catalog.insert(&atom(0), Limits::default()).unwrap();
+    catalog.insert(&unary("row", 0), Limits::default()).unwrap();
     catalog
 }
 
@@ -257,7 +263,10 @@ fn repeated_refusals_preserve_committed_merge_progress() {
         );
         for (row, value) in (0..14).rev().enumerate() {
             assert_eq!(
-                catalog.lookup(&atom(value), Limits::default()).unwrap().row,
+                catalog
+                    .lookup(&unary("row", value), Limits::default())
+                    .unwrap()
+                    .row,
                 Some(row)
             );
         }

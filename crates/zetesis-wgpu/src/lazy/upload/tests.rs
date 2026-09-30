@@ -4,8 +4,9 @@ use super::{Receipt, Uploads};
 use crate::lazy::{Plan, Selection, plan::Retention};
 use crate::{GpuLimits, LazyGpuStatistics};
 use std::num::NonZeroU32;
-use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
+use zetesis_core::{AdmissionLimits, Program, Seed, Template};
 use zetesis_cpu::{Cancellation, lazy};
+use zetesis_test_support::programs::nullary_pattern as pattern;
 
 fn retained(snapshots: bool, seeds: bool) -> Retention {
     Retention {
@@ -78,24 +79,20 @@ fn saved_uploads_do_not_weaken_the_retained_memory_ceiling() {
     });
 }
 
-fn pattern(name: String) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
-
 #[test]
 fn source_round_receipts_preserve_actual_input_prefixes() {
     let mut rules = Vec::new();
     for index in 0..40 {
         rules.push(Template::new(
-            Some(pattern(format!("p{index}"))),
+            Some(pattern(&format!("p{index}"))),
             vec![],
             vec![],
             vec![],
             vec![],
         ));
         rules.push(Template::new(
-            Some(pattern(format!("q{index}"))),
-            vec![pattern(format!("p{index}"))],
+            Some(pattern(&format!("q{index}"))),
+            vec![pattern(&format!("p{index}"))],
             vec![],
             vec![],
             vec![],

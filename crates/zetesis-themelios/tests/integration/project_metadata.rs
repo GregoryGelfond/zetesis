@@ -1,15 +1,12 @@
 //! Source declarations stay separate from completed fixed-domain projection.
 
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::Predicate;
 use zetesis_reference_support::formula;
+use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     SourceDirective, admit_formula,
 };
-
-fn atom(name: &str, value: i32) -> Atom {
-    Atom::new(Predicate::new(name, 1).unwrap(), vec![Value::Number(value)]).unwrap()
-}
 
 fn selected_pair() -> (
     zetesis_themelios::AdmittedFormula,

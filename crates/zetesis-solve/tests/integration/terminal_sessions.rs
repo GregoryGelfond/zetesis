@@ -9,6 +9,7 @@ use zetesis_solve::{
     Interruption, Oracle, PreparedInput, PreparedProfile, Session, SolveConfig, SolveError,
     SolveMeasurements, SolvePhase, SolveStage, Subject, WorldView, WorldViewError, WorldViewLimits,
 };
+use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaMaterialization,
     FormulaResource, TerminalFormula, admit_formula, prepare_formula,
@@ -46,14 +47,6 @@ fn config() -> SolveConfig {
         completion_workers: NonZeroUsize::MIN,
         ..SolveConfig::default()
     }
-}
-
-fn atom(name: &str, number: i32) -> Atom {
-    Atom::new(
-        Predicate::new(name, 1).unwrap(),
-        vec![Value::Number(number)],
-    )
-    .unwrap()
 }
 
 fn expected() -> BTreeSet<Model> {

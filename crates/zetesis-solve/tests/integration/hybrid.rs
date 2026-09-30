@@ -2,13 +2,14 @@
 
 use std::num::NonZeroUsize;
 
-use crate::support::models::{Family, atom};
-use zetesis_core::{Atom, Model, Sign, Value};
+use crate::support::models::Family;
+use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig, SolveError, Subject,
 };
+use zetesis_test_support::programs::{signed as atom, unary as number};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ConstraintCheckCause, ConstraintCheckLimits,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, HybridFormula, admit_formula,
@@ -90,10 +91,6 @@ fn capture(input: PreparedInput<'_>, config: SolveConfig) -> (Family, SemanticOu
     }
     assert!(session.next().is_none());
     (family, session.outcome().unwrap())
-}
-
-fn number(name: &str, value: i32) -> Atom {
-    atom(name, Sign::Positive, vec![Value::Number(value)])
 }
 
 fn monotone_family() -> Family {

@@ -1,14 +1,11 @@
 //! Reuse preserves full candidate results and admits actual retained capacity.
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
+    AdmissionLimits, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
+use zetesis_test_support::programs::unary as atom;
 
 use super::*;
-
-fn atom(name: &str, value: i32) -> Atom {
-    Atom::new(Predicate::new(name, 1).unwrap(), vec![Value::Number(value)]).unwrap()
-}
 
 fn pattern(name: &str, term: Term) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, 1).unwrap(), vec![term]).unwrap()

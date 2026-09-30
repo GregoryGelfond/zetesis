@@ -1,9 +1,9 @@
 //! Deterministic static programs and worlds for the oracle measurements.
 
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
-    StaticLimits, Template,
+    AdmissionLimits, GroundProgram, Program, Seed, SeedSelection, StaticLimits, Template,
 };
+use zetesis_test_support::programs::nullary_pattern as atom;
 
 /// Families expose both rule-order sensitivity and independent parallel work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,9 +18,9 @@ pub enum Family {
 /// `consequences - 1` gated rules and one constraint, so batches hold both
 /// accepted and constraint-rejected worlds.
 pub fn program(family: Family, consequences: usize) -> GroundProgram {
-    let gates: Vec<_> = (0..8).map(|index| atom(format!("g{index}"))).collect();
+    let gates: Vec<_> = (0..8).map(|index| atom(&format!("g{index}"))).collect();
     let atoms: Vec<_> = (0..consequences)
-        .map(|index| atom(format!("p{index:04}")))
+        .map(|index| atom(&format!("p{index:04}")))
         .collect();
     let mut templates: Vec<_> = gates
         .iter()
@@ -104,12 +104,4 @@ pub fn seeds(program: &GroundProgram, count: usize, salt: usize) -> Vec<Seed> {
             .to_seed()
         })
         .collect()
-}
-
-fn atom(name: String) -> AtomPattern {
-    AtomPattern::new(
-        Predicate::new(name, 0).expect("generated name is nonempty"),
-        Vec::new(),
-    )
-    .expect("nullary pattern")
 }
