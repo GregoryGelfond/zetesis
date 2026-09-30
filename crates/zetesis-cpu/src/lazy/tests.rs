@@ -3,12 +3,9 @@
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Template, Term, Value, ValueNodeRef,
 };
+use zetesis_test_support::programs::nullary_pattern as pattern;
 
 use super::*;
-
-fn pattern(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
 
 #[test]
 fn completed_scans_retain_the_join_reservation() {

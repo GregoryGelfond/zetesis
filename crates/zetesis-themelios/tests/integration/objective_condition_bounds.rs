@@ -2,17 +2,14 @@
 
 use std::cmp::Ordering;
 
-use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
+use zetesis_core::{Atom, AtomPattern, Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, models};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate, evaluate};
+use zetesis_test_support::programs::nullary as atom;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundLimits, ObjectivePlan, ObjectivePlanLimits,
 };
-
-fn atom(name: &str) -> Atom {
-    Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
 
 fn row(weight: i32, priority: i32, condition: Vec<ConditionNode>) -> ObjectiveTemplate {
     ObjectiveTemplate::new(

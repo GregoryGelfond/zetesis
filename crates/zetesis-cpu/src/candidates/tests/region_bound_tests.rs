@@ -1,11 +1,8 @@
 //! Descendant narrowing preserves the owned cube's pass and stop boundaries.
 
 use super::*;
-use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Template};
-
-fn atom(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
+use zetesis_core::{AdmissionLimits, Predicate, Template};
+use zetesis_test_support::programs::nullary_pattern as atom;
 
 fn cycle() -> Program {
     Program::new(

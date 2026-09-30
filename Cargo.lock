@@ -1957,6 +1957,7 @@ dependencies = [
  "zetesis-reference-support",
  "zetesis-sat",
  "zetesis-telemetry",
+ "zetesis-test-support",
  "zetesis-themelios",
  "zetesis-validation",
  "zetesis-wgpu",
@@ -2040,6 +2041,7 @@ dependencies = [
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
+ "zetesis-test-support",
  "zetesis-theory-support",
 ]
 

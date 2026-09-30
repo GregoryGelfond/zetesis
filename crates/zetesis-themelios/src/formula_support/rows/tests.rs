@@ -10,6 +10,7 @@ use themelios_base::{
 };
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNodeRef};
+use zetesis_test_support::programs::atom;
 
 use crate::formula_support::Context;
 fn location() -> Location {
@@ -17,9 +18,6 @@ fn location() -> Location {
         source: SourceId::new(73),
         span: Span::empty(ByteOffset::new(9)),
     }
-}
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 fn pattern(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
     LiteralIr::Atom(

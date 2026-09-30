@@ -5,6 +5,7 @@ use crate::oracle::Schedule;
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Seed, Template, Term, Value,
 };
+use zetesis_test_support::programs::pattern;
 
 fn atom(name: &str, values: &[i32]) -> Atom {
     Atom::new(
@@ -12,10 +13,6 @@ fn atom(name: &str, values: &[i32]) -> Atom {
         values.iter().copied().map(Value::Number).collect(),
     )
     .unwrap()
-}
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
 }
 
 fn fact(name: &str, values: &[i32]) -> Template {

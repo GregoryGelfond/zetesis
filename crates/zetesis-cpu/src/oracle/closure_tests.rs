@@ -3,16 +3,9 @@
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
+use zetesis_test_support::programs::{nullary as atom, nullary_pattern as pattern};
 
 use super::{Cancellation, Limits, Statistics, Stop, Work, gate_agreement, least_closure};
-
-fn atom(name: &str) -> Atom {
-    Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
-
-fn pattern(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
 
 fn work(cancellation: &Cancellation, max_work: u64) -> Work<'_> {
     Work {

@@ -22,6 +22,7 @@ rayon.workspace = true
 zetesis-validation = { path = "../zetesis-validation" }
 zetesis-clingo-support.workspace = true
 zetesis-reference-support.workspace = true
+zetesis-test-support.workspace = true
 
 [lints]
 workspace = true

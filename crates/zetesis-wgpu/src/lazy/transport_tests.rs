@@ -7,6 +7,7 @@ use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
 };
 use zetesis_cpu::{Cancellation, Limits, Stop, check, lazy};
+use zetesis_test_support::programs::pattern;
 
 use crate::{GpuErrorKind, GpuLimits, GpuOptions, GpuSelection};
 
@@ -184,10 +185,6 @@ fn oracle(backend: GpuApi) -> GpuLazyOracle {
     assert!(oracle.info().is_hardware_gpu());
     eprintln!("lazy transport adapter={:?}", oracle.info());
     oracle
-}
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
 }
 
 fn growth_program() -> Program {

@@ -425,14 +425,11 @@ fn duration_overflow_preserves_the_previous_record() {
 mod classification {
     use std::error::Error;
     use zetesis_core::{
-        AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
+        AdmissionLimits, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
     };
     use zetesis_cpu::{Cancellation, Stop, lazy};
+    use zetesis_test_support::programs::nullary as atom;
     use zetesis_wgpu::GpuError;
-
-    fn atom(name: &str) -> Atom {
-        Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-    }
 
     fn program() -> Program {
         let pattern = |name| AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap();

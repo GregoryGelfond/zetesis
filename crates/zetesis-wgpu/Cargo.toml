@@ -27,6 +27,7 @@ wgpu = { workspace = true, features = ["vulkan"] }
 # The shader validator paired with this wgpu release. Hardware-independent
 # validation checks the authored WGSL even when no adapter is available.
 naga = { version = "=30.0.1", features = ["wgsl-in"] }
+zetesis-test-support.workspace = true
 zetesis-theory-support.workspace = true
 
 [lints]

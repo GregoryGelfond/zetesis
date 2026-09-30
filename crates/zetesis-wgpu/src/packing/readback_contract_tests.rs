@@ -7,18 +7,14 @@ use std::num::NonZeroU32;
 use super::{BatchPlan, GraphPlan, PackedSeeds, decode, next_epoch};
 use crate::{GpuCheck, GpuErrorKind, GpuLimits};
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
-    StaticLimits, Template,
+    AdmissionLimits, GroundProgram, Program, Seed, SeedSelection, StaticLimits, Template,
 };
 use zetesis_cpu::{Cancellation, Limits, check_static};
+use zetesis_test_support::programs::nullary_pattern as atom;
 
 fn compile(templates: Vec<Template>) -> GroundProgram {
     let program = Program::new(templates, AdmissionLimits::default()).unwrap();
     GroundProgram::compile(&program, StaticLimits::default()).unwrap()
-}
-
-fn atom(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
 }
 
 fn fixture() -> GroundProgram {

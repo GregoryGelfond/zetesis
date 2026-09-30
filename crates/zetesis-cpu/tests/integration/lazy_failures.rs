@@ -2,12 +2,9 @@
 
 use std::error::Error;
 
-use zetesis_core::{AdmissionLimits, AtomPattern, Model, Predicate, Program, Seed, Template};
+use zetesis_core::{AdmissionLimits, Model, Program, Seed, Template};
 use zetesis_cpu::{Cancellation, Stop, lazy, source};
-
-fn atom(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
+use zetesis_test_support::programs::nullary_pattern as atom;
 
 fn program() -> Program {
     Program::new(

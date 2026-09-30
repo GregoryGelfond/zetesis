@@ -12,25 +12,16 @@ use std::{
     num::NonZeroUsize,
     time::{Duration, Instant},
 };
+use zetesis_test_support::programs::{number, pattern};
 
 use criterion::{BenchmarkId, Criterion, Throughput};
-use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
-};
+use zetesis_core::{AdmissionLimits, Atom, Model, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{BatchOracle, Cancellation, Limits, check};
 
 struct Case {
     program: Program,
     seeds: Vec<Seed>,
     expected: Model,
-}
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
-
-fn number(value: i32) -> Term {
-    Term::Constant(Value::Number(value))
 }
 
 impl Case {

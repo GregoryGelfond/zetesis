@@ -4,13 +4,11 @@ use zetesis_core::{
     Term, Value,
 };
 use zetesis_cpu::{Cancellation, Limits, Stop, check, check_static, lazy, source};
+use zetesis_test_support::programs::nullary as atom;
 use zetesis_test_support::programs::{pattern, program};
 
 fn nullary(name: &str) -> AtomPattern {
     pattern(name, vec![])
-}
-fn atom(name: &str) -> Atom {
-    Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
 }
 fn rule(
     head: Option<AtomPattern>,

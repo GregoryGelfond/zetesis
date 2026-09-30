@@ -13,6 +13,7 @@ use zetesis_cli::{
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::programs::nullary as atom;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_validation::answers;
 
@@ -22,10 +23,6 @@ struct Expected {
     models: Vec<Vec<Atom>>,
     costs: Vec<(i32, i64)>,
     displays: Vec<(Vec<String>, u64)>,
-}
-
-fn atom(name: &str) -> Atom {
-    Atom::new(Predicate::new(name, 0).unwrap(), Vec::new()).unwrap()
 }
 
 fn expected() -> [Expected; 2] {

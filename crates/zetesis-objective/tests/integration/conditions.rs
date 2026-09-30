@@ -7,10 +7,7 @@ use zetesis_objective::{
     AdmissionError, AdmissionLimits, AdmissionResource, Condition, ConditionNode as Node,
     ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop, evaluate,
 };
-
-fn atom(name: &str) -> Atom {
-    Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
+use zetesis_test_support::programs::nullary as atom;
 
 fn row(condition: Vec<Node>) -> ObjectiveTemplate {
     ObjectiveTemplate::new(

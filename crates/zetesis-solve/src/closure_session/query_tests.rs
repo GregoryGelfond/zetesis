@@ -2,7 +2,7 @@
 
 use std::{num::NonZeroUsize, sync::Arc};
 
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template};
+use zetesis_core::{AdmissionLimits, Atom, Predicate, Program, Template};
 use zetesis_cpu::{BatchError, Cancellation, Stop};
 
 use super::ClosureSession;
@@ -10,10 +10,7 @@ use crate::{
     Backend, ExecutionResources, Grounder, Interruption, SearchState, SolveConfig, SolveError,
 };
 use crate::{execution_observation::Ignore, phase_timing::Recorder};
-
-fn pattern(name: &str) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
-}
+use zetesis_test_support::programs::nullary_pattern as pattern;
 
 fn program(choice: bool) -> Program {
     let mut templates = vec![Template::new(

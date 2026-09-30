@@ -22,6 +22,24 @@ pub fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(predicate, terms).expect("matching arity")
 }
 
+/// The nullary atom `name`.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn nullary(name: &str) -> Atom {
+    atom(name, Vec::new())
+}
+
+/// The nullary atom pattern `name`.
+///
+/// # Panics
+/// Panics if `name` is empty.
+#[must_use]
+pub fn nullary_pattern(name: &str) -> AtomPattern {
+    pattern(name, Vec::new())
+}
+
 /// The number `value` as a constant term.
 #[must_use]
 pub fn number(value: i32) -> Term {
@@ -58,6 +76,13 @@ mod tests {
             built.values(),
             [Value::Number(1), Value::Symbol("a".into())]
         );
+    }
+
+    #[test]
+    fn a_nullary_atom_and_pattern_have_no_arguments() {
+        assert_eq!(nullary("a").predicate().arity(), 0);
+        assert!(nullary("a").values().is_empty());
+        assert_eq!(nullary_pattern("a").predicate().arity(), 0);
     }
 
     #[test]

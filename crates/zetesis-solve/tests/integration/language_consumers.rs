@@ -6,10 +6,11 @@ use std::{
     num::NonZeroUsize,
     path::Path,
 };
+use zetesis_test_support::programs::atom;
 
 use crate::support::reports::REPORT_BYTES;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Model, Predicate, Value};
+use zetesis_core::{Model, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionResources, Grounder, Oracle,
@@ -35,10 +36,6 @@ fn record(atoms: &[&str], priority: i32, cost: i64, display: &str) -> Record {
         costs: vec![(priority, cost)],
         display: display.into(),
     }
-}
-
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 
 struct Case {
