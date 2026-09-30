@@ -313,6 +313,7 @@ fn metadata_over(
     coverage::metadata(Metadata {
         mode: Mode::Gate,
         floor: "91",
+        filter: coverage::SUPPORT_SOURCES,
         physical,
         observation: Observation {
             rustc: "rustc 1.97.1\nhost: fixture\nLLVM version: 22.1.6",
@@ -322,6 +323,32 @@ fn metadata_over(
         },
     })
 }
+
+#[test]
+fn metadata_refuses_a_filter_other_than_the_support_sources() {
+    let digest = "a".repeat(64);
+    let tool = Tool {
+        path: Path::new("/fixture/llvm"),
+        sha256: &digest,
+        version: "LLVM version 22.1.6",
+    };
+    for filter in ["", "/crates/zetesis-test-support/", "/crates/"] {
+        let refused = coverage::metadata(Metadata {
+            mode: Mode::Gate,
+            floor: "91",
+            filter,
+            physical: None,
+            observation: Observation {
+                rustc: "rustc 1.97.1\nhost: fixture\nLLVM version: 22.1.6",
+                cargo_llvm_cov: "cargo-llvm-cov 0.8.7",
+                llvm_cov: tool,
+                llvm_profdata: tool,
+            },
+        });
+        assert!(refused.is_err(), "{filter}");
+    }
+}
+
 #[test]
 fn llvm_version_requires_the_pinned_build() {
     for version in ["22.1.6", "22.1.6-rust-1.97.1-stable"] {
@@ -357,7 +384,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
-        serde_json::json!([])
+        serde_json::json!([coverage::SUPPORT_SOURCES])
     );
 }
 

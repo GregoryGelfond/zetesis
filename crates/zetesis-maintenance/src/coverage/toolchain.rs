@@ -1,5 +1,5 @@
 //! Coverage metadata retains observed tool identities and disjoint populations.
-use super::{Floor, Group, Mode, selection};
+use super::{Floor, Group, Mode, SUPPORT_SOURCES, selection};
 use crate::{Error, files, require};
 use regex::Regex;
 use serde_json::{Value, json};
@@ -47,6 +47,9 @@ pub struct Metadata<'a> {
     pub mode: Mode,
     /// The exact committed file spelling after whitespace removal.
     pub floor: &'a str,
+    /// The filename filter the reports and floors pass, which must be the
+    /// reviewed [`SUPPORT_SOURCES`].
+    pub filter: &'a str,
     /// The physical stage, when physical tests are selected; absence means
     /// portable only.
     pub physical: Option<Physical<'a>>,
@@ -123,6 +126,10 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         .strip_prefix("cargo-llvm-cov ")
         .ok_or_else(|| Error::Invalid("invalid cargo-llvm-cov banner".into()))?;
     Floor::parse(request.floor)?.admit(request.mode)?;
+    require(
+        request.filter == SUPPORT_SOURCES,
+        "coverage reports leave out exactly the test-support crates' sources",
+    )?;
     // A stage records the reviewed selection of the backend it runs.
     let groups: Vec<Group> = match request.physical {
         None => Vec::new(),
@@ -147,7 +154,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         "primary":"workspace --all-features","supplemental":"--package zetesis-cli --package zetesis-solve --no-default-features",
         "floor_profiles":["workspace","cli-cpu"],
         "default_filename_filters":"cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
-        "project_added_filename_filters":[],"profiles_merged":false,
+        "project_added_filename_filters":[request.filter],"profiles_merged":false,
         "profile_merge_scope":"profiles_merged describes floor profiles; raw execution profiles combine only within their own floor profile",
         "workspace_execution":api.map_or_else(|| "portable".to_owned(), |api| format!("portable+{}", api.label())),
         "workspace_stages":api.map_or_else(|| vec!["portable"], |api| vec!["portable", api.label()]),

@@ -15,6 +15,12 @@ use serde_json::Value;
 /// Inclusive retained policy, version-observation or physical-log input ceiling.
 pub const MAX_INPUT_BYTES: usize = 16_777_216;
 
+/// The filename filter every coverage report and floor adds to
+/// cargo-llvm-cov's defaults: the four test-support crates' sources, which hold
+/// test code, as the defaults already leave out `tests/` directories. The
+/// receipt records it, and [`metadata`] refuses any other.
+pub const SUPPORT_SOURCES: &str = "/crates/zetesis-(test|theory|clingo|reference)-support/";
+
 pub(super) fn input_bytes(bytes: usize) -> Result<(), Error> {
     if bytes <= MAX_INPUT_BYTES {
         Ok(())

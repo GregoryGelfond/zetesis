@@ -8,8 +8,7 @@ use std::{
 
 pub const TABLE: &str = include_str!("../../../src/coverage/physical-selection.txt");
 pub const VULKAN_TABLE: &str = include_str!("../../../src/coverage/physical-selection-vulkan.txt");
-/// The sources every coverage report skips: the test-support crates.
-const SUPPORT_SOURCES: &str = "/crates/zetesis-(test|theory|clingo|reference)-support/";
+use zetesis_maintenance::coverage::SUPPORT_SOURCES;
 pub struct Fixture {
     pub directory: tempfile::TempDir,
 }
@@ -304,7 +303,10 @@ impl Fixture {
             "--package zetesis-cli --package zetesis-solve --no-default-features"
         );
         assert_eq!(metadata["floor_profiles"], json!(["workspace", "cli-cpu"]));
-        assert_eq!(metadata["project_added_filename_filters"], json!([]));
+        assert_eq!(
+            metadata["project_added_filename_filters"],
+            json!([SUPPORT_SOURCES])
+        );
         let expected_groups: Vec<_> = if let Some(backend) = backend {
             groups_of(backend).iter().map(|fields|json!({"group":fields[0],"target_kind":if fields[1]=="lib"{"lib"}else{"test"},"target":if fields[1]=="lib"{"workspace libraries"}else{fields[1]},"tests":fields[3].split_whitespace().collect::<Vec<_>>(),"expected_tests":fields[2].parse::<usize>().unwrap()})).collect()
         } else {

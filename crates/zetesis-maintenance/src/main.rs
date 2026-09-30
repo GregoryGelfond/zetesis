@@ -118,6 +118,9 @@ enum Action {
         llvm_profdata: PathBuf,
         #[arg(long)]
         llvm_profdata_version: String,
+        /// The filename filter the reports and floors pass.
+        #[arg(long)]
+        project_filter: String,
         /// The backend of the physical stage.
         #[arg(long, value_enum, requires = "physical_table")]
         physical_backend: Option<GpuApi>,
@@ -264,6 +267,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             llvm_cov_version,
             llvm_profdata,
             llvm_profdata_version,
+            project_filter,
             physical_backend,
             physical_table,
         } => {
@@ -272,6 +276,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             let request = Metadata {
                 mode: Mode::parse(&mode)?,
                 floor: &floor,
+                filter: &project_filter,
                 physical: physical_stage(physical_backend, physical_table.as_deref()),
                 observation: Observation {
                     rustc: &rustc_version,

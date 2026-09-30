@@ -31,8 +31,11 @@ visible and is retained under a fresh `target/proof-checks/run.*` directory.
 
 `coverage` separates floor policy, version observations, exact physical test
 selection and libtest output checks from execution. It retains the existing
-`toolchain.json` schema and independent workspace/CPU-only CLI populations. No
-floor or filename filter is changed. The shell driver keeps the exclusive lock,
+`toolchain.json` schema and independent workspace/CPU-only CLI populations. The
+floors are unchanged. Every report and floor also leaves out the test-support
+crates' sources, as cargo-llvm-cov already leaves out `tests/` directories; the
+receipt records that filter under `project_added_filename_filters`, and the
+metadata command refuses any other. The shell driver keeps the exclusive lock,
 fresh cleanup, ordered commands and incomplete status until both floors pass.
 After both reports exist, both floor commands run independently; `floors.tsv`
 retains their profile names and exit statuses, including failures. This does not

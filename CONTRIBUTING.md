@@ -261,8 +261,9 @@ portable report is retained separately; the CPU-only profile independently
 instruments both `zetesis-solve` and `zetesis-cli`. `target/coverage/toolchain.json` records the finite selection, with
 per-group logs and status files under `target/coverage/workspace`; the
 hardware gate keeps its logs and status files under `target/hardware`. Neither
-floor nor filename filters change. Unlisted GPU paths still require their own
-physical qualification.
+floor changes; every report and floor leaves out the test-support crates'
+sources, which `toolchain.json` records under `project_added_filename_filters`.
+Unlisted GPU paths still require their own physical qualification.
 After both reports are written, the gate checks both floors even if the first
 fails. `target/coverage/floors.tsv` retains each profile's exit status;
 `target/coverage/status.txt` remains incomplete unless both floors pass.

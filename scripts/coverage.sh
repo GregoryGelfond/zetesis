@@ -74,6 +74,7 @@ rust_version=$(rustc +1.97.1 -vV)
 cov_version=$("$LLVM_COV" --version)
 profdata_version=$("$LLVM_PROFDATA" --version)
 set -- coverage-metadata --mode "$mode" --floor "$floor" \
+    --project-filter "$support_sources" \
     --rustc-version "$rust_version" --cargo-llvm-cov-version "$tool_version" \
     --llvm-cov "$LLVM_COV" \
     --llvm-cov-version "$cov_version" --llvm-profdata "$LLVM_PROFDATA" \
