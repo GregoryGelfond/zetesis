@@ -240,7 +240,7 @@ fn early_cancellation_and_output_failure_retain_typed_attempts() {
 #[test]
 fn original_bundle_formula_grounding_has_the_same_host_boundaries() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/kr-domains/accepted/shortest-path-reachable.lp");
+        .join("tests/fixtures/correctness/excerpts/shortest-path-reachable.lp");
     let bundle =
         zetesis_themelios::SourceBundle::load(path, zetesis_themelios::BundleLimits::default())
             .unwrap();

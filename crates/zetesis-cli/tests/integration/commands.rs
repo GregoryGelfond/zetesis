@@ -183,7 +183,7 @@ fn bench_names_the_separate_benchmarking_tool() {
 fn process_keeps_backend_reporting_on_stderr() {
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/kr-domains/accepted/task-allocation-projections.lp"
+        "/tests/fixtures/correctness/excerpts/task-allocation-projections.lp"
     );
     let result = ProcessCommand::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--backend", "cpu", source])

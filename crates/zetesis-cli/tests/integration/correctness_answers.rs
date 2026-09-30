@@ -1,4 +1,5 @@
-//! Recorded external whole-source parity runs portably without a solver dependency.
+//! Every correctness case's complete answers, against clingo's recorded ones,
+//! without a solver dependency.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -7,10 +8,10 @@ use std::process::Command;
 use serde_json::Value;
 
 #[test]
-fn unchanged_entry_graphs_match_complete_external_results() {
+fn every_case_matches_the_recorded_complete_answers() {
     let recorded: Value =
-        serde_json::from_str(include_str!("../fixtures/kr-domains/complete-models.json")).unwrap();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
+        serde_json::from_str(include_str!("../fixtures/correctness/complete-models.json")).unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     let cases = recorded["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 94);
     for case in cases {

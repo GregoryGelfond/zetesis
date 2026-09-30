@@ -96,11 +96,11 @@ fn common_profile_matches_clingo() {
 
 #[test]
 #[ignore = "requires an independently installed clingo executable"]
-fn kr_domains_rule_excerpts_match_clingo() {
+fn rule_excerpts_match_clingo() {
     for source in [
-        include_str!("../fixtures/kr-domains/accepted/shortest-path-reachable.lp"),
-        include_str!("../fixtures/kr-domains/accepted/shortest-path-disconnected-cycle-unsat.lp"),
-        include_str!("../fixtures/kr-domains/accepted/task-allocation-projections.lp"),
+        include_str!("../fixtures/correctness/excerpts/shortest-path-reachable.lp"),
+        include_str!("../fixtures/correctness/excerpts/shortest-path-disconnected-cycle-unsat.lp"),
+        include_str!("../fixtures/correctness/excerpts/task-allocation-projections.lp"),
     ] {
         compare(source);
     }

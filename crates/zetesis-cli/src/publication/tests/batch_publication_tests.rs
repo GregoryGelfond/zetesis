@@ -353,39 +353,38 @@ fn every_publication_truncation_preserves_its_prefix() {
 }
 
 #[test]
-fn cpu_batches_preserve_original_corpus_displays() {
-    every_original_case(crate::SearchMethod::Clauses, 1);
+fn cpu_batches_preserve_recorded_correctness_displays() {
+    every_correctness_case(crate::SearchMethod::Clauses, 1);
 }
 
 /// Four workers walking the region tree return the recorded answer sets,
-/// atom for atom, on every corpus case, in whatever order they arrive.
+/// atom for atom, on every correctness case, in whatever order they arrive.
 #[test]
-fn parallel_regions_preserve_original_corpus_displays() {
-    every_original_case(crate::SearchMethod::Regions, 4);
+fn parallel_regions_preserve_recorded_correctness_displays() {
+    every_correctness_case(crate::SearchMethod::Regions, 4);
 }
 
 /// The regions proposer returns the recorded answer sets, atom for atom, on
-/// every corpus case, through the same batched route.
+/// every correctness case, through the same batched route.
 #[test]
-fn cpu_batches_preserve_original_corpus_displays_under_regions() {
-    every_original_case(crate::SearchMethod::Regions, 1);
+fn cpu_batches_preserve_recorded_correctness_displays_under_regions() {
+    every_correctness_case(crate::SearchMethod::Regions, 1);
 }
 
-fn every_original_case(search: crate::SearchMethod, workers: usize) {
+fn every_correctness_case(search: crate::SearchMethod, workers: usize) {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/kr-domains/complete-models.json"
+        "../../../tests/fixtures/correctness/complete-models.json"
     ))
     .unwrap();
     let cases = fixture["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 94);
-    let root =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/correctness");
     for case in cases {
-        original_case(&root, case, search, workers);
+        correctness_case(&root, case, search, workers);
     }
 }
 
-fn original_case(
+fn correctness_case(
     root: &std::path::Path,
     case: &serde_json::Value,
     search: crate::SearchMethod,

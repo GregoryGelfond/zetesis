@@ -1,4 +1,5 @@
-//! One unchanged full kr-domains source, with complete native model coverage.
+//! The N-Queens correctness examples: one board parameter, and complete native
+//! model coverage.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -69,9 +70,9 @@ fn every_queens_variant_accepts_the_same_board_parameter() {
 }
 
 #[test]
-fn unchanged_queens_variant_one_completes_all_92_boards() {
+fn queens_variant_one_completes_all_92_boards() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/corpus/kr-domains/standalone/n-queens/variant-01.lp");
+        .join("../../examples/correctness/standalone/n-queens/variant-01.lp");
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--backend", "cpu", "--models", "0"])
         .arg(path)

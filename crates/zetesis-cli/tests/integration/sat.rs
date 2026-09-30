@@ -163,7 +163,7 @@ fn hybrid_device_requests_are_refused_before_source() {
 }
 
 fn queens(size: usize) -> String {
-    // Explicitly synthetic S0 source, not the unchanged kr-domains encoding.
+    // Explicitly synthetic S0 source, not the correctness examples' encoding.
     let mut source = String::new();
     for row in 0..size {
         for column in 0..size {

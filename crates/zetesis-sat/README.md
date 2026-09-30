@@ -616,4 +616,4 @@ minimality specialization remains separate.
 The crate consumes an already finite `Theory`. Source grounding, richer choice
 and aggregate translations, tuple-set semantics, output projection and
 optimization belong to separate boundaries. Passing this kernel's tests is
-not acceptance of an original kr-domains case or full clingo compatibility.
+not acceptance of a correctness example or full clingo compatibility.

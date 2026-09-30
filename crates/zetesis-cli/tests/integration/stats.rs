@@ -308,7 +308,7 @@ fn automatic_execution_reports_cpu() {
 #[test]
 fn bundled_sources_use_the_same_statistics_boundary_without_rewriting_stdout() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/kr-domains/accepted/shortest-path-reachable.lp");
+        .join("tests/fixtures/correctness/excerpts/shortest-path-reachable.lp");
     let mut configured = options(&[]);
     let mut baseline = Vec::new();
     let first = run_bundle_with_diagnostics(

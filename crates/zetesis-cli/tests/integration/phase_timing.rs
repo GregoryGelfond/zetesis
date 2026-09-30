@@ -226,7 +226,7 @@ impl io::Write for ClosedOutput {
 #[test]
 fn already_loaded_original_bundle_receives_driver_phases_on_both_oracles() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/kr-domains/accepted/shortest-path-reachable.lp");
+        .join("tests/fixtures/correctness/excerpts/shortest-path-reachable.lp");
     let source = std::fs::read_to_string(&path).unwrap();
     for oracle in ["closure", "countermodel"] {
         let options = options(&["--oracle", oracle], true);

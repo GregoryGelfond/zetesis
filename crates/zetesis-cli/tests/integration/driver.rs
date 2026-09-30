@@ -152,7 +152,7 @@ fn cli_rejects_zero_workers_and_batches() {
 }
 
 #[test]
-fn kr_domains_rule_excerpts_complete_with_known_results() {
+fn rule_excerpts_complete_with_known_results() {
     // Reachability is derived by gate-free rules, so every reachable vertex
     // is a held gate atom and no other is derivable: one seed decides
     // the reachable excerpt, where the symbolic carrier alone offered
@@ -160,19 +160,19 @@ fn kr_domains_rule_excerpts_complete_with_known_results() {
     // constraint on an unreachable vertex fires under every seed.
     for (source, models, seeds) in [
         (
-            include_str!("../fixtures/kr-domains/accepted/shortest-path-reachable.lp"),
+            include_str!("../fixtures/correctness/excerpts/shortest-path-reachable.lp"),
             1,
             1,
         ),
         (
             include_str!(
-                "../fixtures/kr-domains/accepted/shortest-path-disconnected-cycle-unsat.lp"
+                "../fixtures/correctness/excerpts/shortest-path-disconnected-cycle-unsat.lp"
             ),
             0,
             0,
         ),
         (
-            include_str!("../fixtures/kr-domains/accepted/task-allocation-projections.lp"),
+            include_str!("../fixtures/correctness/excerpts/task-allocation-projections.lp"),
             1,
             1,
         ),
@@ -184,8 +184,11 @@ fn kr_domains_rule_excerpts_complete_with_known_results() {
 }
 
 #[test]
-fn unchanged_shortest_path_encoding_without_an_instance_completes() {
-    let source = include_str!("../fixtures/kr-domains/unchanged/shortest-path-variant-01.lp");
+fn shortest_path_encoding_without_an_instance_completes() {
+    // The encoding alone: #defined, a conditional choice, aggregates,
+    // optimization and #show, admitted through the Ferraris route.
+    let source =
+        include_str!("../../../../examples/correctness/encodings/shortest-path/variant-01.lp");
     let (report, _) = solve(source, &["--models", "0"]);
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);

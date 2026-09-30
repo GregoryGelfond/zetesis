@@ -1,5 +1,5 @@
-% Extracted S0 fixture for zetesis, not a complete kr-domains optimization case.
-% Upstream MIT: Copyright (c) 2026 Gregory Gelfond. See ../README.md and ../LICENSE.kr-domains.
+% Extracted S0 fixture for zetesis, not a complete correctness example.
+% Upstream MIT: Copyright (c) 2026 Gregory Gelfond. See ../README.md and ../LICENSE.
 % Snapshot: 38f0660ded448ed268c5a68759ceb0e2840dd497.
 
 % Synthetic scalar facts authored for this fixture.
