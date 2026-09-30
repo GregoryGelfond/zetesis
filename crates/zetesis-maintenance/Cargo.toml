@@ -17,6 +17,8 @@ zetesis-backend.workspace = true
 zetesis-validation = { path = "../zetesis-validation" }
 
 [dev-dependencies]
+proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
+syn = { version = "=2.0.119", features = ["full"] }
 tempfile = "3"
 
 [lints]

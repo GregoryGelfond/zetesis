@@ -1,6 +1,6 @@
 //! The oracle gate's selection, read from `scripts/check.sh`: each
 //! `oracle_test` call is one `cargo test` campaign over the test targets it
-//! names, run with `--ignored` for the comparisons the portable gate skips.
+//! names, run with `--ignored` for the clingo tests the portable gate skips.
 //! The gate's list is written by hand; this reading lets the portable gate
 //! check it against the sources.
 

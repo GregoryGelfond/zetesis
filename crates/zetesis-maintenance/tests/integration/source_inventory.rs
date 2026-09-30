@@ -94,3 +94,57 @@ fn policy_reads_have_an_inclusive_byte_limit() {
     assert!(inventory::read(&path, 8).is_err());
     assert!(inventory::read(Path::new("/missing/maintenance-input"), 10).is_err());
 }
+
+fn source_file(root: &Path, path: &str) {
+    let path = root.join(path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, "fn f() {}\n").unwrap();
+}
+
+#[test]
+fn inventory_selects_maintained_rust_roots() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let expected = [
+        "crates/example/build.rs",
+        "crates/example/examples/demo.rs",
+        "crates/example/src/lib.rs",
+        "crates/example/src/target/mod.rs",
+        "crates/example/tests/.git/hidden.rs",
+        "crates/example/tests/nested/case.rs",
+        "crates/target/src/lib.rs",
+        "docs/book/examples/session.rs",
+        "experiments/gate-transfer/src/lib.rs",
+        "refinement/membership/rust/src/lib.rs",
+        "validation/reference/src/lib.rs",
+    ];
+    for package in [
+        "crates/example",
+        "crates/target",
+        "validation/reference",
+        "experiments/gate-transfer",
+        "refinement/membership/rust",
+    ] {
+        let directory = root.join(package);
+        fs::create_dir_all(&directory).unwrap();
+        let name = directory.file_name().unwrap().to_str().unwrap();
+        fs::write(
+            directory.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\n"),
+        )
+        .unwrap();
+    }
+    for source in expected {
+        source_file(root, source);
+    }
+    for ignored in [
+        "crates/example/target/generated.rs",
+        "crates/example/docs/old.rs",
+        "docs/verification/historical.rs",
+        "validation/upstream/original.rs",
+    ] {
+        source_file(root, ignored);
+    }
+    let actual = inventory::authored(root, Limits::default()).unwrap();
+    assert_eq!(actual, expected);
+}

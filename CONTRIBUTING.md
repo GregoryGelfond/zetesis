@@ -194,7 +194,7 @@ the integration binary's regression seeds live in
 `proptest-regressions/<path>.txt` at the crate root. Commit a seed with the
 change that fixes the failure it records.
 
-The portable gate's `authored_lints` regression checks literal Rust attributes
+zetesis-maintenance's `authored_lints` regression checks literal Rust attributes
 throughout the maintained source roots, including inactive `cfg_attr` branches
 and literal macro templates. Quoted examples are not attributes. This complements
 the compiler and review: it does not expand procedural macros or audit Cargo
@@ -206,12 +206,16 @@ assume. Its reason begins with that resource, `requires clingo:`,
 `requires Metal:` or `requires Vulkan:`, and goes on to state what the test
 establishes, with any qualifier that bounds the claim after a semicolon.
 
-The oracle gate runs the ignored clingo comparisons its campaigns in
-`scripts/check.sh` select by hand: test targets and, within a crate's
-`integration` target, test-name filters naming modules. The portable gate's
-`oracle_selection` regression reads those campaigns and fails when a test whose
-ignore reason names clingo is selected by none, or a campaign's selection holds
-none. Select a new comparison's module there when the comparison is written.
+The oracle gate runs the clingo tests its campaigns in `scripts/check.sh`
+select by hand: test targets and, within a crate's `integration` target,
+test-name filters naming modules. The hardware gate runs each backend's reviewed
+selection by exact name. zetesis-maintenance's `ignored_tests` check, which the
+portable gate runs, reads the reasons, the campaigns and the selections. It fails
+when an ignore names no resource, when a clingo test is selected by no campaign
+or a campaign's selection holds none, and when a Metal or Vulkan test is missing
+from its backend's selection or a selection entry names no such test. Select a
+new clingo test's module in a campaign, and a new hardware test in its
+backend's reviewed selection, when the test is written.
 
 A foreign API can require a signature or field name that conflicts with a style
 lint. Such an exception must use a narrow `expect` on the required declaration

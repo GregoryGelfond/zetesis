@@ -2,7 +2,6 @@
 
 mod support;
 mod authored_examples;
-mod authored_lints;
 mod authored_workloads;
 mod cli_contracts;
 mod comparison_reports;
@@ -14,7 +13,6 @@ mod example_parity;
 mod matrix_schedule;
 mod native_invocation;
 mod native_json_answers;
-mod oracle_selection;
 mod performance_families;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod process_capture;

@@ -1889,10 +1889,12 @@ name = "zetesis-maintenance"
 version = "0.1.5"
 dependencies = [
  "clap",
+ "proc-macro2",
  "regex",
  "serde",
  "serde_json",
  "sha2",
+ "syn 2.0.119",
  "tempfile",
  "zetesis-backend",
  "zetesis-validation",
@@ -2011,14 +2013,12 @@ version = "0.1.5"
 dependencies = [
  "clap",
  "nix",
- "proc-macro2",
  "proptest",
  "rustix",
  "serde",
  "serde_json",
  "sha2",
  "signal-hook",
- "syn 2.0.119",
  "tempfile",
  "themelios-program",
  "themelios-syntax",

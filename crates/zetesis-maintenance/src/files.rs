@@ -102,20 +102,68 @@ impl Tree {
         String::from_utf8(self.read(relative)?)
             .map_err(|_| Error::Invalid(format!("invalid UTF-8: {relative}")))
     }
-    pub(crate) fn inventory(
-        &self,
-        directory: &str,
-        suffix: &str,
-    ) -> Result<BTreeSet<String>, Error> {
-        let directory = self.root.join(directory);
-        let kind = fs::symlink_metadata(&directory)
-            .map_err(|error| io(&directory, error))?
+    /// Whether `relative` names an entry under the root; a symbolic link is refused.
+    pub(crate) fn exists(&self, relative: &str) -> Result<bool, Error> {
+        let path = self.root.join(relative);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                require(
+                    !metadata.file_type().is_symlink(),
+                    format!("inventory cannot contain symbolic links: {relative}"),
+                )?;
+                Ok(true)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(io(&path, error)),
+        }
+    }
+    /// `directory` under the root, which must be a real directory.
+    fn directory(&self, directory: &str) -> Result<PathBuf, Error> {
+        let path = self.root.join(directory);
+        let kind = fs::symlink_metadata(&path)
+            .map_err(|error| io(&path, error))?
             .file_type();
         require(
             kind.is_dir() && !kind.is_symlink(),
             "inventory root must be a real directory",
         )?;
-        let mut pending = vec![directory];
+        Ok(path)
+    }
+    /// The subdirectories directly under `directory`, relative to the root;
+    /// other entries are skipped and a symbolic link is refused.
+    pub(crate) fn directories(&self, directory: &str) -> Result<BTreeSet<String>, Error> {
+        let path = self.directory(directory)?;
+        let mut result = BTreeSet::new();
+        let mut remaining = self.limits.entries;
+        for entry in fs::read_dir(&path).map_err(|error| io(&path, error))? {
+            let entry = entry.map_err(|error| io(&path, error))?;
+            remaining = remaining.checked_sub(1).ok_or(Error::Limit {
+                resource: "directory entries",
+                limit: self.limits.entries,
+            })?;
+            let kind = entry
+                .file_type()
+                .map_err(|error| io(&entry.path(), error))?;
+            require(
+                !kind.is_symlink(),
+                "inventory cannot contain symbolic links",
+            )?;
+            if kind.is_dir() {
+                let name = entry
+                    .file_name()
+                    .into_string()
+                    .map_err(|_| Error::Invalid("non-UTF-8 inventory path".into()))?;
+                result.insert(format!("{directory}/{name}"));
+            }
+        }
+        Ok(result)
+    }
+    pub(crate) fn inventory(
+        &self,
+        directory: &str,
+        suffix: &str,
+    ) -> Result<BTreeSet<String>, Error> {
+        let mut pending = vec![self.directory(directory)?];
         let mut result = BTreeSet::new();
         let mut remaining = self.limits.entries;
         while let Some(directory) = pending.pop() {

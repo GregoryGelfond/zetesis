@@ -3,6 +3,7 @@ pub use crate::files::Limits;
 use crate::{
     Error,
     files::{self, Tree},
+    require,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -35,6 +36,48 @@ pub fn sources(root: &Path, limits: Limits) -> Result<BTreeMap<String, String>, 
             Ok((name, digest))
         })
         .collect()
+}
+/// The maintained standalone packages, which the workspace does not build.
+const STANDALONE: [&str; 3] = [
+    "validation/reference",
+    "experiments/gate-transfer",
+    "refinement/membership/rust",
+];
+/// Every maintained Rust source, relative to `root`, in order: the `src`,
+/// `tests`, `benches` and `examples` trees and the `build.rs` of each workspace
+/// package under `crates` and of each maintained standalone package, and the
+/// manual's shared examples. Build outputs, vendored imports and historical
+/// evidence lie outside these roots; a directory named `target` inside one is
+/// authored source.
+/// # Errors
+/// Refuses a package without a manifest, symbolic links, more than
+/// `limits.entries` directory entries in one tree, and I/O errors.
+pub fn authored(root: &Path, limits: Limits) -> Result<Vec<String>, Error> {
+    let tree = Tree::new(root, limits)?;
+    let mut packages = tree.directories("crates")?;
+    packages.extend(STANDALONE.map(str::to_owned));
+    let mut sources = BTreeSet::new();
+    for package in &packages {
+        let manifest = format!("{package}/Cargo.toml");
+        require(
+            tree.exists(&manifest)?,
+            format!("missing maintained package manifest: {package}"),
+        )?;
+        tree.member(&manifest)?;
+        for directory in ["src", "tests", "benches", "examples"] {
+            let directory = format!("{package}/{directory}");
+            if tree.exists(&directory)? {
+                sources.extend(tree.inventory(&directory, ".rs")?);
+            }
+        }
+        let build = format!("{package}/build.rs");
+        if tree.exists(&build)? {
+            tree.member(&build)?;
+            sources.insert(build);
+        }
+    }
+    sources.extend(tree.inventory("docs/book/examples", ".rs")?);
+    Ok(sources.into_iter().collect())
 }
 /// Read a small policy/record input through the same bounded file boundary.
 /// # Errors

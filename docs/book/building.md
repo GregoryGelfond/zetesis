@@ -70,8 +70,8 @@ device discovery. Device behavior is checked by the separate physical test
 population. Running the example requires an accessible GPU. GPU support is compiled
 for this dependency set; the other examples select CPU execution explicitly.
 The same files are registered as Cargo examples, so workspace formatting and
-all-target Clippy checks apply to them. The authored-lint inventory includes
-`docs/book/examples` as a maintained source root.
+all-target Clippy checks apply to them. zetesis-maintenance's authored-source
+inventory includes `docs/book/examples` as a maintained source root.
 
 To run one example as an ordinary consumer from the checkout root:
 

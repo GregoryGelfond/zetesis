@@ -1,9 +1,10 @@
-//! The comparisons against clingo among the maintained sources: ignored
-//! tests whose reason names the oracle, each placed in the integration test
-//! target that compiles it, found by following the module declarations from
-//! each target's root file, and named as that target's harness names it. An
-//! `ignore` written inside `cfg_attr`, and a module declared inside an inline
-//! module, are outside this reading and are refused rather than guessed.
+//! The ignored tests among the maintained sources, each placed in the target
+//! that compiles it, found by following the module declarations from each
+//! target's root file, and named as that target's harness names it: a
+//! package's library tests from `src/lib.rs`, its integration tests from
+//! `tests/NAME.rs` or `tests/NAME/main.rs`. An `ignore` written inside
+//! `cfg_attr`, and a module declared inside an inline module, are outside this
+//! reading and are refused rather than guessed.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -13,57 +14,62 @@ use std::path::{Component, Path, PathBuf};
 use syn::punctuated::Punctuated;
 use syn::{Expr, Item, ItemFn, Lit, Meta, Token};
 
-/// One ignored test whose reason names clingo.
-pub(super) struct Comparison {
+/// A test target whose harness can run an ignored test.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Target {
+    /// The package's library, rooted at `src/lib.rs`.
+    Lib,
+    /// The integration test target of this name.
+    Test(String),
+}
+
+/// One ignored test.
+pub(super) struct Ignored {
     /// The package whose sources hold the test.
     pub package: String,
-    /// The integration test target compiling the test, when one does.
-    pub target: Option<String>,
+    /// The target compiling the test, when one does.
+    pub target: Option<Target>,
     /// The test's name as its target's harness lists it: the module path
-    /// from the target's root, then the function. Outside a test target,
-    /// the path from the test's own file.
+    /// from the target's root, then the function. Outside every target, the
+    /// path from the test's own file.
     pub name: String,
+    /// The ignore's reason, empty when it gives none.
+    pub reason: String,
     /// The source file, relative to the repository.
     pub path: PathBuf,
     /// The line of the test function, from one.
     pub line: usize,
 }
 
-impl fmt::Display for Comparison {
+impl fmt::Display for Ignored {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (package, name, path, line) =
+            (&self.package, &self.name, self.path.display(), self.line);
         match &self.target {
-            Some(target) => write!(
-                f,
-                "-p {} --test {}: {} ({}:{})",
-                self.package,
-                target,
-                self.name,
-                self.path.display(),
-                self.line
-            ),
+            Some(Target::Lib) => write!(f, "-p {package} --lib: {name} ({path}:{line})"),
+            Some(Target::Test(target)) => {
+                write!(f, "-p {package} --test {target}: {name} ({path}:{line})")
+            }
             None => write!(
                 f,
-                "-p {}: {} ({}:{}) is in no test target",
-                self.package,
-                self.name,
-                self.path.display(),
-                self.line
+                "-p {package}: {name} ({path}:{line}) is in no test target"
             ),
         }
     }
 }
 
-/// What one source file holds: its comparisons and its module declarations.
+/// What one source file holds: its ignored tests and its module declarations.
 #[derive(Default)]
 struct Scan {
     hits: Vec<Hit>,
     declarations: Vec<Declaration>,
 }
 
-/// An ignored test whose reason names clingo.
+/// An ignored test.
 struct Hit {
     /// The inline modules holding the function, then the function.
     name: String,
+    reason: String,
     line: usize,
 }
 
@@ -74,30 +80,30 @@ struct Declaration {
     line: usize,
 }
 
-/// The comparisons among `sources`, files under `root`, in path order; a
-/// comparison in a module several test roots include is listed once for
-/// each of them.
+/// The ignored tests among `sources`, files under `root`, in path order; a
+/// test in a module several target roots include is listed once for each of
+/// them.
 ///
 /// # Errors
 /// Returns the first unreadable or unparsable source, a declared module
 /// with no source or two among `sources`, circular module declarations, a
-/// module declared inside an inline module, an ignored comparison that is
-/// not a test, or a source in no package.
-pub(super) fn comparisons(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Comparison>> {
+/// module declared inside an inline module, an ignored function that is not a
+/// test, or a source in no package.
+pub(super) fn ignored(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Ignored>> {
     let root = normalize(root);
     let root = root.as_path();
     let mut scans = BTreeMap::new();
     for source in sources {
-        let text = super::authored_sources::read(source)?;
+        let text = crate::support::source(source)?;
         let scan = scan(&text)
             .map_err(|error| invalid(source, &format!("{}: {error}", error.span().start().line)))?;
         scans.insert(normalize(source), scan);
     }
-    // Each file's places in the test targets: the target, and the module path
-    // from its root at which the file is compiled.
-    let mut targets: BTreeMap<&Path, Vec<(String, String)>> = BTreeMap::new();
+    // Each file's places in the targets: the target, and the module path from
+    // its root at which the file is compiled.
+    let mut targets: BTreeMap<&Path, Vec<(Target, String)>> = BTreeMap::new();
     for path in scans.keys() {
-        let Some(target) = test_target(path) else {
+        let Some(target) = target_root(path) else {
             continue;
         };
         let mut included = BTreeMap::new();
@@ -117,18 +123,19 @@ pub(super) fn comparisons(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Co
         let relative = path.strip_prefix(root).unwrap_or(path).to_path_buf();
         let places = targets.get(path.as_path()).map_or(&[][..], Vec::as_slice);
         for hit in &scan.hits {
-            let comparison = |target, name| Comparison {
+            let ignored = |target, name| Ignored {
                 package: package.clone(),
                 target,
                 name,
+                reason: hit.reason.clone(),
                 path: relative.clone(),
                 line: hit.line,
             };
             if places.is_empty() {
-                found.push(comparison(None, hit.name.clone()));
+                found.push(ignored(None, hit.name.clone()));
             } else {
                 found.extend(places.iter().map(|(target, module)| {
-                    comparison(Some(target.clone()), qualified(module, &hit.name))
+                    ignored(Some(target.clone()), qualified(module, &hit.name))
                 }));
             }
         }
@@ -136,23 +143,26 @@ pub(super) fn comparisons(root: &Path, sources: &[PathBuf]) -> io::Result<Vec<Co
     Ok(found)
 }
 
-/// The test target whose root `path` is, if it is one: Cargo's
-/// `tests/NAME.rs` and `tests/NAME/main.rs` of a package, named `NAME`.
-fn test_target(path: &Path) -> Option<String> {
+/// The target whose root `path` is, if it is one: a package's `src/lib.rs`,
+/// or Cargo's `tests/NAME.rs` and `tests/NAME/main.rs`, the test target `NAME`.
+fn target_root(path: &Path) -> Option<Target> {
     let directory = path.parent()?;
-    let name = if is_tests_directory(directory) {
+    if path.file_name()? == "lib.rs" && is_package_directory(directory, "src") {
+        return Some(Target::Lib);
+    }
+    let name = if is_package_directory(directory, "tests") {
         path.file_stem()?
-    } else if path.file_name()? == "main.rs" && is_tests_directory(directory.parent()?) {
+    } else if path.file_name()? == "main.rs" && is_package_directory(directory.parent()?, "tests") {
         directory.file_name()?
     } else {
         return None;
     };
-    name.to_str().map(str::to_owned)
+    name.to_str().map(|name| Target::Test(name.to_owned()))
 }
 
-/// A package's `tests` directory.
-fn is_tests_directory(directory: &Path) -> bool {
-    directory.file_name().is_some_and(|name| name == "tests")
+/// A package's directory of this name, such as its `src` or `tests`.
+fn is_package_directory(directory: &Path, name: &str) -> bool {
+    directory.file_name().is_some_and(|found| found == name)
         && directory
             .parent()
             .is_some_and(|package| package.join("Cargo.toml").is_file())
@@ -196,7 +206,7 @@ fn include<'a>(
         .parent()
         .ok_or_else(|| invalid(file, "a source file needs a directory"))?;
     let beside =
-        test_target(file).is_some() || file.file_name().is_some_and(|name| name == "mod.rs");
+        target_root(file).is_some() || file.file_name().is_some_and(|name| name == "mod.rs");
     chain.push(file);
     for declaration in &scans[file].declarations {
         let candidates = if let Some(path) = &declaration.path {
@@ -254,7 +264,7 @@ fn package_name(
             if let Some(name) = names.get(package) {
                 return Ok(name.clone());
             }
-            let name = manifest_name(&super::authored_sources::read(&manifest)?)
+            let name = manifest_name(&crate::support::source(&manifest)?)
                 .ok_or_else(|| invalid(&manifest, "the manifest names no package"))?;
             names.insert(package.to_path_buf(), name.clone());
             return Ok(name);
@@ -313,7 +323,7 @@ fn scan(text: &str) -> syn::Result<Scan> {
     Ok(scan)
 }
 
-/// Record the comparisons and module declarations among `items`; `inline`
+/// Record the ignored tests and module declarations among `items`; `inline`
 /// is the path of the inline modules they sit in, empty at the file's top.
 fn visit(items: &[Item], inline: &str, scan: &mut Scan) -> syn::Result<()> {
     for item in items {
@@ -341,8 +351,7 @@ fn visit(items: &[Item], inline: &str, scan: &mut Scan) -> syn::Result<()> {
     Ok(())
 }
 
-/// The function, in the inline modules at path `inline`, as a comparison,
-/// when an `ignore` reason names clingo.
+/// The function, in the inline modules at path `inline`, when it is ignored.
 fn hit(function: &ItemFn, inline: &str) -> syn::Result<Option<Hit>> {
     let mut test = false;
     let mut reason = None;
@@ -369,17 +378,15 @@ fn hit(function: &ItemFn, inline: &str) -> syn::Result<Option<Hit>> {
     let Some(reason) = reason else {
         return Ok(None);
     };
-    if !reason.to_ascii_lowercase().contains("clingo") {
-        return Ok(None);
-    }
     if !test {
         return Err(syn::Error::new(
             function.sig.ident.span(),
-            "an ignored clingo comparison is not a test",
+            "an ignored function is not a test",
         ));
     }
     Ok(Some(Hit {
         name: qualified(inline, &function.sig.ident.to_string()),
+        reason,
         line: function.sig.ident.span().start().line,
     }))
 }

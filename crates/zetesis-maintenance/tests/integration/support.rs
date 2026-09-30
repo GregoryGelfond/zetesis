@@ -2,11 +2,33 @@
 
 pub(crate) mod process;
 
+use std::io;
 use std::path::{Path, PathBuf};
+
+use zetesis_maintenance::inventory::{self, Limits};
 
 /// The repository's root directory.
 pub(crate) fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// The largest maintained source the audits read.
+const MAX_SOURCE_BYTES: usize = 1_048_576;
+
+/// The maintained Rust sources the library's authored-source inventory lists,
+/// each under `root`.
+pub(crate) fn authored_sources(root: &Path) -> Vec<PathBuf> {
+    inventory::authored(root, Limits::default())
+        .unwrap()
+        .into_iter()
+        .map(|relative| root.join(relative))
+        .collect()
+}
+
+/// A maintained source's text, read through the library's bounded reader.
+pub(crate) fn source(path: &Path) -> io::Result<String> {
+    let bytes = inventory::read(path, MAX_SOURCE_BYTES).map_err(io::Error::other)?;
+    String::from_utf8(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 
 /// Every Markdown document of the repository, skipping hidden and build

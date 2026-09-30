@@ -48,7 +48,10 @@ supplied by the caller, not evidence that this library executed those tools.
 Coverage metadata requires the actual cargo-llvm-cov version observation and
 validates its pin; a direct library caller cannot omit that observation.
 `inventory::sources` hashes the declared Cargo/Rust/WGSL boundary; this is not a
-complete dependency or source-to-binary seal.
+complete dependency or source-to-binary seal. `inventory::authored` lists the
+maintained Rust sources for the repository audits in this crate's tests: the
+authored-lint audit, and the ignored-test check, which refuses an ignore that
+names no resource and a clingo, Metal or Vulkan test its gate does not select.
 
 Policy input and physical logs have a 16 MiB inclusive ceiling. LLVM executable
 identity reads have a 256 MiB ceiling. Proof/source reads expose their own limits;

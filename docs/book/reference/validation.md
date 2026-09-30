@@ -93,9 +93,9 @@ first failed campaign's status. Capture stdout and stderr with the command log.
 
 The script lists each campaign's selection explicitly: its test targets and,
 within a crate's `integration` target, test-name filters naming the modules it
-runs. The portable `oracle_selection` regression checks that every ignored test
-whose reason names clingo is selected by a campaign, and that every campaign's
-selection contains such a test.
+runs. zetesis-maintenance's portable `ignored_tests` check refuses an ignore
+whose reason names no resource, a `requires clingo:` test that no campaign
+selects, and a campaign whose selection contains no such test.
 
 ### Check tool selection
 

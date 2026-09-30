@@ -2,24 +2,22 @@
 //! Compiler-generated attributes and procedural macro expansions are outside
 //! this token audit. Rust's deny gate still applies to the compiled code.
 
-use crate::support::authored_sources;
 mod lint_attributes;
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use crate::support::{authored_sources, repository, source};
 
 #[test]
 fn authored_code_preserves_dead_code_diagnostics() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let sources = authored_sources::inventory(&root).unwrap();
+    let root = repository();
+    let sources = authored_sources(&root);
     assert!(
         !sources.is_empty(),
         "the maintained inventory must be present"
     );
     let mut violations = Vec::new();
     for path in &sources {
-        let source = authored_sources::read(path).unwrap();
-        let findings = lint_attributes::suppressions(&source)
+        let text = source(path).unwrap();
+        let findings = lint_attributes::suppressions(&text)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         for finding in findings {
             violations.push(format!(
@@ -103,62 +101,4 @@ fn unrelated_specific_lints_remain_outside_this_policy() {
 #[test]
 fn malformed_lint_metadata_cannot_pass_the_audit() {
     assert!(lint_attributes::suppressions("#[allow(dead_code,,)] fn f() {}").is_err());
-}
-
-fn fixture(root: &Path, path: &str) {
-    let path = root.join(path);
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, "fn f() {}\n").unwrap();
-}
-
-#[test]
-fn inventory_selects_maintained_rust_roots() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path();
-    let expected = [
-        "crates/example/build.rs",
-        "crates/example/examples/demo.rs",
-        "crates/example/src/lib.rs",
-        "crates/example/src/target/mod.rs",
-        "crates/example/tests/.git/hidden.rs",
-        "crates/example/tests/nested/case.rs",
-        "crates/target/src/lib.rs",
-        "docs/book/examples/session.rs",
-        "experiments/gate-transfer/src/lib.rs",
-        "refinement/membership/rust/src/lib.rs",
-        "validation/reference/src/lib.rs",
-    ];
-    for package in [
-        "crates/example",
-        "crates/target",
-        "validation/reference",
-        "experiments/gate-transfer",
-        "refinement/membership/rust",
-    ] {
-        let directory = root.join(package);
-        fs::create_dir_all(&directory).unwrap();
-        let name = directory.file_name().unwrap().to_str().unwrap();
-        fs::write(
-            directory.join("Cargo.toml"),
-            format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\n"),
-        )
-        .unwrap();
-    }
-    for source in expected {
-        fixture(root, source);
-    }
-    for ignored in [
-        "crates/example/target/generated.rs",
-        "crates/example/docs/old.rs",
-        "docs/verification/historical.rs",
-        "validation/upstream/original.rs",
-    ] {
-        fixture(root, ignored);
-    }
-    let actual = authored_sources::inventory(root).unwrap();
-    let relative: Vec<PathBuf> = actual
-        .iter()
-        .map(|path| path.strip_prefix(root).unwrap().into())
-        .collect();
-    assert_eq!(relative, expected.map(PathBuf::from));
 }
