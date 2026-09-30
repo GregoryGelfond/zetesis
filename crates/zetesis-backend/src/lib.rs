@@ -11,7 +11,7 @@
 //! without it still reads every value and refuses a GPU request with its reason,
 //! never with "unknown value". Spellings are stable — they appear in arguments,
 //! configuration and retained records — and a spelling zetesis no longer accepts
-//! is answered with what to use instead ([`ParseBackendError::retired`]).
+//! is refused with what to use instead ([`ParseBackendError`]).
 //!
 //! The CPU backend's default parallelism is here too ([`default_threads`]), so
 //! every tool that runs or measures zetesis means the same count by `auto`.
@@ -194,13 +194,6 @@ impl ParseBackendError {
     #[must_use]
     pub fn spelling(&self) -> &str {
         &self.spelling
-    }
-
-    /// Why a spelling zetesis once accepted no longer is, and what to use
-    /// instead; `None` for a spelling it never accepted.
-    #[must_use]
-    pub const fn retired(&self) -> Option<&'static str> {
-        self.retired
     }
 }
 

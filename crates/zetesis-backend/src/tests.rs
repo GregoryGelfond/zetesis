@@ -30,19 +30,15 @@ fn a_retired_spelling_names_what_to_use_instead() {
     ] {
         let error = spelling.parse::<Backend>().unwrap_err();
         assert_eq!(error.spelling(), spelling);
-        assert!(
-            error
-                .retired()
-                .is_some_and(|reason| reason.contains(replacement))
-        );
-        assert!(error.to_string().contains("is no longer a backend"));
+        let message = error.to_string();
+        assert!(message.contains("is no longer a backend"), "{message}");
+        assert!(message.contains(replacement), "{message}");
     }
 }
 
 #[test]
 fn an_unknown_spelling_lists_the_values() {
     let error = "tpu".parse::<Backend>().unwrap_err();
-    assert_eq!(error.retired(), None);
     assert_eq!(
         error.to_string(),
         "`tpu` is not a backend; use cpu, gpu, metal or vulkan"
