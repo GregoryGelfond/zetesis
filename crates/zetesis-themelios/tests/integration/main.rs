@@ -65,7 +65,6 @@ mod hybrid_regions;
 mod indexed_joins;
 mod join_order;
 mod keyed_constraints;
-mod kr_domains;
 mod logical_bounds;
 mod maximize_bounds;
 mod maximize_clingo;
