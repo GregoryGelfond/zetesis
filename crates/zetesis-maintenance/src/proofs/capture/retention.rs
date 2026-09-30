@@ -250,7 +250,7 @@ mod tests {
         );
         assert!(failure.cleanup.attempted);
         assert_eq!(failure.cleanup.exit.unwrap().signal, Some(9));
-        assert!(failure.cleanup.succeeded());
+        assert!(failure.cleanup.succeeded(), "{failure:?}");
         directory.close();
     }
 
@@ -277,7 +277,7 @@ mod tests {
         );
         assert!(failure.cleanup.attempted);
         assert_eq!(failure.cleanup.exit.unwrap().signal, Some(9));
-        assert!(failure.cleanup.succeeded());
+        assert!(failure.cleanup.succeeded(), "{failure:?}");
         directory.close();
     }
 
