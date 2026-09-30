@@ -15,6 +15,19 @@ pub struct DecisionCount {
     pub positions: usize,
 }
 
+/// What a cell's answer family was qualified against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Qualification {
+    /// Clingo's complete census, which took part in the campaign.
+    Clingo,
+    /// The workload's recorded contract, in a clingo-free campaign.
+    Contract,
+    /// Nothing: a clingo-free campaign cannot qualify a workload without a
+    /// recorded contract, so its cells were not launched.
+    NeedsClingo,
+}
+
 /// One source/producer cell's compact observations, without raw answer streams.
 #[derive(Clone, Debug, Serialize)]
 pub struct CellSummary {
@@ -22,6 +35,8 @@ pub struct CellSummary {
     pub case: usize,
     /// Reference solver or requested native profile index.
     pub producer: Producer,
+    /// What the cell's answer family was qualified against.
+    pub qualification: Qualification,
     /// Counts over every requested phase, including unlaunched positions.
     pub decisions: Vec<DecisionCount>,
     /// Non-pass explanations grouped by schedule phase and original blocker.
@@ -52,19 +67,40 @@ pub struct Summary<'a> {
     pub workloads: Option<&'a [super::Workload]>,
     /// Exact requested native profiles.
     pub profiles: &'a [crate::selected::NativeExecution],
-    /// Whether the reference was measured or used only for its census.
-    pub reference_policy: super::ReferencePolicy,
+    /// Whether the reference was measured or used only for its census, or
+    /// took no part (`clingo_free`).
+    pub reference_policy: super::RecordedPolicy,
     /// Sealed executable and source identities.
     pub before: &'a [crate::selected::FileSeal],
-    /// Source-major, reference-first compact cells.
+    /// Source-major, reference-first compact cells; a clingo-free campaign has
+    /// no reference cells.
     pub cells: Vec<CellSummary>,
+}
+
+/// What a case's cells were qualified against: clingo's census when it took
+/// part, the recorded contract otherwise, and nothing for a workload without one.
+fn qualification(report: &Report, case: usize) -> Qualification {
+    if report.plan.reference_policy.reference().is_some() {
+        return Qualification::Clingo;
+    }
+    match report.workloads.as_deref() {
+        Some(workloads) if workloads[case].contract().is_none() => Qualification::NeedsClingo,
+        _ => Qualification::Contract,
+    }
 }
 
 pub(super) fn summarize(report: &Report) -> Summary<'_> {
     let mut cells = Vec::new();
+    let reference = report
+        .plan
+        .reference_policy
+        .reference()
+        .map(|_| Producer::Reference);
     for case in 0..report.cases.len() {
-        for producer in std::iter::once(Producer::Reference)
-            .chain((0..report.plan.profiles.len()).map(|profile| Producer::Native { profile }))
+        let qualification = qualification(report, case);
+        for producer in reference
+            .into_iter()
+            .chain((0..report.plan.plan.profiles.len()).map(|profile| Producer::Native { profile }))
         {
             let mut decisions: Vec<DecisionCount> = Vec::new();
             let mut reasons = BTreeMap::new();
@@ -91,7 +127,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
                 }
                 if sample.slot.phase == Phase::Timed {
                     let duration = (sample.decision == Decision::Pass)
-                        .then(|| sample.capture.as_ref()?.elapsed_ns()?.try_into().ok())
+                        .then(|| sample.capture()?.elapsed_ns()?.try_into().ok())
                         .flatten();
                     match (&mut intervals, duration) {
                         (Some(intervals), Some(duration)) => intervals.push(duration),
@@ -114,6 +150,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
             cells.push(CellSummary {
                 case,
                 producer,
+                qualification,
                 decisions,
                 reasons,
                 timing,
@@ -128,7 +165,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
         accounted: report.accounted(),
         cases: &report.cases,
         workloads: report.workloads.as_deref(),
-        profiles: &report.plan.profiles,
+        profiles: &report.plan.plan.profiles,
         reference_policy: report.plan.reference_policy,
         before: &report.before,
         cells,
@@ -140,15 +177,19 @@ fn reason(sample: &super::Sample, samples: &[super::Sample]) -> String {
         .detail
         .as_deref()
         .unwrap_or("reason unavailable in retained sample");
-    let mut reason = format!("{:?}: {:?}: {detail}", sample.slot.phase, sample.decision);
+    let mut reason = format!(
+        "{}: {}: {detail}",
+        sample.slot.phase.label(),
+        sample.decision.label()
+    );
     if let Some(index) = sample.blocked_by {
         use std::fmt::Write;
         if let Some(blocker) = samples.get(index) {
             write!(
                 reason,
-                "; blocked by sample {index} ({:?}, {:?}): {}",
-                blocker.slot.phase,
-                blocker.decision,
+                "; blocked by sample {index} ({}, {}): {}",
+                blocker.slot.phase.label(),
+                blocker.decision.label(),
                 blocker
                     .detail
                     .as_deref()

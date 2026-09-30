@@ -44,25 +44,10 @@ pub enum CampaignFault {
     ChildCleanup(String),
 }
 
-/// Requested hardware policy; observed execution is retained separately in raw
-/// native JSON/statistics and is never inferred from this request.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Backend {
-    /// Require CPU execution.
-    #[default]
-    Cpu,
-    /// Request physical Metal; unavailable or unsupported execution must fail.
-    Metal,
-}
-impl Backend {
-    pub(super) const fn label(self) -> &'static str {
-        match self {
-            Self::Cpu => "cpu",
-            Self::Metal => "metal",
-        }
-    }
-}
+/// Requested execution backend. Observed execution is retained separately in
+/// raw native JSON/statistics and is never inferred from this request; an
+/// unavailable or unsupported GPU request must fail, never fall back.
+pub use zetesis_backend::Backend;
 
 /// Requested native reduct procedure, without changing the selected source task.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
@@ -77,7 +62,9 @@ pub enum Oracle {
     Countermodel,
 }
 impl Oracle {
-    pub(super) const fn label(self) -> &'static str {
+    /// Stable spelling, as the command line and records take it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Auto => "auto",
             Self::Closure => "closure",
@@ -99,7 +86,9 @@ pub enum Grounder {
     Auto,
 }
 impl Grounder {
-    pub(super) const fn label(self) -> &'static str {
+    /// Stable spelling, as the command line and records take it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
         match self {
             Self::Eager => "eager",
             Self::Lazy => "lazy",

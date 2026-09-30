@@ -1,5 +1,7 @@
 # CPU and Metal execution series
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 This comparison retains the `994fbb79` to `eca5a1a7` measurements. The later
 [shared-plan execution comparison](plan-execution.md) measures `eca5a1a7` to
 `2e80d065`, including the changed Metal candidate and membership paths.

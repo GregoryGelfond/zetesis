@@ -52,6 +52,7 @@ fn report_arguments(arguments: &[String]) -> Result<(), String> {
             "--output-path",
             "--output-dir",
             "--fail-under-lines",
+            "--ignore-filename-regex",
         ]
         .contains(&argument.as_str())
             && !rest.is_empty()
@@ -59,6 +60,21 @@ fn report_arguments(arguments: &[String]) -> Result<(), String> {
             remaining = &rest[1..];
         } else {
             return fail(&format!("invalid mock report option: {argument}"));
+        }
+    }
+    Ok(())
+}
+fn clean_arguments(arguments: &[String]) -> Result<(), String> {
+    // cargo-llvm-cov refuses `--no-clean` beside `--no-report` or `--no-run`,
+    // which already keep earlier profiles and build artifacts. Options after
+    // `--` belong to the test binary.
+    let own = arguments
+        .iter()
+        .position(|arg| arg == "--")
+        .map_or(arguments, |end| &arguments[..end]);
+    for flag in ["--no-report", "--no-run"] {
+        if has(own, flag) && has(own, "--no-clean") {
+            return fail(&format!("{flag} may not be used together with --no-clean"));
         }
     }
     Ok(())
@@ -75,8 +91,8 @@ fn physical(arguments: &[String]) -> Result<(), String> {
         .ok_or("missing exact filter")?;
     let filters = &arguments[position + 1..];
     let fields: Vec<_> = [
-        include_str!("physical-selection.txt"),
-        include_str!("physical-selection-vulkan.txt"),
+        include_str!("../../src/coverage/physical-selection.txt"),
+        include_str!("../../src/coverage/physical-selection-vulkan.txt"),
     ]
     .into_iter()
     .flat_map(str::lines)
@@ -155,10 +171,20 @@ fn physical(arguments: &[String]) -> Result<(), String> {
 fn cargo(arguments: &[String]) -> Result<(), String> {
     if env::var_os("CHECK_TEST_TRACE").is_some() {
         let failed = variable("CHECK_TEST_ORACLE_FAILURE", "");
-        if arguments.first().is_some_and(|argument| argument == "test")
-            && arguments
+        // A campaign names its tests as a target (`--test name`) or as a module
+        // of a crate's one integration binary (the filter `name::`).
+        let selects = |name: &str| {
+            arguments
                 .windows(2)
-                .any(|pair| pair[0] == "--test" && failed.split(',').any(|name| name == pair[1]))
+                .any(|pair| pair[0] == "--test" && pair[1] == name)
+                || arguments
+                    .iter()
+                    .any(|argument| argument.strip_suffix("::") == Some(name))
+        };
+        if arguments.first().is_some_and(|argument| argument == "test")
+            && failed
+                .split(',')
+                .any(|name| !name.is_empty() && selects(name))
         {
             return fail("simulated oracle campaign failure");
         }
@@ -201,6 +227,7 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
         return fail("unexpected mock Cargo invocation");
     }
     report_arguments(arguments)?;
+    clean_arguments(arguments)?;
     let directory = env::var("CARGO_LLVM_COV_TARGET_DIR").map_err(|error| error.to_string())?;
     let profile = Path::new(&directory).file_name().unwrap().to_str().unwrap();
     let log = env::var("COVERAGE_TEST_LOG").map_err(|error| error.to_string())?;
@@ -242,6 +269,17 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+/// Whether `CHECK_TEST_FAILURE` asks this call of `role` to fail: a Lean build
+/// or audit, the proof record, or the check of the oracle campaigns' runs.
+fn simulated_failure(role: &str, arguments: &[String]) -> bool {
+    let failure = variable("CHECK_TEST_FAILURE", "");
+    let command = arguments.first().map(String::as_str);
+    (role == "lake"
+        && ((arguments == ["build"] && failure == "build")
+            || (has(arguments, "Audit.lean") && failure == "audit")))
+        || (role == "maintenance" && command == Some("proof-record") && failure == "record")
+        || (role == "maintenance" && command == Some("oracle-runs") && failure == "oracle-runs")
+}
 fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     trace(role, arguments);
     if let Some(expected) = env::var_os("CHECK_TEST_EXPECT_DIRECTORY")
@@ -262,16 +300,7 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     {
         eprintln!("synthetic unexpected Audit stderr");
     }
-    let failure = variable("CHECK_TEST_FAILURE", "");
-    if (role == "lake"
-        && ((arguments == ["build"] && failure == "build")
-            || (has(arguments, "Audit.lean") && failure == "audit")))
-        || (role == "maintenance"
-            && arguments
-                .first()
-                .is_some_and(|argument| argument == "proof-record")
-            && failure == "record")
-    {
+    if simulated_failure(role, arguments) {
         return fail("simulated check failure");
     }
     match role {

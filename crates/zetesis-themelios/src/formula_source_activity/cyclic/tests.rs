@@ -4,11 +4,7 @@ use crate::formula_support::{Computation, Counters, SupportCatalog};
 use crate::{ExpansionLimits, FormulaLimits};
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
-use zetesis_core::{Atom, Predicate};
-
-fn atom(name: &str) -> Atom {
-    Atom::new(Predicate::new(name, 0).unwrap(), Vec::new()).unwrap()
-}
+use zetesis_test_support::programs::nullary as atom;
 
 fn context<T>(limits: &FormulaLimits, f: impl FnOnce(&mut Context<'_, '_, '_>) -> T) -> T {
     let mut budget = Budget::new(ExpansionLimits::default(), 0);

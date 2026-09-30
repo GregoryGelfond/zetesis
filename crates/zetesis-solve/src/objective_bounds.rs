@@ -110,9 +110,4 @@ impl Bounds {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/objective_observer_contracts.rs"]
-mod observer_contract_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/objective_bound_contracts.rs"]
-mod contract_tests;
+mod tests;

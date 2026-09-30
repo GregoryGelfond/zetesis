@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 zetesis-telemetry.workspace = true
+zetesis-backend.workspace = true
 zetesis-core.workspace = true
 zetesis-themelios.workspace = true
 zetesis-cpu.workspace = true
@@ -19,6 +20,9 @@ rayon.workspace = true
 
 [dev-dependencies]
 zetesis-validation = { path = "../zetesis-validation" }
+zetesis-clingo-support.workspace = true
+zetesis-reference-support.workspace = true
+zetesis-test-support.workspace = true
 
 [lints]
 workspace = true
@@ -71,11 +75,6 @@ required-features = ["gpu"]
 [[example]]
 name = "book-measurements"
 path = "../../docs/book/examples/measurements.rs"
-
-[[example]]
-name = "book-batch-executor"
-path = "../../docs/book/examples/batch-executor.rs"
-test = true
 
 [[example]]
 name = "book-hybrid"

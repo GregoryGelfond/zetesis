@@ -14,7 +14,6 @@ pub(super) struct Receipt {
 }
 
 #[cfg(test)]
-#[path = "../../tests/lazy/uploads.rs"]
 mod tests;
 
 impl From<&Chunk<'_>> for Receipt {

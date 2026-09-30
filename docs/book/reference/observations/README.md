@@ -1,5 +1,7 @@
 # Recorded release observations
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 The recorded [0.1.5 verification receipt](coverage-318c8238.json) identifies the
 independent portable workspace and CPU coverage populations. Sixty physical
 Metal tests and three ordinary CLI backend checks passed separately, without
@@ -65,12 +67,10 @@ all-undefined and fatal-error refusals; the historical timings do not measure
 that policy's implementation.
 
 The [prepared-grounding CPU/Metal comparison](../prepared-metal.md) also retains
-plain timing data: [eager intervals](prepared-metal-eager-20260914.tsv),
-[lazy intervals](prepared-metal-lazy-20260914.tsv) and
-[lazy provenance](prepared-metal-lazy-provenance-20260914.tsv). These contain
-486 eager and 3,456 lazy timed observations, preserving block/source identities
-and raw report or stream hashes. Eager rows retain the six original intervals
-and each block's median/range; lazy rows retain one original interval each.
+plain timing data: [eager intervals](prepared-metal-eager-20260914.tsv). They
+contain 486 eager timed observations, preserving block/source identities and raw
+report hashes. Rows retain the six original intervals and each block's
+median/range.
 Qualification and warmup results belong to the acquisition review described in
 the chapter, rather than being inferred from these timed-only files. These
 TSV views are separate from the four fixed JSON datasets and their renderer.
@@ -555,7 +555,7 @@ being the ten-millisecond arithmetic chain. The audit's reproduction pair,
 over `d(1..40)`, run three times per executable with
 `--max-expansion-work 100000000`, median driver wall time and the rows the
 support-completion join reads (the count the
-[join-order tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/join_order.rs)
+[join-order tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/join_order.rs)
 pin):
 
 | Program | main | before | after | clingo | support rows before | support rows after |

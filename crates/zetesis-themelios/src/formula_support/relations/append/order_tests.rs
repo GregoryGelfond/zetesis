@@ -1,30 +1,15 @@
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
-use zetesis_core::{Atom, Predicate, Value, ValueNodeRef};
+use zetesis_core::ValueNodeRef;
 
 use super::*;
 use crate::formula_support::relations::SupportCatalog;
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
-
-fn atom(value: i32) -> Atom {
-    Atom::new(
-        Predicate::new("row", 1).unwrap(),
-        vec![Value::Number(value)],
-    )
-    .unwrap()
-}
+use crate::test_support::location;
+use zetesis_test_support::programs::unary;
 
 fn populate(append: &mut SupportAppend<'_>, values: &[i32], counters: &mut Counters) {
     for &value in values {
         append
             .atom(
-                (&atom(value)).into(),
+                (&unary("row", value)).into(),
                 &FormulaLimits::default(),
                 counters,
                 location(),
@@ -139,7 +124,7 @@ fn sparse_work(history: i32) -> u64 {
     let mut catalog = SupportCatalog::default();
     for value in 0..history {
         catalog = catalog
-            .insert(&atom(value), &limits, &mut counters, location())
+            .insert(&unary("row", value), &limits, &mut counters, location())
             .unwrap();
     }
     let (_, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
@@ -169,7 +154,13 @@ fn pending_order_can_include_an_older_discovery() {
     let earlier = {
         let (_, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
         let earlier = append
-            .discover_ref((&atom(1)).into(), 0, &limits, &mut counters, location())
+            .discover_ref(
+                (&unary("row", 1)).into(),
+                0,
+                &limits,
+                &mut counters,
+                location(),
+            )
             .unwrap();
         populate(&mut append, &[0], &mut counters);
         earlier

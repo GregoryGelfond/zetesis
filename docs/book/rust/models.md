@@ -52,13 +52,20 @@ term workspaces can refer to this catalog without becoming model selections.
 for its occurrences. Equal logical atoms have equal ranks. Increasing ranks
 follow typed storage order, not discovery order or ASP arithmetic comparison.
 `select_with` validates positions, orders them through the ranks and coalesces
-duplicates, retaining a supplied occurrence from each selected equivalence class.
-It returns an ordinary `Model` sharing the original catalog; the model can outlive
-the prepared order. No atom payload is copied or compared again during selection.
+duplicates, retaining the least supplied occurrence of each selected equivalence
+class. It returns an ordinary `Model` sharing the original catalog; the model can
+outlive the prepared order. No atom payload is copied or compared again during
+selection.
 
 For a catalog of size *n* and a selection of size *m*, preparation takes
-O(n log n) semantic comparisons and two integer buffers, retaining one.
-Selection takes O(m log m) integer comparisons and O(m) temporary space.
+O(n log n) semantic comparisons and retains two integer buffers: the ranks and
+the occurrences in semantic order. Selection marks the supplied positions in an
+*n*-bit mask and then chooses, from *m* and *n* alone and before either runs, one
+of two strategies with identical results. A dense selection
+(m·⌈log₂(m + 1)⌉ ≥ n) walks the semantic order once in O(n) integer steps,
+keeping each rank's first marked occurrence. A sparse one sorts its marked
+positions in O(m log m) integer comparisons. Temporary space is the mask plus
+O(m) cells.
 Both operations accept work/cancellation callbacks and metadata byte ceilings.
 `ModelPublication` and `ModelPublicationFailure` retain actual peak metadata;
 rejected reservation proposals are not counted as allocations. Catalog payload
@@ -143,7 +150,7 @@ order. Consuming an interner transfers its discovery map and shares the sealed
 canonical prefix with the immutable catalog; it releases construction indexes. Positions
 belong to their owner and must not be compared across unrelated catalogs as
 semantic identities. The
-[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs)
+[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs)
 documents the entry, borrowing, allocation and final-transfer contracts.
 The bounded
 [`atom_interning` example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#appendable-atom-interning-probe)
@@ -170,7 +177,7 @@ accounts for external owners separately. `prior_publication_metadata_bytes`
 authenticates a publication from the original writer and reports only its
 independent metadata. Equal content or a shared vocabulary is insufficient to
 deduct shared storage. See the
-[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner/closed.rs)
+[`closed-catalog API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner/closed.rs)
 and [`lookup correspondence`](../lean/correspondence.md).
 
 ## Borrowing and explicit copies
@@ -233,6 +240,16 @@ validates the selected slots against a live reader and returns a borrowed
 `BindingView` without copying values. This validation visits every selected
 slot. `TermSet` separately records explicitly selected roots; interning a child
 does not make it a domain member, and ID order is not semantic term order.
+`read.predicate_mask_with(decide)` decides every predicate of the read prefix
+once, in identity order, and packs the decisions into a `PredicateMask`, one bit
+per predicate. `mask.decision(predicate)` answers a canonical predicate of that
+vocabulary admitted before preparation; owned ingress, another vocabulary or a
+later predicate has no decision, so the caller keeps its general procedure.
+`AtomIdentityMap` records values by the owner-scoped identity of canonical atoms,
+for any number of atom owners, so a repeated lookup hashes one identity word
+rather than the atom's structure. Equal atoms of different owners are different
+keys, and owned ingress or carrier atoms are never recorded; callers that need
+structural identity keep a structural index as the authority.
 The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
 documents each frame's storage allowance and stopped-operation behavior.
 
@@ -283,7 +300,8 @@ For `N` catalog atoms and `M` supplied selected positions:
 | Catalog construction | Imports descriptions into a shared term DAG and canonical atom rows; records original occurrences and a checked portable encoding measure. Work includes structure, text and exact interning probes. |
 | Selection | Checks indices, performs `O(M log M)` typed atom comparisons and retains `O(M)` position cells. Equal logical atoms coalesce. |
 | Model clone | Constant time; shares the selected owner and catalog without allocation. |
-| Complete iteration | `O(M)` borrowed atom visits after duplicate removal; resolving a canonical row also searches its immutable segment directory. |
+| Complete iteration | `O(M)` borrowed atom visits after duplicate removal; each yielded view checks prefix membership, and reading its contents resolves the canonical row through the immutable segment directory. |
+| Atom traversal | Hashing, ordering, checked comparison and argument iteration resolve a canonical row once per operation; `Arguments::at` and `len` resolve it once per call. |
 | Membership | `O(log M)` typed atom comparisons. |
 | Model equality/order | Lexicographic comparison of selected atom values; identical selected owners compare immediately. |
 

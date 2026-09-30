@@ -1,0 +1,28 @@
+//! Integration tests of `zetesis-sat`, compiled as one test binary.
+
+mod support;
+mod batch_interruptions;
+mod batches;
+mod candidate_support;
+mod certified;
+mod cnf;
+mod completion;
+mod ferraris;
+mod ordering;
+mod parallel_region_receipts;
+mod parallel_regions;
+mod parallel_stress;
+mod partition;
+mod partition_search;
+mod phase_timing;
+mod positive_certified;
+mod prepared_reduct;
+mod projection_history;
+mod reduct_regions;
+mod refusal_contracts;
+mod region_filters;
+mod region_proposals;
+mod regions;
+mod restrictions;
+mod semantic_receipts;
+mod stopped_batches;

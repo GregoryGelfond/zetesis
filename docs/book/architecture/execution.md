@@ -119,7 +119,7 @@ are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
 Because the regions share nothing, several workers can walk the tree at
-once (`--threads`, at most four available host threads by default), each deciding
+once (`--threads`, the host's available parallelism by default), each deciding
 the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
 answer arriving once, by the partition law; the order in which answers
 arrive is the schedule's, is not promised to repeat between runs, and is
@@ -156,9 +156,9 @@ entire region frontier, thread stacks or process memory.
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original
 formula readings, support conditions, candidate partitions and reduct semantics.
-The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/batch.rs)
+The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/batch.rs)
 owns proposal validation and publication; the
-[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/region_proposals.rs)
+[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/region_proposals.rs)
 owns the bounded parallel frontier. `Frontier` and `BatchAccounting` state the
 coverage and completion laws; concrete synchronization remains a refinement
 obligation.
@@ -340,7 +340,7 @@ policy marker is a readback failure even if the reported verdict agrees; this
 validates the protocol, without proving the shader or device implementation.
 
 The four physical
-[tight-oracle tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware_tight.rs)
+[tight-oracle tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware_tight.rs)
 exercise both policies on Apple M4 Pro Metal. They cover original-root precedence,
 least unsupported atoms, duplicate and skewed producers, packed-word boundaries,
 batch isolation, resource refusals and retained-theory identity. The

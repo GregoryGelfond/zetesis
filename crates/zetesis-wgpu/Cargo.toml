@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+zetesis-backend = { path = "../zetesis-backend" }
 zetesis-core = { path = "../zetesis-core" }
 zetesis-cpu = { path = "../zetesis-cpu" }
 zetesis-ferraris = { path = "../zetesis-ferraris" }
@@ -14,10 +15,20 @@ wgpu.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true
 
+# zetesis targets Metal on Apple platforms and Vulkan on every other platform;
+# no other graphics API is compiled.
+[target.'cfg(target_vendor = "apple")'.dependencies]
+wgpu = { workspace = true, features = ["metal"] }
+
+[target.'cfg(not(target_vendor = "apple"))'.dependencies]
+wgpu = { workspace = true, features = ["vulkan"] }
+
 [dev-dependencies]
 # The shader validator paired with this wgpu release. Hardware-independent
 # validation checks the authored WGSL even when no adapter is available.
 naga = { version = "=30.0.1", features = ["wgsl-in"] }
+zetesis-test-support.workspace = true
+zetesis-theory-support.workspace = true
 
 [lints]
 workspace = true

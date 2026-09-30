@@ -3,12 +3,12 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::super::{Capture, Error, Fault, Phase, capture};
 use super::{
-    Decision, NativeInvocation, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload,
-    outcome,
+    Decision, NativeInvocation, Plan, Producer, RecordedPlan, Report, Request, Sample, Slot, Suite,
+    Workload, outcome, serialization::MatrixCapture,
 };
 use crate::selected::{identity, publication};
 use crate::{answers, examples, process};
@@ -54,6 +54,13 @@ pub(super) fn campaign(
             "memory rounds require an absolute helper executable",
         ));
     }
+    // A selection chooses cases of the suite; explicit workloads bring their
+    // own, so a selection beside them would be silently ignored.
+    if workloads.is_some() && request.plan.selection().is_some() {
+        return Err(Error::Configuration(
+            "a case selection applies to suite cases, not to explicit workloads",
+        ));
+    }
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let cases = prepare(&corpus, request, workloads)?;
     let sources: BTreeSet<_> = cases
@@ -71,9 +78,13 @@ pub(super) fn campaign(
         } else {
             "instrumented_explicit_profile_matrix_v1"
         },
+        tool: request.tool.clone(),
         manifest_sha256: examples::MANIFEST_SHA256,
         manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
-        plan: request.plan.clone(),
+        plan: RecordedPlan {
+            plan: request.plan.clone(),
+            reference_policy: request.reference.map(|reference| reference.policy).into(),
+        },
         limits: request.limits,
         native_normalization_limits: normalization_limits(request),
         cases: cases
@@ -83,8 +94,8 @@ pub(super) fn campaign(
         workloads: workloads.map(<[Workload]>::to_vec),
         started_unix_ns: started,
         finished_unix_ns: None,
-        wall_scope: "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
-        comparison_scope: "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; hidden_reference_interpretations_unavailable",
+        wall_scope: wall_scope(request.reference.is_some()),
+        comparison_scope: comparison_scope(request.reference.is_some()),
         peak_rss: if request.plan.memory_runs() > 0 {
             "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
         } else {
@@ -130,8 +141,28 @@ pub(super) fn campaign(
     Ok(report)
 }
 
-/// Preserve the native/reference/catalog prefix used by retained-report readers,
-/// then seal optional helpers and independent authored sources in the same campaign.
+/// What a sample's wall time covers; clingo's output only when it takes part.
+const fn wall_scope(clingo: bool) -> &'static str {
+    if clingo {
+        "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim"
+    } else {
+        "fresh_process_spawn_capture_reap; native_json_and_stats_included; no_reference; comparison_hashing_excluded; no_cold_cache_claim"
+    }
+}
+
+/// What qualification compares: clingo's census when it takes part, the
+/// recorded contracts otherwise.
+const fn comparison_scope(clingo: bool) -> &'static str {
+    if clingo {
+        "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; hidden_reference_interpretations_unavailable"
+    } else {
+        "complete_selected_displays_checked_against_recorded_contracts; final_optimum_ties_and_costs; full_native_atoms_and_shown_values_compared_across_profiles_and_repeats; workloads_without_contracts_need_clingo"
+    }
+}
+
+/// Preserve the native, reference (when one takes part) and catalog prefix used
+/// by retained-report readers, then seal optional helpers and independent
+/// authored sources in the same campaign.
 fn seal_inputs(
     corpus: &examples::Corpus,
     sources: &BTreeSet<&str>,
@@ -143,7 +174,7 @@ fn seal_inputs(
         sources,
         request.corpus,
         request.native,
-        request.reference,
+        request.reference.map(|reference| reference.executable),
         request.limits,
     )?;
     if let Some(helper) = request.helper.filter(|_| request.plan.memory_runs() > 0) {
@@ -324,13 +355,38 @@ fn materialize(
     }
     Ok(sealed)
 }
+/// The plan's cases: its selection when it has one, each a case of its suite,
+/// and the whole suite otherwise.
 fn cases<'a>(corpus: &'a examples::Corpus, plan: &Plan) -> Result<Vec<&'a examples::Case>, Error> {
-    let cases: &[super::super::Case] = match plan.suite {
-        Suite::Corpus => return Ok(corpus.cases().iter().collect()),
-        Suite::Baseline | Suite::Scalability => super::super::Suite::Baseline.cases(),
-        Suite::Queens => super::super::Suite::Queens.cases(),
-        Suite::Series => &super::super::series::CORPUS_CASES,
+    let suite: Vec<&examples::Case> = match plan.suite {
+        Suite::Corpus => corpus.cases().iter().collect(),
+        Suite::Baseline | Suite::Scalability => {
+            members(corpus, super::super::Suite::Baseline.cases())?
+        }
+        Suite::Queens => members(corpus, super::super::Suite::Queens.cases())?,
+        Suite::Series => members(corpus, &super::super::series::CORPUS_CASES)?,
     };
+    let Some(selection) = &plan.selection else {
+        return Ok(suite);
+    };
+    selection
+        .iter()
+        .map(|path| {
+            suite
+                .iter()
+                .copied()
+                .find(|case| case.path() == path)
+                .ok_or(Error::Configuration(
+                    "a selected case is not a case of the plan's suite",
+                ))
+        })
+        .collect()
+}
+
+fn members<'a>(
+    corpus: &'a examples::Corpus,
+    cases: &[super::super::Case],
+) -> Result<Vec<&'a examples::Case>, Error> {
     cases
         .iter()
         .map(|selected| {
@@ -357,10 +413,23 @@ fn unattempted(slot: Slot, blocked_by: Option<usize>, detail: &str) -> Sample {
         memory: None,
     }
 }
+/// A position a clingo-free campaign cannot qualify: without clingo, only a
+/// recorded contract qualifies a family, and this workload has none.
+fn needs_clingo(slot: Slot) -> Sample {
+    Sample {
+        decision: Decision::NeedsClingo,
+        ..unattempted(
+            slot,
+            None,
+            "no recorded contract; only clingo establishes this workload's family",
+        )
+    }
+}
 fn fill_unattempted(report: &mut Report) -> Result<(), Error> {
     report.samples = report
         .plan
-        .slots(report.cases.len())?
+        .plan
+        .slots(report.cases.len(), report.plan.reference_policy.reference())?
         .into_iter()
         .map(|slot| unattempted(slot, None, "campaign setup prevented execution"))
         .collect();
@@ -373,17 +442,22 @@ fn capture_metadata(
     report: &mut Report,
     invocation: NativeInvocation,
 ) -> bool {
+    let reference = request
+        .reference
+        .map(|reference| (reference.executable, vec!["--version".into()]));
     for (executable, arguments) in [
         (request.native, vec!["--version".into()]),
         (request.native, invocation.help_arguments()),
-        (request.reference, vec!["--version".into()]),
-    ] {
-        let Some(observed) = invoke(executable, arguments, false, directory, schedule, report)
+    ]
+    .into_iter()
+    .chain(reference)
+    {
+        let Some((observed, _)) = invoke(executable, arguments, false, directory, schedule, report)
         else {
             return false;
         };
         let completed = observed.complete(false);
-        report.metadata.push(observed);
+        report.metadata.push(MatrixCapture(observed));
         if !completed {
             report.faults.push(Fault::Metadata);
             return false;
@@ -407,7 +481,8 @@ fn execute(
     let width = request.plan.profiles.len() + 1;
     let mut blocked: Vec<Option<usize>> = vec![None; cases.len() * width];
     let mut stopped = false;
-    for slot in request.plan.slots(cases.len())? {
+    let policy = request.reference.map(|reference| reference.policy);
+    for slot in request.plan.slots(cases.len(), policy)? {
         stopped |= schedule.stopped(report);
         let cell = slot.case * width + slot.producer.index();
         let skipped = if stopped {
@@ -417,7 +492,10 @@ fn execute(
                 Some(previous),
                 "cell disabled by its first non-pass observation",
             ))
-        } else if slot.phase != Phase::Qualification && censuses[slot.case].reference.is_none() {
+        } else if request.reference.is_some()
+            && slot.phase != Phase::Qualification
+            && censuses[slot.case].reference.is_none()
+        {
             Some((
                 blocked[slot.case * width],
                 "reference census did not establish a complete family",
@@ -430,6 +508,11 @@ fn execute(
             continue;
         }
         let selected = &cases[slot.case];
+        if request.reference.is_none() && selected.input.contract().is_none() {
+            blocked[cell] = Some(report.samples.len());
+            report.samples.push(needs_clingo(slot));
+            continue;
+        }
         let case_directory = directory.join(&selected.directory);
         let (executable, arguments) = arguments(
             request,
@@ -448,7 +531,7 @@ fn execute(
             schedule,
             report,
         );
-        let Some(capture) = launched else {
+        let Some((capture, curtailed)) = launched else {
             stopped = true;
             report.samples.push(unattempted(
                 slot,
@@ -459,7 +542,7 @@ fn execute(
         };
         let mut sample = Sample {
             slot,
-            capture: Some(capture),
+            capture: Some(MatrixCapture(capture)),
             decision: Decision::Pass,
             detail: None,
             blocked_by: None,
@@ -469,13 +552,15 @@ fn execute(
             memory: None,
         };
         if slot.phase == Phase::Memory
-            && !cancelled_capture(sample.capture.as_ref().unwrap())
+            && !cancelled_capture(sample.capture().unwrap())
             && !measured(&mut sample, &record, report)
         {
             continue;
         }
         let contract = selected.input.contract();
-        if let Err((decision, detail)) = censuses[slot.case].check(&mut sample, contract, request) {
+        if let Err((decision, detail)) =
+            censuses[slot.case].check(&mut sample, contract, request, curtailed)
+        {
             sample.decision = decision;
             sample.detail = Some(detail);
             blocked[cell] = Some(report.samples.len());
@@ -494,7 +579,10 @@ fn arguments<'a>(
 ) -> (&'a Path, Vec<OsString>) {
     let (executable, mut arguments): (_, Vec<OsString>) = match producer {
         Producer::Reference => (
-            request.reference,
+            request
+                .reference
+                .expect("the schedule has reference positions only when a reference takes part")
+                .executable,
             vec![
                 "--models=0".into(),
                 "--outf=2".into(),
@@ -539,8 +627,15 @@ impl Census {
         sample: &mut Sample,
         contract: Option<&examples::Contract>,
         request: &Request<'_>,
+        curtailed: Curtailed,
     ) -> Result<(), (Decision, String)> {
-        let answer = qualify(sample, contract, self.reference.as_ref(), request)?;
+        let answer = qualify(
+            sample,
+            contract,
+            self.reference.as_ref(),
+            request,
+            curtailed,
+        )?;
         if let Some(native) = answer.native {
             super::native_family::accept(&mut self.native, native)?;
         }
@@ -552,24 +647,41 @@ impl Census {
     }
 }
 
+/// The decision a capture that stopped at a limit earns, or `None` for one
+/// that did not. A stop at a limit the campaign lowered is the campaign's;
+/// only a stop at the authored limit says something of the workload.
+fn limit_stop(capture: &Capture, curtailed: Curtailed) -> Option<(Decision, String)> {
+    match capture.stop() {
+        Some(process::Stop::Deadline) if curtailed.time => {
+            Some((Decision::CampaignDeadline, "campaign deadline".into()))
+        }
+        Some(process::Stop::Deadline) => Some((Decision::Timeout, "process deadline".into())),
+        Some(process::Stop::OutputLimit) if curtailed.bytes => Some((
+            Decision::CampaignCaptureBudget,
+            "campaign capture budget".into(),
+        )),
+        Some(process::Stop::OutputLimit) => {
+            Some((Decision::CaptureLimit, "capture byte ceiling".into()))
+        }
+        _ => None,
+    }
+}
+
 fn qualify(
     sample: &mut Sample,
     contract: Option<&examples::Contract>,
     reference: Option<&answers::ReportedAnswers>,
     request: &Request<'_>,
+    curtailed: Curtailed,
 ) -> Result<Qualified, (Decision, String)> {
     let capture = sample
-        .capture
-        .as_ref()
+        .capture()
         .expect("qualification follows a launched capture");
     if cancelled_capture(capture) {
         return Err((Decision::Cancelled, "campaign cancelled".into()));
     }
-    if capture.stop() == Some(process::Stop::Deadline) {
-        return Err((Decision::Timeout, "process deadline".into()));
-    }
-    if capture.stop() == Some(process::Stop::OutputLimit) {
-        return Err((Decision::CaptureLimit, "capture byte ceiling".into()));
+    if let Some(stop) = limit_stop(capture, curtailed) {
+        return Err(stop);
     }
     if capture.stop() != Some(process::Stop::Completed)
         || capture.failure().is_some()
@@ -624,11 +736,20 @@ fn qualify(
             .check(&parsed)
             .map_err(|e| (Decision::ParityMismatch, e.to_string()))?;
     }
+    // With clingo taking part, its census is the authority; without it, the
+    // recorded contract checked above is, and a family without one is refused.
     if let Some(reference) = reference {
         if !answers::same_displays(reference, &parsed) {
             return Err((
                 Decision::ParityMismatch,
                 "complete selected displays/counts/costs differ from qualified reference".into(),
+            ));
+        }
+    } else if request.reference.is_none() {
+        if contract.is_none() {
+            return Err((
+                Decision::NeedsClingo,
+                "no recorded contract; only clingo establishes this workload's family".into(),
             ));
         }
     } else if sample.slot.producer != Producer::Reference
@@ -648,10 +769,7 @@ fn qualify(
 /// A memory capture belongs to the helper. Require its success separately,
 /// then use the measured solver exit for the producer's outcome contract.
 fn solver_exit(sample: &Sample) -> Result<Option<process::Exit>, (Decision, String)> {
-    let capture = sample
-        .capture
-        .as_ref()
-        .expect("a launched sample has a capture");
+    let capture = sample.capture().expect("a launched sample has a capture");
     if sample.slot.phase != Phase::Memory {
         return Ok(capture.exit());
     }
@@ -688,7 +806,7 @@ fn launch(
     directory: &Path,
     schedule: Schedule<'_>,
     report: &mut Report,
-) -> Option<Capture> {
+) -> Option<(Capture, Curtailed)> {
     if phase != Phase::Memory {
         return invoke(executable, arguments, false, directory, schedule, report);
     }
@@ -696,7 +814,7 @@ fn launch(
         .helper
         .expect("memory rounds admitted with a helper");
     let mut supervised: Vec<OsString> = vec![
-        "__measure-child".into(),
+        crate::process::memory::HELPER_COMMAND.into(),
         record.as_os_str().to_owned(),
         executable.as_os_str().to_owned(),
     ];
@@ -708,7 +826,7 @@ fn launch(
 /// contradictory record decides the sample and is retained with a fault;
 /// the campaign goes on, since the rounds are independent invocations.
 fn measured(sample: &mut Sample, record: &Path, report: &mut Report) -> bool {
-    let helper_child = sample.capture.as_ref().and_then(Capture::helper_child_id);
+    let helper_child = sample.capture().and_then(Capture::helper_child_id);
     match super::super::run::memory::read(record, helper_child).1 {
         Ok(measurement) => {
             sample.memory = Some(measurement);
@@ -727,9 +845,38 @@ fn measured(sample: &mut Sample, record: &Path, report: &mut Report) -> bool {
     }
 }
 
+/// Which of a launch's limits the campaign's remainder set below the authored
+/// one, so that a stop at that limit is the campaign's, not the workload's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Curtailed {
+    /// The campaign's remaining time was shorter than the process timeout.
+    time: bool,
+    /// The campaign's remaining capture budget was smaller than the ceiling.
+    bytes: bool,
+}
+
+/// The limits of one launch: each authored limit, lowered to the `time` and
+/// `bytes` the campaign has left, with which of them the campaign lowered.
+fn within_campaign(
+    authored: process::Limits,
+    time: Duration,
+    bytes: usize,
+) -> (process::Limits, Curtailed) {
+    let curtailed = Curtailed {
+        time: time < authored.timeout,
+        bytes: bytes < authored.max_output_bytes,
+    };
+    let limits = process::Limits {
+        timeout: authored.timeout.min(time),
+        max_output_bytes: authored.max_output_bytes.min(bytes),
+        ..authored
+    };
+    (limits, curtailed)
+}
+
 /// Launch one bounded process within the campaign's remaining time and
-/// capture; a supervised launch is the memory helper's, whose child is
-/// reaped separately.
+/// capture, reporting which limits the campaign lowered; a supervised launch
+/// is the memory helper's, whose child is reaped separately.
 fn invoke(
     executable: &Path,
     arguments: Vec<OsString>,
@@ -737,7 +884,7 @@ fn invoke(
     directory: &Path,
     schedule: Schedule<'_>,
     report: &mut Report,
-) -> Option<Capture> {
+) -> Option<(Capture, Curtailed)> {
     if schedule.stopped(report) {
         return None;
     }
@@ -754,11 +901,7 @@ fn invoke(
         report.faults.push(Fault::CaptureBudget);
         return None;
     }
-    let limits = process::Limits {
-        timeout: report.limits.process.timeout.min(time),
-        max_output_bytes: report.limits.process.max_output_bytes.min(bytes),
-        ..report.limits.process
-    };
+    let (limits, curtailed) = within_campaign(report.limits.process, time, bytes);
     let (capture, fault) = if supervised {
         capture::supervised_with_cancellation(
             executable,
@@ -786,7 +929,7 @@ fn invoke(
     if let Some(id) = capture.unresolved_child {
         report.unresolved_children.push(id);
     }
-    Some(capture)
+    Some((capture, curtailed))
 }
 
 fn cancelled_capture(capture: &Capture) -> bool {
@@ -817,5 +960,4 @@ fn normalization_limits(request: &Request<'_>) -> Value {
 }
 
 #[cfg(test)]
-#[path = "../../../tests/support/matrix_comparison.rs"]
 mod tests;

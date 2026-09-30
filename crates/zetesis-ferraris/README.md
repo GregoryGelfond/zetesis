@@ -115,7 +115,7 @@ Construction retains the existing finite formula/work limits and charged
 failure prefix. No partial restriction escapes opaque-root, resource or control
 refusal. The separate restriction still copies original DAG descriptors before
 adding support nodes; repeated encoding of that copy remains a preparation cost.
-See [support API](src/support.rs) and [complete small-family controls](tests/support.rs).
+See [support API](src/support.rs) and [complete small-family controls](tests/integration/support.rs).
 
 ## Narrowing regions by the theory's readings
 
@@ -193,9 +193,9 @@ needed; the quota may additionally poll control at every read. The existing
 `RegionLimits` methods retain their local-ceiling API. SAT injects its search
 budget into the metered methods, so parallel workers acquire shared permits
 before candidate or frozen-reduct reads and retain their receipts after failure.
-Failed knowledge still must be abandoned. The [metering regressions](tests/region_work.rs)
+Failed knowledge still must be abandoned. The [metering regressions](tests/integration/region_work.rs)
 exercise every prefix of original and frozen narrowing and cancellation.
-The [packed knowledge regressions](tests/support/packed_knowledge.rs) compare
+The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs) compare
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
 
@@ -205,7 +205,7 @@ rule sound for stable models on the fragment `DisjunctiveSupport` names
 (`unsupported_cut`, `sole_support_forces`); the
 choice reading and the agreement of the Rust closure with `Known` are Rust
 obligations. See [regions API](src/regions.rs) and
-[the rule propositions](tests/regions.rs).
+[the rule propositions](tests/integration/regions.rs).
 
 ## Checked tight producer plans
 
@@ -230,20 +230,7 @@ characterization for this grammar, including original choices in both branch
 orders. It does not prove the Rust extractor, rank implementation or missing
 lazy source coverage. Tests compare finite trees and their materialized reducts,
 validate rank/root/identity/resource boundaries, and exercise the ordinary
-candidate batch protocol. Two maintained corpus experiments report
-[certificate eligibility](../zetesis-themelios/tests/tight_plans.rs) and
-[complete enumeration comparisons](../zetesis-themelios/tests/tight_completion.rs).
-The latter checks full model/score equality, optimum ties, candidate counts and
-avoided reduct queries against scalar checking. Their output measures eligibility
-and work counts, not elapsed time or GPU performance; it does not select a
-default execution policy.
-
-Run them from the repository root and retain the output with the source revision:
-
-```sh
-cargo test --locked -p zetesis-themelios --test tight_plans original_corpus_eligibility -- --ignored --exact --nocapture --test-threads=1
-cargo test --locked -p zetesis-themelios --test tight_completion unchanged_corpus_complete_batch_experiment -- --ignored --exact --nocapture --test-threads=1
-```
+candidate batch protocol.
 
 ## Positive producers and original constraints
 
@@ -470,7 +457,7 @@ extreme element values. A fourth test characterizes the six known discrepancies
 below; its successful execution does **not** count as six equivalence passes.
 
 ```sh
-cargo test -p zetesis-ferraris --test extrema_clingo -- --ignored
+cargo test -p zetesis-ferraris --test integration -- --ignored extrema_clingo::
 ```
 
 ### Known clingo numeric-endpoint compatibility gaps
@@ -495,8 +482,9 @@ integer wraparound has been introduced to imitate the observation.
 [The boundary evidence](tests/fixtures/extrema-clingo-5.8.2-boundaries.json)
 retains all 24 endpoint/comparison probes, their exact source, raw clingo output,
 ground text and separate equivalence/mismatch classification.
-`known_clingo_integer_endpoint_gaps_are_reported_separately` checks the six
-observations and requires reassessment if the oracle changes.
+`known_clingo_integer_endpoint_gaps_are_reported_separately` reads the six known
+mismatches from that record, checks each family against the kernel and against
+clingo, and requires reassessment if the oracle changes.
 
 A frontend promising clingo compatibility must refuse evaluated numeric min/max
 guards at `i32::MIN` and `i32::MAX` until an explicit compatibility policy is
@@ -539,7 +527,7 @@ aggregates:
 
 ```sh
 cargo test -p zetesis-ferraris
-cargo test -p zetesis-ferraris --test aggregate_clingo -- --ignored
+cargo test -p zetesis-ferraris --test integration -- --ignored aggregate_clingo::
 ```
 
 The optional subprocesses use temporary files, a five-second deadline and a

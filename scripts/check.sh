@@ -3,14 +3,14 @@
 set -eu
 mode=${1:-portable}
 coverage_option=${2:-}
-usage='Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|hardware|full]; scripts/check.sh coverage --metal; scripts/check.sh hardware [--metal|--vulkan]'
+usage='Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|hardware|full]; scripts/check.sh coverage [--metal|--vulkan]; scripts/check.sh hardware [--metal|--vulkan]'
 if [ "$#" -gt 2 ]; then
     printf '%s\n' "$usage" >&2
     exit 2
 fi
 if [ "$#" -eq 2 ]; then
     case "$mode $coverage_option" in
-        'coverage --metal'|'hardware --metal'|'hardware --vulkan') ;;
+        'coverage --metal'|'coverage --vulkan'|'hardware --metal'|'hardware --vulkan') ;;
         *)
             printf '%s\n' "$usage" >&2
             exit 2 ;;
@@ -42,16 +42,16 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
     cargo clippy --locked -p zetesis-cli -p zetesis-solve --no-default-features --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
-    # These maintained semantic experiments are independent Cargo workspaces.
+    # The maintained standalone packages are independent Cargo workspaces.
     # Main-workspace checks cannot select them implicitly.
-    for standalone_manifest in validation/reference/Cargo.toml experiments/gate-transfer/Cargo.toml refinement/membership/rust/Cargo.toml; do
+    for standalone_manifest in validation/reference/Cargo.toml refinement/membership/rust/Cargo.toml; do
         cargo fmt --manifest-path "$standalone_manifest" --all -- --check
         cargo test --manifest-path "$standalone_manifest" --locked --all-targets --all-features --no-fail-fast
         cargo test --manifest-path "$standalone_manifest" --locked --doc --all-features --no-fail-fast
         cargo clippy --manifest-path "$standalone_manifest" --locked --all-targets --all-features -- -D warnings
         RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path "$standalone_manifest" --locked --all-features --no-deps
     done
-    cargo bench --locked -p zetesis-experiments --bench oracles -- --test
+    cargo bench --locked -p zetesis-cpu --bench oracles -- --test
     cargo bench --locked -p zetesis-cpu --bench lazy_joins -- --test
     cargo bench --locked -p zetesis-ferraris --bench native_aggregates -- --test
     cargo bench --locked -p zetesis-ferraris --bench frozen_reduct -- --test
@@ -111,32 +111,48 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     oracle_test() {
         oracle_index=$((oracle_index + 1))
         printf '%s\n' cargo test "$@" > "$oracle_records/$oracle_index.argv"
-        if cargo test "$@"; then
-            oracle_exit=0
-        else
-            oracle_exit=$?
-        fi
-        printf '%s\n' "$oracle_exit" > "$oracle_records/$oracle_index.exit"
+        # The harness's report of the tests it ran is kept beside the exit
+        # status, for the check of every campaign's run below.
+        {
+            if cargo test "$@"; then
+                printf '%s\n' 0 > "$oracle_records/$oracle_index.exit"
+            else
+                printf '%s\n' "$?" > "$oracle_records/$oracle_index.exit"
+            fi
+        } | tee "$oracle_records/$oracle_index.log"
+        oracle_exit=$(cat "$oracle_records/$oracle_index.exit")
         printf 'Oracle campaign %s exited %s\n' "$oracle_index" "$oracle_exit"
         if [ "$oracle_first_failure" -eq 0 ] && [ "$oracle_exit" -ne 0 ]; then
             oracle_first_failure=$oracle_exit
         fi
     }
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test arithmetic_validation --test support_delta --test extremal_terms --test observation_bindings --test objective_rich_cycles --test objective_pools --test conditional_heads --test keyed_constraints --test strong_negation -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test language_consumers original_sources_retain_declared_reference_results -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test projected_reference -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-validation --test example_parity --test authored_examples -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test objective_boundaries --test objective_dependency_contracts -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test objective_scopes --test objective_carrier_composition --test objective_language_boundaries -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test head_contributions --test objective_source_completion --test objective_field_expressions --test objective_priority_reporting --test objective_cyclic_producers --test objective_rich_producers --test observation_expressions --test observation_scopes --test observation_families -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test logical_bounds --test objective_priorities --test objective_priority_certificates --test objective_measure_carriers --test finite_chains --test affine_normalization -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test extrema_alias_contracts --test boolean_element_contracts --test signed_element_contracts --test signed_choices -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding --test boolean_heads --test evaluated_witnesses --test objective_literal_weights --test objective_extrema_presence -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test aggregate_dependencies --test aggregate_consumers --test choice_consumers --test outer_negative_consumers --test outer_ranges --test negative_count_eligibility --test structured_witnesses -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test aggregate_clingo -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test extrema_clingo -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-cli --test clingo --test extended_clingo --test multiple_inputs --test maximize --test language_value_sessions --test contribution_sessions --test bound_priority_sessions --test finite_carrier_sessions --test count_objective_sessions --test strong_negation -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test bundle_admission --test metadata --test formula --test formula_clingo --test aggregate_clingo --test aggregate_assignments_multiple --test aggregate_objective_observers --test extrema_source --test scalar_bindings_clingo --test objective_bounds_adversarial --test factorization_clingo --test comparison_reuse --test disjunction --test sum_profiles --test weak_objectives --test maximize_clingo --test observations --test observations_adversarial --test choice_intervals --test ground_guards --test conditional_body --test comparison_generators --test finite_bindings --test evaluated_heads --test negative_heads --test structural_values --test finite_pools --test true_heads --test count_heads --test value_extrema --test structural_bindings --test finite_values --test consequent_alternatives --test function_patterns --test positive_arguments --test scalar_evaluation -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture arithmetic_validation:: support_delta:: extremal_terms:: observation_bindings:: objective_rich_cycles:: objective_pools:: conditional_heads:: keyed_constraints:: strong_negation::
+    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration language_consumers::original_sources_retain_declared_reference_results -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration -- --ignored --nocapture projected_reference::
+    oracle_test --locked --no-fail-fast -p zetesis-validation --test integration -- --ignored --nocapture example_parity:: authored_examples::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture objective_boundaries:: objective_dependency_contracts::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture objective_scopes:: objective_carrier_composition:: objective_language_boundaries::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture head_contributions:: objective_source_completion:: objective_field_expressions:: objective_priority_reporting:: objective_cyclic_producers:: objective_rich_producers:: observation_expressions:: observation_scopes:: observation_families::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture logical_bounds:: objective_priorities:: objective_priority_certificates:: objective_measure_carriers:: finite_chains:: affine_normalization::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture extrema_alias_contracts:: boolean_element_contracts:: signed_element_contracts:: signed_choices::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture program_parts:: conditional_consumers:: weighted_heads:: nonbinding_guards:: extrema_heads:: count_plans:: count_head_activity:: objective_forwarding:: boolean_heads:: evaluated_witnesses:: objective_literal_weights:: objective_extrema_presence::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture aggregate_dependencies:: aggregate_consumers:: choice_consumers:: outer_negative_consumers:: outer_ranges:: negative_count_eligibility:: structured_witnesses::
+    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --nocapture aggregate_clingo::
+    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --nocapture extrema_clingo::
+    oracle_test --locked --no-fail-fast -p zetesis-cli --test integration -- --ignored --nocapture clingo:: extended_clingo:: multiple_inputs:: maximize:: language_value_sessions:: contribution_sessions:: bound_priority_sessions:: finite_carrier_sessions:: count_objective_sessions:: strong_negation::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture bundle_admission:: metadata:: formula:: formula_clingo:: aggregate_clingo:: aggregate_assignments_multiple:: aggregate_objective_observers:: extrema_source:: scalar_bindings_clingo:: objective_bounds_adversarial:: factorization_clingo:: comparison_reuse:: disjunction:: sum_profiles:: weak_objectives:: maximize_clingo:: observations:: observations_adversarial:: choice_intervals:: ground_guards:: conditional_body:: comparison_generators:: finite_bindings:: evaluated_heads:: negative_heads:: structural_values:: finite_pools:: true_heads:: count_heads:: value_extrema:: structural_bindings:: finite_values:: consequent_alternatives:: function_patterns:: positive_arguments:: scalar_evaluation::
+    # Each campaign ran at least one test, and exactly the ignored tests its
+    # filters select among the sources: a filter matching nothing, or a
+    # selected test the campaign's features compile out, fails the gate.
+    if scripts/maintenance.sh oracle-runs --root . --records "$oracle_records"; then
+        oracle_runs_exit=0
+    else
+        oracle_runs_exit=$?
+    fi
+    printf '%s\n' "$oracle_runs_exit" > "$oracle_records/runs.exit"
+    if [ "$oracle_first_failure" -eq 0 ] && [ "$oracle_runs_exit" -ne 0 ]; then
+        oracle_first_failure=$oracle_runs_exit
+    fi
     printf 'Oracle campaign records: %s\n' "$oracle_records"
     if [ "$oracle_first_failure" -ne 0 ]; then
         printf '%s\n' failed > "$oracle_records/status.txt"
@@ -167,8 +183,9 @@ if [ "$mode" = proofs ] || [ "$mode" = full ]; then
     scripts/maintenance.sh proof-record --live-audit "$proof_check/audit.stdout"
 fi
 if [ "$mode" = coverage ] || [ "$mode" = full ]; then
-    if [ "$coverage_option" = --metal ]; then
-        ./scripts/coverage.sh gate --metal
+    # A physical stage only when a backend is named.
+    if [ -n "$coverage_option" ]; then
+        ./scripts/coverage.sh gate "$coverage_option"
     else
         ./scripts/coverage.sh
     fi

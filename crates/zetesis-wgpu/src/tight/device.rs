@@ -8,7 +8,8 @@ use super::{
     TightSupport, poll,
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
-use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
@@ -48,13 +49,7 @@ impl GpuTightOracle {
     /// Refuses unavailable or policy-incompatible adapters, capabilities,
     /// allocation, shader validation or device creation.
     pub fn new_metal(options: GpuOptions) -> Result<Self, GpuError> {
-        Self::new_selected(
-            options,
-            GpuSelection {
-                backend: GpuBackendPreference::Metal,
-                ..Default::default()
-            },
-        )
+        Self::new_selected(options, GpuSelection { api: GpuApi::Metal })
     }
     /// Create an independently owned device/pipeline using hard adapter filters.
     /// Construction and compilation costs are outside per-batch limits.
@@ -318,5 +313,4 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/tight/device.rs"]
 mod tests;

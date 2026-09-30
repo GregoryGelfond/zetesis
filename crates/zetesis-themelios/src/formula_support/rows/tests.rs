@@ -2,6 +2,7 @@ use super::{Frame, Ownership};
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::testing::Fixture;
+use crate::formula_support::testing::numbers;
 use crate::formula_support::{Computation, Counters, Join, Traversal};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_base::{
@@ -10,6 +11,7 @@ use themelios_base::{
 };
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNodeRef};
+use zetesis_test_support::programs::atom;
 
 use crate::formula_support::Context;
 fn location() -> Location {
@@ -17,9 +19,6 @@ fn location() -> Location {
         source: SourceId::new(73),
         span: Span::empty(ByteOffset::new(9)),
     }
-}
-fn atom(name: &str, values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 fn pattern(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
     LiteralIr::Atom(
@@ -33,9 +32,6 @@ fn pattern(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr 
             location(),
         ),
     )
-}
-fn numbers(values: &[i32]) -> Vec<Value> {
-    values.iter().map(|&value| Value::Number(value)).collect()
 }
 fn with_join<T>(
     literals: impl FnOnce(&mut Fixture) -> Vec<LiteralIr>,

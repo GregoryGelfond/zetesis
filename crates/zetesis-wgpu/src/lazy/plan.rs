@@ -311,5 +311,4 @@ fn snapshot_shape(
 }
 
 #[cfg(test)]
-#[path = "../../tests/lazy/shapes.rs"]
-mod shape_tests;
+mod tests;

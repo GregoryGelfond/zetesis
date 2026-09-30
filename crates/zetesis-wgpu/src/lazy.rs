@@ -438,7 +438,6 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
 }
 
 #[cfg(test)]
-#[path = "../tests/lazy/capabilities.rs"]
 mod capability_tests;
 
 #[cfg(test)]
@@ -698,13 +697,10 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/lazy/transport.rs"]
 mod transport_tests;
 
 #[cfg(test)]
-#[path = "../tests/lazy/replacement.rs"]
 mod replacement_tests;
 
 #[cfg(test)]
-#[path = "../tests/lazy/retention.rs"]
 mod retention_tests;

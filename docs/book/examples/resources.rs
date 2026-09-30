@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         let program = Program::new(vec![fact], AdmissionLimits::default())?;
         let config = SolveConfig {
-            backend: Backend::Gpu,
+            backend: Backend::Gpu(None),
             grounder: Grounder::Lazy,
             models: 0,
             ..Default::default()

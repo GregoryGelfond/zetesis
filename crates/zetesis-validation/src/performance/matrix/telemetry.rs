@@ -2,6 +2,7 @@
 use super::{DeviceWork, Execution, FormulaResidualStatistics, Observation, Procedure};
 use crate::selected::{Backend, Grounder, NativeExecution, Oracle};
 use serde_json::Value;
+use zetesis_backend::GpuApi;
 
 mod hybrid;
 mod terminal;
@@ -44,8 +45,9 @@ pub(super) fn observe(
     let [route] = routes.as_slice() else {
         return Err("missing or ambiguous actual backend metadata".into());
     };
+    // `gpu` asks for the platform's native API; what ran is the concrete one.
     let (backend, adapter) = reported_backend(route)?;
-    if backend != request.backend {
+    if backend.resolved_api() != request.backend.resolved_api() {
         return Err("actual backend differs from requested matrix cell".into());
     }
     let effective = one(
@@ -134,13 +136,21 @@ fn reported_backend(route: &str) -> Result<(Backend, Option<String>), String> {
         .or_else(|| route.strip_prefix("hybrid GPU propagation + exact CPU residual search ("))
         .or_else(|| route.strip_prefix("GPU tight support ("))
         .ok_or("unsupported actual backend metadata")?;
-    let (adapter, _) = prefix
-        .split_once(", Metal; vendor=")
-        .ok_or("actual device API is not Metal")?;
+    let (identity, _) = prefix
+        .split_once("; vendor=")
+        .ok_or("missing actual device vendor")?;
+    let (adapter, api) = identity
+        .rsplit_once(", ")
+        .ok_or("missing actual device API")?;
+    let api = match api {
+        "Metal" => GpuApi::Metal,
+        "Vulkan" => GpuApi::Vulkan,
+        _ => return Err("actual device API is neither Metal nor Vulkan".into()),
+    };
     if adapter.is_empty() {
         return Err("empty actual device name".into());
     }
-    Ok((Backend::Metal, Some(adapter.to_owned())))
+    Ok((Backend::Gpu(Some(api)), Some(adapter.to_owned())))
 }
 
 fn one<'a>(mut values: impl Iterator<Item = &'a str>, label: &str) -> Result<&'a str, String> {
@@ -184,6 +194,7 @@ fn device(
         }
         return cpu(statistics);
     }
+    let api = backend.resolved_api().ok_or("missing actual device API")?;
     if procedure == Procedure::Closure {
         if effective != "requested GPU policy"
             || !route.starts_with("gpu (")
@@ -193,9 +204,9 @@ fn device(
         }
         if grounder == Grounder::Lazy {
             if !route.ends_with("; lazy immutable reduct rounds)") || !lazy_stats.is_object() {
-                return Err("lazy Metal requires its own activity record and route".into());
+                return Err("lazy GPU route requires its own activity record and route".into());
             }
-            return lazy(lazy_stats, adapter);
+            return lazy(lazy_stats, api, adapter);
         }
         if !route.contains("; static atoms=") || !lazy_stats.is_null() {
             return Err("static closure route has conflicting lazy activity".into());
@@ -212,9 +223,9 @@ fn device(
             || !formula_stats.is_object()
             || !lazy_stats.is_null()
         {
-            return Err("tight Metal requires its own activity record and route".into());
+            return Err("tight GPU route requires its own activity record and route".into());
         }
-        return tight(formula_stats, adapter);
+        return tight(formula_stats, api, adapter);
     }
     if grounder != Grounder::Eager
         || effective != "hybrid GPU propagation + exact CPU residual search"
@@ -222,9 +233,9 @@ fn device(
         || !formula_stats.is_object()
         || !lazy_stats.is_null()
     {
-        return Err("hybrid Metal requires its own activity record and route".into());
+        return Err("hybrid GPU route requires its own activity record and route".into());
     }
-    formula(formula_stats, adapter)
+    formula(formula_stats, api, adapter)
 }
 
 fn number(value: &Value, key: &str) -> Result<u64, String> {
@@ -232,10 +243,10 @@ fn number(value: &Value, key: &str) -> Result<u64, String> {
         .as_u64()
         .ok_or_else(|| format!("missing or non-u64 execution counter: {key}"))
 }
-fn lazy(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
+fn lazy(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWork, String> {
     let submitted = number(value, "submitted_candidates")?;
     let completed = number(value, "completed_candidates")?;
-    if value["backend"] != "Metal"
+    if value["backend"] != api.name()
         || value["adapter"].as_str() != adapter
         || number(value, "stopped_candidates")? != 0
         || number(value, "queued_results")? != 0
@@ -261,11 +272,11 @@ fn lazy(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
         completed_candidates: completed,
     })
 }
-fn formula(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
+fn formula(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWork, String> {
     if !value["tight_work_per_candidate"].is_null() || !value["gpu_scheduled_work"].is_null() {
         return Err("propagation route reports tight-support work".into());
     }
-    let activity = formula_activity(value, adapter)?;
+    let activity = formula_activity(value, api, adapter)?;
     Ok(DeviceWork::Formula {
         batches: activity.batches,
         candidates: activity.candidates,
@@ -311,12 +322,15 @@ struct FormulaActivity {
     peak_bytes: u64,
 }
 
-fn formula_activity(value: &Value, adapter: Option<&str>) -> Result<FormulaActivity, String> {
+fn formula_activity(
+    value: &Value,
+    api: GpuApi,
+    adapter: Option<&str>,
+) -> Result<FormulaActivity, String> {
     let adapter = adapter.ok_or("missing actual formula adapter")?;
-    if !value["adapter"]
-        .as_str()
-        .is_some_and(|reported| reported.starts_with(&format!("{adapter}, Metal; vendor=")))
-    {
+    if !value["adapter"].as_str().is_some_and(|reported| {
+        reported.starts_with(&format!("{adapter}, {}; vendor=", api.name()))
+    }) {
         return Err("formula adapter disagrees with actual route".into());
     }
     let candidates = number(value, "gpu_candidates")?;
@@ -340,8 +354,8 @@ fn formula_activity(value: &Value, adapter: Option<&str>) -> Result<FormulaActiv
     })
 }
 
-fn tight(value: &Value, adapter: Option<&str>) -> Result<DeviceWork, String> {
-    let activity = formula_activity(value, adapter)?;
+fn tight(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWork, String> {
+    let activity = formula_activity(value, api, adapter)?;
     let submitted_batches = number(value, "gpu_submitted_batches")?;
     let submitted_candidates = number(value, "gpu_submitted_candidates")?;
     let scheduled_work = number(value, "gpu_scheduled_work")?;
@@ -457,7 +471,6 @@ fn consistent_timings(
 }
 
 #[cfg(test)]
-#[path = "../../../tests/support/matrix_telemetry.rs"]
 mod tests;
 
 fn cpu(statistics: &Value) -> Result<DeviceWork, String> {

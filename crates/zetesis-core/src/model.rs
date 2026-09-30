@@ -330,8 +330,9 @@ impl<'a> ModelAtoms<'a> {
         self.positions.is_empty()
     }
 
-    /// The atom at a position of the model's canonical order. Resolving its
-    /// canonical payload searches the retained immutable segment ranges.
+    /// The atom at a position of the model's canonical order. The view checks
+    /// prefix membership only; reading its payload resolves the row through the
+    /// retained immutable segment ranges.
     #[must_use]
     pub fn at(self, position: usize) -> Option<AtomRef<'a>> {
         self.positions
@@ -348,7 +349,7 @@ impl<'a> ModelAtoms<'a> {
         }
     }
 
-    /// Least true atom in canonical storage order, resolving its retained segment.
+    /// Least true atom in canonical storage order, borrowed without resolving it.
     #[must_use]
     pub fn first(self) -> Option<AtomRef<'a>> {
         self.positions
@@ -356,7 +357,7 @@ impl<'a> ModelAtoms<'a> {
             .and_then(|&position| self.atoms.at(position))
     }
 
-    /// Greatest true atom in canonical storage order, resolving its retained segment.
+    /// Greatest true atom in canonical storage order, borrowed without resolving it.
     #[must_use]
     pub fn last(self) -> Option<AtomRef<'a>> {
         self.positions
@@ -690,5 +691,4 @@ impl<E: std::error::Error + 'static> std::error::Error for ModelPublicationFailu
 }
 
 #[cfg(test)]
-#[path = "model/publication_tests.rs"]
 mod publication_tests;

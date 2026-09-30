@@ -2,6 +2,7 @@
 use super::{
     super::{Capture, Diagnostics},
     Slot,
+    serialization::MatrixCapture,
 };
 use crate::selected::Backend;
 use serde::Serialize;
@@ -24,6 +25,12 @@ pub enum Decision {
     Cancelled,
     /// Authored capture ceiling was reached.
     CaptureLimit,
+    /// The campaign's deadline, earlier than the authored process timeout,
+    /// stopped this invocation; it says nothing of the workload's own time.
+    CampaignDeadline,
+    /// The campaign's remaining capture budget, smaller than the authored
+    /// ceiling, stopped this invocation's capture.
+    CampaignCaptureBudget,
     /// Spawn/exit/capture/cleanup failed; a GPU error is not assumed to mean absence.
     InvocationFailure,
     /// Captured producer output is malformed or contradictory.
@@ -34,11 +41,39 @@ pub enum Decision {
     InvalidTelemetry,
     /// A complete reference was unavailable for comparison.
     ReferenceUnavailable,
+    /// The campaign is clingo-free and the workload has no recorded contract:
+    /// only clingo establishes its family, so it was not launched.
+    NeedsClingo,
     /// Prespecified scheduling policy prevented this position from launching.
     NotAttempted,
     /// A memory round's separate child-resource record was absent, invalid or
     /// contradicted the helper's evidence.
     InvalidMemory,
+}
+impl Decision {
+    /// The spelling records carry for this decision.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Pass => "pass",
+            Self::Refused => "refused",
+            Self::BackendUnavailable => "backend_unavailable",
+            Self::Incomplete => "incomplete",
+            Self::Timeout => "timeout",
+            Self::Cancelled => "cancelled",
+            Self::CaptureLimit => "capture_limit",
+            Self::CampaignDeadline => "campaign_deadline",
+            Self::CampaignCaptureBudget => "campaign_capture_budget",
+            Self::InvocationFailure => "invocation_failure",
+            Self::InvalidReport => "invalid_report",
+            Self::ParityMismatch => "parity_mismatch",
+            Self::InvalidTelemetry => "invalid_telemetry",
+            Self::ReferenceUnavailable => "reference_unavailable",
+            Self::NeedsClingo => "needs_clingo",
+            Self::NotAttempted => "not_attempted",
+            Self::InvalidMemory => "invalid_memory",
+        }
+    }
 }
 /// Actual reported semantic checker, including certified specializations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -234,8 +269,7 @@ impl Observation {
 #[derive(Debug, Serialize)]
 pub struct Sample {
     pub(super) slot: Slot,
-    #[serde(serialize_with = "super::serialization::optional_capture")]
-    pub(super) capture: Option<Capture>,
+    pub(super) capture: Option<MatrixCapture>,
     pub(super) decision: Decision,
     pub(super) detail: Option<String>,
     pub(super) blocked_by: Option<usize>,
@@ -282,7 +316,10 @@ impl Sample {
     /// Exact launched process record, absent for a skipped position.
     #[must_use]
     pub const fn capture(&self) -> Option<&Capture> {
-        self.capture.as_ref()
+        match &self.capture {
+            Some(capture) => Some(&capture.0),
+            None => None,
+        }
     }
     /// Earlier failed sample disabling this cell, when applicable.
     #[must_use]

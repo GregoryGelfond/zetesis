@@ -2,6 +2,7 @@
 
 [About this book](index.md)
 [Using the zetesis command](reference/commands.md)
+[Benchmarking with zetesis-bench](reference/benchmarking.md)
 
 # Part I — Solver design and architecture
 
@@ -23,7 +24,6 @@
 - [Library reference index](rust/libraries.md)
 - [Reusing command workflows](rust/workflows.md)
 - [Preparing source and interpreting analysis](rust/source.md)
-- [Supplying a membership executor](rust/executors.md)
 - [Interpretations and retained atoms](rust/models.md)
 - [Observations and host measurements](rust/measurements.md)
 - [Working with finite reducts](rust/reducts.md)
@@ -58,6 +58,7 @@
   - [Earlier grounding measurements](reference/grounding-measurements.md)
 - [Validating an implementation change](reference/validation.md)
   - [Measurement protocols](reference/measurement-protocols.md)
+  - [Version 0.1.5 coverage](reference/coverage-0.1.5.md)
 
 ---
 

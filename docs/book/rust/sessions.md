@@ -20,10 +20,6 @@ broader finite formula profile. These are explicit library choices. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
-An admitted formula session can also use a caller-supplied
-[membership executor](executors.md), while retaining the ordinary candidate,
-reduct, objective and outcome owners.
-
 `SolveConfig::validate` checks representation-independent policy combinations.
 Prepared input adds its profile constraints; the selected executor then checks
 its own resources. CPU closure setup conservatively requires
@@ -40,9 +36,8 @@ privately constructed `AnswerSet` retains its original `Subject`, complete inter
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
 completed membership results under the selected implementation, not Lean proof
-objects. A caller-supplied `BatchExecutor` must satisfy its
-[soundness contract](executors.md#state-the-trusted-boundary); the host exactly
-completes residual checks but trusts the executor's decisive verdicts.
+objects. Membership is always decided by zetesis's own reduct check, on the CPU
+or on a qualified GPU route; the library accepts no caller-supplied checker.
 
 `Session::enumerate` streams all answers of the original program, including
 nonoptimal answers. It evaluates objective scores but disables both candidate
@@ -128,8 +123,8 @@ frozen reduct.
 
 An explicit Metal or Vulkan formula session with `Oracle::Auto` uses the same
 accounted tight preparation, then executes `GpuTightOracle` when it succeeds.
-`StableModels::prepare_tight_certificate` exposes the shared immutable plan for
-an external executor without enabling CPU membership. Repeated calls retain the
+`StableModels::prepare_tight_certificate` exposes the shared immutable plan to
+the GPU route without enabling CPU membership. Repeated calls retain the
 first construction attempt and its work; CPU checking can activate that same
 owner before enumeration. Theories without a complete tight certificate continue
 through general device propagation, as does explicit `Oracle::Countermodel`.
@@ -194,9 +189,9 @@ Reuse preserves consumed work and pending-candidate accounting after a refusal.
 `HybridFormula` owning the original source, retained core and streamed constraint
 plans. Pass it through `PreparedInput::hybrid(&owner)`. The current profile uses
 CPU execution, indexed joins and no objectives; richer constraints remain in
-the eager core. `Backend::Cpu` or `Auto` and `Grounder::Lazy` or `Auto` are
-accepted. An explicit device request, eager schedule, closure oracle or external
-batch executor is refused for this profile.
+the eager core. `Backend::Cpu` and `Grounder::Lazy` or `Auto` are accepted.
+A GPU backend, eager schedule, closure oracle or external batch executor is
+refused for this profile.
 
 Preparation still completes possible support, arithmetic admission and the atom
 catalog. Eligible instances are visited during admission, but their full
@@ -459,12 +454,11 @@ execution observations. The solver retains no event queue; any collection or
 side effects belong to the observer. Successful observation does not establish
 membership, coverage or publication.
 
-Automatic hardware policy keeps CPU execution throughout the session. Independent
-relational checking in a GPU-enabled build records `AutomaticCpu`; shared source
-rounds record `SharedCpu`, and a CPU-only build records `DeviceNotCompiled`.
-Formula preparation records `CpuFormula`. Earlier deferred-discovery and CPU-retry
-variants are no longer part of the enum. An explicit GPU request can produce
-device observations; supplying resources alone does not select it.
+The CPU backend keeps CPU execution throughout the session: relational checking
+records `CpuClosure` and formula preparation records `CpuFormula`. Earlier
+automatic-selection, deferred-discovery and CPU-retry variants are no longer part
+of the enum. A GPU backend can produce device observations; supplying resources
+alone does not select it.
 
 An observer error stops the relevant operation and is retained separately from
 device errors. Some formula

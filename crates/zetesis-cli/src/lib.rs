@@ -15,7 +15,6 @@
 mod options;
 mod command;
 pub mod testing;
-pub mod benchmark;
 pub mod statistics_view;
 pub use command::Invocation;
 pub use statistics_view::StatisticsView;
@@ -37,10 +36,6 @@ pub use view::{
     AnswerRenderer, AnswerView, HumanRenderer, JsonRenderer, PublicationConfig, PublicationView,
     SummaryDelivery, SummaryStage,
 };
-
-#[cfg(test)]
-#[path = "../tests/support/bounded_writer.rs"]
-mod test_writer;
 
 pub use devices::devices;
 pub use driver::{

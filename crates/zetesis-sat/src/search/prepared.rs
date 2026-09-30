@@ -169,9 +169,4 @@ impl PreparedWorkspace {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/prepared_search.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "../../tests/support/prepared_base.rs"]
-mod base_tests;

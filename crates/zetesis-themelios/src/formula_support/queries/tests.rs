@@ -1,20 +1,13 @@
 //! Distinguishing workspace ownership, live masks and refused work prefixes.
 
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
 
 use super::*;
+use crate::GroundingPhase;
 use crate::grounding_observer::Profile;
-use crate::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
+use crate::test_support::Observer;
+use crate::test_support::location;
 
 fn catalog() -> super::super::SupportCatalog {
     let mut catalog = super::super::SupportCatalog::default();
@@ -42,25 +35,6 @@ fn pattern(alias: bool) -> AtomPattern {
         vec![Term::Variable(0), Term::Variable(usize::from(!alias))],
     )
     .unwrap()
-}
-
-#[derive(Default)]
-struct Observer(Cell<GroundingWork>);
-impl GroundingObserver for Observer {
-    fn enter(&self) {}
-    fn exit(&self) {}
-    fn details_enabled(&self) -> bool {
-        true
-    }
-    fn phase_exit(
-        &self,
-        _: GroundingPhase,
-        _: Option<Location>,
-        _: GroundingOutcome,
-        work: GroundingWork,
-    ) {
-        self.0.set(work);
-    }
 }
 
 #[test]

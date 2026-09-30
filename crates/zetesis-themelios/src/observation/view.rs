@@ -10,7 +10,7 @@ use zetesis_objective::Score;
 
 use super::json::AtomTable;
 use super::{ConstructionLimits, Error, Evaluation, Limits, ObservationProgram, Statistics};
-use crate::OutputSelection;
+use crate::{OutputSelection, PreparedSelection};
 
 /// A full supplied model beside its independent observation and objective channels.
 /// Construction evaluates observations only; the caller establishes stability and
@@ -19,10 +19,37 @@ use crate::OutputSelection;
 /// the full model, atom selection, and optional score are borrowed.
 pub struct ModelView<'a> {
     model: &'a Model,
-    selection: &'a OutputSelection,
+    selection: AtomChannel<'a>,
     terms: Evaluation,
     score: Option<&'a Score>,
 }
+
+/// The selection deciding a view's atom channel: the policy itself, or the
+/// policy with decisions prepared for repeated answers.
+#[derive(Clone, Copy)]
+pub(super) enum AtomChannel<'a> {
+    Policy(&'a OutputSelection),
+    Prepared(&'a PreparedSelection<'a>),
+}
+impl AtomChannel<'_> {
+    fn includes<'a>(self, atom: impl Into<AtomRef<'a>>) -> bool {
+        match self {
+            Self::Policy(selection) => selection.includes(atom),
+            Self::Prepared(selection) => selection.includes(atom),
+        }
+    }
+    pub(super) fn try_includes<'a, E>(
+        self,
+        atom: impl Into<AtomRef<'a>>,
+        charge: impl FnMut(u128) -> Result<(), E>,
+    ) -> Result<bool, E> {
+        match self {
+            Self::Policy(selection) => selection.try_includes(atom, charge),
+            Self::Prepared(selection) => selection.try_includes(atom, charge),
+        }
+    }
+}
+
 impl ObservationProgram {
     /// Evaluate a view over a supplied full model and optional already computed score.
     ///
@@ -54,6 +81,29 @@ impl ObservationProgram {
         )
     }
 
+    /// Evaluate a view like [`Self::view`] whose atom channel reads a
+    /// selection prepared once for repeated answers.
+    ///
+    /// # Errors
+    /// Returns the same typed refusals as [`Self::view`].
+    pub fn view_prepared<'a>(
+        &self,
+        model: &'a Model,
+        selection: &'a PreparedSelection<'a>,
+        score: Option<&'a Score>,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<ModelView<'a>, Error> {
+        self.channel_view(
+            model,
+            AtomChannel::Prepared(selection),
+            score,
+            limits,
+            ConstructionLimits::default(),
+            cancellation,
+        )
+    }
+
     /// Construct a view with an independent observation-construction ceiling.
     /// JSON encoding remains a separate operation with its own accounting.
     ///
@@ -63,6 +113,25 @@ impl ObservationProgram {
         &self,
         model: &'a Model,
         selection: &'a OutputSelection,
+        score: Option<&'a Score>,
+        limits: Limits,
+        construction: ConstructionLimits,
+        cancellation: &Cancellation,
+    ) -> Result<ModelView<'a>, Error> {
+        self.channel_view(
+            model,
+            AtomChannel::Policy(selection),
+            score,
+            limits,
+            construction,
+            cancellation,
+        )
+    }
+
+    fn channel_view<'a>(
+        &self,
+        model: &'a Model,
+        selection: AtomChannel<'a>,
         score: Option<&'a Score>,
         limits: Limits,
         construction: ConstructionLimits,
@@ -124,8 +193,9 @@ impl ModelView<'_> {
 
     /// Selected original atoms in full-model order; no term-channel deduplication.
     /// Constructing the iterator takes constant time and allocates nothing. A full
-    /// traversal scans all atoms and, for explicit selection, performs a binary
-    /// lookup per atom; predicate comparison also inspects name bytes.
+    /// traversal scans all atoms; for explicit selection each atom reads a prepared
+    /// decision or, outside the prepared vocabulary, performs a binary lookup whose
+    /// predicate comparisons inspect name bytes.
     pub fn shown_atoms(&self) -> impl Iterator<Item = AtomRef<'_>> {
         self.model
             .atoms()
@@ -173,11 +243,13 @@ impl ModelView<'_> {
     /// Encoding looks every atom of the model up in the table once and
     /// traverses the value nodes of the atoms it spells, every shown term
     /// node and every cost entry, together with their emitted UTF-8 bytes.
-    /// Signature selection uses the same binary lookup as
-    /// [`OutputSelection::includes`], with at most `floor(log2(S)) + 1`
-    /// comparisons per atom for nonempty `S` signatures. Each probe charges
-    /// one unit plus both predicate-name byte lengths. Observation
-    /// evaluation has already occurred and is not repeated here.
+    /// Signature selection uses the binary lookup of
+    /// [`crate::OutputSelection::includes`], with at most `floor(log2(S)) + 1`
+    /// comparisons per atom for nonempty `S` signatures, each charging one
+    /// unit plus both predicate-name byte lengths. In a view built by
+    /// [`ObservationProgram::view_prepared`], an atom answered by a prepared
+    /// decision instead charges one unit. Observation evaluation has already
+    /// occurred and is not repeated here.
     ///
     /// The returned record retains `B` bytes, bounded by `max_bytes`. Encoding
     /// additionally holds a cursor of at most `D` frames for one shown term, bounded

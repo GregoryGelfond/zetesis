@@ -12,6 +12,10 @@ use super::{Error, matrix, series};
 /// can explicitly apply [`series::limits`] and [`series::native_answers`] before
 /// constructing its request. This operation never silently raises a ceiling.
 /// The returned report is not published; the caller chooses when to publish it.
+/// A series case selection names workload entries, including generated paths;
+/// each entry expands to all its cells in series order, with entries visited in
+/// the caller's order. The report retains the original selection and each
+/// expanded workload's identity.
 ///
 /// # Errors
 /// Returns corpus, workload preparation or campaign configuration failures.
@@ -42,7 +46,7 @@ pub fn run_with_cancellation(
         let corpus =
             crate::examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
         let workloads = series::workloads(&corpus, matrix::WorkloadLimits::default())?;
-        matrix::run_workloads_with_cancellation(request, &workloads, invocation, cancelled)
+        matrix::run_series_with_cancellation(request, &workloads, invocation, cancelled)
     } else {
         matrix::run_with_cancellation(request, invocation, cancelled)
     }

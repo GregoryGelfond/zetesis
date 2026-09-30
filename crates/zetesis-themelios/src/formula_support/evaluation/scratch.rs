@@ -237,5 +237,4 @@ impl Drop for Frame<'_> {
 }
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

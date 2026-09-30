@@ -10,8 +10,56 @@
 mod record;
 pub use record::{RecordError, measure_to_file};
 
+use std::ffi::OsString;
 use std::fmt;
-use std::io;
+use std::io::{self, Write};
+use std::process::ExitCode;
+
+/// The first argument that makes a campaign's helper executable measure one
+/// child: `HELPER RECORD EXECUTABLE [ARGUMENT…]`, dispatched by [`run_helper`].
+pub const HELPER_COMMAND: &str = "__measure-child";
+
+/// The measurement helper's whole behaviour, for the executable a campaign
+/// launches as its helper.
+///
+/// `arguments` follow [`HELPER_COMMAND`]: the new record's path, then the
+/// absolute executable to measure and its unmodified arguments. Measures that
+/// one child from the current directory with [`measure_to_file`], in this
+/// fresh process; the child's own output passes through. A missing argument or
+/// a failed measurement is reported to `diagnostics` and exits with status 2.
+pub fn run_helper(
+    arguments: impl IntoIterator<Item = OsString>,
+    diagnostics: &mut impl Write,
+) -> ExitCode {
+    let mut arguments = arguments.into_iter();
+    let (Some(record), Some(executable)) = (arguments.next(), arguments.next()) else {
+        let _ = writeln!(
+            diagnostics,
+            "usage: {HELPER_COMMAND} RECORD EXECUTABLE [ARGUMENT...]"
+        );
+        return ExitCode::from(2);
+    };
+    let child_arguments: Vec<OsString> = arguments.collect();
+    let result = std::env::current_dir()
+        .map_err(RecordError::Io)
+        .and_then(|directory| {
+            measure_to_file(
+                super::Invocation {
+                    executable: std::path::Path::new(&executable),
+                    arguments: &child_arguments,
+                    directory: &directory,
+                },
+                std::path::Path::new(&record),
+            )
+        });
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(diagnostics, "measurement helper: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
 
 use serde::{Deserialize, Serialize};
 

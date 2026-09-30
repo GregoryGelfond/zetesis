@@ -125,15 +125,15 @@ registered roots until evaluation ends, under the separate
 `Limits::max_term_storage_bytes` allowance. It borrows model and compiled-metadata
 prefixes rather than copying their payload. The output boundary constructs the
 independently bounded public terms. These are Rust contracts supported by
-[focused scope tests](../../crates/zetesis-themelios/tests/observation_scopes.rs),
+[focused scope tests](../../crates/zetesis-themelios/tests/integration/observation_scopes.rs),
 not a theorem about allocation or cancellation.
 
-The [complete-family matrix](../../crates/zetesis-themelios/tests/observation_families.rs)
+The [complete-family matrix](../../crates/zetesis-themelios/tests/integration/observation_families.rs)
 checks original theory identity, display multiplicities and exact work ceilings
 across hidden model families. The
-[expression and pattern tests](../../crates/zetesis-themelios/tests/observation_expressions.rs)
+[expression and pattern tests](../../crates/zetesis-themelios/tests/integration/observation_expressions.rs)
 include external comparisons for structural pools and explicit valid-source
-refusals. The [binding contracts](../../crates/zetesis-themelios/tests/observation_bindings.rs)
+refusals. The [binding contracts](../../crates/zetesis-themelios/tests/integration/observation_bindings.rs)
 cover finite equality chains, shared middle alternatives, original family identity,
 resource boundaries and complete external displays. Structural pool alternatives
 on a capturing equality operand, inverse arithmetic binding, and anonymous negative

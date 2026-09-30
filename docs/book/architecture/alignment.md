@@ -54,7 +54,7 @@ different types of value.
 | Test formula satisfaction | Evaluate an acyclic Boolean graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
-| Reuse reduct structure across candidates | Under the clauses method, compile one parameterized graph and refresh authenticated candidate truth and membership inputs; under the regions method, read the original graph under each candidate's mask | [`PreparedReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs); [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/regions.rs) |
+| Reuse reduct structure across candidates | Under the clauses method, compile one parameterized graph and refresh authenticated candidate truth and membership inputs; under the regions method, read the original graph under each candidate's mask | [`PreparedReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs); [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/regions.rs) |
 | Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
 | Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound | [Source formula lowering](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs); [native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
 | Score an answer | Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority | [Objective specialization](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs); [cost evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs) |
@@ -319,16 +319,14 @@ or uncompleted obligations remain pending and prevent an exhaustion claim.
 Generator feedback must preserve every answer still to be found. Candidate rows
 cannot share truth by accident. A rejected proposal, a pending query and a committed answer remain
 different states. General subset blocking is not licensed merely by finding an
-answer: for example, `{a}.` admits both the empty answer and `{a}`.
-
-The bounded [`feedback` experiment](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#conditional-countermodel-feedback)
-constructs conditional restrictions from actual checked reduct countermodels.
-Its guard tests both proper inclusion and satisfaction of that particular frozen
-reduct witness. Complete tiny families check the compiler against the
-[`Feedback` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Feedback.lean); the laws do not establish
-Rust compilation or restart correctness. Fixed-candidate replay measures avoided
-membership calls, while a separate pre-acquired-guard replay counts actual native
-restriction restarts. Neither changes the ordinary search protocol.
+answer: for example, `{a}.` admits both the empty answer and `{a}`. The
+[`Feedback` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Feedback.lean)
+prove both: feedback preserves every stable model still to be found
+(`feedback_preserves_stability`, `all_feedback_preserves_stability`), and `{a}.`
+has the empty and the full answer, comparable by inclusion
+(`unit_choice_empty_stable`, `unit_choice_full_stable`,
+`unit_choice_comparable_stable_models`). The laws are denotational; they claim no
+correspondence with Rust.
 
 Objective selection and display follow checked answers. Complete unrestricted
 enumeration plus complete retention can construct a `WorldView`; optimal ties

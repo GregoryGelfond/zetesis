@@ -1,36 +1,13 @@
 //! Live external owners participate in admission without entering retained receipts.
 
-use std::cell::Cell;
-
 use super::{atom, insert, location};
 use crate::formula::Preparation;
 use crate::formula_ir::Prepared;
 use crate::formula_support::producers::ProducerPlan;
 use crate::formula_support::{Buffer, Computation, Counters, Support, SupportCatalog, testing};
 use crate::grounding_observer::Profile;
-use crate::{
-    FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome,
-    GroundingPhase, GroundingWork,
-};
-
-#[derive(Default)]
-struct Observer(Cell<GroundingWork>);
-impl GroundingObserver for Observer {
-    fn enter(&self) {}
-    fn exit(&self) {}
-    fn details_enabled(&self) -> bool {
-        true
-    }
-    fn phase_exit(
-        &self,
-        _: GroundingPhase,
-        _: Option<themelios_base::span::Location>,
-        _: GroundingOutcome,
-        work: GroundingWork,
-    ) {
-        self.0.set(work);
-    }
-}
+use crate::test_support::Observer;
+use crate::{FormulaFailure, FormulaLimits, FormulaResource, GroundingPhase};
 
 fn measure<T>(
     counters: &mut Counters,

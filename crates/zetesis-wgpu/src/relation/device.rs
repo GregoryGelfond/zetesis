@@ -418,5 +418,4 @@ fn upload_columns(
 }
 
 #[cfg(test)]
-#[path = "../../tests/relation/preparation.rs"]
-mod preparation_tests;
+mod tests;

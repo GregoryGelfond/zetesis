@@ -198,5 +198,4 @@ fn widen(
 }
 
 #[cfg(test)]
-#[path = "argument_bounds_tests.rs"]
 mod tests;

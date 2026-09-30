@@ -98,11 +98,21 @@ impl<'a> Read<'a> {
             Self::Frozen(base) => base.data.counts,
         }
     }
+    // Segments are contiguous from zero and the counts end with the last one
+    // (a writer answers its unpublished tail directly), so an identity below
+    // a count is exactly one that resolves. Views rely on this to check
+    // membership without resolving.
     pub(crate) fn contains_atom(self, id: AtomId) -> bool {
         (id.0 as usize) < self.counts().atoms
     }
     pub(crate) fn contains_predicate(self, id: PredicateId) -> bool {
         (id.0 as usize) < self.counts().predicates
+    }
+    /// Every predicate identity of this prefix, in identity order.
+    pub(crate) fn predicate_ids(self) -> impl ExactSizeIterator<Item = PredicateId> {
+        (0..self.counts().predicates).map(|position| {
+            PredicateId(u32::try_from(position).expect("admitted predicate identities fit u32"))
+        })
     }
     pub(crate) fn contains_term(self, id: TermId) -> bool {
         (id.0 as usize) < self.counts().terms
@@ -202,7 +212,8 @@ impl<'a> Read<'a> {
         let segment = self.vocabulary_segment(id.0 as usize, |counts| counts.predicates)?;
         let signature = segment.predicates[id.0 as usize - segment.start.predicates];
         Some(Predicate {
-            name: self.text(signature.name),
+            read: self,
+            name: signature.name,
             arity: signature.arity,
             sign: signature.sign,
         })

@@ -1,7 +1,6 @@
 //! Ordinary shared CPU accounting, separate from device execution.
 
 #[cfg(test)]
-#[path = "../tests/support/shared_accounting.rs"]
 mod tests;
 
 use zetesis_cpu::lazy::shared::{Cause, Statistics};

@@ -5,10 +5,11 @@ use std::{
     path::PathBuf,
     process::ExitCode,
 };
+use zetesis_backend::GpuApi;
 use zetesis_maintenance::{
     Error, book,
-    coverage::{self, Floor, Metadata, Mode, Observation, Tool},
-    inventory, proofs,
+    coverage::{self, Floor, Metadata, Mode, Observation, Physical, Tool},
+    ignored, inventory, proofs,
 };
 
 #[derive(Parser)]
@@ -19,6 +20,15 @@ use zetesis_maintenance::{
 struct Options {
     #[command(subcommand)]
     command: Action,
+}
+
+/// The physical stage a coverage run names: its API with its table, both or
+/// neither, as the command's arguments require.
+fn physical_stage(api: Option<GpuApi>, table: Option<&str>) -> Option<Physical<'_>> {
+    Some(Physical {
+        api: api?,
+        table: table?,
+    })
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -108,8 +118,15 @@ enum Action {
         llvm_profdata: PathBuf,
         #[arg(long)]
         llvm_profdata_version: String,
+        /// The filename filter the reports and floors pass.
         #[arg(long)]
-        metal_groups: Option<String>,
+        project_filter: String,
+        /// The backend of the physical stage.
+        #[arg(long, value_enum, requires = "physical_table")]
+        physical_backend: Option<GpuApi>,
+        /// The backend's reviewed selection, as the stage reads it.
+        #[arg(long, requires = "physical_backend")]
+        physical_table: Option<String>,
     },
     /// Require every selected physical test and its complete passing summary.
     CoveragePhysical {
@@ -125,6 +142,38 @@ enum Action {
         #[arg(long)]
         root: PathBuf,
     },
+    /// Require each oracle campaign's recorded run to have run at least one
+    /// test, and exactly the ignored tests its filters select.
+    OracleRuns {
+        /// The repository whose gate script and sources the campaigns ran.
+        #[arg(long)]
+        root: PathBuf,
+        /// Each campaign's harness output, `N.log` for campaign N from one.
+        #[arg(long)]
+        records: PathBuf,
+    },
+}
+/// Check the oracle gate's recorded runs against the campaigns of `root`'s
+/// gate script and the ignored tests of its sources.
+fn oracle_runs(root: &std::path::Path, records: &std::path::Path) -> Result<Vec<u8>, Error> {
+    let campaigns = ignored::campaigns(&text(&root.join("scripts/check.sh"))?)?;
+    let sources: Vec<PathBuf> = inventory::authored(root, inventory::Limits::default())?
+        .into_iter()
+        .map(|source| root.join(source))
+        .collect();
+    let tests = ignored::ignored(root, &sources).map_err(|source| Error::Io {
+        path: root.to_path_buf(),
+        source,
+    })?;
+    let outputs = (1..=campaigns.len())
+        .map(|index| text(&records.join(format!("{index}.log"))))
+        .collect::<Result<Vec<_>, _>>()?;
+    ignored::check_runs(&campaigns, &tests, &outputs)?;
+    Ok(format!(
+        "oracle campaigns: each of {} ran exactly the tests it selects\n",
+        campaigns.len()
+    )
+    .into_bytes())
 }
 fn text(path: &std::path::Path) -> Result<String, Error> {
     String::from_utf8(inventory::read(path, 16_777_216)?)
@@ -250,14 +299,17 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             llvm_cov_version,
             llvm_profdata,
             llvm_profdata_version,
-            metal_groups,
+            project_filter,
+            physical_backend,
+            physical_table,
         } => {
             let (cov_path, cov_hash) = coverage::executable_identity(&llvm_cov)?;
             let (prof_path, prof_hash) = coverage::executable_identity(&llvm_profdata)?;
             let request = Metadata {
                 mode: Mode::parse(&mode)?,
                 floor: &floor,
-                physical_table: metal_groups.as_deref(),
+                filter: &project_filter,
+                physical: physical_stage(physical_backend, physical_table.as_deref()),
                 observation: Observation {
                     rustc: &rustc_version,
                     cargo_llvm_cov: &cargo_llvm_cov_version,
@@ -288,6 +340,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             let sources = inventory::sources(&root, inventory::Limits::default())?;
             coverage::render(&serde_json::to_value(sources).map_err(Error::Json)?)?
         }
+        Action::OracleRuns { root, records } => oracle_runs(&root, &records)?,
     };
     output.write_all(&value).map_err(|source| Error::Io {
         path: "<stdout>".into(),

@@ -1,14 +1,6 @@
 use super::*;
+use crate::test_support::{PERMIT_WITH_UNIT_ERROR as PERMIT, unlimited};
 use crate::{Predicate, Sign, TemplateComponents, TemplateTerm, Value, ValueLimits, ValueNode};
-
-const PERMIT: fn() -> Result<(), ()> = || Ok(());
-fn unlimited() -> Limits {
-    Limits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
 
 #[test]
 fn frozen_owner_preserves_component_identity() {

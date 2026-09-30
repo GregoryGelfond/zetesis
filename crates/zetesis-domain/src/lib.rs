@@ -34,6 +34,6 @@ mod value;
 pub mod terminal;
 
 pub use analysis::analyze;
-pub use keys::{KeyWork, KeyedRelation, atom_signature, facts, keys};
+pub use keys::{FactIndex, KeyWork, KeyedRelation, atom_signature, keys};
 pub use limits::{Limits, Resource, Statistics, Stop};
 pub use value::{Analysis, Argument, Context, Domain, Status, UnknownReason, Widening};

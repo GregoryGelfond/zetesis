@@ -9,6 +9,9 @@ use std::mem::size_of;
 mod partition;
 use partition::Partition;
 
+mod accounted;
+use accounted::AccountedRelations;
+
 mod dense;
 pub(in crate::oracle) use dense::{Block, Dense, Layout, Layouts, PendingMarks};
 
@@ -231,6 +234,15 @@ impl Relation {
         }
     }
 
+    /// Retained capacity of this relation's own storage: tree catalog columns,
+    /// indexes and membership, or dense bit vectors.
+    fn retained_bytes(&self) -> u128 {
+        match self {
+            Self::Tree { catalog, .. } => catalog.retained_bytes() as u128,
+            Self::Dense(dense) => dense.retained_bytes(),
+        }
+    }
+
     #[cfg(test)]
     pub(super) fn catalog(&self) -> &Catalog {
         match self {
@@ -414,13 +426,15 @@ impl Relational for Relations<'_> {
 
 /// One Program's retained canonical authority and independently reset truth.
 /// Payload survives candidate completion under the named storage ceiling;
-/// relation rows, partitions and dense bits do not.
+/// relation rows, partitions and dense bits do not. Relation capacities are
+/// summed as they change, so storage decisions read the envelope in constant
+/// time however many relations the Program has.
 #[derive(Default)]
 pub(super) struct Catalogs {
     authority: Option<AtomInterner>,
     program: Option<Program>,
     declarations: Vec<DeclaredPredicate>,
-    relations: Vec<Relation>,
+    relations: AccountedRelations,
     atoms: usize,
     overhead: u128,
 }
@@ -570,7 +584,7 @@ impl Relational for Catalogs {
     }
     fn rows_at(&self, handle: usize, set: RowSet) -> Result<Rows<'_>, Stop> {
         let read = self.authority.as_ref().ok_or(Stop::InvalidProgram)?.read();
-        rows_at(&self.relations, read, handle, set)
+        rows_at(self.relations.as_slice(), read, handle, set)
     }
 }
 
@@ -623,18 +637,23 @@ impl Catalogs {
         self.atoms
     }
 
+    #[cfg(test)]
+    pub(super) fn discovered(&self) -> usize {
+        self.relations
+            .as_slice()
+            .iter()
+            .map(|relation| match relation {
+                Relation::Dense(dense) => dense.discovered().len(),
+                Relation::Tree { .. } => 0,
+            })
+            .sum()
+    }
+
     fn metadata_bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.declarations.capacity() as u128 * size_of::<DeclaredPredicate>() as u128
-            + self.relations.capacity() as u128 * size_of::<Relation>() as u128
-            + self
-                .relations
-                .iter()
-                .map(|relation| match relation {
-                    Relation::Tree { catalog, .. } => catalog.retained_bytes() as u128,
-                    Relation::Dense(dense) => dense.retained_bytes(),
-                })
-                .sum::<u128>()
+            + self.relations.directory_bytes()
+            + self.relations.retained_bytes()
     }
     fn total_bytes(&self) -> u128 {
         self.owned_bytes() + self.overhead
@@ -665,14 +684,14 @@ impl Catalogs {
         let Some(authority) = &self.authority else {
             return Ok(Err(0));
         };
-        find_relation(&self.relations, authority.read(), predicate, work)
+        find_relation(self.relations.as_slice(), authority.read(), predicate, work)
     }
 
     #[cfg(test)]
     pub(super) fn relation(&self, predicate: &Predicate) -> &Relation {
         let cancellation = crate::Cancellation::default();
         let mut work = Work::source(&cancellation, u64::MAX);
-        &self.relations[self
+        &self.relations.as_slice()[self
             .find(predicate.into(), &mut work)
             .unwrap()
             .expect("relation exists")]
@@ -687,7 +706,7 @@ impl Catalogs {
         Ok((
             RoundRead {
                 read: committed.read(),
-                relations: &self.relations,
+                relations: self.relations.as_slice(),
                 atoms: self.atoms,
                 base,
             },
@@ -714,7 +733,8 @@ impl Catalogs {
         storage::record(work, self.total_bytes())?;
         for index in 0..self.relations.len() {
             let total = self.total_bytes();
-            let Relation::Tree { catalog, .. } = &mut self.relations[index] else {
+            let mut relation = self.relations.get_mut(index).ok_or(Stop::InvalidProgram)?;
+            let Relation::Tree { catalog, .. } = &mut *relation else {
                 continue;
             };
             work.cancellation.poll()?;
@@ -732,7 +752,7 @@ impl Catalogs {
     }
     pub(super) fn prepare_delta(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         self.prepare(work)?;
-        for relation in &self.relations {
+        for relation in self.relations.as_slice() {
             if let Relation::Tree { catalog, partition } = relation {
                 partition.confirm(catalog, work)?;
             }
@@ -740,8 +760,9 @@ impl Catalogs {
         Ok(())
     }
     pub(super) fn advance(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
-        for relation in &mut self.relations {
-            match relation {
+        for index in 0..self.relations.len() {
+            let mut relation = self.relations.get_mut(index).ok_or(Stop::InvalidProgram)?;
+            match &mut *relation {
                 Relation::Tree { catalog, partition } => partition.advance(catalog.len(), work)?,
                 Relation::Dense(dense) => dense.advance(work)?,
             }
@@ -783,19 +804,22 @@ impl Catalogs {
             .total_bytes()
             .checked_add(pending)
             .ok_or(Stop::StorageLimit)?;
-        let Relation::Tree { catalog, .. } = &mut self.relations[handle] else {
-            return Err(Stop::InvalidProgram);
+        let (insertion, other) = {
+            let mut relation = self.relations.get_mut(handle).ok_or(Stop::InvalidProgram)?;
+            let Relation::Tree { catalog, .. } = &mut *relation else {
+                return Err(Stop::InvalidProgram);
+            };
+            let other = total
+                .checked_sub(catalog.retained_bytes() as u128)
+                .ok_or(Stop::InvalidProgram)?;
+            let atom = self
+                .authority
+                .as_ref()
+                .and_then(|authority| authority.get(id))
+                .ok_or(Stop::InvalidProgram)?;
+            let result = catalog.insert(atom, limits(work, other)?);
+            (completed(result, other, work)?, other)
         };
-        let other = total
-            .checked_sub(catalog.retained_bytes() as u128)
-            .ok_or(Stop::InvalidProgram)?;
-        let atom = self
-            .authority
-            .as_ref()
-            .and_then(|authority| authority.get(id))
-            .ok_or(Stop::InvalidProgram)?;
-        let result = catalog.insert(atom, limits(work, other)?);
-        let insertion = completed(result, other, work)?;
         self.publish(insertion, other, work)
     }
 
@@ -824,7 +848,7 @@ impl Catalogs {
             .total_bytes()
             .checked_add(pending)
             .ok_or(Stop::StorageLimit)?;
-        storage::reserve(&mut self.relations, 1, live, work)?;
+        self.relations.reserve(1, live, work)?;
         let other = self
             .total_bytes()
             .checked_add(pending)
@@ -872,7 +896,7 @@ impl Catalogs {
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         let live = self.total_bytes();
-        storage::reserve(&mut self.relations, 1, live, work)?;
+        self.relations.reserve(1, live, work)?;
         let total = self
             .total_bytes()
             .checked_add(Dense::word_bytes(layout))
@@ -898,7 +922,8 @@ impl Catalogs {
             let handle = self
                 .find(layout.predicate(), work)?
                 .map_err(|_| Stop::InvalidProgram)?;
-            let Relation::Dense(dense) = &mut self.relations[handle] else {
+            let mut relation = self.relations.get_mut(handle).ok_or(Stop::InvalidProgram)?;
+            let Relation::Dense(dense) = &mut *relation else {
                 return Err(Stop::InvalidProgram);
             };
             self.atoms += pending.absorb_into(slot, dense, work)?;
@@ -922,7 +947,7 @@ impl Catalogs {
                 .total_bytes()
                 .checked_add(selection_bytes)
                 .ok_or(Stop::StorageLimit)?;
-            match &self.relations[index] {
+            match &self.relations.as_slice()[index] {
                 Relation::Tree { catalog, .. } => {
                     let authority = self.authority.as_ref().ok_or(Stop::InvalidProgram)?;
                     let other = total
@@ -953,50 +978,100 @@ impl Catalogs {
                         positions.push(id);
                     }
                 }
-                Relation::Dense(dense) => {
-                    let layout = dense.layout();
-                    let mut coordinates = Vec::new();
-                    storage::reserve(
-                        &mut coordinates,
-                        layout.predicate().arity(),
-                        total + size_of::<Vec<usize>>() as u128,
-                        work,
-                    )?;
-                    let coordinate_bytes = size_of::<Vec<usize>>() as u128
-                        + coordinates.capacity() as u128 * size_of::<usize>() as u128;
-                    let base =
-                        self.metadata_bytes() + self.overhead + selection_bytes + coordinate_bytes;
-                    let mut range = 0..layout.positions();
-                    while let Some(position) = dense.next_row(RowSet::Current, &mut range, work)? {
-                        coordinates.clear();
-                        charge(work, layout.predicate().arity())?;
-                        coordinates.extend(
-                            (0..layout.predicate().arity())
-                                .map(|argument| layout.coordinate(argument, position)),
-                        );
-                        let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
-                        let available = available(work, base + authority.storage_bytes())?;
-                        let atom = layout
-                            .program()
-                            .carrier_atom_with(layout.signature(), &coordinates, available, || {
-                                charge(work, 1)
-                            })
-                            .map_err(|error| carrier_failure(&error))?;
-                        let other = base + atom.coordinate_bytes();
-                        let allowance = storage::atom_limits(work, other)?;
-                        authority.restart_storage_peak();
-                        let result = authority
-                            .entry_atom_with(atom.atom(), allowance, || charge(work, 1))
-                            .and_then(|entry| entry.insert_with(allowance, || charge(work, 1)));
-                        storage::record(work, other + authority.storage_peak_bytes())?;
-                        let id = result.map_err(storage::atom_failure)?;
-                        charge(work, 1)?;
-                        positions.push(id);
-                    }
+                Relation::Dense(_) => {
+                    self.dense_positions(index, &mut positions, selection_bytes, total, work)?;
                 }
             }
         }
         Ok(positions)
+    }
+
+    /// Resolve the current rows of the dense relation at `index` to discovery
+    /// positions, appending them to `positions`. A row with a recorded
+    /// discovery position is answered from the record; any other row is
+    /// admitted through the authority, and rows whose identity already existed
+    /// are then recorded, so later candidates resolve them without building
+    /// their atoms again.
+    fn dense_positions(
+        &mut self,
+        index: usize,
+        positions: &mut Vec<usize>,
+        selection_bytes: u128,
+        total: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let Relation::Dense(dense) = &self.relations.as_slice()[index] else {
+            return Err(Stop::InvalidProgram);
+        };
+        let layout = dense.layout();
+        let mut coordinates = Vec::new();
+        storage::reserve(
+            &mut coordinates,
+            layout.predicate().arity(),
+            total + size_of::<Vec<usize>>() as u128,
+            work,
+        )?;
+        let coordinate_bytes = size_of::<Vec<usize>>() as u128
+            + coordinates.capacity() as u128 * size_of::<usize>() as u128;
+        let base = self.metadata_bytes() + self.overhead + selection_bytes + coordinate_bytes;
+        // Rows ascend, as do the discovered positions, so one forward
+        // cursor finds each row's record if it has one. Each record it passes
+        // costs one unit, charged with the row's own first operation.
+        let discovered = dense.discovered();
+        let admitted = self.authority.as_ref().ok_or(Stop::InvalidProgram)?.len();
+        let (start, mut next, mut repeats) = (positions.len(), 0, 0);
+        let mut range = 0..layout.positions();
+        while let Some(position) = dense.next_row(RowSet::Current, &mut range, work)? {
+            let first = next;
+            while discovered.get(next).is_some_and(|&(row, _)| row < position) {
+                next += 1;
+            }
+            let passed = next - first;
+            if let Some(&(row, id)) = discovered.get(next)
+                && row == position
+            {
+                charge(work, passed + 1)?;
+                positions.push(id);
+                continue;
+            }
+            coordinates.clear();
+            charge(work, passed + layout.predicate().arity())?;
+            coordinates.extend(
+                (0..layout.predicate().arity())
+                    .map(|argument| layout.coordinate(argument, position)),
+            );
+            let authority = self.authority.as_mut().ok_or(Stop::InvalidProgram)?;
+            let available = available(work, base + authority.storage_bytes())?;
+            let atom = layout
+                .program()
+                .carrier_atom_with(layout.signature(), &coordinates, available, || {
+                    charge(work, 1)
+                })
+                .map_err(|error| carrier_failure(&error))?;
+            let other = base + atom.coordinate_bytes();
+            let allowance = storage::atom_limits(work, other)?;
+            authority.restart_storage_peak();
+            let result = authority
+                .entry_atom_with(atom.atom(), allowance, || charge(work, 1))
+                .and_then(|entry| entry.insert_with(allowance, || charge(work, 1)));
+            storage::record(work, other + authority.storage_peak_bytes())?;
+            let id = result.map_err(storage::atom_failure)?;
+            repeats += usize::from(id < admitted);
+            charge(work, 1)?;
+            positions.push(id);
+        }
+        // Row coordinates are no longer needed when reserving cache scratch.
+        drop(coordinates);
+        if repeats > 0 {
+            let live = self.total_bytes()
+                + size_of::<Vec<usize>>() as u128
+                + positions.capacity() as u128 * size_of::<usize>() as u128;
+            let mut relation = self.relations.get_mut(index).ok_or(Stop::InvalidProgram)?;
+            if let Relation::Dense(dense) = &mut *relation {
+                dense.remember(&positions[start..], admitted, live, work)?;
+            }
+        }
+        Ok(())
     }
 
     /// Select the final prepared truth in semantic order and publish one shared
@@ -1028,7 +1103,8 @@ impl Catalogs {
         // catalog/selection metadata remains alongside truth during reset.
         for index in 0..self.relations.len() {
             let total = self.total_bytes() + result_bytes;
-            match &mut self.relations[index] {
+            let mut relation = self.relations.get_mut(index).ok_or(Stop::InvalidProgram)?;
+            match &mut *relation {
                 Relation::Tree { catalog, partition } => {
                     let other = total
                         .checked_sub(catalog.retained_bytes() as u128)
@@ -1405,36 +1481,134 @@ mod tests {
         );
     }
 
+    fn recomputed_relation_bytes(catalogs: &Catalogs) -> u128 {
+        catalogs
+            .relations
+            .as_slice()
+            .iter()
+            .map(Relation::retained_bytes)
+            .sum()
+    }
+
     #[test]
-    fn cancelled_receipt_preserves_catalog_count() {
+    fn relation_capacity_sum_follows_every_change() {
+        // Tree creation, insertion, ordered preparation, truth reset and a
+        // second candidate; then dense creation, absorption, advance and reset.
         let cancellation = Cancellation::default();
-        let mut work = Work::source(&cancellation, u64::MAX);
+        let mut work = dense_work(&cancellation);
+        let source = [3, 1, 2].map(|value| atom(Value::Number(value)));
+        let mut catalogs = fixture(&source, &mut work);
+        let exact = |catalogs: &Catalogs| {
+            assert_eq!(
+                catalogs.relations.retained_bytes(),
+                recomputed_relation_bytes(catalogs)
+            );
+        };
+        exact(&catalogs);
+        insert(&mut catalogs, &source[0], &mut work);
+        exact(&catalogs);
+        insert(&mut catalogs, &source[1], &mut work);
+        exact(&catalogs);
+        catalogs.prepare(&mut work).unwrap();
+        exact(&catalogs);
+        catalogs.take_model(&mut work).unwrap();
+        exact(&catalogs);
+        insert(&mut catalogs, &source[2], &mut work);
+        catalogs.advance(&mut work).unwrap();
+        exact(&catalogs);
+        let (_, _, mut dense, _) = laid_out(&mut work);
+        exact(&dense);
+        dense.advance(&mut work).unwrap();
+        exact(&dense);
+        dense.take_model(&mut work).unwrap();
+        exact(&dense);
+    }
+
+    #[test]
+    fn relation_capacity_sum_survives_refused_insertions() {
+        // Each ceiling admits the earlier rows but may refuse the next one
+        // before or after its catalog grows; the sum must stay exact either
+        // way, and the sweep must reach a refusal after growth.
+        let cancellation = Cancellation::default();
+        let source: Vec<_> = (0..12).map(|value| atom(Value::Number(value))).collect();
+        let mut refused_after_growth = 0;
+        for slack in 0..512 {
+            let mut work = Work::source(&cancellation, u64::MAX);
+            work.limits.max_derived_atoms = 64;
+            work.limits.max_closure_bytes = 1 << 20;
+            let mut catalogs = fixture(&source, &mut work);
+            for tuple in &source[..8] {
+                insert(&mut catalogs, tuple, &mut work);
+            }
+            let id = intern(&mut catalogs, &source[8], &mut work);
+            work.limits.max_closure_bytes =
+                usize::try_from(catalogs.total_bytes()).unwrap() + slack;
+            let before = recomputed_relation_bytes(&catalogs);
+            let refused = catalogs.insert(id, 0, &mut work).is_err();
+            let after = recomputed_relation_bytes(&catalogs);
+            if refused && after != before {
+                refused_after_growth += 1;
+            }
+            assert_eq!(catalogs.relations.retained_bytes(), after);
+        }
+        assert!(
+            refused_after_growth > 0,
+            "some ceiling refuses the insertion after its catalog grew"
+        );
+    }
+
+    // One tree relation receives a row; cancellation then interrupts the
+    // publication of its receipt.
+    fn cancelled_publication(cancellation: &Cancellation) -> Catalogs {
+        let mut work = Work::source(cancellation, u64::MAX);
         work.limits.max_derived_atoms = 1;
         let tuple = atom(Value::Number(1));
         let mut catalogs = fixture(std::slice::from_ref(&tuple), &mut work);
         let id = intern(&mut catalogs, &tuple, &mut work);
         catalogs.create(0, 0, 0, &mut work).unwrap();
         let total = catalogs.total_bytes();
-        let Relation::Tree { catalog, .. } = &mut catalogs.relations[0] else {
-            unreachable!()
+        let (receipt, other) = {
+            let mut relation = catalogs.relations.get_mut(0).unwrap();
+            let Relation::Tree { catalog, .. } = &mut *relation else {
+                unreachable!()
+            };
+            let other = total - catalog.retained_bytes() as u128;
+            let tuple = catalogs.authority.as_ref().unwrap().get(id).unwrap();
+            let receipt = catalog
+                .insert(tuple, limits(&work, other).unwrap())
+                .unwrap();
+            (receipt, other)
         };
-        let other = total - catalog.retained_bytes() as u128;
-        let tuple = catalogs.authority.as_ref().unwrap().get(id).unwrap();
-        let receipt = catalog
-            .insert(tuple, limits(&work, other).unwrap())
-            .unwrap();
         cancellation.cancel();
         assert_eq!(
             catalogs.publish(receipt, other, &mut work),
             Err(Stop::Cancelled)
         );
+        catalogs
+    }
+
+    #[test]
+    fn cancelled_receipt_preserves_catalog_count() {
+        let cancellation = Cancellation::default();
+        let catalogs = cancelled_publication(&cancellation);
         assert_eq!(
             catalogs.len(),
             catalogs
                 .relations
+                .as_slice()
                 .iter()
                 .map(|relation| relation.catalog().len())
                 .sum::<usize>()
+        );
+    }
+
+    #[test]
+    fn relation_capacity_sum_survives_cancelled_publication() {
+        let cancellation = Cancellation::default();
+        let catalogs = cancelled_publication(&cancellation);
+        assert_eq!(
+            catalogs.relations.retained_bytes(),
+            recomputed_relation_bytes(&catalogs)
         );
     }
 }

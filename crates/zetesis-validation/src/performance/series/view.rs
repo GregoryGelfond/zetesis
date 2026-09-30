@@ -1,9 +1,10 @@
 //! Derived comparison of published matrix reports over the same cells.
 //!
 //! The view reads the retained records and computes exact integer medians of
-//! the timed native and reference intervals per cell and profile, ratios of
-//! those medians between reports in the order given, and the counters the
-//! native records carry. For each report and profile it also keeps a
+//! the timed native and reference intervals per cell and profile, and the
+//! counters the native records carry; its tables divide those medians between
+//! reports in the order given and against the reference, exactly, and its JSON
+//! publishes the medians alone. For each report and profile it also keeps a
 //! scoreboard against the reference solver: the cells where both passed,
 //! which of them the native solver decided faster, and each cell's time
 //! split into grounding, candidate proposal and membership on the native
@@ -13,11 +14,15 @@
 //! report's native executable seal so that a published comparison names
 //! what it compared.
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::value::RawValue;
+
+use super::super::matrix::Qualification;
 
 /// A published report under the name it will carry in the comparison.
 #[derive(Clone, Copy, Debug)]
@@ -237,8 +242,6 @@ pub struct Verdict {
     pub native_ns: u64,
     /// Reference median wall interval.
     pub reference_ns: u64,
-    /// `native_ns / reference_ns`; below one is a win.
-    pub ratio: f64,
     /// The native intervals by part.
     pub native: Breakdown,
     /// The reference's own grounding and preprocessing time.
@@ -265,19 +268,13 @@ pub struct PhaseTiming {
     pub median_ns: u64,
 }
 
-/// One profile's records across the reports, and the ratios between them.
+/// One profile's records across the reports.
 #[derive(Clone, Debug, Serialize)]
 pub struct ProfileRow {
     /// The requested profile, as the reports serialize it.
     pub profile: Value,
     /// Records by report label.
     pub reports: BTreeMap<String, Native>,
-    /// `later/earlier` median ratios between consecutive reports and between
-    /// the last and the first, present only where both cells passed.
-    pub ratios: BTreeMap<String, f64>,
-    /// Each report's native median over the reference solver's median on the
-    /// same cell, by report label, present only where both passed.
-    pub reference_ratios: BTreeMap<String, f64>,
 }
 
 /// One cell across the reports.
@@ -294,6 +291,11 @@ pub struct Cell {
     /// The reference solver's timing and its own split by report label,
     /// where it passed.
     pub reference: BTreeMap<String, Reference>,
+    /// What qualified the cell's answer family in each report, by label:
+    /// clingo's census where clingo took part, the workload's recorded
+    /// contract in a clingo-free report, or nothing where that report's
+    /// campaign needed clingo for the cell.
+    pub qualification: BTreeMap<String, Qualification>,
     /// Non-pass samples across all scheduled phases, grouped by report and
     /// producer, phase and retained reason. Native profile indices are zero-based.
     pub failure_reasons: BTreeMap<String, BTreeMap<String, usize>>,
@@ -304,8 +306,13 @@ pub struct Cell {
 pub struct Provenance {
     /// SHA-256 of the native executable the report sealed.
     pub native_sha256: String,
-    /// SHA-256 of the reference executable the report sealed.
-    pub reference_sha256: String,
+    /// SHA-256 of the reference executable the report sealed; none for a
+    /// clingo-free campaign, which seals no reference.
+    pub reference_sha256: Option<String>,
+    /// Whether the report timed the reference: some timed position ran
+    /// clingo. A campaign that ran clingo only to qualify its cells, or ran
+    /// without it, did not.
+    pub reference_timed: bool,
     /// SHA-256 of the corpus manifest the report sealed.
     pub manifest_sha256: String,
     /// When the campaign started, Unix nanoseconds.
@@ -337,7 +344,8 @@ pub struct Comparison {
     /// the method and left out of the profile comparison.
     pub methods: BTreeMap<String, String>,
     /// Each report's and profile's standing against the reference, in report
-    /// order and then profile order.
+    /// order and then profile order; a report whose campaign ran without
+    /// clingo has none.
     pub scoreboards: Vec<Scoreboard>,
 }
 
@@ -398,11 +406,16 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     for (index, entry) in entries.iter().enumerate() {
         let label = label(entry, workloads.and_then(|workloads| workloads.get(index)));
         let mut reference = BTreeMap::new();
+        let mut qualification = BTreeMap::new();
         let mut failure_reasons = BTreeMap::new();
         for labelled in reports {
             if let Some(record) = self::reference(labelled, index)? {
                 reference.insert(labelled.label.to_owned(), record);
             }
+            qualification.insert(
+                labelled.label.to_owned(),
+                self::qualification(labelled, index)?,
+            );
             let reasons = self::failure_reasons(labelled, index)?;
             if !reasons.is_empty() {
                 failure_reasons.insert(labelled.label.to_owned(), reasons);
@@ -414,13 +427,9 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             for labelled in reports {
                 records.insert(labelled.label.to_owned(), native(labelled, index, profile)?);
             }
-            let ratios = ratios(&labels, &records);
-            let reference_ratios = reference_ratios(&records, &reference);
             rows.push(ProfileRow {
                 profile: request.clone(),
                 reports: records,
-                ratios,
-                reference_ratios,
             });
         }
         cells.push(Cell {
@@ -428,10 +437,18 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
             label,
             profiles: rows,
             reference,
+            qualification,
             failure_reasons,
         });
     }
-    let scoreboards = scoreboards(&labels, &methods, &cells);
+    // A scoreboard stands a report against clingo's times, so a report that
+    // did not time clingo has none.
+    let with_clingo: Vec<String> = labels
+        .iter()
+        .filter(|label| provenance[*label].reference_timed)
+        .cloned()
+        .collect();
+    let scoreboards = scoreboards(&with_clingo, &methods, &cells);
     Ok(Comparison {
         labels,
         cells,
@@ -441,7 +458,8 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
     })
 }
 
-/// One scoreboard per report and profile, over the cells where both passed.
+/// One scoreboard per report in `labels` and per profile, over the cells
+/// where both passed.
 fn scoreboards(
     labels: &[String],
     methods: &BTreeMap<String, String>,
@@ -462,7 +480,9 @@ fn scoreboards(
                     Some(verdict(&cell.label, passed, reference))
                 })
                 .collect();
-            verdicts.sort_by(|a, b| a.ratio.total_cmp(&b.ratio));
+            verdicts.sort_by_key(|verdict| {
+                Ratio::against_reference(verdict.native_ns, verdict.reference_ns)
+            });
             scoreboards.push(Scoreboard {
                 report: label.clone(),
                 profile,
@@ -482,24 +502,70 @@ fn scoreboards(
     scoreboards
 }
 
-/// The native median over the reference median; a reference median of zero
-/// reads as one nanosecond, so the ratio is always a number.
-fn ratio(native_ns: u64, reference_ns: u64) -> f64 {
-    #[expect(
-        clippy::cast_precision_loss,
-        reason = "a ratio of intervals is reported to three decimals"
-    )]
-    let ratio = native_ns as f64 / reference_ns.max(1) as f64;
-    ratio
+/// One median interval over another, exact: ordered by cross-multiplication
+/// and shown to three decimals, rounded half up by integer arithmetic, as
+/// `milliseconds` shows an interval.
+#[derive(Clone, Copy, Debug)]
+struct Ratio {
+    numerator: u64,
+    denominator: u64,
+}
+
+impl Ratio {
+    /// A native median over the reference's; a reference median of zero reads
+    /// as one nanosecond, so the ratio is always a number.
+    fn against_reference(native_ns: u64, reference_ns: u64) -> Self {
+        Self {
+            numerator: native_ns,
+            denominator: reference_ns.max(1),
+        }
+    }
+    /// A later report's median over an earlier one's, when the earlier is positive.
+    fn between(later_ns: u64, earlier_ns: u64) -> Option<Self> {
+        (earlier_ns > 0).then_some(Self {
+            numerator: later_ns,
+            denominator: earlier_ns,
+        })
+    }
+}
+
+impl Ord for Ratio {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Each product of two u64 values fits in a u128.
+        (u128::from(self.numerator) * u128::from(other.denominator))
+            .cmp(&(u128::from(other.numerator) * u128::from(self.denominator)))
+    }
+}
+
+impl PartialOrd for Ratio {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Ratio {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Ratio {}
+
+impl fmt::Display for Ratio {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Thousandths rounded half up, floor((2000 n + d) / 2d), exact in u128.
+        let numerator = u128::from(self.numerator);
+        let denominator = u128::from(self.denominator);
+        let thousandths = (2_000 * numerator + denominator) / (2 * denominator);
+        write!(f, "{}.{:03}", thousandths / 1_000, thousandths % 1_000)
+    }
 }
 
 fn verdict(cell: &str, passed: &Passed, reference: &Reference) -> Verdict {
-    let ratio = ratio(passed.timing.median_ns, reference.timing.median_ns);
     Verdict {
         cell: cell.to_owned(),
         native_ns: passed.timing.median_ns,
         reference_ns: reference.timing.median_ns,
-        ratio,
         native: passed.breakdown.clone(),
         reference_grounding_ns: reference.grounding_ns,
         reference_solving_ns: reference.solving_ns,
@@ -565,19 +631,19 @@ impl fmt::Display for Markdown<'_> {
         for profile in 0..profile_count {
             let first = &comparison.cells[0].profiles[profile];
             heading(f, comparison, &first.profile)?;
-            let ratio_names: Vec<&String> = first.ratios.keys().collect();
+            let pairs = report_pairs(&comparison.labels);
             write!(f, "| Cell |")?;
             for label in &comparison.labels {
                 write!(f, " {label} |")?;
             }
-            for name in &ratio_names {
-                write!(f, " {name} |")?;
+            for (earlier, later) in &pairs {
+                write!(f, " {later}/{earlier} |")?;
             }
             for label in &comparison.labels {
                 write!(f, " {label}/reference |")?;
             }
             write!(f, "\n|---|")?;
-            for _ in 0..2 * comparison.labels.len() + ratio_names.len() {
+            for _ in 0..2 * comparison.labels.len() + pairs.len() {
                 write!(f, "---:|")?;
             }
             writeln!(f)?;
@@ -587,15 +653,25 @@ impl fmt::Display for Markdown<'_> {
                 for label in &comparison.labels {
                     write!(f, " {} |", native_cell(row.reports.get(label)))?;
                 }
-                for name in &ratio_names {
-                    match row.ratios.get(*name) {
-                        Some(ratio) => write!(f, " {ratio:.3} |")?,
+                for (earlier, later) in &pairs {
+                    let ratio = passed_median(row.reports.get(*later))
+                        .zip(passed_median(row.reports.get(*earlier)))
+                        .and_then(|(later, earlier)| Ratio::between(later, earlier));
+                    match ratio {
+                        Some(ratio) => write!(f, " {ratio} |")?,
                         None => write!(f, " n/a |")?,
                     }
                 }
                 for label in &comparison.labels {
-                    match row.reference_ratios.get(label) {
-                        Some(ratio) => write!(f, " {ratio:.3} |")?,
+                    let ratio = passed_median(row.reports.get(label))
+                        .zip(cell.reference.get(label))
+                        .map(|(native, reference)| {
+                            Ratio::against_reference(native, reference.timing.median_ns)
+                        });
+                    match ratio {
+                        Some(ratio) => write!(f, " {ratio} |")?,
+                        None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
+                        None if !clingo_timed(comparison, label) => write!(f, " not timed |")?,
                         None => write!(f, " n/a |")?,
                     }
                 }
@@ -603,25 +679,7 @@ impl fmt::Display for Markdown<'_> {
             }
             writeln!(f)?;
         }
-        write!(f, "Reference wall time, ms, same notation.\n\n| Cell |")?;
-        for label in &comparison.labels {
-            write!(f, " {label} |")?;
-        }
-        write!(f, "\n|---|")?;
-        for _ in &comparison.labels {
-            write!(f, "---:|")?;
-        }
-        writeln!(f)?;
-        for cell in &comparison.cells {
-            write!(f, "| {} |", cell.label)?;
-            for label in &comparison.labels {
-                match cell.reference.get(label) {
-                    Some(record) => write!(f, " {} |", timing_cell(&record.timing))?,
-                    None => write!(f, " not passed |")?,
-                }
-            }
-            writeln!(f)?;
-        }
+        reference_table(f, comparison)?;
         writeln!(
             f,
             "\nCounters of report {last}: published models, candidates examined, charged search work, driver median ms.\n\n| Cell | profile | models | candidates | work | driver ms |\n|---|---|---:|---:|---:|---:|"
@@ -653,6 +711,50 @@ impl fmt::Display for Markdown<'_> {
         failure_table(f, comparison)?;
         Ok(())
     }
+}
+
+/// Clingo's wall time per cell and report: "not passed" where it failed,
+/// "not timed" where the report's campaign ran it only to qualify the cells,
+/// and "not run" where the campaign ran without it.
+fn reference_table(f: &mut fmt::Formatter<'_>, comparison: &Comparison) -> fmt::Result {
+    write!(f, "Reference wall time, ms, same notation.\n\n| Cell |")?;
+    for label in &comparison.labels {
+        write!(f, " {label} |")?;
+    }
+    write!(f, "\n|---|")?;
+    for _ in &comparison.labels {
+        write!(f, "---:|")?;
+    }
+    writeln!(f)?;
+    for cell in &comparison.cells {
+        write!(f, "| {} |", cell.label)?;
+        for label in &comparison.labels {
+            match cell.reference.get(label) {
+                Some(record) => write!(f, " {} |", timing_cell(&record.timing))?,
+                None if !clingo_ran(comparison, label) => write!(f, " not run |")?,
+                None if !clingo_timed(comparison, label) => write!(f, " not timed |")?,
+                None => write!(f, " not passed |")?,
+            }
+        }
+        writeln!(f)?;
+    }
+    Ok(())
+}
+
+/// Whether clingo took part in the campaign of the report labelled `label`.
+fn clingo_ran(comparison: &Comparison, label: &str) -> bool {
+    comparison
+        .provenance
+        .get(label)
+        .is_some_and(|provenance| provenance.reference_sha256.is_some())
+}
+
+/// Whether the report labelled `label` timed clingo.
+fn clingo_timed(comparison: &Comparison, label: &str) -> bool {
+    comparison
+        .provenance
+        .get(label)
+        .is_some_and(|provenance| provenance.reference_timed)
 }
 
 /// Every retained non-pass phase, independently of the timed population.
@@ -729,16 +831,16 @@ fn scoreboard_tables(
         }
         writeln!(
             f,
-            "\n{name}. Milliseconds: the native and the reference medians and their ratio; the native split into grounding, candidate proposal and membership; the reference's into grounding and solving from its own report.\n\n| Cell | native | reference | native/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+            "\n{name}. Milliseconds: the native and the reference medians and their ratio; the native split into grounding, candidate proposal and membership, each summed over its intervals, which can overlap within or across threads, so the parts need not add up to the native median; the reference's into grounding and solving from its own report.\n\n| Cell | native | reference | native/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
         )?;
         for verdict in verdicts {
             writeln!(
                 f,
-                "| {} | {} | {} | {:.3} | {} | {} | {} | {} | {} |",
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {} |",
                 verdict.cell,
                 milliseconds(verdict.native_ns),
                 milliseconds(verdict.reference_ns),
-                verdict.ratio,
+                Ratio::against_reference(verdict.native_ns, verdict.reference_ns),
                 optional_ms(verdict.native.grounding),
                 optional_ms(verdict.native.proposal),
                 optional_ms(verdict.native.membership),
@@ -892,48 +994,23 @@ fn milliseconds(nanoseconds: u64) -> String {
     format!("{}.{:03}", microseconds / 1_000, microseconds % 1_000)
 }
 
-fn ratios(labels: &[String], records: &BTreeMap<String, Native>) -> BTreeMap<String, f64> {
-    let median = |label: &String| match records.get(label) {
-        Some(Native::Passed(passed)) => Some(passed.timing.median_ns),
-        _ => None,
-    };
-    let mut ratios = BTreeMap::new();
+/// The reports the tables divide, as `(earlier, later)`: each report after the
+/// first over its predecessor, and the last over the first when there are more
+/// than two.
+fn report_pairs(labels: &[String]) -> Vec<(&String, &String)> {
     let mut pairs: Vec<(&String, &String)> = labels.windows(2).map(|w| (&w[0], &w[1])).collect();
     if labels.len() > 2 {
         pairs.push((&labels[0], &labels[labels.len() - 1]));
     }
-    for (earlier, later) in pairs {
-        if let (Some(before), Some(after)) = (median(earlier), median(later))
-            && before > 0
-        {
-            // Precision loss beyond 2^53 nanoseconds (over a hundred days) is
-            // irrelevant to a solver interval.
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "a ratio of intervals is reported to three decimals"
-            )]
-            let ratio = after as f64 / before as f64;
-            ratios.insert(format!("{later}/{earlier}"), ratio);
-        }
-    }
-    ratios
+    pairs
 }
 
-/// The native median over the reference median, per report, where both passed.
-fn reference_ratios(
-    records: &BTreeMap<String, Native>,
-    reference: &BTreeMap<String, Reference>,
-) -> BTreeMap<String, f64> {
-    let mut ratios = BTreeMap::new();
-    for (label, record) in records {
-        if let (Native::Passed(passed), Some(other)) = (record, reference.get(label)) {
-            ratios.insert(
-                label.clone(),
-                ratio(passed.timing.median_ns, other.timing.median_ns),
-            );
-        }
+/// The median interval of a native record that passed.
+fn passed_median(record: Option<&Native>) -> Option<u64> {
+    match record {
+        Some(Native::Passed(passed)) => Some(passed.timing.median_ns),
+        _ => None,
     }
-    ratios
 }
 
 fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
@@ -1051,13 +1128,51 @@ fn profile_method(profile: &Value) -> String {
     }
 }
 
+/// Whether the report's campaign ran without clingo, as its plan records.
+fn clingo_free(labelled: &Labelled<'_>) -> bool {
+    labelled.report["report"]["plan"]["reference_policy"].as_str() == Some("clingo_free")
+}
+
+/// What can qualify a case in one report: clingo where it took part; without
+/// it, the workload's contract, which amendments invalidate even when no
+/// position ran. Older corpus reports without workload metadata retain the
+/// reading from their recorded decisions.
+fn qualification(labelled: &Labelled<'_>, case: usize) -> Result<Qualification, ViewError> {
+    if !clingo_free(labelled) {
+        return Ok(Qualification::Clingo);
+    }
+    if let Some(workloads) = labelled.report["report"].get("workloads") {
+        let amended = workloads
+            .get(case)
+            .and_then(|workload| workload["amended"].as_bool())
+            .ok_or(ViewError::Malformed {
+                label: labelled.label.into(),
+                field: "workload.amended",
+            })?;
+        return Ok(if amended {
+            Qualification::NeedsClingo
+        } else {
+            Qualification::Contract
+        });
+    }
+    let needs_clingo = samples(labelled)?
+        .iter()
+        .any(|sample| sample["slot"]["case"] == case && sample["decision"] == "needs_clingo");
+    Ok(if needs_clingo {
+        Qualification::NeedsClingo
+    } else {
+        Qualification::Contract
+    })
+}
+
 fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
     let malformed = |field| ViewError::Malformed {
         label: labelled.label.into(),
         field,
     };
-    // The campaign seals the native executable, the reference executable and
-    // the manifest first, in that order, before the sources.
+    // The campaign seals the native executable, the reference executable when
+    // clingo takes part, and the manifest first, in that order, before the
+    // sources. The recorded policy says whether clingo took part.
     let seal = |index: usize, field| {
         labelled.report["report"]["before"]
             .as_array()
@@ -1066,10 +1181,23 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
             .map(str::to_owned)
             .ok_or(malformed(field))
     };
+    let clingo_free = clingo_free(labelled);
+    let reference_timed = samples(labelled)?.iter().any(|sample| {
+        sample["slot"]["phase"] == "timed" && sample["slot"]["producer"]["solver"] == "reference"
+    });
     Ok(Provenance {
         native_sha256: seal(0, "report.before[0].sha256")?,
-        reference_sha256: seal(1, "report.before[1].sha256")?,
-        manifest_sha256: seal(2, "report.before[2].sha256")?,
+        reference_sha256: if clingo_free {
+            None
+        } else {
+            Some(seal(1, "report.before[1].sha256")?)
+        },
+        reference_timed,
+        manifest_sha256: if clingo_free {
+            seal(1, "report.before[1].sha256")?
+        } else {
+            seal(2, "report.before[2].sha256")?
+        },
         started_unix_ns: labelled.report["report"]["started_unix_ns"]
             .as_u64()
             .ok_or(malformed("report.started_unix_ns"))?,
@@ -1305,14 +1433,13 @@ fn reference(labelled: &Labelled<'_>, case: usize) -> Result<Option<Reference>, 
     for record in &records {
         let Some(times) = record["capture"]["stdout"]["data"]
             .as_str()
-            .and_then(|text| serde_json::from_str::<Value>(text).ok())
-            .map(|document| document["Time"].clone())
+            .and_then(|text| serde_json::from_str::<ReportedTimes<'_>>(text).ok())
         else {
             continue;
         };
         if let (Some(total), Some(solve)) = (
-            times["Total"].as_f64().and_then(seconds_to_ns),
-            times["Solve"].as_f64().and_then(seconds_to_ns),
+            decimal_seconds_ns(times.time.total.get()),
+            decimal_seconds_ns(times.time.solve.get()),
         ) {
             grounding.push(total.saturating_sub(solve));
             solving.push(solve);
@@ -1387,16 +1514,47 @@ pub(crate) fn median(values: &mut [u64]) -> Option<u64> {
     }
 }
 
-/// Seconds as the reference prints them to whole nanoseconds; a negative
-/// or non-finite value is not a duration.
-fn seconds_to_ns(seconds: f64) -> Option<u64> {
-    if !seconds.is_finite() || seconds < 0.0 {
+/// The times in the reference's saved report, as the text it wrote them in.
+#[derive(Deserialize)]
+struct ReportedTimes<'a> {
+    #[serde(rename = "Time", borrow)]
+    time: Times<'a>,
+}
+
+#[derive(Deserialize)]
+struct Times<'a> {
+    #[serde(rename = "Total", borrow)]
+    total: &'a RawValue,
+    #[serde(rename = "Solve", borrow)]
+    solve: &'a RawValue,
+}
+
+/// Seconds written as the reference writes them, a plain decimal such as
+/// `0.012`, as whole nanoseconds, exactly. Any other spelling, such as a sign
+/// or an exponent, or a nonzero digit beyond the ninth fractional one, reads as
+/// no time rather than an approximation.
+fn decimal_seconds_ns(text: &str) -> Option<u64> {
+    let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
+    let digits = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+    if whole.is_empty() || !digits(whole) || !digits(fraction) {
         return None;
     }
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "the value is finite and non-negative, and rounded to whole nanoseconds"
-    )]
-    Some((seconds * 1e9).round() as u64)
+    if fraction.bytes().skip(9).any(|byte| byte != b'0') {
+        return None;
+    }
+    let nanoseconds = (0..9).fold(0, |value: u64, position| {
+        let digit = fraction
+            .as_bytes()
+            .get(position)
+            .map_or(0, |byte| byte - b'0');
+        value * 10 + u64::from(digit)
+    });
+    whole
+        .parse::<u64>()
+        .ok()?
+        .checked_mul(1_000_000_000)?
+        .checked_add(nanoseconds)
 }
+
+#[cfg(test)]
+mod tests;

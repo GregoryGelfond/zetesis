@@ -1,0 +1,454 @@
+{
+  "accounted": true,
+  "passed": false,
+  "report": {
+    "before": [
+      {
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      {
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      {
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "cases": [
+      "generated/choice-2.lp",
+      "generated/cycle-2.lp"
+    ],
+    "finished_unix_ns": 2000000000,
+    "plan": {
+      "profiles": [
+        {
+          "backend": "cpu",
+          "batch_size": 64,
+          "completion_workers": 1,
+          "grounder": "auto",
+          "max_completion_scratch_bytes": 268435456,
+          "oracle": "auto",
+          "workers": 1
+        },
+        {
+          "backend": "cpu",
+          "batch_size": 64,
+          "completion_workers": 1,
+          "grounder": "auto",
+          "max_completion_scratch_bytes": 268435456,
+          "oracle": "auto",
+          "workers": 4
+        }
+      ]
+    },
+    "samples": [
+      {
+        "capture": {
+          "elapsed_ns": 5000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 1000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 2000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 5000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 3000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 4000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 5000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 2000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 3000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 15000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 9999999999
+        },
+        "decision": "timeout",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 9999999999
+        },
+        "decision": "timeout",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 15000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 1
+        }
+      },
+      {
+        "blocked_by": 10,
+        "capture": null,
+        "decision": "not_attempted",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "blocked_by": 11,
+        "capture": null,
+        "decision": "not_attempted",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 15000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 2
+        }
+      },
+      {
+        "blocked_by": 10,
+        "capture": null,
+        "decision": "not_attempted",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "blocked_by": 11,
+        "capture": null,
+        "decision": "not_attempted",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 99000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "memory": {
+          "peak_rss_bytes": 3670016
+        },
+        "slot": {
+          "case": 0,
+          "phase": "memory",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 99000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "memory": {
+          "peak_rss_bytes": 5242880
+        },
+        "slot": {
+          "case": 0,
+          "phase": "memory",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 0
+        }
+      }
+    ],
+    "started_unix_ns": 1000000000
+  }
+}

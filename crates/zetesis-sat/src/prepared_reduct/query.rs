@@ -383,5 +383,4 @@ fn reserve_query(
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/prepared_identity.rs"]
 mod tests;

@@ -268,7 +268,7 @@ For the concrete order bridge, admitted signatures and domain values are sorted
 and unique. `AtomIter` advances the last tuple coordinate fastest, giving the
 same lexicographic tuple order as `Atom::Ord`, within its signature-first order.
 Nullary predicates contribute one tuple even when the domain is empty. The
-[full-carrier control](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/tests/gate_positions.rs)
+[full-carrier control](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/tests/integration/gate_positions.rs)
 compares enumeration with an independently generated, sorted and deduplicated
 product, including signed predicates and typed values. This is executable test
 evidence and a source argument, not a Lean proof of Rust's iterator. Canonical
@@ -339,7 +339,12 @@ appender admits newly discovered identities. Pending discovery IDs and dense
 coordinate marks remain separate from truth until the complete scan finishes.
 Final result publication selects the completed truth over an immutable prefix;
 reset clears memberships, frontiers and pending marks while retaining identity
-and reusable capacity for the next candidate.
+and reusable capacity for the next candidate. A dense relation also keeps, for
+rows derived again, the discovery position its coordinate's identity already
+has in that authority, so a later candidate resolves such a row without
+rebuilding its atom. This is identity, not truth: the authority's discovery
+positions never change, the pairs die with the workspace that owns the
+authority, and which rows are true is still decided afresh by each closure.
 `RelationExtension` states preservation of old row reconstruction and equality
 selection when row references and dictionary meanings survive extension. It does
 not establish the new Rust owner/prefix checks, publication protocol or reset
@@ -366,7 +371,8 @@ excludes duplicate decoded atoms from that selection. These premises do not
 follow from increasing occurrence IDs, a shared vocabulary or equal catalog
 lengths. Rust must construct and bind the ranks to the exact catalog, retain
 selected representatives, and check work, capacity, cancellation and publication.
-The laws do not verify that implementation or its sorting algorithm.
+The laws do not verify that implementation, its semantic-order walk or its
+sorting algorithm.
 
 The common `ModelRetention` ledger charges each distinct occurrence catalog's
 portable encoding once, including repeated and unselected entries, then
@@ -415,7 +421,14 @@ atom. `owner_transfer_preserves_interpretation` requires agreement of decoded
 atoms, and `raw_ids_do_not_determine_interpretation` shows why raw equality is
 insufficient. The laws reuse `ModelSelections`; they do not establish DAG
 interning uniqueness, Rust comparison/hash consistency, lifetimes or storage
-accounting.
+accounting. In Rust, one atom operation resolves each canonical row once and
+reads every field from that resolution while the immutable prefix is
+borrowed; this is one evaluation of the decoder, not a retained copy. Atom
+hashing writes the same fields as the ingress atom with equal contents, which
+the canonical/ingress hash tests check across segments and readers.
+Constructing a canonical view checks only that its identity lies below the
+reader's counts: segments are contiguous from zero and end with those counts,
+so every counted identity resolves when an operation reads it.
 
 `CanonicalCatalog.find_discovery` separates canonical query resolution from a
 unique discovery map. `discovery_lookup_exact` equates that composition with the
@@ -548,8 +561,9 @@ that owner does not reuse a reduct or an interpretation. Each candidate starts
 with empty relations; assignments borrow only its current immutable round.
 Final assembly publishes a selected immutable prefix and resets truth-bearing
 relation memberships, frontiers and pending marks. The canonical authority and
-its discovered identities remain available; their presence supplies no truth to
-the next candidate. Previous results retain their original immutable prefix.
+its discovered identities remain available, with the recorded discovery
+positions of dense rows derived again; their presence supplies no truth to the
+next candidate. Previous results retain their original immutable prefix.
 The required refinement is equality with a fresh full-round closure, including
 constraints and frozen-seed agreement. The scalar and batch reuse controls
 compare those results, retained buffer addresses and failure recovery. They do
@@ -610,8 +624,17 @@ cancellation; the Lean laws do not prove condition-variable progress. A joined
 batch records spent operations only after all leases settle; a lease is not
 evidence of candidate execution or membership.
 
-The parallel region walk scopes each lease to one region and settles it before
-waiting for another region or sending a model. Its shared allowance includes
+The parallel region walk keeps one lease per worker across its consecutive
+regions and settles it before stealing or waiting for another region and
+before sending a model; a reservation settles it first, and exit or unwinding
+drops it. The ledger is therefore locked about twice per grant rather than
+twice per region, while no unused permit is held where the worker could
+block. Holding a grant across regions shifts timing, not outcomes: exhaustion
+is still reported only when no permit is available or outstanding, so the
+total work bound is unchanged, but near a small allowance a peer can wait
+until a busy worker's local run ends before permits return, and mid-run
+statistics trail committed work by up to one grant per worker. Its shared
+allowance includes
 coordinator certificate preparation; each worker reserves a finite checking
 bound before running its certificate and settles its actual returned work.
 The bounds follow the checkers' charged visits: nodes, roots, producers and atoms
@@ -620,7 +643,7 @@ consumes its reservation conservatively and yields an incomplete worker failure.
 Returning unused grants before an idle wait, releasing blocked
 sends before joining on iterator drop, and counting joined certificate checks
 are Rust lifecycle and accounting obligations, beyond permit conservation. The
-bounded subprocess regressions in `zetesis-sat/tests/parallel_regions.rs` exercise
+bounded subprocess regressions in `zetesis-sat/tests/integration/parallel_regions.rs` exercise
 shutdown and idle grants; the certificate regressions compare complete scalar
 and parallel work and reject an insufficient shared allowance. An injected
 worker unwind also checks that idle peers wake and coverage remains incomplete.
@@ -633,16 +656,22 @@ slots fallibly, then raises the unresolved-region count by one before publishing
 either child under the same queue guard. A resolved region decrements the count
 once. Taking or stealing only transfers ownership. Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
-can establish termination only when the count reaches zero.
+can establish termination only when the count reaches zero. Idle workers wait at
+a gate: the resolution that reaches zero, a stop and a close each wake them after
+changing the count or the closed flag, and an idle worker re-checks both under the
+gate before waiting, so none waits past the end of the walk. The wait stays
+bounded, which is how an idle worker sees a cancellation or a newly published
+region; completeness never depends on a wake.
 
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
-and exhaustion laws; the atomic count, mutex protocol and absence of lost
-ownership remain Rust refinement obligations. Depth-first local order retains
-at most one older sibling per ancestor plus the newest children. Each split
-decides another atom, and stealing starts only with an empty local deque, giving
-at most `atom_count + 1` live entries per deque. Slot capacity grows fallibly as
-needed and is released after joining, including a partially launched worker set.
-This slot reservation does not make region/knowledge payload cloning fallible.
+and exhaustion laws; the atomic count, the queue and gate protocols and absence
+of lost ownership remain Rust refinement obligations. Depth-first local order
+retains at most one older sibling per ancestor plus the newest children. Each
+split decides another atom, and stealing starts only with an empty local deque,
+giving at most `atom_count + 1` live entries per deque. Slot capacity grows
+fallibly as needed and is released after joining, including a partially launched
+worker set. This slot reservation does not make region/knowledge payload cloning
+fallible.
 An idle worker that observes cancellation or a deadline
 records the typed stop before publishing closure. The coordinator may already
 be waiting after its own control poll; channel disconnection must retain that
@@ -733,19 +762,16 @@ ownership, reservation arithmetic, panic/cancellation paths, budget settlement
 before checking and transfer between rounds remain Rust obligations. The two
 abstract laws do not themselves verify that concurrent implementation.
 
-`SessionBuilder::executor` exposes that same formula batch boundary to an
-external `BatchExecutor`; it does not replace the candidate frontier or objective
-owner. The complete original-theory tight certificate, when selected, is shared
-with the executor through `MembershipPlan`. Original satisfaction is checked
-before invocation. `CandidateBatch::finish` and the host receipt consumer retain
-exact theory and candidate-slice association and check result count. Neither
-operation proves the soundness of a verdict or its association with the right
-position within that slice. The batch laws therefore still require a sound
-executor for the selected operation as an explicit premise. Exact residual
-completion uses the existing host checker; a callback interruption, refusal or
-fault cannot discharge its pending candidates. Rust ownership, callback effects,
-resource compliance and transport identities remain implementation obligations,
-with no additional theorem or device qualification claimed by this API.
+The CPU batched completion and the GPU formula routes share one internal batch
+boundary. Original satisfaction is checked before a route sees a candidate, and
+the host receipt consumer retains exact theory and candidate-slice association
+and checks the result count. Neither check proves the soundness of a verdict or
+its association with the right position within that slice, so the batch laws
+take a sound route for the selected operation as an explicit premise; each route
+is zetesis's own and is qualified with it. Exact residual completion uses the
+existing host checker; an interruption or fault cannot discharge its pending
+candidates. Rust ownership, resource compliance and transport identities remain
+implementation obligations.
 
 ## Representation and source laws
 

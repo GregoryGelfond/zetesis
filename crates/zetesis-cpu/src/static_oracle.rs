@@ -7,8 +7,7 @@ use zetesis_core::{
 use crate::{Cancellation, Limits, Stop};
 
 #[cfg(test)]
-#[path = "../tests/support/static_decode.rs"]
-mod decode_tests;
+mod tests;
 
 /// Work counters for a completed dense CPU invocation. These measure this
 /// algorithm's operations, not equivalent work by the lazy or GPU backends.

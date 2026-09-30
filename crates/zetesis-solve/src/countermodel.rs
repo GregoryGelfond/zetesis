@@ -45,17 +45,12 @@ pub(crate) fn prepare_certificate(
     options: &SolveConfig,
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
-    mode: crate::batch_executor::Mode,
 ) -> Result<Option<zetesis_sat::Incomplete>, SolveError> {
-    if options.oracle != crate::Oracle::Auto
-        || matches!(mode, crate::batch_executor::Mode::External(capabilities) if !capabilities.tight())
-    {
+    if options.oracle != crate::Oracle::Auto {
         return Ok(None);
     }
     let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
-        if matches!(mode, crate::batch_executor::Mode::External(_))
-            || !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu)
-        {
+        if options.backend.is_gpu() {
             // Device execution currently implements tight support. Preparation
             // authenticates the complete theory and charges the same owner, but
             // does not install CPU membership checks behind a device request.
@@ -122,17 +117,4 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/formula_harness.rs"]
-mod test_harness;
-
-#[cfg(test)]
-#[path = "../tests/support/certificate_order.rs"]
-mod certificate_order_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/batch_orchestration.rs"]
-mod batch_orchestration_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/partial_batch.rs"]
-mod partial_batch_tests;
+mod tests;

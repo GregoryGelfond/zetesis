@@ -176,11 +176,11 @@ fn bounded_read(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
 mod tests {
     use super::{hash, load, verify};
     use crate::corpus_comparison::Request as Options;
-    use std::path::PathBuf;
+    use zetesis_test_support::repository;
 
     #[test]
     fn complete_vendored_target_has_94_cases_and_matching_dependencies() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = repository::root();
         let options = Options {
             repo: root.clone(),
             ..Options::default()
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn edited_manifest_cannot_redefine_the_pinned_target() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = repository::root();
         let mut options = Options {
             repo: root.clone(),
             ..Options::default()
@@ -237,7 +237,7 @@ mod tests {
 
     fn repository_options() -> Options {
         Options {
-            repo: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            repo: repository::root(),
             ..Options::default()
         }
     }

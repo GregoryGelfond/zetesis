@@ -18,18 +18,6 @@ enum NativeOracle {
     Countermodel,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-enum NativeBackend {
-    #[default]
-    Cpu,
-    Auto,
-    Gpu,
-    Metal,
-    Vulkan,
-    Dx12,
-    Gl,
-    Nvidia,
-}
 #[derive(Debug, Parser)]
 #[command(
     name = "zetesis-validate",
@@ -55,9 +43,9 @@ struct Options {
     /// Native reduct oracle policy, recorded in the report and invocation.
     #[arg(long, value_enum, default_value_t)]
     native_oracle: NativeOracle,
-    /// Native hardware policy; explicit GPU policies are passed through unchanged.
-    #[arg(long, value_enum, default_value_t)]
-    native_backend: NativeBackend,
+    /// Native execution backend (cpu, gpu, metal or vulkan), passed through unchanged.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
+    native_backend: zetesis_backend::Backend,
     /// Positive native candidate batch size, recorded and passed to zetesis.
     #[arg(long, default_value = "64")]
     native_batch_size: NonZeroUsize,
@@ -105,7 +93,7 @@ fn execute(options: &Options) -> Result<bool, String> {
         clingo: options.clingo.clone(),
         zetesis: options.zetesis.clone(),
         native_oracle: options.native_oracle.into(),
-        native_backend: options.native_backend.into(),
+        native_backend: options.native_backend,
         native_batch_size: options.native_batch_size,
         native_completion_workers: options.native_completion_workers,
         native_max_completion_scratch_bytes: options.native_max_completion_scratch_bytes,
@@ -141,21 +129,6 @@ impl From<NativeOracle> for corpus_comparison::NativeOracle {
             NativeOracle::Auto => Self::Auto,
             NativeOracle::Closure => Self::Closure,
             NativeOracle::Countermodel => Self::Countermodel,
-        }
-    }
-}
-
-impl From<NativeBackend> for corpus_comparison::NativeBackend {
-    fn from(value: NativeBackend) -> Self {
-        match value {
-            NativeBackend::Cpu => Self::Cpu,
-            NativeBackend::Auto => Self::Auto,
-            NativeBackend::Gpu => Self::Gpu,
-            NativeBackend::Metal => Self::Metal,
-            NativeBackend::Vulkan => Self::Vulkan,
-            NativeBackend::Dx12 => Self::Dx12,
-            NativeBackend::Gl => Self::Gl,
-            NativeBackend::Nvidia => Self::Nvidia,
         }
     }
 }

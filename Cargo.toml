@@ -21,12 +21,17 @@ dead_code = "deny"
 pedantic = { level = "deny", priority = -1 }
 
 [workspace.dependencies]
+zetesis-bench = { path = "crates/zetesis-bench" }
 zetesis-presentation = { path = "crates/zetesis-presentation" }
 zetesis-validation = { path = "crates/zetesis-validation" }
-zetesis-experiments = { path = "crates/zetesis-experiments" }
 zetesis-solve = { path = "crates/zetesis-solve", default-features = false }
 zetesis-telemetry = { path = "crates/zetesis-telemetry" }
+zetesis-test-support = { path = "crates/zetesis-test-support" }
+zetesis-clingo-support = { path = "crates/zetesis-clingo-support" }
+zetesis-reference-support = { path = "crates/zetesis-reference-support" }
+zetesis-theory-support = { path = "crates/zetesis-theory-support" }
 zetesis-core = { path = "crates/zetesis-core" }
+zetesis-backend = { path = "crates/zetesis-backend" }
 zetesis-themelios = { path = "crates/zetesis-themelios" }
 zetesis-cpu = { path = "crates/zetesis-cpu" }
 zetesis-wgpu = { path = "crates/zetesis-wgpu" }
@@ -41,7 +46,9 @@ themelios-analysis = { git = "https://github.com/GregoryGelfond/themelios.git", 
 rayon = "1.12"
 # Borrowed canonical atom queries use Equivalent rather than an owned key copy.
 hashbrown = { version = "0.17.1", default-features = false }
-wgpu = "30.0.1"
+# zetesis-wgpu adds the one graphics API each target compiles: Metal on Apple
+# targets, Vulkan on all others.
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl"] }
 bytemuck = "1.25"
 pollster = "0.4"
 clap = { version = "4.6", features = ["derive"] }

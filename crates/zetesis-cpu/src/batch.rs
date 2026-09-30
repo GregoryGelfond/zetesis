@@ -373,12 +373,13 @@ mod tests {
     use std::time::Duration;
 
     use zetesis_core::{
-        AdmissionLimits, Atom, AtomPattern, GroundProgram, Model, Predicate, Program, Seed,
-        StaticLimits, Template,
+        AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits,
+        Template,
     };
 
     use super::{BatchError, BatchOracle};
     use crate::{Cancellation, Limits};
+    use zetesis_test_support::programs::model;
 
     pub(super) fn fixture() -> (GroundProgram, Vec<Seed>) {
         let [a, b, c] = ["a", "b", "c"]
@@ -406,15 +407,6 @@ mod tests {
             GroundProgram::compile(&program, StaticLimits::default()).unwrap(),
             seeds.into(),
         )
-    }
-
-    fn model(names: &[&str]) -> Model {
-        Model::new(
-            names
-                .iter()
-                .map(|name| Atom::new(Predicate::new(*name, 0).unwrap(), vec![]).unwrap()),
-        )
-        .unwrap()
     }
 
     fn exact_results(pool: &BatchOracle, graph: &GroundProgram, seeds: &[Seed]) {

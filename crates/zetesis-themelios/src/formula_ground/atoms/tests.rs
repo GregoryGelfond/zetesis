@@ -1,6 +1,5 @@
 //! Source identity, emitted local order and located refusal contracts.
 
-#[path = "count_capture.rs"]
 mod count_capture;
 
 use std::collections::BTreeMap;
@@ -10,22 +9,13 @@ use proptest::prelude::*;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::catalog::AtomRef;
-use zetesis_core::{Atom, AtomCatalog, Predicate, Sign, Value, ValueLimits, ValueNode};
+use zetesis_core::{Atom, AtomCatalog, Sign, Value, ValueLimits, ValueNode};
 
 use super::Catalog;
 use crate::formula_support::{Publication, SourceSelection, testing::Fixture};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_test_support::programs::{signed as atom, unary};
 
-fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values,
-    )
-    .unwrap()
-}
-fn number(value: i32) -> Atom {
-    atom("p", Sign::Positive, vec![Value::Number(value)])
-}
 fn location() -> Location {
     Location {
         source: SourceId::new(7),
@@ -97,7 +87,7 @@ fn local_selection_preserves_complete_atom_identity() {
     )
     .unwrap();
     let atoms = vec![
-        number(1),
+        unary("p", 1),
         atom("p", Sign::Negative, vec![Value::Number(1)]),
         atom("p", Sign::Positive, vec![Value::String("1".into())]),
         atom("p", Sign::Positive, vec![Value::Symbol("1".into())]),
@@ -112,13 +102,13 @@ fn local_selection_preserves_complete_atom_identity() {
     for (id, atom) in atoms.iter().enumerate() {
         assert_eq!(selected.find(atom), Some(id));
     }
-    assert_eq!(selected.find(&number(2)), None);
+    assert_eq!(selected.find(&unary("p", 2)), None);
     assert_atoms(&selected.finish(&FormulaLimits::default()).unwrap(), &atoms);
 }
 
 #[test]
 fn growth_preserves_first_emitted_occurrence_order() {
-    let atoms: Vec<_> = (0..257).rev().map(number).collect();
+    let atoms: Vec<_> = (0..257).rev().map(|value| unary("p", value)).collect();
     let mut selected = Selection::new();
     for (id, atom) in atoms.iter().enumerate() {
         assert_eq!(selected.intern(atom), id);
@@ -132,7 +122,7 @@ fn growth_preserves_first_emitted_occurrence_order() {
 #[test]
 fn exhausted_lookup_retains_its_source_location() {
     let mut selected = Selection::new();
-    selected.intern(&number(4));
+    selected.intern(&unary("p", 4));
     selected
         .source
         .with(location(), |_, computation, counters| {
@@ -148,18 +138,18 @@ fn exhausted_lookup_retains_its_source_location() {
         }) if observed == limit + 1 && actual == location()));
         });
     assert_eq!(selected.catalog.len(), 1);
-    assert_eq!(selected.find(&number(4)), Some(0));
-    assert_eq!(selected.intern(&number(5)), 1);
+    assert_eq!(selected.find(&unary("p", 4)), Some(0));
+    assert_eq!(selected.intern(&unary("p", 5)), 1);
     assert_atoms(
         &selected.finish(&FormulaLimits::default()).unwrap(),
-        &[number(4), number(5)],
+        &[unary("p", 4), unary("p", 5)],
     );
 }
 
 #[test]
 fn signed_lookup_keeps_local_selection_membership() {
     let mut selected = Selection::new();
-    selected.intern(&number(4));
+    selected.intern(&unary("p", 4));
     let opposite = atom("p", Sign::Negative, vec![Value::Number(4)]);
     // Canonical discovery alone is not an emitted member.
     assert_eq!(selected.find(&opposite), None);
@@ -224,7 +214,7 @@ fn allocation_diagnostics_retain_the_original_error() {
 #[test]
 fn final_catalog_keeps_its_canonical_authority() {
     let mut selected = Selection::new();
-    selected.intern(&number(4));
+    selected.intern(&unary("p", 4));
     let first = selected
         .source
         .with(location(), |_, computation, counters| {
@@ -240,7 +230,7 @@ fn final_catalog_keeps_its_canonical_authority() {
                 .unwrap();
             first
         });
-    selected.intern(&number(5));
+    selected.intern(&unary("p", 5));
     let (mut completed, mut counters) = selected.source.finish(location());
     let limits = FormulaLimits::default();
     let mut publication = Publication::new(&mut completed, &counters, location()).unwrap();
@@ -256,8 +246,8 @@ fn final_catalog_keeps_its_canonical_authority() {
         )
         .unwrap();
     assert!(prefix.shares_snapshot(&finished));
-    assert_atoms(&prefix, &[number(4)]);
-    assert_atoms(&finished, &[number(4), number(5)]);
+    assert_atoms(&prefix, &[unary("p", 4)]);
+    assert_atoms(&finished, &[unary("p", 4), unary("p", 5)]);
 }
 
 #[test]
@@ -279,7 +269,7 @@ fn repeated_argument_payload_has_one_canonical_term() {
 #[test]
 fn zero_atom_storage_refuses_final_publication() {
     let mut selected = Selection::new();
-    selected.intern(&number(1));
+    selected.intern(&unary("p", 1));
     let limits = FormulaLimits {
         max_atom_storage_bytes: 0,
         ..FormulaLimits::default()
@@ -298,7 +288,7 @@ proptest! {
         let mut reference = BTreeMap::new();
         let mut ordered = Vec::new();
         for value in values {
-            let atom = number(value);
+            let atom = unary("p", value);
             let next = reference.len();
             let id = *reference.entry(atom.clone()).or_insert_with(|| { ordered.push(atom.clone()); next });
             prop_assert_eq!(selected.intern(&atom), id);

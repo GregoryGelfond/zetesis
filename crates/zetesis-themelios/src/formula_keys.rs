@@ -27,7 +27,8 @@
 //! defined, and `s` is evaluated where the written constraint evaluated it.
 //! The values `p` admits are those of its choice's condition, and the
 //! condition's are read from the facts of a literal binding the value when
-//! facts are all that produces it ([`zetesis_domain::facts`]): what the facts
+//! facts are all that produces it ([`zetesis_domain::FactIndex`], read once
+//! per analysis): what the facts
 //! admit is exactly what the relation admits. A condition produced otherwise
 //! bounds nothing, and the constraint is left as written.
 //!
@@ -81,7 +82,7 @@ use themelios_program::program::{
 use themelios_program::provenance::{Provenance, WithProvenance};
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{BinaryOp, Term, Variable};
-use zetesis_domain::{KeyWork, KeyedRelation, Stop, atom_signature};
+use zetesis_domain::{FactIndex, KeyWork, KeyedRelation, Stop, atom_signature};
 
 use crate::expansion::Budget;
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
@@ -160,6 +161,14 @@ fn ask_under(
     }
     let keys: BTreeMap<&Signature, &KeyedRelation<'_>> =
         keys.iter().map(|key| (key.signature(), key)).collect();
+    // Every question about facts below is answered from one reading.
+    let facts = match FactIndex::read(analyzed, work) {
+        Ok(facts) => facts,
+        Err(stop) => {
+            asked.analysis = KeyAnalysis::Stopped(stop);
+            return Ok(asked);
+        }
+    };
     // The analyzed statement of each source statement, by parsed origin; a
     // source statement normalized into several is left as written.
     let mut by_origin: BTreeMap<Location, Vec<&WithProvenance<Statement>>> = BTreeMap::new();
@@ -173,7 +182,7 @@ fn ask_under(
         let [statement] = statements[..] else {
             continue;
         };
-        match ask(statement, &keys, analyzed, work, budget, location)? {
+        match ask(statement, &keys, &facts, work, budget, location)? {
             Outcome::Asked(rules) => {
                 asked
                     .rules
@@ -203,7 +212,7 @@ struct Demand<'a> {
 fn ask(
     statement: &WithProvenance<Statement>,
     keys: &BTreeMap<&Signature, &KeyedRelation<'_>>,
-    program: &SourceProgram,
+    facts: &FactIndex<'_>,
     work: &mut KeyWork,
     budget: &mut Budget,
     location: Location,
@@ -258,7 +267,7 @@ fn ask(
     let Some((skipped, left, right)) = comparison else {
         return Ok(Outcome::Written);
     };
-    let proof = match safety::Proof::of(body, keys, program, work) {
+    let proof = match safety::Proof::of(body, keys, facts, work) {
         Ok(Some(proof)) => proof,
         Ok(None) => return Ok(Outcome::Written),
         Err(failure) => return applicability_failure(failure, location),
@@ -266,7 +275,7 @@ fn ask(
     let demands = demands(body, skipped, keys, &occurrences);
     let asked = match one_value(left, right, &demands) {
         Some((demand, value)) => vec![(demand, value)],
-        None => match digit_and_carry(left, right, &demands, program, &proof, work) {
+        None => match digit_and_carry(left, right, &demands, facts, &proof, work) {
             Ok(Some(asked)) => asked,
             Ok(None) => return Ok(Outcome::Written),
             Err(failure) => return applicability_failure(failure, location),
@@ -405,7 +414,7 @@ fn digit_and_carry<'a>(
     left: &Term,
     right: &Term,
     demands: &'a [Demand<'a>],
-    program: &SourceProgram,
+    facts: &FactIndex<'_>,
     proof: &safety::Proof<'_>,
     work: &mut KeyWork,
 ) -> Result<Option<Vec<(&'a Demand<'a>, Term)>>, safety::Failure> {
@@ -421,8 +430,8 @@ fn digit_and_carry<'a>(
         if !proof.numeric(other, work)? {
             continue;
         }
-        if !admits_within(program, digit.key, 0, i64::from(base) - 1, work)?
-            || !admits_within(program, carry.key, 0, i64::from(i32::MAX), work)?
+        if !admits_within(facts, digit.key, 0, i64::from(base) - 1, work)?
+            || !admits_within(facts, carry.key, 0, i64::from(i32::MAX), work)?
         {
             continue;
         }
@@ -494,7 +503,7 @@ fn digit_plus_carry<'a>(
 /// # Errors
 /// Returns the key work's stop.
 fn admits_within(
-    program: &SourceProgram,
+    facts: &FactIndex<'_>,
     key: &KeyedRelation<'_>,
     low: i64,
     high: i64,
@@ -514,7 +523,7 @@ fn admits_within(
         Some((atom_signature(atom, terms.len())?, position))
     });
     for (signature, position) in positions {
-        if let Some(values) = zetesis_domain::facts(program, &signature, position, work)?
+        if let Some(values) = facts.values(&signature, position, work)?
             && within(&values, low, high)
         {
             return Ok(true);

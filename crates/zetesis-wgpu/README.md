@@ -18,9 +18,7 @@ explains their place in ordinary solving, and the
 | `GpuRelationExecutor` | One immutable typed relation and equality queries; ordered row masks | Complete pattern matching, source coverage and answer-set checking |
 
 The tight, native aggregate and relation operations are explicit library
-experiments;
-ordinary solver dispatch does not currently select them. A successful primitive
-benchmark is not a complete source-language solve.
+operations; ordinary solver dispatch does not currently select them.
 
 Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
 reproducibility requires a particular backend. Selection distinguishes physical
@@ -236,15 +234,15 @@ Portable checks exercise planning and host failure boundaries. Physical Metal
 qualification is selected explicitly:
 
 ```sh
-cargo test --locked -p zetesis-wgpu --all-features --test hardware_formula metal -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --all-features --test hardware_aggregate metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test integration hardware_formula::metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test integration hardware_aggregate::metal -- --ignored --nocapture
 cargo test --locked -p zetesis-wgpu --all-features --lib metal_aggregate -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --all-features --test hardware_relation -- --ignored --nocapture --test-threads=1 --exact metal_relation_masks_match_typed_rows metal_relation_refusals_preserve_prepared_view
+cargo test --locked -p zetesis-wgpu --all-features --test integration -- --ignored --nocapture --test-threads=1 --exact hardware_relation::metal_relation_masks_match_typed_rows hardware_relation::metal_relation_refusals_preserve_prepared_view
 ```
 
 The [test sources](tests) contain the separate static, lazy, tight, formula,
 aggregate and relation controls. Vulkan tests use their explicit Vulkan filters;
-a Metal pass does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`
-checks the selected physical groups with the matching instrumented binaries and
+a Metal pass does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`,
+or `--vulkan`, checks that backend's selected physical groups with the matching instrumented binaries and
 keeps CPU-only CLI coverage separate. See [Contributing](../../CONTRIBUTING.md)
 for the complete gate discipline.

@@ -225,5 +225,4 @@ pub(crate) fn io(path: &Path, source: std::io::Error) -> Error {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/selected_identity.rs"]
 mod tests;

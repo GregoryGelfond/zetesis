@@ -1,5 +1,7 @@
 # Lending completed grounding rows
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 Lending a completed join binding to its immediate consumer reduced dense-rule
 instantiation time in this four-program CPU comparison. On the larger dense
 case, the improvement also reached whole-process time. The smaller case and

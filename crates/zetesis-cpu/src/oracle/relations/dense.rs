@@ -276,6 +276,13 @@ pub(in crate::oracle) struct Dense {
     /// The words holding new bits, so that advancing clears only them: an
     /// unchanged relation costs a round one unit, whatever its size.
     new_words: Range<usize>,
+    /// Discovery positions of rows whose identity the workspace's authority
+    /// had already admitted when they were derived again, as (position,
+    /// discovery position) pairs ascending by position. Identity metadata,
+    /// not truth: a reset keeps it, and the authority's discovery positions
+    /// never change, so a pair stays exact for as long as the workspace that
+    /// owns the authority, which owns this relation.
+    discovered: Vec<(usize, usize)>,
 }
 
 impl Dense {
@@ -298,6 +305,7 @@ impl Dense {
             count: 0,
             new_count: 0,
             new_words: 0..0,
+            discovered: Vec::new(),
         })
     }
 
@@ -363,7 +371,7 @@ impl Dense {
         Ok(())
     }
 
-    /// Empty the relation, keeping its capacity.
+    /// Empty the relation, keeping its capacity and its discovered positions.
     pub(super) fn reset(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         charge(work, 2 * self.present.len())?;
         self.present.fill(0);
@@ -404,9 +412,103 @@ impl Dense {
         Ok(None)
     }
 
-    /// Actual retained bit-vector capacity; layout metadata is shared preparation.
+    /// Discovered positions of current rows, ascending by row position.
+    pub(super) fn discovered(&self) -> &[(usize, usize)] {
+        &self.discovered
+    }
+
+    /// Record the discovery positions of current rows whose identity existed
+    /// before this pass. `ids` holds the discovery position of each current
+    /// row in row order, and `admitted` the authority's size when the pass
+    /// began, below which a discovery position names an older identity.
+    /// Recording only saves later lookups, so it never refuses a closure: it
+    /// is skipped when its work would exceed the remaining work, when its
+    /// bytes would take the closure past its ceiling (`live` being the bytes
+    /// already held), or when it cannot be allocated.
+    ///
+    /// # Errors
+    /// Returns a cancellation stop observed while charging the scan or the
+    /// merge. The guard admits recording only when their work fits the
+    /// remaining work, so no work limit is reached here.
+    pub(super) fn remember(
+        &mut self,
+        ids: &[usize],
+        admitted: usize,
+        live: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let repeats = ids.iter().filter(|&&id| id < admitted).count();
+        if repeats == 0 {
+            return Ok(());
+        }
+        // The scan visits each word and row once; the merge, each pair.
+        let cost = self.layout.words() + ids.len() + self.discovered.len() + repeats;
+        let remaining = work.limits.max_work.saturating_sub(work.statistics.work);
+        let size = size_of::<(usize, usize)>() as u128;
+        let headers = 2 * size_of::<Vec<(usize, usize)>>() as u128;
+        let bytes = headers + (2 * repeats as u128 + self.discovered.len() as u128) * size;
+        if u64::try_from(cost).map_or(true, |cost| cost > remaining)
+            || live.saturating_add(bytes) > work.limits.max_closure_bytes as u128
+        {
+            return Ok(());
+        }
+        // The byte guard above covers these requested reservations; the final
+        // record uses their actual capacities.
+        let mut found = Vec::new();
+        let mut merged = Vec::new();
+        if found.try_reserve_exact(repeats).is_err()
+            || merged
+                .try_reserve_exact(self.discovered.len() + repeats)
+                .is_err()
+        {
+            return Ok(());
+        }
+        let mut range = 0..self.layout.positions;
+        for &id in ids {
+            let position = self
+                .next_row(RowSet::Current, &mut range, work)?
+                .ok_or(Stop::InvalidProgram)?;
+            if id < admitted {
+                found.push((position, id));
+            }
+        }
+        // A row already recorded meets its own record here: identities are
+        // stable, so the pair is the same and is kept once.
+        charge(work, self.discovered.len() + found.len())?;
+        let (mut old, mut new) = (self.discovered.iter().peekable(), found.iter().peekable());
+        while let (Some(&&left), Some(&&right)) = (old.peek(), new.peek()) {
+            match left.0.cmp(&right.0) {
+                std::cmp::Ordering::Less => {
+                    merged.push(left);
+                    old.next();
+                }
+                std::cmp::Ordering::Greater => {
+                    merged.push(right);
+                    new.next();
+                }
+                std::cmp::Ordering::Equal => {
+                    debug_assert_eq!(left, right);
+                    merged.push(left);
+                    old.next();
+                    new.next();
+                }
+            }
+        }
+        merged.extend(old.copied());
+        merged.extend(new.copied());
+        super::storage::record(
+            work,
+            live + headers + (found.capacity() + merged.capacity()) as u128 * size,
+        )?;
+        self.discovered = merged;
+        Ok(())
+    }
+
+    /// Actual retained bit-vector capacity and discovered positions; layout
+    /// metadata is shared preparation.
     pub(super) fn retained_bytes(&self) -> u128 {
         (self.present.capacity() as u128 + self.new.capacity() as u128) * size_of::<u64>() as u128
+            + self.discovered.capacity() as u128 * size_of::<(usize, usize)>() as u128
     }
 }
 
@@ -874,6 +976,97 @@ mod tests {
             pending.absorb_into(0, dense, work).unwrap(),
             positions.len()
         );
+    }
+
+    /// A dense relation over `layout()` holding the rows at `positions`.
+    fn rows(positions: &[usize], work: &mut Work<'_>) -> Dense {
+        let (layouts, mut pending) = pending(work);
+        let mut dense = Dense::new(layouts.iter().next().unwrap().clone()).unwrap();
+        insert(&mut dense, &mut pending, positions, work);
+        dense
+    }
+
+    #[test]
+    fn remembering_records_older_identities_in_position_order() {
+        // Rows 1, 4 and 5 hold discovery positions 7, 2 and 9. With three
+        // identities admitted before the first pass, only row 4's is older;
+        // a later pass, after ten, records rows 1 and 5 around it.
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        dense.remember(&[7, 2, 9], 3, 0, &mut work).unwrap();
+        assert_eq!(dense.discovered(), [(4, 2)]);
+        dense.remember(&[7, 2, 9], 10, 0, &mut work).unwrap();
+        assert_eq!(dense.discovered(), [(1, 7), (4, 2), (5, 9)]);
+    }
+
+    #[test]
+    fn remembering_charges_every_pair_it_merges() {
+        // After row 4 is recorded, a pass over rows 1, 4 and 5, all older
+        // identities, scans three rows and merges the one record with the
+        // three repeated pairs, row 4's own included: seven units.
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        dense.remember(&[7, 2, 9], 3, 0, &mut work).unwrap();
+        let spent = work.statistics.work;
+        dense.remember(&[7, 2, 9], 10, 0, &mut work).unwrap();
+        assert_eq!(work.statistics.work - spent, 7);
+    }
+
+    #[test]
+    fn remembering_past_the_byte_ceiling_records_nothing() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        dense.remember(&[0, 1, 2], 3, 1 << 20, &mut work).unwrap();
+        assert!(dense.discovered().is_empty());
+    }
+
+    #[test]
+    fn remembering_reserves_its_scratch_headers() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        let live = size_of::<Dense>() as u128 + dense.retained_bytes();
+        // Both pair arrays fit, but their simultaneously live headers do not.
+        let pairs = 2 * 3 * size_of::<(usize, usize)>();
+        work.limits.max_closure_bytes = usize::try_from(live).unwrap() + pairs;
+        let spent = work.statistics.work;
+        dense.remember(&[0, 1, 2], 3, live, &mut work).unwrap();
+        assert!(dense.discovered().is_empty());
+        assert_eq!(work.statistics.work, spent);
+    }
+
+    #[test]
+    fn remembering_reports_its_simultaneous_scratch() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        let live = size_of::<Dense>() as u128 + dense.retained_bytes();
+        work.statistics.peak_closure_bytes = 0;
+        dense.remember(&[0, 1, 2], 3, live, &mut work).unwrap();
+        assert_eq!(dense.discovered(), [(1, 0), (4, 1), (5, 2)]);
+        let scratch = 2 * size_of::<Vec<(usize, usize)>>() + 2 * 3 * size_of::<(usize, usize)>();
+        assert!(work.statistics.peak_closure_bytes as u128 >= live + scratch as u128);
+    }
+
+    #[test]
+    fn remembering_past_the_remaining_work_records_and_charges_nothing() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        work.limits.max_work = work.statistics.work + 1;
+        let spent = work.statistics.work;
+        dense.remember(&[0, 1, 2], 3, 0, &mut work).unwrap();
+        assert!(dense.discovered().is_empty());
+        assert_eq!(work.statistics.work, spent);
     }
 
     #[test]

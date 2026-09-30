@@ -12,7 +12,6 @@ use crate::formula_ir::{HeadIr, HeadLiteral, HeadOperand, LiteralIr, Preparation
 use crate::formula_support::{Counters, GroundingWork, SupportCatalog, components};
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource};
 
-#[path = "tests/policy.rs"]
 mod policy;
 
 fn prepare(text: &str) -> crate::formula::Preparation {
@@ -484,4 +483,102 @@ fn reads_in_nested_conditions_prevent_partition() {
         partition(prepared).unwrap(),
         Partition { terminal: None, .. }
     ));
+}
+
+/// Partition work for a small terminal program joined by unrelated facts.
+fn partition_work(unrelated: &str) -> u128 {
+    let prepared = prepare(&format!("p(1). d(X):-p(X). {unrelated}"));
+    let before = prepared.accounting.work;
+    let Partition {
+        base,
+        terminal: Some(_),
+    } = partition(prepared).unwrap()
+    else {
+        panic!("eligible terminal definitions")
+    };
+    u128::from(base.accounting.work - before)
+}
+
+fn separate_facts(count: usize) -> String {
+    (0..count)
+        .map(|value| format!("noise({value})."))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn partition_work_grows_linearly_with_unrelated_facts() {
+    // Every unrelated fact is a terminal definition and an IR rule; certifying
+    // each against every other would grow with their square.
+    let small = partition_work(&separate_facts(100));
+    let large = partition_work(&separate_facts(400));
+    assert!(large < 6 * small, "{small} -> {large}");
+}
+
+#[test]
+fn partition_work_grows_linearly_with_an_unrelated_interval() {
+    // An interval expands into facts sharing one parsed origin.
+    let small = partition_work("noise(0..99).");
+    let large = partition_work("noise(0..399).");
+    assert!(large < 6 * small, "{small} -> {large}");
+}
+
+fn deferred(prepared: crate::formula::Preparation) -> Option<usize> {
+    match partition(prepared).unwrap() {
+        Partition {
+            terminal: Some(Definitions { deferred, .. }),
+            ..
+        } => Some(deferred.len()),
+        Partition { terminal: None, .. } => None,
+    }
+}
+
+#[test]
+fn a_rule_without_origins_still_finds_its_definition() {
+    // Origins only nominate candidates; without them every definition is tried.
+    let mut prepared = prepare("p(1). q(2). d(X):-p(X). d(X):-q(X).");
+    for rule in &mut prepared.program.rules {
+        rule.origins.clear();
+    }
+    assert_eq!(deferred(prepared), Some(2));
+}
+
+#[test]
+fn reordered_occurrences_of_one_origin_still_correspond() {
+    // The facts of one pooled statement share an origin; reversed, the outer
+    // two miss the definition at their own place and every one is tried.
+    let mut prepared = prepare("d(1;2;3). e(X):-d(X).");
+    let facts: Vec<usize> = prepared
+        .program
+        .rules
+        .iter()
+        .enumerate()
+        .filter(|(_, rule)| rule.body.is_empty())
+        .map(|(index, _)| index)
+        .collect();
+    assert_eq!(facts.len(), 3);
+    prepared.program.rules.swap(facts[0], facts[2]);
+    assert_eq!(deferred(prepared), Some(1));
+}
+
+#[test]
+fn a_definition_matched_only_by_an_earlier_rule_is_still_covered() {
+    // Two source carriers of one rule: the first match leaves the second
+    // uncovered, and the final check finds the same rule matches it too.
+    let mut prepared = prepare("p(1). d(X):-p(X). d(Y):-p(Y).");
+    let first = prepared
+        .program
+        .rules
+        .iter()
+        .position(|rule| !rule.body.is_empty())
+        .unwrap();
+    let second = prepared
+        .program
+        .rules
+        .iter()
+        .rposition(|rule| !rule.body.is_empty())
+        .unwrap();
+    assert_ne!(first, second);
+    prepared.program.rules.remove(second);
+    assert_eq!(deferred(prepared), Some(1));
 }

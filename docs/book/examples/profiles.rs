@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let profile = GpuFormulaProfile::new_selected(GpuOptions::default(), GpuSelection::default())?;
     let resources = ExecutionResources::with_formula_profile(&profile);
     let config = SolveConfig {
-        backend: Backend::Gpu,
+        backend: Backend::Gpu(None),
         grounder: Grounder::Eager,
         oracle: Oracle::Countermodel,
         models: 0,

@@ -9,6 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+use rustix::io::Errno;
 use rustix::process::{Pid, Signal, WaitId, WaitIdOptions, kill_process_group, waitid};
 
 use super::{
@@ -77,13 +78,11 @@ pub(super) fn invoke(
             Ok(false) => {
                 // A failed helper may have left its solver after closing pipes.
                 // The waitable helper still reserves this group ID.
-                if let Err(error) =
-                    pid(&owned).and_then(|pid| match kill_process_group(pid, Signal::KILL) {
-                        Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
-                        Err(error) => Err(error.into()),
-                    })
-                {
-                    capture.failure = Some(Failure::new(Operation::TerminateGroup, error));
+                if let Err(error) = kill_group(&owned, Instant::now()) {
+                    if error.operation() == Operation::ObserveExit {
+                        owned.group_owned = false;
+                    }
+                    capture.failure = Some(error);
                     capture.stop = Stop::Failure;
                 }
             }
@@ -232,6 +231,58 @@ fn observe(child: &PendingChild) -> io::Result<bool> {
     .map_err(Into::into)
 }
 
+/// Send SIGKILL to the child's process group.
+///
+/// kill(2) succeeds when it signals any member of the group, so a refusal
+/// (`EPERM`) or an empty group (`ESRCH`) means no member could be signalled.
+/// Once the waitable leader has exited, that is the expected end, not a failed
+/// termination: macOS refuses a group whose members are all zombies. A member
+/// this process may not signal, such as a set-user-ID descendant, stays
+/// invisible here, as it does to a group kill that succeeds.
+fn kill_group(child: &PendingChild, deadline: Instant) -> Result<(), Failure> {
+    let id = pid(child).map_err(|error| Failure::new(Operation::TerminateGroup, error))?;
+    settle_termination(
+        || kill_process_group(id, Signal::KILL),
+        || observe(child),
+        || {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
+            thread::sleep(POLL_INTERVAL.min(remaining));
+            Instant::now() < deadline
+        },
+    )
+}
+
+/// Resolve a group refusal before any direct-child reap can release ownership.
+/// A dying leader can stop accepting signals before its exit becomes waitable.
+/// Only PERM/SRCH may wait for that transition, within the caller's existing
+/// cleanup deadline. Each retry signals the still-owned group afresh; an exit
+/// observation never consumes wait status. Other faults stay explicit.
+fn settle_termination(
+    mut signal: impl FnMut() -> Result<(), Errno>,
+    mut exited: impl FnMut() -> io::Result<bool>,
+    mut wait_for_retry: impl FnMut() -> bool,
+) -> Result<(), Failure> {
+    let mut first_refusal = None;
+    loop {
+        match signal() {
+            Ok(()) => return Ok(()),
+            Err(error @ (Errno::PERM | Errno::SRCH)) => {
+                let original = *first_refusal.get_or_insert(error);
+                if exited().map_err(|error| Failure::new(Operation::ObserveExit, error))? {
+                    return Ok(());
+                }
+                if !wait_for_retry() {
+                    return Err(Failure::new(Operation::TerminateGroup, original.into()));
+                }
+            }
+            Err(error) => return Err(Failure::new(Operation::TerminateGroup, error.into())),
+        }
+    }
+}
+
 fn helper_succeeded(child: &PendingChild) -> io::Result<bool> {
     waitid(
         WaitId::Pid(pid(child)?),
@@ -300,10 +351,12 @@ fn finish(mut child: PendingChild, timeout: Duration, terminate: bool) -> Cleanu
     let mut failure = None;
     if terminate
         && child.group_owned
-        && let Err(error) =
-            pid(&child).and_then(|pid| kill_process_group(pid, Signal::KILL).map_err(Into::into))
+        && let Err(error) = kill_group(&child, deadline)
     {
-        failure = Some(Failure::new(Operation::TerminateGroup, error));
+        if error.operation() == Operation::ObserveExit {
+            child.group_owned = false;
+        }
+        failure = Some(error);
     }
     loop {
         match child.child.try_wait() {
@@ -400,6 +453,119 @@ mod tests {
             panic!("fixture cleanup abandoned child {}", pending.abandon());
         }
         assert_eq!(second.exit.unwrap().signal, Some(9));
+    }
+
+    #[test]
+    fn a_group_refusal_waits_for_the_leaders_exit() {
+        // The first signal finds a dying leader whose exit is not waitable;
+        // the second refusal is followed by its exit, without reaping it.
+        for refusal in [Errno::PERM, Errno::SRCH] {
+            let mut signals = 0;
+            let mut observations = [false, true].into_iter();
+            let mut waits = 0;
+            settle_termination(
+                || {
+                    signals += 1;
+                    Err(refusal)
+                },
+                || Ok(observations.next().expect("two exit observations")),
+                || {
+                    waits += 1;
+                    assert_eq!(waits, 1);
+                    true
+                },
+            )
+            .unwrap();
+            assert_eq!(signals, 2);
+            assert_eq!(waits, 1);
+            assert!(observations.next().is_none());
+        }
+    }
+
+    #[test]
+    fn a_group_refusal_survives_the_cleanup_deadline() {
+        let failure = settle_termination(|| Err(Errno::PERM), || Ok(false), || false).unwrap_err();
+        assert_eq!(failure.operation(), Operation::TerminateGroup);
+        assert_eq!(failure.cause().kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn an_unrelated_group_error_is_not_retried() {
+        let failure = settle_termination(
+            || Err(Errno::IO),
+            || panic!("an unrelated group error must not observe exit"),
+            || panic!("an unrelated group error must not wait"),
+        )
+        .unwrap_err();
+        assert_eq!(failure.operation(), Operation::TerminateGroup);
+        let expected: io::Error = Errno::IO.into();
+        assert_eq!(failure.cause().raw_os_error(), expected.raw_os_error());
+    }
+
+    #[test]
+    fn an_exit_observation_failure_stays_explicit() {
+        let failure = settle_termination(
+            || Err(Errno::PERM),
+            || Err(Errno::CHILD.into()),
+            || panic!("uncertain ownership must not wait to signal again"),
+        )
+        .unwrap_err();
+        assert_eq!(failure.operation(), Operation::ObserveExit);
+        let expected: io::Error = Errno::CHILD.into();
+        assert_eq!(failure.cause().raw_os_error(), expected.raw_os_error());
+    }
+
+    #[test]
+    fn cleanup_after_the_leader_exits_reports_no_termination_failure() {
+        let child = Command::new("/bin/sh")
+            .args(["-c", "exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let exited = PendingChild {
+            child,
+            group_owned: true,
+        };
+        // Wait without reaping: the group's only member is now its waitable
+        // leader, which macOS refuses to signal.
+        let status = waitid(
+            WaitId::Pid(pid(&exited).unwrap()),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+        )
+        .unwrap();
+        assert!(status.is_some_and(|status| status.exit_status() == Some(0)));
+        let settled = cleanup(exited, Duration::from_secs(1));
+        if let Some(pending) = settled.pending {
+            panic!("fixture cleanup abandoned child {}", pending.abandon());
+        }
+        assert!(settled.failure.is_none(), "{:?}", settled.failure);
+        assert_eq!(settled.exit.unwrap().code, Some(0));
+    }
+
+    #[test]
+    fn a_failed_helper_without_descendants_completes_with_its_exit() {
+        // Completion is observed only after the helper has exited, so its group
+        // holds just the waitable leader when the failed helper's group is killed.
+        let arguments: [std::ffi::OsString; 2] = ["-c".into(), "exit 7".into()];
+        let outcome = crate::process::invoke_supervised(
+            Invocation {
+                executable: std::path::Path::new("/bin/sh"),
+                arguments: &arguments,
+                directory: &std::env::temp_dir(),
+            },
+            Limits::default(),
+        )
+        .unwrap();
+        let (capture, pending) = outcome.into_parts();
+        if let Some(pending) = pending {
+            panic!("fixture cleanup abandoned child {}", pending.abandon());
+        }
+        assert_eq!(capture.stop, Stop::Completed, "{capture:?}");
+        assert!(capture.failure.is_none(), "{capture:?}");
+        assert_eq!(capture.exit.unwrap().code, Some(7));
     }
 
     #[test]

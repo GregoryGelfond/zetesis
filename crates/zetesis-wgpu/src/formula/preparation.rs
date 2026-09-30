@@ -267,5 +267,4 @@ fn finalize_outputs(
 }
 
 #[cfg(test)]
-#[path = "../../tests/formula/preparation.rs"]
 mod tests;

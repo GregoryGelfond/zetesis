@@ -9,11 +9,12 @@ pub(crate) mod storage;
 mod view;
 mod membership;
 mod constructor;
+mod atom_identities;
+mod predicate_mask;
 mod terms;
 mod term_read;
 mod vocabulary;
 
-#[path = "atom_interner.rs"]
 pub mod interner;
 mod compare;
 
@@ -21,10 +22,12 @@ use std::{cmp::Ordering, fmt, iter::FusedIterator, marker::PhantomData, slice, s
 
 use crate::Atom;
 
+pub use atom_identities::AtomIdentityMap;
 pub(crate) use constructor::ConstructorData;
 pub use constructor::DeclaredConstructor;
 pub use membership::{CatalogRead, DeclaredPredicate, ReadError};
 pub(crate) use membership::{Member, Membership};
+pub use predicate_mask::{PredicateMask, PredicateMaskFailure};
 pub use storage::Fault as Error;
 pub use storage::{DerivedFailure, DerivedTerms};
 pub use term_read::TermRead;

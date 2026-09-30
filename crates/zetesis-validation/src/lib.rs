@@ -7,7 +7,6 @@ pub mod curated;
 pub mod corpus_comparison;
 mod phase;
 mod stage;
-#[path = "example_corpus/mod.rs"]
 pub mod examples;
 pub mod performance;
 pub mod process;

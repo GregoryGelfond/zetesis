@@ -249,7 +249,7 @@ readback and error cleanup. Another operation receives `GpuErrorKind::Busy`
 without entering a waiting queue. This is serialized composition of primitives;
 their internal GPU parallelism remains unchanged. Prepared data does not retain
 that execution lease. The
-[composition example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware_context.rs)
+[composition example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware_context.rs)
 executes formula checks while relation columns remain prepared on the same
 context, then uses those columns again.
 
@@ -349,7 +349,11 @@ Scalar delta rows are derived ID selections over each predicate's sole tuple
 owner. Their live and spare capacities, headers and conservative replacement
 overlap enter the same per-candidate allowance. Cutoffs, cache keys and logical
 ID lengths are reset before reuse; stable insertion IDs belong to one candidate's
-catalog lifetime and do not become persistent truth across candidates.
+catalog lifetime and do not become persistent truth across candidates. A dense
+relation's recorded discovery positions, kept for rows derived again, are
+identity metadata of the workspace's authority: they count in the same
+allowance, are skipped rather than refused when the work or byte allowance
+cannot hold them, and are discarded with a failed or foreign workspace.
 Before executing a batch it admits idle retained workspaces and the allowance
 for each assigned workspace against its collective limit. If `S` is spare slot
 capacity (zero once every reserved slot holds a workspace), `P` the prepared

@@ -38,8 +38,7 @@ pub struct HybridExecutionStatistics {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/hybrid_terminal.rs"]
-mod terminal_tests;
+mod tests;
 
 pub(crate) struct HybridSession<'a> {
     owner: &'a HybridFormula,
@@ -56,7 +55,7 @@ impl<'a> HybridSession<'a> {
     pub(crate) fn new(
         owner: &'a HybridFormula,
         config: &SolveConfig,
-        resources: crate::session::Executors<'_>,
+        resources: &crate::ExecutionResources,
         observations: &mut impl ExecutionSink,
         cancellation: &Cancellation,
         phases: &Recorder,

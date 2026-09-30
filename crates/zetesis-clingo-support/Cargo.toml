@@ -1,0 +1,17 @@
+[package]
+name = "zetesis-clingo-support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Clingo, the external comparison oracle, for the zetesis workspace's tests."
+publish = false
+
+[dependencies]
+serde_json = "1"
+tempfile = "3"
+zetesis-test-support.workspace = true
+zetesis-validation.workspace = true
+
+[lints]
+workspace = true

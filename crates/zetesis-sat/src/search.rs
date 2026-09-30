@@ -7,8 +7,7 @@ mod shared_budget;
 mod watch_node;
 
 #[cfg(test)]
-#[path = "../tests/support/search_workspace.rs"]
-mod workspace_tests;
+mod tests;
 
 use watch_node::WatchNode;
 
@@ -16,28 +15,7 @@ pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
 pub(crate) use shared_budget::{SharedBudget, WorkLease};
 
 #[cfg(test)]
-#[path = "../tests/support/finish_contracts.rs"]
-mod finish_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/watch_contracts.rs"]
-mod watch_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/watch_traces.rs"]
-mod watch_traces;
-
-#[cfg(test)]
-#[path = "../tests/support/propagation_profile.rs"]
 mod propagation_profile;
-
-#[cfg(test)]
-#[path = "../tests/support/binary_watch_contracts.rs"]
-mod binary_watch_tests;
-
-#[cfg(test)]
-#[path = "../tests/support/ternary_watch_contracts.rs"]
-mod ternary_watch_tests;
 
 pub(crate) use cursor::Cursor;
 
@@ -334,8 +312,6 @@ impl State {
             let mut cursor = self.heads[false_literal.index()];
             while let Some(node) = cursor {
                 budget.tick()?;
-                #[cfg(test)]
-                propagation_profile::visit();
                 let following = self.next[node.index()];
                 let clause = node.index() / 2;
                 let slot = node.index() % 2;
@@ -375,12 +351,12 @@ impl State {
         slot: usize,
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<Option<usize>, Incomplete> {
-        #[cfg(test)]
-        propagation_profile::replacement_attempt(cnf.clause_at(clause).len());
         // Two distinct watches cover every position of a binary clause. The
         // calling watch visit has already polled control and charged its work;
         // there is no replacement position to examine or watch to relocate.
         if cnf.clause_at(clause).len() == 2 {
+            #[cfg(test)]
+            propagation_profile::binary_attempt();
             return Ok(None);
         }
         if cnf.clause_at(clause).len() == 3 {

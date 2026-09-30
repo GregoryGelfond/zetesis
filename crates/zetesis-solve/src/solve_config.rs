@@ -12,7 +12,10 @@ const DEFAULT_MAX_SUBSTITUTIONS: usize = 10_000_000;
 /// No field selects an output format, file path, source loader or writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SolveConfig {
-    /// Execution backend policy.
+    /// Execution backend: the CPU (the default) runs source joins or static
+    /// closure scans on an owned Rayon pool; a GPU backend requires a physical
+    /// device of its API and runs exact integer batches there, with general
+    /// formulas propagated on the GPU and their residual search exact on the CPU.
     pub backend: Backend,
     /// Materialization policy within the admitted input's supported profiles.
     pub grounder: Grounder,
@@ -76,8 +79,8 @@ pub struct SolveConfig {
     /// region tree under the regions method, one being the scalar walk.
     /// CPU closure setup conservatively reserves `max_closure_bytes` per worker;
     /// [`Self::for_allowance`] keeps that product within the collective ceiling.
-    /// The library default is four; the command uses at most four available
-    /// host threads.
+    /// The library default is four; the command uses the host's available
+    /// parallelism, or one when availability is unknown.
     pub workers: NonZeroUsize,
     /// Worker count for unresolved formula queries: under the clauses search,
     /// and under regions with one CPU walker or general device propagation.
@@ -158,7 +161,7 @@ impl SolveConfig {
     /// takes the host's memory and parallelism. Cumulative scalar-copy limits
     /// count work across source checks and are not scaled with retained storage.
     pub const DEFAULT: Self = Self {
-        backend: Backend::Auto,
+        backend: Backend::Cpu,
         grounder: Grounder::Auto,
         source_batching: SourceBatching::Independent,
         oracle: Oracle::Auto,
@@ -215,8 +218,8 @@ impl SolveConfig {
     pub fn region_workers(&self) -> Option<NonZeroUsize> {
         (self.search == SearchMethod::Regions
             && self.workers.get() > 1
-            && matches!(self.backend, Backend::Auto | Backend::Cpu))
-        .then_some(self.workers)
+            && self.backend == Backend::Cpu)
+            .then_some(self.workers)
     }
 }
 
@@ -312,7 +315,7 @@ impl SolveConfig {
         if self.source_batching != SourceBatching::Independent {
             return Err(crate::SolveError::UnsupportedSourceBatching);
         }
-        if !matches!(self.backend, Backend::Auto | Backend::Cpu) {
+        if self.backend.is_gpu() {
             return Err(crate::SolveError::HybridBackend {
                 backend: self.backend,
             });

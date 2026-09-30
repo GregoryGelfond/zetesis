@@ -9,7 +9,7 @@ pub enum NativeInvocation {
     /// Existing flat `zetesis --backend … --workers …` interface.
     #[default]
     Legacy,
-    /// Explicit `zetesis solve --device … --threads …` interface.
+    /// Explicit `zetesis solve --backend … --threads …` interface.
     Solve,
 }
 
@@ -21,9 +21,7 @@ impl NativeInvocation {
         let mut arguments = execution.arguments();
         if self == Self::Solve {
             for argument in &mut arguments {
-                if argument == "--backend" {
-                    *argument = "--device".into();
-                } else if argument == "--workers" {
+                if argument == "--workers" {
                     *argument = "--threads".into();
                 }
             }

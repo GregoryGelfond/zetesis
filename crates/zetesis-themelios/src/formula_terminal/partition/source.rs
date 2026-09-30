@@ -3,7 +3,10 @@
 use themelios_program::program::{Program, Statement};
 use themelios_program::provenance::WithProvenance;
 
-use super::workspace::{Context, Scratch};
+use super::{
+    index,
+    workspace::{Context, Scratch},
+};
 use crate::expansion::Budget;
 use crate::{ExpansionResource, FormulaFailure, FormulaResource};
 
@@ -13,11 +16,23 @@ pub(super) fn base(
     budget: &mut Budget,
     context: &mut Context<'_, '_>,
 ) -> Result<(Program, themelios_analysis::Analysis), FormulaFailure> {
+    // Definitions are found by address, so each statement costs a search.
+    let mut addresses = Scratch::new(context)?;
+    addresses.reserve(definitions.len(), context)?;
+    for definition in definitions {
+        context.work()?;
+        addresses
+            .values
+            .push(std::ptr::from_ref(*definition).addr());
+    }
+    index::sort(&mut addresses.values, context)?;
     let mut statements = Scratch::new(context)?;
+    let total = source.statements().count();
+    statements.reserve(total.saturating_sub(definitions.len()), context)?;
     let mut nodes = 0_u128;
     for statement in source.statements() {
         context.work()?;
-        if selected(statement, definitions, context)? {
+        if selected(statement, &addresses.values, context)? {
             continue;
         }
         let (work, bytes) = crate::formula_pool::source_copy_cost(statement.get());
@@ -30,7 +45,9 @@ pub(super) fn base(
         )?;
         budget.charge(ExpansionResource::TermWork, work, context.location)?;
         budget.charge(ExpansionResource::ScalarBytes, bytes, context.location)?;
-        statements.reserve(1, context)?;
+        if statements.values.len() == statements.values.capacity() {
+            statements.reserve(1, context)?;
+        }
         context.work()?;
         // Upstream cloning/Program collection uses infallible allocation under
         // these logical source limits. Other AST carriers, provenance and tree
@@ -45,16 +62,13 @@ pub(super) fn base(
     Ok((program, analysis))
 }
 
+/// Whether `source` is one of the definitions, by identity.
 fn selected(
     source: &WithProvenance<Statement>,
-    definitions: &[&WithProvenance<Statement>],
+    addresses: &[usize],
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
-    for definition in definitions {
-        context.work()?;
-        if std::ptr::eq(source, *definition) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    let address = std::ptr::from_ref(source).addr();
+    let found = index::partition(addresses, context, |&entry| entry < address)?;
+    Ok(addresses.get(found) == Some(&address))
 }

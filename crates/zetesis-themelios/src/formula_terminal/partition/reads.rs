@@ -5,7 +5,7 @@ use themelios_program::provenance::WithProvenance;
 use zetesis_core::catalog::PredicateRef;
 
 use super::{
-    matching,
+    index::Defined,
     workspace::{Context, Scratch},
 };
 use crate::FormulaFailure;
@@ -15,30 +15,19 @@ use crate::formula_support::components::Pattern;
 
 pub(super) fn selected(
     predicate: PredicateRef<'_>,
-    definitions: &[&WithProvenance<Statement>],
+    defined: &Defined<'_>,
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
-    for definition in definitions {
-        context.work()?;
-        let Statement::Rule(rule) = definition.get() else {
-            continue;
-        };
-        if let Some(head) = matching::head(rule)
-            && matching::signature(head, predicate, true, context)?
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    defined.defines(predicate, context)
 }
 
 pub(super) fn pattern(
     value: Pattern,
-    definitions: &[&WithProvenance<Statement>],
+    defined: &Defined<'_>,
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
     let predicate = context.pattern(value)?.predicate();
-    selected(predicate, definitions, context)
+    selected(predicate, defined, context)
 }
 
 pub(super) fn source(definition: &WithProvenance<Statement>) -> &Rule {
@@ -50,7 +39,7 @@ pub(super) fn source(definition: &WithProvenance<Statement>) -> &Rule {
 
 pub(super) fn rule(
     rule: &RuleIr,
-    definitions: &[&WithProvenance<Statement>],
+    defined: &Defined<'_>,
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
     let mut pending = Scratch::new(context)?;
@@ -78,7 +67,7 @@ pub(super) fn rule(
             .expect("checked nonempty read frontier");
         for literal in literals {
             context.work()?;
-            if literal_reads(literal, definitions, &mut pending, context)? {
+            if literal_reads(literal, defined, &mut pending, context)? {
                 return Ok(true);
             }
         }
@@ -88,7 +77,7 @@ pub(super) fn rule(
 
 fn projection<'ir>(
     value: &'ir Projection,
-    definitions: &[&WithProvenance<Statement>],
+    defined: &Defined<'_>,
     pending: &mut Scratch<&'ir [LiteralIr]>,
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
@@ -98,7 +87,7 @@ fn projection<'ir>(
         context.counters,
         context.location,
     )?;
-    if selected(predicate, definitions, context)? {
+    if selected(predicate, defined, context)? {
         return Ok(true);
     }
     if let Projection::Witnesses { bindings, .. } = value {
@@ -109,14 +98,14 @@ fn projection<'ir>(
 
 fn literal_reads<'ir>(
     literal: &'ir LiteralIr,
-    definitions: &[&WithProvenance<Statement>],
+    defined: &Defined<'_>,
     pending: &mut Scratch<&'ir [LiteralIr]>,
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
     match literal {
-        LiteralIr::Atom(_, atom) => pattern(*atom, definitions, context),
-        LiteralIr::PatternAtom(atom) => pattern(atom.atom, definitions, context),
-        LiteralIr::ProjectedAtom(_, value) => projection(value, definitions, pending, context),
+        LiteralIr::Atom(_, atom) => pattern(*atom, defined, context),
+        LiteralIr::PatternAtom(atom) => pattern(atom.atom, defined, context),
+        LiteralIr::ProjectedAtom(_, value) => projection(value, defined, pending, context),
         LiteralIr::Conditional(value) => {
             pending.push(value.condition.as_slice(), context)?;
             match &value.consequent {
@@ -125,9 +114,9 @@ fn literal_reads<'ir>(
                         context.work()?;
                         pending.push(alternative.bindings.as_slice(), context)?;
                         let found = match &alternative.operand {
-                            ConsequentOperand::Atom(atom) => pattern(*atom, definitions, context)?,
+                            ConsequentOperand::Atom(atom) => pattern(*atom, defined, context)?,
                             ConsequentOperand::Projection(value) => {
-                                projection(value, definitions, pending, context)?
+                                projection(value, defined, pending, context)?
                             }
                         };
                         if found {
@@ -150,7 +139,7 @@ fn literal_reads<'ir>(
                 context.work()?;
                 pending.push(element.condition.as_slice(), context)?;
                 if let AggregateKey::Atom(atom) = &element.key
-                    && pattern(*atom, definitions, context)?
+                    && pattern(*atom, defined, context)?
                 {
                     return Ok(true);
                 }

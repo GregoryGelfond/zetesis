@@ -133,6 +133,8 @@ mod grounding_options;
 mod formula_domains;
 mod formula_keys;
 mod word_hash;
+#[cfg(test)]
+mod test_support;
 pub use formula_keys::KeyAnalysis;
 pub use grounding_observer::{
     DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
@@ -141,8 +143,8 @@ pub use grounding_options::{DomainLimits, DomainStop, GroundingOptions, JoinStra
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, Directives, LocatedDirective,
     MetadataError, MetadataFeature, MetadataLimits, MetadataResource, MetadataStorageError,
-    MetadataStorageLimits, OutputSelection, PreparedProjection, ProjectSelection, Signatures,
-    SourceDirective, SourceMetadata,
+    MetadataStorageLimits, OutputSelection, PreparedProjection, PreparedSelection,
+    ProjectSelection, Signatures, SourceDirective, SourceMetadata,
 };
 
 /// Explicit host admission ceilings. Zero means that no resource of that kind

@@ -17,8 +17,7 @@ use crate::{
 
 pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), SolveError> {
     if options.source_batching != SourceBatching::Independent
-        && (!matches!(options.backend, Backend::Auto | Backend::Cpu)
-            || options.grounder == Grounder::Eager)
+        && (options.backend.is_gpu() || options.grounder == Grounder::Eager)
     {
         return Err(SolveError::UnsupportedSourceBatching);
     }
@@ -120,20 +119,10 @@ impl Engine {
     ) -> Result<Self, SolveError> {
         validate_combination(options)?;
         let executor = match options.backend {
-            Backend::Auto | Backend::Cpu => {
-                let cpu = Executor::cpu(options, program, cached, observations, phases)?;
-                if options.backend == Backend::Auto {
-                    if options.source_batching != SourceBatching::Independent {
-                        observations.record(Event::SharedCpu)?;
-                    } else if cfg!(feature = "gpu") {
-                        observations.record(Event::AutomaticCpu)?;
-                    } else {
-                        observations.record(Event::DeviceNotCompiled)?;
-                    }
-                }
-                cpu
+            Backend::Cpu => Executor::cpu(options, program, cached, observations, phases)?,
+            Backend::Gpu(_) => {
+                Executor::gpu(options, program, cached, resources, observations, phases)?
             }
-            _ => Executor::gpu(options, program, cached, resources, observations, phases)?,
         };
         Ok(Self { executor })
     }
@@ -606,30 +595,23 @@ fn materialized(
     }
 }
 
+/// The GPU a device route opens: the solver's one application of the backend
+/// vocabulary's resolution rule, so `gpu` becomes the platform's native API here
+/// and nowhere else. Device routes run only for a GPU backend; the route choice
+/// on [`SolveConfig::backend`] establishes that before any of them is entered.
 #[cfg(feature = "gpu")]
 pub(crate) fn selection(backend: Backend) -> zetesis_wgpu::GpuSelection {
-    use zetesis_wgpu::{GpuBackendPreference, GpuSelection, NVIDIA_VENDOR_ID};
-
-    GpuSelection {
-        backend: match backend {
-            Backend::Metal => GpuBackendPreference::Metal,
-            Backend::Vulkan => GpuBackendPreference::Vulkan,
-            Backend::Dx12 => GpuBackendPreference::Dx12,
-            Backend::Gl => GpuBackendPreference::Gl,
-            Backend::Auto | Backend::Cpu | Backend::Gpu | Backend::Nvidia => {
-                GpuBackendPreference::Auto
-            }
-        },
-        vendor_id: (backend == Backend::Nvidia).then_some(NVIDIA_VENDOR_ID),
+    zetesis_wgpu::GpuSelection {
+        api: backend
+            .resolved_api()
+            .expect("device routes run only for a GPU backend"),
     }
 }
 
 #[cfg(test)]
-#[path = "../tests/support/engine_control_contracts.rs"]
 mod control_contract_tests;
 
 #[cfg(all(test, feature = "gpu"))]
-#[path = "../tests/support/engine_resources.rs"]
 mod resource_tests;
 
 #[cfg(test)]
@@ -662,22 +644,19 @@ mod tests {
 
     #[cfg(feature = "gpu")]
     #[test]
-    fn explicit_api_and_vendor_requests_are_preserved() {
-        use crate::Backend;
-        use zetesis_wgpu::{GpuBackendPreference, NVIDIA_VENDOR_ID};
+    fn a_named_api_is_opened_as_requested() {
+        use crate::{Backend, GpuApi};
 
-        for (request, expected) in [
-            (Backend::Metal, GpuBackendPreference::Metal),
-            (Backend::Vulkan, GpuBackendPreference::Vulkan),
-            (Backend::Dx12, GpuBackendPreference::Dx12),
-            (Backend::Gl, GpuBackendPreference::Gl),
-        ] {
-            let selected = super::selection(request);
-            assert_eq!(selected.backend, expected);
-            assert_eq!(selected.vendor_id, None);
+        for api in [GpuApi::Metal, GpuApi::Vulkan] {
+            assert_eq!(super::selection(Backend::Gpu(Some(api))).api, api);
         }
-        let nvidia = super::selection(Backend::Nvidia);
-        assert_eq!(nvidia.vendor_id, Some(NVIDIA_VENDOR_ID));
-        assert_eq!(nvidia.backend, GpuBackendPreference::Auto);
+    }
+
+    #[cfg(feature = "gpu")]
+    #[test]
+    fn a_gpu_request_without_an_api_opens_the_native_one() {
+        use crate::{Backend, GpuApi};
+
+        assert_eq!(super::selection(Backend::Gpu(None)).api, GpuApi::native());
     }
 }

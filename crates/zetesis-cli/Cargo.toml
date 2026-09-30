@@ -8,8 +8,8 @@ publish = false
 
 [dependencies]
 zetesis-presentation = { workspace = true, features = ["clap"] }
+zetesis-backend = { workspace = true, features = ["clap"] }
 zetesis-validation.workspace = true
-zetesis-experiments = { workspace = true, optional = true }
 zetesis-solve.workspace = true
 zetesis-telemetry.workspace = true
 rayon.workspace = true
@@ -24,18 +24,19 @@ clap.workspace = true
 serde = "1"
 serde_json = "=1.0.151"
 
-[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-signal-hook = { version = "=0.4.4", default-features = false }
-
 [dev-dependencies]
 tempfile = "3"
+zetesis-bench.workspace = true
+zetesis-test-support.workspace = true
+zetesis-clingo-support.workspace = true
+zetesis-reference-support.workspace = true
 
 [lints]
 workspace = true
 
 [features]
 default = ["gpu"]
-gpu = ["dep:zetesis-wgpu", "zetesis-solve/gpu", "dep:zetesis-experiments"]
+gpu = ["dep:zetesis-wgpu", "zetesis-solve/gpu"]
 
 [[bin]]
 name = "zetesis"

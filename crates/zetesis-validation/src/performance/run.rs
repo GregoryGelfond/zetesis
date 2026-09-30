@@ -16,7 +16,6 @@ use crate::selected::{FileSeal, identity, publication};
 use crate::{answers, examples, process};
 
 #[cfg(test)]
-#[path = "../../tests/support/performance_sources.rs"]
 mod tests;
 
 pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<Report, Error> {
@@ -47,7 +46,7 @@ pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<R
         &sources,
         request.corpus,
         request.native,
-        request.reference,
+        Some(request.reference),
         request.limits,
     )?;
     if let Some(helper) = helper {
@@ -153,16 +152,19 @@ pub(super) fn checked_seal(path: &Path, limit: usize, expected: &str) -> Result<
     Ok(seal)
 }
 
+/// Seal the native executable, the reference executable when one takes part,
+/// the corpus manifest and license, and the selected sources, in that order:
+/// retained-report readers take the prefix by position.
 pub(super) fn seals(
     corpus: &examples::Corpus,
     sources: &BTreeSet<&str>,
     root: &Path,
     native: &Path,
-    reference: &Path,
+    reference: Option<&Path>,
     limits: super::Limits,
 ) -> Result<Vec<FileSeal>, Error> {
     let mut sealed = Vec::new();
-    for executable in [native, reference] {
+    for executable in std::iter::once(native).chain(reference) {
         if !executable.is_absolute() {
             return Err(Error::Configuration(
                 "native and reference executable paths must be absolute",
@@ -170,7 +172,7 @@ pub(super) fn seals(
         }
         sealed.push(identity::seal(executable, limits.max_executable_bytes)?);
     }
-    if identity::aliases(&sealed[0], &sealed[1]) {
+    if reference.is_some() && identity::aliases(&sealed[0], &sealed[1]) {
         return Err(Error::Configuration(
             "native and reference executable identities must differ",
         ));

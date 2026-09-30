@@ -1,25 +1,10 @@
 use std::{cell::Cell, convert::Infallible};
 
 use crate::catalog::{AtomRef, Limits, PredicateRef, TermRef};
-use crate::{Atom, Predicate, Value, ValueLimits, ValueNode, ValueResource};
+use crate::{Atom, Predicate, Value, ValueNode, ValueResource};
 
 use super::{AtomId, Budget, Failure, Fault, Index, Snapshot, Store, budget, control::Work};
-
-fn limits() -> Limits {
-    Limits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
-
-fn value_limits() -> ValueLimits {
-    ValueLimits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
+use crate::test_support::{unlimited as limits, unlimited_values as value_limits};
 
 fn source_atom() -> Atom {
     let nested = Value::from_nodes(

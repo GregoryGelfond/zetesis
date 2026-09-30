@@ -102,7 +102,7 @@ The existing signed-head laws still govern activity and eligibility. Source
 recognition, complete binding coverage, checked arithmetic, exact provenance and
 Rust refinement remain separate obligations.
 
-The [source matrix](../../crates/zetesis-themelios/tests/support/head_contributions.rs)
+The [source matrix](../../crates/zetesis-themelios/tests/integration/head_contributions/cases.rs)
 pairs every admitted example with explicit choices and constraints. Tests compare
 complete native answer-set families, subset enumeration, original interpretations
 and arbitrary frozen interpretation pairs. Further tests cover remaining refusals,

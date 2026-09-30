@@ -2,7 +2,7 @@
 
 The command line is one consumer of the libraries. A Rust application need not
 construct argument strings, launch a zetesis process or parse its human output
-to solve a program or measure a primitive. The command adapters map user options
+to solve a program. The command adapters map user options
 to the same typed requests available to library callers.
 
 | Task | Library operation | Result or observation |
@@ -12,7 +12,6 @@ to the same typed requests available to library callers.
 | Compare the corpus with clingo | `zetesis_validation::corpus_comparison::run_with_invocation` | A report with typed decisions for each source |
 | Check a backend through the CLI | `zetesis_validation::backend_check::run` | Bounded process evidence and complete-family checks |
 | Measure corpus workloads | `zetesis_validation::performance::command::run` | A matrix report with every planned position accounted for |
-| Measure a primitive | `zetesis_experiments::primitives::measure` | Typed preparation, sample and completion events |
 | Compare saved measurements | `zetesis_validation::performance::series::read_compare` | A typed comparison after bounded decoding and identity checks |
 | Inspect GPU adapters | `zetesis_wgpu::discover_adapters` | Advertised capabilities; no claim of successful execution |
 
@@ -56,15 +55,15 @@ The complete field catalog remains available in the typed values and JSON.
 
 `zetesis-presentation` supplies explicit color roles and text tables. It performs
 no terminal or environment discovery and knows no answer-set semantics. The
-process adapter resolves each output stream's terminal capability. Generic
-library writers remain plain under automatic styling; a caller can request
-styling explicitly. Narrow tables retain their values in a vertical layout.
+process adapter observes each output stream's terminal capability and the
+environment; `Streams`, `color_disabled` and `terminal_width` turn those
+observations into styling and width, so `zetesis` and `zetesis-bench` resolve
+them alike. Generic library writers remain plain under automatic styling; a
+caller can request styling explicitly. Narrow tables retain their values in a
+vertical layout.
 
-Primitive measurements use synchronous observers outside measured intervals.
-The human adapter renders typed observations; the JSON adapter streams the
-profile's event schema. A failed observer stops publication. A missing completion
-event is not a completed benchmark. Corpus reports can produce a compact typed
-summary without copying their raw answer streams.
+Corpus reports can produce a compact typed summary without copying their raw
+answer streams.
 
 ## Scope of checks
 
@@ -75,8 +74,6 @@ reported answer contracts; it is not a proof for every admitted program.
 The [validation reference](../reference/validation.md) describes those separate
 obligations.
 
-The primitive command currently exposes the relation, aggregate, tight and lazy
-profiles with typed event streams. Historical static/formula experiments retain
-their compatibility executable. CPU-only solver builds do not compile the
-experiment crate and report that primitive command as unavailable; corpus
-validation, corpus measurements and saved-report comparison remain available.
+`zetesis-bench` links no solver or GPU crate:
+it measures the `zetesis` executable it is given, so corpus measurements and
+saved-report comparison are the same whichever build of `zetesis` they measure.

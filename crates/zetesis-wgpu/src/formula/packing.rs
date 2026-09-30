@@ -349,5 +349,4 @@ pub(super) fn decode(words: &[u32], plan: &Plan) -> Result<Vec<FormulaCheck>, Gp
 }
 
 #[cfg(test)]
-#[path = "../../tests/formula/packing.rs"]
 mod tests;

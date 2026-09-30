@@ -1,0 +1,20 @@
+[package]
+name = "zetesis-reference-support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The native reference the zetesis workspace's tests compare with clingo."
+publish = false
+
+[dependencies]
+serde_json = "1"
+zetesis-core.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
+zetesis-objective.workspace = true
+zetesis-test-support.workspace = true
+zetesis-themelios.workspace = true
+
+[lints]
+workspace = true

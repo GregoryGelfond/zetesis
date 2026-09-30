@@ -1,9 +1,7 @@
 # Benchmarks and comparisons
 
 Use a **solver benchmark** to compare the time and memory needed to answer a
-program. Use a **primitive benchmark** to investigate one operation, such as
-filtering a relation. A faster operation does not necessarily make a complete
-solve faster.
+program.
 
 ## What the results show
 
@@ -66,30 +64,30 @@ observations and the shared-host conditions of the measurement.
 
 ## Run a benchmark
 
-From a repository checkout, with zetesis and clingo installed:
+From a repository checkout, with zetesis installed, and clingo to compare with:
 
 ```sh
-zetesis bench corpus examples/correctness --suite baseline --report baseline.json
+zetesis-bench run --suite baseline --report baseline.json
 ```
 
 This small suite runs SEND, queens variant 2 and task allocation. The terminal
 shows a table; the report retains settings, results and measurements. The runner
 checks answers before comparing timings and records incomplete or failed runs.
-It refuses to overwrite an existing report.
+It refuses to overwrite an existing report. Without clingo, it times zetesis
+alone and checks its answers against the ones each workload records.
 
-Omit `--suite baseline` to run the full corpus. Select CPU threads or a device
+Omit `--suite baseline` to run the full corpus. Select CPU threads or a backend
 explicitly when comparing configurations:
 
 ```sh
-zetesis bench corpus examples/correctness --threads 2 --report two-threads.json
-zetesis bench corpus examples/correctness --device metal --grounder eager \
-  --report metal.json
-zetesis bench corpus examples/correctness --json --report run.json > summary.json
+zetesis-bench run --threads 2 --report two-threads.json
+zetesis-bench run --backend metal --grounder eager --report metal.json
+zetesis-bench run --json --report run.json > summary.json
 ```
 
 Benchmarks always collect their required statistics. `solve --stats` is useful
 for investigating one run, but a single duration is not a repeatable comparison.
-See the [benchmark command options](commands.md#measure-a-corpus) for limits,
+See the [benchmark command options](benchmarking.md#run-the-suite) for limits,
 repetition counts and other suites. Use `zetesis test corpus` when you want to
 check answers without conducting a benchmark.
 
@@ -97,7 +95,7 @@ The maintained scalability selection is shared by testing and benchmarking:
 
 ```sh
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
-zetesis bench corpus --suite scalability --grounder eager \
+zetesis-bench run --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
@@ -140,7 +138,7 @@ include in an average.
 For before/after comparisons, run both executables on the same quiet machine
 and alternate their order. The retained reports identify the actual binaries;
 version labels alone are insufficient. The
-[comparison command](commands.md#compare-reports-and-consume-machine-output) reads saved reports
+[comparison command](benchmarking.md#compare-reports) reads saved reports
 without rerunning the solver.
 
 ## Detailed measurements
@@ -159,7 +157,14 @@ their original programs and executables; they are not a cumulative speedup chart
 | What did grounding reuse change on CPU and Metal? | [Prepared grounding](prepared-metal.md) |
 | What did atom catalogs, table joins and release optimization change? | [Grounding and representation measurements](grounding-measurements.md) |
 
-For small, matched operation measurements, use
-[`zetesis bench primitives`](commands.md#measure-primitives). For library callers,
-the [measurement guide](../rust/measurements.md) explains how to observe work
-without using the command line.
+For library callers, the [measurement guide](../rust/measurements.md) explains
+how to observe work without using the command line.
+
+The records below keep the command spellings of the binaries they identify.
+Those made before benchmarking took its present form spell it as it was then:
+`zetesis bench corpus`, `zetesis-bench corpus` and the instrumented matrix of
+`zetesis-perf` and `zetesis-bench perf` are now `zetesis-bench run`, and their
+ordinary uninstrumented campaign has no command; `zetesis bench compare`,
+`zetesis-series` and `zetesis-bench series` are now `zetesis-bench compare`,
+whose `--markdown` prints what `series` printed and whose reports, once given
+as `--report LABEL=PATH`, are operands.

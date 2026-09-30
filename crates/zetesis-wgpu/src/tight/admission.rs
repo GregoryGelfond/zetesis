@@ -75,5 +75,4 @@ impl Admission {
 }
 
 #[cfg(test)]
-#[path = "../../tests/tight/admission.rs"]
 mod tests;

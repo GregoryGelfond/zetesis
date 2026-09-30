@@ -142,7 +142,7 @@ See the implementation contracts in
 [`Session`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/session.rs),
 [`SemanticOutcome`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/semantic_outcome.rs)
 and [`WorldView::collect`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view.rs).
-The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/world_views.rs)
+The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/world_views.rs)
 cover additional search, scoring and storage failures. The
 [source preparation example](source.md) separately checks empty and inconsistent
 programs; neither an empty display nor a retained prefix decides inconsistency.
@@ -173,9 +173,14 @@ nor `SummaryDelivery::Accepted` implies durability. Callers own flushing.
 
 The human renderer preflights one complete record under its byte ceiling. The
 JSON renderer additionally retains a bounded document atom table; each invocation
-starts fresh indices. Custom renderers own their encoding limits and any copies
-they retain. The controller retains no complete family for presentation, although
-objective selection still uses the solver's separately bounded incumbent store.
+starts fresh indices. Structural equality decides each atom's index, so equal
+atoms of independent owners share one; once a canonical atom has been found, the
+table answers its later occurrences from the same owner by owner-scoped identity
+instead of hashing the atom's structure. A refused record withdraws the atoms it
+entered together with their identities. Custom renderers own their encoding
+limits and any copies they retain. The controller retains no complete family
+for presentation, although objective selection still uses the solver's
+separately bounded incumbent store.
 
 `SummaryStage::SearchFinished` preserves the human summary before statistics are
 written. That view cannot claim later reporting succeeded, and the callback is
@@ -222,7 +227,7 @@ capture remain independently bounded; requesting every answer does not make
 those resources unlimited. A smaller explicit work, decision or candidate
 allowance still yields an interrupted prefix when exhausted.
 
-The [streaming regression](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/streaming_defaults.rs)
+The [streaming regression](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/streaming_defaults.rs)
 checks every full answer for independent selections on a 24-vertex path against
 an independently generated bitmask family, using both automatic specialization
 and the general countermodel oracle. The former already completes within the

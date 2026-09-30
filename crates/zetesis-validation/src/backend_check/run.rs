@@ -140,11 +140,8 @@ fn arguments(fixture: &Fixture, backend: Backend) -> Vec<String> {
         "--stats",
         "--color",
         "never",
-        "--device",
-        match backend {
-            Backend::Cpu => "cpu",
-            Backend::Metal => "metal",
-        },
+        "--backend",
+        backend.label(),
         "--grounder",
         "eager",
         "--oracle",

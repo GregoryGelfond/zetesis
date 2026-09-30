@@ -1,18 +1,11 @@
 use super::super::budget;
 use super::*;
+use crate::test_support::{PERMIT_WITH_UNIT_ERROR as PERMIT, unlimited as logical};
 use crate::{
     Sign, Value, ValueLimits, ValueNode,
-    catalog::{Limits, Vocabulary, VocabularyBuilder},
+    catalog::{Vocabulary, VocabularyBuilder},
 };
 
-const PERMIT: fn() -> Result<(), ()> = || Ok(());
-fn logical() -> Limits {
-    Limits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
 fn fixture() -> (Vocabulary, TermKey, TermKey, DeclaredConstructor) {
     let mut builder = VocabularyBuilder::new(1 << 22).unwrap();
     let number = builder

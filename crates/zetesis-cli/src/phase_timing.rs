@@ -44,5 +44,4 @@ fn write_phase(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/phase_timing_contracts.rs"]
-mod contracts;
+mod tests;

@@ -5,7 +5,6 @@ use std::num::NonZeroUsize;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, CommandFactory, FromArgMatches, Subcommand};
 
-use crate::benchmark::BenchCommand;
 use crate::testing::TestCommand;
 use crate::{Options, StatisticsView};
 
@@ -22,9 +21,7 @@ pub enum Invocation {
     /// List available execution devices.
     Devices,
     /// Run a selected conformance check.
-    Test(TestCommand),
-    /// Measure workloads or compare retained measurements.
-    Bench(BenchCommand),
+    Test(Box<TestCommand>),
 }
 
 impl Invocation {
@@ -32,6 +29,8 @@ impl Invocation {
     ///
     /// Bare invocation displays help. An explicit `solve` requires a file or
     /// `-` for standard input; legacy solving keeps its standard-input default.
+    /// `bench` stays a reserved word, never a file-first source, and is refused
+    /// with a pointer to the separate `zetesis-bench` tool.
     /// Help and version requests return clap's successful display errors, before
     /// any command can perform I/O other than rendering that text.
     ///
@@ -51,12 +50,15 @@ impl Invocation {
             arguments.push("--help".into());
         }
         let first = arguments[1].to_str();
+        // Reserved rather than read as a file-first source: it names the tool.
+        if first == Some("bench") {
+            return Err(bench());
+        }
         let legacy = !matches!(
             first,
             Some(
                 "solve"
                     | "test"
-                    | "bench"
                     | "devices"
                     | "help"
                     | "version"
@@ -74,15 +76,16 @@ impl Invocation {
         match matches.subcommand() {
             Some(("solve", matches)) => solve(matches, legacy),
             Some(("devices", _)) => Ok(Self::Devices),
-            Some(("test", matches)) => TestCommand::from_arg_matches(matches).map(Self::Test),
-            Some(("bench", matches)) => BenchCommand::from_arg_matches(matches).map(Self::Bench),
+            Some(("test", matches)) => {
+                TestCommand::from_arg_matches(matches).map(|command| Self::Test(Box::new(command)))
+            }
             Some(("help", matches)) => Err(help(matches)),
             // Use clap's informational formatter, not a raw error message.
             // This fixed flag exits parsing before subcommand dispatch.
             Some(("version", _)) => Self::try_parse_from(["zetesis", "--version"]),
             _ => Err(command(legacy).error(
                 clap::error::ErrorKind::MissingSubcommand,
-                "choose solve, test, bench, devices, help or version",
+                "choose solve, test, devices, help or version",
             )),
         }
     }
@@ -103,14 +106,6 @@ fn command(legacy: bool) -> Command {
                     .arg_required_else_help(true),
             )
             .about("Check example programs or an execution device"),
-        )
-        .subcommand(
-            BenchCommand::augment_subcommands(
-                Command::new("bench")
-                    .subcommand_required(true)
-                    .arg_required_else_help(true),
-            )
-            .about("Measure performance or compare saved reports"),
         )
         .subcommand(Command::new("devices").about("List available execution devices"))
         .subcommand(
@@ -170,11 +165,8 @@ fn solve_argument(argument: Arg) -> Arg {
     match name {
         "models" => argument.hide(true),
         "backend" => argument
-            .visible_alias(None::<&str>)
-            .long("device")
-            .alias("backend")
-            .value_name("DEVICE")
-            .help("Choose a device; auto currently selects CPU")
+            .value_name("BACKEND")
+            .help("Choose the execution backend: cpu (the default), gpu, metal or vulkan")
             .help_heading("Execution"),
         "workers" => argument
             .visible_alias(None::<&str>)
@@ -210,9 +202,22 @@ fn solve(matches: &ArgMatches, legacy: bool) -> Result<Invocation, clap::Error> 
     Ok(Invocation::Solve(Box::new(options)))
 }
 
+/// The refusal of the retired `bench` command, in place of clap's generic
+/// unrecognized-subcommand message.
+fn bench() -> clap::Error {
+    command(false).error(
+        clap::error::ErrorKind::InvalidSubcommand,
+        "`bench` is not a zetesis command; benchmarking is the separate `zetesis-bench` tool \
+         (see INSTALL.md). To solve a file named `bench`, run `zetesis solve bench`.",
+    )
+}
+
 fn help(matches: &ArgMatches) -> clap::Error {
     let mut arguments = vec![OsString::from("zetesis")];
     if let Some(topics) = matches.get_many::<String>("topic") {
+        if topics.clone().next().is_some_and(|topic| topic == "bench") {
+            return bench();
+        }
         arguments.extend(topics.map(OsString::from));
     }
     arguments.push(

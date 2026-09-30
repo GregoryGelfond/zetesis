@@ -46,7 +46,7 @@ an atomic occurrence. The tuple contributes once, while only positive atomic
 head occurrences can supply atom permission. Neither a true Boolean nor a
 satisfied bound supplies support for an atom in its condition. The exact three
 answers `{a}`, `{b}` and `{a,b}` are covered by the maintained
-[Boolean element contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/boolean_element_contracts.rs).
+[Boolean element contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/boolean_element_contracts.rs).
 
 `BooleanHeadElements.coalesced_group_in_context` proves preservation for an
 assumed keyed row family and covering atomic permissions;
@@ -309,7 +309,7 @@ fields; a defined false body does not enter head or consequent evaluation.
 The relational comparison exclusion above remains separate from
 rejection by a binder, interval, tuple comparison or aggregate guard; those
 rejections cannot hide required arithmetic in other fields. Closed constants
-and post-solve observations retain their strict checks. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
+and post-solve observations retain their strict checks. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/scratch/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
 Formula bindings retain source variable identities in optional slots. A pending
@@ -350,7 +350,7 @@ construction peak or process RSS. The [ownership chapter](ownership.md) relates
 these lifetimes to prepared views and execution state.
 
 The final formula catalog uses the shared core
-[`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
+[`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs).
 It owns one canonical term/atom authority. Authenticated tuple queries reuse that
 store's exact identity index, then an integer-key inverse translates identity to
 discovery. A known same-authority atom ID avoids tuple lookup altogether. An
@@ -673,9 +673,16 @@ bodies hold in that answer. The
 classifies the source. Adaptive formula admission then checks complete
 source-to-IR correspondence before removing any producer from the base.
 Every producer must match a complete flat positive source rule, including its
-typed constants and one consistent variable mapping. A dependency projection
-cannot supply this certificate. Objectives and explicit projection currently
-exclude this schedule; ordinary eager materialization remains available.
+typed constants and one consistent variable mapping, and every definition must
+be matched by some producer. A producer's parsed origin nominates the
+definition at the same place among that origin's definitions, and only a
+miss falls back to trying every definition; a definition left unmatched is
+tried against every producer. The certificate is the same as checking every
+pair, at a cost linear in producers and definitions when compilation keeps
+their order, and a shared origin alone never establishes a match. A
+dependency projection cannot supply this certificate. Objectives and explicit
+projection currently exclude this schedule; ordinary eager materialization
+remains available.
 
 After correspondence is established, a physical policy defers a complete group
 of producers sharing predicate name, arity and sign only if at least one lowered
@@ -961,12 +968,15 @@ discovery IDs/marks, query assignment/cursor/undo capacities, and operation scra
 with conservative growth overlap. The authority counts canonical payload once;
 final catalog and model-selection metadata are admitted while being assembled.
 Its default is 128 MiB; zero is a zero-byte allowance. `peak_closure_bytes` is the
-maximum observed named envelope of a completed check. Earlier results retained
-by the caller, allocator bookkeeping and Arc counters remain outside this
-per-check ledger. A successful allocation can exceed its proposed reservation
-before the actual-capacity check refuses it. A stopped scalar check returns no
-partial `Check` or statistics. Collective worker admission and result retention
-have separate owners; this is not a total process-memory bound.
+maximum observed named envelope of a completed check. Relation capacities are
+summed as each relation is created, grows or is cleared, so reading the envelope
+does not visit every relation; debug builds recompute the sum on each read.
+Earlier results retained by the caller, allocator bookkeeping and Arc counters
+remain outside this per-check ledger. A successful allocation can exceed its
+proposed reservation before the actual-capacity check refuses it. A stopped
+scalar check returns no partial `Check` or statistics. Collective worker
+admission and result retention have separate owners; this is not a total
+process-memory bound.
 
 `FormulaLimits::max_support_bytes` bounds one evolving canonical support authority
 and its current prefix, relation/equality metadata, postings, borrowed snapshot
@@ -986,8 +996,7 @@ Row identity connects relational semantics to masks, intersections and gathers.
 Combining two column masks means intersecting positions in the same relation
 snapshot; it must not combine values from different tuples. The bounded
 [`relation` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
-provides the immutable column view used by eager formula support and primitive
-experiments. It borrows canonical `AtomRef` rows or construction descriptions,
+provides the immutable column view used by eager formula support. It borrows canonical `AtomRef` rows or construction descriptions,
 then encodes complete typed values through a dictionary of borrowed references.
 It preserves row occurrences and their order, including duplicate tuples, and
 keeps original catalog indices distinct from local positions. Explicit predicate

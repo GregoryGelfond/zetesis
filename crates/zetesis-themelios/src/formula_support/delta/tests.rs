@@ -1,7 +1,5 @@
 //! The actual schedule preserves source occurrences and bootstrap obligations.
 
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits};
 
@@ -10,14 +8,8 @@ use crate::expansion::Budget;
 use crate::formula_ir::{HeadIr, HeadLiteral, HeadOperand, LiteralIr, RuleIr};
 use crate::formula_support::components::Pattern;
 use crate::formula_support::{Computation, Counters, Join, Support, testing::Fixture};
+use crate::test_support::location;
 use crate::{ExpansionLimits, FormulaLimits};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 fn pattern(fixture: &mut Fixture, name: &str, slots: &[usize]) -> Pattern {
     let owned = AtomPattern::new(

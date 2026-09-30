@@ -490,13 +490,9 @@ mod tests {
     use crate::{GpuErrorKind, GpuLimits};
     use std::num::NonZeroU32;
     use zetesis_core::{
-        AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
-        StaticLimits, Template,
+        AdmissionLimits, GroundProgram, Program, Seed, SeedSelection, StaticLimits, Template,
     };
-
-    fn nullary(name: &str) -> AtomPattern {
-        AtomPattern::new(Predicate::new(name, 0).expect("signature"), vec![]).expect("pattern")
-    }
+    use zetesis_test_support::programs::nullary_pattern as nullary;
 
     fn fixture() -> GroundProgram {
         let a = nullary("a");
@@ -668,13 +664,10 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/packing/budgets.rs"]
 mod budget_contract_tests;
 
 #[cfg(test)]
-#[path = "../tests/packing/readback.rs"]
 mod readback_contract_tests;
 
 #[cfg(test)]
-#[path = "../tests/packing/seeds.rs"]
 mod seed_contract_tests;

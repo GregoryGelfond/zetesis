@@ -1,5 +1,7 @@
 # CPU and Metal worker scaling
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 This comparison measures all 94 corpus cases before and after two changes to
 native CPU worker coordination. Four workers give the best observed times for
 queens variant 2 and the larger task-allocation case. Fourteen workers show a

@@ -229,5 +229,4 @@ impl Transport {
 }
 
 #[cfg(test)]
-#[path = "../../tests/lazy/buffers.rs"]
 mod tests;

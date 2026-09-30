@@ -1,0 +1,149 @@
+//! Live documentation names only executables the workspace builds.
+//!
+//! Every command in a shell code block, and every tool table's first cell,
+//! whose first word is a zetesis executable must name a binary or package of
+//! the workspace, and `zetesis bench` is not a command. A document with
+//! [`RECORD`] on a line of its own is a dated measurement record: its commands
+//! keep the spellings of the binaries it records, so they are not checked.
+//! Prose is not checked; it may name an executable's former spelling on
+//! purpose. Code blocks are fenced with backticks or tildes alike.
+
+use std::collections::BTreeSet;
+
+use crate::markdown::{self, Line};
+use crate::{Error, require, workspace};
+
+/// Marks a dated measurement record, whose commands keep the spellings of the
+/// binaries it records. A record carries it on a line of its own, outside any
+/// code block.
+pub const RECORD: &str =
+    "<!-- A dated record: its commands keep the spellings of the binaries it records. -->";
+
+/// Whether `text` is a dated measurement record: a line of it outside every
+/// code block is exactly [`RECORD`]. A document that quotes the marker, as
+/// the contributor guide does in prose, or shows it in a code block, is not a
+/// record.
+#[must_use]
+pub fn is_record(text: &str) -> bool {
+    markdown::lines(text)
+        .any(|(_, line)| matches!(line, Line::Prose(prose) if prose.trim() == RECORD))
+}
+
+/// Code-block languages whose lines are shell commands.
+const SHELLS: [&str; 5] = ["sh", "shell", "bash", "zsh", "console"];
+
+/// Check each live document against the workspace's binaries and packages.
+///
+/// `documents` pairs each document's path, as reported, with its text;
+/// `metadata` is the output of `cargo metadata --no-deps --format-version 1`.
+///
+/// # Errors
+/// Returns [`Error::Invalid`] listing every offending line, and [`Error::Json`]
+/// for malformed metadata.
+pub fn check<'a>(
+    documents: impl IntoIterator<Item = (&'a str, &'a str)>,
+    metadata: &[u8],
+) -> Result<(), Error> {
+    let members = workspace::packages(metadata)?;
+    let known: BTreeSet<&str> = members
+        .iter()
+        .flat_map(|(name, package)| {
+            std::iter::once(name.as_str()).chain(package.binaries.iter().map(String::as_str))
+        })
+        .collect();
+    let mut stale = Vec::new();
+    for (path, text) in documents {
+        if is_record(text) {
+            continue;
+        }
+        for (line, command) in commands(text) {
+            if let Some(problem) = problem(command, &known) {
+                stale.push(format!("{path}:{line}: {problem}"));
+            }
+        }
+    }
+    require(
+        stale.is_empty(),
+        format!(
+            "live documentation names what the workspace does not build:\n{}",
+            stale.join("\n")
+        ),
+    )
+}
+
+/// Each command of a shell code block and each tool table's first cell, with
+/// its one-based line number.
+fn commands(text: &str) -> Vec<(usize, &str)> {
+    let mut commands = Vec::new();
+    let mut continued = false;
+    for (number, line) in markdown::lines(text) {
+        match line {
+            Line::Code { text, info } if shell(info) => {
+                // A line continuing the previous one carries arguments only.
+                let starts = !continued;
+                continued = text.trim_end().ends_with('\\');
+                let trimmed = text.trim_start();
+                if starts && !trimmed.starts_with('#') {
+                    commands.extend(
+                        trimmed
+                            .split([';', '|', '&'])
+                            .map(str::trim)
+                            .filter(|segment| !segment.is_empty())
+                            .map(|segment| (number, segment)),
+                    );
+                }
+            }
+            Line::Prose(text) => {
+                if let Some(cell) = table_cell(text.trim_start()) {
+                    commands.push((number, cell));
+                }
+            }
+            Line::Opening(_) | Line::Closing => continued = false,
+            Line::Code { .. } => {}
+        }
+    }
+    commands
+}
+
+/// Whether a code block's info string names a shell language.
+fn shell(info: &str) -> bool {
+    info.split([',', ' '])
+        .next()
+        .is_some_and(|language| SHELLS.contains(&language))
+}
+
+/// The code span filling a table row's first cell, as in "| `zetesis-bench` |".
+fn table_cell(line: &str) -> Option<&str> {
+    let cell = line.strip_prefix('|')?.split('|').next()?.trim();
+    cell.strip_prefix('`')?.strip_suffix('`')
+}
+
+/// Why a command names what the workspace does not build, if it does.
+fn problem(command: &str, known: &BTreeSet<&str>) -> Option<String> {
+    let mut words = command
+        .split_whitespace()
+        .skip_while(|word| *word == "$" || assignment(word));
+    let first = words.next()?;
+    let name = first.rsplit('/').next().unwrap_or(first);
+    if name != "zetesis" && !name.starts_with("zetesis-") {
+        return None;
+    }
+    if !known.contains(name) {
+        return Some(format!(
+            "`{name}` is not a binary or package of this workspace"
+        ));
+    }
+    // The CLI reserves `bench` only to refuse it with a pointer to the tool.
+    (name == "zetesis" && words.next() == Some("bench"))
+        .then(|| "`zetesis bench` is not a command; benchmarking is `zetesis-bench`".to_owned())
+}
+
+/// Whether `word` is a shell variable assignment such as `NAME=value`.
+fn assignment(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, _)| {
+        !name.is_empty()
+            && name
+                .chars()
+                .all(|character| character == '_' || character.is_ascii_alphanumeric())
+    })
+}

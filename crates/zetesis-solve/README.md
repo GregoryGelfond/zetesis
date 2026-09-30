@@ -55,14 +55,13 @@ consumer. Cargo feature unification can enable it through another dependency.
 Compiling GPU support does not select a device.
 
 `SessionBuilder` can accept shared `ExecutionResources`, optional
-`SolveMeasurements`, and an `ExecutionObserver`. A caller-supplied `BatchExecutor`
-is supported for formula membership under its explicit soundness contract.
-Shared resources do not reuse candidate truth, search coverage or budgets.
+`SolveMeasurements`, and an `ExecutionObserver`. Membership is always decided by
+zetesis's own reduct check. Shared resources do not reuse candidate truth, search
+coverage or budgets.
 Failures and interrupted searches preserve available evidence without claiming
 exhaustion, inconsistency or optimality. Lean laws do not yet certify the complete
 Rust or device implementation.
 
 Continue with [sessions](../../docs/book/rust/sessions.md),
-[completion and output](../../docs/book/rust/outcomes.md),
-[custom executors](../../docs/book/rust/executors.md), or the
+[completion and output](../../docs/book/rust/outcomes.md), or the
 [library reference index](../../docs/book/rust/libraries.md).

@@ -1,0 +1,455 @@
+{
+  "accounted": true,
+  "passed": true,
+  "report": {
+    "before": [
+      {
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      {
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      {
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "cases": [
+      "generated/choice-2.lp",
+      "generated/cycle-2.lp"
+    ],
+    "finished_unix_ns": 2000000000,
+    "plan": {
+      "profiles": [
+        {
+          "backend": "cpu",
+          "batch_size": 64,
+          "completion_workers": 1,
+          "grounder": "auto",
+          "max_completion_scratch_bytes": 268435456,
+          "oracle": "auto",
+          "workers": 1
+        },
+        {
+          "backend": "cpu",
+          "batch_size": 64,
+          "completion_workers": 1,
+          "grounder": "auto",
+          "max_completion_scratch_bytes": 268435456,
+          "oracle": "auto",
+          "workers": 4
+        }
+      ]
+    },
+    "samples": [
+      {
+        "capture": {
+          "elapsed_ns": 8000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 10000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 11000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 8000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 30000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 31000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 8000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 20000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 21000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 0,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 18000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 20000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 21000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 0
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 18000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 40000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 41000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 1
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 18000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "solver": "reference"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 30000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 0,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      },
+      {
+        "capture": {
+          "elapsed_ns": 31000000,
+          "stderr": {
+            "data": "",
+            "encoding": "utf8"
+          },
+          "stdout": {
+            "data": "{}",
+            "encoding": "utf8"
+          }
+        },
+        "decision": "pass",
+        "slot": {
+          "case": 1,
+          "phase": "timed",
+          "producer": {
+            "profile": 1,
+            "solver": "native"
+          },
+          "round": 2
+        }
+      }
+    ],
+    "started_unix_ns": 1000000000
+  }
+}

@@ -2,11 +2,15 @@
 
 use std::io::Write;
 
+use zetesis_backend::GpuApi;
+
 use crate::{ColorMode, RunError};
 
-/// Print compiled GPU APIs and detected adapter capabilities without reading
-/// source, enumerating candidates, or creating a compute device. Advertised
-/// capabilities do not guarantee later device/pipeline initialization succeeds.
+/// Print the backends, the compiled GPU APIs and the detected adapters with
+/// their capabilities, including the adapter `--backend gpu` would use, without
+/// reading source, enumerating candidates, or creating a compute device.
+/// Advertised capabilities do not guarantee later device/pipeline
+/// initialization succeeds.
 ///
 /// # Errors
 /// Returns [`RunError`] for output or GPU discovery failures. A CPU-only build
@@ -27,11 +31,8 @@ pub(crate) fn devices_with_color(
     inventory(output, color)?;
     writeln!(
         output,
-        "Auto backend: CPU until a measured GPU crossover is established. Explicit GPU backends support eager and admitted lazy grounding."
-    )?;
-    writeln!(
-        output,
-        "NVIDIA selection filters the vendor through an available graphics API; CUDA is not implemented."
+        "Backends: cpu (the default); gpu, the platform's native API ({}); metal; vulkan. GPU backends support eager and admitted lazy grounding.",
+        GpuApi::native().name()
     )?;
     Ok(())
 }
@@ -41,24 +42,33 @@ fn inventory(output: &mut impl Write, color: ColorMode) -> Result<(), RunError> 
     color.metadata(
         output,
         "GPU",
-        format_args!("support not compiled; install the default build or enable --features gpu"),
+        format_args!(
+            "not compiled into this build; install the default build for GPU execution (see INSTALL.md)"
+        ),
     )?;
     Ok(())
 }
 
 #[cfg(feature = "gpu")]
 fn inventory(output: &mut impl Write, color: ColorMode) -> Result<(), RunError> {
-    let compiled = zetesis_wgpu::compiled_backends();
-    color.metadata(output, "Compiled GPU APIs", format_args!("{compiled:?}"))?;
+    let compiled: Vec<_> = zetesis_wgpu::compiled_apis()
+        .into_iter()
+        .map(GpuApi::name)
+        .collect();
+    color.metadata(
+        output,
+        "Compiled GPU APIs",
+        format_args!("{}", compiled.join(", ")),
+    )?;
     let adapters = zetesis_wgpu::discover_adapters().map_err(RunError::Gpu)?;
     if adapters.is_empty() {
         color.metadata(
             output,
             "GPU",
-            format_args!("no adapters detected; auto uses CPU"),
+            format_args!("no adapters detected; the cpu backend remains available"),
         )?;
     }
-    for adapter in adapters {
+    for adapter in &adapters {
         writeln!(
             output,
             "Adapter: {}; API={}; vendor=0x{:04x}; device=0x{:04x}; type={}; physical={}; static-profile={}",
@@ -84,6 +94,22 @@ fn inventory(output: &mut impl Write, color: ColorMode) -> Result<(), RunError> 
             adapter.driver(),
             adapter.driver_info()
         )?;
+    }
+    // `--backend gpu` resolves to the native API; this is the adapter device
+    // creation would choose for it.
+    let native = GpuApi::native();
+    let selection = zetesis_wgpu::GpuSelection { api: native };
+    match selection.chosen(&adapters, zetesis_wgpu::GpuOptions::default()) {
+        Ok(adapter) => color.metadata(
+            output,
+            "--backend gpu",
+            format_args!("{} ({})", adapter.name(), native.name()),
+        )?,
+        Err(refusal) => color.metadata(
+            output,
+            "--backend gpu",
+            format_args!("no usable {} adapter: {refusal}", native.name()),
+        )?,
     }
     writeln!(
         output,

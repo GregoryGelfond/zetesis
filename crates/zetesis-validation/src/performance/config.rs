@@ -86,13 +86,6 @@ impl Suite {
             ],
         }
     }
-    #[expect(
-        clippy::trivially_copy_pass_by_ref,
-        reason = "serde's skip callback receives a borrowed field"
-    )]
-    const fn is_baseline(&self) -> bool {
-        matches!(self, Self::Baseline)
-    }
 }
 /// Invocation population; only `Timed` belongs to the wall-time distribution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -108,6 +101,19 @@ pub enum Phase {
     Diagnostics,
     /// Separate fresh-helper child RSS observation, excluded from timed summaries.
     Memory,
+}
+impl Phase {
+    /// The spelling records carry for this phase.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Qualification => "qualification",
+            Self::Warmup => "warmup",
+            Self::Timed => "timed",
+            Self::Diagnostics => "diagnostics",
+            Self::Memory => "memory",
+        }
+    }
 }
 /// Producer identity within a paired semantic task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -135,7 +141,7 @@ pub struct Slot {
 pub struct Schedule {
     // Preserve the schema-1 baseline representation and its historical `queens`
     // case identifier. Non-baseline schedules state their suite explicitly.
-    #[serde(skip_serializing_if = "Suite::is_baseline")]
+    #[serde(skip_serializing_if = "is_default")]
     suite: Suite,
     warmups: usize,
     repetitions: usize,
@@ -155,6 +161,39 @@ impl Default for Schedule {
         }
     }
 }
+/// Whether `value` is its type's default, which the schedule leaves unwritten.
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
+}
+/// Check an explicit selection of manifest-relative cases: one through 94
+/// distinct normal relative paths of 1..=1024 bytes each. Whether each names a
+/// runnable case is decided later, against the admitted corpus.
+///
+/// # Errors
+/// Refuses empty or oversized selections, duplicates and escaping or empty paths.
+pub(super) fn selection(paths: &[String]) -> Result<(), Error> {
+    use std::collections::BTreeSet;
+    use std::path::Component;
+    if paths.is_empty() || paths.len() > 94 {
+        return Err(Error::Configuration("selected cases must be 1..=94"));
+    }
+    let mut seen = BTreeSet::new();
+    for path in paths {
+        if path.is_empty()
+            || path.len() > 1024
+            || !seen.insert(path)
+            || Path::new(path)
+                .components()
+                .any(|part| !matches!(part, Component::Normal(_)))
+        {
+            return Err(Error::Configuration(
+                "selected cases require distinct normal relative paths of 1..=1024 bytes",
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl Schedule {
     /// Select the baseline suite with zero through five warmups and one through
     /// 41 timed repetitions.
@@ -195,25 +234,7 @@ impl Schedule {
         warmups: usize,
         repetitions: usize,
     ) -> Result<Self, Error> {
-        use std::collections::BTreeSet;
-        use std::path::Component;
-        if paths.is_empty() || paths.len() > 94 {
-            return Err(Error::Configuration("selected cases must be 1..=94"));
-        }
-        let mut seen = BTreeSet::new();
-        for path in &paths {
-            if path.is_empty()
-                || path.len() > 1024
-                || !seen.insert(path)
-                || Path::new(path)
-                    .components()
-                    .any(|part| !matches!(part, Component::Normal(_)))
-            {
-                return Err(Error::Configuration(
-                    "selected cases require distinct normal relative paths of 1..=1024 bytes",
-                ));
-            }
-        }
+        selection(&paths)?;
         let mut schedule = Self::new(warmups, repetitions)?;
         schedule.selected = Some(paths.into_iter().map(Case::Selected).collect());
         Ok(schedule)

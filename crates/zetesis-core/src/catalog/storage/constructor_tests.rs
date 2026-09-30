@@ -1,8 +1,6 @@
 use super::*;
+use crate::test_support::PERMIT;
 use crate::{Sign, ValueNodeRef};
-use std::convert::Infallible;
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 
 #[test]
 fn declaring_a_function_adds_only_its_text() {

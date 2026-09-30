@@ -93,7 +93,7 @@ Implementation boundaries are in [the cursor](../src/search/cursor.rs),
 [Cursor tests](../src/search/cursor/tests.rs) compare complete truth-table model
 sets, including free auxiliary extensions, appended clauses, empty/root-forced
 queries, cancellation between yields and exact cumulative work/decision ceilings.
-[Ferraris tests](../tests/ferraris.rs) compare original membership and complete
+[Ferraris tests](../tests/integration/ferraris.rs) compare original membership and complete
 models with an independent reference.
 
 [CandidateCursor.lean](../../../proofs/Zetesis/CandidateCursor.lean) specifies a

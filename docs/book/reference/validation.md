@@ -37,8 +37,8 @@ the Rust implementation or shaders.
 
 The shell checks target macOS and Linux. Install Git and
 [Rust's native prerequisites](https://doc.rust-lang.org/book/ch01-01-installation.html),
-including a linker. The [installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run)
-covers source access and the installed zetesis commands.
+including a linker. The [installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/INSTALL.md)
+covers source access and the installed tools.
 
 ### Rust, coverage and documentation
 
@@ -86,14 +86,19 @@ export PATH="$(dirname "$CLINGO"):$PATH"
 ```
 
 The gate verifies the version and that both names identify the same executable.
-Its 15 independent Cargo campaigns retain arguments and exit statuses under a
-fresh `target/oracle-checks/run.*` directory. A test failure does not skip later
-campaigns; setup or receipt-write failures stop the run. The gate returns the
-first failed campaign's status. Capture stdout and stderr with the command log.
+Its 15 independent Cargo campaigns retain arguments, exit statuses and the
+harness's report of the tests each ran under a fresh `target/oracle-checks/run.*`
+directory. A test failure does not skip later campaigns; setup or receipt-write
+failures stop the run. After the campaigns, the gate requires each to have run
+at least one test, and exactly the ignored tests its filters select among the
+sources. The gate returns the first failed campaign's status, or that check's.
+Capture stdout and stderr with the command log.
 
-The script lists campaign targets explicitly. The portable `oracle_selection`
-regression checks that every ignored test whose reason names clingo is in a
-listed target, and that every listed target contains such a test.
+The script lists each campaign's selection explicitly: its test targets and,
+within a crate's `integration` target, test-name filters naming the modules it
+runs. zetesis-maintenance's portable `ignored_tests` check refuses an ignore
+whose reason names no resource, a `requires clingo:` test that no campaign
+selects, and a campaign whose selection contains no such test.
 
 ### Check tool selection
 
@@ -128,7 +133,10 @@ The native test therefore checks the typed refusal and provenance; oracle tests
 compare admitted include graphs. A version number alone does not establish a
 portable diagnostic contract.
 
-The maintained source collections provide broader regressions:
+The maintained source collections provide broader regressions. `zetesis-corpus`
+is a developer tool and is not installed; build it with
+`cargo build --locked --release -p zetesis-validation` and run it from
+`target/release`:
 
 ```sh
 zetesis-corpus verify-examples examples/correctness
@@ -166,30 +174,32 @@ Neither participates in production answer-set search.
 
 The hardware gate selects Metal on macOS and Vulkan elsewhere. Override the
 selection with `scripts/check.sh hardware --metal` or `--vulkan`.
-Each backend has a reviewed selection of 60 exact tests in 16 groups.
+Each backend has a reviewed selection of 58 exact tests in 14 groups.
 This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.
 
-To include the physical Metal tests in coverage, run:
+To include a backend's physical tests in coverage, run:
 
 ```sh
 scripts/check.sh coverage --metal
+scripts/check.sh coverage --vulkan
 ```
 
-This requires an available Metal adapter. The selection includes static-oracle
+Each requires an available adapter of its backend, and each reads the reviewed
+selection the hardware gate reads. The selection includes static-oracle
 construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
-[static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware.rs).
-The coverage snapshot below describes the tests qualified on its stated source;
-today's required selection does not update that snapshot.
+[static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs).
+The [coverage snapshot](coverage-0.1.5.md) describes the tests qualified on its
+stated source; today's required selection does not update it.
 
 Coverage always has two separately instrumented populations:
 
 | Population | Report directory |
 | --- | --- |
-| Workspace, portable tests; also the named physical tests with `--metal` | `target/coverage/workspace` |
+| Workspace, portable tests; also the named physical tests with `--metal` or `--vulkan` | `target/coverage/workspace` |
 | CPU-only `zetesis-solve` and `zetesis-cli` | `target/coverage/cli-cpu` |
 
 The historical directory name `cli-cpu` includes both crates. A portable-only
@@ -203,6 +213,8 @@ floor does not skip the CPU-only check. `target/coverage/status.txt` stays
 `incomplete` unless both pass. Setup, test or report-generation failures stop
 before those floor checks. Keep the command log to distinguish these outcomes.
 
+The coverage command clears each instrumented build directory before rebuilding
+it, including obsolete test executables. It retains the ordinary build directory.
 Use fresh instrumentation for the source under review. Matching executable
 names do not prove matching builds. Coverage does not measure assertion strength
 or replace review.
@@ -223,94 +235,12 @@ development records should not be needed to understand a public claim.
 ## Coverage
 
 The README badge reports workspace line coverage from the most recently
-qualified source below. It is a recorded local measurement, not a live hosted-CI
-status. A newer source remains unqualified until its own checks complete.
+qualified source. It is a recorded local measurement, not a live hosted-CI
+status, and a newer source remains unqualified until its own checks complete.
+The [version 0.1.5 coverage record](coverage-0.1.5.md) holds that snapshot:
+its exact counts, source identities, qualification scope and the commands
+that reproduce it at the revisions it measured.
 
-| Population | Covered / instrumented lines | Coverage |
-| --- | ---: | ---: |
-| Workspace, all features, portable tests | 108,128 / 117,927 | 91.69% |
-| CPU-only solver library and CLI, separate instrumentation | 9,666 / 10,549 | 91.63% |
-
-This version `0.1.5` snapshot measures compiled source
-[`318c8238`](https://github.com/GregoryGelfond/zetesis/tree/318c8238ad72719deee63f9b5250d3e1bbce565b)
-using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2.
-The [verification receipt](observations/coverage-318c8238.json) retains exact
-counts, source identities, report hashes and qualification scope. Documentation
-updates do not change the measured source. The
-[canonical-storage comparison](canonical-storage.md) records performance
-separately; its measured executable is byte-identical to the qualified release.
-
-Both populations passed their independent 91% floor. The workspace contains
-2,433 portable profiles; the CPU-only population contains 342 profiles.
-No physical profiles were imported into either population.
-
-Sixty tests in 16 groups passed separately on Apple M4 Pro Metal at
-[`3b06e479`](https://github.com/GregoryGelfond/zetesis/tree/3b06e4795b3a00cd0fbf11d3e0f4f2c32750cf2c).
-That revision changes only an ignored table-join test to request eager grounding
-explicitly; automatic grounding can instead reconstruct terminal definitions.
-All assertions remain, and production sources and the release executable are
-unchanged. The ordinary `zetesis test backend --device metal` command also
-passed its three complete-family checks with actual device work. These runs
-were not instrumented and do not contribute to the coverage badge.
-
-The portable, external-oracle, manual and coverage gates passed at `318c8238`.
-The corrected test also passed formatting, its related CPU tests and strict
-Clippy before device qualification. The Lean 4.33.1 build, axiom audit and
-source-record checks cover 147 semantic modules and 1,348 audited theorems.
-Their source hashes are recorded in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/3b06e4795b3a00cd0fbf11d3e0f4f2c32750cf2c/proofs/verification.json).
-These counts describe the checked
-mathematical library, not verification of the Rust grounder, masks or GPU
-execution. Historical corpus and performance results retain their original
-source identities in the [grounding comparison](grounding-measurements.md).
-
-The static closure comparison checked 53 candidate executions against an
-independent ordered-set reference. Owned seeds, indexed selections and manual
-selections share that reference, including reused epochs and the 4,096-atom
-boundary. Each of the four tight-oracle physical tests exercises both Atomic
-and Grouped support construction. The relation tests cover typed equality masks,
-prepared-view refusals and matched scalar/Rayon/Metal measurement results.
-The shared-context tests cover formula execution while relation columns remain
-prepared, non-destructive contention refusal and failure propagation to peers.
-They check reuse after healthy, settled preparation cancellation, as well as
-caller control during static and formula execution. Ordinary-session tests
-check exact context identity across explicit GPU eager/lazy closure and formula
-setup. Automatic execution remains on CPU, including when the caller supplies
-GPU resources. Repeated sessions preserve
-independent subjects, budgets, costs and outcomes while sharing the device;
-policy and observer refusals preserve later reuse.
-The formula-session tests distinguish tight support from general reduct checking
-using checked plan preconditions. They verify automatic tight dispatch, general
-checking for a non-tight positive cycle, and a finite tight-work refusal before
-device submission. An unseeded positive cycle grounds to the empty theory and
-therefore exercises tight checking; source recursion alone does not determine
-the ground theory's plan.
-Compiled-profile tests check exact pipeline identity across fresh formula oracles
-and ordinary library sessions, including device health and contention boundaries.
-Builder collection tests use caller-owned resources and retain incomplete results
-without claiming a complete `WorldView`. The independent CPU population covers
-both the composed solver and its CLI consumer after their crate separation.
-Explicit lazy execution checks preserve source grounding, immutable-upload reuse
-and complete candidate accounting. Formula checks exercise dependency-level
-original truth, packed auxiliary domains, strict-subset reduction and actual
-submission receipts under finite device limits.
-Combined language-consumer tests preserve complete answer-set families, scored
-observations and all optimum ties across aggregate heads, objectives and output
-queries. They require actual GPU work and exact accounting of CPU residuals.
-The ordinary table-join case requires positive table preparation, probe and row
-counts, actual GPU candidates, exact decided/residual accounting and no pending
-results. Its complete Metal family equals the independent CPU family. It checks
-host table grounding composed with GPU reduct checking, not a GPU table kernel.
-Other devices are outside this measurement; the hardware gate qualifies the
-Vulkan selection on a host exposing a Vulkan adapter.
-
-Reproduce the portable snapshot with `scripts/check.sh coverage` at `318c8238`
-using the [verification tools](#prepare-verification-tools). At `3b06e479`, run
-`scripts/check.sh hardware --metal` for the 60 device tests and
-`zetesis test backend --device metal --json` for the three CLI checks.
-Retain the coverage JSON and HTML reports and the hardware logs separately.
-Running `scripts/check.sh coverage --metal` creates a different, combined
-measurement; it is not the population reported above.
-Update the badge and this table together only after qualification completes.
-Line coverage identifies executed Rust lines; it does not establish assertion
-strength, WGSL instruction coverage or formal correctness.
+Update the badge and the snapshot record together only after qualification
+completes. Line coverage identifies executed Rust lines; it does not establish
+assertion strength, WGSL instruction coverage or formal correctness.

@@ -104,5 +104,4 @@ fn write_friendly(sink: &mut impl Write, timings: &StageTimings) -> io::Result<(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/stage_timing_contracts.rs"]
 mod tests;

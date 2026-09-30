@@ -1,18 +1,8 @@
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Location, Span},
-};
+use crate::test_support::location;
 use zetesis_core::Value;
 
 use super::*;
 use crate::formula_support::testing::Fixture;
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 #[test]
 fn frozen_computation_resolves_admitted_identity() {

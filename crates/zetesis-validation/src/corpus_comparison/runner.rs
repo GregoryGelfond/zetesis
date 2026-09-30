@@ -206,16 +206,14 @@ fn native_arguments(
     invocation: NativeInvocation,
     input: &Path,
 ) -> Vec<OsString> {
+    // Every native executable accepts `--backend`: older ones as their flag,
+    // those between fe635ff3 and the flag's return as an alias.
     let mut arguments: Vec<OsString> = match invocation {
-        NativeInvocation::Legacy => vec!["--backend".into()],
-        NativeInvocation::Solve => vec![
-            "solve".into(),
-            "--all".into(),
-            "--json".into(),
-            "--device".into(),
-        ],
+        NativeInvocation::Legacy => Vec::new(),
+        NativeInvocation::Solve => vec!["solve".into(), "--all".into(), "--json".into()],
     };
     arguments.extend([
+        "--backend".into(),
         request.native_backend.label().into(),
         "--oracle".into(),
         request.native_oracle.label().into(),
@@ -349,5 +347,4 @@ fn decide(evidence: CaseEvidence, decision: Decision) -> CaseResult {
 }
 
 #[cfg(all(test, unix))]
-#[path = "../../tests/support/runner_contracts.rs"]
 mod tests;

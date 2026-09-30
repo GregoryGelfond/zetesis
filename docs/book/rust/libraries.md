@@ -20,7 +20,7 @@ need a specific capability rather than a complete solve.
 | Evaluate costs and source displays | `zetesis_objective`, admitted-owner observation APIs | [Costs and shown terms](costs-and-output.md) |
 | Observe execution without parsing statistics text | `ExecutionObserver`, `SolveMeasurements`, `SemanticOutcome` | [Observations and measurements](measurements.md) |
 | Publish answers through a custom view | `zetesis_cli::{publish_prepared, PublicationConfig, AnswerRenderer}` | [Answer presentation](outcomes.md#replace-answer-presentation) |
-| Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_experiments`, `zetesis_presentation` | [Command workflows](workflows.md) |
+| Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_bench`, `zetesis_presentation` | [Command workflows](workflows.md) |
 
 `zetesis-themelios` is zetesis's source-admission crate. The underlying themelios
 libraries provide parsing, logical-program construction and analysis; their
@@ -36,6 +36,8 @@ and does not parse source or choose another admission profile after a refusal.
 | Read or explicitly export canonical values | `catalog::{AtomRef, PredicateRef, TermRef}`, `TermRef::nodes`, `TermRef::write_with`, `AtomRef::to_atom` | [Borrowing and explicit copies](models.md#borrowing-and-explicit-copies) |
 | Build typed vocabulary without a program or atom population | `catalog::{VocabularyBuilder, Vocabulary}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Retain scoped bindings and selected roots | `catalog::{CatalogRead, TermRead, TermKey, TermAssignment, AssignmentSlice, TermSet}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
+| Decide each predicate of one vocabulary once | `catalog::{CatalogRead::predicate_mask_with, PredicateMask}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
+| Key values by canonical atom identity per owner | `catalog::AtomIdentityMap` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Construct derived terms over immutable input owners | `catalog::{DerivedTerms, DeclaredConstructor}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Locate sparse carrier coordinates | `Program::locate_atom_with`, `CarrierAtom` | [Canonical ownership](../architecture/ownership.md) |
 | Borrow candidate membership | `SeedSelection`, `SeedView`, `Candidates::next_selection` | [Parallel and lazy checking](parallel.md) |
@@ -65,9 +67,8 @@ row or locating a gate atom does not establish answer-set membership. See
 | Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
 | Enumerate formula answers and complete reduct queries | `zetesis_sat::{StableModels, SearchMethod, check_with, PreparedReduct, ReductWorkspace}` | [Sessions](sessions.md) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |
-| Supply a formula membership executor | `SessionBuilder::executor`, `BatchExecutor`, `MembershipPlan`, `CandidateBatch` | [Custom executors](executors.md) |
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
-| Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation measurement example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection) |
+| Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation selection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection) |
 
 `PreparedInput` borrows a coherent admitted owner, native program or complete
 ground graph. Keep the theory, atom catalog, objectives and source observations
@@ -77,8 +78,8 @@ not support a request to replace that graph with lazy grounding.
 Prepared resources can share immutable data and reusable storage. Candidate
 truth, search coverage and resource budgets remain local to the computation.
 Device primitives have explicit capability, limit and failure contracts; enabling
-a feature or selecting a device does not establish that work ran there. Custom
-executors must meet their documented verdict-soundness contract.
+a feature or selecting a device does not establish that work ran there. Every
+answer set a session returns is decided by zetesis's own reduct check.
 
 ## Validation, measurement and presentation
 
@@ -90,7 +91,6 @@ executors must meet their documented verdict-soundness contract.
 | Measure a bounded corpus schedule | `zetesis_validation::performance::{command::run, matrix::Request}` |
 | Derive a compact campaign view | `matrix::Report::summary` |
 | Compare retained measurements | `zetesis_validation::performance::series::{read_compare, compare}` |
-| Measure matched execution primitives | `zetesis_experiments::primitives::{Request, Event, measure}` |
 | Render human tables with explicit styling | `zetesis_presentation::{Table, Row, Column, Layout, ColorMode}` |
 | Check proof records and coverage policy | `zetesis_maintenance::{proofs, coverage}` |
 | Execute and retain a fresh proof check | `zetesis_maintenance::proofs::capture::capture` |

@@ -2,21 +2,9 @@
 
 use super::*;
 use crate::oracle::Schedule;
-use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Seed, Template, Term, Value,
-};
-
-fn atom(name: &str, values: &[i32]) -> Atom {
-    Atom::new(
-        Predicate::new(name, values.len()).unwrap(),
-        values.iter().copied().map(Value::Number).collect(),
-    )
-    .unwrap()
-}
-
-fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
-}
+use crate::oracle::test_support::rule;
+use zetesis_core::{AdmissionLimits, Atom, Model, Seed, Template, Term, Value};
+use zetesis_test_support::programs::{numbered as atom, pattern};
 
 fn fact(name: &str, values: &[i32]) -> Template {
     Template::new(
@@ -34,10 +22,6 @@ fn fact(name: &str, values: &[i32]) -> Template {
         vec![],
         vec![],
     )
-}
-
-fn rule(head: AtomPattern, positive: Vec<AtomPattern>) -> Template {
-    Template::new(Some(head), positive, vec![], vec![], vec![])
 }
 
 fn path(edges: i32, labels: i32) -> (Program, Model) {

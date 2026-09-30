@@ -1,0 +1,16 @@
+[package]
+name = "zetesis-theory-support"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Helpers the zetesis workspace's tests share over the Ferraris theories."
+publish = false
+
+[dependencies]
+zetesis-core.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
+
+[lints]
+workspace = true

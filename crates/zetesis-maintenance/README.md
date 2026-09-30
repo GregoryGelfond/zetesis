@@ -31,13 +31,16 @@ visible and is retained under a fresh `target/proof-checks/run.*` directory.
 
 `coverage` separates floor policy, version observations, exact physical test
 selection and libtest output checks from execution. It retains the existing
-`toolchain.json` schema and independent workspace/CPU-only CLI populations. No
-floor or filename filter is changed. The shell driver keeps the exclusive lock,
+`toolchain.json` schema and independent workspace/CPU-only CLI populations. The
+floors are unchanged. Every report and floor also leaves out the test-support
+crates' sources, as cargo-llvm-cov already leaves out `tests/` directories; the
+receipt records that filter under `project_added_filename_filters`, and the
+metadata command refuses any other. The shell driver keeps the exclusive lock,
 fresh cleanup, ordered commands and incomplete status until both floors pass.
 After both reports exist, both floor commands run independently; `floors.tsv`
 retains their profile names and exit statuses, including failures. This does not
 change either floor or make a below-floor portable population pass.
-The sixteen physical groups contain 59 exact tests; the Rust checker rejects
+The fourteen physical groups contain 58 exact tests; the Rust checker rejects
 selection drift, zero matches and incomplete individual outcomes.
 
 `scripts/maintenance.sh` enters the repository and selects Cargo 1.97.1 before
@@ -48,7 +51,13 @@ supplied by the caller, not evidence that this library executed those tools.
 Coverage metadata requires the actual cargo-llvm-cov version observation and
 validates its pin; a direct library caller cannot omit that observation.
 `inventory::sources` hashes the declared Cargo/Rust/WGSL boundary; this is not a
-complete dependency or source-to-binary seal.
+complete dependency or source-to-binary seal. `inventory::authored` lists the
+maintained Rust sources for the repository audits in this crate's tests: the
+authored-lint audit, and the ignored-test check, which refuses an ignore that
+names no resource and a clingo, Metal or Vulkan test its gate does not select.
+`ignored` reads those ignored tests and the oracle gate's campaigns, and
+`ignored::check_runs` holds each campaign's recorded run to exactly the ignored
+tests its filters select; the oracle gate calls it through `oracle-runs`.
 
 Policy input and physical logs have a 16 MiB inclusive ceiling. LLVM executable
 identity reads have a 256 MiB ceiling. Proof/source reads expose their own limits;
@@ -57,11 +66,11 @@ refuse symbolic links. Confined recorded-file paths do not establish a filesyste
 snapshot or protection against concurrent replacement by another process.
 
 ```sh
-cargo test --locked -p zetesis-maintenance --all-features
-cargo clippy --locked -p zetesis-maintenance --all-targets --all-features -- -D warnings
+cargo test --locked -p zetesis-maintenance
+cargo clippy --locked -p zetesis-maintenance --all-targets -- -D warnings
 ```
 
-The `test-fixtures` feature enables a deterministic Rust subprocess stand-in.
+The `zetesis-maintenance-fixture` binary supplies deterministic Rust subprocess stand-ins.
 Tests execute the actual shell drivers with those stand-ins and inspect command
 order, profiles, status publication, failures and cleanup; they do not compile
 programs, execute Lean, collect coverage or exercise Metal. Real compiler,
@@ -167,3 +176,27 @@ Other source checkouts and instrumented coverage populations keep separate targe
 The caller must leave artifacts immutable during the check. The serialized input
 and path-count limits bound representation size, not artifact payload size or RSS;
 hard-link publication does not read or duplicate those payloads.
+
+## Installed tools and documented executables
+
+`install::check` holds the installed tool set to one source, the lists in
+`scripts/install.sh`: INSTALL.md's tool table must describe exactly those tools,
+its Cargo commands must name exactly the installer's packages, and those
+packages' binary targets, as `cargo metadata` reports them, must be exactly the
+tools. `invocations::check` holds live documentation to what the workspace
+builds: a command in a shell code block, fenced with backticks or tildes, or a
+tool table's first cell, that begins with a zetesis executable must name a
+binary or package of the workspace, and `zetesis bench` is not a command. A
+page carrying `invocations::RECORD` on a line of its own, outside any code
+block, records a dated measurement and keeps the spellings of the binaries it
+records; prose is not checked. Both take text their caller has read and build
+nothing. The portable gate runs them over the repository in the
+`executable_agreement` tests.
+
+`links::check` holds live documentation's links to the working tree: every
+relative link, and every link to the repository's main branch, must name a file
+or directory the repository holds, and a manual link into the API reference
+must name a workspace crate. A dated record's links are checked like any other;
+links pinned to a commit, links to other sites and anything inside code are
+not. The portable gate runs it over the repository in the `documentation_links`
+tests.

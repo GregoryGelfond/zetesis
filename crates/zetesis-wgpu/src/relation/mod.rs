@@ -229,5 +229,4 @@ fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/relation/module.rs"]
 mod tests;

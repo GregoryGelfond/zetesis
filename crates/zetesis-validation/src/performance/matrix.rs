@@ -3,10 +3,13 @@
 //! Every native invocation uses JSON and statistics. Wall time includes their
 //! overhead, setup, grounding, solving and captured output. This is distinct from
 //! the legacy uninstrumented CPU protocol and the eventual full uninstrumented
-//! corpus matrix. Selected displays/counts/costs are compared with clingo; native
-//! full families also agree across profiles and repeats, including hidden atoms,
-//! shown values and multiplicities. Hidden clingo interpretations are unavailable.
-//! A qualification-only reference policy leaves all later measurements native.
+//! corpus matrix. Selected displays/counts/costs are compared with clingo when
+//! it takes part, and with each workload's recorded contract when the campaign
+//! is clingo-free; a workload without a contract then needs clingo and is not
+//! launched. Native full families also agree across profiles and repeats,
+//! including hidden atoms, shown values and multiplicities. Hidden clingo
+//! interpretations are unavailable. A qualification-only reference policy leaves
+//! all later measurements native.
 //!
 //! First-observed refusals and failures disable only their cell's later launches;
 //! every fixed schedule position remains recorded. No failed sample is replaced.
@@ -23,11 +26,13 @@ mod record;
 mod run;
 mod serialization;
 mod summary;
-pub use summary::{CellSummary, DecisionCount, Summary};
+pub use summary::{CellSummary, DecisionCount, Qualification, Summary};
 mod telemetry;
 mod workload;
 
-pub use config::{Plan, Producer, ReferencePolicy, Request, Slot, Suite};
+pub use config::{
+    Plan, Producer, RecordedPolicy, Reference, ReferencePolicy, Request, Slot, Suite, Tool,
+};
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
@@ -40,14 +45,24 @@ use super::{Capture, Error, Fault};
 use crate::selected::{Change, FileSeal, publication};
 use serde::Serialize;
 
+/// The plan together with the reference policy its run used, recorded once.
+/// Saved reports keep the policy inside their plan section.
+#[derive(Clone, Debug, Serialize)]
+struct RecordedPlan {
+    #[serde(flatten)]
+    plan: Plan,
+    reference_policy: RecordedPolicy,
+}
+
 /// Owned complete matrix evidence, including unlaunched positions and refusals.
 #[derive(Debug, Serialize)]
 pub struct Report {
     schema: u32,
     protocol: &'static str,
+    tool: Tool,
     manifest_sha256: &'static str,
     manifest_scope: &'static str,
-    plan: Plan,
+    plan: RecordedPlan,
     limits: super::Limits,
     native_normalization_limits: serde_json::Value,
     cases: Vec<String>,
@@ -60,8 +75,7 @@ pub struct Report {
     peak_rss: &'static str,
     before: Vec<FileSeal>,
     after: Vec<Change>,
-    #[serde(serialize_with = "serialization::captures")]
-    metadata: Vec<Capture>,
+    metadata: Vec<serialization::MatrixCapture>,
     samples: Vec<Sample>,
     total_capture_bytes: usize,
     faults: Vec<Fault>,
@@ -80,20 +94,25 @@ impl Report {
     }
 
     /// Every planned position is represented; this does not require solver parity.
+    /// The schedule is rebuilt from the policy the report records.
     #[must_use]
     pub fn accounted(&self) -> bool {
         self.plan
-            .slots(self.cases.len())
+            .plan
+            .slots(self.cases.len(), self.plan.reference_policy.reference())
             .is_ok_and(|slots| slots.len() == self.samples.len())
     }
-    /// Every requested invocation passed parity/telemetry with unchanged inputs.
-    /// Refused and skipped cells make this false even in a fully accounted report.
+    /// Every requested invocation passed parity/telemetry with unchanged inputs,
+    /// and every metadata capture the run owed completed: zetesis's version and
+    /// help, and clingo's version when clingo took part. Refused, skipped and
+    /// needs-clingo cells make this false even in a fully accounted report.
     #[must_use]
     pub fn passed(&self) -> bool {
+        let owed = 2 + usize::from(self.plan.reference_policy.reference().is_some());
         self.accounted()
             && self.samples.iter().all(|s| s.decision == Decision::Pass)
-            && self.metadata.len() == 3
-            && self.metadata.iter().all(|c| c.complete(false))
+            && self.metadata.len() == owed
+            && self.metadata.iter().all(|c| c.0.complete(false))
             && self.after.iter().all(Change::unchanged)
             && self.faults.is_empty()
             && self.unresolved_children.is_empty()
@@ -122,7 +141,17 @@ impl Report {
     /// Immutable requested profile and schedule configuration.
     #[must_use]
     pub const fn plan(&self) -> &Plan {
-        &self.plan
+        &self.plan.plan
+    }
+    /// The reference policy the run used; none for a clingo-free campaign.
+    #[must_use]
+    pub const fn reference_policy(&self) -> Option<ReferencePolicy> {
+        self.plan.reference_policy.reference()
+    }
+    /// The tool that ran the campaign and wrote this report.
+    #[must_use]
+    pub const fn tool(&self) -> &Tool {
+        &self.tool
     }
     /// Pre-run primary and private-copy source/executable seals.
     #[must_use]
@@ -136,8 +165,8 @@ impl Report {
     }
     /// Retained executable version/help captures outside solve observations.
     #[must_use]
-    pub fn metadata(&self) -> &[Capture] {
-        &self.metadata
+    pub fn metadata(&self) -> impl ExactSizeIterator<Item = &Capture> {
+        self.metadata.iter().map(|capture| &capture.0)
     }
     /// Direct child IDs explicitly abandoned after bounded cleanup failed.
     #[must_use]
@@ -196,16 +225,16 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 /// follow the plan.
 ///
 /// # Errors
-/// Refuses empty/oversized populations, repeated content identities, foreign
-/// corpus identities, sources outside the allowed suite and resource excess.
-/// Materialization failures are retained in the returned report before any
-/// solver invocation.
+/// Refuses a plan with a case selection, which chooses suite cases rather than
+/// explicit workloads, empty/oversized populations, repeated content
+/// identities, foreign corpus identities, sources outside the allowed suite and
+/// resource excess. Materialization failures are retained in the returned
+/// report before any solver invocation.
 pub fn run_workloads(request: &Request<'_>, workloads: &[Workload]) -> Result<Report, Error> {
     run_workloads_with_invocation(request, workloads, NativeInvocation::Legacy)
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/matrix_reports.rs"]
 mod fixtures;
 
 /// Run the fixed matrix using an explicit native command interface.
@@ -273,4 +302,47 @@ pub fn run_workloads_with_cancellation(
     cancelled: &std::sync::atomic::AtomicBool,
 ) -> Result<Report, Error> {
     run::campaign(request, Some(workloads), invocation, cancelled)
+}
+
+/// Expand a selection over the maintained series' workload entries before
+/// invoking the explicit-workload runner. One entry can name several amended
+/// cells; every match keeps its identity and its order within that entry.
+/// Only this command-owned expansion consumes a selection: the public
+/// explicit-workload operations still refuse one. The returned report records
+/// both the original request and the actual expanded population.
+pub(super) fn run_series_with_cancellation(
+    request: &Request<'_>,
+    workloads: &[Workload],
+    invocation: NativeInvocation,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Report, Error> {
+    let Some(selection) = request.plan.selection() else {
+        return run_workloads_with_cancellation(request, workloads, invocation, cancelled);
+    };
+    let mut selected = Vec::with_capacity(workloads.len());
+    for path in selection {
+        let previous = selected.len();
+        selected.extend(
+            workloads
+                .iter()
+                .filter(|workload| workload.entry() == path.as_str())
+                .cloned(),
+        );
+        if selected.len() == previous {
+            return Err(Error::Configuration(
+                "a selected case is not a workload of the series",
+            ));
+        }
+    }
+    let expanded = Request {
+        tool: request.tool.clone(),
+        plan: Plan {
+            selection: None,
+            ..request.plan.clone()
+        },
+        ..*request
+    };
+    let mut report = run::campaign(&expanded, Some(&selected), invocation, cancelled)?;
+    report.plan.plan = request.plan.clone();
+    Ok(report)
 }

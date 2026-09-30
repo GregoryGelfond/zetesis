@@ -11,6 +11,8 @@ mod work;
 mod binding;
 mod interpreter;
 mod output;
+#[cfg(test)]
+mod test_support;
 
 use super::{
     Binder, Cancellation, Condition, ConstructionLimits, DefaultNegation, Error, ErrorKind,

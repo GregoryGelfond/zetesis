@@ -1,17 +1,7 @@
 use super::*;
 use crate::formula_support::{self, testing};
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Span},
-};
+use crate::test_support::location;
 use zetesis_core::{Predicate, ValueNodeRef};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 #[test]
 fn projection_uses_the_completed_support_payload() {

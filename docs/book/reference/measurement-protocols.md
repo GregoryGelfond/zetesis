@@ -1,8 +1,10 @@
 # Measurement protocols and early results
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 For everyday benchmarking and current results, start with
 [Benchmarks and comparisons](performance.md). This reference is for maintainers
-reproducing a particular experiment or deriving a workload through the library.
+reproducing a particular measurement or deriving a workload through the library.
 
 The recipes retain the compatibility command names used by the recorded runs.
 They do not qualify a newer executable. The results below identify their own
@@ -13,13 +15,15 @@ sources, dates, settings and measurement limits.
 | Compare unchanged source cases | [Measure the relevant work](#measure-the-relevant-work) |
 | Change a workload constant without editing the corpus | [Parameterized workloads](#compare-a-parameterized-workload) |
 | Compare successive executables on fixed cells | [Fixed series](#measure-the-series) |
-| Read early CPU, Metal and primitive observations | [Performance evidence](#performance-evidence) |
+| Read early CPU and Metal observations | [Performance evidence](#performance-evidence) |
 
 ## Measure the relevant work
 
-Use `zetesis bench corpus` for the installed explicit-profile matrix interface.
-The `zetesis-perf` compatibility executable retains the additional protocols and
-argument spellings used by the recipes and measured records below. See the
+Use `zetesis-bench corpus` for the installed explicit-profile matrix interface.
+`zetesis-bench perf`, formerly the separate `zetesis-perf` executable, retains
+the additional protocols and argument spellings used by the recipes and measured
+records below, which keep the `zetesis-perf` name of the binaries they record.
+See the
 [comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md) for its schedules,
 capture bounds and report formats. Direct wall time includes process startup,
 source loading, grounding, solving and captured output. The CPU baseline keeps
@@ -116,12 +120,12 @@ size each, byte-exact, with closed-form complete families as their
 contracts), three amended queens boards and two unchanged entries. The
 generated programs reach routes the corpus does not: the closure route, deep
 derivation, cyclic and stratified negation, refused admissions, a Latin
-square in the shape of Sudoku and a line walked under frame rules. `zetesis-perf --suite series` runs
-them through the instrumented matrix; `--profile cpu-auto` requests the shipped
+square in the shape of Sudoku and a line walked under frame rules.
+`zetesis-bench perf --suite series` runs them through the instrumented matrix; `--profile cpu-auto` requests the shipped
 defaults and the observation retains the grounding mode each cell took;
 `--time-limit` adds a cooperative deadline to every native profile.
 
-`zetesis-series` derives one comparison from published reports of the same
+`zetesis-bench series` derives one comparison from published reports of the same
 cells: exact medians, later-over-earlier ratios, each report's native median
 over the reference solver's median on the same cell, the retained counters and
 each report's native seal, with cells that did not pass listed by decision,
@@ -135,10 +139,9 @@ gives the commands. Retained series comparisons live beside the other
 
 The [grounding comparison](grounding-measurements.md) reports ordinary CPU wall time and
 child peak RSS for sources `ca10a5e7`, `f56a5a24` and `679ca856`, alongside
-separate lazy CPU work and timing observations and larger queens screens.
-The [matched CPU/Metal comparison](prepared-metal.md) adds 810 complete eager
-positions and 4,320 lazy-library observations, with exact timed data and the
-actual device-work scope. The measured executables report version `0.1.0`.
+larger queens screens. The [matched CPU/Metal comparison](prepared-metal.md) adds
+810 complete eager positions, with exact timed data and the actual device-work
+scope. The measured executables report version `0.1.0`.
 The grounding comparison also retains the earlier
 `6bebb980` → `1e5b78ce` release, Table, Metal and LTO comparisons under their
 original source identities. Those historical Metal measurements retain two
@@ -457,117 +460,3 @@ cells when reviewing the report. The measurements used the maintained
 `performance::matrix::run_workloads` API with unchanged N=8 sources; the command
 above selects the same inputs, profiles and schedule through the base-corpus
 report view. Raw report schemas need not be identical.
-
-### Tight GPU membership
-
-The following tight-oracle measurements compare
-[`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de)
-with [`e7e5e410`](https://github.com/GregoryGelfond/zetesis/tree/e7e5e410d4072457eee4a469b600981d713f5d15),
-using Rust 1.97.1 release builds on Apple M4 Pro on 10 September 2026.
-Both sources use packed Atomic support. The order is
-previous/current/current/previous; unchanged-executable drift remains part of
-the result. These descriptive observations are not confidence estimates.
-
-The [tight-oracle benchmark](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md)
-compares identical candidates through scalar, Rayon, fresh-device and
-resident-device routes. Classification includes transfer and result decoding;
-whole-query time also includes exact CPU completion of residuals. Source
-grounding and outer candidate search are outside this experiment. The
-[execution chapter](../architecture/execution.md) states the support-buffer
-size independently of elapsed time and total device memory.
-
-The Atomic comparison uses the same normal/choice fixtures, with 4, 32, 33 and
-256 atoms and batches of 3 or 128 candidates:
-
-```sh
-zetesis-bench tight --backend metal --atoms 4,32,33,256 --batches 3,128 \
-  --families normal,choices --workers 4 --warmups 2 --repetitions 8 \
-  --max-work 100000000
-```
-
-Each of the four blocks retains 704 observations, including 512 timed
-observations. Complete ordered subjects, certificate witnesses, final decisions
-and device work/storage accounting agree across blocks. All 1,408 GPU batches
-complete, accounting for 92,224 candidate occurrences. Exact residual checking
-remains on the CPU.
-
-For each case, compare the average of the two current block medians with the
-average of the two before block medians. The table summarizes those 16 ratios
-with a geometric mean; values below one mean less elapsed time.
-
-| GPU route | Classification ratio | Whole-call ratio | Whole-call case range | Before final/initial drift range |
-| --- | ---: | ---: | --- | --- |
-| Fresh resources | 1.008 | 1.007 | 0.811–1.528 | 0.514–1.443 |
-| Resident resources | 1.011 | 1.002 | 0.821–1.313 | 0.490–1.381 |
-
-Substantial same-executable drift prevents a firm speedup or regression
-conclusion from this short screen. These intervals include host/device transfer
-and waiting; they are not shader-only timings or ordinary solve times.
-
-A separate 33-atom, three-candidate check uses
-`--families support-uniform,support-skewed`, four workers, one warmup and four
-repetitions with each of `--support atomic` and `--support grouped`. Both
-policies complete 48 observations and agree with the full CPU reference,
-including exact residual completion. Each theory retains 512 producer
-occurrences. Grouped storage adds 12 graph bytes and eight temporary cursor
-bytes, with unchanged transport and readback payloads. All producers occupy one
-support word, so this check establishes neither useful occupancy nor a timing
-advantage. Atomic remains the tight library default.
-
-Neither the selected CPU cases nor these device primitives establish performance
-across the complete corpus, general lazy grounding or every backend. Keep
-complete distributions, unchanged-baseline drift and separate memory
-observations with every comparison.
-
-### Typed relation selection
-
-The shared relation primitive at
-[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/d871e91b56406c20b312e63f9d3437e6352803e2)
-was measured separately on Apple M4 Pro using an uninstrumented Rust 1.97.1
-release build on 10 September 2026. Each case used four Rayon workers, one
-warmup and three timed repetitions. These operation medians include equality
-selection and typed row reconstruction; source/view preparation is separate.
-
-The table compares routes within each physical Metal invocation. CPU routes
-retain the uploaded columns, and all routes use the same typed input and masks.
-
-| Relation case | Rows / queries | Scalar (µs) | Rayon (µs) | Metal (µs) |
-| --- | ---: | ---: | ---: | ---: |
-| Independent, numeric values | 256 / 8 | 4.667 | 18.999 | 235.833 |
-| Correlated, tuple values | 256 / 8 | 4.959 | 21.167 | 477.375 |
-| Independent, numeric values | 4,096 / 32 | 206.375 | 139.376 | 732.584 |
-| Skewed, tuple values | 4,096 / 32 | 252.457 | 152.166 | 663.666 |
-
-All routes produced the same complete masks and reconstructed typed rows. Across
-the four cases, 20 Metal batches completed all 400 queries. Rayon reduced the
-operation median in the two larger cases; Metal did not beat the CPU routes in
-this pilot. The fixed scalar/Rayon/Metal order and three repetitions make these
-descriptive observations, not confidence estimates or evidence of faster program
-grounding. The numeric 4,096-row Metal case includes a retained 2.806-ms sample;
-the 256-row tuple Metal samples range from 0.222 to 0.521 ms.
-
-Device and pipeline preparation took 9.549–44.942 ms, column upload
-17.875–58.958 µs, and initial GPU operations 3.014–3.361 ms. Repeated operations
-reused the immutable columns. In the two 4,096-row cases, common typed
-reconstruction remained about 76–85 µs. These costs identify further work on
-batching, transport and materialization; they do not establish a GPU speedup.
-Separate CPU-only invocations are a distinct population and are not pooled into
-this table.
-
-Reproduce a row with the corresponding family, payload, row and query counts:
-
-```sh
-zetesis-bench relation --backend metal --family independent --payload numeric \
-  --rows 4096 --queries 32 --workers 4 --warmups 1 --repetitions 3
-```
-
-Use `--family correlated --payload tuple --rows 256 --queries 8` or
-`--family skewed --payload tuple --rows 4096 --queries 32` for the tuple rows.
-The small numeric case uses `--family independent --payload numeric --rows 256
---queries 8` with the same worker and repetition settings. Use `--backend cpu`
-for a separate scalar/Rayon invocation. The
-[measurement contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection)
-defines the preparation, transfer, reconstruction and authored-storage fields.
-Eager formula support also uses this column view, with its own unchanged
-shortest-posting selection and complete matcher. These isolated selection
-measurements do not establish ordinary grounding performance or GPU grounding.

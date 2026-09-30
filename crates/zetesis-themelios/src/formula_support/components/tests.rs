@@ -1,15 +1,7 @@
 use super::*;
 use crate::formula_support::{Computation, Support};
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
+use crate::test_support::location;
 use zetesis_core::{Sign, Value};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 #[test]
 fn committed_components_borrow_across_generated_admission_without_truth() {

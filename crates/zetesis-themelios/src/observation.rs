@@ -457,6 +457,40 @@ pub(crate) struct Directive {
     origins: Vec<Location>,
 }
 
+/// Prepare an output selection for repeated answers over one catalog's
+/// vocabulary, charging its decisions against `limits.max_work` as one
+/// observation would. A preparation that would exceed that ceiling keeps every
+/// atom's search, which is the unprepared behaviour.
+///
+/// # Errors
+/// Returns the cancellation stop, without a prepared selection.
+pub fn prepare_selection<'a>(
+    selection: &'a crate::OutputSelection,
+    read: zetesis_core::catalog::CatalogRead<'_>,
+    limits: Limits,
+    cancellation: &Cancellation,
+) -> Result<crate::PreparedSelection<'a>, Stop> {
+    enum Refusal {
+        Work,
+        Stopped(Stop),
+    }
+    let mut work = 0u128;
+    let prepared = selection.prepare_with(read, |units| {
+        cancellation.poll().map_err(Refusal::Stopped)?;
+        work += units;
+        if work > u128::from(limits.max_work) {
+            Err(Refusal::Work)
+        } else {
+            Ok(())
+        }
+    });
+    match prepared {
+        Ok(prepared) => Ok(prepared),
+        Err(Refusal::Work) => Ok(crate::PreparedSelection::from(selection)),
+        Err(Refusal::Stopped(stop)) => Err(stop),
+    }
+}
+
 /// Immutable display templates with original source evidence. No solver or
 /// candidate carrier is retained; the query is meaningful for any supplied model.
 #[derive(Clone, Debug, Default)]

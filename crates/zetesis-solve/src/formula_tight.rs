@@ -118,5 +118,4 @@ fn verdict(verdict: TightVerdict) -> BatchVerdict {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/formula_tight.rs"]
 mod tests;

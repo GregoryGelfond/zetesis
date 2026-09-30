@@ -1,17 +1,5 @@
 //! Checked human units at the argument boundary; library settings retain bytes and seconds.
 
-use std::num::NonZeroUsize;
-
-pub(crate) fn workers(value: &str) -> Result<NonZeroUsize, String> {
-    if value == "auto" {
-        Ok(super::host_workers())
-    } else {
-        value
-            .parse()
-            .map_err(|_| "expected auto or a positive worker count".to_owned())
-    }
-}
-
 pub(super) fn seconds(value: &str) -> Result<u64, String> {
     quantity(value, &[("", 1), ("s", 1), ("m", 60), ("h", 3_600)]).map_err(|()| {
         "expected whole seconds or a whole number with s, m or h; value must fit u64 seconds"

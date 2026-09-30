@@ -1,21 +1,14 @@
 use super::Accounting;
 use crate::formula_support::{Computation, Support, SupportCatalog};
+use crate::test_support::location;
 use crate::{
     FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome,
     GroundingPhase, GroundingWork,
 };
 use std::cell::RefCell;
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::Location;
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 #[test]
 fn refused_checks_retain_their_accepted_prefix() {

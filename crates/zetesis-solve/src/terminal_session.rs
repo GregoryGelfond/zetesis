@@ -16,7 +16,6 @@ use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
 
 #[cfg(test)]
-#[path = "../tests/support/terminal_reconstruction.rs"]
 mod tests;
 
 /// Verified base answers consumed by full-answer reconstruction.
@@ -50,7 +49,7 @@ impl<'a> TerminalSession<'a> {
     pub(crate) fn new(
         owner: &'a TerminalFormula,
         config: &SolveConfig,
-        resources: crate::session::Executors<'_>,
+        resources: &crate::ExecutionResources,
         observations: &mut impl ExecutionSink,
         cancellation: &Cancellation,
         phases: &Recorder,

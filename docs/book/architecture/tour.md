@@ -11,13 +11,13 @@ Its answer sets are `{a}` and `{b}`. The complete world view is therefore
 
 ```sh
 cargo run --locked -p zetesis-cli --no-default-features --bin zetesis -- \
-  solve docs/book/examples/choices.lp --device cpu --all
+  solve docs/book/examples/choices.lp --backend cpu --all
 ```
 
 An installed executable can use the same source path and options:
 
 ```sh
-zetesis solve docs/book/examples/choices.lp --device cpu --all
+zetesis solve docs/book/examples/choices.lp --backend cpu --all
 ```
 
 The two answers may appear in either order. `--all` requests exhaustive

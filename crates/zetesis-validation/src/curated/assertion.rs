@@ -244,5 +244,4 @@ pub(super) fn helper_models(text: &str) -> Result<Vec<Vec<String>>, Error> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/curated_literals.rs"]
 mod tests;

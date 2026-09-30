@@ -22,10 +22,10 @@
 
 use std::collections::BTreeMap;
 
-use themelios_program::program::{Arguments, Body, BodyElement, LiteralInner, Program};
+use themelios_program::program::{Arguments, Body, BodyElement, LiteralInner};
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{BinaryOp, Term, UnaryOp, Variable};
-use zetesis_domain::{KeyWork, KeyedRelation, Stop, atom_signature};
+use zetesis_domain::{FactIndex, KeyWork, KeyedRelation, Stop, atom_signature};
 
 #[derive(Clone, Copy)]
 pub(super) enum Failure {
@@ -49,7 +49,7 @@ impl<'a> Proof<'a> {
     pub(super) fn of(
         body: &'a Body,
         keys: &BTreeMap<&Signature, &KeyedRelation<'_>>,
-        program: &Program,
+        facts: &FactIndex<'_>,
         work: &mut KeyWork,
     ) -> Result<Option<Self>, Failure> {
         let mut proof = Self {
@@ -78,10 +78,8 @@ impl<'a> Proof<'a> {
                     continue;
                 };
                 let bound = match keys.get(&signature) {
-                    Some(key) if position == key.value_position() => {
-                        keyed_range(key, program, work)?
-                    }
-                    _ => fact_range(program, &signature, position, work)?,
+                    Some(key) if position == key.value_position() => keyed_range(key, facts, work)?,
+                    _ => fact_range(facts, &signature, position, work)?,
                 };
                 if let Some(bound) = bound {
                     // Either conjunct is already a necessary bound; retain
@@ -276,12 +274,12 @@ impl Range {
 }
 
 fn fact_range(
-    program: &Program,
+    facts: &FactIndex<'_>,
     signature: &Signature,
     position: usize,
     work: &mut KeyWork,
 ) -> Result<Option<Range>, Failure> {
-    let Some(values) = zetesis_domain::facts(program, signature, position, work)? else {
+    let Some(values) = facts.values(signature, position, work)? else {
         return Ok(None);
     };
     let mut range: Option<Range> = None;
@@ -309,7 +307,7 @@ fn fact_range(
 
 fn keyed_range(
     key: &KeyedRelation<'_>,
-    program: &Program,
+    facts: &FactIndex<'_>,
     work: &mut KeyWork,
 ) -> Result<Option<Range>, Failure> {
     // KeyedRelation construction certifies an all-positive, flat condition.
@@ -329,7 +327,7 @@ fn keyed_range(
         for (position, term) in terms.iter().enumerate() {
             work.step()?;
             if matches!(term, Term::Variable(Variable::Named(name)) if name == key.value_variable())
-                && let Some(range) = fact_range(program, &signature, position, work)?
+                && let Some(range) = fact_range(facts, &signature, position, work)?
             {
                 return Ok(Some(range));
             }

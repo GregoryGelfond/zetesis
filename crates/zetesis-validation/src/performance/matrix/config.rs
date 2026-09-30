@@ -31,32 +31,81 @@ pub enum Suite {
     Scalability,
 }
 
-/// Which populations include the independent reference solver.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+/// Which populations include the independent reference solver when one takes part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReferencePolicy {
     /// Qualify and measure the reference alongside every native profile.
-    #[default]
     AllPhases,
     /// Establish one complete reference census per case; measure native profiles only.
     QualificationOnly,
 }
 
+/// The reference policy a report records: the one the campaign ran under, or
+/// `clingo_free` when no reference took part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordedPolicy {
+    /// The reference was qualified and measured alongside every native profile.
+    AllPhases,
+    /// The reference established one complete census per case; only native
+    /// profiles were measured.
+    QualificationOnly,
+    /// No reference took part: each native family was qualified against its
+    /// workload's recorded contract.
+    ClingoFree,
+}
+impl RecordedPolicy {
+    /// The policy the campaign ran under; none for a clingo-free campaign.
+    #[must_use]
+    pub const fn reference(self) -> Option<ReferencePolicy> {
+        match self {
+            Self::AllPhases => Some(ReferencePolicy::AllPhases),
+            Self::QualificationOnly => Some(ReferencePolicy::QualificationOnly),
+            Self::ClingoFree => None,
+        }
+    }
+}
+impl From<Option<ReferencePolicy>> for RecordedPolicy {
+    fn from(policy: Option<ReferencePolicy>) -> Self {
+        match policy {
+            Some(ReferencePolicy::AllPhases) => Self::AllPhases,
+            Some(ReferencePolicy::QualificationOnly) => Self::QualificationOnly,
+            None => Self::ClingoFree,
+        }
+    }
+}
+
+/// The independent reference solver, clingo, and what a campaign uses it for.
+/// A campaign without one is clingo-free: each native family is qualified
+/// against its workload's recorded contract.
+#[derive(Clone, Copy, Debug)]
+pub struct Reference<'a> {
+    /// Absolute clingo executable.
+    pub executable: &'a Path,
+    /// Whether clingo is measured in every phase or only establishes each census.
+    pub policy: ReferencePolicy,
+}
+
 /// Validated finite campaign configuration; requested profiles never imply execution.
+/// Whether a reference takes part is the request's, not the plan's.
 #[derive(Clone, Debug, Serialize)]
 pub struct Plan {
     pub(super) suite: Suite,
     pub(super) profiles: Vec<NativeExecution>,
     pub(super) reference_workers: NonZeroUsize,
-    pub(super) reference_policy: ReferencePolicy,
     pub(super) warmups: usize,
     pub(super) repetitions: usize,
     /// Separate child-resource rounds per producer and case, after the
     /// timed rounds; zero unless requested.
     pub(super) memory_runs: usize,
+    /// Relative entry paths of the suite to run, in caller order; the
+    /// whole suite when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) selection: Option<Vec<String>>,
 }
 impl Plan {
-    /// Construct up to eight CPU/Metal profiles. Each worker count is bounded
+    /// Construct up to eight profiles, on any backend. Each worker count is bounded
     /// by 256; every profile retains its batch/scratch ceilings. Zero through
     /// five warmups and one through 41 timed rounds are admitted. An automatic
     /// grounding request is admitted; its observations retain the mode taken.
@@ -77,16 +126,16 @@ impl Plan {
             suite,
             profiles,
             reference_workers,
-            reference_policy: ReferencePolicy::AllPhases,
             warmups,
             repetitions,
             memory_runs: 0,
+            selection: None,
         })
     }
 
-    /// Qualify each complete family once with the reference and each native
-    /// profile. No warmup, timed or memory positions are scheduled. Profile
-    /// and worker bounds are identical to [`Self::new`].
+    /// Qualify each complete family once with each native profile, and with
+    /// the reference when one takes part. No warmup, timed or memory positions
+    /// are scheduled. Profile and worker bounds are identical to [`Self::new`].
     ///
     /// # Errors
     /// Refuses empty/oversized profile families or worker counts above 256.
@@ -100,23 +149,11 @@ impl Plan {
             suite,
             profiles,
             reference_workers,
-            reference_policy: ReferencePolicy::QualificationOnly,
             warmups: 0,
             repetitions: 0,
             memory_runs: 0,
+            selection: None,
         })
-    }
-    /// Select reference populations without changing native qualification,
-    /// repetition counts or source/answer contracts. Defaults to all phases.
-    #[must_use]
-    pub const fn with_reference(mut self, policy: ReferencePolicy) -> Self {
-        self.reference_policy = policy;
-        self
-    }
-    /// Requested reference populations, retained in serialized evidence.
-    #[must_use]
-    pub const fn reference_policy(&self) -> ReferencePolicy {
-        self.reference_policy
     }
     /// Request zero through 41 memory rounds per producer and case: each a
     /// separate invocation through a fresh helper that reports the child's
@@ -138,6 +175,25 @@ impl Plan {
     pub const fn memory_runs(&self) -> usize {
         self.memory_runs
     }
+    /// Run exactly `paths`, one through 94 distinct relative entry paths of
+    /// the plan's suite, in the order given, instead of the whole suite.
+    /// The ordinary matrix runner selects corpus cases. When
+    /// [`super::super::command::run`] expands the series, paths name workload
+    /// entries, including generated paths, and one entry can select several
+    /// amended cells. An unknown path is refused before launching anything.
+    ///
+    /// # Errors
+    /// Refuses empty or oversized selections, duplicates and escaping or empty paths.
+    pub fn with_cases(mut self, paths: Vec<String>) -> Result<Self, Error> {
+        super::super::config::selection(&paths)?;
+        self.selection = Some(paths);
+        Ok(self)
+    }
+    /// The selected cases, in order; none when the whole suite runs.
+    #[must_use]
+    pub fn selection(&self) -> Option<&[String]> {
+        self.selection.as_deref()
+    }
     /// Ordered requested native profiles, indexed by [`Producer::Native`].
     #[must_use]
     pub fn profiles(&self) -> &[NativeExecution] {
@@ -148,13 +204,18 @@ impl Plan {
     pub const fn suite(&self) -> Suite {
         self.suite
     }
-    /// Complete schedule. Qualification visits the reference first. Later rounds
-    /// rotate both case and producer positions, without compacting refused cells.
-    /// The memory rounds follow the timed rounds.
+    /// Complete schedule under `reference`, the policy of the reference that
+    /// takes part, or none for a clingo-free campaign. Qualification visits the
+    /// reference first. Later rounds rotate both case and producer positions,
+    /// without compacting refused cells. The memory rounds follow the timed rounds.
     ///
     /// # Errors
     /// Refuses a case count outside the sealed corpus maximum.
-    pub fn slots(&self, cases: usize) -> Result<Vec<Slot>, Error> {
+    pub fn slots(
+        &self,
+        cases: usize,
+        reference: Option<ReferencePolicy>,
+    ) -> Result<Vec<Slot>, Error> {
         if !(1..=MAX_CASES).contains(&cases) {
             return Err(Error::Configuration("matrix cases must be 1..=94"));
         }
@@ -168,8 +229,9 @@ impl Plan {
             (Phase::Timed, self.repetitions),
             (Phase::Memory, self.memory_runs),
         ] {
-            let reference = phase == Phase::Qualification
-                || self.reference_policy == ReferencePolicy::AllPhases;
+            let reference = reference.is_some_and(|policy| {
+                phase == Phase::Qualification || policy == ReferencePolicy::AllPhases
+            });
             let width = self.profiles.len() + usize::from(reference);
             for round in 0..rounds {
                 for position in 0..cases {
@@ -249,15 +311,29 @@ pub struct Slot {
     /// Requested solver/profile.
     pub producer: Producer,
 }
+/// The tool that runs a campaign and writes its report, with its version: a
+/// report names what produced it beside the executables it measured, as
+/// benchmarking tools' result files do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Tool {
+    /// The tool's name, for example `zetesis-bench`.
+    pub name: String,
+    /// The tool's version.
+    pub version: String,
+}
+
 /// Library-owned experiment request, independent of clap and global I/O.
 #[derive(Debug)]
 pub struct Request<'a> {
+    /// The tool that runs the campaign; its report names it.
+    pub tool: Tool,
     /// Verified clean examples/correctness root.
     pub corpus: &'a Path,
     /// Absolute native executable.
     pub native: &'a Path,
-    /// Absolute independent clingo executable.
-    pub reference: &'a Path,
+    /// The independent reference solver when one takes part; absent, the
+    /// campaign is clingo-free.
+    pub reference: Option<Reference<'a>>,
     /// New no-clobber evidence path in an exclusively owned parent.
     pub report: &'a Path,
     /// Immutable profile/schedule configuration.

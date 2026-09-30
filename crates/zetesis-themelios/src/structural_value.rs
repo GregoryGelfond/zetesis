@@ -446,5 +446,4 @@ pub(crate) fn symbol_bytes(symbol: &Symbol) -> u128 {
 }
 
 #[cfg(test)]
-#[path = "structural_value_tests.rs"]
 mod tests;

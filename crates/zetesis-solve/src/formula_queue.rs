@@ -7,8 +7,9 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{BatchError, BatchLimits, CompletionExecutor, StableModels};
 
+use crate::batch_executor::{BatchResult, CandidateBatch};
 use crate::formula_execution::Failure;
-use crate::{BatchResult, CandidateBatch, SolveConfig, SolveError};
+use crate::{SolveConfig, SolveError};
 
 #[derive(Default)]
 /// Owns only reduct-verified models awaiting objective scoring or output.

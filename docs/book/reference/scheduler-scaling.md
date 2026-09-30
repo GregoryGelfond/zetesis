@@ -1,5 +1,7 @@
 # CPU candidate-region scheduling
 
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+
 The 24 September 2026 measurements show better high-worker performance on
 several larger workloads, alongside regressions on smaller ones. These are
 CPU results with eager grounding, indexed formula joins and region search.

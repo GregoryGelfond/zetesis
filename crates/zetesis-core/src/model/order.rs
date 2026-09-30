@@ -8,6 +8,7 @@ use super::{
 };
 
 const VECTOR_BYTES: u128 = size_of::<Vec<usize>>() as u128;
+const MARK_BITS: usize = usize::BITS as usize;
 
 /// Immutable semantic equivalence ranks for one exact borrowed occurrence map.
 ///
@@ -17,14 +18,19 @@ const VECTOR_BYTES: u128 = size_of::<Vec<usize>>() as u128;
 /// borrows its catalog, not a writer or another atom authority. A selected [`Model`]
 /// shares that catalog and can outlive this preparation.
 ///
-/// Preparation uses O(n log n) checked semantic comparisons and two n-cell
-/// integer buffers, retaining one. Selection uses O(m log m) integer comparisons
-/// and O(m) temporary cells; it does not compare atom payloads again. Structural
-/// comparison includes segment resolution and inspected term/text contents.
+/// Preparation uses O(n log n) checked semantic comparisons and retains two
+/// n-cell integer buffers: each occurrence's rank, and the occurrences in
+/// semantic order (equal ranks by ascending position). Selection marks the m
+/// supplied positions in an n-bit mask, then either walks the semantic order
+/// once (O(n) integer steps) or sorts the marked positions (O(m log m) integer
+/// comparisons), whichever the counts make cheaper; both publish the same model
+/// and neither compares atom payloads again. Structural comparison includes
+/// segment resolution and inspected term/text contents.
 #[derive(Debug)]
 pub struct ModelOrder<'catalog> {
     catalog: &'catalog AtomCatalog,
     ranks: Vec<usize>,
+    semantic: Vec<usize>,
     preparation_peak_bytes: u128,
 }
 
@@ -58,6 +64,7 @@ impl<'catalog> ModelOrder<'catalog> {
         let mut order = Self {
             catalog,
             ranks: Vec::new(),
+            semantic: Vec::new(),
             preparation_peak_bytes: 0,
         };
         let mut scratch = Vec::new();
@@ -121,7 +128,9 @@ impl<'catalog> ModelOrder<'catalog> {
                 previous = Some(position);
             }
             checked()?;
+            // The sorted positions are the semantic order; the scratch holds ranks.
             std::mem::swap(&mut order.ranks, &mut scratch);
+            order.semantic = scratch;
             Ok(())
         })();
         result.map_err(|failure| ModelPublicationFailure {
@@ -132,10 +141,11 @@ impl<'catalog> ModelOrder<'catalog> {
         Ok(order)
     }
 
-    /// Order header and actual retained rank capacity; excludes the catalog.
+    /// Order header and actual retained rank and semantic-order capacity;
+    /// excludes the catalog.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
-        size_of::<Self>() as u128 + cells(self.ranks.capacity())
+        size_of::<Self>() as u128 + cells(self.ranks.capacity()) + cells(self.semantic.capacity())
     }
 
     /// Actual named peak during successful preparation, including its scratch.
@@ -152,17 +162,29 @@ impl<'catalog> ModelOrder<'catalog> {
     /// published directly; its catalog and selection remain independent of this
     /// order's lifetime. No semantic comparison or payload import is repeated.
     ///
-    /// The allowance and success/failure peak include the retained order plus
-    /// this attempt's live position/scratch headers, actual capacities, growth
-    /// overlap and final selection header when allocated. Previously published
-    /// models, catalog payload, caller inputs, callback/receipt frames, allocator
-    /// metadata and Arc counters are excluded. Selection scratch is not retained.
+    /// Supplied positions are marked in an n-bit mask. When the m marked
+    /// positions are dense enough that m·⌈log₂(m + 1)⌉ reaches n, the prepared
+    /// semantic order is walked once, keeping the first marked occurrence of
+    /// each rank (the least marked position, since equal ranks ascend by
+    /// position), and the walk ends at the last marked occurrence. Otherwise the
+    /// marked positions are sorted by rank and position and each rank's first is
+    /// kept. The choice depends only on m and n and is made before either runs;
+    /// both publish the same model.
     ///
-    /// Permits precede iterator pulls, index/rank access, integer comparisons and
-    /// writes, reservations and final publication. A finite caller work budget
-    /// bounds successful iterator pulls; it cannot preempt a blocking `next`.
-    /// The first callback precedes iterator conversion and allocation. Stable
-    /// Rust's final Arc allocation remains infallible after the last permit.
+    /// The allowance and success/failure peak include the retained order plus
+    /// this attempt's live mask/position/scratch headers, actual capacities,
+    /// growth overlap and final selection header when allocated. Previously
+    /// published models, catalog payload, caller inputs, callback/receipt frames,
+    /// allocator metadata and Arc counters are excluded. The mask and scratch are
+    /// not retained.
+    ///
+    /// Permits precede iterator pulls, mask and rank access, sort comparisons,
+    /// writes, reservations and final publication. The walk's loop control and
+    /// its rank comparison follow the permit taken for the same occurrence. A finite caller work
+    /// budget bounds successful iterator pulls; it cannot preempt a blocking
+    /// `next`. The first callback precedes iterator conversion and allocation.
+    /// Stable Rust's final Arc allocation remains infallible after the last
+    /// permit.
     ///
     /// # Errors
     /// Returns the first invalid position, metadata-capacity, allocation or
@@ -174,14 +196,23 @@ impl<'catalog> ModelOrder<'catalog> {
         max_bytes: usize,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<ModelPublication, ModelPublicationFailure<E>> {
+        let mut marks = Vec::new();
         let mut selected = Vec::new();
         let mut scratch = Vec::new();
-        let base = self.retained_bytes() + 2 * VECTOR_BYTES;
+        let base = self.retained_bytes() + 3 * VECTOR_BYTES;
         let mut account = Account::new(max_bytes, base);
         let result = (|| {
             let mut checked = || before().map_err(ModelFailure::Stopped);
             checked()?;
             account.admit(base)?;
+            let count = self.ranks.len();
+            let words = count.div_ceil(MARK_BITS);
+            reserve(&mut marks, words, base, &mut account, &mut checked)?;
+            for _ in 0..words {
+                checked()?;
+                marks.push(0);
+            }
+            let mut marked = 0;
             let mut positions = positions.into_iter();
             loop {
                 checked()?;
@@ -189,71 +220,48 @@ impl<'catalog> ModelOrder<'catalog> {
                     break;
                 };
                 checked()?;
-                if position >= self.ranks.len() {
+                if position >= count {
                     return Err(ModelFailure::Model(ModelError::Position {
                         position,
-                        atoms: self.ranks.len(),
+                        atoms: count,
                     }));
                 }
-                // Vec<usize> storage is bounded by isize::MAX bytes, so one
-                // further cell count cannot overflow usize.
-                let needed = selected.len() + 1;
-                reserve(&mut selected, needed, base, &mut account, &mut checked)?;
-                checked()?;
-                selected.push(position);
-            }
-            reserve(
-                &mut scratch,
-                selected.len(),
-                base + cells(selected.capacity()),
-                &mut account,
-                &mut checked,
-            )?;
-            for _ in 0..selected.len() {
-                checked()?;
-                scratch.push(0);
-            }
-            crate::checked_sort::sort(
-                &mut selected,
-                &mut scratch,
-                |values, left, right, permit| {
-                    permit()?;
-                    let left = values[left];
-                    permit()?;
-                    let right = values[right];
-                    permit()?;
-                    let left_rank = self.ranks[left];
-                    permit()?;
-                    let right_rank = self.ranks[right];
-                    permit()?;
-                    let order = left_rank.cmp(&right_rank);
-                    if order.is_eq() {
-                        permit()?;
-                        Ok(left.cmp(&right))
-                    } else {
-                        Ok(order)
-                    }
-                },
-                &mut checked,
-            )?;
-            let mut previous = None;
-            let mut kept = 0;
-            for index in 0..selected.len() {
-                checked()?;
-                let position = selected[index];
-                checked()?;
-                let rank = self.ranks[position];
-                checked()?;
-                if previous != Some(rank) {
-                    checked()?;
-                    selected[kept] = position;
-                    kept += 1;
-                    previous = Some(rank);
+                let bit = 1 << (position % MARK_BITS);
+                let word = &mut marks[position / MARK_BITS];
+                if *word & bit == 0 {
+                    *word |= bit;
+                    marked += 1;
                 }
             }
-            checked()?;
-            selected.truncate(kept);
+            let other = base + cells(marks.capacity());
+            reserve(&mut selected, marked, other, &mut account, &mut checked)?;
+            if walks(marked, count) {
+                self.walk(&marks, marked, &mut selected, &mut checked)?;
+            } else {
+                for (index, &word) in marks.iter().enumerate() {
+                    checked()?;
+                    let mut bits = word;
+                    while bits != 0 {
+                        checked()?;
+                        selected.push(index * MARK_BITS + bits.trailing_zeros() as usize);
+                        bits &= bits - 1;
+                    }
+                }
+                reserve(
+                    &mut scratch,
+                    selected.len(),
+                    other + cells(selected.capacity()),
+                    &mut account,
+                    &mut checked,
+                )?;
+                for _ in 0..selected.len() {
+                    checked()?;
+                    scratch.push(0);
+                }
+                self.sort_marked(&mut selected, &mut scratch, &mut checked)?;
+            }
             drop(scratch);
+            drop(marks);
             let published =
                 self.retained_bytes() + size_of::<Selected>() as u128 + cells(selected.capacity());
             account.admit(published)?;
@@ -273,6 +281,100 @@ impl<'catalog> ModelOrder<'catalog> {
             peak_bytes: account.peak,
         })
     }
+
+    /// Keep the first marked occurrence of each rank along the semantic order,
+    /// stopping after the last marked occurrence. `selected` has room for
+    /// `marked` cells.
+    ///
+    /// The first marked occurrence of a rank is its least marked position, as
+    /// the sorting route keeps: preparation's merge sort is stable over
+    /// ascending positions, and occurrences of one rank compare equal, so equal
+    /// ranks appear in the semantic order by ascending position.
+    fn walk<E>(
+        &self,
+        marks: &[usize],
+        marked: usize,
+        selected: &mut Vec<usize>,
+        checked: &mut impl FnMut() -> Result<(), ModelFailure<E>>,
+    ) -> Result<(), ModelFailure<E>> {
+        let mut previous = None;
+        let mut seen = 0;
+        for &position in &self.semantic {
+            if seen == marked {
+                break;
+            }
+            checked()?;
+            if marks[position / MARK_BITS] & (1 << (position % MARK_BITS)) == 0 {
+                continue;
+            }
+            seen += 1;
+            checked()?;
+            let rank = self.ranks[position];
+            if previous != Some(rank) {
+                checked()?;
+                selected.push(position);
+                previous = Some(rank);
+            }
+        }
+        Ok(())
+    }
+
+    /// Sort marked positions by rank, then position, and keep each rank's first.
+    fn sort_marked<E>(
+        &self,
+        selected: &mut Vec<usize>,
+        scratch: &mut Vec<usize>,
+        checked: &mut impl FnMut() -> Result<(), ModelFailure<E>>,
+    ) -> Result<(), ModelFailure<E>> {
+        crate::checked_sort::sort(
+            selected,
+            scratch,
+            |values, left, right, permit| {
+                permit()?;
+                let left = values[left];
+                permit()?;
+                let right = values[right];
+                permit()?;
+                let left_rank = self.ranks[left];
+                permit()?;
+                let right_rank = self.ranks[right];
+                permit()?;
+                let order = left_rank.cmp(&right_rank);
+                if order.is_eq() {
+                    permit()?;
+                    Ok(left.cmp(&right))
+                } else {
+                    Ok(order)
+                }
+            },
+            checked,
+        )?;
+        let mut previous = None;
+        let mut kept = 0;
+        for index in 0..selected.len() {
+            checked()?;
+            let position = selected[index];
+            checked()?;
+            let rank = self.ranks[position];
+            checked()?;
+            if previous != Some(rank) {
+                checked()?;
+                selected[kept] = position;
+                kept += 1;
+                previous = Some(rank);
+            }
+        }
+        checked()?;
+        selected.truncate(kept);
+        Ok(())
+    }
+}
+
+/// Whether walking the n-occurrence semantic order is expected to cost no
+/// more than sorting `marked` positions: m·⌈log₂(m + 1)⌉ ≥ n.
+const fn walks(marked: usize, count: usize) -> bool {
+    let depth = (usize::BITS - marked.leading_zeros()) as usize;
+    marked.saturating_mul(depth) >= count
 }
 
 fn cells(capacity: usize) -> u128 {

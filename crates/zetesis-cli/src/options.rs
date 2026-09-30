@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
-pub(crate) mod values;
+mod values;
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -42,11 +42,11 @@ pub struct Options {
     /// cannot be combined with file roots in this source-bundle profile.
     #[arg(value_name = "FILE")]
     pub additional_inputs: Vec<PathBuf>,
-    /// Execution backend.
+    /// Execution backend: cpu (the default), gpu, metal or vulkan.
     ///
-    /// Auto retains CPU execution. Explicit GPU requests fail if unavailable;
-    /// device failure does not silently retry on CPU. GPU support is enabled by default.
-    #[arg(long, visible_alias = "device", value_parser = backend_parser(), default_value = "auto")]
+    /// `gpu` uses the platform's native API: Metal on macOS, Vulkan elsewhere.
+    /// An unavailable GPU fails; device failure does not silently retry on CPU.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
@@ -239,7 +239,7 @@ pub struct Options {
     /// and the leaves a device checks; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
     pub batch_size: NonZeroUsize,
-    /// Threads for candidate search; auto uses at most four available threads.
+    /// Threads for candidate search; auto uses the host's available parallelism.
     ///
     /// The closure route's pool and the region tree's walkers use this count.
     /// Auto falls back to one when the host does not report its parallelism.
@@ -249,7 +249,7 @@ pub struct Options {
     /// than one worker, models arrive in the schedule's order, which differs
     /// between runs; the family of answer sets is the same. Formula
     /// completion under `--search clauses` has a separate worker setting.
-    #[arg(long, visible_alias = "threads", value_name = "auto|N", value_parser = values::workers, default_value = "auto", hide_short_help = true)]
+    #[arg(long, visible_alias = "threads", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto", hide_short_help = true)]
     pub workers: NonZeroUsize,
     /// Workers for unresolved formula queries: under `--search clauses`, and
     /// under regions with one CPU walker or general device propagation.
@@ -348,13 +348,6 @@ pub struct Options {
     /// Omitted, it is the library default scaled by `--memory`.
     #[arg(long, hide_short_help = true)]
     pub max_batch_bytes: Option<u64>,
-}
-
-/// A conservative automatic pool, falling back to one when the host is unknown.
-fn host_workers() -> NonZeroUsize {
-    std::thread::available_parallelism()
-        .unwrap_or(NonZeroUsize::MIN)
-        .min(NonZeroUsize::new(4).expect("four is nonzero"))
 }
 
 /// The host's physical memory in bytes, read once per process the first
@@ -518,54 +511,10 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
     })
 }
 
-fn backend_parser() -> impl TypedValueParser<Value = Backend> {
-    policy_parser([
-        (
-            Backend::Auto,
-            PossibleValue::new(Backend::Auto.label())
-                .help("CPU execution until a measured GPU crossover supports automatic selection."),
-        ),
-        (
-            Backend::Cpu,
-            PossibleValue::new(Backend::Cpu.label())
-                .help("Source joins or static closure scans on an owned Rayon pool."),
-        ),
-        (
-            Backend::Gpu,
-            PossibleValue::new(Backend::Gpu.label())
-                .help("Exact integer GPU batches, including explicit lazy relational execution."),
-        ),
-        (
-            Backend::Metal,
-            PossibleValue::new(Backend::Metal.label()).help("Require a physical GPU using Metal."),
-        ),
-        (
-            Backend::Vulkan,
-            PossibleValue::new(Backend::Vulkan.label())
-                .help("Require a physical GPU using Vulkan."),
-        ),
-        (
-            Backend::Dx12,
-            PossibleValue::new(Backend::Dx12.label())
-                .help("Require a physical GPU using DirectX 12."),
-        ),
-        (
-            Backend::Gl,
-            PossibleValue::new(Backend::Gl.label())
-                .help("Require a physical GPU using OpenGL or OpenGL ES."),
-        ),
-        (
-            Backend::Nvidia,
-            PossibleValue::new(Backend::Nvidia.label())
-                .help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA."),
-        ),
-    ])
-}
-
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
         (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto hardware selection retains CPU.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. A GPU backend checks them in immutable relational rounds; the CPU backend on the host.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }

@@ -6,7 +6,8 @@ use super::*;
 use crate::FormulaResource;
 use crate::formula::Preparation;
 use crate::formula_support::{GroundingWork, SupportCatalog, complete};
-use zetesis_core::{Atom, Predicate, Value};
+use zetesis_core::Atom;
+use zetesis_test_support::programs::signed_numbered as atom;
 
 fn prepare(source: &str) -> Preparation {
     crate::formula_support::testing::prepare(source)
@@ -25,14 +26,6 @@ fn plan<'a>(prepared: &'a Prepared, catalog: &SupportCatalog) -> ProducerPlan<'a
         location(prepared),
     )
     .unwrap()
-    .unwrap()
-}
-
-fn atom(name: &str, sign: zetesis_core::Sign, values: &[i32]) -> Atom {
-    Atom::new(
-        Predicate::with_sign(name, values.len(), sign).unwrap(),
-        values.iter().copied().map(Value::Number).collect(),
-    )
     .unwrap()
 }
 

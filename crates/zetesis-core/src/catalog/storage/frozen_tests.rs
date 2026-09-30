@@ -1,17 +1,10 @@
-use std::{convert::Infallible, sync::Arc};
+use std::sync::Arc;
 
 use super::{Failure, Fault, FrozenVocabulary, PredicateId, Read, Store, TermId};
-use crate::catalog::{AtomRef, Limits, PredicateRef, TermRef};
+use crate::catalog::{AtomRef, PredicateRef, TermRef};
+use crate::test_support::{PERMIT, unlimited as limits};
 use crate::{Atom, Predicate, Value, ValueLimits, ValueNode};
 
-fn limits() -> Limits {
-    Limits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 fn base() -> (FrozenVocabulary, PredicateId, TermId, TermId) {
     let mut writer = Store::new(usize::MAX);
     let first = writer

@@ -1,10 +1,8 @@
 use super::super::{AtomId, PredicateId, Read, TermId};
 use super::*;
 use crate::catalog::{AtomRef, Limits, PredicateRef, TermRef};
+use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, Value};
-use std::convert::Infallible;
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 
 fn fixture() -> (Store, PredicateId, [TermId; 3]) {
     let mut store = Store::new(usize::MAX);

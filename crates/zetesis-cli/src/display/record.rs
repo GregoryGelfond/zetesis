@@ -213,8 +213,8 @@ mod value_output_tests {
 
     #[test]
     fn complete_typed_atom_spelling_preserves_every_writer_prefix() {
-        use crate::test_writer::BoundedWriter;
         use zetesis_core::{Sign, ValueLimits, ValueNode};
+        use zetesis_test_support::io::{BoundedWriter, FULL};
 
         let nested = Value::from_nodes(
             vec![
@@ -255,7 +255,7 @@ mod value_output_tests {
             let mut output = BoundedWriter::new(capacity);
             let error = write_atoms(&mut output, model.atoms().iter()).unwrap_err();
             assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
-            assert_eq!(error.to_string(), "diagnostic sink closed");
+            assert_eq!(error.to_string(), FULL);
             assert_eq!(output.bytes(), &expected.as_bytes()[..capacity]);
         }
         let mut output = BoundedWriter::new(expected.len());

@@ -1,9 +1,7 @@
 use std::cell::RefCell;
 
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Location, Span},
-};
+use crate::test_support::location;
+use themelios_base::span::Location;
 
 use super::*;
 use crate::formula::Preparation;
@@ -31,13 +29,6 @@ impl GroundingObserver for Observer {
         work: GroundingWork,
     ) {
         self.0.borrow_mut().push((outcome, work));
-    }
-}
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
     }
 }
 

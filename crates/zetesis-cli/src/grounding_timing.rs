@@ -93,5 +93,4 @@ fn field(sink: &mut impl Write, name: &str, value: Option<u128>) -> io::Result<(
 }
 
 #[cfg(test)]
-#[path = "../tests/support/grounding_timing_contracts.rs"]
 mod tests;

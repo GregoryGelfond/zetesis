@@ -31,14 +31,6 @@ pub enum ExecutionObservation<'a> {
         /// Possible instances visited during complete source admission.
         streamed_instances: u64,
     },
-    /// An explicitly supplied executor owns only bounded membership batches.
-    /// Capabilities do not identify hardware or establish successful execution.
-    ExternalExecutor {
-        /// Supported operations declared by this implementation.
-        capabilities: crate::ExecutorCapabilities,
-        /// Selected operation over the original immutable theory.
-        operation: crate::MembershipOperation,
-    },
     /// An admitted static relational representation is available.
     StaticGrounding {
         /// Requested materialization policy.
@@ -91,13 +83,6 @@ pub enum ExecutionObservation<'a> {
         /// Logical scratch ceiling, not process RSS.
         max_scratch_bytes: u64,
     },
-    /// Automatic execution retains CPU because no measured device crossover
-    /// has been established for the current policy.
-    AutomaticCpu,
-    /// Explicit shared source rounds select CPU execution.
-    SharedCpu,
-    /// This binary has no compiled device support.
-    DeviceNotCompiled,
     /// Host source joins will supply device consequence rounds.
     #[cfg(feature = "gpu")]
     LazyDeviceGrounding {

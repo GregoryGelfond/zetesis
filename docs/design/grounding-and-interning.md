@@ -22,7 +22,7 @@ Several execution representations already replace larger objects with IDs:
 
 | Representation | Meaning of an ID |
 | --- | --- |
-| [`AtomInterner`](../../crates/zetesis-core/src/atom_interner.rs) | A unique atom in one appendable owner |
+| [`AtomInterner`](../../crates/zetesis-core/src/catalog/interner.rs) | A unique atom in one appendable owner |
 | [`GroundProgram`](../../crates/zetesis-core/src/ground.rs) | An atom position in one static ground program |
 | Formula theory | An atom or formula-node position in that theory |
 | [`Relation`](../../crates/zetesis-core/src/relation.rs) | A value in one relation's equality dictionary, or a row occurrence |

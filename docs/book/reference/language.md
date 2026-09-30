@@ -96,7 +96,7 @@ The condition determines eligibility, while its original implication remains
 in the frozen reduct. A positive head atom obtains support only from its own
 condition together with the rule body; default and double negation retain their
 original form. See the [conditional-head laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/conditional-heads.md)
-and [complete-family controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/conditional_heads.rs).
+and [complete-family controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/conditional_heads.rs).
 
 For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
@@ -121,7 +121,7 @@ located `ProfileFeature::Term` refusal. The same boundary applies when the
 comparison chain is preceded by `not not`. clingo 5.8.2 completes both forms
 with the single answer `{d(1), d(2), p((-f(2),(2,)))}`. This is an existing
 admission limitation, not a disagreement about answer-set semantics. The
-[finite-value controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_values.rs)
+[finite-value controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_values.rs)
 check the exact refusal separately from admitted constructor comparisons.
 
 A generating comparison chain may bound several variables before their values
@@ -155,7 +155,7 @@ remain 32-bit. Evaluation failures follow the
 [arithmetic family policy](#numeric-boundaries-and-refusal-meaning); coefficient
 and bound capacity refusals do not become skippable instances.
 Expansion work and retained storage are charged before enumeration. See the
-[finite-chain contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_chains.rs)
+[finite-chain contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_chains.rs)
 for scoped formulas, complete answer families and resource boundaries.
 
 A positive conditional consequent may bind a local variable from one part of
@@ -170,7 +170,7 @@ The witness plan can extract `X` before evaluating `X+1`; it does not solve an
 equation for an otherwise unbound variable. Local witness variables cannot
 establish outer-rule or condition safety. Empty completed universal families
 are true, while recursive conditions retain their original implications.
-The maintained [witness tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/evaluated_witnesses.rs)
+The maintained [witness tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/evaluated_witnesses.rs)
 exercise these distinctions.
 
 Under `not` or `not not`, anonymous positions instead denote an existential
@@ -203,7 +203,7 @@ Anonymous inputs inside arithmetic or unary wrappers,
 classical-negative anonymous predicates and genuinely unbound named inputs
 remain refused. Expanding a pool does not let one alternative supply another
 alternative's missing input. See the
-[conditional contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/consequent_alternatives.rs)
+[conditional contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/consequent_alternatives.rs)
 and the finite-carrier laws in
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean).
 
@@ -237,7 +237,7 @@ inputs are bound. Every interval occurrence is independent, including repeated
 spellings. An empty range can yield no instances, but cannot hide an unsafe
 source name or a required arithmetic failure. Source expansion, value storage,
 substitution and work limits still refuse the whole operation. The
-[finite occurrence controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_pools.rs)
+[finite occurrence controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_pools.rs)
 compare complete answers and every original/frozen pair with explicit expansions.
 Their mathematical coverage premises are described in the
 [finite occurrence guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-occurrences.md).
@@ -274,7 +274,7 @@ Source bindings, eligibility, measured values and reached arithmetic still under
 their required validation before a comparison is folded. A missing extremum-head
 value is neutral under the explicit rule below; it does not bypass validation.
 
-The [logical-bound contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/logical_bounds.rs)
+The [logical-bound contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/logical_bounds.rs)
 cover declared answer families, all comparison relations, arbitrary frozen
 `M/J` queries, source comparisons and resource boundaries. Their preservation
 law is described under [implementation correspondence](../lean/correspondence.md).
@@ -478,7 +478,7 @@ Pools in local conditions or aggregate tuples remain local to their element;
 weight, priority and complete objective-tuple pools form independent complete
 keys. Repeated complete keys still contribute once if any corresponding
 condition is true. Nested interval fields use the same scoped data generators.
-The [objective pool contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs)
+The [objective pool contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_pools.rs)
 compare the complete scored families with explicit observations. An alternative
 must establish its own required bindings: `d(X;X+1)` cannot use the first
 alternative to make `X` safe in the second. Unresolved binding dependencies and
@@ -502,7 +502,7 @@ activity exclusion or numeric selection. Only retained numeric rows allocate
 closed objective query nodes. `FormulaLimits::max_objective_formula_atoms` and
 `max_objective_formula_nodes` bound each transient body independently of the
 original theory and retained `objective.max_condition_nodes`; cumulative source
-work and value budgets still apply. The [scoped objective contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_scopes.rs)
+work and value budgets still apply. The [scoped objective contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_scopes.rs)
 check full costs, scope, required errors and independent limits.
 
 Transient rich producer and projection-condition validation instead apply
@@ -530,7 +530,7 @@ A completed support round adds no new positive head atom after all its joins and
 binding proposals finish. Resource exhaustion returns a typed failure, not a
 program with incomplete objective coverage. Recursive value generation need not
 terminate; finite storage in an intermediate round supplies no completion result.
-The [cyclic producer contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_cycles.rs)
+The [cyclic producer contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_rich_cycles.rs)
 cover complete scored families, source order, independent precision and resource
 exits. Their [coverage argument](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)
 separates observed closure from the source-to-reduct projection premise.
@@ -548,7 +548,7 @@ priority evaluation.
 The base predicate and each forwarding edge qualify independently. A filtered
 or multiply produced descendant uses its own source-support carrier; observing
 it cannot discard an established base or sibling refinement. The
-[composition contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_carrier_composition.rs)
+[composition contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_carrier_composition.rs)
 check this independence under source order, additional observers and competing
 producers, including the shared work and storage limits.
 
@@ -563,22 +563,22 @@ A source carrier describes possible key selections, not realizable answers.
 Several admitted observers use the existing complete binding join; their
 original equalities retain correlations in each answer.
 
-The [invariant-priority tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priority_certificates.rs)
+The [invariant-priority tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_priority_certificates.rs)
 include empty endpoints, complete tuple identities and correlated weight/priority
-inputs. The [source-carrier tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/tests/finite_carrier_sessions.rs)
+inputs. The [source-carrier tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/tests/integration/finite_carrier_sessions.rs)
 check changing counts, sums, extrema and forwarding through complete scored
 answers. Carrier construction has explicit value, work and retained-entry
 limits; numeric subset construction may require exponential work and space.
 Filtered and multiple observers, mixed extrema, negative dependencies and
 conditional producers use their complete finite source relations when the
-flat refinement does not apply. The [producer contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_producers.rs)
-check full scored families and unchanged original formulas. The [priority contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priorities.rs)
+flat refinement does not apply. The [producer contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_rich_producers.rs)
+check full scored families and unchanged original formulas. The [priority contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_priorities.rs)
 check complete scored answers, same-binding numeric presence, empty and zero
 cases, evaluation failures and inclusive specialization limits.
 
 Finite source eligibility does not promise clingo's exact retained priority
 layout. An extra slot may be zero across all answers even when clingo omits it.
-These [versioned reporting cases](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priority_reporting.rs)
+These [versioned reporting cases](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_priority_reporting.rs)
 preserve explicit raw differences while comparing full answer identities,
 costs at named priorities, pairwise ordering and every optimum tie. They are
 distinct from the aggregate-head answer-family differences documented above.
@@ -652,9 +652,9 @@ atoms witness it; equal concrete branches coalesce before counting. The numeric
 aggregate examples above have an impossible constructor match and show no value. They neither coerce
 numbers into constructors nor narrow widened aggregate arithmetic.
 
-The [binding contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_bindings.rs),
-[inverse contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_inverse.rs)
-and [expression contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_expressions.rs)
+The [binding contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_bindings.rs),
+[inverse contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_inverse.rs)
+and [expression contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_expressions.rs)
 retain original source witnesses. Cyclic or unseeded local bindings and missing
 measures in authored extremum elements retain their separate explicit boundaries;
 an empty extremum itself remains valid. Source-template limits bound admitted
@@ -788,7 +788,7 @@ p((X+1)**31):-d(X),X=0.` evaluates the head only for `X=0`. The same
 distinction applies to local choice elements. Negative gates and aggregate
 truth remain formulas and do not prune that stage. Aggregate-head tuple
 contribution checks retain their own scopes.
-The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/arithmetic_validation.rs)
+The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/arithmetic_validation.rs)
 check defined complete families, incomplete joins, required failures and explicit
 clingo differences.
 
@@ -814,7 +814,7 @@ and the native formula interpretation. It is not proof that every guarded input
 is undefined or a modeling error. The lower-level finite formula library can
 represent endpoint formulas. The
 [admission predicate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs)
-and [source regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/extrema_source.rs)
+and [source regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/extrema_source.rs)
 locate the current boundary.
 
 `#inf` and `#sup` are distinct extremal terms. Empty minimum and maximum results

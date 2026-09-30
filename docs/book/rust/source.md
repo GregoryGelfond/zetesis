@@ -373,7 +373,8 @@ carry, `:- G, p(k, Y), q(j, C), s != Y + 10*C.`, is prepared as two such
 constraints demanding `s \ 10` of `p` and `s / 10` of `q`, when the facts of
 the conditions binding the digit and the carry admit only digits in `0..9`
 and only natural numbers, facts being all that produces them
-(`zetesis_domain::facts`); the equation then has one solution, and for a
+(`zetesis_domain::FactIndex`, which reads a program's facts once for every
+such question); the equation then has one solution, and for a
 negative `s` no solution, in which case both forms fire. The product of the
 demanded value with every value the key admits is never formed; the
 [observation record](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md#keyed-constraints-the-one-atom-the-key-admits)

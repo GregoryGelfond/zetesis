@@ -8,24 +8,30 @@ comparison and performance measurements. The main command provides:
 | `zetesis test corpus` | Compare the maintained corpus with clingo. |
 | `zetesis test backend` | Check a device against known complete answer families. |
 | `zetesis test scalability` | Qualify maintained authored/corpus workloads across CPU thread counts. |
-| `zetesis bench corpus` | Measure ordinary solver processes. |
-| `zetesis bench compare` | Compare retained measurement reports. |
 
-See the [command guide](../../docs/book/reference/commands.md) for these interfaces.
-The following compatibility tools remain available; the detailed examples below
-also cover their source-integrity and selected-upstream capabilities:
+The separate `zetesis-bench` tool composes this crate's campaigns: `run`
+measures a suite's answer families, timings and memory, beside clingo when
+there is one and alone when there is not, and `compare` compares saved reports
+as tables, JSON or Markdown. See the
+[command guide](../../docs/book/reference/commands.md) and the
+[benchmarking guide](../../docs/book/reference/benchmarking.md) for these
+interfaces.
+
+This crate also builds two developer tools. They are not installed; build them
+from the checkout with `cargo build --locked --release -p zetesis-validation`
+and run them from `target/release`. The detailed examples below also cover
+their source-integrity and selected-upstream capabilities:
 
 | Command | Purpose |
 |---|---|
 | `zetesis-corpus` | Verify curated source collections or compare selected upstream cases. |
 | `zetesis-validate` | Run the self-contained correctness regression collection against external clingo and zetesis. |
-| `zetesis-perf` | Compare ordinary runs or measure a grounding/backend matrix. |
 
-The production solver neither invokes nor depends on this validation executable.
+The production solver neither invokes nor depends on these validation executables.
 clingo is an external reference. Reports record observations and their limits;
 a process exit alone does not establish answer-set correctness.
 
-See [Install and run](../../README.md#install-and-run) for installation and the
+See [INSTALL.md](../../INSTALL.md) for installation and the
 [contributing guide](../../CONTRIBUTING.md#verification-and-review) for gates.
 Library entry points are documented in [src/lib.rs](src/lib.rs); generate their
 reference with `cargo doc --locked -p zetesis-validation --no-deps --open`.
@@ -72,7 +78,7 @@ changing inputs or interfering with execution. `Report::passed`,
 parsing JSON. `Report::to_json` supplies the fallible schema-1 presentation view;
 publication belongs to the caller. A rendering failure does not alter the
 retained comparison decision. See [the corpus API](src/corpus_comparison.rs) and
-its [direct-consumer tests](tests/corpus_comparison.rs).
+its [direct-consumer tests](tests/integration/corpus_comparison.rs).
 
 `CaseResult::native_exit` and `reference_exit` retain both the exit code and, on
 Unix, the terminating signal. The JSON view preserves `exit_code` and adds
@@ -114,7 +120,7 @@ zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
 
 That stronger claim belongs to those selected sources, not every corpus program.
 See [reported answers](src/answers.rs),
-[native decoding](tests/native_json_answers.rs) and
+[native decoding](tests/integration/native_json_answers.rs) and
 [selected comparisons](src/selected.rs).
 
 ## Require actual GPU execution
@@ -143,48 +149,50 @@ The logical scratch allowance is separate from RSS and the default scalar CPU
 cursor. A zero allowance can produce a recorded incomplete native run; the
 validator does not raise it or silently substitute another route.
 Current completion telemetry must reconcile those requested settings.
-See [execution contracts](tests/support/execution_contracts.rs) and
-[CLI controls](tests/cli_contracts.rs).
+See [execution contracts](src/corpus_comparison/execution/tests.rs) and
+[CLI controls](tests/integration/cli_contracts.rs).
 
 ## Measure ordinary solves and execution matrices
 
 ```sh
-zetesis-perf examples/correctness --zetesis /path/to/zetesis \
-  --clingo /path/to/clingo --report target/cpu-comparison.json
+zetesis-bench run examples/correctness --suite baseline \
+  --zetesis /path/to/zetesis --clingo /path/to/clingo --report target/baseline.json
 
-zetesis-perf examples/correctness --suite corpus \
-  --profile cpu-eager --profile cpu-lazy \
-  --profile metal-eager --profile metal-lazy \
+zetesis-bench run examples/correctness \
+  --compare-backends cpu,metal --compare-grounders \
   --zetesis /path/to/zetesis --clingo /path/to/clingo \
   --report target/execution-matrix.json
 ```
 
-The default ordinary comparison uses the maintained CPU baseline cases, not the
-whole collection. It times uninstrumented processes after qualification;
-separate statistics invocations are outside that timed population.
-The matrix instead uses native `--json --stats --models 0`, so it measures
-instrumented runs including typed output. The memory allowance is the host's,
-as the command takes it, and each native sample's statistics record it. Native full-atom JSON and clingo's
-selected display output can differ in volume. These are different protocols,
-not interchangeable timing populations.
+`zetesis-bench run` measures through the matrix, which runs native
+`solve --all --json --stats`, so it measures instrumented runs including typed
+output. The memory allowance is the host's, as the command takes it, and each
+native sample's statistics record it. Native full-atom JSON and clingo's
+selected display output can differ in volume. The ordinary comparison instead
+times uninstrumented processes after qualification, with separate statistics
+invocations outside that timed population; it has no command, and its engine,
+`performance::run`, serves library callers and the maintained example. These
+are different protocols, not interchangeable timing populations.
 
 `--suite queens` selects the maintained queens encodings;
-`--suite corpus` selects the full clean collection. Repeated `--profile`
-arguments select execution cells. Requested eager/lazy and CPU/GPU policies are
-recorded alongside actual routes; unsupported combinations remain failures.
-Native and reference worker settings are explicit and can differ.
-Arrange a quiet measurement window and choose explicit invocation/campaign
-deadlines appropriate to the suite. Input/executable seals do not capture
-thermal state, dynamic libraries or the rest of the host environment.
+`--suite corpus` selects the full clean collection. The profile axes
+(`--compare-backends`, `--compare-grounders`, `--compare-threads`) select
+execution cells. Requested eager/lazy and CPU/GPU policies are recorded
+alongside actual routes; unsupported combinations remain failures. Native and
+reference worker settings are explicit and can differ. Arrange a quiet
+measurement window and choose explicit invocation/campaign deadlines appropriate
+to the suite. Input/executable seals do not capture thermal state, dynamic
+libraries or the rest of the host environment.
 
-Repeated `--case <manifest-relative.lp>` selects arbitrary runnable clean corpus
-cases for the ordinary CPU campaign. Add `--memory-runs 5` for separate paired
-child RSS observations; these never enter timed samples, and the matrix and
-series campaigns take the same option, running their memory rounds after the
-timed rounds. The CLI seals its own
-runner executable alongside the solvers and selected transitive source closure.
-Full native help is captured when short help advertises it, under the same
-capture limits, with no fallback after a failed full-help query.
+Repeated `--case <manifest-relative.lp>` measures chosen cases of the suite, as
+`Plan::with_cases` does for library callers; the ordinary campaign's
+`Schedule::for_cases` selects arbitrary runnable clean corpus cases. Add
+`--memory-runs 5` for separate paired child RSS observations; these never enter
+timed samples and run after the timed rounds. The run seals its own
+executable, the memory rounds' helper, alongside the solvers and selected
+transitive source closure. Full native help is captured when short help
+advertises it, under the same capture limits, with no fallback after a failed
+full-help query.
 
 Explicit selections and memory populations use ordinary report schema 2.
 Named presets without those extensions retain schema 1. Completed schema-2
@@ -222,8 +230,8 @@ explicit selections; `Schedule::with_memory` appends the separate population.
 `run_with_runner` seals the supplied executable and uses it as a fresh helper
 only for resource samples. They own bounded acquisition and separate
 report publication. See [performance](src/performance.rs),
-[matrix scheduling](tests/matrix_schedule.rs) and
-[matrix accounting](tests/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
+[matrix scheduling](tests/integration/matrix_schedule.rs) and
+[matrix accounting](../zetesis-bench/tests/integration/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
 documents reproducible commands, limits and protocol boundaries.
 
 ### Derive explicit parameter workloads
@@ -234,6 +242,19 @@ The plan's suite is the allowed base population. Multiple instances can share
 an entry path; their content identities must be distinct. Use one request per
 native executable when comparing two zetesis revisions with the same clingo
 reference and workload list.
+
+The request's optional `reference` names clingo and what it is for:
+`ReferencePolicy::AllPhases` times it beside every profile, and
+`QualificationOnly` uses it only to establish each census. Without one, the
+campaign is clingo-free: each native family is qualified against its workload's
+recorded contract, and a workload without a contract, such as an amended board,
+is recorded as needing clingo and is not launched. The report records the policy
+its run used as a `RecordedPolicy`, `ClingoFree` included, and rebuilds its
+schedule from it.
+`Plan::with_cases` narrows the suite to named cases, run in the order given; a
+path that is not a case of the suite is refused before anything is launched.
+The request's `tool` names what runs the campaign and its version, and the
+report records it beside the executables it measured.
 
 `Workload::original` retains the default corpus contract. `Workload::amended`
 accepts `ConstantAmendment { source_path, name, expected, replacement }` and
@@ -257,8 +278,8 @@ before retention. Combined workloads must also fit the request's existing
 source/metadata ceilings. Each launched private source closure is sealed before
 and after execution. Derived-workload reports use matrix schema 2; unchanged
 suite reports retain schema 1. No first-answer phase is added by this entry
-point; memory rounds follow the plan when requested. See [workload admission](tests/workload_admission.rs) and
-[matrix acquisition](tests/matrix_campaign.rs) for checked library usage.
+point; memory rounds follow the plan when requested. See [workload admission](tests/integration/workload_admission.rs) and
+[matrix acquisition](../zetesis-bench/tests/integration/matrix_campaign.rs) for checked library usage.
 The [manual's runnable client](../../docs/book/reference/measurement-protocols.md#compare-a-parameterized-workload)
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
@@ -269,7 +290,7 @@ The maintained commands select one library-owned workload population:
 
 ```sh
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
-zetesis bench corpus --suite scalability --grounder eager \
+zetesis-bench run --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
@@ -287,11 +308,11 @@ The reusable `scalability::run_with_cancellation` admits those workloads and
 delegates to the same bounded matrix runner. Its request must select
 `matrix::Suite::Scalability`; a plain matrix run without explicit workloads
 refuses that suite instead of silently running only its three corpus entries.
-`matrix::Plan::qualification` schedules only one reference and one invocation
-per native profile for each workload. It adds no timing, warmup or RSS rounds
+`matrix::Plan::qualification` schedules one invocation per native profile for
+each workload, and one reference invocation when clingo takes part. It adds no timing, warmup or RSS rounds
 and refuses adding memory rounds. This is the plan used by `test scalability`.
-`bench corpus --compare-threads` retains normal native measurement rounds and
-uses clingo only for qualification. Both preserve the complete workload and
+`zetesis-bench run --compare-threads` retains normal native measurement
+rounds and uses clingo only for qualification. Both preserve the complete workload and
 executable identities, typed refusals, cancellation and no-clobber report
 publication. `--stats` on the test controls optional elapsed presentation;
 mandatory route observations remain in its evidence.
@@ -300,9 +321,8 @@ mandatory route observations remain in its evidence.
 limits)` provides the same bounded admission independently of the maintained
 selection. It parses through themelios, rejects unsupported source closure and
 checks constant edits before retaining original/derived identities. The shared
-fixture population and its limits belong to the library, not a standalone
-experiment runner. See [authored workload admission](tests/authored_workloads.rs)
-and [CLI checks](../zetesis-cli/tests/scalability_commands.rs).
+fixture population and its limits belong to the library. See [authored workload admission](tests/integration/authored_workloads.rs)
+and [CLI checks](../zetesis-cli/tests/integration/scalability_commands.rs).
 
 ### Measure a fixed series of cells
 
@@ -323,8 +343,8 @@ never takes, in particular the closure route; the sizes were measured to keep
 every cell's complete native JSON output under `series::CAPTURE_BYTES`, which
 the library does not check.
 
-`zetesis-perf --suite series` runs the cells through the instrumented matrix.
-The `cpu-auto` profile requests the shipped defaults, automatic grounding and
+`zetesis-bench run --suite series` runs the cells through the instrumented matrix.
+Its default profile requests the shipped defaults, automatic grounding and
 oracle; the observation retains the grounding mode actually taken, so an
 automatic cell cannot be read as an explicit eager or lazy one. `--time-limit`
 adds a cooperative deadline to every native profile, which changes what the
@@ -332,12 +352,14 @@ solver polls at every charged unit and is therefore part of the profile's
 identity; `--oracle` requests a reduct procedure explicitly. Cells a change is meant to move, a refusal or a timeout, stay in the
 set: their typed decisions are the observation.
 
-`zetesis-series --report LABEL=PATH …` derives one comparison from published
+`zetesis-bench compare LABEL=PATH … --markdown` derives one comparison from published
 reports over the same cells and profiles: exact integer medians of the timed
-native and reference intervals, later-over-earlier ratios of medians in the
-order given, the counters the native records carry (published models,
-candidates examined, charged search work, driver and phase medians), and each
-report's native executable seal. A cell that did not pass is listed by its
+native and reference intervals, the counters the native records carry (published
+models, candidates examined, charged search work, driver and phase medians), and
+each report's native executable seal. Its tables divide the medians, later over
+earlier in the order given and each against the reference, exactly and to three
+decimals rounded half up; its JSON publishes the medians and no rounded ratio.
+A cell that did not pass is listed by its
 decisions, never averaged. The reports may differ in the search method
 alone, which a profile spells as `search`, or as `candidates` in a report
 written before that field, with `region_workers` beside it in one
@@ -352,9 +374,9 @@ the candidate setup and generation phases; membership sums certificate
 setup and checks, closure and exact reduct membership, reduct preparation,
 original validation and the device's host oracle; grounding is the
 grounding stage, absent under lazy grounding, which grounds within
-membership. `--json` writes the derived comparison for retention beside the
-manual's observations; the raw reports stay with their builds. See [series cells](tests/series_cells.rs), [family
-generation](tests/performance_families.rs) and [the view](tests/series_view.rs).
+membership. `--output` keeps the derived comparison for retention beside the
+manual's observations; the raw reports stay with their builds. See [series cells](tests/integration/series_cells.rs), [family
+generation](tests/integration/performance_families.rs) and [the view](tests/integration/series_view.rs).
 
 ## Compose capture, contracts and publication
 
@@ -407,12 +429,12 @@ allocator and operating-system overhead; deadlines are not hard real-time
 guarantees. Publication requires the documented parent-directory ownership
 assumptions and is not a durable-storage guarantee.
 
-Maintained tests include [capture](tests/process_capture.rs),
-[curated integrity](tests/curated_corpus.rs),
-[clean examples](tests/example_corpus.rs),
-[reported answers](tests/reported_answers.rs),
-[selected runs](tests/selected_campaign.rs) and
-[ordinary timing](tests/performance_campaign.rs).
+Maintained tests include [capture](tests/integration/process_capture.rs),
+[curated integrity](tests/integration/curated_corpus.rs),
+[clean examples](tests/integration/example_corpus.rs),
+[reported answers](tests/integration/reported_answers.rs),
+[selected runs](tests/integration/selected_campaign.rs) and
+[ordinary timing](../zetesis-bench/tests/integration/performance_campaign.rs).
 The [outcome guide](../../docs/book/rust/outcomes.md) explains the corresponding
 semantic distinctions on the solver side.
 
@@ -420,7 +442,7 @@ semantic distinctions on the solver side.
 ### Application benchmark adapters
 
 `performance::command::run` accepts the existing typed matrix request and an
-explicit `matrix::NativeInvocation`. `Solve` uses `solve --device … --threads …
+explicit `matrix::NativeInvocation`. `Solve` uses `solve --backend … --threads …
 --all`; `Legacy` retains the flat interface for sealed older executables. Both
 request machine answers and statistics and share all fixed scheduling,
 qualification, timeout, no-clobber publication and failure accounting. The
@@ -436,7 +458,9 @@ for that cell; the outcome counts remain visible. Memory medians use only
 successfully validated separate memory rounds and are absent when unavailable.
 
 `series::read_compare` reads saved matrix reports within an explicit per-file
-source-byte bound, then calls the existing identity-checked comparison. The
-`zetesis-series` compatibility executable and `zetesis bench compare` use this
-same reader. `process::memory::measure_to_file` is the fresh supervised helper's
-shared no-clobber resource-record adapter, not a cumulative in-process RSS API.
+source-byte bound, then calls the existing identity-checked comparison.
+`zetesis-bench compare` uses this same reader.
+`process::memory::measure_to_file` is the fresh supervised helper's shared
+no-clobber resource-record adapter, not a cumulative in-process RSS API, and
+`process::memory::run_helper` is the helper's whole behaviour, answered under
+`process::memory::HELPER_COMMAND` by `zetesis-bench`.

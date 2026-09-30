@@ -1,19 +1,9 @@
 use super::*;
 use crate::formula_support::components::Term;
 use crate::formula_support::testing::{Fixture, binding};
+use crate::test_support::location;
 use crate::{ExpansionLimits, expansion::Budget};
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Span},
-};
 use zetesis_core::{Atom, Predicate, Value, ValueNodeRef};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 fn query(fixture: &mut Fixture) -> (PendingCondition, SourceSelection) {
     let limits = FormulaLimits::default();

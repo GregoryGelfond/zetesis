@@ -100,7 +100,9 @@ impl From<crate::ExecutorError> for Failure {
             crate::ExecutorError::Shape { expected, actual } => {
                 SolveError::FormulaBatchShape { expected, actual }
             }
-            error => SolveError::Executor(error),
+            crate::ExecutorError::ForeignBatch => {
+                SolveError::Executor(crate::ExecutorError::ForeignBatch)
+            }
         })
     }
 }
@@ -118,20 +120,10 @@ pub(crate) trait MembershipExecution {
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
-
-    fn batch_execution(&self, _: &StableModels) -> Option<crate::BatchExecutionStatistics> {
-        None
-    }
 }
 
 pub(crate) enum Execution {
     Cpu,
-    External {
-        executor: Box<dyn crate::batch_executor::ErasedExecutor>,
-        capabilities: crate::ExecutorCapabilities,
-        operation: crate::MembershipOperation,
-        queue: Box<crate::formula_queue::BatchQueue>,
-    },
     Batched {
         queue: Box<crate::formula_queue::BatchQueue>,
     },
@@ -151,42 +143,13 @@ pub(crate) enum Execution {
 }
 
 impl Execution {
-    pub(crate) fn external(
-        mut executor: Box<dyn crate::batch_executor::ErasedExecutor>,
-        capabilities: crate::ExecutorCapabilities,
-        plan: crate::MembershipPlan<'_>,
-        options: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
-        observations: &mut impl ExecutionSink,
-    ) -> Result<Self, Failure> {
-        cancellation
-            .poll()
-            .map_err(|stop| Failure::Search(stop.into()))?;
-        executor.prepare(plan, cancellation)?;
-        cancellation
-            .poll()
-            .map_err(|stop| Failure::Search(stop.into()))?;
-        observations
-            .record(Event::ExternalExecutor {
-                capabilities,
-                operation: plan.operation(),
-            })
-            .map_err(Failure::Run)?;
-        Ok(Self::External {
-            executor,
-            capabilities,
-            operation: plan.operation(),
-            queue: Box::new(crate::formula_queue::BatchQueue::new(options).map_err(Failure::Run)?),
-        })
-    }
-
     pub(crate) fn with_resources(
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
-        if matches!(options.backend, Backend::Auto | Backend::Cpu) {
+        if options.backend == Backend::Cpu {
             observations.record(Event::CpuFormula {
                 oracle: options.oracle,
                 grounder: options.grounder,
@@ -274,7 +237,7 @@ impl Execution {
 impl MembershipExecution for Execution {
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         match self {
-            Self::Cpu | Self::External { .. } => None,
+            Self::Cpu => None,
             Self::Batched { queue } => Some(batch_statistics(
                 queue,
                 models,
@@ -300,24 +263,6 @@ impl MembershipExecution for Execution {
         }
     }
 
-    fn batch_execution(&self, models: &StableModels) -> Option<crate::BatchExecutionStatistics> {
-        match self {
-            Self::External {
-                capabilities,
-                operation,
-                queue,
-                ..
-            } => Some(crate::BatchExecutionStatistics {
-                capabilities: *capabilities,
-                operation: *operation,
-                batches: models.batch_statistics(),
-                completion: queue.accounting(),
-                queued_models: queue.len(),
-            }),
-            _ => None,
-        }
-    }
-
     fn next(
         &mut self,
         models: &mut StableModels,
@@ -326,11 +271,6 @@ impl MembershipExecution for Execution {
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         match self {
-            Self::External {
-                executor, queue, ..
-            } => queue.next(models, options, cancellation, |batch| {
-                executor.check(batch, cancellation)
-            }),
             Self::Cpu => {
                 let _ = options;
                 let _ = cancellation;
@@ -526,15 +466,7 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         (**self).statistics(models)
     }
-    fn batch_execution(&self, models: &StableModels) -> Option<crate::BatchExecutionStatistics> {
-        (**self).batch_execution(models)
-    }
 }
 
 #[cfg(all(test, feature = "gpu"))]
-#[path = "../tests/support/formula_resources.rs"]
-mod resource_tests;
-
-#[cfg(all(test, feature = "gpu"))]
-#[path = "../tests/support/formula_residuals.rs"]
-mod residual_tests;
+mod tests;

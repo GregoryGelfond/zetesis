@@ -43,17 +43,17 @@ the unchanged source hash, edit and resulting source hash.
 
 ## Check and measure thread scaling
 
-The maintained `test scalability` and `bench corpus --suite scalability`
-commands use one library-owned population: queens at n=8/9/10, pigeonhole at
-h=5/6/7, and the established correctness queens variant 02, SEND+MORE=MONEY and
-task-allocation cases. Test qualifications request CPU eager/indexed region
+The maintained `zetesis test scalability` and `zetesis-bench run --suite
+scalability` commands use one library-owned population: queens at n=8/9/10,
+pigeonhole at h=5/6/7, and the established correctness queens variant 02,
+SEND+MORE=MONEY and task-allocation cases. Test qualifications request CPU eager/indexed region
 search at 1, 2, 4, 8 and 14 threads with one completion worker by default.
 
 From the repository root, with zetesis and clingo installed:
 
 ```sh
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
-zetesis bench corpus --suite scalability --grounder eager \
+zetesis-bench run --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
@@ -81,7 +81,7 @@ three established cases. Each authored workload carries its own source seal and
 typed contract; it makes no upstream-cleaning or generated-family proof claim.
 The command adapters use `performance::scalability::run_with_cancellation`; Rust
 consumers can select the same workloads and qualification or measurement plan
-without clap or a separate experiment executable. See the
+without clap. See the
 [command guide](../../docs/book/reference/commands.md#check-conformance) for
 source roots, compact JSON views and preserved refusal diagnostics.
 
@@ -94,6 +94,6 @@ expected complete results. `cargo test -p zetesis-validation --test
 authored_examples` checks source integrity and contract registration without
 solving large instances. `scripts/check.sh oracle` also runs the complete clingo
 contracts for both defaults and Einstein. Native default checks live in
-`zetesis-cli/tests/authored_examples.rs`, including Einstein with automatic
+`zetesis-cli/tests/integration/authored_examples.rs`, including Einstein with automatic
 grounding and unchanged resource defaults. These checks run in the portable
 test suite.

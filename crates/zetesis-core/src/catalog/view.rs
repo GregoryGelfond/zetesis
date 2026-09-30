@@ -134,10 +134,13 @@ impl<'a> TermRef<'a> {
         }
     }
 
+    // Prefix membership suffices: the segment directory covers exactly the
+    // counted identities, and an operation resolves the term when it reads it.
     pub(crate) fn new(snapshot: impl Into<Read<'a>>, id: TermId) -> Option<Self> {
         let snapshot = snapshot.into();
-        snapshot.term(id)?;
-        Some(Self(TermSource::Canonical { snapshot, id }))
+        snapshot
+            .contains_term(id)
+            .then_some(Self(TermSource::Canonical { snapshot, id }))
     }
 
     pub(super) fn scoped(self) -> Option<(super::TermRead<'a>, TermId)> {
@@ -639,8 +642,9 @@ enum PredicateSource<'a> {
         sign: Sign,
     },
 }
-// Canonical resolution happens once before reading the signature fields.
-// This projection borrows the same admitted prefix as its PredicateRef.
+// Canonical resolution reads the signature once; the name's text is resolved
+// only by an operation that reads the name. This projection borrows the same
+// admitted prefix as its PredicateRef.
 #[derive(Clone, Copy)]
 enum PredicateRead<'a> {
     Canonical(storage::Predicate<'a>),
@@ -659,6 +663,22 @@ impl<'a> PredicateRead<'a> {
             Self::Signed { name, arity, sign } => (name, arity, sign),
         }
     }
+
+    fn arity(self) -> usize {
+        match self {
+            Self::Canonical(predicate) => predicate.arity(),
+            Self::Ingress(predicate) => predicate.arity(),
+            Self::Signed { arity, .. } => arity,
+        }
+    }
+
+    fn sign(self) -> Sign {
+        match self {
+            Self::Canonical(predicate) => predicate.sign(),
+            Self::Ingress(predicate) => predicate.sign(),
+            Self::Signed { sign, .. } => sign,
+        }
+    }
 }
 impl<'a> From<&'a Predicate> for PredicateRef<'a> {
     fn from(predicate: &'a Predicate) -> Self {
@@ -666,10 +686,12 @@ impl<'a> From<&'a Predicate> for PredicateRef<'a> {
     }
 }
 impl<'a> PredicateRef<'a> {
+    // Prefix membership suffices, as for terms: no signature or name is read.
     pub(crate) fn new(snapshot: impl Into<Read<'a>>, id: PredicateId) -> Option<Self> {
         let snapshot = snapshot.into();
-        snapshot.predicate(id)?;
-        Some(Self(PredicateSource::Canonical { snapshot, id }))
+        snapshot
+            .contains_predicate(id)
+            .then_some(Self(PredicateSource::Canonical { snapshot, id }))
     }
 
     pub(super) fn canonical(self) -> Option<(Read<'a>, PredicateId)> {
@@ -714,15 +736,16 @@ impl<'a> PredicateRef<'a> {
     pub fn name(self) -> &'a str {
         self.read().signature().0
     }
-    /// Number of arguments, without visiting them.
+    /// Number of arguments, without visiting them or reading the name.
     #[must_use]
     pub fn arity(self) -> usize {
-        self.read().signature().1
+        self.read().arity()
     }
-    /// Classical predicate sign, independent of default negation.
+    /// Classical predicate sign, independent of default negation. The name is
+    /// not read.
     #[must_use]
     pub fn sign(self) -> Sign {
-        self.read().signature().2
+        self.read().sign()
     }
     /// Compare with an owned signature using exact name bytes, arity and sign.
     #[must_use]
@@ -826,12 +849,17 @@ impl Ord for PredicateRef<'_> {
         self.read().signature().cmp(&other.read().signature())
     }
 }
-impl Hash for PredicateRef<'_> {
+impl Hash for PredicateRead<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let (name, arity, sign) = self.read().signature();
+        let (name, arity, sign) = self.signature();
         name.hash(state);
         arity.hash(state);
         sign.hash(state);
+    }
+}
+impl Hash for PredicateRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.read().hash(state);
     }
 }
 impl fmt::Debug for PredicateRef<'_> {
@@ -865,8 +893,10 @@ enum AtomSource<'a> {
 // Every atom row was admitted only after its predicate and argument IDs.
 // Its references therefore remain valid in this same read prefix; following a
 // row link does not need another membership check or a copied argument payload.
+// One resolution serves a whole traversal: the row cannot change while its
+// prefix is borrowed.
 #[derive(Clone, Copy)]
-enum AtomRead<'a> {
+pub(super) enum AtomRead<'a> {
     Canonical {
         snapshot: Read<'a>,
         row: storage::Atom<'a>,
@@ -875,7 +905,7 @@ enum AtomRead<'a> {
     Carrier(&'a crate::carrier::CarrierAtom),
 }
 impl<'a> AtomRead<'a> {
-    fn predicate(self) -> PredicateRef<'a> {
+    pub(super) fn predicate(self) -> PredicateRef<'a> {
         match self {
             Self::Canonical { snapshot, row } => PredicateRef(PredicateSource::Canonical {
                 snapshot,
@@ -886,7 +916,7 @@ impl<'a> AtomRead<'a> {
         }
     }
 
-    fn argument(self, column: usize) -> Option<TermRef<'a>> {
+    pub(super) fn argument(self, column: usize) -> Option<TermRef<'a>> {
         match self {
             Self::Canonical { snapshot, row } => Some(TermRef(TermSource::Canonical {
                 snapshot,
@@ -894,6 +924,31 @@ impl<'a> AtomRead<'a> {
             })),
             Self::Ingress(atom) => atom.values().get(column).map(TermRef::from),
             Self::Carrier(atom) => atom.argument(column),
+        }
+    }
+
+    // Callers have established column < arity() from this same resolved row.
+    // Iterators use this invariant to provide their exact-size contract; checked
+    // comparisons invoke it only after admitting the corresponding lookup.
+    pub(super) fn at_valid_column(self, column: usize) -> TermRef<'a> {
+        self.argument(column)
+            .expect("column is within the admitted atom arity")
+    }
+
+    // A carrier atom holds one domain coordinate per argument of its signature.
+    pub(super) fn arity(self) -> usize {
+        match self {
+            Self::Canonical { row, .. } => row.arity(),
+            Self::Ingress(atom) => atom.predicate().arity(),
+            Self::Carrier(atom) => atom.coordinates().len(),
+        }
+    }
+
+    pub(super) fn arguments(self) -> ArgumentIter<'a> {
+        ArgumentIter {
+            atom: self,
+            front: 0,
+            back: self.arity(),
         }
     }
 }
@@ -915,12 +970,15 @@ impl<'a> AtomRef<'a> {
         }
     }
 
+    // Prefix membership suffices, as for terms: the row is resolved once by
+    // each operation that reads it.
     pub(super) fn new(snapshot: impl Into<Read<'a>>, id: AtomId) -> Option<Self> {
         let snapshot = snapshot.into();
-        snapshot.atom(id)?;
-        Some(Self(AtomSource::Canonical { snapshot, id }))
+        snapshot
+            .contains_atom(id)
+            .then_some(Self(AtomSource::Canonical { snapshot, id }))
     }
-    fn read(self) -> AtomRead<'a> {
+    pub(super) fn read(self) -> AtomRead<'a> {
         match self.0 {
             AtomSource::Canonical { snapshot, id } => AtomRead::Canonical {
                 snapshot,
@@ -1042,15 +1100,16 @@ impl<'a> AtomRef<'a> {
                 .map(Ordering::reverse);
         }
         before()?;
-        let predicate = self.predicate();
+        let atom = self.read();
+        let predicate = atom.predicate();
         let query_predicate = other.predicate_with(&mut before)?;
         let order = predicate.compare_ref_with(query_predicate, &mut before)?;
         if !order.is_eq() {
             return Ok(order);
         }
-        for column in 0..predicate.arity() {
+        for column in 0..atom.arity() {
             before()?;
-            let term = self.values().at_valid_column(column);
+            let term = atom.at_valid_column(column);
             let query_term = other.argument_with(column, &mut before)?;
             let order = term.compare_ref_with(query_term, &mut before)?;
             if !order.is_eq() {
@@ -1069,19 +1128,19 @@ impl<'a> AtomRef<'a> {
     /// No partial atom is returned. Shared owner envelopes retain the allocation
     /// behavior of the owned constructors, not universal allocation recovery.
     pub fn to_atom(self, limits: ValueLimits) -> Result<Atom, Fault> {
-        let predicate = self.predicate();
-        let requested = predicate.arity() as u128 * std::mem::size_of::<Value>() as u128
-            + predicate.name().len() as u128;
+        let atom = self.read();
+        let (name, arity, sign) = atom.predicate().read().signature();
+        let requested = arity as u128 * std::mem::size_of::<Value>() as u128 + name.len() as u128;
         ceiling(ValueResource::Bytes, requested, limits.max_bytes)?;
         let mut values = Vec::new();
         values
-            .try_reserve_exact(predicate.arity())
+            .try_reserve_exact(arity)
             .map_err(|_| Fault::Allocation)?;
-        let mut bytes = values.capacity() as u128 * std::mem::size_of::<Value>() as u128
-            + predicate.name().len() as u128;
+        let mut bytes =
+            values.capacity() as u128 * std::mem::size_of::<Value>() as u128 + name.len() as u128;
         ceiling(ValueResource::Bytes, bytes, limits.max_bytes)?;
-        let name = copy_text(predicate.name(), &mut bytes, limits.max_bytes)?;
-        for term in self.values() {
+        let name = copy_text(name, &mut bytes, limits.max_bytes)?;
+        for term in atom.arguments() {
             let remaining =
                 limits.max_bytes - usize::try_from(bytes).map_err(|_| Fault::Overflow)?;
             let value = term.to_value(ValueLimits {
@@ -1094,8 +1153,7 @@ impl<'a> AtomRef<'a> {
             ceiling(ValueResource::Bytes, bytes, limits.max_bytes)?;
             values.push(value);
         }
-        let predicate = Predicate::with_sign(name, predicate.arity(), predicate.sign())
-            .map_err(|_| Fault::Shape)?;
+        let predicate = Predicate::with_sign(name, arity, sign).map_err(|_| Fault::Shape)?;
         Ok(Atom::from_valid_parts(predicate, values))
     }
 }
@@ -1117,10 +1175,13 @@ impl Ord for AtomRef<'_> {
     }
 }
 impl Hash for AtomRef<'_> {
+    // One row and one signature resolution produce the writes of the ingress
+    // atom with equal contents.
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.predicate().hash(state);
-        self.predicate().arity().hash(state);
-        for term in self.values() {
+        let atom = self.read();
+        atom.predicate().read().hash(state);
+        atom.arity().hash(state);
+        for term in atom.arguments() {
             term.hash(state);
         }
     }
@@ -1145,17 +1206,18 @@ impl PartialOrd<Atom> for AtomRef<'_> {
 }
 
 /// Borrowed ordered argument columns. Indexing returns a reference value, not a
-/// reference to a separately stored row cell. Canonical access includes storage
-/// resolution; ingress access borrows its original argument slice.
+/// reference to a separately stored row cell. Canonical length and indexing each
+/// resolve the row; an iterator resolves it once for its whole traversal.
+/// Ingress access borrows its original argument slice.
 #[derive(Clone, Copy)]
 pub struct Arguments<'a> {
     atom: AtomRef<'a>,
 }
 impl<'a> Arguments<'a> {
-    /// Argument count, without visiting argument payloads.
+    /// Argument count, without visiting argument payloads or the predicate name.
     #[must_use]
     pub fn len(self) -> usize {
-        self.atom.predicate().arity()
+        self.atom.read().arity()
     }
     /// Whether this is a nullary atom's empty tuple.
     #[must_use]
@@ -1168,26 +1230,16 @@ impl<'a> Arguments<'a> {
         self.atom.read().argument(column)
     }
 
-    // Callers have established column < len() from this same immutable atom.
-    // Iterators use this invariant to provide their exact-size contract; checked
-    // comparisons invoke it only after admitting the corresponding lookup.
-    fn at_valid_column(self, column: usize) -> TermRef<'a> {
-        self.at(column)
-            .expect("column is within the admitted atom arity")
-    }
     /// Borrow an argument, with the same meaning as [`Self::at`].
     #[must_use]
     pub fn get(self, column: usize) -> Option<TermRef<'a>> {
         self.at(column)
     }
-    /// Exact-size, double-ended traversal; cloning copies only cursor state.
+    /// Exact-size, double-ended traversal of one resolved row; cloning copies
+    /// only cursor state.
     #[must_use]
     pub fn iter(self) -> ArgumentIter<'a> {
-        ArgumentIter {
-            arguments: self,
-            front: 0,
-            back: self.len(),
-        }
+        self.atom.read().arguments()
     }
 }
 impl fmt::Debug for Arguments<'_> {
@@ -1219,12 +1271,18 @@ impl<'a> IntoIterator for Arguments<'a> {
     }
 }
 
-/// Exact borrowed argument traversal. No node, text or argument vector is copied.
-#[derive(Clone, Debug)]
+/// Exact borrowed argument traversal. The row is resolved once, when the
+/// traversal starts. No node, text or argument vector is copied.
+#[derive(Clone)]
 pub struct ArgumentIter<'a> {
-    arguments: Arguments<'a>,
+    atom: AtomRead<'a>,
     front: usize,
     back: usize,
+}
+impl fmt::Debug for ArgumentIter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.clone()).finish()
+    }
 }
 impl<'a> Iterator for ArgumentIter<'a> {
     type Item = TermRef<'a>;
@@ -1234,7 +1292,7 @@ impl<'a> Iterator for ArgumentIter<'a> {
         }
         let column = self.front;
         self.front += 1;
-        Some(self.arguments.at_valid_column(column))
+        Some(self.atom.at_valid_column(column))
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.back - self.front;
@@ -1247,7 +1305,7 @@ impl DoubleEndedIterator for ArgumentIter<'_> {
             return None;
         }
         self.back -= 1;
-        Some(self.arguments.at_valid_column(self.back))
+        Some(self.atom.at_valid_column(self.back))
     }
 }
 impl ExactSizeIterator for ArgumentIter<'_> {}
@@ -1388,10 +1446,8 @@ fn copy_node(
 }
 
 #[cfg(test)]
-#[path = "equality_tests.rs"]
 mod equality_tests;
 #[cfg(test)]
-#[path = "atom_equality_tests.rs"]
 mod atom_equality_tests;
 
 #[cfg(test)]
@@ -1575,6 +1631,244 @@ mod tests {
             assert!(arguments.next().is_none());
             assert!(arguments.next_back().is_none());
             assert!(atom_ref.values().at(4).is_none());
+        }
+    }
+
+    fn nested(depth: usize) -> Value {
+        let mut nodes = vec![
+            ValueNode::Function {
+                name: "h".into(),
+                sign: Sign::Positive,
+                arity: 1,
+            };
+            depth
+        ];
+        nodes.push(ValueNode::Symbol("x".into()));
+        Value::from_nodes(nodes, ValueLimits::default()).unwrap()
+    }
+
+    // Arities zero, one and four, scalar and nested arguments; `-p/4` recurs in
+    // a later publication with new vocabulary.
+    fn traversed_atoms() -> Vec<Atom> {
+        vec![
+            atom(),
+            Atom::new(Predicate::new("q", 0).unwrap(), Vec::new()).unwrap(),
+            Atom::new(
+                Predicate::with_sign("r", 1, Sign::Negative).unwrap(),
+                vec![Value::Number(1)],
+            )
+            .unwrap(),
+            Atom::new(
+                Predicate::with_sign("p", 4, Sign::Negative).unwrap(),
+                vec![
+                    Value::Number(1),
+                    Value::Symbol("a".into()),
+                    Value::String("b".into()),
+                    nested(3),
+                ],
+            )
+            .unwrap(),
+        ]
+    }
+
+    // One publication per atom: each row and its new vocabulary occupy their
+    // own segment, and every earlier snapshot keeps its shorter prefix.
+    fn segmented(atoms: &[Atom]) -> (Store, Vec<Snapshot>, Vec<AtomId>) {
+        let mut store = Store::new(16_000_000);
+        let mut snapshots = Vec::new();
+        let mut ids = Vec::new();
+        for atom in atoms {
+            ids.push(store.import_atom(atom, Limits::default()).unwrap());
+            snapshots.push(store.snapshot(0).unwrap());
+        }
+        (store, snapshots, ids)
+    }
+
+    #[test]
+    fn argument_traversal_agrees_across_segments_and_readers() {
+        let atoms = traversed_atoms();
+        let (store, snapshots, ids) = segmented(&atoms);
+        let latest = snapshots.last().unwrap();
+        for (index, (atom, &id)) in atoms.iter().zip(&ids).enumerate() {
+            for view in [
+                AtomRef::new(&snapshots[index], id).unwrap(),
+                AtomRef::new(latest, id).unwrap(),
+                AtomRef::new(&store, id).unwrap(),
+            ] {
+                let arguments = view.values();
+                assert_eq!(arguments.len(), atom.values().len());
+                assert!(arguments.iter().eq(atom.values().iter().cloned()));
+                assert!(
+                    arguments
+                        .iter()
+                        .rev()
+                        .eq(atom.values().iter().rev().cloned())
+                );
+                for (column, value) in atom.values().iter().enumerate() {
+                    assert_eq!(arguments.at(column).unwrap(), *value);
+                }
+                assert!(arguments.at(atom.values().len()).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn predicate_fields_agree_across_segments() {
+        // `p/2` and `-p/1` reuse the name text interned with `p/1` in an earlier
+        // segment; every field must still read the admitted signature.
+        let atoms = [
+            Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(1)]).unwrap(),
+            Atom::new(
+                Predicate::new("p", 2).unwrap(),
+                vec![Value::Number(1), Value::Number(2)],
+            )
+            .unwrap(),
+            Atom::new(
+                Predicate::with_sign("p", 1, Sign::Negative).unwrap(),
+                vec![Value::Number(3)],
+            )
+            .unwrap(),
+        ];
+        let (store, snapshots, ids) = segmented(&atoms);
+        let latest = snapshots.last().unwrap();
+        for (index, (atom, &id)) in atoms.iter().zip(&ids).enumerate() {
+            for view in [
+                AtomRef::new(&snapshots[index], id).unwrap(),
+                AtomRef::new(latest, id).unwrap(),
+                AtomRef::new(&store, id).unwrap(),
+            ] {
+                let predicate = view.predicate();
+                assert_eq!(predicate.name(), atom.predicate().name());
+                assert_eq!(predicate.arity(), atom.predicate().arity());
+                assert_eq!(predicate.sign(), atom.predicate().sign());
+                assert_eq!(predicate, *atom.predicate());
+                assert_eq!(hash_writes(&predicate), hash_writes(atom.predicate()));
+            }
+        }
+    }
+
+    #[test]
+    fn atom_hash_writes_agree_across_segments_and_readers() {
+        let atoms = traversed_atoms();
+        let (store, snapshots, ids) = segmented(&atoms);
+        let latest = snapshots.last().unwrap();
+        for (index, (atom, &id)) in atoms.iter().zip(&ids).enumerate() {
+            for view in [
+                AtomRef::new(&snapshots[index], id).unwrap(),
+                AtomRef::new(latest, id).unwrap(),
+                AtomRef::new(&store, id).unwrap(),
+            ] {
+                assert_eq!(hash_writes(&view), hash_writes(atom));
+            }
+        }
+    }
+
+    #[test]
+    fn atom_order_agrees_with_ingress_across_owners() {
+        // Reversed publication gives the right owner different IDs and segment
+        // boundaries; the order must depend on contents alone.
+        let atoms = traversed_atoms();
+        let reversed: Vec<_> = atoms.iter().rev().cloned().collect();
+        let (_, left, left_ids) = segmented(&atoms);
+        let (_, right, right_ids) = segmented(&reversed);
+        let (left, right) = (left.last().unwrap(), right.last().unwrap());
+        for (left_atom, &left_id) in atoms.iter().zip(&left_ids) {
+            let left_view = AtomRef::new(left, left_id).unwrap();
+            for (right_atom, &right_id) in reversed.iter().zip(&right_ids) {
+                let right_view = AtomRef::new(right, right_id).unwrap();
+                let expected = AtomRef::from(left_atom).cmp(&AtomRef::from(right_atom));
+                assert_eq!(left_view.cmp(&right_view), expected);
+                assert_eq!(left_view.compare(right_atom), expected);
+                assert_eq!(
+                    left_view.compare_ref_with(right_view, || Ok::<_, Infallible>(())),
+                    Ok(expected)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn checked_canonical_key_comparison_keeps_its_permit_schedule() {
+        // A canonical atom compared with a substitution key reads its row
+        // once; one permit still precedes each signature, argument and term
+        // step, and a refusal stops before the step it would admit.
+        let atom = atom();
+        let (snapshot, id) = snapshot(&atom, false);
+        let view = AtomRef::new(&snapshot, id).unwrap();
+        let empty: &[Value] = &[];
+        let key_of = |atom: &Atom| {
+            AtomPattern::new(
+                atom.predicate().clone(),
+                atom.values().iter().cloned().map(Term::Constant).collect(),
+            )
+            .unwrap()
+        };
+        let pattern = key_of(&atom);
+        let key = pattern.key(empty).unwrap();
+        let mut permits = 0;
+        assert_eq!(
+            view.compare_key_with(&key, || {
+                permits += 1;
+                Ok::<_, Infallible>(())
+            }),
+            Ok(Ordering::Equal)
+        );
+        assert_eq!(permits, 70);
+        for cutoff in 0..permits {
+            let mut accepted = 0;
+            assert_eq!(
+                view.compare_key_with(&key, || {
+                    if accepted == cutoff {
+                        return Err("stop");
+                    }
+                    accepted += 1;
+                    Ok(())
+                }),
+                Err("stop")
+            );
+            assert_eq!(accepted, cutoff);
+        }
+        for other in traversed_atoms() {
+            let pattern = key_of(&other);
+            let key = pattern.key(empty).unwrap();
+            assert_eq!(
+                view.compare_key_with(&key, || Ok::<_, Infallible>(())),
+                AtomRef::from(&atom).compare_key_with(&key, || Ok::<_, Infallible>(()))
+            );
+        }
+    }
+
+    #[test]
+    fn checked_foreign_atom_comparison_keeps_its_permit_schedule() {
+        // Independent owners compare contents: one permit precedes each
+        // signature, argument and term step, and a refusal stops before it.
+        let atom = atom();
+        let (_, left, left_ids) = segmented(std::slice::from_ref(&atom));
+        let (_, right, right_ids) = segmented(&traversed_atoms());
+        let left = AtomRef::new(left.last().unwrap(), left_ids[0]).unwrap();
+        let right = AtomRef::new(right.last().unwrap(), right_ids[0]).unwrap();
+        let mut permits = 0;
+        assert_eq!(
+            left.compare_ref_with(right, || {
+                permits += 1;
+                Ok::<_, Infallible>(())
+            }),
+            Ok(Ordering::Equal)
+        );
+        assert_eq!(permits, 96);
+        for cutoff in 0..permits {
+            let mut accepted = 0;
+            assert_eq!(
+                left.compare_ref_with(right, || {
+                    if accepted == cutoff {
+                        return Err("stop");
+                    }
+                    accepted += 1;
+                    Ok(())
+                }),
+                Err("stop")
+            );
+            assert_eq!(accepted, cutoff);
         }
     }
 

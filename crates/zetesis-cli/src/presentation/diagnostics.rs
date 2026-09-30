@@ -11,7 +11,6 @@ pub(crate) enum Label {
     Oracle,
     Grounding,
     Backend,
-    Auto,
 }
 impl Label {
     const fn text(self) -> &'static str {
@@ -20,7 +19,6 @@ impl Label {
             Self::Oracle => "Oracle",
             Self::Grounding => "Grounding",
             Self::Backend => "Backend",
-            Self::Auto => "Auto",
         }
     }
 }
@@ -88,8 +86,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
     fn observe(&mut self, observation: crate::ExecutionObservation<'_>) -> Result<(), Self::Error> {
         use crate::ExecutionObservation as Event;
         match observation {
-            Event::ExternalExecutor { capabilities, operation } => self.metadata(Label::Backend,
-                format_args!("supplied batch executor; operation: {operation:?}; capabilities: {capabilities:?}")),
             Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
                 Label::Grounding,
                 format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),
@@ -127,11 +123,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 "Parallel candidate production: {workers} workers; joined before batch membership checking"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
-            Event::AutomaticCpu => self.metadata(Label::Auto,
-                format_args!("CPU selected; no measured GPU crossover for this execution profile.")),
-            Event::SharedCpu => self.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery.")),
-            Event::DeviceNotCompiled => self.metadata(Label::Auto,
-                format_args!("GPU support was not compiled; using CPU without device discovery.")),
             #[cfg(feature = "gpu")]
             Event::LazyDeviceGrounding { requested } => self.metadata(Label::Grounding,
                 format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", requested.label())),
@@ -172,9 +163,4 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
 }
 
 #[cfg(test)]
-#[path = "../../tests/support/objective_writer_contracts.rs"]
-mod objective_diagnostic_tests;
-
-#[cfg(all(test, feature = "gpu"))]
-#[path = "../../tests/support/backend_writer_contracts.rs"]
-mod backend_diagnostic_tests;
+mod tests;

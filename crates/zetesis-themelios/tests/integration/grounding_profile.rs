@@ -1,0 +1,561 @@
+//! Public phase observation describes work without changing admitted formulas.
+
+mod lending_rows;
+
+use std::cell::{Cell, RefCell};
+
+use themelios_base::span::Location;
+use zetesis_test_support::repository;
+use zetesis_themelios::{
+    AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
+    GroundingWork, admit_formula_with_grounding_observer, prepare_formula,
+};
+
+#[derive(Clone, Copy, Debug)]
+struct Record {
+    phase: GroundingPhase,
+    location: Option<Location>,
+    outcome: GroundingOutcome,
+    work: GroundingWork,
+}
+
+#[derive(Default)]
+struct Observer {
+    active: Cell<bool>,
+    phase: Cell<Option<(GroundingPhase, Option<Location>)>>,
+    records: RefCell<Vec<Record>>,
+}
+
+impl GroundingObserver for Observer {
+    fn enter(&self) {
+        assert!(!self.active.replace(true));
+    }
+    fn exit(&self) {
+        assert!(self.active.replace(false));
+        assert!(self.phase.get().is_none());
+    }
+    fn details_enabled(&self) -> bool {
+        assert!(self.active.get());
+        true
+    }
+    fn phase_enter(&self, phase: GroundingPhase, location: Option<Location>) {
+        assert!(self.active.get());
+        assert!(self.phase.replace(Some((phase, location))).is_none());
+    }
+    fn phase_exit(
+        &self,
+        phase: GroundingPhase,
+        location: Option<Location>,
+        outcome: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        assert_eq!(self.phase.take(), Some((phase, location)));
+        self.records.borrow_mut().push(Record {
+            phase,
+            location,
+            outcome,
+            work,
+        });
+    }
+}
+
+fn compile(
+    source: &str,
+    limits: &FormulaLimits,
+    observer: Option<&dyn GroundingObserver>,
+) -> Result<AdmittedFormula, FormulaFailure> {
+    admit_formula_with_grounding_observer(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        *limits,
+        observer,
+    )
+}
+
+#[test]
+fn profile_preserves_the_compiled_subject() {
+    let source = "digit(0..3). 1 {p(X):digit(X)} 1. :- p(X), X+1>2. #minimize{X:p(X)}. #show p/1.";
+    let observer = Observer::default();
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap();
+    assert_eq!(measured.atoms(), plain.atoms());
+    assert_eq!(measured.theory().nodes(), plain.theory().nodes());
+    assert_eq!(measured.theory().roots(), plain.theory().roots());
+    assert_eq!(measured.formula_origins(), plain.formula_origins());
+    assert_eq!(measured.objective_origins(), plain.objective_origins());
+    assert_eq!(
+        measured.objective_declarations(),
+        plain.objective_declarations()
+    );
+    assert_eq!(
+        measured.objectives().templates().iter().collect::<Vec<_>>(),
+        plain.objectives().templates().iter().collect::<Vec<_>>()
+    );
+    assert!(!observer.active.get());
+}
+
+#[test]
+fn phase_counts_reconcile_with_materialized_storage() {
+    let observer = Observer::default();
+    let admitted = compile(
+        "p(1). 1 {q(X):p(X)} 1. -q(1).",
+        &FormulaLimits::default(),
+        Some(&observer),
+    )
+    .unwrap();
+    let records = observer.records.borrow();
+    let sum = |field: fn(GroundingWork) -> Option<u64>| {
+        records
+            .iter()
+            .map(|record| field(record.work).unwrap())
+            .sum::<u64>()
+    };
+    assert_eq!(
+        sum(|work| work.atoms_inserted),
+        admitted.atoms().len() as u64
+    );
+    assert_eq!(
+        sum(|work| work.nodes_inserted),
+        admitted.theory().nodes().len() as u64
+    );
+    assert_eq!(
+        sum(|work| work.roots),
+        admitted.theory().roots().len() as u64
+    );
+}
+
+#[test]
+fn support_counts_describe_completed_rounds() {
+    let observer = Observer::default();
+    compile("p(1).", &FormulaLimits::default(), Some(&observer)).unwrap();
+    let records = observer.records.borrow();
+    let support = records
+        .iter()
+        .find(|r| r.phase == GroundingPhase::SupportCompletion)
+        .unwrap();
+    assert_eq!(support.work.support_rounds, Some(2));
+    assert_eq!(support.work.support_atoms, Some(1));
+    assert_eq!(support.work.support_index_entries, Some(1));
+}
+
+#[test]
+fn support_operation_work_reaches_the_library_observer() {
+    let source = "p(3).p(1).p(2).q(X):-p(X).";
+    let observer = Observer::default();
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap();
+    assert_eq!(measured.atoms(), plain.atoms());
+    assert_eq!(measured.theory().nodes(), plain.theory().nodes());
+    assert_eq!(measured.theory().roots(), plain.theory().roots());
+    let records = observer.records.borrow();
+    let work = records
+        .iter()
+        .find(|record| record.phase == GroundingPhase::SupportCompletion)
+        .unwrap()
+        .work;
+    let operations = [
+        work.support_production_work,
+        work.support_order_work,
+        work.support_wake_work,
+        work.support_publication_work,
+    ]
+    .map(Option::unwrap);
+    assert!(operations.iter().all(|amount| *amount > 0));
+    assert!(operations.iter().sum::<u64>() < work.support_construction_work.unwrap());
+    let join = work.support_join_work.unwrap();
+    let head = work.support_head_work.unwrap();
+    assert!(join > 0 && head > 0);
+    assert!(join + head < work.support_production_work.unwrap());
+    assert_eq!(work.support_atoms, Some(6));
+}
+
+#[test]
+fn recursive_support_appends_each_posting_once() {
+    for bound in [16, 100, 200, 400] {
+        let observer = Observer::default();
+        let admitted = compile(
+            &format!("p(0). p(X+1):-p(X),X<{bound}."),
+            &FormulaLimits {
+                max_work: 1_048_576,
+                ..Default::default()
+            },
+            Some(&observer),
+        )
+        .unwrap();
+        assert_eq!(admitted.atoms().len(), bound + 1);
+        let records = observer.records.borrow();
+        let support = records
+            .iter()
+            .find(|record| record.phase == GroundingPhase::SupportCompletion)
+            .unwrap();
+        assert_eq!(
+            support.work.support_index_entries,
+            Some(u64::try_from(bound + 1).unwrap())
+        );
+    }
+}
+
+#[test]
+fn recursive_support_visits_only_new_positive_rows() {
+    for bound in [16, 100, 200, 400] {
+        let observer = Observer::default();
+        compile(
+            &format!("p(0). p(X+1):-p(X),X<{bound}."),
+            &FormulaLimits {
+                max_work: 1_048_576,
+                ..Default::default()
+            },
+            Some(&observer),
+        )
+        .unwrap();
+        let records = observer.records.borrow();
+        let support = records
+            .iter()
+            .find(|record| record.phase == GroundingPhase::SupportCompletion)
+            .unwrap();
+        assert_eq!(support.work.join_rows, Some(bound + 1));
+        assert_eq!(support.work.support_rounds, Some(bound + 2));
+    }
+}
+
+#[test]
+fn arithmetic_counts_describe_the_joined_rule() {
+    let observer = Observer::default();
+    compile(
+        "p(1). :- p(X), X+1<3.",
+        &FormulaLimits::default(),
+        Some(&observer),
+    )
+    .unwrap();
+    let records = observer.records.borrow();
+    let arithmetic = records
+        .iter()
+        .find(|r| r.work.expression_nodes == Some(4))
+        .unwrap();
+    assert_eq!(arithmetic.phase, GroundingPhase::RuleInstantiation);
+    assert_eq!(arithmetic.work.expression_evaluations, Some(2));
+    assert_eq!(arithmetic.work.join_probes, Some(1));
+    assert_eq!(arithmetic.work.join_rows, Some(1));
+    assert_eq!(arithmetic.work.binding_snapshots, Some(0));
+    assert_eq!(arithmetic.work.roots, Some(1));
+}
+
+#[test]
+fn only_rule_phases_claim_a_source_location() {
+    let observer = Observer::default();
+    compile("p(1).", &FormulaLimits::default(), Some(&observer)).unwrap();
+    let records = observer.records.borrow();
+    assert_eq!(
+        records.first().unwrap().phase,
+        GroundingPhase::SupportCompletion
+    );
+    assert_eq!(
+        records.last().unwrap().phase,
+        GroundingPhase::TheoryValidation
+    );
+    for record in records.iter() {
+        assert_eq!(
+            record.location.is_some(),
+            record.phase == GroundingPhase::RuleInstantiation
+        );
+        assert_eq!(record.outcome, GroundingOutcome::Completed);
+    }
+}
+
+#[test]
+fn undefined_family_validation_retains_its_failed_phase() {
+    let observer = Observer::default();
+    let source = "p(0). :- p(X), 1/X=0.";
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap_err();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap_err();
+    assert_eq!(measured.to_string(), plain.to_string());
+    let records = observer.records.borrow();
+    let last = records.last().unwrap();
+    assert_eq!(last.phase, GroundingPhase::SupportCompletion);
+    assert_eq!(last.outcome, GroundingOutcome::Failed);
+    assert!(last.work.expression_nodes.unwrap() > 0);
+    assert_eq!(last.work.roots, Some(0));
+    assert!(!observer.active.get());
+}
+
+#[test]
+fn profiling_preserves_inclusive_support_limits() {
+    for (rounds, succeeds) in [(1, false), (2, true)] {
+        let limits = FormulaLimits {
+            max_support_rounds: rounds,
+            ..FormulaLimits::default()
+        };
+        let observer = Observer::default();
+        let measured = compile("p(1).", &limits, Some(&observer));
+        let plain = compile("p(1).", &limits, None);
+        assert_eq!(measured.is_ok(), succeeds);
+        assert_eq!(plain.is_ok(), succeeds);
+        if let Err(error) = measured {
+            assert_eq!(error.to_string(), plain.unwrap_err().to_string());
+            let records = observer.records.borrow();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].outcome, GroundingOutcome::Failed);
+            assert_eq!(records[0].work.support_rounds, Some(1));
+            assert_eq!(records[0].work.support_atoms, Some(1));
+        }
+    }
+}
+
+#[test]
+fn node_refusal_retains_attempted_interning() {
+    let limits = FormulaLimits {
+        theory: zetesis_ferraris::AdmissionLimits {
+            max_nodes: 1,
+            ..zetesis_ferraris::AdmissionLimits::default()
+        },
+        ..FormulaLimits::default()
+    };
+    let observer = Observer::default();
+    let error = compile("p(1).", &limits, Some(&observer)).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        compile("p(1).", &limits, None).unwrap_err().to_string()
+    );
+    let records = observer.records.borrow();
+    let last = records.last().unwrap();
+    assert_eq!(last.phase, GroundingPhase::FormulaInitialization);
+    assert_eq!(last.outcome, GroundingOutcome::Failed);
+    assert_eq!(last.work.node_lookups, Some(2));
+    assert_eq!(last.work.nodes_inserted, Some(1));
+}
+
+fn root_refusal(source: &str, roots: usize, phase: GroundingPhase) {
+    let limits = FormulaLimits {
+        theory: zetesis_ferraris::AdmissionLimits {
+            max_roots: roots,
+            ..zetesis_ferraris::AdmissionLimits::default()
+        },
+        ..FormulaLimits::default()
+    };
+    let observer = Observer::default();
+    let error = compile(source, &limits, Some(&observer)).unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Limit {
+            resource: FormulaResource::Roots,
+            observed,
+            limit,
+            ..
+        } if observed == roots as u128 + 1 && limit == roots as u128
+    ));
+    let records = observer.records.borrow();
+    let last = records.last().unwrap();
+    assert_eq!(last.phase, phase);
+    assert_eq!(last.outcome, GroundingOutcome::Failed);
+    assert!(
+        records[..records.len() - 1]
+            .iter()
+            .all(|record| record.outcome == GroundingOutcome::Completed)
+    );
+    assert!(!observer.active.get());
+}
+
+#[test]
+fn coherence_preserves_the_cumulative_root_limit() {
+    // Both source facts consume the allowance before their coherence constraint.
+    root_refusal("p. -p.", 2, GroundingPhase::Coherence);
+}
+
+#[test]
+fn support_guards_preserve_the_cumulative_root_limit() {
+    // A fact consumes the allowance before its necessary-support guard.
+    root_refusal("p.", 1, GroundingPhase::SupportGuards);
+}
+
+#[test]
+fn source_refusals_have_no_grounding_phases() {
+    for source in ["p(.", "p(X)."] {
+        let observer = Observer::default();
+        assert!(compile(source, &FormulaLimits::default(), Some(&observer)).is_err());
+        assert!(observer.records.borrow().is_empty());
+        assert!(!observer.active.get());
+    }
+}
+
+#[test]
+fn bundle_rule_locations_identify_retained_sources() {
+    use zetesis_themelios::{
+        BundleAdmissionOptions, BundleLimits, SourceBundle,
+        admit_bundle_formula_with_grounding_observer,
+    };
+
+    let path = repository::examples().join("reachability.lp");
+    let bundle = SourceBundle::load(path, BundleLimits::default()).unwrap();
+    let observer = Observer::default();
+    let admitted = admit_bundle_formula_with_grounding_observer(
+        bundle,
+        BundleAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+        Some(&observer),
+    )
+    .unwrap();
+    let records = observer.records.borrow();
+    let locations: Vec<_> = records
+        .iter()
+        .filter_map(|record| record.location)
+        .collect();
+    assert_eq!(locations.len(), 4);
+    for location in locations {
+        assert!(admitted.bundle().get(location.source).is_some());
+        assert!(
+            admitted
+                .formula_origins()
+                .iter()
+                .any(|origins| origins.contains(&location))
+        );
+    }
+}
+
+#[test]
+fn work_aggregation_preserves_field_availability() {
+    let mut left = GroundingWork::default();
+    left.support_construction_work = Some(u64::MAX);
+    left.support_production_work = None;
+    left.support_join_work = Some(u64::MAX);
+    left.support_head_work = Some(7);
+    left.support_order_work = Some(2);
+    left.support_wake_work = Some(3);
+    left.support_publication_work = Some(5);
+    left.join_rows = Some(u64::MAX);
+    left.expression_nodes = None;
+    left.roots = Some(3);
+    let mut right = GroundingWork::default();
+    right.support_construction_work = Some(1);
+    right.support_production_work = Some(2);
+    right.support_join_work = Some(1);
+    right.support_head_work = None;
+    right.support_order_work = Some(3);
+    right.support_wake_work = Some(4);
+    right.support_publication_work = Some(6);
+    right.join_rows = Some(1);
+    right.expression_nodes = Some(5);
+    right.roots = Some(2);
+    let sum = left.checked_sum(right);
+    assert_eq!(sum.support_construction_work, None);
+    assert_eq!(sum.support_production_work, None);
+    assert_eq!(sum.support_join_work, None);
+    assert_eq!(sum.support_head_work, None);
+    assert_eq!(sum.support_order_work, Some(5));
+    assert_eq!(sum.support_wake_work, Some(7));
+    assert_eq!(sum.support_publication_work, Some(11));
+    assert_eq!(sum.join_rows, None);
+    assert_eq!(sum.expression_nodes, None);
+    assert_eq!(sum.roots, Some(5));
+    assert_eq!(sum.atoms_inserted, Some(0));
+}
+
+#[test]
+fn support_subdivision_sums_preserve_exact_and_unavailable_counts() {
+    for (left, right, expected) in [
+        (Some(0), Some(0), Some(0)),
+        (Some(3), Some(5), Some(8)),
+        (Some(u64::MAX), Some(1), None),
+        (None, Some(0), None),
+        (Some(0), None, None),
+    ] {
+        let mut first = GroundingWork::default();
+        first.support_join_work = left;
+        first.support_head_work = left;
+        let mut second = GroundingWork::default();
+        second.support_join_work = right;
+        second.support_head_work = right;
+        let sum = first.checked_sum(second);
+        assert_eq!(sum.support_join_work, expected);
+        assert_eq!(sum.support_head_work, expected);
+        assert_eq!(sum.support_production_work, Some(0));
+    }
+}
+
+#[test]
+fn phases_are_entered_in_the_order_the_catalog_lists() {
+    // The catalog promises materialization order. The observer records each
+    // phase as it exits, so the first exit of every phase, the domain analysis
+    // included when it runs, must follow the catalog's order.
+    let observer = Observer::default();
+    prepare_formula(
+        "p(1..3). q(X) :- p(X), X < 3.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .with_domain_analysis(Some(DomainLimits::default()))
+    .ground_with_observer(Some(&observer))
+    .unwrap();
+    let records = observer.records.borrow();
+    let mut entered: Vec<GroundingPhase> = Vec::new();
+    for record in records.iter() {
+        if !entered.contains(&record.phase) {
+            entered.push(record.phase);
+        }
+    }
+    assert!(entered.contains(&GroundingPhase::DomainAnalysis));
+    let positions: Vec<usize> = entered
+        .iter()
+        .map(|phase| {
+            GroundingPhase::ALL
+                .iter()
+                .position(|listed| listed == phase)
+                .unwrap()
+        })
+        .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{entered:?}"
+    );
+}
+
+#[test]
+fn phase_labels_form_a_unique_complete_catalog() {
+    let labels: std::collections::BTreeSet<_> = GroundingPhase::ALL
+        .into_iter()
+        .map(GroundingPhase::label)
+        .collect();
+    assert_eq!(labels.len(), GroundingPhase::ALL.len());
+    assert_eq!(
+        labels,
+        [
+            "support_completion",
+            "domain_analysis",
+            "objective_activation",
+            "formula_initialization",
+            "rule_instantiation",
+            "coherence",
+            "support_guards",
+            "theory_validation"
+        ]
+        .into_iter()
+        .collect()
+    );
+}
+
+#[test]
+fn outcome_labels_form_a_unique_complete_catalog() {
+    let labels: std::collections::BTreeSet<_> = GroundingOutcome::ALL
+        .into_iter()
+        .map(GroundingOutcome::label)
+        .collect();
+    assert_eq!(labels.len(), GroundingOutcome::ALL.len());
+    assert_eq!(
+        labels,
+        ["completed", "failed", "unwound"].into_iter().collect()
+    );
+}
+
+#[test]
+fn support_capacity_peaks_combine_by_maximum() {
+    let mut first = GroundingWork::default();
+    first.support_peak_bytes = Some(17);
+    let mut second = GroundingWork::default();
+    second.support_peak_bytes = Some(29);
+    assert_eq!(first.checked_sum(second).support_peak_bytes, Some(29));
+    assert_eq!(second.checked_sum(first).support_peak_bytes, Some(29));
+}

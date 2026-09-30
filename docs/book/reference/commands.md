@@ -1,7 +1,7 @@
 # Using the zetesis command
 
-The `zetesis` command solves answer-set programs, checks selected contracts and
-measures performance. Install it using the [repository instructions](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run).
+The `zetesis` command solves answer-set programs and checks selected contracts.
+Install it using the [installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/INSTALL.md).
 Installed commands do not require Cargo at runtime. Programs use the admitted
 [ASP language](language.md); these command examples are separate from the
 themelios library's source-representation examples.
@@ -20,12 +20,14 @@ Bare `zetesis` displays concise help. Each task has its own options:
 | --- | --- |
 | `solve` | Find answer sets or optimize a program. |
 | `test` | Check a corpus, scalability workloads or an execution backend. |
-| `bench` | Measure corpus or primitive performance, or compare saved reports. |
-| `devices` | List available execution devices and their capabilities. |
+| `devices` | List the GPU devices found, their capabilities and the one `--backend gpu` would use. |
 | `help` | Explain a command, including nested tasks. |
 | `version` | Report the installed program version. |
 
-Help and version requests do not read a program or initialize a GPU.
+Benchmarking is the separate `zetesis-bench` tool, described in
+[Benchmarking with zetesis-bench](benchmarking.md); `zetesis bench` answers
+with a pointer to it. Help and version requests do not read a program or
+initialize a GPU.
 `zetesis version` prints the version, copyright year and holder, and MIT license
 on one line. `--version` and `-V` provide the same information.
 `zetesis devices` performs discovery; it does not prove that a complete solve
@@ -75,8 +77,8 @@ matters. The reduct remains the criterion for accepting an answer.
 
 | Option | Default and meaning |
 | --- | --- |
-| `--device auto` | CPU execution. Explicit GPU requests are honored or refused. |
-| `--threads auto` | At most four available host threads; one if availability is unknown. |
+| `--backend cpu` | CPU execution. `gpu` uses the platform's native API (Metal on macOS, Vulkan elsewhere); `metal` and `vulkan` name one. A GPU request is honored or refused. |
+| `--threads auto` | The host's available parallelism; one if availability is unknown. |
 | `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
 | `--memory-budget SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
@@ -90,7 +92,7 @@ Explicit `--grounder eager` still requests complete materialization.
 For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
 checked from their admitted source families. This hybrid profile is separate from
-automatic terminal-definition reconstruction. It accepts `--device cpu` or `auto`, uses indexed
+automatic terminal-definition reconstruction. It runs on the CPU backend, uses indexed
 joins and refuses objective declarations and table joins. Relational lazy
 closure retains its existing CPU and device routes.
 
@@ -101,16 +103,20 @@ admission and replay do not share one remaining allowance. A stopped check is
 incomplete, never an accepted answer or an UNSAT result.
 
 ```sh
-zetesis solve program.lp --device cpu --threads 4
-zetesis solve program.lp --device metal --grounder eager --all
+zetesis solve program.lp --backend cpu --threads 4
+zetesis solve program.lp --backend metal --grounder eager --all
 zetesis solve program.lp --time-limit 30s --memory-budget 4GiB
 ```
 
-An explicit positive thread count is not capped at four. The thread setting
+An explicit positive thread count overrides this default. The thread setting
 selects the applicable host search or closure pool. General GPU execution also
 has host candidate production and exact CPU completion; a GPU request does not
-move all solving work to the device. Automatic device selection currently stays
-on CPU. Explicit unavailable or failed devices do not silently retry on CPU.
+move all solving work to the device. An unavailable or failed GPU does not
+silently retry on CPU. Choosing a backend per problem is not implemented, so no
+value promises that choice: the retired `auto` is refused and names `cpu`, the
+default; `dx12` and `gl` are refused because zetesis targets Metal and Vulkan;
+`nvidia` is refused and names `gpu` or `vulkan`, since choosing one GPU among
+several is not implemented yet.
 The [execution chapter](../architecture/execution.md) explains each route.
 
 The deadline starts after input loading and is cooperative. `0` requests an
@@ -123,6 +129,9 @@ minimum of two GiB; an unavailable reading falls back to two GiB. It scales
 specified session storage ceilings, not every allocation. Fixed admission/output
 limits and work/count limits retain their own defaults. This allowance is not
 a process RSS cap. Advanced help identifies which bytes each ceiling counts.
+Closure workers share a collective storage ceiling: increasing `--threads`
+reduces each worker's default share. Use an explicit thread count to balance
+parallelism with memory per worker.
 
 Formula model construction has separate controls: `--max-model-work` bounds
 cumulative preparation of atom order and construction of selected models;
@@ -219,8 +228,8 @@ refused. Diagnostics go to stderr.
 ```sh
 zetesis test corpus --repo . --clingo clingo
 zetesis test corpus --repo . --json --report corpus-check.json
-zetesis test backend --device cpu --json
-zetesis test backend --device metal --stats --report metal-check.json
+zetesis test backend --backend cpu --json
+zetesis test backend --backend metal --stats --report metal-check.json
 zetesis test scalability --threads 1,2,4,8,14 --report scalability-check.json
 ```
 
@@ -240,13 +249,12 @@ and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
 60-test physical qualification suite.
 
-Corpus and backend checks accept `--device cpu` (the default) or `--device metal`.
-Metal corpus checks request the eager general formula route. This is the scope
-of these check decoders, not a restriction of `solve`, whose explicit wgpu
-backend choices are listed in solve help. An unavailable device remains a
-nonpass; it does not trigger CPU fallback.
+Corpus and backend checks accept every backend: `--backend cpu` (the default),
+`gpu`, `metal` or `vulkan`. GPU corpus checks request the eager general formula
+route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
+unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same nine workloads as `bench corpus --suite
+`test scalability` uses the same nine workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
 unchanged queens variant 02, SEND+MORE=MONEY and task allocation. It checks one
 complete clingo family and one native family per requested thread count, with
@@ -280,12 +288,10 @@ has a default 30-second timeout and an 8 MiB combined stdout/stderr capture
 ceiling, adjustable with `--timeout-seconds` and `--capture-bytes`.
 
 On Linux and macOS, the process entry handles SIGINT and SIGTERM cooperatively
-for `test` and `bench corpus`: it stops further launches, settles owned children
-under the cleanup bounds and retains incomplete evidence. Reusable library
-operations accept caller-owned cancellation flags and install no global signal
-handlers. SIGKILL, a crash or forced process termination cannot use this
-cooperative cleanup path. Primitive benchmarks do not currently consume this
-campaign cancellation flag.
+for `test`: it stops further launches, settles owned children under the cleanup
+bounds and retains incomplete evidence. Reusable library operations accept
+caller-owned cancellation flags and install no global signal handlers. SIGKILL,
+a crash or forced process termination cannot use this cooperative cleanup path.
 
 `--stats` follows the test kind, for example `test backend --stats`.
 It adds optional elapsed-time details and is off by default. Backend and
@@ -293,224 +299,13 @@ scalability checks always capture the internal statistics required to verify
 actual execution; Metal corpus checks also require route telemetry. Turning off the optional
 view never removes evidence needed to pass a check.
 
-## Measure a corpus
-
-Benchmarks prescribe their instrumentation, including statistics. There is no
-`bench --stats` toggle. Human tables use the shared terminal styling and remain
-plain when redirected; `--json` selects the command's structured view.
-`bench corpus` currently requires Linux or macOS for bounded process capture
-and fresh-child RSS receipts. It refuses an unsupported platform explicitly;
-saved-report comparison does not launch children and has no such requirement.
-
-```sh
-zetesis bench corpus examples/correctness --report cpu-run.json
-zetesis bench corpus examples/correctness --suite baseline \
-  --device metal --grounder eager --report metal-run.json
-zetesis bench corpus examples/correctness --threads 2 --json \
-  --report two-thread-run.json > two-thread-summary.json
-```
-
-The positional directory defaults to `examples/correctness` relative to the
-current directory. Supply the directory from a repository checkout when running
-elsewhere; the installed command does not fetch or bundle these inputs.
-`--suite corpus` selects all 94 cases. `baseline` selects SEND, queens variant 02
-and task allocation; `queens` selects the six unchanged encodings; `series`
-selects the maintained 22 generated, constant-amended and original workloads.
-`scalability` selects the nine authored/corpus workloads described above, with
-indexed formula joins and region search. Only this suite accepts `--examples`
-and `--include-einstein`; its authored root defaults to `examples`.
-
-| Setting | Default |
-| --- | --- |
-| Native execution | CPU, automatic grounding and automatic reduct procedure |
-| `--threads auto` | At most four available host threads; one if unknown |
-| `--completion-workers` / `--clingo-threads` | One / one |
-| `--batch-size` | 64 candidate occurrences |
-| `--warmups` / `--repetitions` | One warmup / three timed rounds per solver and case |
-| `--memory-runs` | One separate fresh-child RSS round per solver and case |
-| `--timeout-seconds` / `--campaign-seconds` | 10 per child / 180 for campaign scheduling |
-
-A qualification round precedes warmups and timings. Native children use
-`solve --all --json --stats`; clingo retains its stock search heuristics and
-exhaustive optimum-tie output. Wall time includes process launch, grounding,
-solving and captured machine output. Qualification requires complete selected
-output families and costs to agree. RSS is a separate child-resource observation,
-not device memory or an allocator counter. Primitive work counts are not elapsed
-time or machine instructions.
-
-The maintained corpus telemetry decoder supports `--device cpu|metal` and
-`--grounder auto|eager|lazy`. It reports unsupported combinations and actual
-execution failures rather than silently replacing the requested route. Explicit
-thread counts are accepted within the campaign's finite bounds. Capture, decoder
-and evidence byte ceilings are separate controls; `zetesis bench corpus -h`
-shows the common options and `zetesis bench corpus --help` includes advanced
-measurement controls.
-
-`--report NEW.json` is required and stores the full bounded campaign evidence,
-including executable/source identities, raw captures, failed and unlaunched
-positions. Existing files are never replaced. A first nonpass disables later
-launches for that cell; a campaign stop retains the remaining planned positions.
-Neither is replaced by another sample. The human and JSON summaries compute
-wall-time distributions only when the cell's entire timed population passed;
-failures are not assigned a synthetic timeout duration. Validated memory rounds
-have their own median and may be unavailable.
-
-Non-pass summaries include the recorded reason and schedule phase. If a failed
-qualification prevented later samples, those slots identify the original blocker.
-Known resource limits and required amounts remain in the reason; missing historical
-details are labelled unavailable. A refusal, timeout or process failure never
-counts as an UNSAT result or a successful timing sample.
-
-Omitting `--zetesis` measures this installed executable through its explicit
-`solve` command. An explicit `--zetesis PATH` defaults to the legacy flat
-interface for retained binaries; add `--native-interface solve` for another
-modern executable. The report retains the actual argument sequences.
-
-`--compare-grounders` requests eager and lazy profiles of the same native
-executable, with identical device, worker, batch and completion settings. It
-conflicts with an explicit `--grounder`. Clingo supplies one complete
-qualification census per case; only the two native profiles have warmup,
-timing and RSS rounds. These reports therefore contain no clingo timing or
-memory comparison. Without this option, the existing single-profile campaign
-continues to measure clingo in every phase unless a thread comparison is selected.
-
-`--compare-threads 1,2,4,8,14` compares native profiles differing only in their
-candidate/closure thread count. It conflicts with explicit `--threads` and with
-`--compare-grounders`. It accepts one through eight profiles with each count at
-most 256. Clingo supplies only the qualification census; native profiles retain
-the requested warmup, timing and RSS rounds. `--max-expansion-work` applies the
-same explicit grounding ceiling to every native profile and records it in the
-evidence. This is independent of the process deadline.
-
-```sh
-zetesis bench corpus examples/correctness --suite queens --device cpu \
-  --threads 1 --compare-grounders --repetitions 4 --memory-runs 2 \
-  --report grounding-comparison.json
-zetesis bench corpus examples/correctness --suite scalability --examples examples \
-  --grounder eager --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
-  --timeout-seconds 30 --campaign-seconds 1800 --report thread-comparison.json
-```
-
-All native populations must agree on complete full-model identities as well as
-the selected outputs and costs qualified by clingo. Lazy formula execution
-records the eager retained core and streamed constraint checks separately.
-Deferring constraints can increase core enumeration work, so a refusal or a
-slower lazy result is a meaningful result of the comparison. Four timed rounds
-balance the rotating eager/lazy order; RSS rounds remain separate.
-
-For hybrid formula execution, the grounding interval covers initial support and
-core admission. Streamed constraint checks occur during solving and are included
-in `original_validation`. The initial grounding time alone therefore does not
-measure all source evaluation work. Compare complete solve time, storage and
-the separate constraint-work counters as well.
-
-For a smaller fixed population, the maintained
-[grounding comparison example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-validation/examples/grounding_comparison.rs)
-uses the same typed matrix API. Its default `--study storage` preserves nine
-workloads: queens variants 01 and 03 at n=4/5,
-variant 02 at n=4 as a control for lost early constraint pruning, and variant 06
-at n=4 whose scoped constraints remain eager. Generated monotone choices at
-n=6 and redundant transitivity at n=8/12 provide additional pruning and storage
-controls. Workload constructors retain source identities and leave the corpus
-unchanged. Neither those labels nor successful qualification predicts a speedup.
-
-```sh
-cargo run --release -p zetesis-validation --example grounding_comparison -- \
-  --zetesis /absolute/path/to/zetesis --clingo /absolute/path/to/clingo \
-  --helper /absolute/path/to/zetesis --workers 1 \
-  --report grounding-small.json > grounding-small-summary.json
-```
-
-The native and helper paths must name the current zetesis executable. The
-example uses one warmup, four timed rounds and two separate RSS rounds per
-native profile, a ten-second child timeout and a 180-second campaign deadline.
-All 153 planned positions are retained, including nine qualification-only
-clingo invocations. A nonpass exits unsuccessfully after publishing the evidence.
-
-The fixed `refutation` study compares earlier constraint pruning with repeated
-scan costs. Its twenty workloads are queens 01/03 at n=4/5/6, queens 02/04/05/06
-at n=4/5, monotone choices at n=6/8/10 and redundant transitivity at n=8/12/16.
-It retains the same profiles and rounds, with a 300-second campaign deadline
-and 340 planned positions, including twenty qualification-only clingo invocations.
-
-```sh
-cargo run --release -p zetesis-validation --example grounding_comparison -- \
-  --study refutation --zetesis /absolute/path/to/zetesis \
-  --clingo /absolute/path/to/clingo --helper /absolute/path/to/zetesis \
-  --workers 4 --report grounding-refutation.json > grounding-refutation-summary.json
-```
-
-The larger cases can reach the fixed resource ceilings or timeout, particularly
-when hybrid execution checks every core answer before rejecting it. Those
-refusals remain nonpasses; an incomplete family does not supply a speed ratio.
-Both studies compare complete native families within each workload. Clingo
-supplies the selected-output census only, with no reference timings or RSS runs.
-
-## Measure primitives
-
-Primitive measurements compare matched operations and qualified result batches.
-They exclude ordinary outer answer-set search and do not establish whole-solver
-speedups. Each profile retains its own finite dimensions, reference checks,
-setup intervals and timing boundaries.
-
-```sh
-zetesis bench primitives relation --device cpu --threads 2 \
-  --rows 256 --queries 8 --report relation.jsonl
-zetesis bench primitives tight --device metal --atoms 4 --batches 32 \
-  --json > tight.jsonl
-zetesis help bench primitives aggregate
-```
-
-| Profile | Measured operation | Default device |
-| --- | --- | --- |
-| `relation` | Packed equality masks and typed row reconstruction | CPU |
-| `aggregate` | Exact native aggregate reductions | Metal |
-| `tight` | Tight support classification with exact residual completion | Metal |
-| `lazy` | Matched scalar, Rayon and lazy source-round operations | Metal |
-
-All four profiles accept explicit `--device cpu|metal|vulkan`. Their retained
-experiment defaults use four Rayon threads; select a positive `--threads N`
-explicitly when another count is required. Physical selections never fall back
-to CPU. Profile-specific help describes dimensions, work bounds and schedules.
-
-`--json` emits the selected profile's versioned **JSON-lines event stream**,
-including preparation, sample populations and a final `complete` event only
-when the whole requested measurement succeeds. Optional `--report NEW.jsonl`
-retains the same structured events independently of the human view. Its default
-per-sink serialized ceiling is 256 MiB, adjustable with `--report-bytes`.
-A stopped operation retains its event prefix; completed sample rows do not turn
-an incomplete campaign into a pass.
-
-The current primitive command requires a build with the `gpu` feature, including
-when selecting a CPU primitive profile. CPU-only builds explicitly refuse this
-command; corpus measurements and saved-report comparison remain available.
-The compatibility `zetesis-bench` executable retains its other legacy experiment
-profiles and views, documented in the [experiment library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md).
-
-## Compare reports and consume machine output
-
-```sh
-zetesis bench compare --report before=cpu-before.json --report after=cpu-after.json
-zetesis bench compare --report before=cpu-before.json --report after=cpu-after.json \
-  --json --output comparison.json
-```
-
-`bench compare` launches no solver. It checks matching ordered workloads, sealed
-corpus identities and requested profiles before deriving comparisons. Search
-method is the explicitly supported profile difference; other profile settings,
-such as thread counts, must match. `--report LABEL=PATH` can be repeated in the
-chosen order. Optional `--output NEW.json` saves the derived comparison without
-replacing a file. `--report-bytes` bounds each input document; it defaults to
-4 GiB of source bytes and is not a decoded-memory guarantee.
+## Consume machine output
 
 | Command with `--json` | Stdout format |
 | --- | --- |
 | `solve` | One versioned answer/outcome document |
 | `test corpus`, `test backend` | One structured conformance report |
 | `test scalability` | Compact `zetesis_scalability_conformance`, schema 1; full sealed evidence is at required `--report` |
-| `bench corpus` | One compact summary: `zetesis_benchmark_summary`, schema 1; full evidence is at `--report` |
-| `bench compare` | One structured derived comparison |
-| `bench primitives …` | The selected profile's versioned JSON-lines events |
 
 The compact scalability view includes workload/profile identities, source and
 executable seals, each check's decision and explanation, its blocker when any,
@@ -525,19 +320,16 @@ initialization failures, such as failure to register interruption handling, also
 return exit 2 with a diagnostic and no machine document. Once the workflow has
 started, a test failure before any stdout write attempt emits one
 `zetesis-test-failure` document, including failure to publish the retained
-report. A benchmark failure at that boundary emits one
-`zetesis-benchmark-failure` document, including when no primitive event could
-be produced. Both use schema
-1. Once publication has been attempted, no second document is appended: a writer
-can modify its sink before reporting failure. JSON/JSONL output may therefore be
-truncated or retain only a prefix. Check the process status and terminal report
-or `complete` event; successful earlier samples do not establish completion.
+report. It uses schema 1. Once publication has been attempted, no second
+document is appended: a writer can modify its sink before reporting failure.
+JSON output may therefore be truncated or retain only a prefix. Check the
+process status and terminal report; successful earlier samples do not establish
+completion.
 Diagnostics remain on stderr, and JSON never contains terminal styling.
 
-For `test` and measurement commands, exit `0` means all requested checks passed,
-`1` means the published report contains nonpasses, and `2` means setup, operation
-or publication failed. `bench compare` exits `0` when the comparison view was
-produced, even if its input reports contain failed measurements. These statuses
+For `test`, exit `0` means all requested checks passed, `1` means the published
+report contains nonpasses, and `2` means setup, operation or publication failed.
+These statuses
 do not replace the independent Rust, Lean, coverage, oracle and physical gates
 in the [validation guide](validation.md). Published performance claims remain
 bound to the protocols and identities in the [performance records](performance.md).
@@ -547,8 +339,8 @@ bound to the protocols and identities in the [performance records](performance.m
 File-first invocations remain accepted, including `zetesis program.lp --models 0`.
 Their missing-input default remains standard input, and their existing statistics
 records are preserved. Prefer explicit `solve` in new scripts. The old flags
-`--backend`, `--workers` and `--memory` remain aliases for `--device`, `--threads`
-and `--memory-budget`; `--models 0` maps to `--all`, and positive `--models N`
+`--workers` and `--memory` remain aliases for `--threads` and `--memory-budget`;
+`--models 0` maps to `--all`, and positive `--models N`
 maps to `--answers N`. Conflicting answer-selection flags are rejected.
 
 `--help-all` remains an alias for full solve help. Historical measurement recipes
