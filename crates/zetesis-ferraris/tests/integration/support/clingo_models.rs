@@ -1,11 +1,8 @@
 //! clingo's complete models of a source, for the oracle comparisons.
 
-use std::collections::BTreeSet;
-
 use zetesis_clingo_support as oracle;
 
-/// Models as sets of atom spellings.
-pub type Models = BTreeSet<BTreeSet<String>>;
+pub use zetesis_test_support::records::Models;
 
 /// clingo's models of `source`, from a decided run that enumerated them all.
 pub fn clingo(source: &str) -> Models {

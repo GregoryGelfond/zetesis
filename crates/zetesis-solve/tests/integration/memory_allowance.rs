@@ -2,13 +2,8 @@
 //! session's allowance scales them, and its worker count shares the
 //! collective closure ceiling among the workers.
 
-use std::num::NonZeroUsize;
-
 use zetesis_solve::SolveConfig;
-
-fn workers(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).unwrap()
-}
+use zetesis_test_support::counts::nonzero as workers;
 
 #[test]
 fn the_reference_allowance_with_the_default_workers_is_the_default() {

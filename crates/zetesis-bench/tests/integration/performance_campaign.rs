@@ -8,6 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use zetesis_test_support::fixtures::{PHASE_STATISTICS, STAGE_STATISTICS};
+use zetesis_test_support::scripts::{executable, quote};
 use zetesis_validation::{
     examples,
     performance::{self, Case, Decision, Phase, Producer, Schedule, Suite},
@@ -26,13 +27,6 @@ struct Fixture {
     native: PathBuf,
     reference: PathBuf,
     report: PathBuf,
-}
-fn quote(path: &Path) -> String {
-    format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
-}
-fn executable(path: &Path, body: &str) {
-    fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
 }
 impl Fixture {
     fn new(native_prefix: &str, mutate: impl Fn(&mut String)) -> Self {

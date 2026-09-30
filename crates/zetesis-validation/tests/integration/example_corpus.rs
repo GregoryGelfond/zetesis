@@ -4,14 +4,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use zetesis_test_support::repository::root as repo;
 use zetesis_validation::answers::{self, ReportedAnswers};
 use zetesis_validation::examples::{
     self, Contract, ContractMismatch, Corpus, Error, Family, Limits, Resource, Satisfiability,
 };
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
 fn clean_root() -> PathBuf {
     repo().join("examples/correctness")
 }

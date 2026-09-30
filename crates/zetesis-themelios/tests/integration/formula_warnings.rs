@@ -2,6 +2,7 @@
 
 use std::fs;
 
+use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_themelios::base::{
     diagnostic::{Severity, ToDiagnostic},
     source::SourceId,
@@ -11,8 +12,6 @@ use zetesis_themelios::{
     FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, SourceBundle,
     admit_bundle_formula, admit_formula,
 };
-
-const SOURCE: &str = "d(0..2).\np(X) :- d(X), 1/X=1.\n";
 
 fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(

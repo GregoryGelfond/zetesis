@@ -6,17 +6,13 @@ use crate::support::formula_theories as theories;
 use zetesis_theory_support::theories::theory;
 
 use std::collections::BTreeSet;
-use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Incomplete, Limits,
     SearchLimits, SearchMethod, StableModels,
 };
-
-fn nonzero(value: usize) -> NonZeroUsize {
-    NonZeroUsize::new(value).unwrap()
-}
+use zetesis_test_support::counts::nonzero;
 
 fn batch(count: usize) -> BatchLimits {
     BatchLimits {

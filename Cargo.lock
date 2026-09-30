@@ -1881,6 +1881,7 @@ dependencies = [
  "zetesis-clingo-support",
  "zetesis-core",
  "zetesis-cpu",
+ "zetesis-test-support",
  "zetesis-theory-support",
 ]
 
@@ -1897,6 +1898,7 @@ dependencies = [
  "syn 2.0.119",
  "tempfile",
  "zetesis-backend",
+ "zetesis-test-support",
  "zetesis-validation",
 ]
 
@@ -1939,6 +1941,7 @@ dependencies = [
  "rayon",
  "zetesis-cpu",
  "zetesis-ferraris",
+ "zetesis-test-support",
  "zetesis-themelios",
  "zetesis-theory-support",
 ]

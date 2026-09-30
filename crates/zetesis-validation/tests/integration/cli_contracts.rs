@@ -1,15 +1,13 @@
 //! Process-level failures cannot masquerade as a qualified corpus campaign.
 
-use std::path::PathBuf;
 use std::process::Command;
 
 use serde_json::Value;
+use zetesis_test_support::repository::root as repository;
 
 fn command() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_zetesis-validate"));
-    command
-        .arg("--repo")
-        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
+    command.arg("--repo").arg(repository());
     command
 }
 
@@ -172,10 +170,6 @@ fn native_hardware_options_are_user_visible_and_reject_invalid_values() {
 
 fn corpus_command() -> Command {
     Command::new(env!("CARGO_BIN_EXE_zetesis-corpus"))
-}
-
-fn repository() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 #[test]

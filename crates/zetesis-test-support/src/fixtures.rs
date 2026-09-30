@@ -7,6 +7,10 @@ pub const PHASE_STATISTICS: &str = include_str!("../fixtures/phase_statistics.tx
 /// [`PHASE_STATISTICS`].
 pub const STAGE_STATISTICS: &str = include_str!("../fixtures/stage_statistics.txt");
 
+/// A program one of whose rule instances divides by zero, which admission
+/// reports as a zero-divisor warning.
+pub const ZERO_DIVISOR: &str = "d(0..2).\np(X) :- d(X), 1/X=1.\n";
+
 /// Comparison-generator programs, one JSON case per line, each with its
 /// expected admission and its complete answer sets.
 pub const COMPARISON_GENERATORS: &str = include_str!("../fixtures/comparison-generators.jsonl");

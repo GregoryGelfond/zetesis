@@ -176,16 +176,19 @@ the consumers that need them. Helpers that several crates' tests share live in
 internal support crates, each over one dependency closure, so a test build
 compiles only what its tests use and no crate's unit tests link a second copy of
 that crate. `zetesis-test-support`, over `zetesis-core`, holds the sinks that
-fail on purpose, builders of small programs, the reader of a JSON document's
-spelled atoms and the data several crates' tests read. `zetesis-theory-support`,
-over `zetesis-ferraris`, holds the small-theory builder and the CPU reference a
-device's aggregates are compared with. `zetesis-clingo-support`, over
-`zetesis-validation` alone, finds clingo, runs it within bounds and decodes its
-reports, so a comparison reaches clingo without compiling a solver.
-`zetesis-reference-support`, over `zetesis-themelios`, enumerates a small
-program's answer sets through the reduct check. A helper that only one crate's
-tests use stays in that crate's `tests/integration/support`. The support crates
-are not published, and every coverage report skips their sources.
+fail on purpose, builders of small programs and nonzero counts, the reader of a
+JSON document's spelled atoms, the answer sets a comparison holds, the data
+several crates' tests read and the repository directories they read in place,
+the shell scripts a test runs as child processes, and the names the harness
+gives a crate's own tests. `zetesis-theory-support`, over `zetesis-ferraris`,
+holds the small-theory builder and the CPU reference a device's aggregates are
+compared with. `zetesis-clingo-support`, over `zetesis-validation` alone, finds
+clingo, runs it within bounds and decodes its reports, so a comparison reaches
+clingo without compiling a solver. `zetesis-reference-support`, over
+`zetesis-themelios`, enumerates a small program's answer sets through the
+reduct check. A helper that only one crate's tests use stays in that crate's
+`tests/integration/support`. The support crates are not published, and every
+coverage report skips their sources.
 
 The data a crate's tests read, unit or integration, lives in its
 `tests/fixtures/`. Property tests keep proptest's default failure persistence:

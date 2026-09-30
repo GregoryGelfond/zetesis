@@ -5,8 +5,12 @@
 //! the crates that use it never link a second copy of themselves. It is not
 //! published or installed.
 
+pub mod counts;
 pub mod document;
 pub mod fixtures;
+pub mod harness;
 pub mod io;
 pub mod programs;
 pub mod records;
+pub mod repository;
+pub mod scripts;

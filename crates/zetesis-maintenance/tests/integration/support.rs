@@ -7,10 +7,7 @@ use std::path::{Path, PathBuf};
 
 use zetesis_maintenance::inventory::{self, Limits};
 
-/// The repository's root directory.
-pub(crate) fn repository() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+pub(crate) use zetesis_test_support::repository::root as repository;
 
 /// The largest maintained source the audits read.
 const MAX_SOURCE_BYTES: usize = 1_048_576;

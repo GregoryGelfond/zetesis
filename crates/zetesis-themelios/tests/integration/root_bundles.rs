@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use themelios_base::source::SourceId;
+use zetesis_test_support::harness;
 use zetesis_themelios::{
     BundleAdmissionError, BundleAdmissionOptions, BundleError, BundleLimits, BundleResource,
     ExpansionLimits, IncludeResolution, SourceBundle, admit_bundle_extended,
@@ -286,7 +287,10 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     fixture.write("second.lp", "second.");
     fixture.write("block", "a regular file, not a directory");
     fixture.write("sub/block/data.lp", "not_directory_fallback.");
-    let name = harness_name("cwd_resolution_is_captured_before_loading_and_retained_for_admission");
+    let name = harness::test_name(
+        module_path!(),
+        "cwd_resolution_is_captured_before_loading_and_retained_for_admission",
+    );
     let result = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name.as_str(), "--test-threads=1"])
         .env(CHILD, "1")
@@ -299,13 +303,4 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     // A name the harness does not know runs nothing and still succeeds.
     assert!(output.contains("test result: ok. 1 passed"), "{output}");
     fixture.close();
-}
-
-/// This module's test `function` as the harness names it: the module path
-/// below the test crate's root, then the function.
-fn harness_name(function: &str) -> String {
-    match module_path!().split_once("::") {
-        Some((_, module)) => format!("{module}::{function}"),
-        None => function.to_owned(),
-    }
 }

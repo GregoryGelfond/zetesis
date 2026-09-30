@@ -1,8 +1,6 @@
 //! Fixture integrity is portable; complete clingo contract checks are opt-in.
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeSet;
+use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     examples,
     performance::{
@@ -10,10 +8,6 @@ use zetesis_validation::{
         scalability,
     },
 };
-
-fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples")
-}
 
 fn defaults() -> Vec<Workload> {
     let mut workloads = scalability::defaults(&root(), WorkloadLimits::default()).unwrap();

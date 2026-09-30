@@ -14,6 +14,7 @@ zetesis-ferraris.workspace = true
 [dev-dependencies]
 zetesis-themelios.workspace = true
 proptest = "1.11"
+zetesis-test-support.workspace = true
 zetesis-theory-support.workspace = true
 
 [lints]

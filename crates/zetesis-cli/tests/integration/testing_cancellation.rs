@@ -7,6 +7,7 @@ use std::{
     process::{Child, Command, ExitStatus, Stdio},
     time::{Duration, Instant},
 };
+use zetesis_test_support::scripts::quote;
 use zetesis_validation::process::{self, Capture, Invocation, Limits};
 
 fn signal_owned(child: &Child) -> Result<Capture, String> {
@@ -58,10 +59,6 @@ fn wait_for(path: &Path, timeout: Duration) -> bool {
         std::thread::sleep(Duration::from_millis(1));
     }
     path.exists()
-}
-
-fn quote(path: &Path) -> String {
-    format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
 }
 
 #[test]

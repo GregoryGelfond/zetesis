@@ -8,10 +8,10 @@ use zetesis_cli::{
     run_finalized_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-const SOURCE: &str = "d(0..2).\np(X) :- d(X), 1/X=1.\n";
 const WARNING: &str = "warning[zetesis::zero-divisor]";
 
 fn options() -> Options {

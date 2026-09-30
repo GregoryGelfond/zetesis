@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use zetesis_test_support::scripts::{executable, quote};
 use zetesis_validation::{curated, selected};
 
 struct Fixture {
@@ -15,15 +16,6 @@ struct Fixture {
     reference: PathBuf,
     native: PathBuf,
     report: PathBuf,
-}
-
-fn quote(path: &Path) -> String {
-    format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"))
-}
-
-fn executable(path: &Path, body: &str) {
-    fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
 }
 
 impl Fixture {

@@ -2,13 +2,8 @@
 //! method on a CPU backend; otherwise one worker walks it and its leaves
 //! are batched.
 
-use std::num::NonZeroUsize;
-
 use zetesis_solve::{Backend, SearchMethod, SolveConfig};
-
-fn workers(count: usize) -> NonZeroUsize {
-    NonZeroUsize::new(count).unwrap()
-}
+use zetesis_test_support::counts::nonzero as workers;
 
 fn parallel() -> SolveConfig {
     SolveConfig {

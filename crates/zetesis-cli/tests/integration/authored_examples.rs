@@ -1,8 +1,8 @@
 //! Real authored defaults cross the CLI and complete-display contract boundary.
 use clap::Parser;
-use std::path::{Path, PathBuf};
 use zetesis_cli::{Completion, Options, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     answers::native_json,
     performance::{
@@ -10,10 +10,6 @@ use zetesis_validation::{
         scalability,
     },
 };
-
-fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples")
-}
 
 fn check(workload: &Workload) {
     // Exercise ordinary automatic admission with unchanged resource defaults.

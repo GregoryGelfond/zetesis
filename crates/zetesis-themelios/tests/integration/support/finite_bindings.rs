@@ -9,7 +9,7 @@ use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::canonical;
 use zetesis_themelios::AdmittedFormula;
 
-pub(crate) type Models = BTreeSet<BTreeSet<String>>;
+pub(crate) use zetesis_test_support::records::Models;
 
 pub(crate) fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
     let mut result = Vec::new();

@@ -7,17 +7,13 @@ use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
 
 use std::collections::BTreeSet;
-use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{Node, TightPlanLimits};
 use zetesis_sat::{Cancellation, Incomplete, Limits, SearchLimits, SearchMethod, StableModels};
+use zetesis_test_support::{counts::nonzero as workers, harness};
 
 use choice_theories::{choices, theory_over};
 use theories::mixed;
-
-fn workers(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).unwrap()
-}
 
 fn family(search: &mut StableModels) -> Vec<Vec<usize>> {
     search
@@ -304,15 +300,6 @@ fn one_worker_returns_the_scalar_walks_sequence() {
     assert_eq!(family(&mut one), family(&mut scalar));
 }
 
-/// This module's test `function` as the harness names it: the module path
-/// below the test crate's root, then the function.
-fn harness_name(function: &str) -> String {
-    match module_path!().split_once("::") {
-        Some((_, module)) => format!("{module}::{function}"),
-        None => function.to_owned(),
-    }
-}
-
 /// Run a possibly blocking worker lifecycle in a child, so a regression is
 /// killed and reaped instead of stranding a thread in the test runner. The
 /// child re-runs this module's test `name` alone.
@@ -322,7 +309,7 @@ fn bounded_child(name: &str, run: impl FnOnce()) {
         return;
     }
     let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--exact", harness_name(name).as_str()])
+        .args(["--exact", harness::test_name(module_path!(), name).as_str()])
         .env("ZETESIS_REGION_CHILD", name)
         .stdout(std::process::Stdio::piped())
         .spawn()
