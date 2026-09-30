@@ -105,7 +105,7 @@ pub struct Plan {
     pub(super) selection: Option<Vec<String>>,
 }
 impl Plan {
-    /// Construct up to eight CPU/Metal profiles. Each worker count is bounded
+    /// Construct up to eight profiles, on any backend. Each worker count is bounded
     /// by 256; every profile retains its batch/scratch ceilings. Zero through
     /// five warmups and one through 41 timed rounds are admitted. An automatic
     /// grounding request is admitted; its observations retain the mode taken.
