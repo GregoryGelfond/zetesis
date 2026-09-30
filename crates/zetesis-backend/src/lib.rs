@@ -277,6 +277,21 @@ impl clap::builder::TypedValueParser for BackendParser {
     }
 }
 
+/// Command-line parsing for an argument that names a GPU API alone, such as
+/// the API a physical test stage qualifies: the API spellings, each with the
+/// help of the backend it selects.
+#[cfg(feature = "clap")]
+impl clap::ValueEnum for GpuApi {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Metal, Self::Vulkan]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        let backend = Backend::Gpu(Some(*self));
+        Some(clap::builder::PossibleValue::new(self.label()).help(backend.help()))
+    }
+}
+
 #[cfg(feature = "clap")]
 fn possible_values() -> impl Iterator<Item = clap::builder::PossibleValue> {
     Backend::ALL

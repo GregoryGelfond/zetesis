@@ -211,6 +211,58 @@ mod command_line {
                 .contains("tip: a similar value exists: 'metal'")
         );
     }
+
+    fn api_command() -> Command {
+        Command::new("zetesis-maintenance").arg(
+            Arg::new("api")
+                .long("physical-backend")
+                .value_parser(clap::value_parser!(GpuApi)),
+        )
+    }
+
+    #[test]
+    fn an_api_argument_lists_the_apis_with_their_backend_help() {
+        let values: Vec<_> = <GpuApi as clap::ValueEnum>::value_variants()
+            .iter()
+            .filter_map(clap::ValueEnum::to_possible_value)
+            .map(|value| {
+                (
+                    value.get_name().to_owned(),
+                    value.get_help().map(ToString::to_string),
+                )
+            })
+            .collect();
+        let expected: Vec<_> = [GpuApi::Metal, GpuApi::Vulkan]
+            .into_iter()
+            .map(|api| {
+                let help = Backend::Gpu(Some(api)).help();
+                (api.label().to_owned(), Some(help.to_owned()))
+            })
+            .collect();
+        assert_eq!(values, expected);
+    }
+
+    #[test]
+    fn an_api_argument_parses_each_api_label() {
+        for api in [GpuApi::Metal, GpuApi::Vulkan] {
+            let matches = api_command().try_get_matches_from([
+                "zetesis-maintenance",
+                "--physical-backend",
+                api.label(),
+            ]);
+            assert_eq!(matches.unwrap().get_one::<GpuApi>("api"), Some(&api));
+        }
+    }
+
+    #[test]
+    fn an_api_argument_refuses_a_backend_that_names_no_api() {
+        for spelling in ["cpu", "gpu"] {
+            let error = api_command()
+                .try_get_matches_from(["zetesis-maintenance", "--physical-backend", spelling])
+                .unwrap_err();
+            assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+        }
+    }
 }
 
 #[cfg(feature = "serde")]

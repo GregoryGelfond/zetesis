@@ -22,26 +22,11 @@ struct Options {
     command: Action,
 }
 
-/// The backend of a physical coverage stage.
-#[derive(Clone, Copy, ValueEnum)]
-enum PhysicalBackend {
-    Metal,
-    Vulkan,
-}
-impl PhysicalBackend {
-    const fn api(self) -> GpuApi {
-        match self {
-            Self::Metal => GpuApi::Metal,
-            Self::Vulkan => GpuApi::Vulkan,
-        }
-    }
-}
-
-/// The physical stage a coverage run names: its backend with its table, both or
+/// The physical stage a coverage run names: its API with its table, both or
 /// neither, as the command's arguments require.
-fn physical_stage(backend: Option<PhysicalBackend>, table: Option<&str>) -> Option<Physical<'_>> {
+fn physical_stage(api: Option<GpuApi>, table: Option<&str>) -> Option<Physical<'_>> {
     Some(Physical {
-        api: backend?.api(),
+        api: api?,
         table: table?,
     })
 }
@@ -135,7 +120,7 @@ enum Action {
         llvm_profdata_version: String,
         /// The backend of the physical stage.
         #[arg(long, value_enum, requires = "physical_table")]
-        physical_backend: Option<PhysicalBackend>,
+        physical_backend: Option<GpuApi>,
         /// The backend's reviewed selection, as the stage reads it.
         #[arg(long, requires = "physical_backend")]
         physical_table: Option<String>,
