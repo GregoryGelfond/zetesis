@@ -58,6 +58,7 @@
   - [Earlier grounding measurements](reference/grounding-measurements.md)
 - [Validating an implementation change](reference/validation.md)
   - [Measurement protocols](reference/measurement-protocols.md)
+  - [Version 0.1.5 coverage](reference/coverage-0.1.5.md)
 
 ---
 
