@@ -118,7 +118,7 @@ fn automatic_threads_match_the_default() {
     let explicit = solve(&["zetesis", "solve", "-", "--threads", "auto"]);
     let host = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
     assert_eq!(explicit.workers, implicit.workers);
-    assert_eq!(explicit.workers.get(), host.min(4));
+    assert_eq!(explicit.workers.get(), host);
 }
 
 #[test]

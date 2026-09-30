@@ -22,14 +22,11 @@ use std::num::NonZeroUsize;
 use std::str::FromStr;
 
 /// The CPU backend's default thread count, which `--threads auto` means: the
-/// host's available parallelism, at most four, or one when the host reports
-/// none. It reads the host each time it is called.
+/// host's available parallelism, or one when availability is unknown. It reads
+/// the host each time it is called.
 #[must_use]
 pub fn default_threads() -> NonZeroUsize {
-    const CAP: NonZeroUsize = NonZeroUsize::new(4).expect("four is nonzero");
-    std::thread::available_parallelism()
-        .unwrap_or(NonZeroUsize::MIN)
-        .min(CAP)
+    std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
 }
 
 /// Read a thread count as a command line spells it: `auto` for

@@ -87,9 +87,9 @@ fn the_cpu_resolves_to_no_api() {
 }
 
 #[test]
-fn default_threads_are_the_host_parallelism_at_most_four() {
+fn default_threads_are_the_host_parallelism() {
     let host = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
-    assert_eq!(default_threads().get(), host.min(4));
+    assert_eq!(default_threads().get(), host);
 }
 
 #[test]
@@ -99,7 +99,12 @@ fn auto_threads_mean_the_default() {
 
 #[test]
 fn a_positive_thread_count_is_read_as_given() {
-    assert_eq!(parse_threads("7").map(NonZeroUsize::get), Ok(7));
+    for count in [1, 2, 4, 7, 8, 14] {
+        assert_eq!(
+            parse_threads(&count.to_string()).map(NonZeroUsize::get),
+            Ok(count)
+        );
+    }
 }
 
 #[test]

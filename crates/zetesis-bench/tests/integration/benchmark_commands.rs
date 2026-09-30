@@ -26,9 +26,7 @@ fn installed_run_defaults_to_canonical_solve() {
     );
     assert_eq!(
         options.threads.get(),
-        std::thread::available_parallelism()
-            .map_or(1, std::num::NonZeroUsize::get)
-            .min(4)
+        std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
     );
     assert_eq!(options.completion_workers.get(), 1);
     assert_eq!(options.clingo_threads.get(), 1);

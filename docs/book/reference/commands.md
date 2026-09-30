@@ -78,7 +78,7 @@ matters. The reduct remains the criterion for accepting an answer.
 | Option | Default and meaning |
 | --- | --- |
 | `--backend cpu` | CPU execution. `gpu` uses the platform's native API (Metal on macOS, Vulkan elsewhere); `metal` and `vulkan` name one. A GPU request is honored or refused. |
-| `--threads auto` | At most four available host threads; one if availability is unknown. |
+| `--threads auto` | The host's available parallelism; one if availability is unknown. |
 | `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
 | `--memory-budget SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
@@ -108,7 +108,7 @@ zetesis solve program.lp --backend metal --grounder eager --all
 zetesis solve program.lp --time-limit 30s --memory-budget 4GiB
 ```
 
-An explicit positive thread count is not capped at four. The thread setting
+An explicit positive thread count overrides this default. The thread setting
 selects the applicable host search or closure pool. General GPU execution also
 has host candidate production and exact CPU completion; a GPU request does not
 move all solving work to the device. An unavailable or failed GPU does not
@@ -129,6 +129,9 @@ minimum of two GiB; an unavailable reading falls back to two GiB. It scales
 specified session storage ceilings, not every allocation. Fixed admission/output
 limits and work/count limits retain their own defaults. This allowance is not
 a process RSS cap. Advanced help identifies which bytes each ceiling counts.
+Closure workers share a collective storage ceiling: increasing `--threads`
+reduces each worker's default share. Use an explicit thread count to balance
+parallelism with memory per worker.
 
 Formula model construction has separate controls: `--max-model-work` bounds
 cumulative preparation of atom order and construction of selected models;

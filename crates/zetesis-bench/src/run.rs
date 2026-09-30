@@ -205,7 +205,7 @@ pub struct RunOptions {
     /// Requested materialization policy.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
-    /// Native candidate/closure workers; auto uses at most four available threads.
+    /// Native candidate/closure workers; auto uses the host's available parallelism.
     #[arg(long, alias = "workers", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto")]
     pub threads: NonZeroUsize,
     /// Compare native thread counts, for example 1,2,4; clingo only qualifies.

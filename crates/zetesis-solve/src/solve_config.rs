@@ -79,8 +79,8 @@ pub struct SolveConfig {
     /// region tree under the regions method, one being the scalar walk.
     /// CPU closure setup conservatively reserves `max_closure_bytes` per worker;
     /// [`Self::for_allowance`] keeps that product within the collective ceiling.
-    /// The library default is four; the command uses at most four available
-    /// host threads.
+    /// The library default is four; the command uses the host's available
+    /// parallelism, or one when availability is unknown.
     pub workers: NonZeroUsize,
     /// Worker count for unresolved formula queries: under the clauses search,
     /// and under regions with one CPU walker or general device propagation.

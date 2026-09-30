@@ -95,7 +95,10 @@ timing and memory rounds.
 | --- | --- |
 | `--backend cpu\|gpu\|metal\|vulkan` | `cpu`. A GPU backend is required: its absence is retained as a non-pass. |
 | `--grounder auto\|eager\|lazy` | `auto` |
-| `--threads auto\|N`, also `--workers` | At most four available host threads; one if unknown |
+| `--threads auto\|N`, also `--workers` | The host's available parallelism; one if unknown |
+
+Each benchmark profile admits at most 256 threads. On a host reporting more,
+choose an explicit count within that bound.
 
 The advanced controls, listed by `zetesis-bench run --help` and omitted from
 `-h`, apply to every profile:

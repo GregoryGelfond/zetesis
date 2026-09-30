@@ -24,7 +24,8 @@ manifest data; removed test annotations never become solver directives.
 
 Native runs use `solve --all --json --stats` with the requested profile, by
 default the CPU, automatic grounding, the automatic reduct oracle, one
-completion worker and at most four closure threads. Reference clingo uses one
+completion worker and the host's available parallelism for closure and candidate
+search. An explicit `--threads N` sets that parallelism budget. Reference clingo uses one
 worker and `optN`. Both receive unchanged source bytes, including the verified
 transitive include closure. Every selected contract and complete reported-display
 multiset must agree before a campaign can pass. Symbol multiplicities, duplicate

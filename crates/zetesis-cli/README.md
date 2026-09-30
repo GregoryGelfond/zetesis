@@ -148,8 +148,8 @@ accepted. `--stats` reports the regions visited, refuted and reached as
 leaves for the candidate tree and, under `--search regions`, for the reduct
 queries.
 
-`--threads auto|N` (`--workers` in existing scripts) defaults to at most four
-available host threads, or one when availability is unknown. It sets the closure
+`--threads auto|N` (`--workers` in existing scripts) defaults to the host's
+available parallelism, or one when availability is unknown. It sets the closure
 route's pool and, under `--search regions`, the region walkers. Native CPU region
 workers decide the leaves they reach. Device region workers produce unchecked
 leaves in bounded rounds; all producers join before device membership checking

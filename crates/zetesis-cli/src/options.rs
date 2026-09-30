@@ -239,7 +239,7 @@ pub struct Options {
     /// and the leaves a device checks; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
     pub batch_size: NonZeroUsize,
-    /// Threads for candidate search; auto uses at most four available threads.
+    /// Threads for candidate search; auto uses the host's available parallelism.
     ///
     /// The closure route's pool and the region tree's walkers use this count.
     /// Auto falls back to one when the host does not report its parallelism.
