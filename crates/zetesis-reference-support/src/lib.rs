@@ -3,7 +3,8 @@
 //! against the reduct.
 //!
 //! [`admit`] admits a source under the default options, [`formula`] under
-//! the default limits as well, and [`exhaustive`] enumerates every subset of
+//! the default limits as well and [`normal`] on the normal-program route, and
+//! [`exhaustive`] enumerates every subset of
 //! its atoms, keeping those the reduct check (`zetesis_ferraris::check`)
 //! accepts, each with its objective's costs; atoms are spelled as clingo
 //! spells them ([`canonical`]). The crate stands above `zetesis-themelios`,
@@ -15,8 +16,8 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_formula,
+    AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
+    admit_extended, admit_formula,
 };
 
 /// An atom as clingo spells it: a leading `-` for strong negation, and
@@ -75,6 +76,21 @@ pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Fo
 #[must_use]
 pub fn formula(source: &str) -> AdmittedFormula {
     admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+/// `source` admitted on the normal-program route, the bounded extension of
+/// S0, under the default options and limits.
+///
+/// # Panics
+/// Panics if the admission refuses `source`.
+#[must_use]
+pub fn normal(source: &str) -> Admitted {
+    admit_extended(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+    )
+    .unwrap()
 }
 
 /// Every answer set of `input`, each with its objective's costs: every subset

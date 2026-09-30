@@ -8,8 +8,8 @@ use std::{
 };
 use zetesis_test_support::programs::atom;
 
-use crate::support::reports::REPORT_BYTES;
 use zetesis_clingo_support as oracle;
+use zetesis_clingo_support::REPORT_BYTES;
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{

@@ -7,8 +7,8 @@
 
 use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroUsize, path::Path};
 
-use crate::support::reports::REPORT_BYTES;
 use zetesis_clingo_support as oracle;
+use zetesis_clingo_support::REPORT_BYTES;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{

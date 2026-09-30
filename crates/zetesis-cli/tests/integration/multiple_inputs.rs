@@ -11,6 +11,7 @@ use clap::Parser;
 use serde_json::Value as Json;
 use zetesis_cli::Options;
 use zetesis_clingo_support as oracle;
+use zetesis_clingo_support::costs;
 
 type Records = Vec<(BTreeSet<String>, Option<Vec<i64>>)>;
 struct Fixture(tempfile::TempDir);
@@ -95,11 +96,6 @@ fn atoms(line: &str) -> BTreeSet<String> {
         assert!(result.insert(line[start..].to_owned()));
     }
     result
-}
-fn costs(value: &Json) -> Option<Vec<i64>> {
-    value
-        .as_array()
-        .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect())
 }
 fn expected(case: &Json) -> Records {
     let mut records: Records = case["records"]

@@ -1,13 +1,10 @@
 //! Every stopped prefix retains charged work for cumulative caller budgets.
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Node, Theory, TightCheckLimits, TightError, TightPlan,
-    TightPlanLimits, TightResource,
+    Interpretation, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightResource,
 };
+use zetesis_theory_support::theories::fact as theory;
 
-fn theory() -> Theory {
-    Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap()
-}
 #[test]
 fn construction_and_candidate_prefixes_retain_exact_work_on_failure() {
     let t = theory();

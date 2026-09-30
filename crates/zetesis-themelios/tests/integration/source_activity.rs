@@ -1,19 +1,7 @@
 //! Rich source activity shares scoped lowering and preserves independent literals.
 
-use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula,
-};
-
-fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        *limits,
-    )
-}
+use zetesis_reference_support::{admit, formula};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[test]
 fn constant_aggregate_producers_exclude_negative_domains() {

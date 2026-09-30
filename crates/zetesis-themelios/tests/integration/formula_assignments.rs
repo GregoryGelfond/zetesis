@@ -6,7 +6,7 @@ use crate::support::atom_models::Models;
 use crate::support::objective_boundaries;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{admit, formula as input};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
@@ -14,9 +14,6 @@ use zetesis_themelios::{
     FormulaLimits, FormulaResource, admit_formula,
 };
 
-fn input(source: &str) -> AdmittedFormula {
-    admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
-}
 fn models(input: &AdmittedFormula) -> Models {
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("search admission");

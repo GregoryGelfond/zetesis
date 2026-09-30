@@ -4,9 +4,10 @@ use std::time::{Duration, Instant};
 
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Node, Theory, TightCheckLimits, TightError, TightPlan,
-    TightPlanLimits, TightProducerKind, TightResource, TightVerdict,
+    AdmissionLimits, Node, Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
+    TightProducerKind, TightResource, TightVerdict,
 };
+use zetesis_theory_support::theories::interpretation;
 
 #[derive(Clone, Debug)]
 enum Tree {
@@ -68,13 +69,6 @@ fn theory(atoms: usize, formulas: &[Tree]) -> Theory {
     let mut nodes = Vec::new();
     let roots = formulas.iter().map(|tree| tree.emit(&mut nodes)).collect();
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
-fn interpretation(theory: &Theory, world: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|a| world & (1 << a) != 0),
-    )
-    .unwrap()
 }
 fn stable(formulas: &[Tree], candidate: usize) -> bool {
     if !formulas.iter().all(|tree| tree.truth(candidate)) {

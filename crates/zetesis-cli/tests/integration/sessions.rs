@@ -16,9 +16,8 @@ use zetesis_cli::{
 };
 use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, normal};
 use zetesis_test_support::io::{CLOSED, Closed};
-use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -27,14 +26,6 @@ fn config() -> SolveConfig {
         workers: NonZeroUsize::MIN,
         ..Default::default()
     }
-}
-fn normal(source: &str) -> Admitted {
-    admit_extended(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap()
 }
 fn atoms(model: &SessionModel) -> Vec<String> {
     model

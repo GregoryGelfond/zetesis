@@ -11,13 +11,12 @@ use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, Session, SolveConfig, run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
+use zetesis_clingo_support::REPORT_BYTES as MAX_REPORT_BYTES;
 use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::programs::nullary as atom;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_validation::answers;
-
-const MAX_REPORT_BYTES: usize = 64 * 1024;
 
 struct Expected {
     models: Vec<Vec<Atom>>,

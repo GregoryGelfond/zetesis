@@ -2,12 +2,9 @@
 
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check_interpretation,
+    AdmissionLimits, Interpretation, Limits, Theory, Verdict, check_interpretation,
 };
-
-fn fact() -> Theory {
-    Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap()
-}
+use zetesis_theory_support::theories::fact;
 
 #[test]
 fn accepted_receipt_retains_the_checked_subject() {

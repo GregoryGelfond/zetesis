@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
+use zetesis_clingo_support::costs;
 use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
@@ -52,12 +53,6 @@ fn names(value: &Json) -> BTreeSet<String> {
         .iter()
         .map(|atom| atom.as_str().unwrap().to_owned())
         .collect()
-}
-
-fn costs(value: &Json) -> Option<Vec<i64>> {
-    value
-        .as_array()
-        .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect())
 }
 
 fn text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {

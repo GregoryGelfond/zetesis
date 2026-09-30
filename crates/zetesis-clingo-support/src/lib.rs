@@ -56,6 +56,9 @@ fn discover(clingo: Option<OsString>, search: Option<&OsStr>) -> PathBuf {
         .unwrap_or_else(|error| panic!("CLINGO is unset and PATH holds no clingo: {error}"))
 }
 
+/// The byte ceiling of a clingo report the comparisons read: 64 KiB.
+pub const REPORT_BYTES: usize = 64 * 1024;
+
 /// The bounds of one clingo run.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
@@ -66,11 +69,11 @@ pub struct Limits {
 }
 
 impl Default for Limits {
-    /// Five seconds and 64 KiB.
+    /// Five seconds and [`REPORT_BYTES`].
     fn default() -> Self {
         Self {
             timeout: Duration::from_secs(5),
-            max_output_bytes: 64 * 1024,
+            max_output_bytes: REPORT_BYTES,
         }
     }
 }

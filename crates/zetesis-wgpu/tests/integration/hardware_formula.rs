@@ -5,9 +5,8 @@ use crate::support::physical;
 
 use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{
-    AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check,
-};
+use zetesis_ferraris::{FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check};
+use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
     GpuSelection, ResidualReason,
@@ -25,9 +24,6 @@ fn oracle(backend: GpuApi, projection: GateProjection) -> GpuFormulaOracle {
     oracle
 }
 
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
 fn candidates(theory: &Theory) -> Vec<Interpretation> {
     assert!(theory.atom_count() <= 3, "exhaustive fixture is bounded");
     (0..1usize << theory.atom_count())

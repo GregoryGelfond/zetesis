@@ -12,10 +12,11 @@ use zetesis_core::Value as Term;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
-    AggregateLimits, Interpretation, Node, Theory, ValueExtremumElement, append_aggregate,
+    AggregateLimits, Interpretation, Theory, ValueExtremumElement, append_aggregate,
     append_value_extremum_refs, models, models_reduct,
     native_aggregate::{self as native, Bound, Function, Group, Guard, Tuple},
 };
+use zetesis_theory_support::aggregate::ferraris_theory as original;
 
 const WORLD_PAIRS: usize = 16;
 
@@ -34,28 +35,6 @@ struct Fixture {
     lowered: Theory,
     worlds: Vec<Worlds>,
     cancellation: Cancellation,
-}
-
-fn original() -> Theory {
-    Theory::new(
-        2,
-        vec![
-            Node::False,
-            Node::Implies(0, 0),
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(2, 0),
-            Node::Implies(4, 0),
-            Node::Implies(3, 0),
-            Node::And(2, 3),
-            Node::Or(2, 3),
-            Node::Implies(2, 3),
-            Node::Or(2, 4),
-        ],
-        vec![],
-        AdmissionLimits::default(),
-    )
-    .unwrap()
 }
 
 fn term(function: Function, index: usize) -> Term {

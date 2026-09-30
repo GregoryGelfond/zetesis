@@ -5,48 +5,14 @@ use zetesis_core::{Sign, Value as Term, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
-    AggregateLimits, Interpretation, Node, Theory, ValueExtremumElement, append_aggregate,
-    append_value_extremum_refs, models, models_reduct,
+    AggregateLimits, Theory, ValueExtremumElement, append_aggregate, append_value_extremum_refs,
+    models, models_reduct,
     native_aggregate::{self as native, Bound, Function, Group, Guard, Tuple},
 };
-
-const FUNCTIONS: [Function; 5] = [
-    Function::Count,
-    Function::Sum,
-    Function::SumPlus,
-    Function::Min,
-    Function::Max,
-];
-
-fn prefix() -> Theory {
-    Theory::new(
-        2,
-        vec![
-            Node::False,
-            Node::Implies(0, 0),
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(2, 0),
-            Node::Implies(4, 0),
-            Node::Implies(3, 0),
-            Node::And(2, 3),
-            Node::Or(2, 3),
-            Node::Implies(2, 3),
-            Node::Or(2, 4),
-        ],
-        vec![],
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
-
-fn world(theory: &Theory, bits: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| bits & (1 << atom) != 0),
-    )
-    .unwrap()
-}
+use zetesis_theory_support::{
+    aggregate::{FUNCTIONS, ferraris_theory as prefix},
+    theories::interpretation as world,
+};
 
 fn tuples(weights: &[Term], conditions: &[usize]) -> Vec<Tuple> {
     weights

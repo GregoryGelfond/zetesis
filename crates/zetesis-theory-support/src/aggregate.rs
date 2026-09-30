@@ -1,5 +1,7 @@
 //! The CPU reference a device's aggregates are compared with: acquired
-//! original and frozen truth over every connective of a two-atom theory.
+//! original and frozen truth over every connective of a two-atom theory. And
+//! the node prefix on which the Ferraris aggregate propositions build their
+//! theories.
 
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
@@ -36,24 +38,44 @@ pub const COMPARISONS: [Comparison; 6] = [
 /// Panics if the default admission limits refuse the theory; they admit it.
 #[must_use]
 pub fn theory() -> Theory {
-    Theory::new(
-        2,
-        vec![
-            Node::False,
-            Node::Implies(0, 0),
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(2, 0),
-            Node::Implies(4, 0),
-            Node::Implies(3, 0),
-            Node::And(2, 3),
-            Node::Or(2, 3),
-            Node::Implies(2, 3),
-        ],
-        vec![],
-        AdmissionLimits::default(),
-    )
-    .unwrap()
+    Theory::new(2, connectives(), vec![], AdmissionLimits::default()).unwrap()
+}
+
+/// The first nodes of every theory the Ferraris aggregate propositions
+/// build: [`theory`]'s, then `a or not a`, a choice of `a` under the Ferraris
+/// reduct.
+#[must_use]
+pub fn ferraris_prefix() -> Vec<Node> {
+    let mut nodes = connectives();
+    nodes.push(Node::Or(2, 4));
+    nodes
+}
+
+/// The theory over atoms `a` and `b` whose nodes are [`ferraris_prefix`]'s,
+/// without roots.
+///
+/// # Panics
+/// Panics if the default admission limits refuse the theory; they admit it.
+#[must_use]
+pub fn ferraris_theory() -> Theory {
+    Theory::new(2, ferraris_prefix(), vec![], AdmissionLimits::default()).unwrap()
+}
+
+/// Falsity and truth, `a` and `b`, `not a`, `not not a` and `not b`, and `a`
+/// with `b` under conjunction, disjunction and implication.
+fn connectives() -> Vec<Node> {
+    vec![
+        Node::False,
+        Node::Implies(0, 0),
+        Node::Atom(0),
+        Node::Atom(1),
+        Node::Implies(2, 0),
+        Node::Implies(4, 0),
+        Node::Implies(3, 0),
+        Node::And(2, 3),
+        Node::Or(2, 3),
+        Node::Implies(2, 3),
+    ]
 }
 
 /// The group of `function` over one tuple per entry of `first`, under
@@ -168,5 +190,13 @@ mod tests {
         assert_eq!(worlds.len(), 4);
         let group = group(&theory, Function::Sum, 5);
         assert_eq!(observations(&group, &worlds, 7).len(), 7);
+    }
+
+    #[test]
+    fn the_ferraris_prefix_is_the_device_connectives_then_a_or_not_a() {
+        let prefix = ferraris_prefix();
+        assert_eq!(prefix[..prefix.len() - 1], *theory().nodes());
+        assert_eq!(prefix.last(), Some(&Node::Or(2, 4)));
+        assert_eq!(ferraris_theory().nodes(), prefix);
     }
 }

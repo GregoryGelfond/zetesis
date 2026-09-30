@@ -1,31 +1,14 @@
 //! One prepared owner must preserve every candidate's frozen-reduct decision.
 
 use proptest::prelude::*;
-use zetesis_ferraris::{Interpretation, Node, Theory, Verdict};
+use zetesis_ferraris::{Node, Theory, Verdict};
 use zetesis_sat::{
     Cancellation, Check, Incomplete, Limits, PreparedReduct, ReductPreparationLimits,
     ReductWorkspace, SearchLimits,
 };
+use zetesis_theory_support::theories::{interpretation as candidate, theory};
 
 const BYTES: u64 = 4 * 1024 * 1024;
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        nodes,
-        roots,
-        zetesis_ferraris::AdmissionLimits::default(),
-    )
-    .unwrap()
-}
-
-fn candidate(theory: &Theory, mask: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-    )
-    .unwrap()
-}
 
 fn prepare(theory: &Theory) -> PreparedReduct {
     PreparedReduct::prepare(
