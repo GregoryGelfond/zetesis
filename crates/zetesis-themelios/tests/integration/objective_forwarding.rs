@@ -3,12 +3,13 @@
 use crate::support::finite_bindings::holds;
 use crate::support::source_cases;
 
+use crate::support::finite_bindings::values as truth;
+use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as EXTREMA_REFUSALS;
 use oracle::records as clingo;
 use source_cases::cases;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::{admit, canonical, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
@@ -17,7 +18,6 @@ use zetesis_themelios::{
 };
 
 const FIXTURE: &str = include_str!("../fixtures/objective-forwarding.jsonl");
-const EXTREMA_REFUSALS: &str = include_str!("../fixtures/objective-extrema-refusals.jsonl");
 const RECURSIVE_COUNT: &str = "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.";
 
 #[test]
@@ -162,21 +162,6 @@ fn optima(records: &Records) -> Records {
         .filter(|(_, costs)| costs == best)
         .cloned()
         .collect()
-}
-
-fn truth(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut values = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => values[left] && values[right],
-            Node::Or(left, right) => values[left] || values[right],
-            Node::Implies(left, right) => !values[left] || values[right],
-        };
-        values.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    values
 }
 
 #[test]

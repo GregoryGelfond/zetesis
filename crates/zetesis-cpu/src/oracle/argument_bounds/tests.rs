@@ -1,12 +1,13 @@
 //! The bounds of each argument are an upper domain of every closure's atoms:
 //! constants contribute themselves, a head variable ranges within the
 //! positions binding it, and a too-wide argument is unknown.
-use zetesis_core::{AtomPattern, Predicate, Program, Template, Term, Value};
+use zetesis_core::{Predicate, Program, Term, Value};
 
 use super::{ArgumentBounds, Bound, infer};
 use crate::oracle::{PreparationLimits, Work};
 use crate::{Cancellation, Limits, Stop};
 
+use crate::oracle::test_support::rule;
 use zetesis_test_support::programs::{fact, number, pattern, program};
 
 fn numbers(bounds: &ArgumentBounds, values: &[i32]) -> Bound {
@@ -22,10 +23,6 @@ fn numbers(bounds: &ArgumentBounds, values: &[i32]) -> Bound {
             })
             .collect(),
     )
-}
-
-fn rule(head: AtomPattern, body: Vec<AtomPattern>) -> Template {
-    Template::new(Some(head), body, vec![], vec![], vec![])
 }
 
 /// The bound of one argument; unknown for a predicate or an argument the

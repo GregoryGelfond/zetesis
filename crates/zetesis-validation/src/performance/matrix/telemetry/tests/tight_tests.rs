@@ -25,13 +25,6 @@ fn tight_fixture() -> (Value, String) {
     (document, text)
 }
 
-fn metal() -> NativeExecution {
-    NativeExecution {
-        backend: Backend::Gpu(Some(GpuApi::Metal)),
-        ..Default::default()
-    }
-}
-
 #[test]
 fn tight_device_work_is_not_propagation() {
     let (document, text) = tight_fixture();

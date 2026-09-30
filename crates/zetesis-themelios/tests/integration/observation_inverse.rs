@@ -1,28 +1,10 @@
 //! Finite inverse matching, structural alternatives and wildcard key identities.
 
+use crate::support::observation_rendering::shown;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
-
-fn shown(source: &str) -> Vec<String> {
-    let input = formula(source);
-    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
-    input
-        .metadata()
-        .observations()
-        .render(
-            &model,
-            input.metadata().output(),
-            Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
-        .text()
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect()
-}
 
 #[test]
 fn one_invertible_occurrence_supplies_one_checked_scalar() {

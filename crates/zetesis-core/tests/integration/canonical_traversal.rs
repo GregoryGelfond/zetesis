@@ -3,18 +3,9 @@
 use crate::support::canonical::{before, catalog};
 use std::convert::Infallible;
 use zetesis_core::catalog::TermRef;
-use zetesis_core::{AtomCatalog, Sign, Value, ValueLimits, ValueNode as N};
+use zetesis_core::{AtomCatalog, Sign, Value, ValueNode as N};
+use zetesis_test_support::programs::{function, value as tree};
 
-fn function(name: &str, arity: usize) -> N {
-    N::Function {
-        name: name.into(),
-        sign: Sign::Positive,
-        arity,
-    }
-}
-fn tree(nodes: Vec<N>) -> Value {
-    Value::from_nodes(nodes, ValueLimits::default()).unwrap()
-}
 fn term(catalog: &AtomCatalog) -> TermRef<'_> {
     catalog.atoms().at(0).unwrap().values().at(0).unwrap()
 }

@@ -2,10 +2,9 @@
 
 use std::num::NonZeroUsize;
 
+use crate::support::runs::detailed as solve;
 use clap::Parser;
-use zetesis_cli::{
-    Completion, Interruption, Options, Report, RunError, run_detailed_with_diagnostics,
-};
+use zetesis_cli::{Completion, Interruption, Options, RunError, run_detailed_with_diagnostics};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 
@@ -30,24 +29,6 @@ fn options(workers: usize, batch: usize) -> Options {
     options.completion_workers = NonZeroUsize::new(workers).unwrap();
     options.batch_size = NonZeroUsize::new(batch).unwrap();
     options
-}
-
-fn solve(source: &str, options: &Options) -> (Report, String, String) {
-    let mut output = Vec::new();
-    let mut diagnostics = Vec::new();
-    let result = run_detailed_with_diagnostics(
-        source.into(),
-        options,
-        &mut output,
-        &mut diagnostics,
-        &Cancellation::default(),
-    )
-    .unwrap();
-    (
-        result,
-        String::from_utf8(output).unwrap(),
-        String::from_utf8(diagnostics).unwrap(),
-    )
 }
 
 fn answers(output: &str) -> Vec<&str> {

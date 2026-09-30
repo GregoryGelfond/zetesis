@@ -1,10 +1,7 @@
-use std::convert::Infallible;
-
 use super::{PredicateRef, TermRef};
 use crate::catalog::{CatalogRead, DerivedTerms, Limits, storage::Store};
+use crate::test_support::PERMIT;
 use crate::{Predicate, Sign, Value, ValueLimits, ValueNode, ValueNodeRef};
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 
 fn compound(suffix: &str) -> Value {
     let mut nodes = vec![

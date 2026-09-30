@@ -431,6 +431,8 @@ mod classification {
     use zetesis_test_support::programs::nullary as atom;
     use zetesis_wgpu::GpuError;
 
+    use crate::test_support::payload;
+
     fn program() -> Program {
         let pattern = |name| AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap();
         Program::new(
@@ -509,21 +511,6 @@ mod classification {
                 Ok(Some(Model::new([atom("a")]).unwrap()))
             ]
         );
-    }
-
-    fn payload(model: &Model) -> &str {
-        let zetesis_core::ValueNodeRef::String(value) = model
-            .atoms()
-            .first()
-            .unwrap()
-            .values()
-            .at(0)
-            .unwrap()
-            .descriptor()
-        else {
-            panic!("fixture contains one string argument");
-        };
-        value
     }
 
     #[test]

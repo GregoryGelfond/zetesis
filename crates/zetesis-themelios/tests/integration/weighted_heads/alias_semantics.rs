@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use super::{canonical, holds, input, values};
+use crate::support::head_element_reference::signed;
 
 #[derive(Clone, Copy)]
 struct World([bool; 4]);
@@ -23,16 +24,6 @@ impl World {
 
     fn activation(self) -> bool {
         self.0[3]
-    }
-}
-
-/// A positive atom remains live in J; either default-negation form uses M.
-fn signed(sign: u8, candidate: bool, inner: Option<bool>) -> bool {
-    match sign {
-        0 => candidate && inner.unwrap_or(true),
-        1 => !candidate,
-        2 => candidate,
-        _ => unreachable!("three literal signs"),
     }
 }
 

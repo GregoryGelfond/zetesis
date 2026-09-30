@@ -1,6 +1,7 @@
 //! Pure expression evaluation observes full models without extending logical grounding.
 
 use crate::support::observation_reference;
+use crate::support::observation_rendering::shown as terms;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -8,25 +9,6 @@ use zetesis_themelios::observation::{
     ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-
-fn terms(source: &str) -> Vec<String> {
-    let input = formula(source);
-    let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
-    input
-        .metadata()
-        .observations()
-        .render(
-            &model,
-            input.metadata().output(),
-            Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
-        .text()
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect()
-}
 
 #[test]
 fn checked_integer_operators_construct_their_scalar_results() {

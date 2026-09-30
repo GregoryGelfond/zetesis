@@ -1,6 +1,5 @@
 use super::*;
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
+use crate::test_support::PERMIT;
 
 fn prepared() -> (AtomInterner, AtomCatalog) {
     let mut source = owner(&[3]);

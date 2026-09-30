@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::atom_interner::{AtomInterner, Limits};
+use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, TemplateCatalogBuilder, Value, ValueNodeRef};
 
 const METADATA: usize = 1024 * 1024;
@@ -11,7 +12,6 @@ fn limits() -> Limits {
         max_bytes: 4 * 1024 * 1024,
     }
 }
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 fn atom(name: &str, value: Value) -> Atom {
     Atom::new(Predicate::new(name, 1).unwrap(), vec![value]).unwrap()
 }

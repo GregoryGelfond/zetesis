@@ -1,23 +1,16 @@
 //! Shared host scopes preserve attempts independently of application outcomes.
 
+use crate::support::sessions::config as cpu_config;
 use std::{sync::mpsc, thread, time::Duration};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    Backend, Completion, ExecutionObservation, ExecutionObserver, GroundingOutcome, GroundingPhase,
+    Completion, ExecutionObservation, ExecutionObserver, GroundingOutcome, GroundingPhase,
     GroundingWork, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, SolveStage,
 };
 use zetesis_themelios::GroundingObserver as _;
 use zetesis_themelios::{AdmissionOptions, admit};
 
 const WAIT: Duration = Duration::from_secs(5);
-
-fn cpu_config() -> SolveConfig {
-    SolveConfig {
-        backend: Backend::Cpu,
-        models: 0,
-        ..Default::default()
-    }
-}
 
 #[test]
 fn sessions_and_shared_measurements_retain_their_thread_bounds() {

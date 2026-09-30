@@ -1,18 +1,9 @@
-use super::super::{ConstructionLimits, Limits, Statistics};
 use super::*;
+use crate::observation::evaluate::test_support::work;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::programs::function;
 
-fn work(cancellation: &Cancellation) -> Work<'_> {
-    Work {
-        limits: Limits::default(),
-        construction: ConstructionLimits::default(),
-        cancellation,
-        statistics: Statistics::default(),
-        location: None,
-        local_bytes: 0,
-    }
-}
 fn model(nodes: Vec<ValueNode>) -> Model {
     let value = Value::from_nodes(
         nodes,
@@ -27,13 +18,6 @@ fn model(nodes: Vec<ValueNode>) -> Model {
 }
 fn argument(model: &Model) -> TermRef<'_> {
     model.atoms().at(0).unwrap().arguments().get(0).unwrap()
-}
-fn function(name: &str, arity: usize) -> ValueNode {
-    ValueNode::Function {
-        name: name.into(),
-        sign: Sign::Positive,
-        arity,
-    }
 }
 fn no_construction(work: &mut Work<'_>) {
     work.construction.max_bytes = 0;

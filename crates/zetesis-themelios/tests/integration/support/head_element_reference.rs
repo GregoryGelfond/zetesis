@@ -105,7 +105,7 @@ impl World {
     }
 }
 
-fn signed(sign: u8, outer: bool, inner: Option<bool>) -> bool {
+pub(crate) fn signed(sign: u8, outer: bool, inner: Option<bool>) -> bool {
     match sign {
         0 => outer && inner.unwrap_or(true),
         1 => !outer,

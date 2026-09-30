@@ -2,6 +2,7 @@
 
 use crate::support::source_cases;
 
+use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as HISTORICAL;
 use source_cases::cases;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
@@ -10,7 +11,6 @@ use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
 };
 
-const HISTORICAL: &str = include_str!("../fixtures/objective-extrema-refusals.jsonl");
 const CONTROLS: &str = include_str!("../fixtures/objective-flat-presence.jsonl");
 
 fn flat_cases() -> Vec<source_cases::Case> {

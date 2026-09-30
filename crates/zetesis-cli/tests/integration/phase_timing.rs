@@ -2,30 +2,11 @@
 
 use std::io;
 
-use clap::Parser;
+use crate::support::options::serial_with_statistics as options;
 use zetesis_cli::{
     Completion, Options, PhaseTimings, Report, RunError, SolvePhase, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
-
-fn options(arguments: &[&str], stats: bool) -> Options {
-    let mut options = Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--workers",
-            "1",
-            "--models",
-            "0",
-        ]
-        .into_iter()
-        .chain(arguments.iter().copied()),
-    )
-    .unwrap();
-    options.stats = stats;
-    options
-}
 
 fn solve(source: &str, options: &Options) -> (Report, String, String) {
     let mut output = Vec::new();

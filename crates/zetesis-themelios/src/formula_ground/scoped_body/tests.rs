@@ -3,20 +3,10 @@ use crate::formula_support::{
     Publication, SourceSelection,
     testing::{Fixture, binding},
 };
+use crate::test_support::location;
 use crate::{ExpansionLimits, FormulaLimits, FormulaResource, expansion::Budget};
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Location, Span},
-};
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueNodeRef};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 #[test]
 fn scoped_condition_keeps_the_shared_atom_payload() {

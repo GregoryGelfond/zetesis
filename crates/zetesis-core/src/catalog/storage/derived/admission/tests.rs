@@ -1,11 +1,10 @@
 use super::super::super::{budget::Budget, index::Index};
 use super::*;
+use crate::test_support::PERMIT_WITH_UNIT_ERROR as PERMIT;
 use crate::{
     Sign, Value, ValueLimits, ValueNode,
     catalog::{Vocabulary, VocabularyBuilder},
 };
-
-const PERMIT: fn() -> Result<(), ()> = || Ok(());
 
 #[test]
 fn colliding_filters_still_distinguish_typed_root_descriptors() {

@@ -1,8 +1,8 @@
 //! Selected order, bounded route applicability and unpublished failure output.
 
 use super::*;
+use crate::test_support::PERMIT;
 
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 const SELECTED: [usize; 9] = [8, 0, 7, 1, 6, 2, 5, 3, 4];
 const ORDERED: [usize; 9] = [1, 3, 5, 7, 8, 6, 4, 2, 0];
 

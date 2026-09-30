@@ -7,7 +7,8 @@ use zetesis_theory_support::theories::theory;
 
 use std::collections::BTreeSet;
 
-use zetesis_ferraris::{Interpretation, Node, Theory};
+use crate::support::interpretations::stable_models as expected;
+use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Incomplete, Limits,
     SearchLimits, SearchMethod, StableModels,
@@ -24,27 +25,6 @@ fn batch(count: usize) -> BatchLimits {
 fn proposed(theory: &Theory, limits: Limits) -> StableModels {
     StableModels::with_region_producers(theory, nonzero(4), limits, Cancellation::default())
         .unwrap()
-}
-
-fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
-    (0..1_usize << theory.atom_count())
-        .filter_map(|mask| {
-            let candidate = Interpretation::new(
-                theory,
-                (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-            )
-            .unwrap();
-            zetesis_ferraris::check(
-                theory,
-                &candidate,
-                zetesis_ferraris::Limits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap()
-            .accepted()
-            .then(|| candidate.atoms().collect())
-        })
-        .collect()
 }
 
 #[test]

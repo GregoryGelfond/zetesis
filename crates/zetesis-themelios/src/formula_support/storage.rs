@@ -467,15 +467,8 @@ mod tests {
     use super::*;
     use crate::FormulaLimits;
     use crate::formula_support::testing::Fixture;
-    use themelios_base::source::SourceId;
-    use themelios_base::span::{ByteOffset, Span};
 
-    fn location() -> Location {
-        Location {
-            source: SourceId::new(0),
-            span: Span::empty(ByteOffset::new(0)),
-        }
-    }
+    use crate::test_support::location;
 
     #[test]
     fn lease_transfer_preserves_the_live_total() {

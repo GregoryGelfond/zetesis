@@ -1,10 +1,9 @@
 //! Select against the requested profile, then rank; static discovery is metadata.
 
+use super::test_support::METAL;
 use super::{GpuInfo, GpuSelection, check_capabilities, choose};
 use crate::{GpuError, GpuErrorKind, GpuOptions};
 use zetesis_backend::GpuApi;
-
-const METAL: GpuSelection = GpuSelection { api: GpuApi::Metal };
 
 fn report(name: &str, limits: &wgpu::Limits, compute: bool) -> GpuInfo {
     let mut raw = wgpu::AdapterInfo::new(wgpu::DeviceType::IntegratedGpu, wgpu::Backend::Metal);

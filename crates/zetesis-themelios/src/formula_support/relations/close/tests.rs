@@ -1,18 +1,8 @@
 use super::*;
 use crate::FormulaLimits;
 use crate::formula_support::testing::Fixture;
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Span},
-};
+use crate::test_support::location;
 use zetesis_core::{Atom, Predicate, Value, ValueNodeRef};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 #[test]
 fn closing_keeps_the_original_component_vocabulary() {

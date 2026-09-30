@@ -1,7 +1,7 @@
 //! Ordinary formula invocations select the hybrid before answer-set publication.
 
-use clap::Parser;
-use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
+use crate::support::options::enumerating as options;
+use zetesis_cli::{Completion, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 
 mod formula_records;
@@ -26,15 +26,6 @@ use crate::support::finite_carrier_sources;
 use crate::support::language_value_sources;
 #[cfg(feature = "gpu")]
 use crate::support::physical_backend;
-
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(
-        ["zetesis", "--models", "0"]
-            .into_iter()
-            .chain(arguments.iter().copied()),
-    )
-    .unwrap()
-}
 
 fn cpu_output(source: &str, json: bool) -> Vec<u8> {
     let mut configuration = options(&["--backend", "cpu"]);

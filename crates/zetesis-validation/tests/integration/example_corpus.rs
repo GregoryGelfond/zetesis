@@ -1,8 +1,8 @@
 //! Integrity and reported-display contracts for the self-contained correctness examples.
 
 use std::fs;
-use std::path::Path;
 
+use crate::support::files::copy;
 use serde_json::{Value, json};
 use zetesis_test_support::repository::{
     correctness as clean_root, kr_domains as originals, root as repo,
@@ -14,10 +14,6 @@ use zetesis_validation::examples::{
 
 fn verified() -> Corpus {
     examples::load(&clean_root(), Limits::default()).unwrap()
-}
-fn copy(source: &Path, destination: &Path) {
-    fs::create_dir_all(destination.parent().unwrap()).unwrap();
-    fs::copy(source, destination).unwrap();
 }
 fn isolated() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();

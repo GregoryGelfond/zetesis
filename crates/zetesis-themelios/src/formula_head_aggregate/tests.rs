@@ -5,21 +5,13 @@ use crate::formula_ir::{ChoiceIr, Element, HeadElementKey, HeadLiteral, HeadMeas
 use crate::formula_support::Context;
 use crate::formula_support::components::{Pattern, Term};
 use crate::formula_support::testing::Fixture;
+use crate::test_support::location;
 use crate::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     ProfileFeature,
 };
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{AtomPattern, Predicate, Value};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 fn budget() -> Budget {
     Budget::new(

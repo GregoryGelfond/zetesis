@@ -1,16 +1,8 @@
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::{Atom, Predicate, Value, ValueNodeRef};
 
 use super::*;
 use crate::formula_support::{Support, SupportCatalog};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
+use crate::test_support::location;
 
 #[test]
 fn semantic_order_rebuilds_local_coordinates() {

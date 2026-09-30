@@ -3,12 +3,12 @@
 use crate::support::priority_contracts;
 use crate::support::source_cases;
 
+use crate::support::fixtures::OBJECTIVE_LANGUAGE_BOUNDARIES as BOUNDARIES;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
-const BOUNDARIES: &str = include_str!("../fixtures/objective-language-boundaries.jsonl");
 const CASES: &str = include_str!("../fixtures/objective-rich-cycles.jsonl");
 
 fn boundaries() -> Vec<Json> {

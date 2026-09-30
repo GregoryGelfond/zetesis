@@ -1,12 +1,10 @@
 //! User-visible model delivery, coverage, refusals, and output failures.
+use crate::support::options::plain as options;
 use clap::Parser;
 use std::io;
 use zetesis_cli::{Completion, Options, RunError, run};
 use zetesis_cpu::{Cancellation, Stop};
 
-fn options(extra: &[&str]) -> Options {
-    Options::try_parse_from(["zetesis"].into_iter().chain(extra.iter().copied())).unwrap()
-}
 fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, String) {
     let mut output = Vec::new();
     let report = run(

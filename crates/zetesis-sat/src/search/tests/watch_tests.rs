@@ -1,18 +1,8 @@
 //! Watch moves preserve the registry independently of its optional-link layout.
 
-use super::{Budget, Decision, LocalQuota, State, WatchNode, scratch_bytes, storage};
-use crate::{
-    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
-};
-
-fn budget(cancellation: &Cancellation) -> Budget<'_> {
-    Budget {
-        quota: LocalQuota,
-        limits: SearchLimits::default(),
-        cancellation,
-        statistics: SearchStatistics::default(),
-    }
-}
+use super::budget;
+use super::{Decision, State, WatchNode, scratch_bytes, storage};
+use crate::{AdmissionLimits, Cancellation, Cnf, Incomplete, Literal};
 
 fn registry(state: &State, cnf: &Cnf) -> Vec<Vec<usize>> {
     let mut seen = vec![false; state.next.len()];

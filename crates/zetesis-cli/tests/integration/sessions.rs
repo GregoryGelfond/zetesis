@@ -2,6 +2,8 @@
 
 use zetesis_test_support::document::spelled;
 
+use crate::support::options::serial as options;
+use crate::support::options::serial_config as config;
 use std::{
     collections::BTreeSet,
     io::{self, Write},
@@ -11,7 +13,7 @@ use std::{
 
 use clap::Parser;
 use zetesis_cli::{
-    Backend, Completion, Grounder, Interruption, Options, Oracle, PreparedInput, RunError, Session,
+    Completion, Grounder, Interruption, Options, Oracle, PreparedInput, RunError, Session,
     SessionModel, SolveConfig, Subject, run_finalized_with_diagnostics,
 };
 use zetesis_core::{GroundProgram, StaticLimits};
@@ -19,14 +21,6 @@ use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{formula, normal};
 use zetesis_test_support::io::{CLOSED, Closed};
 
-fn config() -> SolveConfig {
-    SolveConfig {
-        backend: Backend::Cpu,
-        models: 0,
-        workers: NonZeroUsize::MIN,
-        ..Default::default()
-    }
-}
 fn atoms(model: &SessionModel) -> Vec<String> {
     model
         .interpretation()
@@ -34,22 +28,6 @@ fn atoms(model: &SessionModel) -> Vec<String> {
         .iter()
         .map(|atom| atom.predicate().name().to_string())
         .collect()
-}
-fn options(extra: &[&str]) -> Options {
-    Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--workers",
-            "1",
-            "--models",
-            "0",
-        ]
-        .into_iter()
-        .chain(extra.iter().copied()),
-    )
-    .unwrap()
 }
 
 #[test]

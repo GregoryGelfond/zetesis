@@ -1,8 +1,9 @@
 //! Ordinary source execution preserves exact reduct, objective and publication contracts.
+use crate::support::runs::detailed as solve;
 use clap::Parser;
 use std::io;
 use zetesis_cli::{
-    Completion, Options, Oracle, Report, RunFailure, SolvePhase, run_detailed_with_diagnostics,
+    Completion, Options, Oracle, RunFailure, SolvePhase, run_detailed_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
 
@@ -26,23 +27,6 @@ fn options(oracle: Oracle, workers: usize) -> Options {
     o.search = zetesis_cli::SearchMethod::Clauses;
     o.completion_workers = std::num::NonZeroUsize::new(workers).unwrap();
     o
-}
-fn solve(source: &str, o: &Options) -> (Report, String, String) {
-    let mut out = Vec::new();
-    let mut diag = Vec::new();
-    let r = run_detailed_with_diagnostics(
-        source.into(),
-        o,
-        &mut out,
-        &mut diag,
-        &Cancellation::default(),
-    )
-    .unwrap();
-    (
-        r,
-        String::from_utf8(out).unwrap(),
-        String::from_utf8(diag).unwrap(),
-    )
 }
 fn answers(text: &str) -> Vec<&str> {
     let mut a = text

@@ -5,8 +5,7 @@ use serde_json::json;
 use super::{NATIVE, PHASE_TIMINGS, check, emitting, loaded, options};
 use crate::corpus_comparison::NativeOracle;
 use zetesis_backend::{Backend, GpuApi};
-
-const STAGES: &str = zetesis_test_support::fixtures::STAGE_STATISTICS;
+use zetesis_test_support::fixtures::STAGE_STATISTICS as STAGES;
 
 #[test]
 fn stage_evidence_is_retained_independently_of_solver_completion() {

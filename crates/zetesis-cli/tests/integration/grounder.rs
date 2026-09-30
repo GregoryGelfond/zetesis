@@ -3,14 +3,11 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use crate::support::options::plain as options;
 use clap::Parser;
 use zetesis_cli::{Backend, Completion, Grounder, Options, Report, RunError, run_with_diagnostics};
 use zetesis_core::StaticError;
 use zetesis_cpu::{Cancellation, Stop};
-
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(["zetesis"].into_iter().chain(arguments.iter().copied())).unwrap()
-}
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String, String) {
     let mut output = Vec::new();

@@ -1,7 +1,8 @@
 //! Source tests share a real canonical owner and execution workspace.
 use super::{CompletedCatalog, Computation, Counters, Support, SupportCatalog};
-use crate::FormulaLimits;
+use crate::expansion::Budget;
 use crate::formula_binding::Binding;
+use crate::{ExpansionLimits, FormulaLimits};
 use themelios_base::span::Location;
 use zetesis_core::Value;
 
@@ -219,4 +220,15 @@ fn prepare_into(
     .prepare(&raised, metadata.project_selection().clone(), &choices)
     .unwrap();
     (prepared, location)
+}
+
+/// An expansion budget under the default limits, for any number of core
+/// templates.
+pub(crate) fn budget() -> Budget {
+    Budget::new(ExpansionLimits::default(), usize::MAX)
+}
+
+/// `values` as number values.
+pub(crate) fn numbers(values: &[i32]) -> Vec<Value> {
+    values.iter().map(|&value| Value::Number(value)).collect()
 }

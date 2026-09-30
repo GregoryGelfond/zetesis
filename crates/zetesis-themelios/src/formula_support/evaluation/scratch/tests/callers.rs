@@ -1,12 +1,12 @@
 //! Actual join consumers share one canonical computation and leased scratch.
 use super::{empty, location};
-use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
+use crate::formula_support::testing::budget;
 use crate::formula_support::{
     Comparisons, Join,
     testing::{Fixture, binding},
 };
-use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_program::{program::Relation, term::BinaryOp};
 use zetesis_core::{Value, ValueNodeRef};
 
@@ -26,9 +26,6 @@ fn increment(fixture: &mut Fixture, variable: usize) -> Expression {
             Operation::Binary(BinaryOp::Add, 0, 1),
         ],
     }
-}
-fn budget() -> Budget {
-    Budget::new(ExpansionLimits::default(), usize::MAX)
 }
 
 #[test]

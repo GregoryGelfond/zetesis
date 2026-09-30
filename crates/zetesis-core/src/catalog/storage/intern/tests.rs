@@ -1,10 +1,8 @@
 //! Prepared row publication consumes an exact result without probing again.
 
 use super::*;
+use crate::test_support::PERMIT;
 use crate::{Predicate, Value};
-use std::convert::Infallible;
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 
 #[test]
 fn shared_and_local_collision_chains_remain_exact() {

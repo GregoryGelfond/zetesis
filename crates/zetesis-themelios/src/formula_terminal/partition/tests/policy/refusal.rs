@@ -1,30 +1,9 @@
 //! Refusals after policy buffers are populated retain work but publish no plan.
 
-use std::cell::Cell;
-
 use super::{Context, Counters, FormulaFailure, FormulaResource, policy, prepare, selection};
 use crate::grounding_observer::Profile;
-use crate::{FormulaLimits, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
-
-#[derive(Default)]
-struct Observer(Cell<GroundingWork>);
-
-impl GroundingObserver for Observer {
-    fn enter(&self) {}
-    fn exit(&self) {}
-    fn details_enabled(&self) -> bool {
-        true
-    }
-    fn phase_exit(
-        &self,
-        _: GroundingPhase,
-        _: Option<themelios_base::span::Location>,
-        _: GroundingOutcome,
-        work: GroundingWork,
-    ) {
-        self.0.set(work);
-    }
-}
+use crate::test_support::Observer;
+use crate::{FormulaLimits, GroundingPhase};
 
 struct Capture {
     result: Result<usize, FormulaFailure>,

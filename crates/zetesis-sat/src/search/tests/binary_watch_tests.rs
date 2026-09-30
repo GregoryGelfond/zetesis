@@ -1,19 +1,9 @@
 //! Binary propagation has no unwatched positions; limits still guard every
 //! dequeued occurrence and every visited clause before publishing deductions.
 
-use super::{Budget, LocalQuota, State};
-use crate::{
-    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
-};
-
-fn budget(cancellation: &Cancellation) -> Budget<'_> {
-    Budget {
-        quota: LocalQuota,
-        limits: SearchLimits::default(),
-        cancellation,
-        statistics: SearchStatistics::default(),
-    }
-}
+use super::State;
+use super::budget;
+use crate::{AdmissionLimits, Cancellation, Cnf, Incomplete, Literal};
 
 fn binary() -> Cnf {
     Cnf::new(

@@ -1,12 +1,11 @@
-use std::{cmp::Ordering, convert::Infallible};
+use std::cmp::Ordering;
 
 use super::AtomRef;
 use crate::catalog::{Limits, storage::Store};
+use crate::test_support::PERMIT;
 use crate::{
     Atom, AtomCatalog, AtomIndex, AtomIndexError, Predicate, Sign, Value, ValueLimits, ValueNode,
 };
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 
 fn atom(sign: Sign, value: Value) -> Atom {
     Atom::new(Predicate::with_sign("p", 1, sign).unwrap(), vec![value]).unwrap()

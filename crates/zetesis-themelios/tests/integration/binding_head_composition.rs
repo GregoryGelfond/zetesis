@@ -2,9 +2,9 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::finite_bindings::values;
 use crate::support::finite_bindings::{holds, remap};
 use zetesis_core::Sign;
-use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
@@ -89,20 +89,6 @@ fn input(source: &str) -> AdmittedFormula {
 // Evaluate topological nodes directly. Freezing replaces every M-false subtree
 // with falsum, including compound implications. This does not call the native
 // evaluator, reduct mask, candidate generator or minimality checker.
-fn values(theory: &Theory, tested: usize, frozen: Option<&[bool]>) -> Vec<bool> {
-    let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
-            Node::False => false,
-            Node::Atom(atom) => tested & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
-            Node::Implies(left, right) => !result[left] || result[right],
-        };
-        result.push(value && frozen.is_none_or(|outer| outer[index]));
-    }
-    result
-}
 
 fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
     let atom = atom.into();

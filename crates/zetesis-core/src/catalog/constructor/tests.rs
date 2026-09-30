@@ -1,9 +1,8 @@
 use super::*;
 use crate::atom_interner::{AtomInterner, Failure, Limits};
+use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, Value};
-use std::convert::Infallible;
 
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 fn limits() -> Limits {
     Limits {
         max_atoms: 8,

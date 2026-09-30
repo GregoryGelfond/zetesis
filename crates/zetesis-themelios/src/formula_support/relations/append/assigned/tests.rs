@@ -1,19 +1,10 @@
 use std::sync::atomic::Ordering;
 
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
-
 use super::*;
 use crate::FormulaResource;
 use crate::formula_support::SupportCatalog;
+use crate::test_support::location;
 use zetesis_core::{Atom, Predicate};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 fn atom() -> Atom {
     Atom::new(Predicate::new("discovered", 0).unwrap(), Vec::new()).unwrap()

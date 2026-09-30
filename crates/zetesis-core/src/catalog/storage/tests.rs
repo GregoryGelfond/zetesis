@@ -1,22 +1,7 @@
 use super::*;
 use crate::catalog::Limits;
-use crate::{Sign, Value, ValueLimits, ValueNode, ValueNodeRef, ValueResource};
-
-fn limits() -> Limits {
-    Limits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
-
-fn value_limits() -> ValueLimits {
-    ValueLimits {
-        max_nodes: usize::MAX,
-        max_depth: usize::MAX,
-        max_bytes: usize::MAX,
-    }
-}
+use crate::test_support::{unlimited as limits, unlimited_values as value_limits};
+use crate::{Sign, Value, ValueNode, ValueNodeRef, ValueResource};
 
 fn store() -> Store {
     Store::new(usize::MAX)

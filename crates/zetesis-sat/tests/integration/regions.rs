@@ -10,6 +10,7 @@ use crate::support::formula_theories as theories;
 
 use std::collections::BTreeSet;
 
+use crate::support::interpretations::models;
 use zetesis_ferraris::{Node, Theory, TightPlanLimits};
 use zetesis_sat::{
     BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, SearchMethod,
@@ -27,13 +28,6 @@ fn regions(theory: &Theory, limits: Limits) -> StableModels {
         Cancellation::default(),
     )
     .unwrap()
-}
-
-fn models(search: &mut StableModels) -> Vec<Vec<usize>> {
-    search
-        .by_ref()
-        .map(|model| model.unwrap().atoms().collect())
-        .collect()
 }
 
 #[test]

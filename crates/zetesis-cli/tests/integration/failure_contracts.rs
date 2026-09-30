@@ -5,27 +5,10 @@ use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::process::{Command, Stdio};
 
-use clap::Parser;
-use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
+use crate::support::options::serial as options;
+use zetesis_cli::{Completion, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL};
-
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--workers",
-            "1",
-            "--models",
-            "0",
-        ]
-        .into_iter()
-        .chain(arguments.iter().copied()),
-    )
-    .unwrap()
-}
 
 fn output_error(error: &RunError) {
     let RunError::Output(source) = error else {
@@ -500,8 +483,7 @@ fn a_tiny_lazy_run_uses_the_cpu_by_default() {
 fn cpu_only_binary_reports_explicit_gpu_unavailability_without_fallback() {
     for backend in ["gpu", "metal", "vulkan"] {
         let options =
-            Options::try_parse_from(["zetesis", "--backend", backend, "--oracle", "closure"])
-                .unwrap();
+            crate::support::options::plain(&["--backend", backend, "--oracle", "closure"]);
         let mut output = Vec::new();
         let error = run_with_diagnostics(
             "a.".into(),

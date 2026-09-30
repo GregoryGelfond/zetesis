@@ -4,6 +4,14 @@ use serde_json::json;
 
 use crate::performance::matrix::fixtures::fixture;
 
+/// A native execution on the Metal backend, otherwise the default.
+fn metal() -> NativeExecution {
+    NativeExecution {
+        backend: Backend::Gpu(Some(GpuApi::Metal)),
+        ..Default::default()
+    }
+}
+
 mod tight_tests;
 mod residual_tests;
 mod hybrid_tests;

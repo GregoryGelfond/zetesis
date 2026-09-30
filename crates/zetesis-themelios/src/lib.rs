@@ -133,6 +133,8 @@ mod grounding_options;
 mod formula_domains;
 mod formula_keys;
 mod word_hash;
+#[cfg(test)]
+mod test_support;
 pub use formula_keys::KeyAnalysis;
 pub use grounding_observer::{
     DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,

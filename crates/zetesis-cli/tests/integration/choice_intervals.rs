@@ -1,34 +1,10 @@
 //! Automatic routing preserves choice groups, observed ties and objective slots.
 
-use clap::Parser;
-use zetesis_cli::{Backend, Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
+use crate::support::runs::enumerated as solve;
+use zetesis_cli::{Backend, Completion, RunError};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, ProfileFeature,
 };
-
-fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
-    let options = Options::try_parse_from(
-        ["zetesis", "--models", "0"]
-            .into_iter()
-            .chain(arguments.iter().copied()),
-    )
-    .unwrap();
-    let mut output = Vec::new();
-    let mut diagnostics = Vec::new();
-    let result = run_with_diagnostics(
-        source.into(),
-        &options,
-        &mut output,
-        &mut diagnostics,
-        &Cancellation::default(),
-    );
-    (
-        result,
-        String::from_utf8(output).unwrap(),
-        String::from_utf8(diagnostics).unwrap(),
-    )
-}
 
 fn displays(text: &str) -> Vec<&str> {
     let mut result = Vec::new();

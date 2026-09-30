@@ -4,17 +4,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 use zetesis_core::{Sign, Value, ValueError, ValueLimits, ValueNode as N, ValueResource};
+use zetesis_test_support::programs::{function as fun, value};
 
-fn value(nodes: Vec<N>) -> Value {
-    Value::from_nodes(nodes, ValueLimits::default()).unwrap()
-}
-fn fun(name: &str, arity: usize) -> N {
-    N::Function {
-        name: name.into(),
-        sign: Sign::Positive,
-        arity,
-    }
-}
 fn render(value: &Value) -> String {
     match value {
         Value::Structured(v) => v.to_string(),

@@ -1,16 +1,8 @@
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::{Sign, Term, ValueLimits, ValueNode, ValueNodeRef};
 
 use super::*;
 use crate::formula_support::{Computation, Support, testing};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
+use crate::test_support::location;
 
 fn insert(catalog: &mut SupportCatalog, atom: &Atom) {
     *catalog = std::mem::take(catalog)

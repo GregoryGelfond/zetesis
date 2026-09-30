@@ -4,12 +4,13 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
+use crate::support::batching::batch as batch_limits;
 use crate::support::choice_theories::three_choices;
 use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory, TightError, TightPlanLimits, TightResource};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Cancellation, CertificateError, CompletionExecutor,
-    Incomplete, Limits, StableModels,
+    BatchError, BatchVerdict, Cancellation, CertificateError, CompletionExecutor, Incomplete,
+    Limits, StableModels,
 };
 use zetesis_theory_support::theories::theory;
 
@@ -35,12 +36,6 @@ fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
             .then(|| m.atoms().collect())
         })
         .collect()
-}
-fn batch_limits(n: usize) -> BatchLimits {
-    BatchLimits {
-        max_candidates: NonZeroUsize::new(n).unwrap(),
-        max_pending_bytes: 1024 * 1024,
-    }
 }
 
 #[test]

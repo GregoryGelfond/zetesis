@@ -1,13 +1,8 @@
 //! Supplied contexts obey discovery's hard identity policy without rediscovery.
 
-use super::{GpuInfo, GpuSelection, check_selection};
+use super::test_support::{METAL, VULKAN};
+use super::{GpuInfo, check_selection};
 use crate::{GpuErrorKind, GpuOptions};
-use zetesis_backend::GpuApi;
-
-const METAL: GpuSelection = GpuSelection { api: GpuApi::Metal };
-const VULKAN: GpuSelection = GpuSelection {
-    api: GpuApi::Vulkan,
-};
 
 fn reported(backend: wgpu::Backend, category: wgpu::DeviceType, vendor: u32) -> GpuInfo {
     let mut raw = wgpu::AdapterInfo::new(category, backend);

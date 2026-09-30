@@ -1,9 +1,8 @@
 //! Canonical scope, sparse discovery and indivisible inverse publication.
 
 use super::*;
+use crate::test_support::PERMIT;
 use crate::{PatternRef, TemplateTerm};
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 
 fn text_owner(width: usize) -> AtomInterner {
     let mut owner = AtomInterner::new();

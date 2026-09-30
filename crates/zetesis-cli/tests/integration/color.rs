@@ -3,7 +3,6 @@
 use std::io;
 use std::process::{Command, Stdio};
 
-use clap::Parser;
 use zetesis_cli::{
     ColorMode, Completion, Options, RunError, run_detailed_with_diagnostics,
     run_finalized_with_diagnostics,
@@ -12,24 +11,9 @@ use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_test_support::repository;
 
-/// One worker: the bytes of two runs are compared, and several walkers of
-/// the region tree deliver models in the schedule's order.
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--workers",
-            "1",
-            "--models",
-            "0",
-        ]
-        .into_iter()
-        .chain(arguments.iter().copied()),
-    )
-    .unwrap()
-}
+// One worker: the bytes of two runs are compared, and several walkers of
+// the region tree deliver models in the schedule's order.
+use crate::support::options::serial as options;
 
 fn output(source: &str, options: &Options) -> String {
     let mut bytes = Vec::new();

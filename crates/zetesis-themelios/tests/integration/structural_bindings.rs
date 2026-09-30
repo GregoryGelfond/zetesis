@@ -1,5 +1,6 @@
 //! Positive tuple matching preserves full source atoms and frozen semantics.
 use crate::support::finite_bindings as reference;
+use crate::support::finite_bindings::expected as models;
 use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
@@ -7,11 +8,6 @@ use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_
 
 const PROJECTION: &str = "q((1,x),2).\np(A) :- q((A,_),_).\np(B) :- q((A,_),B).\n";
 const EXTREMA_SOURCE: &str = "q((#inf,a)).q((#sup,b)).q((\"#inf\",c)).p(X):-q((X,_)).";
-fn models(rows: &[&[&str]]) -> Models {
-    rows.iter()
-        .map(|row| row.iter().map(|atom| (*atom).to_owned()).collect())
-        .collect()
-}
 #[test]
 fn projection_bug_retains_the_complete_model() {
     assert_eq!(

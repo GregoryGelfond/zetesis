@@ -1,8 +1,8 @@
 //! Stage protocol integrity never substitutes for completed solver evidence.
 
 use super::{FOOTER, HEADER, parse};
+use zetesis_test_support::fixtures::STAGE_STATISTICS as SECTION;
 
-const SECTION: &str = zetesis_test_support::fixtures::STAGE_STATISTICS;
 const GROUNDING: &str = "grounding: calls=1; elapsed_ns=200; complete=true";
 
 #[test]

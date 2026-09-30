@@ -3,13 +3,10 @@
 use std::cmp::Ordering;
 
 use super::reported_static_admission;
-use super::{GpuInfo, GpuSelection, backends, choose, compare_info};
+use super::test_support::VULKAN;
+use super::{GpuInfo, backends, choose, compare_info};
 use crate::{GpuErrorKind, GpuOptions};
 use zetesis_backend::GpuApi;
-
-const VULKAN: GpuSelection = GpuSelection {
-    api: GpuApi::Vulkan,
-};
 
 fn info(backend: wgpu::Backend, category: wgpu::DeviceType) -> GpuInfo {
     let mut raw = wgpu::AdapterInfo::new(category, backend);

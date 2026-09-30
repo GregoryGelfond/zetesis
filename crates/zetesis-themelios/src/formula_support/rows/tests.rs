@@ -2,6 +2,7 @@ use super::{Frame, Ownership};
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::testing::Fixture;
+use crate::formula_support::testing::numbers;
 use crate::formula_support::{Computation, Counters, Join, Traversal};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_base::{
@@ -31,9 +32,6 @@ fn pattern(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr 
             location(),
         ),
     )
-}
-fn numbers(values: &[i32]) -> Vec<Value> {
-    values.iter().map(|&value| Value::Number(value)).collect()
 }
 fn with_join<T>(
     literals: impl FnOnce(&mut Fixture) -> Vec<LiteralIr>,

@@ -1,5 +1,6 @@
 use super::*;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation};
+use crate::formula_support::testing::budget;
 use crate::formula_support::{CompletedCatalog, build, testing};
 use crate::{ConstraintAllowance, ConstraintCheckLimits, ExpansionLimits, FormulaResource};
 use themelios_base::{
@@ -68,10 +69,6 @@ fn fixture() -> (CompletedCatalog, RuleIr) {
             location,
         },
     )
-}
-
-fn budget() -> Budget {
-    Budget::new(ExpansionLimits::default(), usize::MAX)
 }
 
 #[test]

@@ -4,17 +4,10 @@ use zetesis_core::{
     Atom, AtomCatalog, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
     catalog::AtomRef,
 };
+use zetesis_test_support::programs::{atom, pattern};
 
 use super::*;
 use crate::Cancellation;
-
-fn tuple(values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap()
-}
-
-fn pattern(terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new("row", terms.len()).unwrap(), terms).unwrap()
-}
 
 fn values() -> Vec<Value> {
     let function = |sign| {
@@ -96,7 +89,7 @@ fn windows_equal_linear_prefix_selection() {
         .flat_map(|left| {
             values
                 .iter()
-                .map(move |right| tuple(vec![left.clone(), right.clone()]))
+                .map(move |right| atom("row", vec![left.clone(), right.clone()]))
         })
         .collect();
     rows.sort();
@@ -107,7 +100,7 @@ fn windows_equal_linear_prefix_selection() {
     assignments.push(None);
     for first in &terms {
         for second in &terms {
-            let pattern = pattern(vec![first.clone(), second.clone()]);
+            let pattern = pattern("row", vec![first.clone(), second.clone()]);
             for left in &assignments {
                 for right in &assignments {
                     assert_linear_selection(&pattern, &rows, &[*left, *right]);
@@ -121,35 +114,37 @@ fn windows_equal_linear_prefix_selection() {
 fn absent_keys_return_empty_windows() {
     let rows: Vec<_> = [-2, 0, 2]
         .into_iter()
-        .map(|n| tuple(vec![Value::Number(n)]))
+        .map(|n| atom("row", vec![Value::Number(n)]))
         .collect();
     let rows: Vec<_> = rows.iter().collect();
     for n in [-3, -1, 1, 3] {
-        let pattern = pattern(vec![Term::Constant(Value::Number(n))]);
+        let pattern = pattern("row", vec![Term::Constant(Value::Number(n))]);
         assert_linear_selection(&pattern, &rows, &[]);
     }
 }
 
 #[test]
 fn empty_relations_need_no_lookup_work() {
-    let (range, work) = lookup(&pattern(vec![Term::Variable(0)]), &[], &[None], 0).unwrap();
+    let (range, work) = lookup(&pattern("row", vec![Term::Variable(0)]), &[], &[None], 0).unwrap();
     assert_eq!(range, 0..0);
     assert_eq!(work, 0);
 }
 
 #[test]
 fn nullary_relations_keep_their_complete_window() {
-    let row = tuple(vec![]);
-    let (range, work) = lookup(&pattern(vec![]), &[&row], &[], 0).unwrap();
+    let row = atom("row", vec![]);
+    let (range, work) = lookup(&pattern("row", vec![]), &[&row], &[], 0).unwrap();
     assert_eq!(range, 0..1);
     assert_eq!(work, 0);
 }
 
 #[test]
 fn lookup_work_limit_is_inclusive() {
-    let rows: Vec<_> = (0..128).map(|n| tuple(vec![Value::Number(n)])).collect();
+    let rows: Vec<_> = (0..128)
+        .map(|n| atom("row", vec![Value::Number(n)]))
+        .collect();
     let rows: Vec<_> = rows.iter().collect();
-    let pattern = pattern(vec![Term::Constant(Value::Number(63))]);
+    let pattern = pattern("row", vec![Term::Constant(Value::Number(63))]);
     let (range, work) = lookup(&pattern, &rows, &[], u64::MAX).unwrap();
     assert_eq!(range, 63..64);
     assert!(work > 1);
@@ -159,8 +154,11 @@ fn lookup_work_limit_is_inclusive() {
 
 #[test]
 fn lookup_charges_compared_text_payloads() {
-    let row = tuple(vec![Value::String("long-key".into())]);
-    let pattern = pattern(vec![Term::Constant(Value::String("long-key".into()))]);
+    let row = atom("row", vec![Value::String("long-key".into())]);
+    let pattern = pattern(
+        "row",
+        vec![Term::Constant(Value::String("long-key".into()))],
+    );
     assert_eq!(lookup(&pattern, &[&row], &[], 2), Err(Stop::WorkLimit));
 }
 
@@ -176,7 +174,7 @@ fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
         .flat_map(|left| {
             [10, 20]
                 .into_iter()
-                .map(move |right| tuple(vec![Value::Number(left), Value::Number(right)]))
+                .map(move |right| atom("row", vec![Value::Number(left), Value::Number(right)]))
         })
         .collect();
     let program = fixtures::program(&source);
@@ -217,8 +215,8 @@ fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
     let two = Value::Number(2);
     let twenty = Value::Number(20);
     let nine = Value::Number(9);
-    let open = pattern(vec![Term::Variable(0), Term::Variable(1)]);
-    let constant = pattern(vec![Term::Constant(two.clone()), Term::Variable(1)]);
+    let open = pattern("row", vec![Term::Variable(0), Term::Variable(1)]);
+    let constant = pattern("row", vec![Term::Constant(two.clone()), Term::Variable(1)]);
     let mut range = |pattern: &AtomPattern, assignment: &[Option<&Value>]| {
         let assignment: Vec<_> = assignment
             .iter()
@@ -240,7 +238,7 @@ fn a_bound_prefix_of_a_dense_relation_is_its_block_of_positions() {
 fn canonical_rows_and_bindings_keep_prefix_selection_and_refusals() {
     let mut atoms: Vec<_> = values()
         .into_iter()
-        .map(|value| tuple(vec![value]))
+        .map(|value| atom("row", vec![value]))
         .collect();
     atoms.sort();
     // The expected position comes from the independent owned ingress ordering.
@@ -252,9 +250,9 @@ fn canonical_rows_and_bindings_keep_prefix_selection_and_refusals() {
     let catalog = AtomCatalog::new(atoms).unwrap();
     let rows: Vec<_> = catalog.atoms().iter().collect();
     // A separate owner supplies the binding; local IDs cannot establish equality.
-    let query = AtomCatalog::new(vec![tuple(vec![wanted])]).unwrap();
+    let query = AtomCatalog::new(vec![atom("row", vec![wanted])]).unwrap();
     let assignment = [Some(query.atoms().at(0).unwrap().values().at(0).unwrap())];
-    let pattern = pattern(vec![Term::Variable(0)]);
+    let pattern = pattern("row", vec![Term::Variable(0)]);
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, u64::MAX);
     let range = matching_prefix(

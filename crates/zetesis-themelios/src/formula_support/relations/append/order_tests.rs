@@ -1,17 +1,9 @@
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::ValueNodeRef;
 
 use super::*;
 use crate::formula_support::relations::SupportCatalog;
+use crate::test_support::location;
 use zetesis_test_support::programs::unary;
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
 
 fn populate(append: &mut SupportAppend<'_>, values: &[i32], counters: &mut Counters) {
     for &value in values {

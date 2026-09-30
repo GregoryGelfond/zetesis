@@ -1,15 +1,12 @@
 //! Real owner/query attempts preserve failed prefixes and release every guard lease.
 
 use crate::formula_support::{Context, GroundingWork as WorkContext};
-use std::cell::Cell;
 
 use super::*;
 use crate::formula_domains;
 use crate::grounding_observer::Profile;
-use crate::{
-    ExpansionLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
-    GroundingWork,
-};
+use crate::test_support::Observer;
+use crate::{ExpansionLimits, FormulaResource, GroundingPhase};
 
 fn prepared() -> crate::formula::Preparation {
     crate::formula_support::testing::prepare("p(1).p(2).q(2).r(X):-p(X),q(X).")
@@ -40,25 +37,6 @@ fn analyze<'source>(
         profile,
         Context::new(&mut computation, limits, counters, location),
     )
-}
-
-#[derive(Default)]
-struct Observer(Cell<GroundingWork>);
-impl GroundingObserver for Observer {
-    fn enter(&self) {}
-    fn exit(&self) {}
-    fn details_enabled(&self) -> bool {
-        true
-    }
-    fn phase_exit(
-        &self,
-        _: GroundingPhase,
-        _: Option<Location>,
-        _: GroundingOutcome,
-        work: GroundingWork,
-    ) {
-        self.0.set(work);
-    }
 }
 
 #[test]

@@ -1,9 +1,8 @@
 //! Shared-CPU evidence and completed-check delivery.
 
+use crate::test_support::payload;
 use std::num::NonZeroUsize;
-use zetesis_core::{
-    AdmissionLimits, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
-};
+use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template, Term, Value};
 use zetesis_cpu::lazy::{SourceSelection, shared};
 use zetesis_cpu::{BatchOracle, Cancellation};
 
@@ -37,21 +36,6 @@ fn accumulation_overflow_preserves_prior_evidence() {
     let error = statistics.record(&batch.statistics, None).unwrap_err();
     assert!(matches!(error, crate::SolveError::LazyStatisticsOverflow));
     assert_eq!(statistics, before);
-}
-
-fn payload(model: &Model) -> &str {
-    let zetesis_core::ValueNodeRef::String(value) = model
-        .atoms()
-        .first()
-        .unwrap()
-        .values()
-        .at(0)
-        .unwrap()
-        .descriptor()
-    else {
-        panic!("fixture contains one string argument");
-    };
-    value
 }
 
 #[test]

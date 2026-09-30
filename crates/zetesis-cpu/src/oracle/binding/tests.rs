@@ -1,20 +1,13 @@
-use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
+use zetesis_core::{Term, Value};
 
 use super::{Row, TermRef, Work, bind, clear};
 use crate::{Cancellation, Stop};
-
-fn pattern(terms: Vec<Term>) -> AtomPattern {
-    AtomPattern::new(Predicate::new("row", terms.len()).unwrap(), terms).unwrap()
-}
-
-fn atom(values: Vec<Value>) -> Atom {
-    Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap()
-}
+use zetesis_test_support::programs::{atom, pattern};
 
 #[test]
 fn captures_charge_arguments_and_one_end_probe() {
-    let pattern = pattern(vec![Term::Variable(0), Term::Variable(1)]);
-    let atom = atom(vec![Value::Number(3), Value::Number(4)]);
+    let pattern = pattern("row", vec![Term::Variable(0), Term::Variable(1)]);
+    let atom = atom("row", vec![Value::Number(3), Value::Number(4)]);
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, 3);
     let mut assignment = [None, None];
@@ -36,8 +29,8 @@ fn captures_charge_arguments_and_one_end_probe() {
 
 #[test]
 fn final_probe_refusal_is_not_a_completed_binding() {
-    let pattern = pattern(vec![Term::Variable(0), Term::Variable(1)]);
-    let atom = atom(vec![Value::Number(3), Value::Number(4)]);
+    let pattern = pattern("row", vec![Term::Variable(0), Term::Variable(1)]);
+    let atom = atom("row", vec![Value::Number(3), Value::Number(4)]);
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, 2);
     let mut assignment = [None, None];
@@ -60,8 +53,8 @@ fn final_probe_refusal_is_not_a_completed_binding() {
 
 #[test]
 fn nullary_matching_charges_one_end_probe() {
-    let pattern = pattern(vec![]);
-    let atom = atom(vec![]);
+    let pattern = pattern("row", vec![]);
+    let atom = atom("row", vec![]);
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, 1);
     assert_eq!(
@@ -88,8 +81,8 @@ fn mismatch_preserves_existing_comparison_work() {
             .equals_ref_with((&actual).into(), || comparison.tick())
             .unwrap()
     );
-    let pattern = pattern(vec![Term::Constant(expected)]);
-    let atom = atom(vec![actual]);
+    let pattern = pattern("row", vec![Term::Constant(expected)]);
+    let atom = atom("row", vec![actual]);
     let required = 1 + comparison.statistics.work;
     let mut work = Work::source(&cancellation, required);
     assert_eq!(
@@ -107,8 +100,8 @@ fn mismatch_preserves_existing_comparison_work() {
 
 #[test]
 fn malformed_row_shape_stops_the_cpu_join() {
-    let pattern = pattern(vec![Term::Variable(0)]);
-    let atom = atom(vec![Value::Number(3), Value::Number(4)]);
+    let pattern = pattern("row", vec![Term::Variable(0)]);
+    let atom = atom("row", vec![Value::Number(3), Value::Number(4)]);
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, 2);
     assert_eq!(
@@ -125,8 +118,8 @@ fn malformed_row_shape_stops_the_cpu_join() {
 
 #[test]
 fn missing_prepared_trail_stops_before_capture() {
-    let pattern = pattern(vec![Term::Variable(0)]);
-    let atom = atom(vec![Value::Number(3)]);
+    let pattern = pattern("row", vec![Term::Variable(0)]);
+    let atom = atom("row", vec![Value::Number(3)]);
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, 1);
     let mut assignment = [None];

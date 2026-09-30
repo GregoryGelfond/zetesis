@@ -2,13 +2,6 @@
 
 use super::*;
 
-fn metal() -> NativeExecution {
-    NativeExecution {
-        backend: Backend::Gpu(Some(GpuApi::Metal)),
-        ..Default::default()
-    }
-}
-
 #[test]
 fn decoded_residual_reasons_retain_each_cause() {
     let (mut document, text) = formula_fixture();

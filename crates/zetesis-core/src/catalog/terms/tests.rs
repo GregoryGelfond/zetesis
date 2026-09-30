@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 
 use super::*;
+use crate::test_support::PERMIT as SUCCESS;
 use crate::{Value, ValueNodeRef};
 
 fn admit(store: &mut storage::Store, value: &Value) -> storage::TermId {
@@ -14,7 +15,6 @@ fn key(store: &storage::Store, id: storage::TermId) -> TermKey {
     let read = CatalogRead(storage::Read::from(store));
     read.term_key(TermRef::new(read.0, id).unwrap()).unwrap()
 }
-const SUCCESS: fn() -> Result<(), Infallible> = || Ok(());
 
 #[test]
 fn equal_foreign_terms_cannot_be_assigned_by_identity() {

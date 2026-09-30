@@ -1,8 +1,7 @@
 //! Exclusive prepared results retain identity and named scratch admission.
 
 use super::*;
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
+use crate::test_support::PERMIT;
 
 #[test]
 fn canonical_only_entry_retains_the_exact_row() {

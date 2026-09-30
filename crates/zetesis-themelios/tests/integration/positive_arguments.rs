@@ -1,12 +1,13 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
+use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
 use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
@@ -415,39 +416,6 @@ fn captures_obey_the_variable_ceiling() {
             }
         }
     }
-}
-
-fn minimum_bytes(source: &str) -> usize {
-    let prepare = |cap| {
-        prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: cap,
-                ..ExpansionLimits::default()
-            },
-            FormulaLimits::default(),
-        )
-    };
-    let (mut lower, mut upper) = (0, ExpansionLimits::default().max_scalar_bytes);
-    assert!(prepare(upper).is_ok());
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if prepare(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    assert!(prepare(lower).is_ok());
-    assert!(matches!(
-        prepare(lower - 1),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-            resource: ExpansionResource::ScalarBytes,
-            ..
-        }))
-    ));
-    lower
 }
 
 #[test]

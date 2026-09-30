@@ -1,5 +1,6 @@
 //! Constructor patterns retain exact source atoms through finite extraction.
 use crate::support::finite_bindings as reference;
+use crate::support::thresholds::minimum_preparation_bytes;
 use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -465,39 +466,6 @@ fn pattern_nodes_obey_the_value_ceiling() {
             }
         }
     }
-}
-
-fn minimum_preparation_bytes(source: &str) -> usize {
-    let prepare = |cap| {
-        prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: cap,
-                ..ExpansionLimits::default()
-            },
-            FormulaLimits::default(),
-        )
-    };
-    let (mut lower, mut upper) = (0, ExpansionLimits::default().max_scalar_bytes);
-    assert!(prepare(upper).is_ok());
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if prepare(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    assert!(prepare(lower).is_ok());
-    assert!(matches!(
-        prepare(lower - 1),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-            resource: ExpansionResource::ScalarBytes,
-            ..
-        }))
-    ));
-    lower
 }
 
 #[test]

@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::time::Duration;
 
+use crate::support::fixtures::OBJECTIVE_LANGUAGE_BOUNDARIES as CASES;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
@@ -16,7 +17,6 @@ use zetesis_reference_support::{admit, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
-const CASES: &str = include_str!("../fixtures/objective-language-boundaries.jsonl");
 const SOURCE: SourceId = SourceId::new(173);
 
 fn cases() -> Vec<Json> {

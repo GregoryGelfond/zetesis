@@ -2,17 +2,11 @@
 
 use crate::support::finite_bindings as reference;
 
+use crate::support::finite_bindings::expected;
 use reference::{Models, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
-
-fn expected(records: &[&[&str]]) -> Models {
-    records
-        .iter()
-        .map(|record| record.iter().map(|atom| (*atom).to_owned()).collect())
-        .collect()
-}
 
 const CASES: &[(&str, &[&[&str]])] = &[
     ("a:#false;b.", &[&["b"]]),

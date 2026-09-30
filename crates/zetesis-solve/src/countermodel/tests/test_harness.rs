@@ -3,9 +3,8 @@
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+pub(super) use zetesis_reference_support::formula as admitted;
+use zetesis_themelios::AdmittedFormula;
 
 use crate::execution_observation::Ignore;
 use crate::formula_execution::MembershipExecution;
@@ -37,16 +36,6 @@ impl Capture {
         records.sort();
         records
     }
-}
-
-pub(super) fn admitted(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
 }
 
 pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {

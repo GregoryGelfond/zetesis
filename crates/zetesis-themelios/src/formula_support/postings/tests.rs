@@ -2,12 +2,12 @@
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
 
 use super::{Limits, Stop, begin_support, record};
+use crate::formula_support::testing::numbers;
 use crate::formula_support::{Counters, SupportCatalog};
+use crate::test_support::location;
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
@@ -20,13 +20,6 @@ fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
             .unwrap();
     }
     support
-}
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
 }
 
 fn probe(catalog: &SupportCatalog, values: &[Option<Value>]) -> (Option<Vec<usize>>, u64) {
@@ -53,10 +46,6 @@ fn probe(catalog: &SupportCatalog, values: &[Option<Value>]) -> (Option<Vec<usiz
         )
         .unwrap();
     (rows.map(<[usize]>::to_vec), counters.accounting.work)
-}
-
-fn numbers(values: &[i32]) -> Vec<Value> {
-    values.iter().map(|&value| Value::Number(value)).collect()
 }
 
 fn independent() -> SupportCatalog {

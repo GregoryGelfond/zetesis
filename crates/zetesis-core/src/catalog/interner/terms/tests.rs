@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::PERMIT as SUCCESS;
 use crate::{Predicate, Sign, Value, ValueLimits, ValueNode};
 use std::convert::Infallible;
 
@@ -8,7 +9,6 @@ fn limits() -> Limits {
         max_bytes: 1_048_576,
     }
 }
-const SUCCESS: fn() -> Result<(), Infallible> = || Ok(());
 
 #[test]
 fn term_admission_does_not_discover_an_atom() {

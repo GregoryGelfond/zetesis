@@ -4,6 +4,7 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::PathBuf;
 
+use crate::support::options::serial as options;
 use clap::Parser;
 use zetesis_cli::{
     Completion, Options, Report, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
@@ -11,23 +12,6 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
-
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--workers",
-            "1",
-            "--models",
-            "0",
-        ]
-        .into_iter()
-        .chain(arguments.iter().copied()),
-    )
-    .unwrap()
-}
 
 fn solve(source: &str, options: &Options) -> (Report, Vec<u8>, String) {
     let mut output = Vec::new();

@@ -141,4 +141,6 @@ pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTi
 pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 
 mod measurements;
+#[cfg(test)]
+mod test_support;
 pub use measurements::{MeasurementSpan, SolveMeasurements};

@@ -96,18 +96,9 @@ fn failure(error: ValueError, location: Location) -> FormulaFailure {
 mod tests {
     use super::*;
     use crate::formula_support::testing::{Fixture, binding};
-    use themelios_base::{
-        source::SourceId,
-        span::{ByteOffset, Span},
-    };
-    use zetesis_core::{Sign, Value, ValueLimits, ValueNode, ValueNodeRef, ValueResource};
 
-    fn location() -> Location {
-        Location {
-            source: SourceId::new(0),
-            span: Span::empty(ByteOffset::new(0)),
-        }
-    }
+    use crate::test_support::location;
+    use zetesis_core::{Sign, Value, ValueLimits, ValueNode, ValueNodeRef, ValueResource};
     fn pair(fixture: &mut Fixture) -> Constructor {
         Constructor {
             shape: fixture.constructor(

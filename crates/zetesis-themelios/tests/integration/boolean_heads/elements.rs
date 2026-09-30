@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use super::{Models, native};
+use crate::support::finite_bindings::expected;
 use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
@@ -30,13 +31,6 @@ fn models(source: &str) -> Models {
         &limited(source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}")),
     )
-}
-
-fn expected(records: &[&[&str]]) -> Models {
-    records
-        .iter()
-        .map(|atoms| atoms.iter().map(|atom| (*atom).to_owned()).collect())
-        .collect()
 }
 
 #[test]

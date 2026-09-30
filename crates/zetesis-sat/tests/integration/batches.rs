@@ -2,43 +2,17 @@
 
 use std::collections::BTreeSet;
 use std::convert::Infallible;
-use std::num::NonZeroUsize;
 
 use crate::support::batching::residual;
 use crate::support::choice_theories::three_choices;
 use crate::support::clause_search::by_clauses;
-use zetesis_ferraris::{Interpretation, Node, Theory};
+use crate::support::{batching::batch as limits, interpretations::stable_models as expected};
+use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, StableModels,
 };
 use zetesis_theory_support::theories::theory;
 
-fn limits(count: usize) -> BatchLimits {
-    BatchLimits {
-        max_candidates: NonZeroUsize::new(count).unwrap(),
-        max_pending_bytes: 1024 * 1024,
-    }
-}
-fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
-    (0..1_usize << theory.atom_count())
-        .filter_map(|mask| {
-            let model = Interpretation::new(
-                theory,
-                (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-            )
-            .unwrap();
-            zetesis_ferraris::check(
-                theory,
-                &model,
-                zetesis_ferraris::Limits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap()
-            .accepted()
-            .then(|| model.atoms().collect())
-        })
-        .collect()
-}
 fn collect(theory: &Theory, count: usize, propagate: bool) {
     let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
     let mut actual = BTreeSet::new();

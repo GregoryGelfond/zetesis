@@ -1,17 +1,9 @@
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{AtomPattern, Predicate, Term, Value, ValueNodeRef};
 
 use super::*;
 use crate::formula_support::{Support, SupportCatalog};
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
-    }
-}
+use crate::test_support::location;
 
 #[test]
 fn assigned_atoms_preserve_argument_occurrences() {

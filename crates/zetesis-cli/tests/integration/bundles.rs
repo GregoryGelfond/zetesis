@@ -4,10 +4,8 @@ use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use clap::Parser;
-use zetesis_cli::{
-    Completion, Options, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
-};
+use crate::support::options::enumerating as options;
+use zetesis_cli::{Completion, RunError, run_bundle_with_diagnostics, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
@@ -31,15 +29,6 @@ impl Fixture {
             .output()
             .unwrap()
     }
-}
-
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(
-        ["zetesis", "--models", "0"]
-            .into_iter()
-            .chain(arguments.iter().copied()),
-    )
-    .unwrap()
 }
 
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";

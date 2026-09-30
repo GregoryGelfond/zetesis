@@ -1,12 +1,11 @@
 use std::cell::RefCell;
 
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::{AtomPattern, Predicate, Term, Value};
 
 use super::*;
 use crate::formula_support::{Accounting, Support, SupportCatalog, testing};
 use crate::grounding_observer::Profile;
+use crate::test_support::location;
 use crate::{FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase};
 
 #[derive(Default)]
@@ -26,13 +25,6 @@ impl GroundingObserver for Observer {
         work: crate::GroundingWork,
     ) {
         *self.0.borrow_mut() = Some(work);
-    }
-}
-
-fn location() -> Location {
-    Location {
-        source: SourceId::new(0),
-        span: Span::empty(ByteOffset::new(0)),
     }
 }
 

@@ -40,6 +40,8 @@ mod ordered_index;
 mod atom_lookup;
 mod checked_sort;
 mod word_mix;
+#[cfg(test)]
+mod test_support;
 pub use catalog::interner as atom_interner;
 mod carrier;
 mod ground;

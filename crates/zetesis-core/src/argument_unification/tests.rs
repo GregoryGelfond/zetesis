@@ -3,8 +3,7 @@ use std::{cell::Cell, convert::Infallible, panic::AssertUnwindSafe};
 use crate::{Atom, AtomCatalog, AtomPattern, PatternRef, Predicate, Term, Value};
 
 use super::{TermRef, UnificationError, UnificationFailure};
-
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
+use crate::test_support::PERMIT;
 
 fn pattern(terms: Vec<Term>) -> AtomPattern {
     AtomPattern::new(Predicate::new("relation", terms.len()).unwrap(), terms).unwrap()

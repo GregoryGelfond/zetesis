@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::oracle::Schedule;
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Seed, Template, Term, Value};
+use crate::oracle::test_support::rule;
+use zetesis_core::{AdmissionLimits, Atom, Model, Seed, Template, Term, Value};
 use zetesis_test_support::programs::{numbered as atom, pattern};
 
 fn fact(name: &str, values: &[i32]) -> Template {
@@ -21,10 +22,6 @@ fn fact(name: &str, values: &[i32]) -> Template {
         vec![],
         vec![],
     )
-}
-
-fn rule(head: AtomPattern, positive: Vec<AtomPattern>) -> Template {
-    Template::new(Some(head), positive, vec![], vec![], vec![])
 }
 
 fn path(edges: i32, labels: i32) -> (Program, Model) {

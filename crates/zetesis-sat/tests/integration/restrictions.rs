@@ -4,25 +4,12 @@ use std::collections::BTreeSet;
 
 use crate::support::clause_search::by_clauses;
 use crate::support::interpretations::key;
+use crate::support::region_filters::choices;
 use proptest::prelude::*;
-use zetesis_ferraris::{Interpretation, Node, Theory};
+use zetesis_ferraris::{Interpretation, Node};
 use zetesis_sat::{Cancellation, Incomplete, Limits, StableModels};
 use zetesis_theory_support::theories::theory;
 
-fn choices(atoms: usize) -> Theory {
-    let mut nodes = vec![Node::False];
-    let mut roots = Vec::new();
-    for atom in 0..atoms {
-        let index = nodes.len();
-        nodes.extend([
-            Node::Atom(atom),
-            Node::Implies(index, 0),
-            Node::Or(index, index + 1),
-        ]);
-        roots.push(index + 2);
-    }
-    theory(atoms, nodes, roots)
-}
 fn remaining(search: &mut StableModels) -> BTreeSet<Vec<usize>> {
     let mut found = BTreeSet::new();
     for model in search.by_ref() {

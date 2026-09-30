@@ -3,18 +3,13 @@
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
-use zetesis_core::{
-    AtomPattern, Filter, GroundProgram, Program, Seed, StaticLimits, Template, Term, Value,
-};
+use crate::support::compile;
+use zetesis_core::{AtomPattern, Filter, GroundProgram, Program, Seed, Template, Term, Value};
 use zetesis_cpu::{
     BatchError, BatchOracle, Cancellation, CandidateLimits, Candidates, Limits, StaticCheck, Stop,
     check, check_static,
 };
 use zetesis_test_support::programs::{pattern, program, unary};
-
-fn compile(source: &Program) -> GroundProgram {
-    GroundProgram::compile(source, StaticLimits::default()).unwrap()
-}
 
 fn empty(source: &Program) -> Seed {
     Seed::new(source, []).unwrap()

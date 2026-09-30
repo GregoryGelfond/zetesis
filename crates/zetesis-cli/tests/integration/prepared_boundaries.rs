@@ -1,11 +1,12 @@
 //! Prepared owners retain semantics independently of source files and execution limits.
 
-use std::{collections::BTreeSet, error::Error, fs, num::NonZeroUsize};
+use std::{collections::BTreeSet, error::Error, fs};
 
+use crate::support::options::serial_config as config;
 use clap::Parser;
 use zetesis_cli::{
-    Backend, Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile,
-    SearchMethod, Session, SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
+    Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile, SearchMethod,
+    Session, SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
 };
 use zetesis_core::{Model, StaticError};
 use zetesis_cpu::Cancellation;
@@ -32,15 +33,6 @@ impl Sources {
 
     fn load(&self) -> SourceBundle {
         SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default()).unwrap()
-    }
-}
-
-fn config() -> SolveConfig {
-    SolveConfig {
-        backend: Backend::Cpu,
-        workers: NonZeroUsize::MIN,
-        models: 0,
-        ..Default::default()
     }
 }
 

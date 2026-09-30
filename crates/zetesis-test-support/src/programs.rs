@@ -2,6 +2,7 @@
 
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Sign, Template, Term, Value,
+    ValueLimits, ValueNode,
 };
 
 /// The atom `name(values…)`, whose arity is the number of values.
@@ -98,6 +99,25 @@ pub fn variable(index: usize) -> Term {
     Term::Variable(index)
 }
 
+/// The value of `nodes` under the default value limits.
+///
+/// # Panics
+/// Panics if `nodes` do not form one value within those limits.
+#[must_use]
+pub fn value(nodes: Vec<ValueNode>) -> Value {
+    Value::from_nodes(nodes, ValueLimits::default()).expect("a valid test value")
+}
+
+/// The positive function node `name` of `arity` arguments.
+#[must_use]
+pub fn function(name: &str, arity: usize) -> ValueNode {
+    ValueNode::Function {
+        name: name.into(),
+        sign: Sign::Positive,
+        arity,
+    }
+}
+
 /// The number `value` as a constant term.
 #[must_use]
 pub fn number(value: i32) -> Term {
@@ -171,6 +191,23 @@ mod tests {
     #[test]
     fn a_variable_term_carries_its_index() {
         assert_eq!(variable(2), Term::Variable(2));
+    }
+
+    #[test]
+    fn a_function_node_is_positive_with_its_arity() {
+        assert_eq!(
+            function("f", 2),
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Positive,
+                arity: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn a_value_is_built_from_its_nodes() {
+        assert_eq!(value(vec![ValueNode::Number(3)]), Value::Number(3));
     }
 
     #[test]

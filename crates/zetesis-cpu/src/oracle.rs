@@ -28,6 +28,8 @@ pub(crate) mod worlds;
 #[cfg(test)]
 mod closure_tests;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod work_tests;
 
 /// Exact checking budgets, applied before the next charged operation/insertion.

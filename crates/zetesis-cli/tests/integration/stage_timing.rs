@@ -1,30 +1,11 @@
 //! Actual routes expose exclusive typed stages without changing model output.
-use clap::Parser;
+use crate::support::options::serial_with_statistics as options;
 use std::io;
 use zetesis_cli::{
-    Completion, GroundingMode, Options, PhaseTimings, SolvePhase, SolveStage,
-    run_detailed_with_diagnostics,
+    Completion, GroundingMode, PhaseTimings, SolvePhase, SolveStage, run_detailed_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
 
-fn options(args: &[&str], enabled: bool) -> Options {
-    let mut options = Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--workers",
-            "1",
-            "--models",
-            "0",
-        ]
-        .into_iter()
-        .chain(args.iter().copied()),
-    )
-    .unwrap();
-    options.stats = enabled;
-    options
-}
 fn partition(timings: &PhaseTimings) {
     let stages = timings.stages;
     assert_eq!(stages.driver_elapsed, timings.driver_elapsed);

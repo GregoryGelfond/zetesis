@@ -12,15 +12,9 @@ use zetesis_ferraris::{Node, TightPlanLimits};
 use zetesis_sat::{Cancellation, Incomplete, Limits, SearchLimits, SearchMethod, StableModels};
 use zetesis_test_support::{counts::nonzero as workers, harness};
 
+use crate::support::interpretations::models as family;
 use choice_theories::{choices, theory_over};
 use theories::mixed;
-
-fn family(search: &mut StableModels) -> Vec<Vec<usize>> {
-    search
-        .by_ref()
-        .map(|model| model.unwrap().atoms().collect())
-        .collect()
-}
 
 #[test]
 fn four_workers_return_the_scalar_family_once_each() {

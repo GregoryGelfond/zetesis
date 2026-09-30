@@ -2,12 +2,9 @@
 
 use crate::support::clingo_report;
 
-use clap::Parser;
-use zetesis_cli::{
-    Completion, Interruption, OptimizationStop, Options, Report, RunError, run_with_diagnostics,
-};
+use crate::support::runs::enumerated as solve;
+use zetesis_cli::{Completion, Interruption, OptimizationStop, RunError};
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::AnswerSelection;
 use zetesis_themelios::observation::{ErrorKind, Resource};
 use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
@@ -122,29 +119,6 @@ fn mixed_choice_support_matches_complete_original_references() {
         assert_eq!(reference.model_count(), 27);
         assert_eq!(reference.displays(), actual.as_slice());
     }
-}
-
-fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
-    let options = Options::try_parse_from(
-        ["zetesis", "--models", "0"]
-            .into_iter()
-            .chain(arguments.iter().copied()),
-    )
-    .unwrap();
-    let mut output = Vec::new();
-    let mut diagnostics = Vec::new();
-    let result = run_with_diagnostics(
-        source.into(),
-        &options,
-        &mut output,
-        &mut diagnostics,
-        &Cancellation::default(),
-    );
-    (
-        result,
-        String::from_utf8(output).unwrap(),
-        String::from_utf8(diagnostics).unwrap(),
-    )
 }
 
 fn displays(output: &str) -> Vec<Vec<&str>> {

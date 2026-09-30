@@ -3,8 +3,8 @@
 use super::*;
 use crate::atom_interner::{AtomInterner, Limits};
 use crate::catalog::{Error, ReadError};
+use crate::test_support::PERMIT;
 use crate::{Atom, Predicate, Sign, Value};
-use std::convert::Infallible;
 
 const METADATA: usize = 1024 * 1024;
 fn limits() -> Limits {
@@ -13,7 +13,6 @@ fn limits() -> Limits {
         max_bytes: 4 * 1024 * 1024,
     }
 }
-const PERMIT: fn() -> Result<(), Infallible> = || Ok(());
 fn owner() -> AtomInterner {
     let mut owner = AtomInterner::new();
     let atom = Atom::new(

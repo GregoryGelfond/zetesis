@@ -2,14 +2,11 @@
 
 use std::process::{Command as ProcessCommand, Stdio};
 
+use crate::support::options::plain as options;
 use clap::Parser;
 use zetesis_cli::{Backend, Command, Completion, Options, Report, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::Closed;
-
-fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(["zetesis"].into_iter().chain(arguments.iter().copied())).unwrap()
-}
 
 #[test]
 fn normal_invocation_defaults_to_the_cpu_and_preserves_explicit_backends() {

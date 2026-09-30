@@ -1,8 +1,9 @@
 //! External integrity contracts for the independently readable selected corpus.
 
+use crate::support::files::copy as copy_file;
 use serde_json::Value;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use zetesis_test_support::repository::upstream as upstream_root;
 use zetesis_validation::curated::{self, Corpus, Error, Limits, Resource};
@@ -12,10 +13,6 @@ fn curated_root() -> PathBuf {
 }
 fn verified() -> Corpus {
     curated::open(&curated_root(), Limits::default()).unwrap()
-}
-fn copy_file(source: &Path, destination: &Path) {
-    fs::create_dir_all(destination.parent().unwrap()).unwrap();
-    fs::copy(source, destination).unwrap();
 }
 fn isolated() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();

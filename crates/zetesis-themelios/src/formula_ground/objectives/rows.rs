@@ -186,16 +186,9 @@ fn with_header<E>(
 mod tests {
     use super::*;
     use crate::formula_support::{SourceSelection, testing::Fixture};
-    use themelios_base::source::SourceId;
-    use themelios_base::span::{ByteOffset, Span};
-    use zetesis_core::Value;
 
-    fn location() -> Location {
-        Location {
-            source: SourceId::new(0),
-            span: Span::empty(ByteOffset::new(0)),
-        }
-    }
+    use crate::test_support::location;
+    use zetesis_core::Value;
 
     fn live(computation: &Computation<'_, '_>, limits: &FormulaLimits) -> usize {
         let probe = computation.lease();
