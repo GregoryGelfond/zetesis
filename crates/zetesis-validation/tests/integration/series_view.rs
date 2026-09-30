@@ -297,6 +297,31 @@ fn scoreboards_count_the_cells_the_native_solver_decided_faster() {
 }
 
 #[test]
+fn scoreboard_tables_say_the_native_parts_need_not_add_up() {
+    // Phase intervals nest and run on several workers, so their sums are
+    // parts of the native time, not a partition of it.
+    let only = report(
+        &["generated/chain-1000.lp"],
+        &[&[500_000]],
+        &[1_000_000],
+        None,
+    );
+    let markdown = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap()
+    .markdown();
+    assert!(
+        markdown.contains(
+            "each summed over its intervals, which can overlap within or across threads, \
+             so the parts need not add up to the native median"
+        ),
+        "{markdown}"
+    );
+}
+
+#[test]
 fn a_cell_the_reference_did_not_pass_is_not_compared() {
     let mut only = report(
         &["generated/chain-1000.lp", "generated/queens-11.lp"],

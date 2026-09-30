@@ -831,7 +831,7 @@ fn scoreboard_tables(
         }
         writeln!(
             f,
-            "\n{name}. Milliseconds: the native and the reference medians and their ratio; the native split into grounding, candidate proposal and membership; the reference's into grounding and solving from its own report.\n\n| Cell | native | reference | native/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
+            "\n{name}. Milliseconds: the native and the reference medians and their ratio; the native split into grounding, candidate proposal and membership, each summed over its intervals, which can overlap within or across threads, so the parts need not add up to the native median; the reference's into grounding and solving from its own report.\n\n| Cell | native | reference | native/reference | grounding | proposal | membership | reference grounding | reference solving |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|"
         )?;
         for verdict in verdicts {
             writeln!(
