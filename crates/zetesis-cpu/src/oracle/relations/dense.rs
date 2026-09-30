@@ -445,14 +445,15 @@ impl Dense {
         let cost = self.layout.words() + ids.len() + self.discovered.len() + repeats;
         let remaining = work.limits.max_work.saturating_sub(work.statistics.work);
         let size = size_of::<(usize, usize)>() as u128;
-        let bytes = (2 * repeats + self.discovered.len()) as u128 * size;
+        let headers = 2 * size_of::<Vec<(usize, usize)>>() as u128;
+        let bytes = headers + (2 * repeats as u128 + self.discovered.len() as u128) * size;
         if u64::try_from(cost).map_or(true, |cost| cost > remaining)
             || live.saturating_add(bytes) > work.limits.max_closure_bytes as u128
         {
             return Ok(());
         }
-        // The byte guard above counts exactly these reservations; an
-        // over-allocating reservation would let the final record refuse.
+        // The byte guard above covers these requested reservations; the final
+        // record uses their actual capacities.
         let mut found = Vec::new();
         let mut merged = Vec::new();
         if found.try_reserve_exact(repeats).is_err()
@@ -497,7 +498,7 @@ impl Dense {
         merged.extend(new.copied());
         super::storage::record(
             work,
-            live + (found.capacity() + merged.capacity()) as u128 * size,
+            live + headers + (found.capacity() + merged.capacity()) as u128 * size,
         )?;
         self.discovered = merged;
         Ok(())
@@ -1023,6 +1024,36 @@ mod tests {
         let mut dense = rows(&[1, 4, 5], &mut work);
         dense.remember(&[0, 1, 2], 3, 1 << 20, &mut work).unwrap();
         assert!(dense.discovered().is_empty());
+    }
+
+    #[test]
+    fn remembering_reserves_its_scratch_headers() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        let live = size_of::<Dense>() as u128 + dense.retained_bytes();
+        // Both pair arrays fit, but their simultaneously live headers do not.
+        let pairs = 2 * 3 * size_of::<(usize, usize)>();
+        work.limits.max_closure_bytes = usize::try_from(live).unwrap() + pairs;
+        let spent = work.statistics.work;
+        dense.remember(&[0, 1, 2], 3, live, &mut work).unwrap();
+        assert!(dense.discovered().is_empty());
+        assert_eq!(work.statistics.work, spent);
+    }
+
+    #[test]
+    fn remembering_reports_its_simultaneous_scratch() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 1_000);
+        work.limits.max_closure_bytes = 1 << 20;
+        let mut dense = rows(&[1, 4, 5], &mut work);
+        let live = size_of::<Dense>() as u128 + dense.retained_bytes();
+        work.statistics.peak_closure_bytes = 0;
+        dense.remember(&[0, 1, 2], 3, live, &mut work).unwrap();
+        assert_eq!(dense.discovered(), [(1, 0), (4, 1), (5, 2)]);
+        let scratch = 2 * size_of::<Vec<(usize, usize)>>() + 2 * 3 * size_of::<(usize, usize)>();
+        assert!(work.statistics.peak_closure_bytes as u128 >= live + scratch as u128);
     }
 
     #[test]

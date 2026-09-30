@@ -1060,6 +1060,8 @@ impl Catalogs {
             charge(work, 1)?;
             positions.push(id);
         }
+        // Row coordinates are no longer needed when reserving cache scratch.
+        drop(coordinates);
         if repeats > 0 {
             let live = self.total_bytes()
                 + size_of::<Vec<usize>>() as u128
