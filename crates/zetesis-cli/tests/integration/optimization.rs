@@ -60,14 +60,16 @@ const HIDDEN_TIES: &str = "{hidden}. {a}. #show. #minimize { -1@2,a:a; 0@7,z:hid
 
 #[test]
 fn all_optimal_hidden_models_retain_multiplicity_and_fixed_priorities() {
-    // The bound keeps every tie, so these hold for any schedule of the
-    // workers; how many dominated models are scored does not.
+    // The bound keeps every tie, and a tie is known only once it is scored,
+    // so these hold for any schedule of the workers; how many dominated
+    // models are scored does not.
     let (all, text) = solve(HIDDEN_TIES, &["--models", "0"]);
     assert_eq!(all.completion, Completion::Exhausted);
     assert_eq!(all.models, 2);
     let best = all.optimization.unwrap();
     assert_eq!(best.score.costs(), &[(7, 0), (2, -1)]);
     assert_eq!(best.tied_models, 2);
+    assert!(best.scored_models >= best.tied_models);
     assert_eq!(text.matches("Optimization: 0 -1\n").count(), 2);
     let (one, _) = solve(HIDDEN_TIES, &[]);
     assert_eq!(one.models, 1);
@@ -169,7 +171,9 @@ fn incumbent_bounds_preserve_all_optimal_models_and_lexicographic_costs() {
         let expected = unpruned.optimization.unwrap();
         assert_eq!(best.score, expected.score, "{source}");
         assert_eq!(best.tied_models, expected.tied_models, "{source}");
+        // Pruning skips dominated models but scores every tie.
         assert!(best.scored_models <= expected.scored_models, "{source}");
+        assert!(best.scored_models >= best.tied_models, "{source}");
         assert!(
             pruned
                 .countermodel_statistics
