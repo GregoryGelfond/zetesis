@@ -56,7 +56,7 @@ fn signed_choices_match_exhaustive_reduct_checking() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original signed sources match clingo"]
 fn original_signed_sources_match_clingo() {
     for &(source, records) in CASES {
         let result = external(source, true);

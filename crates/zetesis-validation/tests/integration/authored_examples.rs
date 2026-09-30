@@ -108,7 +108,7 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-#[ignore = "requires independent clingo 5.8.2 on PATH or through CLINGO"]
+#[ignore = "requires clingo: default authored families satisfy their contracts"]
 fn default_authored_families_satisfy_their_contracts() {
     use std::time::Duration;
     use zetesis_clingo_support as oracle;

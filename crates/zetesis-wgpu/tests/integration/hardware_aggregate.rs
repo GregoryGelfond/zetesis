@@ -73,13 +73,13 @@ fn compare(
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: aggregate reductions match native occurrences"]
 fn metal_aggregate_reductions_match_native_occurrences() {
     qualify_reductions(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: aggregate reductions match native occurrences"]
 fn vulkan_aggregate_reductions_match_native_occurrences() {
     qualify_reductions(GpuApi::Vulkan);
 }
@@ -123,13 +123,13 @@ fn qualify_reductions(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: aggregate guards preserve numeric boundaries"]
 fn metal_aggregate_guards_preserve_numeric_boundaries() {
     qualify_guards(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: aggregate guards preserve numeric boundaries"]
 fn vulkan_aggregate_guards_preserve_numeric_boundaries() {
     qualify_guards(GpuApi::Vulkan);
 }
@@ -183,13 +183,13 @@ fn qualify_guards(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: aggregate exact admission preserves cache lifecycle"]
 fn metal_aggregate_exact_admission_preserves_cache_lifecycle() {
     qualify_admission(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: aggregate exact admission preserves cache lifecycle"]
 fn vulkan_aggregate_exact_admission_preserves_cache_lifecycle() {
     qualify_admission(GpuApi::Vulkan);
 }

@@ -149,7 +149,7 @@ fn arithmetic_refusals_retain_the_source_rule() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: scalar models match clingo"]
 fn scalar_models_match_clingo() {
     for &(source, _) in CASES {
         let output = reference::external(source, true);

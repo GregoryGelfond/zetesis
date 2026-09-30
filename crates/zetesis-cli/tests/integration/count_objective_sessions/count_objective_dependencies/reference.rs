@@ -4,7 +4,7 @@ use super::super::clingo_report;
 use super::{AnswerSelection, CASES};
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: original count dependencies match clingo families"]
 fn original_count_dependencies_match_clingo_families() {
     for case in CASES {
         for selection in [AnswerSelection::All, AnswerSelection::Optimal] {

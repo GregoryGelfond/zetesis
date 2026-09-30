@@ -105,7 +105,7 @@ fn certificates_preserve_original_equalities() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original sources match complete clingo records"]
 fn original_sources_match_complete_clingo_records() {
     for case in source_cases::cases(CASES.trim())
         .into_iter()

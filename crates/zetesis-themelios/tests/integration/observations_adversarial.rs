@@ -230,7 +230,7 @@ fn clingo(source: &str) -> Vec<Record> {
 }
 
 #[test]
-#[ignore = "requires independent clingo on PATH; 195 complete tiny references"]
+#[ignore = "requires clingo: fresh clingo matches recorded and native complete display multisets; 195 complete tiny references"]
 fn fresh_clingo_matches_recorded_and_native_complete_display_multisets() {
     let (base, models) = basis();
     let cases = cases();

@@ -267,13 +267,13 @@ fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: relation masks match typed rows"]
 fn metal_relation_masks_match_typed_rows() {
     qualify_masks(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: relation masks match typed rows"]
 fn vulkan_relation_masks_match_typed_rows() {
     qualify_masks(GpuApi::Vulkan);
 }
@@ -371,13 +371,13 @@ fn qualify_refusals(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: relation refusals preserve prepared view"]
 fn metal_relation_refusals_preserve_prepared_view() {
     qualify_refusals(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: relation refusals preserve prepared view"]
 fn vulkan_relation_refusals_preserve_prepared_view() {
     qualify_refusals(GpuApi::Vulkan);
 }

@@ -25,7 +25,7 @@ use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: projected conditionals match original source records"]
 fn projected_conditionals_match_original_source_records() {
     for source in projected_conditional_sources::SOURCES {
         let admitted = admit(source, &FormulaLimits::default()).unwrap();
@@ -39,7 +39,7 @@ enum Observer {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: logical extrema match original source records"]
 fn logical_extrema_match_original_source_records() {
     for source in logical_extremum_sources::SOURCES {
         let admitted = admit(source, &FormulaLimits::default()).unwrap();
@@ -361,7 +361,7 @@ fn stopped_composition_preserves_objective_presence() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: original sources match complete reference records"]
 fn original_sources_match_complete_reference_records() {
     for (source, expected) in language_value_sources::SOURCES.into_iter().zip(&EXPECTED) {
         let reference = oracle::records(source);

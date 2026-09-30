@@ -235,7 +235,7 @@ fn frozen_truth_matches_explicit_substitution() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     let mut total = 0;
     let mut sources = 0;

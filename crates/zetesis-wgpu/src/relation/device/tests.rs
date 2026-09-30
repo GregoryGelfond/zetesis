@@ -65,13 +65,13 @@ fn interrupted_copy(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires an actual physical Metal adapter"]
+#[ignore = "requires Metal: interrupted preparation preserves context"]
 fn metal_interrupted_preparation_preserves_context() {
     interrupted_copy(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual physical Vulkan adapter"]
+#[ignore = "requires Vulkan: interrupted preparation preserves context"]
 fn vulkan_interrupted_preparation_preserves_context() {
     interrupted_copy(GpuApi::Vulkan);
 }

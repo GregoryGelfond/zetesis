@@ -237,7 +237,7 @@ fn failed_guards_do_not_hide_closed_errors() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original normalized sources match complete clingo"]
 fn original_normalized_sources_match_complete_clingo() {
     // Only the admitted semantic fixtures belong here. Deliberate affine
     // profile refusals and checked overflow policies are independent contracts.

@@ -197,7 +197,7 @@ fn equal_first_values_share_proposals_but_retain_complete_tuple_limit_counts() {
 }
 
 #[test]
-#[ignore = "requires independent clingo; complete value-extrema models"]
+#[ignore = "requires clingo: recorded sources match complete fresh clingo enumeration; complete value-extrema models"]
 fn recorded_sources_match_complete_fresh_clingo_enumeration() {
     for row in cases() {
         let json = reference::external(row["source"].as_str().unwrap(), true);

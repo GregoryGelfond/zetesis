@@ -125,7 +125,7 @@ fn physical_selection_is_a_fixed_contract() {
         TABLE.replacen("static|integration|2|", "static|hardware_formula|2|", 1),
         TABLE.replace(
             "metal_static_oracle_matches_independent_closures",
-            "exact_static_oracle_matches_independent_cpu_closures",
+            "vulkan_static_oracle_matches_independent_closures",
         ),
         TABLE
             .replace("cli-formula|integration|3|", "cli-formula|integration|2|")

@@ -59,7 +59,7 @@ fn original_sources_remain_owned() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original sources match declared answers"]
 fn original_sources_match_declared_answers() {
     let cases = sources();
     let mut total = 0;

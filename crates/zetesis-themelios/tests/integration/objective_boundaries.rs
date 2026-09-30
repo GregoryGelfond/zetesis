@@ -12,7 +12,7 @@ fn objective_consumers_preserve_complete_scored_families() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for complete original source records"]
+#[ignore = "requires clingo: original sources match declared clingo records"]
 fn original_sources_match_declared_clingo_records() {
     priority_contracts::fresh(CASES);
 }

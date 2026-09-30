@@ -60,7 +60,7 @@ fn compare_native(source: &str, search: &str, expected: &BTreeSet<BTreeSet<Strin
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: common profile matches clingo"]
 fn common_profile_matches_clingo() {
     let rules = [
         "a.",
@@ -95,7 +95,7 @@ fn common_profile_matches_clingo() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: rule excerpts match clingo"]
 fn rule_excerpts_match_clingo() {
     for source in [
         include_str!("../fixtures/correctness/excerpts/shortest-path-reachable.lp"),
@@ -107,7 +107,7 @@ fn rule_excerpts_match_clingo() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: complete network repair example matches clingo"]
 fn complete_network_repair_example_matches_clingo() {
     let source = include_str!("../../../../examples/network-repair.lp");
     assert_eq!(external(source).len(), 2);

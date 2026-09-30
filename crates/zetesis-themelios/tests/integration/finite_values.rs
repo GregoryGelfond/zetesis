@@ -405,7 +405,7 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: complete models match clingo"]
 fn complete_models_match_clingo() {
     let competition = competition();
     for source in CASES

@@ -567,7 +567,7 @@ fn preparation_identifies_dependency_projection() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: complete sources match clingo"]
 fn complete_sources_match_clingo() {
     let case = corpus_case();
     let mut sources: Vec<_> = CASES.iter().map(|(source, _)| *source).collect();

@@ -534,7 +534,7 @@ fn clingo(source: &str) -> Records {
 }
 
 #[test]
-#[ignore = "requires external clingo; records every full model and cost, not only optima"]
+#[ignore = "requires clingo: records every full model and cost, not only optima"]
 fn recorded_objective_bound_sources_match_fresh_complete_clingo_records() {
     for case in cases() {
         assert_eq!(clingo(&case.source), case.records, "{}", case.name);

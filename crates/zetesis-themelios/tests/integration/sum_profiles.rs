@@ -76,7 +76,7 @@ fn ignored_weights_do_not_relax_scope_or_resource_checks() {
 }
 
 #[test]
-#[ignore = "requires independent clingo; 274 bounded complete source comparisons"]
+#[ignore = "requires clingo: recorded sum profiles match fresh clingo; 274 bounded complete source comparisons"]
 fn recorded_sum_profiles_match_fresh_clingo() {
     for case in cases() {
         assert_eq!(

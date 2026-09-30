@@ -60,7 +60,7 @@ fn rich_cycles_preserve_complete_objective_order() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for complete cyclic families"]
+#[ignore = "requires clingo: rich cycles match fresh clingo; complete cyclic families"]
 fn rich_cycles_match_fresh_clingo() {
     priority_contracts::fresh(CASES);
     for case in boundaries() {

@@ -130,7 +130,7 @@ fn observer_cases_preserve_recorded_contracts() {
 }
 
 #[test]
-#[ignore = "requires independent clingo; 92 bounded all-model/cost reference programs"]
+#[ignore = "requires clingo: recorded observer contracts match fresh clingo; 92 bounded all-model/cost reference programs"]
 fn recorded_observer_contracts_match_fresh_clingo() {
     for case in cases() {
         assert_eq!(

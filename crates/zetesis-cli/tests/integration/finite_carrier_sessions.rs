@@ -258,7 +258,7 @@ fn json_preserves_complete_optimum_answers() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: original sources match independent answers"]
 fn original_sources_match_independent_answers() {
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
         let actual = oracle::records(source);

@@ -311,7 +311,7 @@ proptest::proptest! {
 }
 
 #[test]
-#[ignore = "requires independent clingo; unchanged literal-weight source matrix"]
+#[ignore = "requires clingo: literal weight sources match fresh clingo; unchanged literal-weight source matrix"]
 fn literal_weight_sources_match_fresh_clingo() {
     for case in source_cases::cases(CONDITION_CASES) {
         external(&case.name, &case.source, &case.records);

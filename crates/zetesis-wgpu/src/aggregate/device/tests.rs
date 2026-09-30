@@ -70,13 +70,13 @@ fn corrupt_identity(selection: GpuSelection) -> GpuAggregateOracle {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: aggregate readback failure retains submitted work"]
 fn metal_aggregate_readback_failure_retains_submitted_work() {
     qualify_failure(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: aggregate readback failure retains submitted work"]
 fn vulkan_aggregate_readback_failure_retains_submitted_work() {
     qualify_failure(GpuApi::Vulkan);
 }
@@ -207,13 +207,13 @@ fn invalidates_shared_primitive(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: readback failure invalidates context peers"]
 fn metal_readback_failure_invalidates_context_peers() {
     invalidates_shared_primitive(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: readback failure invalidates context peers"]
 fn vulkan_readback_failure_invalidates_context_peers() {
     invalidates_shared_primitive(GpuApi::Vulkan);
 }

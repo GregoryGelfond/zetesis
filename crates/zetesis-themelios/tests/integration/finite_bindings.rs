@@ -342,7 +342,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
 }
 
 #[test]
-#[ignore = "requires external clingo; bounded original sources and full model records"]
+#[ignore = "requires clingo: finite bindings match clingo; bounded original sources and full model records"]
 fn finite_bindings_match_clingo() {
     let mut cases = bounded_domains();
     cases.extend(

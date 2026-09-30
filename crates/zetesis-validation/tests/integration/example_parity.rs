@@ -19,7 +19,7 @@ fn run(root: &Path, source: &str) -> answers::ReportedAnswers {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 on PATH or through CLINGO"]
+#[ignore = "requires clingo: original and clean selected displays agree"]
 fn original_and_clean_selected_displays_agree() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")

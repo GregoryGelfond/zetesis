@@ -152,7 +152,7 @@ fn every_frozen_pair_matches_explicit_ground_rules() {
     }
 }
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     for source in [PROJECTION, EXTREMA_SOURCE]
         .into_iter()

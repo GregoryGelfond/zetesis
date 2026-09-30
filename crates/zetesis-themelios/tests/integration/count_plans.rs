@@ -182,7 +182,7 @@ fn unsupported_premises_produce_no_plan() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     for source in SOURCES {
         let result = external(source, true);

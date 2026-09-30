@@ -106,7 +106,7 @@ const GUARDS: [(Bound, &str); 5] = [
 ];
 
 #[test]
-#[ignore = "requires independently installed clingo; bounded five-second/64-KiB subprocesses"]
+#[ignore = "requires clingo: empty extrema keep both infinite sentinels and all comparisons; bounded five-second/64-KiB subprocesses"]
 fn empty_extrema_keep_both_infinite_sentinels_and_all_comparisons() {
     for (extremum, name) in EXTREMA {
         for (comparison, operator) in COMPARISONS {
@@ -126,7 +126,7 @@ fn empty_extrema_keep_both_infinite_sentinels_and_all_comparisons() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo; bounded five-second/64-KiB subprocesses"]
+#[ignore = "requires clingo: recursive not equal coalesced tuples and extreme values match clingo; bounded five-second/64-KiB subprocesses"]
 fn recursive_not_equal_coalesced_tuples_and_extreme_values_match_clingo() {
     for (extremum, name, empty) in [
         (Extremum::Min, "min", Bound::PositiveInfinity),
@@ -241,7 +241,7 @@ fn recursive_not_equal_coalesced_tuples_and_extreme_values_match_clingo() {
 const BOUNDARIES: &str = include_str!("../fixtures/extrema-clingo-5.8.2-boundaries.json");
 
 #[test]
-#[ignore = "characterizes six known clingo 5.8.2 endpoint mismatches; these are NOT equivalence passes"]
+#[ignore = "requires clingo: characterizes six known endpoint mismatches; not equivalence passes"]
 fn known_clingo_integer_endpoint_gaps_are_reported_separately() {
     let record: serde_json::Value = serde_json::from_str(BOUNDARIES).unwrap();
     let gaps: Vec<_> = record["cases"]
@@ -309,7 +309,7 @@ fn recorded(models: &serde_json::Value) -> Models {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo; bounded five-second/64-KiB subprocesses"]
+#[ignore = "requires clingo: generated recursive signed extrema and nested default negation match clingo; bounded five-second/64-KiB subprocesses"]
 fn generated_recursive_signed_extrema_and_nested_default_negation_match_clingo() {
     for (extremum, name) in EXTREMA {
         for (comparison, operator) in COMPARISONS {

@@ -697,61 +697,61 @@ fn session_resource_fixture_families_are_exact() {
 }
 
 #[test]
-#[ignore = "requires actual Metal; independent ordinary sessions share one context"]
+#[ignore = "requires Metal: independent ordinary sessions share one context"]
 fn metal_resources_preserve_independent_sessions() {
     independent_sessions(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan GPU; independent ordinary sessions share one context"]
+#[ignore = "requires Vulkan: independent ordinary sessions share one context"]
 fn vulkan_resources_preserve_independent_sessions() {
     independent_sessions(GpuApi::Vulkan);
 }
 
 #[test]
-#[ignore = "requires actual Metal; policy refusal cannot replace the supplied context"]
+#[ignore = "requires Metal: policy refusal cannot replace the supplied context"]
 fn metal_resource_policy_refusal_preserves_reuse() {
     policy_refusal(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan GPU; policy refusal cannot replace the supplied context"]
+#[ignore = "requires Vulkan: policy refusal cannot replace the supplied context"]
 fn vulkan_resource_policy_refusal_preserves_reuse() {
     policy_refusal(GpuApi::Vulkan);
 }
 
 #[test]
-#[ignore = "requires actual Metal; a supplied context does not select the device policy"]
+#[ignore = "requires Metal: a supplied context does not select the device policy"]
 fn metal_resources_preserve_cpu_policies() {
     cpu_policies(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan GPU; a supplied context does not select the device policy"]
+#[ignore = "requires Vulkan: a supplied context does not select the device policy"]
 fn vulkan_resources_preserve_cpu_policies() {
     cpu_policies(GpuApi::Vulkan);
 }
 
 #[test]
-#[ignore = "requires actual Metal; observation failure does not poison shared resources"]
+#[ignore = "requires Metal: observation failure does not poison shared resources"]
 fn metal_observer_failure_preserves_resource_reuse() {
     observer_failure(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan GPU; observation failure does not poison shared resources"]
+#[ignore = "requires Vulkan: observation failure does not poison shared resources"]
 fn vulkan_observer_failure_preserves_resource_reuse() {
     observer_failure(GpuApi::Vulkan);
 }
 
 #[test]
-#[ignore = "requires actual Metal; independent formula sessions share one compilation"]
+#[ignore = "requires Metal: independent formula sessions share one compilation"]
 fn metal_formula_profiles_preserve_independent_sessions() {
     independent_profile_sessions(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; independent formula sessions share one compilation"]
+#[ignore = "requires Vulkan: independent formula sessions share one compilation"]
 fn vulkan_formula_profiles_preserve_independent_sessions() {
     independent_profile_sessions(GpuApi::Vulkan);
 }
@@ -893,13 +893,13 @@ fn tight_families(device: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; complete ordinary tight families and device route"]
+#[ignore = "requires Metal: tight sessions preserve the complete CPU families on the device's tight route"]
 fn metal_tight_sessions_preserve_complete_families() {
     tight_families(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; complete ordinary tight families and device route"]
+#[ignore = "requires Vulkan: tight sessions preserve the complete CPU families on the device's tight route"]
 fn vulkan_tight_sessions_preserve_complete_families() {
     tight_families(GpuApi::Vulkan);
 }
@@ -965,13 +965,13 @@ fn general_formula_selection(device: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; general formulas never use a CPU certificate fallback"]
+#[ignore = "requires Metal: general formulas never use a CPU certificate fallback"]
 fn metal_general_formulas_keep_device_execution() {
     general_formula_selection(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; general formulas never use a CPU certificate fallback"]
+#[ignore = "requires Vulkan: general formulas never use a CPU certificate fallback"]
 fn vulkan_general_formulas_keep_device_execution() {
     general_formula_selection(GpuApi::Vulkan);
 }
@@ -1028,13 +1028,13 @@ fn tight_refusal(device: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; tight work refusal cannot become CPU success"]
+#[ignore = "requires Metal: tight work refusal cannot become CPU success"]
 fn metal_tight_refusal_preserves_pending_coverage() {
     tight_refusal(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; tight work refusal cannot become CPU success"]
+#[ignore = "requires Vulkan: tight work refusal cannot become CPU success"]
 fn vulkan_tight_refusal_preserves_pending_coverage() {
     tight_refusal(GpuApi::Vulkan);
 }
@@ -1119,13 +1119,13 @@ fn terminal_families(device: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; terminal reconstruction preserves complete original families"]
+#[ignore = "requires Metal: terminal reconstruction preserves complete original families"]
 fn metal_terminal_sessions_preserve_complete_families() {
     terminal_families(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; terminal reconstruction preserves complete original families"]
+#[ignore = "requires Vulkan: terminal reconstruction preserves complete original families"]
 fn vulkan_terminal_sessions_preserve_complete_families() {
     terminal_families(GpuApi::Vulkan);
 }

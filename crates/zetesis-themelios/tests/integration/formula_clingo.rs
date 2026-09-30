@@ -193,7 +193,7 @@ fn recorded_sources_match_exhaustive_reduct_models() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: recursive conditional choices match complete clingo models"]
 fn recursive_conditional_choices_match_complete_clingo_models() {
     for (index, case) in cases().iter().enumerate() {
         let reference = external(&case.source);

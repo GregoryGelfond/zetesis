@@ -177,7 +177,7 @@ fn extremal_values_keep_their_term_order() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2; complete extremal-value families"]
+#[ignore = "requires clingo: extremal sources match clingo; complete extremal-value families"]
 fn extremal_sources_match_clingo() {
     for &(source, wanted) in ORDINARY.iter().chain(FORMULA) {
         assert_eq!(oracle::records(source), expected(wanted), "{source}");

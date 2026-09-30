@@ -169,7 +169,7 @@ fn asked_constraints_keep_the_written_constraint_as_their_origin() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: every interpretation of a small asked program matches clingo"]
 fn every_interpretation_of_a_small_asked_program_matches_clingo() {
     let source = "letter(a;b). digit(0..1). 1 { assign(L,D) : digit(D) } 1 :- letter(L). \
         :- assign(a,X), assign(b,Y), X != Y.";
@@ -178,7 +178,7 @@ fn every_interpretation_of_a_small_asked_program_matches_clingo() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: a constraint with an anonymous key matches clingo as written"]
 fn a_constraint_with_an_anonymous_key_matches_clingo_as_written() {
     // The rewrite declines an anonymous key, so the written constraint
     // decides the family: both letters hold 3, and the column has its one
@@ -197,7 +197,7 @@ fn a_constraint_with_an_anonymous_key_matches_clingo_as_written() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: asked constraints match clingo"]
 fn asked_constraints_match_clingo() {
     // Four digits keep the families within the oracle's capture; the digits
     // still lie within the column's base.

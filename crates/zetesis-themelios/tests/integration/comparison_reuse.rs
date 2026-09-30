@@ -140,7 +140,7 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
 }
 
 #[test]
-#[ignore = "requires the independent clingo executable on PATH"]
+#[ignore = "requires clingo: original comparison sources retain fresh clingo records"]
 fn original_comparison_sources_retain_fresh_clingo_records() {
     for case in source_cases::cases(FIXTURE) {
         assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);

@@ -105,13 +105,13 @@ fn record(answer: &AnswerSet) -> (Vec<String>, Vec<(i32, i64)>) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; unrestricted collection never substitutes CPU"]
+#[ignore = "requires Metal: unrestricted collection never substitutes CPU"]
 fn metal_world_view_preserves_nonoptimal_answers() {
     world_view_preserves_nonoptimal_answers(METAL);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; unrestricted collection never substitutes CPU"]
+#[ignore = "requires Vulkan: unrestricted collection never substitutes CPU"]
 fn vulkan_world_view_preserves_nonoptimal_answers() {
     world_view_preserves_nonoptimal_answers(VULKAN);
 }
@@ -169,13 +169,13 @@ fn world_view_preserves_nonoptimal_answers(device: Device) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; collection refusal preserves completed and queued work"]
+#[ignore = "requires Metal: collection refusal preserves completed and queued work"]
 fn metal_collection_limit_retains_checked_accounting() {
     collection_limit_retains_checked_accounting(METAL);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; collection refusal preserves completed and queued work"]
+#[ignore = "requires Vulkan: collection refusal preserves completed and queued work"]
 fn vulkan_collection_limit_retains_checked_accounting() {
     collection_limit_retains_checked_accounting(VULKAN);
 }
@@ -237,13 +237,13 @@ fn collection_limit_retains_checked_accounting(device: Device) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; collection cannot replace a supplied context"]
+#[ignore = "requires Metal: collection cannot replace a supplied context"]
 fn metal_collection_refuses_a_foreign_context() {
     collection_refuses_a_foreign_context(METAL);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; collection cannot replace a supplied context"]
+#[ignore = "requires Vulkan: collection cannot replace a supplied context"]
 fn vulkan_collection_refuses_a_foreign_context() {
     collection_refuses_a_foreign_context(VULKAN);
 }
@@ -294,13 +294,13 @@ impl ExecutionObserver for CpuExecution {
 }
 
 #[test]
-#[ignore = "requires actual Metal resources to verify a CPU session keeps its CPU route"]
+#[ignore = "requires Metal: a CPU session keeps its CPU route"]
 fn metal_resources_leave_a_cpu_collection_on_the_cpu() {
     resources_leave_a_cpu_collection_on_the_cpu(METAL);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan resources to verify a CPU session keeps its CPU route"]
+#[ignore = "requires Vulkan: a CPU session keeps its CPU route"]
 fn vulkan_resources_leave_a_cpu_collection_on_the_cpu() {
     resources_leave_a_cpu_collection_on_the_cpu(VULKAN);
 }

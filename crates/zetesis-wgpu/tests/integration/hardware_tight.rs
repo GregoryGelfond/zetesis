@@ -260,14 +260,14 @@ fn tight_fixture_verdicts_match_exhaustive_reducts() {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: support matches exact reduct semantics"]
 fn metal_support_matches_exact_reduct_semantics() {
     qualify_support_matches_exact_reduct_semantics(GpuApi::Metal, TightSupport::Atomic);
     qualify_support_matches_exact_reduct_semantics(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: support matches exact reduct semantics"]
 fn vulkan_support_matches_exact_reduct_semantics() {
     qualify_support_matches_exact_reduct_semantics(GpuApi::Vulkan, TightSupport::Atomic);
     qualify_support_matches_exact_reduct_semantics(GpuApi::Vulkan, TightSupport::Grouped);
@@ -284,14 +284,14 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: support preserves batch isolation"]
 fn metal_support_preserves_batch_isolation() {
     qualify_support_preserves_batch_isolation(GpuApi::Metal, TightSupport::Atomic);
     qualify_support_preserves_batch_isolation(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: support preserves batch isolation"]
 fn vulkan_support_preserves_batch_isolation() {
     qualify_support_preserves_batch_isolation(GpuApi::Vulkan, TightSupport::Atomic);
     qualify_support_preserves_batch_isolation(GpuApi::Vulkan, TightSupport::Grouped);
@@ -434,14 +434,14 @@ fn compare_conditional_support(oracle: &mut GpuTightOracle, atoms: usize) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: support refusals preserve reusable residency"]
 fn metal_support_refusals_preserve_reusable_residency() {
     qualify_support_refusals_preserve_reusable_residency(GpuApi::Metal, TightSupport::Atomic);
     qualify_support_refusals_preserve_reusable_residency(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: support refusals preserve reusable residency"]
 fn vulkan_support_refusals_preserve_reusable_residency() {
     qualify_support_refusals_preserve_reusable_residency(GpuApi::Vulkan, TightSupport::Atomic);
     qualify_support_refusals_preserve_reusable_residency(GpuApi::Vulkan, TightSupport::Grouped);
@@ -530,14 +530,14 @@ fn qualify_support_refusals_preserve_reusable_residency(backend: GpuApi, support
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: support residency tracks theory identity"]
 fn metal_support_residency_tracks_theory_identity() {
     qualify_support_residency_tracks_theory_identity(GpuApi::Metal, TightSupport::Atomic);
     qualify_support_residency_tracks_theory_identity(GpuApi::Metal, TightSupport::Grouped);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: support residency tracks theory identity"]
 fn vulkan_support_residency_tracks_theory_identity() {
     qualify_support_residency_tracks_theory_identity(GpuApi::Vulkan, TightSupport::Atomic);
     qualify_support_residency_tracks_theory_identity(GpuApi::Vulkan, TightSupport::Grouped);

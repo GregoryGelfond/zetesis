@@ -248,13 +248,13 @@ fn entry_precedence(
 }
 
 #[test]
-#[ignore = "requires an actual physical Metal adapter"]
+#[ignore = "requires Metal: controlled calls preserve stop identity"]
 fn metal_controlled_calls_preserve_stop_identity() {
     controlled_calls(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual physical Vulkan adapter"]
+#[ignore = "requires Vulkan: controlled calls preserve stop identity"]
 fn vulkan_controlled_calls_preserve_stop_identity() {
     controlled_calls(GpuApi::Vulkan);
 }

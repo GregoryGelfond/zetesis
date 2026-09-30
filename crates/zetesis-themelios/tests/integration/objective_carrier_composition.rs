@@ -13,7 +13,7 @@ fn independent_observers_preserve_precise_carriers() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for raw priority reporting"]
+#[ignore = "requires clingo: composed carriers match fresh raw clingo"]
 fn composed_carriers_match_fresh_raw_clingo() {
     priority_contracts::fresh(CASES);
 }

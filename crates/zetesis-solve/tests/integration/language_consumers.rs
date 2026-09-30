@@ -496,7 +496,7 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires physical Metal; checks complete original identities"]
+    #[ignore = "requires Metal: checks complete original identities"]
     fn metal_families_retain_scored_observations() {
         families(
             SolveConfig {
@@ -508,7 +508,7 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan; checks complete original identities"]
+    #[ignore = "requires Vulkan: checks complete original identities"]
     fn vulkan_families_retain_scored_observations() {
         families(
             SolveConfig {
@@ -520,7 +520,7 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires physical Metal; checks complete optimum identities"]
+    #[ignore = "requires Metal: checks complete optimum identities"]
     fn metal_optimum_ties_retain_full_answers() {
         optimum(
             SolveConfig {
@@ -532,7 +532,7 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan; checks complete optimum identities"]
+    #[ignore = "requires Vulkan: checks complete optimum identities"]
     fn vulkan_optimum_ties_retain_full_answers() {
         optimum(
             SolveConfig {
@@ -545,7 +545,7 @@ mod physical {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: original sources retain declared reference results"]
 fn original_sources_retain_declared_reference_results() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
     for case in cases() {

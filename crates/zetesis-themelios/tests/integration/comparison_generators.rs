@@ -319,7 +319,7 @@ fn generated_include_rules_keep_original_identity_and_display_selection() {
 }
 
 #[test]
-#[ignore = "requires external clingo; exact generators and explicit validity boundaries"]
+#[ignore = "requires clingo: comparison generators match clingo; exact generators and explicit validity boundaries"]
 fn comparison_generators_match_clingo() {
     let mut valid = 0;
     let mut unsafe_sources = 0;

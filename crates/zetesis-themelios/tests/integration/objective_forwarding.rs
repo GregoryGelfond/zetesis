@@ -94,7 +94,7 @@ fn signed_choice_bounds_still_filter_observed_answers() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: signed observer sources match clingo costs"]
 fn signed_observer_sources_match_clingo_costs() {
     for base in [
         SIGNED_BASE,
@@ -239,7 +239,7 @@ fn recursive_count_forwarding_has_no_answer_set() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: recursive count forwarding matches clingo"]
 fn recursive_count_forwarding_matches_clingo() {
     assert_eq!(clingo(RECURSIVE_COUNT), Records::new());
 }
@@ -344,7 +344,7 @@ fn exact_limits(source: &str) {
 }
 
 #[test]
-#[ignore = "requires independent clingo; 48 original model/cost references"]
+#[ignore = "requires clingo: forwarded observers match fresh clingo; 48 original model/cost references"]
 fn forwarded_observers_match_fresh_clingo() {
     for case in cases(FIXTURE).into_iter().chain(cases(EXTREMA_REFUSALS)) {
         assert_eq!(clingo(&case.source), case.records, "{}", case.name);

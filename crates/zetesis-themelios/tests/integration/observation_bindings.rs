@@ -596,7 +596,7 @@ fn observation_bindings_preserve_hidden_answer_identity() {
 }
 
 #[test]
-#[ignore = "requires absolute CLINGO; complete references for finite observation bindings"]
+#[ignore = "requires clingo: finite binding shapes have complete references"]
 fn finite_binding_shapes_have_complete_references() {
     for (source, expected) in FINITE_BINDINGS {
         observation_reference::compare(source, &serde_json::json!([expected]));
@@ -604,7 +604,7 @@ fn finite_binding_shapes_have_complete_references() {
 }
 
 #[test]
-#[ignore = "requires absolute CLINGO; exact original finite equality queries"]
+#[ignore = "requires clingo: finite equalities match complete clingo displays; exact original finite equality queries"]
 fn finite_equalities_match_complete_clingo_displays() {
     for (source, expected) in CHAINS.iter().chain(STRUCTURES).chain(EXTREMA) {
         observation_reference::compare(source, &serde_json::json!([expected]));

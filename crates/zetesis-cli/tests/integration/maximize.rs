@@ -397,7 +397,7 @@ fn clingo(case: &Case) -> Records {
     result
 }
 #[test]
-#[ignore = "requires independent clingo; 13 bounded original source comparisons"]
+#[ignore = "requires clingo: fresh clingo optima match native bounds on and off; 13 bounded original source comparisons"]
 fn fresh_clingo_optima_match_native_bounds_on_and_off() {
     for case in CASES {
         assert_eq!(clingo(case), expected(case), "{}", case.source);

@@ -65,7 +65,7 @@ fn cyclic_producers_keeps_the_original_reduct_subject() {
 }
 
 #[test]
-#[ignore = "requires independent clingo for 15 original cyclic sources"]
+#[ignore = "requires clingo: cyclic producers match fresh clingo; 15 original cyclic sources"]
 fn cyclic_producers_match_fresh_clingo() {
     for case in source_cases::cases(CASES) {
         assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);

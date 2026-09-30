@@ -380,13 +380,13 @@ fn source_sequence_exercises_transport_resize_boundaries() {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: lazy transport reuse preserves round truth"]
 fn metal_lazy_transport_reuse_preserves_round_truth() {
     qualify_lazy_transport_reuse_preserves_round_truth(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires a physical Vulkan adapter"]
+#[ignore = "requires Vulkan: lazy transport reuse preserves round truth"]
 fn vulkan_lazy_transport_reuse_preserves_round_truth() {
     qualify_lazy_transport_reuse_preserves_round_truth(GpuApi::Vulkan);
 }
@@ -482,13 +482,13 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: input slack preserves exact admission"]
 fn metal_input_slack_preserves_exact_admission() {
     qualify_input_slack_preserves_exact_admission(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires a physical Vulkan adapter"]
+#[ignore = "requires Vulkan: input slack preserves exact admission"]
 fn vulkan_input_slack_preserves_exact_admission() {
     qualify_input_slack_preserves_exact_admission(GpuApi::Vulkan);
 }
@@ -545,13 +545,13 @@ fn qualify_input_slack_preserves_exact_admission(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: lazy transport refusal preserves reuse"]
 fn metal_lazy_transport_refusal_preserves_reuse() {
     qualify_lazy_transport_refusal_preserves_reuse(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires a physical Vulkan adapter"]
+#[ignore = "requires Vulkan: lazy transport refusal preserves reuse"]
 fn vulkan_lazy_transport_refusal_preserves_reuse() {
     qualify_lazy_transport_refusal_preserves_reuse(GpuApi::Vulkan);
 }
@@ -624,13 +624,13 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: lazy transport cancelled read discards capacity"]
 fn metal_lazy_transport_cancelled_read_discards_capacity() {
     qualify_lazy_transport_cancelled_read_discards_capacity(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires a physical Vulkan adapter"]
+#[ignore = "requires Vulkan: lazy transport cancelled read discards capacity"]
 fn vulkan_lazy_transport_cancelled_read_discards_capacity() {
     qualify_lazy_transport_cancelled_read_discards_capacity(GpuApi::Vulkan);
 }
@@ -835,13 +835,13 @@ fn qualify_immutable_uploads(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; checks immutable input upload reuse"]
+#[ignore = "requires Metal: checks immutable input upload reuse"]
 fn metal_lazy_uploads_reuse_only_current_batch_inputs() {
     qualify_immutable_uploads(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; checks immutable input upload reuse"]
+#[ignore = "requires Vulkan: checks immutable input upload reuse"]
 fn vulkan_lazy_uploads_reuse_only_current_batch_inputs() {
     qualify_immutable_uploads(GpuApi::Vulkan);
 }

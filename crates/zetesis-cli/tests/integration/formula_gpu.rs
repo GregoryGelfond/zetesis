@@ -291,25 +291,25 @@ mod physical {
     use zetesis_backend::GpuApi;
 
     #[test]
-    #[ignore = "requires actual Metal; executes the ordinary solver and never substitutes CPU"]
+    #[ignore = "requires Metal: executes the ordinary solver and never substitutes CPU"]
     fn ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays() {
         qualify_formula_results(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    #[ignore = "requires Vulkan: ordinary Vulkan formula results match CPU"]
     fn ordinary_vulkan_formula_results_match_cpu() {
         qualify_formula_results(GpuApi::Vulkan);
     }
 
     #[test]
-    #[ignore = "requires actual Metal after source table-join grounding"]
+    #[ignore = "requires Metal: ordinary Metal table joins preserve complete answers"]
     fn ordinary_metal_table_joins_preserve_complete_answers() {
         qualify_table_joins(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan after source table-join grounding"]
+    #[ignore = "requires Vulkan: ordinary Vulkan table joins preserve complete answers"]
     fn ordinary_vulkan_table_joins_preserve_complete_answers() {
         qualify_table_joins(GpuApi::Vulkan);
     }
@@ -483,13 +483,13 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires actual Metal; checks resource and diagnostic failures in ordinary solving"]
+    #[ignore = "requires Metal: checks resource and diagnostic failures in ordinary solving"]
     fn ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors() {
         qualify_formula_limits(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    #[ignore = "requires Vulkan: ordinary Vulkan formula retains bounded outcomes"]
     fn ordinary_vulkan_formula_retains_bounded_outcomes() {
         qualify_formula_limits(GpuApi::Vulkan);
     }

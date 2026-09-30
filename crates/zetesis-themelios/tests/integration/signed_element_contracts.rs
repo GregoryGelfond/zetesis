@@ -158,7 +158,7 @@ fn independent_objectives_keep_scored_answers() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original signed sources match clingo"]
 fn original_signed_sources_match_clingo() {
     for &(source, _) in CASES {
         external(source);
@@ -169,7 +169,7 @@ fn original_signed_sources_match_clingo() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: signed measure contexts match clingo"]
 fn signed_measure_contexts_match_clingo() {
     // Change both head sign and measure while retaining recursive eligibility,
     // a shared complete tuple and independent possible producer support.

@@ -347,7 +347,7 @@ fn included_conditionals_preserve_original_locations_and_output_selection() {
 }
 
 #[test]
-#[ignore = "requires external clingo; exact conditional sources and complete model replay"]
+#[ignore = "requires clingo: conditional body matches clingo; exact conditional sources and complete model replay"]
 fn conditional_body_matches_clingo() {
     let mut valid = 0;
     let mut unsafe_source = 0;

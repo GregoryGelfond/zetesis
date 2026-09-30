@@ -192,7 +192,7 @@ fn unsupported_structural_sources_remain_refused() {
     }
 }
 #[test]
-#[ignore = "requires external clingo; original structural sources with exact full models"]
+#[ignore = "requires clingo: closed structures match clingo; original structural sources with exact full models"]
 fn closed_structures_match_clingo() {
     for (source, wanted) in cases() {
         let out = reference::external(source, true);

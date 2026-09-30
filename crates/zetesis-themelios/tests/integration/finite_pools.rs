@@ -487,7 +487,7 @@ fn unsafe_or_undefined_alternatives_remain_located_refusals() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: pool cases match declared clingo families"]
 fn pool_cases_match_declared_clingo_families() {
     for &(source, _) in CASES {
         let raw = reference::external(source, true);

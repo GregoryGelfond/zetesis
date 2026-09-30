@@ -528,7 +528,7 @@ fn structural_pool_products_are_charged_before_materialization() {
     }
 }
 #[test]
-#[ignore = "requires absolute CLINGO; bounded structural-pool reference cases"]
+#[ignore = "requires clingo: atom pattern cases match complete clingo displays; bounded structural-pool reference cases"]
 fn atom_pattern_cases_match_complete_clingo_displays() {
     for (source, expected) in ATOM_PATTERN_CASES {
         observation_reference::compare(source, &serde_json::json!([expected]));
@@ -568,7 +568,7 @@ fn anonymous_projection_keeps_strong_sign_separate_from_default_negation() {
     }
 }
 #[test]
-#[ignore = "requires absolute CLINGO; explicit native extension with retained upstream refusal"]
+#[ignore = "requires clingo: clingo refuses anonymous strongly signed projections; explicit native extension with retained upstream refusal"]
 fn clingo_refuses_anonymous_strongly_signed_projections() {
     for case in signed_projection_cases() {
         let run = observation_reference::run(case["source"].as_str().unwrap(), &[65]);

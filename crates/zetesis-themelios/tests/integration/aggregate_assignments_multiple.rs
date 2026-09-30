@@ -205,7 +205,7 @@ fn scope_work_is_bounded_and_can_be_retried_without_partial_admission() {
 }
 
 #[test]
-#[ignore = "requires external clingo; exact original sources and complete full-model replay"]
+#[ignore = "requires clingo: multiple aggregate assignments match clingo; exact original sources and complete full-model replay"]
 fn multiple_aggregate_assignments_match_clingo() {
     for row in cases() {
         let source = row[1].as_str().unwrap();

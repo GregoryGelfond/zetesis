@@ -480,7 +480,7 @@ fn compare(fixture: &Fixture) {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: accepted original include graphs match complete clingo models"]
 fn accepted_original_include_graphs_match_complete_clingo_models() {
     let fixture = Fixture::new();
     for lower in -2..=2 {

@@ -245,7 +245,7 @@ fn clingo(case: &Case) -> Models {
     models
 }
 #[test]
-#[ignore = "requires independent clingo; 118 bounded reference source programs"]
+#[ignore = "requires clingo: scalar and interval reference models and unsafe cases match fresh clingo; 118 bounded reference source programs"]
 fn scalar_and_interval_reference_models_and_unsafe_cases_match_fresh_clingo() {
     for case in cases() {
         assert_eq!(
@@ -259,7 +259,7 @@ fn scalar_and_interval_reference_models_and_unsafe_cases_match_fresh_clingo() {
 }
 
 #[test]
-#[ignore = "requires independent clingo; bounded interval facts"]
+#[ignore = "requires clingo: nonnumeric fact ranges match clingo; bounded interval facts"]
 fn nonnumeric_fact_ranges_match_clingo() {
     for source in [
         "p(a..b).",

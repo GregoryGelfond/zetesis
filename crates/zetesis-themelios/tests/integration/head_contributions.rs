@@ -446,7 +446,7 @@ fn neutral_rows_obey_inclusive_expansion_limits() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: source comparisons preserve complete records"]
 fn source_comparisons_preserve_complete_records() {
     for &(source, _) in CASES {
         let result = external(source, true);

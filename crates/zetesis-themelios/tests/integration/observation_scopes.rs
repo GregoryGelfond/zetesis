@@ -351,7 +351,7 @@ fn clingo_integer_wrapping_is_recorded_as_a_known_reference_difference() {
     );
 }
 #[test]
-#[ignore = "requires an absolute CLINGO executable; bounded fresh complete references"]
+#[ignore = "requires clingo: unchanged scoped sources match fresh clingo evidence; bounded fresh complete references"]
 fn unchanged_scoped_sources_match_fresh_clingo_evidence() {
     for case in references() {
         observation_reference::compare(case["source"].as_str().unwrap(), &case["witnesses"]);

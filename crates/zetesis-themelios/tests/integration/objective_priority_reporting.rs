@@ -11,7 +11,7 @@ fn zero_slot_reporting_preserves_full_scored_answers() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for raw priority reporting"]
+#[ignore = "requires clingo: fresh clingo preserves raw reporting differences"]
 fn fresh_clingo_preserves_raw_reporting_differences() {
     priority_contracts::fresh(CASES);
 }

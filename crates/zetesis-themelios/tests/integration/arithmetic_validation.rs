@@ -227,7 +227,7 @@ fn defined_filters_preserve_complete_families() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: defined and empty join families match clingo"]
 fn defined_and_empty_join_families_match_clingo() {
     for source in DEFINED.iter().chain(EMPTY_EXTENSIONS) {
         let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
@@ -240,7 +240,7 @@ fn defined_and_empty_join_families_match_clingo() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: all undefined families differ from clingo"]
 fn all_undefined_families_differ_from_clingo() {
     // clingo drops the only undefined instance; the library refuses a
     // nonempty source family lacking any jointly defined substitution.
@@ -250,7 +250,7 @@ fn all_undefined_families_differ_from_clingo() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: excluded substitutions match clingo"]
 fn excluded_substitutions_match_clingo() {
     // A comparison that is defined and false excludes its substitution, so
     // an operation to its side is not reached, as in the reference.
@@ -408,7 +408,7 @@ fn body_values_keep_their_validation_scope() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2"]
+#[ignore = "requires clingo: staged head families match clingo"]
 fn staged_head_families_match_clingo() {
     for (source, _) in STAGED_HEADS {
         let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();

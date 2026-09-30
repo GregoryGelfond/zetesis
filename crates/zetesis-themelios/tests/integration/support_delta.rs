@@ -230,7 +230,7 @@ fn negative_delta_cannot_publish_a_refused_support_prefix() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: delta sources match clingo complete models"]
 fn delta_sources_match_clingo_complete_models() {
     for &(source, _) in CASES {
         let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();

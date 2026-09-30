@@ -212,7 +212,7 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
 }
 
 #[test]
-#[ignore = "requires independent clingo; 49 bounded complete model/cost cases"]
+#[ignore = "requires clingo: fresh clingo confirms every recorded weak contract; 49 bounded complete model/cost cases"]
 fn fresh_clingo_confirms_every_recorded_weak_contract() {
     for case in cases() {
         assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);

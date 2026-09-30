@@ -88,13 +88,13 @@ fn compose(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: formula executes while relation columns remain prepared"]
 fn metal_formula_executes_while_relation_columns_remain_prepared() {
     compose(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: formula executes while relation columns remain prepared"]
 fn vulkan_formula_executes_while_relation_columns_remain_prepared() {
     compose(GpuApi::Vulkan);
 }

@@ -143,7 +143,7 @@ fn cyclic_objectives_preserve_original_answers() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 on PATH or through CLINGO"]
+#[ignore = "requires clingo: original boundary sources retain reference outcomes"]
 fn original_boundary_sources_retain_reference_outcomes() {
     for case in cases() {
         let source = case["source"].as_str().unwrap();

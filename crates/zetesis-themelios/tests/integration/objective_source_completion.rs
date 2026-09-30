@@ -114,7 +114,7 @@ fn source_eligibility_limits_are_inclusive() {
 }
 
 #[test]
-#[ignore = "requires independent clingo for 36 original source-eligibility cases"]
+#[ignore = "requires clingo: source eligibility matches fresh clingo; 36 original source-eligibility cases"]
 fn source_eligibility_matches_fresh_clingo() {
     for case in source_cases::cases(CASES) {
         assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);

@@ -143,7 +143,7 @@ fn specialization_limits_are_inclusive() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: priority sources match complete clingo records"]
 fn priority_sources_match_complete_clingo_records() {
     for case in source_cases::cases(CASES.trim()) {
         assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);

@@ -14,7 +14,7 @@ fn scoped_objectives_preserve_full_scored_answers() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for raw priority reporting"]
+#[ignore = "requires clingo: scoped objectives match fresh raw clingo"]
 fn scoped_objectives_match_fresh_raw_clingo() {
     priority_contracts::fresh(CASES);
 }

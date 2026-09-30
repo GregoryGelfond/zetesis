@@ -71,7 +71,7 @@ fn compare(
 }
 
 #[test]
-#[ignore = "requires independently installed clingo; bounded five-second/64-KiB subprocesses"]
+#[ignore = "requires clingo: recursive ground aggregates preserve complete clingo model sets; bounded five-second/64-KiB subprocesses"]
 fn recursive_ground_aggregates_preserve_complete_clingo_model_sets() {
     // Fixed sources distinguish != from not(=), mixed-sign implication from
     // classical disjunction, and whole-tuple OR from classical true replacement.
@@ -174,7 +174,7 @@ fn recursive_ground_aggregates_preserve_complete_clingo_model_sets() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo; bounded five-second/64-KiB subprocesses"]
+#[ignore = "requires clingo: generated recursive signed and default negated guards match clingo; bounded five-second/64-KiB subprocesses"]
 fn generated_recursive_signed_and_default_negated_guards_match_clingo() {
     for (comparison, operator) in [
         (Comparison::Eq, "="),

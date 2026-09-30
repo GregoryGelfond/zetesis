@@ -85,7 +85,7 @@ fn unresolved_numeric_endpoints_remain_located_refusals() {
 }
 
 #[test]
-#[ignore = "requires independent clingo; 198 bounded complete source comparisons"]
+#[ignore = "requires clingo: recorded extrema sources match fresh clingo; 198 bounded complete source comparisons"]
 fn recorded_extrema_sources_match_fresh_clingo() {
     for case in cases() {
         assert_eq!(

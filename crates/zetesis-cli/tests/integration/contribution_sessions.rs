@@ -208,7 +208,7 @@ fn composed_output_retains_hidden_optimum_multiplicity() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: original sources preserve complete shown optimum ties"]
 fn original_sources_preserve_complete_shown_optimum_ties() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"));
     for ((source, filename), expected) in contribution_sources::SOURCES

@@ -76,13 +76,13 @@ fn compare(oracle: &mut GpuLazyOracle, program: &Program, seeds: &[Seed], limits
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: lazy worlds match exact frozen CPU closures"]
 fn metal_lazy_worlds_match_exact_frozen_cpu_closures() {
     qualify_lazy_worlds_match_exact_frozen_cpu_closures(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: lazy worlds match exact frozen CPU closures"]
 fn vulkan_lazy_worlds_match_exact_frozen_cpu_closures() {
     qualify_lazy_worlds_match_exact_frozen_cpu_closures(GpuApi::Vulkan);
 }
@@ -161,13 +161,13 @@ fn qualify_lazy_worlds_match_exact_frozen_cpu_closures(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: lazy growth preserves previous round truth"]
 fn metal_lazy_growth_preserves_previous_round_truth() {
     qualify_lazy_growth_preserves_previous_round_truth(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: lazy growth preserves previous round truth"]
 fn vulkan_lazy_growth_preserves_previous_round_truth() {
     qualify_lazy_growth_preserves_previous_round_truth(GpuApi::Vulkan);
 }
@@ -200,13 +200,13 @@ fn qualify_lazy_growth_preserves_previous_round_truth(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: lazy catalog fits when static carrier refuses"]
 fn metal_lazy_catalog_fits_when_static_carrier_refuses() {
     qualify_lazy_catalog_fits_when_static_carrier_refuses(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: lazy catalog fits when static carrier refuses"]
 fn vulkan_lazy_catalog_fits_when_static_carrier_refuses() {
     qualify_lazy_catalog_fits_when_static_carrier_refuses(GpuApi::Vulkan);
 }
@@ -263,13 +263,13 @@ fn qualify_lazy_catalog_fits_when_static_carrier_refuses(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires a physical Metal adapter"]
+#[ignore = "requires Metal: source selections preserve each frozen closure"]
 fn metal_source_selections_preserve_each_frozen_closure() {
     qualify_source_selections_preserve_each_frozen_closure(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: source selections preserve each frozen closure"]
 fn vulkan_source_selections_preserve_each_frozen_closure() {
     qualify_source_selections_preserve_each_frozen_closure(GpuApi::Vulkan);
 }

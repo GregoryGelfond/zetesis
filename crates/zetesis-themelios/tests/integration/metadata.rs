@@ -414,7 +414,7 @@ fn external(source: &str) -> Displays {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: declarations and signature display match clingo without model projection"]
 fn declarations_and_signature_display_match_clingo_without_model_projection() {
     for base in ["p. p(1). {q}.", "{p}. {q}.", "p. :- p.", ""] {
         for metadata in [
@@ -444,7 +444,7 @@ fn declarations_and_signature_display_match_clingo_without_model_projection() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: included signature metadata matches clingo complete display multiplicities"]
 fn included_signature_metadata_matches_clingo_complete_display_multiplicities() {
     let fixture = Fixture::new();
     for directives in ["#show.", "#show p/0.", "#show p/0. #show q/0."] {

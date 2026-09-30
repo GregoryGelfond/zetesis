@@ -67,7 +67,7 @@ fn evaluated_fields_keeps_the_original_reduct_subject() {
 }
 
 #[test]
-#[ignore = "requires independent clingo for 18 original expression sources"]
+#[ignore = "requires clingo: evaluated fields match fresh clingo; 18 original expression sources"]
 fn evaluated_fields_match_fresh_clingo() {
     for case in source_cases::cases(CASES) {
         assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);

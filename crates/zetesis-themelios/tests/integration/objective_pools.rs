@@ -23,7 +23,7 @@ fn conditional_pools_preserve_complete_scored_families() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for raw priority reporting"]
+#[ignore = "requires clingo: conditional pools match fresh clingo"]
 fn conditional_pools_match_fresh_clingo() {
     priority_contracts::fresh(CASES);
 }

@@ -81,7 +81,7 @@ fn conditional_choices_preserve_the_complete_supported_family() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: mixed choice support matches complete original references"]
 fn mixed_choice_support_matches_complete_original_references() {
     for source in [
         MIXED_CHOICES,
@@ -343,7 +343,7 @@ fn closure_preserves_its_term_output_boundary() {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo"]
+#[ignore = "requires clingo: numeric show negation matches the original reference"]
 fn numeric_show_negation_matches_the_original_reference() {
     // Numeric negation is ordinary clingo-compatible arithmetic. This source
     // does not use the separate native extension for signed anonymous queries.

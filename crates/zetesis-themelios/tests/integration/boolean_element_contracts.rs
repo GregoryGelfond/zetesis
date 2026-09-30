@@ -97,7 +97,7 @@ fn constant_heads_add_no_catalog_atoms() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original constant sources match clingo"]
 fn original_constant_sources_match_clingo() {
     for &(source, _) in CASES {
         external(source);

@@ -597,7 +597,7 @@ fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
 }
 
 #[test]
-#[ignore = "requires external clingo; excludes the recorded i32::MAX deadline"]
+#[ignore = "requires clingo: fresh bounded clingo replays complete contracts and explicit diagnostics; excludes the recorded i32::MAX deadline"]
 fn fresh_bounded_clingo_replays_complete_contracts_and_explicit_diagnostics() {
     let mut runs = 0;
     for case in cases().iter().filter(|case| !case["reference"].is_null()) {

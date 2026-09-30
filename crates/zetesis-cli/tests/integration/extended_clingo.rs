@@ -179,7 +179,7 @@ fn shown_answers_preserve_hidden_model_multiplicity() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: display signatures and declarations preserve complete model multisets"]
 fn display_signatures_and_declarations_preserve_complete_model_multisets() {
     for source in [
         "#defined absent/2. {hidden}. visible. #show visible/0.",
@@ -264,7 +264,7 @@ fn nul_strings_refuse_instead_of_inheriting_clingo_truncation() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: generated checked numeric expressions match clingo"]
 fn generated_checked_numeric_expressions_match_clingo() {
     let mut expressions = 0;
     for left in [-7, -3, -1, 0, 1, 3, 7] {
@@ -299,7 +299,7 @@ fn generated_checked_numeric_expressions_match_clingo() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: original strings constants and fact set forms match clingo"]
 fn original_strings_constants_and_fact_set_forms_match_clingo() {
     for source in [
         "p(\"space here\",\"say \\\"hi\\\"\",\"a\\\\b\",\"a\\nb\",\"a\tb\",\"λ雪\").",
@@ -317,7 +317,7 @@ fn original_strings_constants_and_fact_set_forms_match_clingo() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: expanded relational rules compare all stable models"]
 fn expanded_relational_rules_compare_all_stable_models() {
     for lower in -2..=2 {
         for upper in -2..=2 {
@@ -377,7 +377,7 @@ fn scalar_order_source() -> String {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable"]
+#[ignore = "requires clingo: mixed scalar order comparisons match clingo"]
 fn mixed_scalar_order_comparisons_match_clingo() {
     let source = scalar_order_source();
     let expected = external(&source);

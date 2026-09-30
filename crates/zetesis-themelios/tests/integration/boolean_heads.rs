@@ -56,7 +56,7 @@ fn boolean_constants_introduce_no_atoms() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     let mut models = 0;
     for &(source, records) in CASES {
@@ -441,7 +441,7 @@ fn duplicate_boolean_heads_retain_original_file_identity() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: tautological rules remain unsafe in clingo"]
 fn tautological_rules_remain_unsafe_in_clingo() {
     for source in ["#true|p(X).", "#true:-not p(X).", "#true|p(2..1,X)."] {
         let result = external(source, false);

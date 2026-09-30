@@ -60,7 +60,7 @@ fn explicit_base_matches_exhaustive_reduct_checking() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: explicit base matches clingo full models"]
 fn explicit_base_matches_clingo_full_models() {
     for &(source, _) in CASES {
         let result = external(source, true);

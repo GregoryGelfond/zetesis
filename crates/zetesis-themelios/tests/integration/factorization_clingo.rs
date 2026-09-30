@@ -190,7 +190,7 @@ fn clingo(source: &str) -> Records {
 }
 
 #[test]
-#[ignore = "requires installed clingo; exact complete full models and cost presence"]
+#[ignore = "requires clingo: factorization campaign matches fresh complete clingo; exact complete full models and cost presence"]
 fn factorization_campaign_matches_fresh_complete_clingo() {
     let cases = cases();
     assert_eq!(cases.len(), 36);

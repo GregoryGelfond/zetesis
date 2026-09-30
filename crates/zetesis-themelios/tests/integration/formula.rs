@@ -502,7 +502,7 @@ fn clingo(source: &str) -> Models {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo 5.8.x oracle"]
+#[ignore = "requires clingo: conditional formula models match exhausted clingo on deterministic cases"]
 fn conditional_formula_models_match_exhausted_clingo_on_deterministic_cases() {
     let mut sources: Vec<String> = [
         "1{a:a}1.",

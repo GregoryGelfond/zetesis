@@ -14,7 +14,7 @@ fn rich_producers_preserve_full_scored_answers() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 for raw priority reporting"]
+#[ignore = "requires clingo: rich producers match fresh raw clingo"]
 fn rich_producers_match_fresh_raw_clingo() {
     priority_contracts::fresh(CASES);
 }

@@ -684,7 +684,7 @@ fn oracle(source: &str) -> Json {
     ))
 }
 #[test]
-#[ignore = "requires external clingo; complete bounded displayed-symbol multisets"]
+#[ignore = "requires clingo: unchanged sources match fresh clingo reference; complete bounded displayed-symbol multisets"]
 fn unchanged_sources_match_fresh_clingo_reference() {
     for case in cases() {
         let raw = oracle(case["source"].as_str().unwrap());

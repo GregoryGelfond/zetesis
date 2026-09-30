@@ -185,7 +185,7 @@ fn complete_signed_models_match_handwritten_theories_and_explicit_expansions() {
 }
 
 #[test]
-#[ignore = "requires external clingo 5.8; bounded original and explicit-expansion captures"]
+#[ignore = "requires clingo: fresh clingo preserves every complete negative head contract; bounded original and explicit-expansion captures"]
 fn fresh_clingo_preserves_every_complete_negative_head_contract() {
     for case in cases() {
         for field in ["source", "expanded"] {
@@ -260,7 +260,7 @@ fn singleton_heads_preserve_complete_models() {
 }
 
 #[test]
-#[ignore = "requires external clingo 5.8; bounded complete captures"]
+#[ignore = "requires clingo: singleton references match clingo; bounded complete captures"]
 fn singleton_references_match_clingo() {
     for case in singleton_cases() {
         assert_eq!(

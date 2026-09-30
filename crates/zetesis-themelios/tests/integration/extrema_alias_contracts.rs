@@ -64,7 +64,7 @@ fn aliases_preserve_complete_model_contracts() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original alias sources match clingo"]
 fn original_alias_sources_match_clingo() {
     for &(source, _) in CASES {
         external(source);

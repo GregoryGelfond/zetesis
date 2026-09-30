@@ -553,7 +553,7 @@ fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() 
 }
 
 #[test]
-#[ignore = "requires external clingo; independent bounded full reference replay"]
+#[ignore = "requires clingo: fresh clingo replays signed models objectives and unsafe diagnostics; independent bounded full reference replay"]
 fn fresh_clingo_replays_signed_models_objectives_and_unsafe_diagnostics() {
     for case in cases() {
         let fresh = optimal(case["source"].as_str().unwrap());

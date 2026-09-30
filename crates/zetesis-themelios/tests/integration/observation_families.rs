@@ -180,7 +180,7 @@ fn complete_family_evaluations_obey_their_exact_work_boundary() {
     }
 }
 #[test]
-#[ignore = "requires absolute CLINGO; bounded complete reference family capture"]
+#[ignore = "requires clingo: unchanged finite query families match fresh clingo; bounded complete reference family capture"]
 fn unchanged_finite_query_families_match_fresh_clingo() {
     for case in cases() {
         observation_reference::compare(case["source"].as_str().unwrap(), &case["witnesses"]);

@@ -430,7 +430,7 @@ fn generated_instances_preserve_every_duplicate_source_origin() {
 }
 
 #[test]
-#[ignore = "requires external clingo 5.8; each original and expansion has a bounded complete capture"]
+#[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
     for case in cases() {
         let predicted = expected(&case["models"]);

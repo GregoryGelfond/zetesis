@@ -99,13 +99,13 @@ fn cpu_keeps_its_route(context: &GpuContext, grounder: Grounder) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; checks exact executor context identity"]
+#[ignore = "requires Metal: checks exact executor context identity"]
 fn metal_closure_retains_the_supplied_context() {
     supplied_context(Backend::Gpu(Some(GpuApi::Metal)), "Metal");
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; checks exact executor context identity"]
+#[ignore = "requires Vulkan: checks exact executor context identity"]
 fn vulkan_closure_retains_the_supplied_context() {
     supplied_context(Backend::Gpu(Some(GpuApi::Vulkan)), "Vulkan");
 }

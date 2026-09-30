@@ -238,13 +238,13 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
 }
 
 #[test]
-#[ignore = "requires an actual Metal GPU; run this hardware qualification explicitly"]
+#[ignore = "requires Metal: constructor executes resident batches without fallback"]
 fn metal_constructor_executes_resident_batches_without_fallback() {
     qualify_constructor_executes_resident_batches_without_fallback(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: constructor executes resident batches without fallback"]
 fn vulkan_constructor_executes_resident_batches_without_fallback() {
     qualify_constructor_executes_resident_batches_without_fallback(GpuApi::Vulkan);
 }
@@ -264,14 +264,7 @@ fn qualify_constructor_executes_resident_batches_without_fallback(backend: GpuAp
 }
 
 #[test]
-#[ignore = "requires an actual GPU; run this hardware qualification explicitly"]
-fn exact_static_oracle_matches_independent_cpu_closures() {
-    let oracle = GpuOracle::new(GpuOptions::default()).expect("physical GPU adapter is available");
-    qualify_static(oracle);
-}
-
-#[test]
-#[ignore = "requires an actual Metal GPU; explicit physical qualification"]
+#[ignore = "requires Metal: static oracle matches independent closures"]
 fn metal_static_oracle_matches_independent_closures() {
     let backend = GpuApi::Metal;
     let oracle = GpuOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
@@ -281,7 +274,7 @@ fn metal_static_oracle_matches_independent_closures() {
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: static oracle matches independent closures"]
 fn vulkan_static_oracle_matches_independent_closures() {
     let backend = GpuApi::Vulkan;
     let oracle = GpuOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })

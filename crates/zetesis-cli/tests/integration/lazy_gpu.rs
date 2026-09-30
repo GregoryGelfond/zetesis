@@ -85,13 +85,13 @@ mod physical {
     const WORLDS: &str = "a:-not b. b:-not a. x:-a. y:-b. cross:-x,y. :-cross.";
 
     #[test]
-    #[ignore = "requires physical Metal with automatic materialization"]
+    #[ignore = "requires Metal: automatic grounder keeps source joins"]
     fn metal_automatic_grounder_keeps_source_joins() {
         qualify_automatic_grounder(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan with automatic materialization"]
+    #[ignore = "requires Vulkan: automatic grounder keeps source joins"]
     fn vulkan_automatic_grounder_keeps_source_joins() {
         qualify_automatic_grounder(GpuApi::Vulkan);
     }
@@ -155,13 +155,13 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires physical Metal through the ordinary lazy solver"]
+    #[ignore = "requires Metal: ordinary lazy Metal preserves complete CPU models"]
     fn ordinary_lazy_metal_preserves_complete_cpu_models() {
         qualify_lazy_models(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    #[ignore = "requires Vulkan: ordinary lazy Vulkan matches CPU models"]
     fn ordinary_lazy_vulkan_matches_cpu_models() {
         qualify_lazy_models(GpuApi::Vulkan);
     }
@@ -264,13 +264,13 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires physical Metal through the ordinary lazy solver"]
+    #[ignore = "requires Metal: requested model limit retains completed lazy candidates"]
     fn requested_model_limit_retains_completed_lazy_candidates() {
         qualify_model_limit(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    #[ignore = "requires Vulkan: model limit retains completed candidates"]
     fn vulkan_model_limit_retains_completed_candidates() {
         qualify_model_limit(GpuApi::Vulkan);
     }
@@ -302,13 +302,13 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires physical Metal through the ordinary lazy solver"]
+    #[ignore = "requires Metal: lazy source stop preserves unfinished candidate counts"]
     fn lazy_source_stop_preserves_unfinished_candidate_counts() {
         qualify_source_stop(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    #[ignore = "requires Vulkan: source stop retains unfinished candidates"]
     fn vulkan_source_stop_retains_unfinished_candidates() {
         qualify_source_stop(GpuApi::Vulkan);
     }
@@ -339,13 +339,13 @@ mod physical {
     }
 
     #[test]
-    #[ignore = "requires physical Metal through the ordinary lazy solver"]
+    #[ignore = "requires Metal: lazy writer failure preserves completed device work"]
     fn lazy_writer_failure_preserves_completed_device_work() {
         qualify_writer_failure(GpuApi::Metal);
     }
 
     #[test]
-    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    #[ignore = "requires Vulkan: writer failure retains completed work"]
     fn vulkan_writer_failure_retains_completed_work() {
         qualify_writer_failure(GpuApi::Vulkan);
     }

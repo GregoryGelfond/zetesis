@@ -271,7 +271,7 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
 }
 
 #[test]
-#[ignore = "requires external clingo; exact sources and complete full-model replay"]
+#[ignore = "requires clingo: ground guards match clingo; exact sources and complete full-model replay"]
 fn ground_guards_match_clingo() {
     for row in cases() {
         let actual = enumerated(row["source"].as_str().unwrap());

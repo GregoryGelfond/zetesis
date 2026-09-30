@@ -121,7 +121,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
 }
 
 #[test]
-#[ignore = "requires an actual Metal GPU; explicit hardware qualification only"]
+#[ignore = "requires Metal: formula queries preserve exact frozen semantics and residency"]
 fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
     for projection in GateProjection::ALL {
         qualify_frozen_queries(GpuApi::Metal, projection);
@@ -350,7 +350,7 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
 }
 
 #[test]
-#[ignore = "requires an actual Metal GPU; explicit hardware qualification only"]
+#[ignore = "requires Metal: formula limits resize identity and word boundaries remain explicit"]
 fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
     for projection in GateProjection::ALL {
         qualify_resources(GpuApi::Metal, projection);
@@ -507,7 +507,7 @@ fn assert_clears_residency(
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: formula queries preserve frozen semantics"]
 fn vulkan_formula_queries_preserve_frozen_semantics() {
     for projection in GateProjection::ALL {
         qualify_frozen_queries(GpuApi::Vulkan, projection);
@@ -515,7 +515,7 @@ fn vulkan_formula_queries_preserve_frozen_semantics() {
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: formula resource boundaries remain explicit"]
 fn vulkan_formula_resource_boundaries_remain_explicit() {
     for projection in GateProjection::ALL {
         qualify_resources(GpuApi::Vulkan, projection);

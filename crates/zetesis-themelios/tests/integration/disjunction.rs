@@ -399,7 +399,7 @@ fn normalized_reference(raw: &Json) -> (String, Models, Option<Vec<i64>>) {
 }
 
 #[test]
-#[ignore = "requires external clingo; records source refusals separately from admitted parity"]
+#[ignore = "requires clingo: records source refusals separately from admitted parity"]
 fn replay_recorded_clingo_models_optimum_slots_and_refusals() {
     let mut runs = 0;
     for case in cases() {

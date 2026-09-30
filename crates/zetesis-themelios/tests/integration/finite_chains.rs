@@ -392,7 +392,7 @@ proptest! {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo"]
+#[ignore = "requires clingo: original chains match complete clingo answers"]
 fn original_chains_match_complete_clingo_answers() {
     for &(source, atoms) in CASES {
         let record = reference::external(source, true);

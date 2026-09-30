@@ -452,7 +452,7 @@ fn clingo(source: &str) -> Models {
     models
 }
 #[test]
-#[ignore = "requires external clingo 5.8; each original and expansion has a bounded complete capture"]
+#[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
     let mut models = 0;
     for case in cases() {

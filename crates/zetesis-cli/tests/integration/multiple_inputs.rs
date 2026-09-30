@@ -298,7 +298,7 @@ fn root_aliases_are_explicit_refusals_while_identical_roots_are_shared() {
 }
 
 #[test]
-#[ignore = "requires the independent clingo executable on PATH"]
+#[ignore = "requires clingo: original file sets match fresh complete clingo optima"]
 fn original_file_sets_match_fresh_complete_clingo_optima() {
     let cases: Vec<Json> =
         serde_json::from_str(include_str!("../fixtures/multiple-inputs.json")).unwrap();

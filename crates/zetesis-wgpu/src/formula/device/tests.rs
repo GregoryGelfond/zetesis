@@ -162,13 +162,13 @@ fn cold_preparation_refusals(
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit physical qualification"]
+#[ignore = "requires Metal: busy refusal preserves formula state"]
 fn metal_busy_refusal_preserves_formula_state() {
     busy_preserves_state(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+#[ignore = "requires Vulkan: busy refusal preserves formula state"]
 fn vulkan_busy_refusal_preserves_formula_state() {
     busy_preserves_state(GpuApi::Vulkan);
 }
@@ -243,13 +243,13 @@ fn reused_profile(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; explicit compiled-profile qualification"]
+#[ignore = "requires Metal: profile starts fresh formula oracles"]
 fn metal_profile_starts_fresh_formula_oracles() {
     reused_profile(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; explicit compiled-profile qualification"]
+#[ignore = "requires Vulkan: profile starts fresh formula oracles"]
 fn vulkan_profile_starts_fresh_formula_oracles() {
     reused_profile(GpuApi::Vulkan);
 }
@@ -273,13 +273,13 @@ fn compilation_identity(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; exact compilation identity"]
+#[ignore = "requires Metal: profiles identify exact compilations"]
 fn metal_profiles_identify_exact_compilations() {
     compilation_identity(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; exact compilation identity"]
+#[ignore = "requires Vulkan: profiles identify exact compilations"]
 fn vulkan_profiles_identify_exact_compilations() {
     compilation_identity(GpuApi::Vulkan);
 }
@@ -324,13 +324,13 @@ fn profile_lifecycle(backend: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires actual Metal; profile reuse retains shared failure precedence"]
+#[ignore = "requires Metal: profile reuse retains shared failure precedence"]
 fn metal_profile_reuse_checks_context_lifecycle() {
     profile_lifecycle(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; profile reuse retains shared failure precedence"]
+#[ignore = "requires Vulkan: profile reuse retains shared failure precedence"]
 fn vulkan_profile_reuse_checks_context_lifecycle() {
     profile_lifecycle(GpuApi::Vulkan);
 }
@@ -442,13 +442,13 @@ fn submitted_interruption(
 }
 
 #[test]
-#[ignore = "requires actual Metal; checks submission phase and device limits"]
+#[ignore = "requires Metal: checks submission phase and device limits"]
 fn metal_formula_submission_receipt_survives_interruption() {
     submission_receipt(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires actual Vulkan; checks submission phase and device limits"]
+#[ignore = "requires Vulkan: checks submission phase and device limits"]
 fn vulkan_formula_submission_receipt_survives_interruption() {
     submission_receipt(GpuApi::Vulkan);
 }

@@ -347,7 +347,7 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
 }
 
 #[test]
-#[ignore = "requires independently installed clingo 5.8.2"]
+#[ignore = "requires clingo: projected classes match complete reference families"]
 fn projected_classes_match_complete_reference_families() {
     for case in CASES {
         check(case);

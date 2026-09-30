@@ -204,7 +204,7 @@ proptest::proptest! {
 }
 
 #[test]
-#[ignore = "requires independent clingo for complete original records"]
+#[ignore = "requires clingo: flat presence sources match fresh clingo; complete original records"]
 fn flat_presence_sources_match_fresh_clingo() {
     for case in flat_cases() {
         let run = oracle::run(

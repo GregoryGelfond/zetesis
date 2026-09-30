@@ -406,7 +406,7 @@ fn compare_external(case: &Case) {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo executable; reference campaign only"]
+#[ignore = "requires clingo: recorded recursive aggregate semantics match clingo"]
 fn recorded_recursive_aggregate_semantics_match_clingo() {
     let cases = cases();
     assert_eq!(cases.len(), 321);
