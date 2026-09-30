@@ -38,11 +38,7 @@ pub fn sources(root: &Path, limits: Limits) -> Result<BTreeMap<String, String>, 
         .collect()
 }
 /// The maintained standalone packages, which the workspace does not build.
-const STANDALONE: [&str; 3] = [
-    "validation/reference",
-    "experiments/gate-transfer",
-    "refinement/membership/rust",
-];
+const STANDALONE: [&str; 2] = ["validation/reference", "refinement/membership/rust"];
 /// Every maintained Rust source, relative to `root`, in order: the `src`,
 /// `tests`, `benches` and `examples` trees and the `build.rs` of each workspace
 /// package under `crates` and of each maintained standalone package, and the

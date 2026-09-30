@@ -114,7 +114,6 @@ fn inventory_selects_maintained_rust_roots() {
         "crates/example/tests/nested/case.rs",
         "crates/target/src/lib.rs",
         "docs/book/examples/session.rs",
-        "experiments/gate-transfer/src/lib.rs",
         "refinement/membership/rust/src/lib.rs",
         "validation/reference/src/lib.rs",
     ];
@@ -122,7 +121,6 @@ fn inventory_selects_maintained_rust_roots() {
         "crates/example",
         "crates/target",
         "validation/reference",
-        "experiments/gate-transfer",
         "refinement/membership/rust",
     ] {
         let directory = root.join(package);

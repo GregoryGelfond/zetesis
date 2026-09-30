@@ -42,9 +42,9 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
     cargo clippy --locked -p zetesis-cli -p zetesis-solve --no-default-features --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
-    # These maintained semantic experiments are independent Cargo workspaces.
+    # The maintained standalone packages are independent Cargo workspaces.
     # Main-workspace checks cannot select them implicitly.
-    for standalone_manifest in validation/reference/Cargo.toml experiments/gate-transfer/Cargo.toml refinement/membership/rust/Cargo.toml; do
+    for standalone_manifest in validation/reference/Cargo.toml refinement/membership/rust/Cargo.toml; do
         cargo fmt --manifest-path "$standalone_manifest" --all -- --check
         cargo test --manifest-path "$standalone_manifest" --locked --all-targets --all-features --no-fail-fast
         cargo test --manifest-path "$standalone_manifest" --locked --doc --all-features --no-fail-fast

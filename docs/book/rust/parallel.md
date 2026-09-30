@@ -178,6 +178,68 @@ The dense mapping's coverage, injectivity outside leaf aliases, initialized
 address range and checked world offsets are Rust/WGSL correspondence obligations;
 those abstract laws do not certify the packing or physical execution.
 
+### The gate transfer
+
+Each enabled connective narrows its three positions through a finite gate
+transfer. `GateProjection::Enumerated`, the default, enumerates the relation's
+rows; `GateProjection::Bitwise` is an explicit optional implementation. The
+[device constructors](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/device.rs) accept
+that selection, and the bitwise path assembles the unchanged shader scaffold
+with the [bitwise gate transfer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/bitwise.wgsl).
+
+A domain uses two bits: 0 is empty, 1 permits false, 2 permits true and 3
+permits either value. A gate returns the supported values at each position; the
+caller intersects them with the current physical domain slots. Left, right and
+output can alias, and five equality partitions cover the possible physical
+identities. The finite space has 960 transfers: three connectives, five
+partitions and 64 domain triples. It includes different observed masks at
+aliased positions, because separate atomic loads can observe intervening
+monotone narrowing; a coherent snapshot is not assumed.
+
+The bitwise transfer intersects eight-bit row sets and projects position
+supports, with no table lookup or per-row loop. The row index is `x + 2*y + 4*z`.
+And, Or and Implies masks are `0x87`, `0xe1` and `0xd2`. False/true position
+masks are `(0x55,0xaa)`, `(0x33,0xcc)` and `(0x0f,0xf0)`. Equality masks for
+left=right, left=output and right=output are `0x99`, `0xa5` and `0xc3`; all
+equal uses `0x81`. These encode relation rows, not candidate bit planes or the
+physical domain-storage representation. An independent reference enumerates the
+eight Boolean assignments, checks the connective, masks and aliases, and then
+projects support, without the hexadecimal masks.
+
+zetesis-wgpu's [projection tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/formula/projection.rs)
+compare all 960 transfers with that reference, and check that intersecting a
+stale snapshot's supports into smaller current domains keeps every current
+satisfying completion. Its [contract tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/formula/gate_transfer/contract.rs)
+check contraction, idempotence, the 10,935 ordered subset-domain pairs for
+monotonicity, each position's exact support by a separate nested Boolean
+enumeration, the alias partition and the domain encoding.
+
+In `GateProjection`, `bitwise_support_exact` proves equality with independent
+Boolean enumeration for all 960 transfers, and `aliased_intersection_exact`
+preserves intersections at shared physical slots. These laws do not prove shader
+compilation, memory-model behavior, convergence or physical execution. The
+production [projection tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/projection/tests.rs)
+assemble both variants through their actual selector, verify that substitution
+changes only the gate-transfer region, validate both modules with pinned Naga and
+compare their device interfaces. The
+[formula interface contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/formula_interface.rs)
+check the host buffer bindings, uniform layout and compute entry point. These
+portable contracts make no physical-device claim.
+
+A gate substitution must preserve the three atomic loads and intersections in
+order, M-false suppression, original truth evaluation, barriers, strict
+proper-subset constraints, epochs, result decoding, charged sweep work and round
+limits. It must not turn quiescence into acceptance or a residual into a
+completed membership decision. Interleaving safety requires monotonically
+shrinking domains for one immutable query, and a new candidate needs a fresh
+epoch and reset; exact local transfer alone does not establish the surrounding
+propagation or reduct-completion protocol. Physical qualification must exercise
+the actual selected implementation, including aliases, frozen masks, limits and
+faults. Performance comparison must keep candidates and limits matched, preserve
+scalar and Rayon baselines and separate setup from resident calls: enumeration
+may already be unrolled by a compiler, and extra bit operations need not be
+faster.
+
 ## One source stream, independent world truth
 
 `zetesis_cpu::lazy::check_with` owns the bounded round protocol and accepts an

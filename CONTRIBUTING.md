@@ -230,7 +230,7 @@ or fallback behavior. Make malformed input, cancellation, partial results and
 writer/device failures intelligible typed outcomes.
 
 Use `scripts/check.sh portable` for portable Rust tests, lint, strict docs
-and benchmark correctness, including the three maintained standalone Rust packages.
+and benchmark correctness, including the two maintained standalone Rust packages.
 Their checks remain separate from the workspace coverage population. Run
 `scripts/check.sh oracle` for the relevant external
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line

@@ -1,10 +1,14 @@
-//! Test-only finite relation, promoted from experiments/gate-transfer at 93d2575.
-//! Only the used bitwise and independent Boolean paths are retained; no lookup.
+//! Test-only finite relation that `GateProjection::Bitwise` computes: the
+//! bitwise transfer and an independent Boolean reference, with the contract
+//! both satisfy.
 //!
 //! A domain mask uses bit zero for false and bit one for true. All three
 //! snapshots may differ even when slots alias: concurrent atomic loads can
 //! observe intervening narrowing. The gate is enabled in one immutable frozen
 //! query; disabled M-false connectives must never call these transfers.
+
+mod contract;
+pub(super) use contract::{domains, fits, holds};
 
 /// Connectives represented by the production shader's tags 2, 3 and 4.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

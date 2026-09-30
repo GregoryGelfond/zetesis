@@ -1,11 +1,7 @@
 //! Finite transition evidence for the explicit alternative; no device execution.
 
-use super::gate_transfer::{Aliases, Domains, Operation, bitwise, reference};
+use super::gate_transfer::{Aliases, Operation, bitwise, domains, fits, holds, reference};
 use zetesis_wgpu::GateProjection;
-
-fn domains(code: u8) -> Domains {
-    Domains::from_code(code).expect("finite six-bit snapshot")
-}
 
 #[test]
 fn default_projection_is_enumerated() {
@@ -34,23 +30,6 @@ fn every_projection_matches_independent_boolean_rows() {
         }
     }
     assert_eq!(cases, 960);
-}
-
-fn fits(domains: [u8; 3], values: [bool; 3]) -> bool {
-    domains
-        .into_iter()
-        .zip(values)
-        .all(|(domain, value)| domain & (1 << u8::from(value)) != 0)
-}
-
-fn holds(operation: Operation, values: [bool; 3]) -> bool {
-    let [left, right, output] = values;
-    output
-        == match operation {
-            Operation::And => left && right,
-            Operation::Or => left || right,
-            Operation::Implies => !left || right,
-        }
 }
 
 #[test]
