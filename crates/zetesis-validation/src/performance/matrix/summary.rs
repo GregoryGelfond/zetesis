@@ -69,8 +69,7 @@ pub struct Summary<'a> {
     pub profiles: &'a [crate::selected::NativeExecution],
     /// Whether the reference was measured or used only for its census, or
     /// took no part (`clingo_free`).
-    #[serde(serialize_with = "super::config::recorded_policy")]
-    pub reference_policy: Option<super::ReferencePolicy>,
+    pub reference_policy: super::RecordedPolicy,
     /// Sealed executable and source identities.
     pub before: &'a [crate::selected::FileSeal],
     /// Source-major, reference-first compact cells; a clingo-free campaign has
@@ -81,7 +80,7 @@ pub struct Summary<'a> {
 /// What a case's cells were qualified against: clingo's census when it took
 /// part, the recorded contract otherwise, and nothing for a workload without one.
 fn qualification(report: &Report, case: usize) -> Qualification {
-    if report.plan.reference_policy.is_some() {
+    if report.plan.reference_policy.reference().is_some() {
         return Qualification::Clingo;
     }
     match report.workloads.as_deref() {
@@ -92,7 +91,11 @@ fn qualification(report: &Report, case: usize) -> Qualification {
 
 pub(super) fn summarize(report: &Report) -> Summary<'_> {
     let mut cells = Vec::new();
-    let reference = report.plan.reference_policy.map(|_| Producer::Reference);
+    let reference = report
+        .plan
+        .reference_policy
+        .reference()
+        .map(|_| Producer::Reference);
     for case in 0..report.cases.len() {
         let qualification = qualification(report, case);
         for producer in reference

@@ -41,20 +41,38 @@ pub enum ReferencePolicy {
     QualificationOnly,
 }
 
-/// Serialize the policy a campaign ran under; a clingo-free campaign records
-/// `clingo_free`.
-#[expect(
-    clippy::ref_option,
-    clippy::trivially_copy_pass_by_ref,
-    reason = "serde's `serialize_with` passes the field by reference"
-)]
-pub(super) fn recorded_policy<S: serde::Serializer>(
-    policy: &Option<ReferencePolicy>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    match policy {
-        Some(policy) => policy.serialize(serializer),
-        None => serializer.serialize_str("clingo_free"),
+/// The reference policy a report records: the one the campaign ran under, or
+/// `clingo_free` when no reference took part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordedPolicy {
+    /// The reference was qualified and measured alongside every native profile.
+    AllPhases,
+    /// The reference established one complete census per case; only native
+    /// profiles were measured.
+    QualificationOnly,
+    /// No reference took part: each native family was qualified against its
+    /// workload's recorded contract.
+    ClingoFree,
+}
+impl RecordedPolicy {
+    /// The policy the campaign ran under; none for a clingo-free campaign.
+    #[must_use]
+    pub const fn reference(self) -> Option<ReferencePolicy> {
+        match self {
+            Self::AllPhases => Some(ReferencePolicy::AllPhases),
+            Self::QualificationOnly => Some(ReferencePolicy::QualificationOnly),
+            Self::ClingoFree => None,
+        }
+    }
+}
+impl From<Option<ReferencePolicy>> for RecordedPolicy {
+    fn from(policy: Option<ReferencePolicy>) -> Self {
+        match policy {
+            Some(ReferencePolicy::AllPhases) => Self::AllPhases,
+            Some(ReferencePolicy::QualificationOnly) => Self::QualificationOnly,
+            None => Self::ClingoFree,
+        }
     }
 }
 

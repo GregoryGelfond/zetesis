@@ -249,7 +249,8 @@ The request's optional `reference` names clingo and what it is for:
 campaign is clingo-free: each native family is qualified against its workload's
 recorded contract, and a workload without a contract, such as an amended board,
 is recorded as needing clingo and is not launched. The report records the policy
-its run used, `clingo_free` included, and rebuilds its schedule from it.
+its run used as a `RecordedPolicy`, `ClingoFree` included, and rebuilds its
+schedule from it.
 `Plan::with_cases` narrows the suite to named cases, run in the order given; a
 path that is not a case of the suite is refused before anything is launched.
 The request's `tool` names what runs the campaign and its version, and the

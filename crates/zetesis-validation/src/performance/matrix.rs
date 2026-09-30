@@ -30,7 +30,9 @@ pub use summary::{CellSummary, DecisionCount, Qualification, Summary};
 mod telemetry;
 mod workload;
 
-pub use config::{Plan, Producer, Reference, ReferencePolicy, Request, Slot, Suite, Tool};
+pub use config::{
+    Plan, Producer, RecordedPolicy, Reference, ReferencePolicy, Request, Slot, Suite, Tool,
+};
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
@@ -49,8 +51,7 @@ use serde::Serialize;
 struct RecordedPlan {
     #[serde(flatten)]
     plan: Plan,
-    #[serde(serialize_with = "config::recorded_policy")]
-    reference_policy: Option<ReferencePolicy>,
+    reference_policy: RecordedPolicy,
 }
 
 /// Owned complete matrix evidence, including unlaunched positions and refusals.
@@ -99,7 +100,7 @@ impl Report {
     pub fn accounted(&self) -> bool {
         self.plan
             .plan
-            .slots(self.cases.len(), self.plan.reference_policy)
+            .slots(self.cases.len(), self.plan.reference_policy.reference())
             .is_ok_and(|slots| slots.len() == self.samples.len())
     }
     /// Every requested invocation passed parity/telemetry with unchanged inputs,
@@ -108,7 +109,7 @@ impl Report {
     /// needs-clingo cells make this false even in a fully accounted report.
     #[must_use]
     pub fn passed(&self) -> bool {
-        let owed = 2 + usize::from(self.plan.reference_policy.is_some());
+        let owed = 2 + usize::from(self.plan.reference_policy.reference().is_some());
         self.accounted()
             && self.samples.iter().all(|s| s.decision == Decision::Pass)
             && self.metadata.len() == owed
@@ -146,7 +147,7 @@ impl Report {
     /// The reference policy the run used; none for a clingo-free campaign.
     #[must_use]
     pub const fn reference_policy(&self) -> Option<ReferencePolicy> {
-        self.plan.reference_policy
+        self.plan.reference_policy.reference()
     }
     /// The tool that ran the campaign and wrote this report.
     #[must_use]

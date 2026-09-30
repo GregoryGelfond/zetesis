@@ -62,7 +62,7 @@ fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::
         cases,
         workloads: None,
         profiles,
-        reference_policy: Some(matrix::ReferencePolicy::AllPhases),
+        reference_policy: matrix::RecordedPolicy::AllPhases,
         before: &[],
         cells: vec![
             matrix::CellSummary {
@@ -224,7 +224,7 @@ fn qualification_only_reference_has_no_measurements_in_either_view() {
     let cases = [reports::CASES[0].to_owned()];
     let profiles = reports::profiles();
     let mut summary = summary(&cases, &profiles);
-    summary.reference_policy = Some(matrix::ReferencePolicy::QualificationOnly);
+    summary.reference_policy = matrix::RecordedPolicy::QualificationOnly;
     let reference = &mut summary.cells[0];
     reference.decisions[0].positions = 1;
     reference.timing = None;
@@ -430,7 +430,7 @@ fn amended_workloads_have_distinct_human_labels() {
         cases: &cases,
         workloads: Some(&workloads),
         profiles: &[],
-        reference_policy: Some(matrix::ReferencePolicy::AllPhases),
+        reference_policy: matrix::RecordedPolicy::AllPhases,
         before: &[],
         cells: (0..2)
             .map(|case| matrix::CellSummary {
@@ -470,7 +470,7 @@ fn a_clingo_free_run_names_what_qualified_each_cell() {
     let cases = reports::CASES.map(str::to_owned);
     let profiles = reports::profiles();
     let mut summary = summary(&cases, &profiles);
-    summary.reference_policy = None;
+    summary.reference_policy = matrix::RecordedPolicy::ClingoFree;
     summary.cells = vec![
         matrix::CellSummary {
             case: 0,

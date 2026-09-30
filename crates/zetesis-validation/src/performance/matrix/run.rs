@@ -83,7 +83,7 @@ pub(super) fn campaign(
         manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
         plan: RecordedPlan {
             plan: request.plan.clone(),
-            reference_policy: request.reference.map(|reference| reference.policy),
+            reference_policy: request.reference.map(|reference| reference.policy).into(),
         },
         limits: request.limits,
         native_normalization_limits: normalization_limits(request),
@@ -429,7 +429,7 @@ fn fill_unattempted(report: &mut Report) -> Result<(), Error> {
     report.samples = report
         .plan
         .plan
-        .slots(report.cases.len(), report.plan.reference_policy)?
+        .slots(report.cases.len(), report.plan.reference_policy.reference())?
         .into_iter()
         .map(|slot| unattempted(slot, None, "campaign setup prevented execution"))
         .collect();
