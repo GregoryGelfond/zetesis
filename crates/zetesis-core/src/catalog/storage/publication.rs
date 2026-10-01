@@ -6,8 +6,13 @@ use std::{mem::size_of, sync::Arc};
 use super::vocabulary::{Vocabulary, VocabularyData};
 use super::{Fault, RowSegment, Snapshot, SnapshotData, Store, VocabularySegment, budget};
 
+mod renewal;
+
 impl Store {
-    pub(crate) fn publication_steps(&self) -> Result<usize, Fault> {
+    pub(crate) fn publication_steps(&self, prior: &mut Snapshot) -> Result<usize, Fault> {
+        if self.can_renew(prior) {
+            return self.renewal_steps(prior);
+        }
         let rows = directory_steps(&self.sealed, !self.tail.is_empty())?;
         let vocabulary = match &self.vocabulary {
             Vocabulary::Growing(growing) => {
@@ -18,6 +23,18 @@ impl Store {
         rows.checked_add(vocabulary)
             .and_then(|steps| steps.checked_add(16))
             .ok_or(Fault::Overflow)
+    }
+
+    /// Extend an exclusively owned current prefix, or preserve a shared prefix
+    /// by publishing a fresh directory. `extra` includes the prior metadata.
+    /// Refusal preserves the logical prefix; reserved capacity may remain.
+    pub(crate) fn publish_into(&mut self, prior: &mut Snapshot, extra: u128) -> Result<(), Fault> {
+        if self.can_renew(prior) {
+            self.renew(prior, extra)
+        } else {
+            *prior = self.snapshot(extra)?;
+            Ok(())
+        }
     }
 
     pub(crate) fn snapshot(&mut self, extra: u128) -> Result<Snapshot, Fault> {

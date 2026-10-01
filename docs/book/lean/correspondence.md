@@ -430,6 +430,15 @@ Constructing a canonical view checks only that its identity lies below the
 reader's counts: segments are contiguous from zero and end with those counts,
 so every counted identity resolves when an operation reads it.
 
+Canonical publication may extend exclusively owned snapshot directories rather
+than copy their existing entries. The applicability checks establish the same
+owner and current prefix; shared snapshots retain fresh-directory publication.
+Both paths preserve the decoder agreement required by
+`append_preserves_interpretation`. Rust regressions check repeated growth,
+retained prefixes and bounded refusal. Exclusive ownership, fallible allocation
+and transient storage accounting remain implementation obligations; this reuse
+does not extend the scope of the Lean theorem.
+
 `CanonicalCatalog.find_discovery` separates canonical query resolution from a
 unique discovery map. `discovery_lookup_exact` equates that composition with the
 existing structural occurrence lookup, assuming sound and complete canonical

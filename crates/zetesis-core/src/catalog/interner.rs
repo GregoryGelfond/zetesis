@@ -551,7 +551,11 @@ impl AtomInterner {
         for _ in &self.pending {
             checked()?;
         }
-        for _ in 0..self.store.publication_steps().map_err(Failure::Catalog)? {
+        for _ in 0..self
+            .store
+            .publication_steps(&mut self.snapshot)
+            .map_err(Failure::Catalog)?
+        {
             checked()?;
         }
         let metadata = self.storage_bytes() - self.store.current_bytes();
@@ -561,15 +565,14 @@ impl AtomInterner {
             .ceiling(usize::try_from(limits.max_bytes).unwrap_or(usize::MAX))
             .map_err(|error| store_failure(error, metadata, limits))?;
         self.store.restart_peak();
-        let snapshot = self.store.snapshot(metadata);
+        let publication = self.store.publish_into(&mut self.snapshot, metadata);
         self.index.peak = self.index.peak.max(self.store.peak_bytes());
-        let snapshot = snapshot.map_err(|error| store_failure(error, 0, limits))?;
+        publication.map_err(|error| store_failure(error, 0, limits))?;
         if self.committed.is_empty() {
             std::mem::swap(&mut self.committed, &mut self.pending);
         } else {
             self.committed.append(&mut self.pending);
         }
-        self.snapshot = snapshot;
         Ok(())
     }
 

@@ -86,6 +86,12 @@ construction indexes. A refused operation can retain complete canonical
 components without discovering or selecting them. All checked operations consume
 the enclosing work budget; catalog presence establishes no truth.
 
+The current snapshot's segment directories can grow in place only when both
+the snapshot and its growing vocabulary are exclusively owned. Frozen vocabulary
+remains shared. Otherwise publication constructs fresh directories, preserving
+every externally retained prefix. Reservations precede visible changes; both
+retained capacity after refusal and temporary replacement overlap are counted.
+
 The eager formula join owns its current partial binding and undo trails. A
 completed row without a generated body or head suffix lends that binding to its
 immediate consumer through the existing `Binding` view. The final join depth

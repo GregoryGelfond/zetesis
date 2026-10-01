@@ -370,6 +370,15 @@ pending IDs after borrowed views end. Finalization transfers that mapping and
 shares the canonical prefix with an immutable `AtomCatalog`. Possible support and emitted atoms retain
 distinct populations, and commitment establishes no truth.
 
+Publication extends the current segment directories when their snapshot is
+exclusively owned. Existing entries move only when a directory grows its
+capacity; successive small publications therefore take amortized linear
+directory work. A retained snapshot instead requires a fresh directory, leaving
+the older readable prefix unchanged. Canonical payload is shared in both cases.
+All work and reservations precede visible publication. Refusal may retain spare
+capacity, which remains charged, but exposes no partial prefix. This local reuse
+introduces no shared execution queue or synchronization between workers.
+
 The located source
 [adapter](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/atoms.rs)
 charges lookup, canonical import, index construction and commit against cumulative

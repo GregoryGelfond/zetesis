@@ -8,7 +8,7 @@ use crate::{Sign, ValueNodeRef};
 use super::nodes::{Compound, Measures, Nodes};
 use super::{AtomId, PredicateId, Read, Store, TermId, TextId, budget};
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct Counts {
     pub(super) texts: usize,
     pub(super) terms: usize,

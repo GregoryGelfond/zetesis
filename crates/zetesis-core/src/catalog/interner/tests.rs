@@ -5,6 +5,7 @@ mod discovery_tests;
 mod ordering_tests;
 mod prepared_tests;
 mod closed_tests;
+mod publication_tests;
 
 use super::*;
 use crate::{
