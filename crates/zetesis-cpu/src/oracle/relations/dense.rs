@@ -273,8 +273,9 @@ pub(in crate::oracle) struct Dense {
     new: Vec<u64>,
     count: usize,
     new_count: usize,
-    /// The words holding new bits, so that advancing clears only them: an
-    /// unchanged relation costs a round one unit, whatever its size.
+    /// The words holding new bits, so that advancing clears only them and
+    /// New scans omit the zero words outside them. An unchanged relation
+    /// costs advancement one unit, whatever its size.
     new_words: Range<usize>,
     /// Discovery positions of rows whose identity the workspace's authority
     /// had already admitted when they were derived again, as (position,
@@ -391,8 +392,9 @@ impl Dense {
         range: &mut Range<usize>,
         work: &mut Work<'_>,
     ) -> Result<Option<usize>, Stop> {
-        let end = range.end.min(self.layout.positions);
-        let mut position = range.start;
+        let possible = self.possible_range(set, range.clone());
+        let end = possible.end;
+        let mut position = possible.start;
         while position < end {
             charge(work, 1)?;
             let index = position / 64;
@@ -408,8 +410,22 @@ impl Dense {
             range.start = found + 1;
             return Ok(Some(found));
         }
-        range.start = end;
+        range.start = range.end.min(self.layout.positions);
         Ok(None)
+    }
+
+    /// The part of a prefix window that may hold a selected row. Every New
+    /// bit lies in `new_words`, maintained by absorption and cleared by
+    /// advancement/reset. Intersecting only that set preserves the prefix
+    /// restriction and order without examining its known-zero outer words.
+    fn possible_range(&self, set: RowSet, range: Range<usize>) -> Range<usize> {
+        let end = range.end.min(self.layout.positions);
+        if set == RowSet::New {
+            range.start.max(self.new_words.start.saturating_mul(64))
+                ..end.min(self.new_words.end.saturating_mul(64))
+        } else {
+            range.start..end
+        }
     }
 
     /// Discovered positions of current rows, ascending by row position.
@@ -697,7 +713,7 @@ impl PendingMarks {
     /// same values in both, taken a word at a time. A position the head holds
     /// or the round has marked is not marked again, so the marks are those
     /// of marking each offered position singly. One unit for each word of
-    /// the block.
+    /// the block that can hold a selected row.
     ///
     /// Each pass reads the next `width` positions of the block, at most a
     /// word, so the passes partition it and the loop ends with it.
@@ -714,10 +730,16 @@ impl PendingMarks {
             offered: 0,
             marked: 0,
         };
-        let mut done = 0;
-        while done < body.len {
+        let possible = body
+            .relation
+            .possible_range(body.set, body.start..body.start + body.len);
+        // Keep the original block's offset even when its known-zero prefix
+        // is omitted: corresponding body and head positions stay aligned.
+        let mut done = possible.start.saturating_sub(body.start);
+        let end = possible.end.saturating_sub(body.start);
+        while done < end {
             charge(work, 1)?;
-            let width = (body.len - done).min(64);
+            let width = (end - done).min(64);
             let offered = bits(
                 |word| body.relation.word(body.set, word),
                 body.start + done,
@@ -1165,6 +1187,177 @@ mod tests {
             start,
             len: 70,
         }
+    }
+
+    #[test]
+    fn new_rows_skip_known_empty_outer_words() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, _) = wide();
+        insert(&mut body, &mut pending, &[3, 199], &mut work);
+        body.advance(&mut work).unwrap();
+        insert(&mut body, &mut pending, &[70], &mut work);
+        let before = work.statistics.work;
+        let mut range = 0..210;
+        assert_eq!(
+            body.next_row(RowSet::New, &mut range, &mut work).unwrap(),
+            Some(70)
+        );
+        assert_eq!(
+            body.next_row(RowSet::New, &mut range, &mut work).unwrap(),
+            None
+        );
+        // One read finds 70 and one exhausts that same word. Neither outer
+        // zero word nor either old row needs inspection for this New view.
+        assert_eq!(work.statistics.work - before, 2);
+    }
+
+    #[test]
+    fn new_rows_preserve_partial_word_windows() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, _) = wide();
+        insert(&mut body, &mut pending, &[64, 70, 127], &mut work);
+        for (mut range, expected) in [
+            (0..64, vec![]),
+            (65..127, vec![70]),
+            (127..128, vec![127]),
+            (128..210, vec![]),
+        ] {
+            let mut found = Vec::new();
+            while let Some(position) = body.next_row(RowSet::New, &mut range, &mut work).unwrap() {
+                found.push(position);
+            }
+            assert_eq!(found, expected);
+        }
+    }
+
+    #[test]
+    fn new_row_extent_excludes_advanced_rows() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, _) = wide();
+        insert(&mut body, &mut pending, &[70], &mut work);
+        body.advance(&mut work).unwrap();
+        insert(&mut body, &mut pending, &[200], &mut work);
+        let mut range = 0..210;
+        assert_eq!(
+            body.next_row(RowSet::New, &mut range, &mut work).unwrap(),
+            Some(200)
+        );
+        assert_eq!(
+            body.next_row(RowSet::New, &mut range, &mut work).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn reset_new_extent_requires_no_word_scans() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, _) = wide();
+        insert(&mut body, &mut pending, &[70], &mut work);
+        body.reset(&mut work).unwrap();
+        let mut range = 0..210;
+        let before = work.statistics.work;
+        assert_eq!(
+            body.next_row(RowSet::New, &mut range, &mut work).unwrap(),
+            None
+        );
+        assert_eq!(work.statistics.work, before);
+    }
+
+    #[test]
+    fn exhausted_new_windows_keep_their_end() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, _) = wide();
+        insert(&mut body, &mut pending, &[70], &mut work);
+        let mut range = 150..210;
+        for _ in 0..2 {
+            assert_eq!(
+                body.next_row(RowSet::New, &mut range, &mut work).unwrap(),
+                None
+            );
+            assert_eq!(range, 210..210);
+        }
+    }
+
+    #[test]
+    fn new_row_word_refusal_preserves_the_cursor() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, _) = wide();
+        insert(&mut body, &mut pending, &[70], &mut work);
+        let mut refused = Work::source(&cancellation, 0);
+        let mut range = 0..210;
+        assert_eq!(
+            body.next_row(RowSet::New, &mut range, &mut refused),
+            Err(Stop::WorkLimit)
+        );
+        assert_eq!(range, 0..210);
+    }
+
+    #[test]
+    fn new_block_skips_preserve_the_head_offset() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, mut head) = wide();
+        insert(&mut body, &mut pending, &[66], &mut work);
+        let before = work.statistics.work;
+        let joined = pending
+            .join_row(1, &head, 70, block(&body, RowSet::New, 0), &mut work)
+            .unwrap();
+        assert_eq!(
+            joined,
+            RowJoin {
+                offered: 1,
+                marked: 1
+            }
+        );
+        assert_eq!(work.statistics.work - before, 1);
+        pending.absorb_into(1, &mut head, &mut work).unwrap();
+        let mut range = 0..140;
+        assert_eq!(
+            head.next_row(RowSet::Current, &mut range, &mut work)
+                .unwrap(),
+            Some(136)
+        );
+        assert_eq!(
+            head.next_row(RowSet::Current, &mut range, &mut work)
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn clipped_new_blocks_preserve_shifted_word_positions() {
+        let cancellation = Cancellation::default();
+        let mut work = Work::source(&cancellation, 100_000);
+        let (_, mut pending, mut body, mut head) = wide();
+        insert(&mut body, &mut pending, &[128, 133, 139], &mut work);
+        // Skipping the empty prefix of body 70..140 must retain its original
+        // origin when mapping into head 0..70, including the head word edge.
+        let joined = pending
+            .join_row(1, &head, 0, block(&body, RowSet::New, 70), &mut work)
+            .unwrap();
+        assert_eq!(
+            joined,
+            RowJoin {
+                offered: 3,
+                marked: 3
+            }
+        );
+        pending.absorb_into(1, &mut head, &mut work).unwrap();
+        let mut range = 0..140;
+        let mut found = Vec::new();
+        while let Some(position) = head
+            .next_row(RowSet::Current, &mut range, &mut work)
+            .unwrap()
+        {
+            found.push(position);
+        }
+        assert_eq!(found, [58, 63, 69]);
     }
 
     #[test]

@@ -50,6 +50,368 @@ fn expected(value: i32) -> Model {
     .unwrap()
 }
 
+fn ground_heads_program() -> Program {
+    let mut templates = Vec::new();
+    for (number, values) in [
+        (1, vec![Value::Number(1), Value::String("v".into())]),
+        (2, vec![Value::String("v".into()), Value::Number(1)]),
+    ] {
+        let gate = pattern("s", Term::Constant(Value::Number(number)));
+        templates.push(Template::new(
+            Some(gate.clone()),
+            vec![],
+            vec![gate.clone()],
+            vec![],
+            vec![],
+        ));
+        templates.push(Template::new(
+            Some(
+                AtomPattern::new(
+                    Predicate::new("pair", 2).unwrap(),
+                    values.into_iter().map(Term::Constant).collect(),
+                )
+                .unwrap(),
+            ),
+            vec![gate],
+            vec![],
+            vec![],
+            vec![],
+        ));
+    }
+    Program::new(templates, AdmissionLimits::default()).unwrap()
+}
+
+#[test]
+fn ground_head_coordinates_preserve_frozen_truth() {
+    let program = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    let mut ranked =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    // The same immutable layouts and the ordinary per-binding ranking are
+    // the reference; only ground coordinates are absent from this owner.
+    ranked.heads = Heads::default();
+    let mut workspace = ClosureWorkspace::default();
+    let mut retained = Vec::new();
+    for mask in [1, 2, 3, 0, 2, 1] {
+        let seeds: Vec<_> = (1..=2)
+            .filter(|number| mask & (1 << (number - 1)) != 0)
+            .map(|number| atom("s", number))
+            .collect();
+        let seed = Seed::new(&program, seeds.clone()).unwrap();
+        let check = prepared
+            .check_view(
+                seed.view(),
+                &mut workspace,
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        let reference = ranked
+            .check_view(
+                seed.view(),
+                &mut ClosureWorkspace::default(),
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        let mut atoms = seeds;
+        for (number, values) in [
+            (1, vec![Value::Number(1), Value::String("v".into())]),
+            (2, vec![Value::String("v".into()), Value::Number(1)]),
+        ] {
+            if mask & (1 << (number - 1)) != 0 {
+                atoms.push(
+                    zetesis_core::Atom::new(Predicate::new("pair", 2).unwrap(), values).unwrap(),
+                );
+            }
+        }
+        let expected = Model::new(atoms).unwrap();
+        assert!(check.accepted());
+        assert_eq!(check.closure(), &expected);
+        assert_eq!(check.closure(), reference.closure());
+        assert_eq!(check.statistics().rounds, reference.statistics().rounds);
+        assert_eq!(check.statistics().bindings, reference.statistics().bindings);
+        retained.push((check, expected));
+    }
+    for (check, expected) in retained {
+        assert_eq!(check.closure(), &expected);
+    }
+}
+
+#[test]
+fn ground_coordinates_remove_repeated_ranking_work() {
+    let program = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    let mut ranked =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    ranked.heads = Heads::default();
+    let seed = Seed::new(&program, [atom("s", 1), atom("s", 2)]).unwrap();
+    let check = |queries: &PreparedQueries| {
+        queries
+            .check_view(
+                seed.view(),
+                &mut ClosureWorkspace::default(),
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap()
+    };
+    let (prepared, ranked) = (check(&prepared), check(&ranked));
+    assert_eq!(prepared.closure(), ranked.closure());
+    assert_eq!(prepared.statistics().dense_heads, 4);
+    assert_eq!(prepared.statistics().bindings, ranked.statistics().bindings);
+    assert!(prepared.statistics().catalog_work < ranked.statistics().catalog_work);
+    assert!(prepared.statistics().work < ranked.statistics().work);
+}
+
+#[test]
+fn ground_coordinates_require_their_own_layout() {
+    let program = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    assert_eq!(
+        prepared.heads.position(0, usize::MAX),
+        Err(Stop::InvalidProgram)
+    );
+}
+
+/// With a width ceiling of three, a's arguments become unknown and the
+/// target's bound includes b(0). At four, its bound contains only 1. The
+/// optional block rule has equal source/head axes only in that latter plan.
+fn changing_layout_program(block_rule: bool) -> (Program, Model) {
+    let target = if block_rule { "q" } else { "p" };
+    let mut facts: Vec<_> = [(1, 10), (3, 11), (4, 12), (5, 13)]
+        .into_iter()
+        .map(|(left, right)| {
+            zetesis_core::Atom::new(
+                Predicate::new("a", 2).unwrap(),
+                vec![Value::Number(left), Value::Number(right)],
+            )
+            .unwrap()
+        })
+        .collect();
+    facts.extend([atom("b", 0), atom("b", 1), atom(target, 1)]);
+    if block_rule {
+        facts.push(atom("p", 1));
+    }
+    let mut templates: Vec<_> = facts
+        .iter()
+        .map(|atom| {
+            Template::new(
+                Some(
+                    AtomPattern::new(
+                        atom.predicate().clone(),
+                        atom.values().iter().cloned().map(Term::Constant).collect(),
+                    )
+                    .unwrap(),
+                ),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            )
+        })
+        .collect();
+    templates.push(Template::new(
+        Some(pattern(target, Term::Variable(0))),
+        vec![
+            AtomPattern::new(
+                Predicate::new("a", 2).unwrap(),
+                vec![Term::Variable(0), Term::Variable(1)],
+            )
+            .unwrap(),
+            pattern("b", Term::Variable(0)),
+        ],
+        vec![],
+        vec![],
+        vec![],
+    ));
+    if block_rule {
+        templates.push(Template::new(
+            Some(pattern("q", Term::Variable(0))),
+            vec![pattern("p", Term::Variable(0))],
+            vec![],
+            vec![],
+            vec![],
+        ));
+    }
+    (
+        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Model::new(facts).unwrap(),
+    )
+}
+
+fn differently_bounded(program: &Program, cancellation: &Cancellation) -> [PreparedQueries; 2] {
+    [3, 4].map(|max_dense_atoms| {
+        PreparedQueries::new(
+            program,
+            PreparationLimits {
+                max_dense_atoms,
+                ..PreparationLimits::default()
+            },
+            cancellation,
+        )
+        .unwrap()
+    })
+}
+
+#[test]
+fn another_preparation_retires_retained_layouts() {
+    let (program, expected) = changing_layout_program(false);
+    let cancellation = Cancellation::default();
+    let prepared = differently_bounded(&program, &cancellation);
+    let predicate = Predicate::new("p", 1).unwrap();
+    assert_eq!(
+        prepared[0]
+            .layouts
+            .get((&predicate).into())
+            .unwrap()
+            .positions(),
+        2
+    );
+    assert_eq!(
+        prepared[1]
+            .layouts
+            .get((&predicate).into())
+            .unwrap()
+            .positions(),
+        1
+    );
+    let seed = Seed::new(&program, []).unwrap();
+    for order in [[0, 1, 0, 1], [1, 0, 1, 0]] {
+        let mut workspace = ClosureWorkspace::default();
+        let mut retained = Vec::new();
+        for at in order {
+            let check = prepared[at]
+                .check_view(
+                    seed.view(),
+                    &mut workspace,
+                    Limits::default(),
+                    &cancellation,
+                )
+                .unwrap();
+            assert!(check.accepted());
+            assert_eq!(check.closure(), &expected);
+            assert!(Arc::ptr_eq(
+                workspace.layouts.as_ref().unwrap(),
+                &prepared[at].layouts
+            ));
+            retained.push(check);
+        }
+        for check in retained {
+            assert_eq!(check.closure(), &expected);
+        }
+    }
+}
+
+#[test]
+fn block_plans_follow_the_preparation_owner() {
+    let (program, expected) = changing_layout_program(true);
+    let cancellation = Cancellation::default();
+    let prepared = differently_bounded(&program, &cancellation);
+    let seed = Seed::new(&program, []).unwrap();
+    let mut workspace = ClosureWorkspace::default();
+    for at in [0, 1, 0, 1] {
+        let check = prepared[at]
+            .check_view(
+                seed.view(),
+                &mut workspace,
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        assert!(check.accepted());
+        assert_eq!(check.closure(), &expected);
+        if at == 0 {
+            assert_eq!(check.statistics().block_steps, 0);
+        } else {
+            assert!(check.statistics().block_steps > 0);
+        }
+    }
+}
+
+#[test]
+fn refused_preparation_switch_retires_its_workspace() {
+    let (program, expected) = changing_layout_program(false);
+    let cancellation = Cancellation::default();
+    let prepared = differently_bounded(&program, &cancellation);
+    let seed = Seed::new(&program, []).unwrap();
+    for (limits, stop) in [
+        (
+            Limits {
+                max_work: 0,
+                ..Limits::default()
+            },
+            Stop::WorkLimit,
+        ),
+        (
+            Limits {
+                max_closure_bytes: 0,
+                ..Limits::default()
+            },
+            Stop::StorageLimit,
+        ),
+    ] {
+        let mut workspace = ClosureWorkspace::default();
+        let previous = prepared[0]
+            .check_view(
+                seed.view(),
+                &mut workspace,
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        let failure = prepared[1]
+            .check_view(seed.view(), &mut workspace, limits, &cancellation)
+            .unwrap_err();
+        assert_eq!(failure, stop);
+        assert!(workspace.layouts.is_none());
+        assert_eq!(
+            workspace.retained_bytes().unwrap(),
+            ClosureWorkspace::default().retained_bytes().unwrap()
+        );
+        let recovered = prepared[1]
+            .check_view(
+                seed.view(),
+                &mut workspace,
+                Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        assert!(recovered.accepted());
+        assert_eq!(recovered.closure(), &expected);
+        assert_eq!(previous.closure(), &expected);
+    }
+}
+
+#[test]
+fn preparation_admits_the_out_of_line_layout_header() {
+    let program = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    // This ceiling holds the owner and every variable allocation, but omits
+    // the separately allocated Layouts header that their Arc points to.
+    let without_header = size_of::<PreparedQueries>() as u128
+        + prepared.rules.bytes().unwrap()
+        + prepared.block_steps.bytes().unwrap()
+        + prepared.layouts.bytes().unwrap()
+        + prepared.heads.bytes();
+    let limits = PreparationLimits {
+        max_bytes: usize::try_from(without_header).unwrap(),
+        ..PreparationLimits::default()
+    };
+    assert!(matches!(
+        PreparedQueries::new(&program, limits, &cancellation),
+        Err(Stop::StorageLimit)
+    ));
+}
+
 #[test]
 fn repeated_candidates_reuse_empty_query_capacity() {
     let program = program();

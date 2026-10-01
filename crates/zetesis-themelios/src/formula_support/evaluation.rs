@@ -192,6 +192,33 @@ impl Evaluation {
             location,
             zero_divisor: &mut self.zero_divisor,
         };
+        // A leaf already names its complete canonical result. Returning that
+        // authenticated identity avoids resolving a numeric value only to
+        // construct it again. Keep the ordinary workspace admission and frame
+        // cleanup, and spend node work before reading either source kind.
+        match expression.nodes.as_slice() {
+            [Operation::Constant(scalar)] => {
+                context.admit()?;
+                return context
+                    .computation
+                    .static_key(*scalar, limits, context.counters, location);
+            }
+            [Operation::Variable(slot)] => {
+                context.admit()?;
+                let Some(key) = (context.variable)(*slot)? else {
+                    *context.zero_divisor = true;
+                    return Err(super::undefined(location));
+                };
+                context.counters.work(limits, location)?;
+                context
+                    .computation
+                    .read()
+                    .term(&key)
+                    .map_err(|error| scope(error, location))?;
+                return Ok(key);
+            }
+            _ => {}
+        }
         if needs_mask {
             frame.scratch.mask(expression.nodes.len(), &mut context)?;
         }
