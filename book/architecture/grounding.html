@@ -1,0 +1,1254 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Source programs and grounding - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/architecture/grounding.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="source-programs-and-grounding"><a class="header" href="#source-programs-and-grounding">Source programs and grounding</a></h1>
+<p>Source processing and solving are separate library capabilities. themelios owns
+syntax, logical terms, program structure and source provenance.
+<code>zetesis-themelios</code> checks the supported semantic profile and lowers it into
+relational templates or a finite formula theory. It also retains objective and
+observation data associated with that representation.</p>
+<p>Successful parsing is only the first boundary. Profile admission, binding
+safety, arithmetic evaluation and resource limits can still fail. A frontend
+syntax diagnostic, an unsupported zetesis construct, and an exceeded resource
+ceiling have distinct meanings; none denotes an inconsistent program.</p>
+<p>The <a href="../rust/source.html">checked source-preparation example</a> follows
+<code>prepare_formula</code>, the retained analysis basis, <code>ground</code> and a complete CPU
+collection. It contrasts two Boolean source families whose different counting
+identities must survive materialization.</p>
+<h2 id="preserving-source-identity"><a class="header" href="#preserving-source-identity">Preserving source identity</a></h2>
+<p>Zetesis’s private
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_choice_source.rs"><code>Catalog</code></a>
+checks that each retained Boolean choice family corresponds to an original
+enclosing rule and its written element occurrences. A single themelios
+<code>raise_occurrences</code> call supplies source-ordered statements, part keys,
+diagnostics and original provenance. Zetesis retains the affected occurrences
+before collecting that owner into themelios’s ordinary program set. It neither
+lexes source nor reparses statement fragments. The original syntax supplies
+bounded node counts and an independent check of the Boolean element locations.
+In particular, merging two whole rules must not combine their separate counting
+groups. This source preservation supports subsequent lowering; successful
+correspondence checking does not prove the lowering’s answer-set semantics.</p>
+<p>Raising diagnostics precede metadata collection and occurrence-copy admission.
+Only selected rule spans and nodes consume the catalog’s copy-work allowance;
+unrelated source bytes are not recopied for each selected rule. The upstream
+occurrence owner is materialized, and retained Boolean variants coexist with it
+until program collection. Source and syntax limits bound that initial owner;
+expansion Values and Origins bound the additional retained variants. These
+logical limits exclude allocator overhead and are not process-memory measurements.</p>
+<p>At the formula boundary, tuple activity and atom permission remain independent.
+For <code>{a}.1#count{1:#true:a;1:b}1.</code>, <code>a</code> activates the shared tuple through its
+Boolean occurrence; an eligible selected <code>b</code> activates that same tuple through
+an atomic occurrence. The tuple contributes once, while only positive atomic
+head occurrences can supply atom permission. Neither a true Boolean nor a
+satisfied bound supplies support for an atom in its condition. The exact three
+answers <code>{a}</code>, <code>{b}</code> and <code>{a,b}</code> are covered by the maintained
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/boolean_element_contracts.rs">Boolean element contracts</a>.</p>
+<p><code>BooleanHeadElements.coalesced_group_in_context</code> proves preservation for an
+assumed keyed row family and covering atomic permissions;
+<code>boolean_group_in_context</code> establishes that a Boolean-only measured head filters
+the context’s answers without supplying new atom support. Their
+<a href="../lean/correspondence.html">proof boundary</a> leaves source occurrence assignment,
+Rust formula construction and execution refinement open. These are obligations
+of zetesis’s source bridge and solver; this architectural account is separate
+from teaching themelios’s parsing and logical-program APIs.</p>
+<h2 id="canonical-values-and-independent-meanings"><a class="header" href="#canonical-values-and-independent-meanings">Canonical values and independent meanings</a></h2>
+<p>Source grounding computes with one canonical term and atom vocabulary. Bindings
+retain term identifiers, relation columns retain those same identifiers, and
+generated arithmetic values and compound terms enter that vocabulary through a
+checked writer. Joins compare identities within the vocabulary; ordered
+comparisons still use ASP term order. Identifier order has no logical meaning.</p>
+<p>Preparation admits static constants, signed predicates and constructor names
+before the first support round. Compiled expressions and patterns keep component
+coordinates and variable slots; they do not retain a second copy of those values.
+<code>TemplateComponents</code> stores this metadata over the vocabulary used by generated
+terms. A component coordinate identifies an occurrence in one preparation. It is
+neither a portable term identifier nor evidence of semantic equality with another
+occurrence.</p>
+<p>Joining and emission borrow descriptions from the committed source prefix while
+the writer admits generated identities. The prefix remains immutable during that
+operation. Work and storage checks cover both retained component metadata and
+temporary argument frames. Preparing and grounding separately carries the same
+resource history across the boundary.</p>
+<p>An early head check reads only the variables and constants used by that head.
+If a required variable is not yet bound, the join continues. Otherwise a borrowed
+pattern lookup checks canonical identity and discovery, followed by the separate
+support test. It does not validate or copy unrelated binding slots. The later
+insertion still checks each argument’s logical limits before publication.</p>
+<p>Several views can name the same atom without making the same claim about it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>View</th><th>Meaning of membership</th></tr>
+</thead>
+<tbody>
+<tr><td>Completed support</td><td>The atom belongs to the computed upper bound on possible atoms.</td></tr>
+<tr><td>Emitted theory</td><td>A local formula coordinate denotes the atom.</td></tr>
+<tr><td>Objective condition</td><td>A local condition coordinate queries the atom in a candidate.</td></tr>
+<tr><td>Projection</td><td>The atom participates in the program’s projection policy.</td></tr>
+<tr><td>Interpretation</td><td>The atom is true in this interpretation.</td></tr>
+</tbody>
+</table>
+</div>
+<p>These views retain their own occurrence maps over shared payload. Creating an
+identity establishes none of these memberships. In particular, admitting a term
+after support completion cannot add a support row, and a support-only atom cannot
+shift the local coordinates of an already emitted formula.</p>
+<p>Objective templates likewise retain variable slots, canonical constants and
+pattern metadata over the source vocabulary. Their priorities and contribution
+conditions remain separate semantic data. A constant does not become an active
+contribution merely because its identifier exists.</p>
+<p>The source writer is sealed before these views are published. A published view
+keeps the shared prefix alive, including source terms it does not select. This
+avoids payload copying but is a retention tradeoff: releasing eager lookup
+indexes does not necessarily release all unselected source payload. Named storage
+limits count shared payload once and include the live view metadata and
+replacement overlap; they are not bounds on process RSS.</p>
+<p>Hybrid checking borrows an immutable lookup over the admitted vocabulary. Each
+checker owns its mutable bindings and workspace accounting. A missing identity
+is an admission/refinement failure, never evidence that a literal is false.
+This makes the remaining completeness obligation explicit: admission must have
+visited every computed identity that the retained source checks can require.</p>
+<h2 id="eager-and-lazy-execution"><a class="header" href="#eager-and-lazy-execution">Eager and lazy execution</a></h2>
+<p>For admitted relational programs, <strong>eager</strong> grounding explicitly compiles a
+complete bounded graph. This is useful when repeated candidate checks amortize
+its construction. <code>GroundProgram::compile</code> is the operation that creates this
+graph; constructing a <code>Program</code> or <code>Seed</code> does not silently invoke it.</p>
+<p><strong>Lazy</strong> relational execution retains source templates and streams relevant
+instances during positive inference. It can avoid storing the complete ground
+program. Candidate generation still owes coverage of all relevant gate choices,
+and each completed closure owes coverage of all instances enabled in its final
+snapshot. Laziness moves and limits materialization; it does not remove these
+obligations or guarantee smaller memory use on every input.</p>
+<p>The finite formula path materializes a bounded theory. Automatic admission can
+first separate <a href="#terminal-definition-analysis">terminal positive definitions</a>,
+ground the base and reconstruct those definitions from each verified base answer.
+Explicit eager admission materializes the complete theory. An explicit
+<strong>hybrid formula</strong> profile instead retains every producer and streams eligible
+integrity constraints. It currently runs on CPU with indexed joins and no
+objectives. Constraints containing aggregates, projected atoms or conditional
+scopes remain eager; ordinary atom/scalar constraints use the shared binding
+and evaluation operations. Existing eager entry points remain unchanged.</p>
+<p>Hybrid admission still completes possible support and original source-family
+arithmetic validation. It visits the eligible constraint instances to retain
+their atom identities, without retaining their complete formula DAGs. Coherence
+and support guards remain in the core, including guards that force unsupported
+atoms false. Candidate truth cannot suppress a required admission error.</p>
+<p>The execution composition is:</p>
+<pre><code class="language-text">admit complete support, arithmetic and atom identities
+materialize all producers and ineligible constraints as the core
+walk the core's candidate regions:
+    narrow the region under the core and existing candidate restrictions
+    exclude templates whose signed predicates cannot supply a sure body
+    select held positive rows from completed possible support
+    join the selected rows through the existing binding operation
+    filter substitutions by their checked scalar conditions
+    read each body against the region's lower and upper bounds
+    any certainly true body -&gt; refute this original candidate region
+    otherwise               -&gt; continue splitting or core membership checking
+for each surviving answer of the core:
+    check the streamed constraint instances against that answer
+    violation  -&gt; reject this proposal
+    complete   -&gt; return an answer of the original program
+    stopped    -&gt; retain an incomplete outcome
+</code></pre>
+<p>An exhausted core plus completed checks establishes original-program exhaustion.
+A core answer alone does not. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md">constraint-filtering law</a>
+justifies this composition around the reduct. Its premises still require correct
+source instances, original truth and complete coverage; it does not verify the
+Rust cursor or backend implementation.</p>
+<p>The early test has a narrower conclusion than satisfaction. In a region
+<code>L ⊆ S ⊆ U</code>, a positive or double-negated atom is certainly true when it is
+in <code>L</code>; a default-negated atom is certainly true when its atom is outside <code>U</code>.
+A conjunction of such literals, after its scalar guards pass, violates its
+integrity constraint for every interpretation in the region. One witness
+therefore suffices to reject that region. Finding no witness returns
+<code>NotRefuted</code>; final original-constraint checking remains required. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedRegions.lean">region-refutation laws</a>
+make the applicability and coverage argument explicit.</p>
+<p>This is an original candidate restriction. It never enters a proper-subset
+search under a frozen reduct, and never replaces that membership check. The
+optional existing clause-search route retains final constraint checking without
+this region operation.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs">shared source owner</a>
+retains prepared constraints and completed support indexes. Each checker has its
+own mutable state and prepares a checked dense atom lookup on its first region
+operation. A prepared correspondence maps support rows to original dense atom
+IDs without copying their tuples. The region selects held positive rows before
+binding or scalar evaluation; a missing correspondence conservatively retains
+the row. A necessary template test also checks whether each signed predicate
+has any held atom, or any cut atom for a default-negated literal. The latter
+uses the whole original catalog, including unsupported negative occurrences.
+These selections can retain extra work; the complete body test still establishes
+each refutation. They do not filter the separate arithmetic-admission traversal
+or the final candidate check.</p>
+<p>Native persistent workers retain the preparation; scalar pulls and joined
+producer rounds prepare checkers for their operation. The indexed query wrapper
+borrows existing indexes and allocates nothing. Ordinary rows remain borrowed,
+and typed candidate lookup copies no atom. The eager builder keeps its bulk
+materialization path. No channel or task is created for each instance.</p>
+<p>A hybrid checker also retains a rule’s join order and comparison schedule after
+that rule first needs a scan. The plan belongs to the exact rule and completed
+support owner; it carries no candidate truth. Each scan starts fresh binding,
+probe and evaluation state. Preparation is charged once and retained plan storage
+counts against the support-byte allowance. A failed preparation publishes no plan.
+Ordinary eager joins still prepare against their current support snapshot, whose
+row counts can change as the fixed point grows.</p>
+<p>All source checks within a hybrid session share one cumulative allowance for
+work, substitutions and copied scalar bytes. Charges precede the operations,
+including failed attempts; adding workers does not multiply the allowance.
+The final outcome joins workers before publishing settled receipts. Region
+attempts and refutations remain distinct from core answers checked, original
+answers accepted and frozen-reduct work.
+Zero-byte scalar charges, such as copying an inline number, require no shared
+counter update. Zero work charges still poll cancellation. Positive charges
+retain the same atomic admission and all-or-nothing failure behavior.</p>
+<p>Streaming can avoid a constraint-node or root ceiling, but the finite atom
+and support envelope must still fit. Retained source plans and support also
+occupy memory. Early refutation avoids some complete candidates, but repeated
+region joins and checker preparation can increase execution work. Reduced
+formula storage therefore does not imply a time
+or RSS improvement. Full demand-driven producer/atom discovery and device
+constraint streaming are not implemented by this profile. See the
+<a href="../rust/sessions.html#hybrid-formula-sessions">checked hybrid session example</a>.</p>
+<h2 id="source-instances-as-a-composition"><a class="header" href="#source-instances-as-a-composition">Source instances as a composition</a></h2>
+<p>The useful lower-level operations have logical contracts:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Input and result</th><th>Obligation</th></tr>
+</thead>
+<tbody>
+<tr><td>Bind</td><td>Join finite positive witnesses into substitutions</td><td>Preserve repeated-variable agreement and local scope</td></tr>
+<tr><td>Filter</td><td>Evaluate scalar conditions on bound values</td><td>Never invent missing bindings or use undefined arithmetic as a value</td></tr>
+<tr><td>Gate</td><td>Test frozen positive/negative candidate conditions</td><td>Use the candidate, not the growing consequence set</td></tr>
+<tr><td>Project</td><td>Construct a head or constraint instance</td><td>Preserve the complete atom and its source instance</td></tr>
+</tbody>
+</table>
+</div>
+<p>The formula path evaluates terms as finite expression plans. In strict mode,
+each operation reads the completed prefix of earlier results. The final operation uses the same
+checked evaluator and returns its value directly; only intermediate results
+occupy scratch storage. Storage reuse retains each executed operation’s work
+admission and strict first-error order. Source mode separately tracks missing
+results in a transient mask bounded by the admitted expression’s node count.
+The mask is reserved fallibly and cleared after each evaluation; it does not consume the
+cumulative scalar-payload allowance. Continued independent checks retain their
+per-node work charges. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs">evaluator</a>
+clears its value prefix on success, failure and unwind, retaining at most 32 empty
+integer cells and 32 empty term-ID cells between evaluations. A single constant
+or variable returns its authenticated existing canonical key, including numeric
+leaves, without reconstructing that term. It needs no intermediate cells or
+missing mask; an unavailable partial variable still reports typed undefined
+arithmetic. Workspace admission and node work remain charged. Constructing
+composite results can allocate. This storage schedule has a separate
+<a href="../lean/correspondence.html">preservation law</a>.</p>
+<p>A positive body is joined in an order chosen once per join, before a row is
+read, from what the body says: each relation’s size, the variables each
+occurrence binds and the variables each comparison waits on. Extending the
+bound prefix one occurrence at a time, the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/order.rs">criterion</a>
+takes first an occurrence whose variables are all bound, which is a test and
+never widens the join; then the smaller relation; among relations of one size
+the occurrence that decides the most waiting comparisons, so that a false
+comparison prunes before an unrelated relation multiplies the rows; and
+otherwise the earlier occurrence of the canonical body, which orders literals
+by predicate and then by variable name rather than by their position in the
+source text. Every order yields the same complete bindings, and the
+semi-naive partition reads source occurrence, not this order. In the pruning
+path, a comparison is checked at the depth whose occurrence binds its last
+variable. A defined false comparison can prune the prefix. Complete arithmetic
+evidence traversals retain false rows to establish joint definedness instead of
+using that pruning. An evaluation failure met at a depth is retained until that
+depth is undone and is classified only for
+a complete substitution no independent comparison excludes, as the
+<a href="../reference/language.html">language reference</a> states. Binders, interval
+checks, tuple comparisons and guards are validated on the substitutions the
+comparisons leave. The order decides how early an exclusion is decided,
+never whether it is.</p>
+<p>Source-family evidence is finalized over completed support and the original
+source occurrence, not one support round or normalized fragment. Evaluated
+numeric division or remainder by zero omits an instance only when the same
+family also contains a jointly defined instance; a defined false instance is a
+witness. An entirely undefined family refuses admission, while an empty positive
+join is silent. Each local element has a separate family for each fixed outer
+binding. Original objective-element identities keep their pooled fragments
+together without merging distinct elements. Successful owners retain one typed
+warning per source span within the finite warning ceiling.</p>
+<p>Each formula join owns one reusable expression workspace. Prefix checks, binding
+generators and final filters borrow it in sequence; pending generators do not
+retain another workspace. Strict evaluation stops at its first fault. Source
+evaluation uses the same checked scalar operations but continues independent
+branches within the reached phase after a numeric zero divisor, so an independent overflow, type error
+or invalid exponent remains fatal. It does not evaluate a parent whose operand
+is undefined. Body and condition selection still precede head and consequent
+evaluation. An omitted body does not enter those later phases or objective
+fields; a defined false body does not enter head or consequent evaluation.
+The relational comparison exclusion above remains separate from
+rejection by a binder, interval, tuple comparison or aggregate guard; those
+rejections cannot hide required arithmetic in other fields. Closed constants
+and post-solve observations retain their strict checks. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/scratch/tests/callers.rs">caller regressions</a>
+check these actual consumers as well as their values and failure boundaries.</p>
+<p>Formula bindings retain source variable identities in optional slots. A pending
+producer or an unrelated component variable is absent; numeric zero remains an
+ordinary value. Body-prefix views borrow only the original body scope, excluding
+head-only generated slots. Every scalar and atom reader checks availability and
+returns a located failure for a missing required input. Local joins cannot bind
+an absent outer input. Generator backtracking clears exhausted outputs before an
+earlier input changes. Owning frame capacities, including optional cells, are
+charged separately from copied value payloads.</p>
+<p>Support generation and rule instantiation consume ordinary completed bindings
+through the same borrowed-row mechanism. Head admission finishes before the join
+resumes its suspended undo; it does not need a second assignment vector. A nested
+join reads the borrowed outer prefix to initialize its own scoped frame. Arithmetic generators that
+retain a continuation still own their frames. Both routes apply the same scalar
+filters and source-family checks; their allocation and work costs differ.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding.rs">binding implementation</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BindingScopes.lean">scope laws</a>
+state these distinct responsibilities. The laws prove restriction and checked
+read properties for abstract partial assignments; concrete source compilation,
+arithmetic error order and Rust execution remain correspondence obligations.</p>
+<p>Formula construction has an explicit ownership boundary. Source instantiation
+consumes the source IR and owns the completed support catalog and its snapshot
+while it emits formulas and activates objectives. Eager grounding releases that
+support after its consumers finish; hybrid grounding retains it with nonempty
+streamed constraint plans. An empty streamed plan releases both. A consuming
+builder then adds coherence and support guards.
+It passes nodes and roots into theory validation and retains the ordered atoms
+and origins for the compiled owner. Interning indexes, producer tables and
+aggregate caches remain construction scratch.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs">finalizer</a>
+preserves vector order and cumulative work/resource charges. Releasing completed
+scratch reduces overlap between phases; it does not establish a lower earlier
+construction peak or process RSS. The <a href="ownership.html">ownership chapter</a> relates
+these lifetimes to prepared views and execution state.</p>
+<p>The final formula catalog uses the shared core
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs"><code>AtomInterner</code></a>.
+It owns one canonical term/atom authority. Authenticated tuple queries reuse that
+store’s exact identity index, then an integer-key inverse translates identity to
+discovery. A known same-authority atom ID avoids tuple lookup altogether. An
+interned row without a discovery entry remains absent from this population.</p>
+<p>A separate semantic AVL view, grouped by predicate, provides typed enumeration,
+foreign input lookup and insertion placement. It does not make canonical IDs
+into semantic ranks. Insertion plans both index updates in reusable scratch and
+admits all capacity and publication work before publishing discovery. Complete
+canonical rows can survive a refusal without entering either discovery index.
+Both views retain only metadata over the same authoritative payload; their
+actual capacities and growth overlap are charged.</p>
+<p>A committed prefix supplies the count-plan collector’s exact dense occurrence
+view. The first commit transfers the pending ID map; later commits move only
+pending IDs after borrowed views end. Finalization transfers that mapping and
+shares the canonical prefix with an immutable <code>AtomCatalog</code>. Possible support and emitted atoms retain
+distinct populations, and commitment establishes no truth.</p>
+<p>Publication extends the current segment directories when their snapshot is
+exclusively owned. Existing entries move only when a directory grows its
+capacity; successive small publications therefore take amortized linear
+directory work. A retained snapshot instead requires a fresh directory, leaving
+the older readable prefix unchanged. Canonical payload is shared in both cases.
+All work and reservations precede visible publication. Refusal may retain spare
+capacity, which remains charged, but exposes no partial prefix. This local reuse
+introduces no shared execution queue or synchronization between workers.</p>
+<p>The located source
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/atoms.rs">adapter</a>
+charges lookup, canonical import, index construction and commit against cumulative
+formula work; exact refusal cutoffs can change with these operations.
+<code>FormulaLimits::max_atom_storage_bytes</code> independently bounds the shared source
+authority during publication: canonical payload, indexes, current prefix
+directories and scratch, including named growth overlap. Its payload includes
+identities outside the emitted occurrence map; unrelated support indexes and
+query buffers retain their own bound. A refusal preserves existing discovery IDs,
+although complete canonical components and capacity can remain.
+<code>FormulaResource::AtomStorageBytes</code> reports this storage ceiling;
+<code>FormulaFailure::AtomCatalog</code> preserves canonical faults, while vector reservation
+failure retains its <code>TryReserveError</code> in <code>FormulaFailure::AtomAllocation</code>.
+The separate scalar-byte budget bounds cumulative source expansion. Neither
+measure is process RSS.</p>
+<p>An atom in a <strong>possible support relation</strong> is a witness available to source
+enumeration. It is not thereby true in a candidate, and an aggregate’s proposed
+result is not thereby its evaluated result. The emitted formula must retain the
+original activation and equality conditions. Structured positive witnesses can
+bind local variables before dependent arithmetic is checked. Positive-witness
+matching does not invert arithmetic or introduce a global guessed value universe.</p>
+<p>A checked <code>AtomKey</code> borrows a pattern and its current binding. Support and delta
+membership use that full typed identity without making a temporary atom. Formula
+head admission validates a borrowed projection of constants and assigned
+variables. The same immutable coordinates serve discovery lookup and canonical
+row interning before publishing a discovery position. No argument vector,
+replacement assignment or owned atom is needed. The projection preserves repeated
+arguments and accounts for its fixed preparation metadata. Constant resolution
+may still read the canonical segment directory; borrowing avoids copying, not
+all lookup work.
+Missing required inputs still produce a located failure; an incomplete head
+prefix defers the membership check. Membership does not discharge authored-body
+validation. Existing support, current delta and formula atoms retain distinct
+roles even though they share the identity operation.</p>
+<h3 id="keyed-constraints"><a class="header" href="#keyed-constraints">Keyed constraints</a></h3>
+<p>Before completion, preparation reads the program’s keyed relations, the
+choice rules <code>1 { p(K, V) : c(V) } 1 :- b(K).</code> that are their relation’s only
+producer, and asks every constraint that reads such a value only to compare
+it as the one atom the key admits, in the two patterns the
+<a href="../rust/source.html#constraints-over-keyed-values">source guide</a> states with
+their meaning arguments. The transformation is per rule and changes no
+answer set; what it changes is the grounding: a disequality over a product
+of a demanded value with every value the key admits becomes a negated lookup
+of the demanded atom, and the product is never formed. The asked statements
+keep the written constraint’s provenance and take the place of its compiled
+rules; the rest of the program is compiled once. The analysis is bounded by
+the key work ceiling and the term work remaining, charged to the term work,
+and a stop, reported on the admitted formula and by the CLI, leaves the
+constraints not yet asked as written.</p>
+<h3 id="completed-possible-support"><a class="header" href="#completed-possible-support">Completed possible support</a></h3>
+<p>Formula grounding grows possible support by complete rounds. Each round uses an
+immutable snapshot, exhausts the admitted positive joins and binding proposals,
+and collects new positive head atoms. Aggregate and conditional truth remains in
+the emitted formulas; it does not prune possible producers. A proposed aggregate
+assignment value retains its original equality.</p>
+<p>For a normalized positive-flat program without objective declarations, a private
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers.rs">producer plan</a>
+checks every original IR occurrence against the rule certificate also used by
+optional domain guards. Scheduling separately excludes objectives, including
+empty declarations; domain guards permit them. The plan checks signed predicate
+names and arities, positive dependency edges and the existing themelios SCC order. Canonical source
+rules may coalesce duplicates; plan slots still refer to the original IR rule
+array and preserve its provenance. The plan borrows that preparation and caches
+positive body occurrence IDs. Reverse signed-predicate postings mark original
+producer IDs in a packed active set. Bootstrap visits zero-input producers;
+later rounds visit only producers affected by the previous round’s newly
+published predicates. Selected producers retain their original order and the
+same first-new binding partitions. All selected scans finish before new atoms
+are published. An empty active set still admits the final support round but
+needs no new catalog/query snapshot.</p>
+<p>Plan construction and traversal consume the cumulative formula work allowance.
+Its header, occurrence arrays, borrowed predicate postings, packed active set
+and temporary construction arrays count
+against <code>max_support_bytes</code> beside the live catalog and query views. Preparation
+uses checked signature searches, and charges each dependency validation one
+logarithmic lookup in the upstream graph plus the edges it walks, so the plan
+costs O(B log N) for B body occurrences over N predicates. Wake lookup,
+posting visits and packed-set reads/writes are also charged. Temporary graph metadata is released after preparation, and
+the plan is released before completed support is returned. These
+checks qualify support scheduling, not satisfiability, unique-answer claims or
+source-to-Rust semantic refinement. Richer programs keep the existing schedule.
+<code>GroundingWork.support_producer_visits</code> counts charged entries into actual rule
+variant traversal; <code>support_snapshot_preparations</code> counts charged growing
+snapshot attempts, including attempts that subsequently fail. These optional
+fields do not retroactively turn missing historical observations into zeros.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md">producer scheduling laws</a>
+state complete input registration and published old-head history as explicit
+premises. Fewer visits do not by themselves establish a timing improvement.</p>
+<p>Ordinary positive atom heads with positive flat witnesses and pure scalar checks
+or generators use <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs">delta joins</a>.
+Flat ordinary <code>not</code> and <code>not not</code> atoms may occur between these inputs. They
+provide no bindings and do not test truth during possible-support discovery;
+their arguments use the existing admitted bindings and scalar evaluation.
+Their truth remains in the original emitted formula and its frozen reduct.
+Each new tuple combination has one first source occurrence that selects a newly
+appended row. Earlier occurrences select old rows; later occurrences select all
+current rows. This partitions the combinations even when one predicate occurs
+several times or cardinality planning changes execution order:</p>
+<pre><code class="language-text">for pivot in PositiveSourceOccurrences(rule):
+    inputs = MapOccurrences(rule, occurrence =&gt;
+        oldRows       if occurrence &lt; pivot
+        newRows       if occurrence = pivot
+        currentRows   if occurrence &gt; pivot)
+    proposals = Union(proposals, JoinAndEvaluate(rule, inputs))
+</code></pre>
+<p>An ordinary producer without positive inputs runs once, even if it has negative
+non-input atoms. Changing such atoms’ possible presence cannot enable another
+head proposal, because support generation ignores their truth. Aggregate,
+conditional, projected, structural and nonnormal producers retain full-round traversal. Every
+selected input still passes the same typed tuple matcher and scalar evaluator.
+An empty proposal set establishes completion only after every required variant
+and conservative producer has finished. Final formula emission visits all
+complete authored-body families and preserves their definedness evidence,
+including jointly defined false instances. Independent relational exclusions
+and empty joins supply no arithmetic failure. Possible support membership alone
+cannot conceal a required arithmetic error or establish an all-undefined family.</p>
+<p>The preservation argument concerns possible heads, not answer-set truth.
+Removing these flat negative non-inputs leaves the positive occurrence order,
+binding generation, scalar validity and head projection unchanged. Old
+combinations have already proposed their heads; each new combination belongs to
+one delta partition. <code>NormalSupport.propose_gate_independent</code> states the
+corresponding gate-invariance law for mathematical normalized rules. Connecting
+the compiler’s typed instances and checked expressions to that law remains a
+representation obligation. Scheduling fewer old combinations can change the
+charged work and the first bounded refusal; it does not change the cumulative
+generated-value population or turn a failed attempt into completed support.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs">support builder</a>
+returns <code>CompletedCatalog</code> only after an entire round adds no atom. Its
+<code>CompletedSupport</code> view borrows the same authoritative catalog used by final
+formula grounding. Intermediate snapshots have no completion capability, and a
+round, work, value or storage failure returns an error before objective activation.
+A finite snapshot during growth does not establish that value generation will
+terminate.</p>
+<p>Before publishing a round, the builder orders its new support positions by
+typed atom identity. Dense selections filter the canonical catalog’s existing
+semantic ordering index; sparse selections use in-place comparison sorting.
+The dense route is selected only when the complete indexed population is at
+most twice the selected population, the selection has at least two entries,
+and its prospective temporary-storage envelope fits the current allowance.
+Actual allocator capacity is checked during execution and may still cause a
+refusal. Thus a chain adding one atom per round does not rescan its history.
+A failed chosen operation remains a failure; it does not trigger a retry through
+the other strategy.</p>
+<p>The selection contains exactly this round’s newly supported discoveries. It can
+include an older discovery that was not previously supported, so neither an ID
+suffix nor the global support bitset is a substitute. The dense route uses a
+temporary membership mask and position vector, retaining the caller’s selection
+until every replacement write is admitted. Both routes preserve the same typed
+publication order and use the same canonical payload.</p>
+<p>The shared <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_source_activity.rs">source-activity module</a>
+uses this completed view for objective and projection eligibility. Acyclic
+producer dependencies are evaluated in order. Unresolved components begin with
+optional atoms from complete possible support, then aggregate every producer’s
+activity in complete rounds. Each changing round resolves at least one optional
+atom as required or absent; established information cannot be retracted. The
+old and new activity tables are admitted together. This finite refinement does
+not enumerate answer sets or decide whether optional literals can hold together.</p>
+<p>Rich producer bodies share the original scoped aggregate, conditional and
+projection lowering. A three-state fold covers their original Boolean truth;
+an optional atom and its negation remain optional. Actual costs still test the
+original model through the objective query, with weight, priority and complete
+tuple resolved from one binding. Source activity neither rewrites that model’s
+theory nor evaluates its frozen reduct.</p>
+<p>An independently established absent producer contributes no objective row or
+redundant zero-cost priority slot. For example, a required <code>a</code> makes the proposed
+<code>n(0)</code> impossible in <code>n(N):-N=#count{1:a}</code>; a downstream observer of that absent
+row need not publish its priority. This can shorten the raw cost vector while
+preserving costs aligned by priority, the complete answer family and optimum
+ties. Other conservative carriers still retain zero slots when the abstraction
+does not establish absence.</p>
+<p>The semantic bridge requires more than an empty delta. Complete typed rule and
+value generation must ensure that restricting an original model to any closed
+support carrier preserves its frozen reduct. Answer-set minimality then rules
+out atoms outside that carrier. <a href="../lean/theorems.html">SourceSupport</a> and the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md">proof guide</a>
+state this premise explicitly; successful Rust completion is not a proof of the
+source-to-reduct correspondence.</p>
+<p>Formula nodes use an exact-key hash index with randomized hashing. The separate
+node sequence establishes dense IDs and output order; hash-table iteration never
+participates in formula construction. Complete-key equality preserves node identity under hash collisions, and node ceilings are checked before a new ID is published.</p>
+<p>Completed formula theories always include double-negated necessary support
+guards. These guards strengthen candidate checks while preserving reduct subset
+freedom; they are mathematically redundant, not a selectable construction option.
+Construction uses one
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/metadata.rs"><code>Metadata</code> owner</a>
+with flat atom headers and shared append arenas. Each header identifies its
+producer sequence, ordered source locations and first atom occurrence. Producer
+links preserve insertion order and repetitions. Origin links preserve full source
+identity and span order, with duplicates removed when encountered. Necessary
+support formulas still fold the complete producer sequence at the final support
+stage; collecting metadata creates no formula nodes early.</p>
+<p>This removes each atom’s intermediate heap buffers. It adds a link word per
+entry, and origin insertion can still inspect all locations associated with an
+atom. The final public <code>formula_origins()</code> view owns a vector per root. Once root
+and origin limits admit a guard, its ordered locations are copied directly into
+that final vector. The shared arena remains live during this output assembly;
+lower peak memory or faster solving does not follow from allocation count alone.
+Grounding work includes shared arena relocation, origin comparisons and inserts,
+producer traversal, and the final evidence traversal and copy. Allocation failure
+and either origin ceiling remain located admission failures, never UNSAT.</p>
+<h3 id="optional-final-rule-domain-guards"><a class="header" href="#optional-final-rule-domain-guards">Optional final-rule domain guards</a></h3>
+<p>Eager formula preparation can request a domain attempt through the library’s
+<code>with_domain_analysis</code> method. The library leaves it off and the ordinary
+command requests it, independently of <code>Indexed</code> or <code>Table</code>; it changes the
+rows possible-support completion and final instantiation read, never the
+original formula/reduct semantics. The source guide provides a
+<a href="../rust/source.html#optional-domains-during-final-instantiation">checked on/off example</a>.</p>
+<p>The private applicability check covers the exact normalized whole source and
+its original positive flat rule occurrences, body comparisons included. It
+excludes computed or generated terms in rule atoms, negative rule-body literals,
+structural/local scopes in rules and richer producers; a favorable dependency
+projection cannot qualify. The analyzer borrows that
+same immutable Program until final instantiation ends. Normalized statement
+deduplication does not merge the rule occurrences or their provenance.</p>
+<p>Objective declarations may accompany those rules. They rank answer sets and do
+not produce argument values, so the domain analysis ignores their restrictions
+while retaining the complete normalized source. Guards narrow only rule joins;
+objective grounding, arithmetic checks, tuple identity and scoring keep their
+existing paths. This permission does not extend the profile to choice or
+aggregate producers. Producer scheduling retains its separate applicability
+conditions.</p>
+<p>Every complete binding must belong to the upper domain of each mandatory
+positive argument. Intersecting those domains for one source variable remains
+necessary, including repeated occurrences. A comparison that reads one
+variable alone is decided on that variable’s value, so every value it is
+defined and false at is removed from the candidates as well: the candidates
+that remain are exactly the values the exclusion rule leaves, decided before
+any row is read. A value the comparison cannot evaluate stays a candidate, so
+the join reaches it and refuses as the language reference requires. The candidates
+are prepared once per rule, with the analysis; a guard resolves them into a
+snapshot’s dictionary, for every completion round and the final one, and
+only where the candidates are fewer than the argument’s domain, since a
+relation offers no value outside it. Unknown contributes no
+restriction. A global Unknown/Stopped analysis or an inapplicable program
+keeps complete fallback. These are upper bounds on source bindings, not facts
+about candidate truth or answer-set membership.</p>
+<p>The guard builder retains borrowed source symbols for the meets, converts one
+atomic value at a time through the existing compiler, and resolves it through
+the completed support owner’s sole equality dictionary. It retains only IDs and
+original rule/row/column ownership. Both join strategies offer their original
+rows to the same guard before binding and deeper probes. An Indexed posting can
+include rows that fail another bound column; Table intersects its equalities
+before offering rows. Thus offered-row and guard-rejection counts need not
+match across strategies, even when complete bindings do.</p>
+<p><code>DomainBindings.complete_binding_survives</code> states the necessary-meet law under
+explicit argument coverage, and <code>kept_binding_survives</code> the narrowed-candidate
+law for the bindings the exclusion rule keeps. <code>guarded_continuations_exact</code> preserves the ordered
+complete result list, allowing a locally matching row with no complete
+continuation to disappear. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md">domain-binding guide</a>
+keeps analyzer soundness, source/IR correspondence, dictionary identity and
+recursive Rust enumeration as separate obligations. The laws are not an
+end-to-end proof of the source grounder or its resource failures. Arithmetic
+validation stays on the existing complete path for the excluded profiles.</p>
+<p>Applicability, analysis, bridge and guard work consume the remaining cumulative
+formula budget. Analysis has separate finite logical populations and bounded
+standard allocations, outside the named support/guard byte allowance and
+without a new caller-control API. Rule guards account their named scratch and
+actual capacities alongside live support/table/query owners; failed work and
+observed capacity remain in receipts. Optional analysis may cost more work or
+storage than it saves. Its observations establish activity and completion scope,
+not elapsed-time, memory or scalability improvement.</p>
+<h3 id="terminal-definition-analysis"><a class="header" href="#terminal-definition-analysis">Terminal definition analysis</a></h3>
+<p>The domain library separately recognizes positive definitions whose predicates
+are never read by a logical rule or constraint. Every producer of a selected
+predicate must qualify; complementary strong negation blocks selection because
+coherence introduces a dependency. This is a structural property, independent
+of predicate names, constants, filenames and <code>#show</code> declarations. Choices may
+remain in the base program. Their possible atoms are an upper bound, even when
+an exact-one rule selects a single value in each answer set.</p>
+<p>For this one-layer class, the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean"><code>TerminalDefinitions</code> laws</a>
+give each base answer set a unique extension: add all heads whose positive
+bodies hold in that answer. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-domain/src/terminal.rs"><code>terminal::analyze</code> API</a>
+classifies the source. Adaptive formula admission then checks complete
+source-to-IR correspondence before removing any producer from the base.
+Every producer must match a complete flat positive source rule, including its
+typed constants and one consistent variable mapping, and every definition must
+be matched by some producer. A producer’s parsed origin nominates the
+definition at the same place among that origin’s definitions, and only a
+miss falls back to trying every definition; a definition left unmatched is
+tried against every producer. The certificate is the same as checking every
+pair, at a cost linear in producers and definitions when compilation keeps
+their order, and a shared origin alone never establishes a match. A
+dependency projection cannot supply this certificate. Objectives and explicit
+projection currently exclude this schedule; ordinary eager materialization
+remains available.</p>
+<p>After correspondence is established, a physical policy defers a complete group
+of producers sharing predicate name, arity and sign only if at least one lowered
+producer has a variable. Body-only and anonymous variables count. All producers
+of that signed signature then defer together, including ground facts and rules.
+Ground-only groups remain in the base, even when their rules have nonempty
+positive bodies. The domain classification remains mathematically general; this
+policy chooses a subset for reconstruction. The remaining source is analyzed as
+the actual base. If no group is selected, ordinary materialization retains the
+original preparation and its cumulative charges.</p>
+<pre><code class="language-text">prepare original source and certify terminal producer groups
+select complete groups with at least one variable-bearing producer
+ground the base using the original remaining allowance
+close its canonical storage without retaining possible-support indexes
+for each answer verified against the base reduct:
+    select exactly its true base rows
+    join true rows for each terminal definition
+    union the resulting heads with the base answer
+    publish the full answer, then evaluate its observations
+</code></pre>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal.rs">source bridge</a>
+retains the original program separately from the base theory and its analysis.
+Reconstruction shares immutable term and tuple storage, but starts with a fresh
+truth selection for every answer. Its joins use the shared whole-argument matcher
+and borrowed typed keys. It neither imports a second value universe nor treats
+possible support as truth. Duplicate witnesses coalesce only at head publication.</p>
+<p>The automatic formula route can choose this schedule. Explicit eager grounding
+still materializes the complete theory; the existing lazy constraint schedule is
+unchanged. Base membership uses the selected CPU or GPU executor. Reconstruction
+currently runs on the host. Work and substitutions remain cumulative across
+source admission and all reconstructions in a session. A refused extension
+publishes no original answer and cannot establish exhausted enumeration.</p>
+<h3 id="relation-rows-and-vector-operations"><a class="header" href="#relation-rows-and-vector-operations">Relation rows and vector operations</a></h3>
+<p>A relation row is one complete typed tuple. Formula support’s
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/relations.rs"><code>SupportCatalog</code></a>
+owns each possible atom once, with append-only, predicate-local row identities.
+A checked AVL index of those identities supports membership checks without
+another atom collection. The core relation owner retains its equality dictionary
+and argument columns across growth rounds. A dictionary entry refers to one
+whole canonical term; it does not copy that term. Each column has a
+<code>BTreeMap&lt;u32, Vec&lt;usize&gt;&gt;</code> from dictionary IDs to original row positions;
+insertion extends only the new row’s postings. An immutable snapshot borrows
+these existing columns and postings. Row and equality IDs survive append, while
+queries remain bound to one particular immutable view. Numeric ID order is not
+ASP term order.</p>
+<p>The append dictionary also retains a sparse inverse from canonical term identity
+to local equality ID. Tuple insertion and equality queries share that lookup.
+It authenticates the term’s vocabulary and readable prefix before probing the
+inverse. A hit returns the established local ID; an eligible miss proves absence
+from this relation’s dictionary, not absence from the vocabulary or falsity.
+Foreign and ingress terms use typed comparison, as do valid query terms outside
+the supplied canonical prefix. The relation reader must still cover every
+retained row. Static sorted dictionaries retain their own immutable lookup.</p>
+<p>For a positive witness, the selector resolves known whole-column equalities and
+chooses the shortest posting list. Equal-length lists retain the first known
+column’s list. The matcher then checks the complete tuple in original row order,
+including repeated variables and structured terms. Without a known equality,
+the selector offers all relation rows; a missing bound key selects none:</p>
+<pre><code class="language-text">rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
+bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
+</code></pre>
+<p>This describes witness selection, not complete grounding. Scope, generators,
+scalar guards and candidate gates retain their separate contracts. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/README.md#inspect-posting-selectivity">bounded posting diagnostic</a>
+compares intersections with an independent full-row scan. It is compiled only
+for tests and does not replace production selection. Its counters measure
+selectivity; integer comparisons and complete tuple probes have different costs.</p>
+<p>The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
+the snapshot drops before new atoms are appended. A failed tuple or posting
+extension returns no usable support owner. The completed final snapshot supplies
+formula emission and objective eligibility. The core catalog uses the shared
+checked AVL implementation for row order, new dictionary-value placement and
+foreign-value lookup. Nodes contain only IDs and links; typed comparisons inspect
+their actual descriptor/text prefixes. An insertion resolves existing values
+through the inverse, and plans genuinely new dictionary leaves in a bounded
+metadata overlay. Repeated new values share the same tentative local ID.
+Row membership, dictionary representatives, inverse entries and columns publish
+together after all fallible checks. No historical sorted row or dictionary
+sequence is shifted. If a tuple
+introduces <code>a</code> new values into a dictionary of size <code>d</code>, tentative patches occupy
+O(a log d) cells; the checked overlay lookups can use O(a² log² d) metadata work.
+Typed comparisons, node inspection, append copies and posting construction
+consume the grounding work budget. Inverse lookup uses fixed integer keys with
+expected constant-time hash lookup; internal hash probes are not individually
+cancellable. Reservations, relocation and publication are admitted before they
+run. Named storage includes addressable key/value capacity and conservative
+growth overlap, excluding opaque hash-control and allocator storage. It is not
+a process-memory bound. Snapshot construction visits predicates without
+revisiting their rows.</p>
+<p>Scalar reduct closure uses the same per-predicate catalog. Before each round it
+prepares a complete ordered ID view for each changed extent and reuses that view
+for the round’s joins. The view is a stack of sorted runs of row
+IDs. The first preparation of a relation traverses its O(n) row IDs into one
+run. A later preparation promotes the previous run to a level, merges the top
+two levels while the newer is at least half the older, so the levels shrink
+geometrically and number O(log n), and sorts the <code>d</code> rows appended since into
+a new run. A merge of two runs costs their combined length in charged
+comparisons and copies, and each row is merged O(log n) times over a whole
+derivation, so the views cost O(n log n) charged work in all and no
+preparation copies the extent; a bound-prefix window is one binary search per
+run. The levels are the rows present before the last appending preparation and
+the run is what it added, both borrowable until the next one. Row access
+within a run is constant time and borrows the authoritative tuple. A duplicate
+or refused insertion preserves an existing prepared extent; a successful
+append invalidates it.</p>
+<p>A predicate whose every argument is bounded is held as a dense relation
+instead of a catalog. Preparation infers an upper bound on each argument’s
+values over the admitted templates: a constant in a head contributes itself, a
+head variable ranges within the intersection of the bounds of the positive
+body positions binding it, gates and filters bind nothing, and the least
+fixed point is finite because every value is a constant of the program. An
+argument wider than the ceiling is unknown, and unknown absorbs. Where every
+argument of a predicate is bounded and the product of the widths fits
+<code>PreparationLimits::max_dense_atoms</code>, the relation is a bit array over the
+mixed-radix index of the arguments’ ranks, the first argument most
+significant, each argument’s values kept in canonical order so that position
+order is canonical atom order. Membership is a bit test, insertion a bit set,
+and the rows matching a bound prefix are one contiguous range of positions,
+so a window is a scan of that range’s words rather than two binary searches;
+no atom is allocated or compared by value until the model is assembled, and
+the model is read off the bits in order without sorting. The New rows of a
+round are a second bit array cleared when the cutoff advances, over the words
+the round touched, so an unchanged relation costs a round one unit whatever
+its size; Old is present and not new. New-row scans intersect their prefix
+window with that touched-word range: outer words are known zero. Scalar and
+block scans retain the original tuple positions and body-to-head offsets;
+this adds no storage. A round records a derived head of a
+dense relation as a pending bit: the key is ranked once, the position is
+tested against the relation, and an absent position is marked in a row of
+words the closure workspace keeps for the layout, beside the catalogs the
+round’s joins borrow. The marks are disjoint from the relation, so their
+number is the round’s count of new dense atoms and the derived-atom limit is
+judged as each is marked. After the round the marked words are joined into
+the relation and into New, and cleared, so nothing of a round or a candidate
+remains in the pending marks; every dense relation is created when the closure
+starts, so that a round never changes the catalogs. <code>Statistics::dense_heads</code>
+counts the heads recorded this way. Where a rule’s innermost occurrence is
+over a dense relation, its last argument is a variable that nothing else in
+the rule mentions but the head, as the head’s own last argument, every other
+argument of the two patterns is a constant or bound by then, and the two
+relations list that argument’s values alike, the join does not bind the
+occurrence’s rows one by one: the rows matching the bound prefix are one
+block of the relation, their heads are one block of the head’s relation,
+place for place, and the block of rows is joined into the head’s pending marks
+a word at a time, leaving out the positions the head holds or the round has
+marked. No gate or filter reads the variable, so every guard was judged
+before the depth was reached, and each row of the block is one binding of
+the rule; the new marks are counted against the derived-atom limit. This is
+the row operation of a transitive closure over a boolean matrix. The plan is
+fixed at preparation for every occurrence, since the occurrence a round
+visits innermost depends on the one it pivots on; a rule that fails a clause
+keeps the binding of single rows, as does a join that follows membership.
+<code>Statistics::block_steps</code> counts the blocks joined, whose rows are counted as
+bindings and not as tuple probes. The bounds are an upper domain of every
+derivable head, so a head outside them is an admitted-program invariant
+violation, not a missed row, and the closure over dense relations holds
+exactly the atoms the closure over catalogs would, step for step; the family
+tests check this atom for atom with dense relations enabled and disabled.
+Whether a predicate is laid out depends on its bounds and the ceiling alone,
+never on how many tuples it holds: a relation sparse in a wide box is dense
+all the same, at the cost of its words, and the ceiling is the one control.
+It is <code>PreparationLimits::max_dense_atoms</code>, 16,777,216 positions by default,
+and a session takes that default: nothing outside the library sets it.
+Every other predicate keeps its catalog, and the preparation receipt reports
+how many predicates were laid out.</p>
+<p>Scalar closure first visits every template against empty derived truth, including
+facts, zero-positive rules and constraints under the frozen candidate. In each
+later round, a binding is visited at its first source occurrence containing a new
+row: earlier occurrences select Old rows, that occurrence selects New rows, and
+later occurrences select Current rows. These disjoint choices preserve repeated
+predicates and source occurrences. The new occurrence is joined first, so its
+few rows bind the variables and every other occurrence is entered through a
+bound-prefix window, and only templates whose body names a predicate with new
+rows are visited at all, from an index prepared once per program; a round
+therefore costs the new rows times their joins, never a scan of an unchanged
+relation or a visit to a rule that cannot bind. Newness uses stable per-predicate insertion
+IDs, never canonical ranks, which can move when a smaller tuple is appended.
+For mixed extents, the Old rows are the catalog’s levels and the New rows its
+newest run, each run in canonical order and each sharing the sole tuple payload
+owner. The round cutoff advances after the round’s joins and before its heads
+are appended, so the levels of the next preparation hold exactly the Old
+extent; the partition keeps only that cutoff and checks it against the runs.
+All-old and all-new extents reuse every run or none.</p>
+<p>A round completes every selected binding and constraint before advancing its
+frontier and publishing pending heads. Frozen gates and pure equality filters
+preserve the eligibility of old positive bindings. Their consequences are
+already present, and earlier constraint triggers remain latched. Together with
+bootstrap and completed earlier scans, the final no-change round establishes
+complete source coverage. The final gate-carrier comparison still checks both
+directions, even for a rejected candidate. Failure returns no partial closure
+and discards dirty workspace history. Public <code>source::scan</code> and shared-world
+source traversal retain their complete ordered scans; this scalar schedule does
+not change the answer-set definition or claim device delta execution.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DeltaRounds.lean"><code>DeltaRounds</code></a>
+separates three mathematical obligations: first-new partitions cover each new
+binding, old enabled heads are already in current truth, and the retained
+constraint latch equals the old family’s triggers. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/delta-rounds.md">reading guide</a>
+maps those premises to scalar catalog cutoffs, complete bootstrap and round
+publication. These laws preserve a consequence step and constraint verdict;
+they do not prove Rust row decoding, interruption handling, a termination bound
+or answer-set membership. Those require their own representation and completed
+execution arguments.</p>
+<p>Completed scalar <code>Statistics::tuple_probes</code> counts source rows offered to the
+whole-row matcher, including rejected rows. It excludes prefix-search comparisons
+and catalog membership operations. Each probe belongs to a charged join-loop
+step. <code>work</code> also includes canonical and delta-view preparation, initialization,
+ID reads and writes, pivot checks, pending publication and final completion.
+Fewer emitted bindings alone do not establish fewer probes or less total work;
+none of these counters establishes an elapsed-time gain.</p>
+<p><code>zetesis_cpu::PreparedQueries</code> inspects one exact admitted <code>Program</code> once to
+bound the assignment, cursor and undo buffers used by its joins, to infer its
+argument bounds and to choose its dense layouts, which every candidate’s
+closure shares and admits first. A ground head’s complete ordered tuple has a
+fixed position in its dense layout. Preparation retains this position so later
+firings need not rank its arguments again. Each candidate still visits the
+source, checks its guards and marks its own consequences; variable and tree
+heads keep their existing operations. The optional coordinate per template
+adds linear storage, admitted as preparation bytes. Preparation work and bytes
+have independent finite limits and a separate receipt. A
+<code>ClosureWorkspace</code> retains one Program-scoped canonical tuple authority and
+reusable relation, cursor/undo and old/new ID metadata between candidates.
+Assignments borrow terms only within one immutable round. Per-predicate catalogs
+hold membership and equality/order metadata over that authority; dense relations
+hold coordinate bits over the same frozen Program vocabulary.</p>
+<p>Final assembly publishes the selected discovery positions in semantic order,
+then constructs the result <code>Model</code> without exporting owned atoms. The workspace
+retains discovered identities and capacity, while resetting relation membership,
+frontiers, dense truth and pending marks. No candidate truth survives completion.
+Previously returned models keep their immutable prefixes. Any failed check
+discards dirty workspace state before reuse. A different <code>PreparedQueries</code>
+owner retires the old workspace, even for the same Program: its inferred axes
+and block plans may differ. The shared immutable layout owner authenticates
+that boundary. Its separately allocated header is included in preparation bytes.</p>
+<p>The one-shot <code>check_view</code> uses the same evaluator and charges preparation plus
+candidate work to its existing cumulative work limit. Reused preparation has a
+separate work receipt, so exact resource cutoffs can differ while completed
+closures, constraints and seed checks agree. Retained capacities are admitted
+under each prepared call’s current limits, including an empty program. The
+one-shot empty-program path constructs no preparation or workspace and retains
+its vacuous zero-round result. This removes repeated allocation and dimension
+inspection; it does not establish a timing gain. Both entry points use the
+same scalar delta schedule described above.</p>
+<p><code>BatchOracle</code> retains that preparation and a bounded set of workspaces across
+independent batches. Its indexed borrowed seed producer is divided into at most
+one contiguous range per configured worker. Each range has one exclusive
+workspace and its candidates run sequentially; range tasks may be stolen by
+Rayon. Result order and candidate occurrences are preserved without materializing
+seed views. This schedule bounds owners directly, independently of worker thread
+identities. It can balance uneven candidate costs differently from per-candidate
+work stealing. Shared-round and static execution keep their separate algorithms
+and the same nonblocking batch admission slot.</p>
+<p>Batch preparation uses <code>PreparationLimits</code>; a preparation stop is distinct from
+an individual candidate stop. <code>query_statistics</code> reports completed preparation
+builds and adoptions, assigned slots retained from earlier submissions, actual
+cached capacity and the latest admitted collective envelope. The envelope counts
+the separately allocated preparation header once, all idle workspace capacity, and each assigned
+workspace’s maximum of retained capacity and its remaining per-closure allowance.
+A workspace’s per-closure allowance already counts the prepared queries’ retained
+bytes, so those bytes are subtracted before combining owners. Actual unused workspace-vector
+capacity and conservative replacement overlap are included. Lowering a limit
+can refuse already-retained capacity; even an empty batch checks an existing
+cache, while an empty batch never creates preparation. Final result retention,
+source payload, allocator/tree overhead and worker stacks remain separate. These
+receipts describe bounded ownership and reuse, not timing or process RSS.</p>
+<p>In an independent lazy CPU session, optional candidate narrowing supplies its
+completed immutable <code>PreparedQueries</code> to the mandatory oracle. The oracle adopts
+that exact owner only when the dense-layout policy agrees, the recorded work fits
+its preparation limit, and construction completed under no wider byte allowance.
+Otherwise it prepares the program through its ordinary path. Narrowing and the
+oracle retain separate mutable workspaces; shared queries contain no candidate
+truth or membership verdict. An optional resource-limit refusal permits ordinary
+mandatory checking; cancellation and deadlines still stop the session. Empty
+batches adopt nothing. <code>preparation_adoptions</code> counts adoption events; reusing
+the currently retained owner adds none. <code>preparation_builds</code> counts construction
+by the oracle itself.
+The preparation receipt still reports the original construction work. This reuse
+does not change eager, shared-round or device execution.</p>
+<p><code>zetesis_cpu::Limits::max_closure_bytes</code> bounds each scalar closure’s canonical
+authority, relation indexes/columns and prepared-order runs, dense words, pending
+discovery IDs/marks, query assignment/cursor/undo capacities, and operation scratch
+with conservative growth overlap. The authority counts canonical payload once;
+final catalog and model-selection metadata are admitted while being assembled.
+Its default is 128 MiB; zero is a zero-byte allowance. <code>peak_closure_bytes</code> is the
+maximum observed named envelope of a completed check. Relation capacities are
+summed as each relation is created, grows or is cleared, so reading the envelope
+does not visit every relation; debug builds recompute the sum on each read.
+Earlier results retained by the caller, allocator bookkeeping and Arc counters
+remain outside this per-check ledger. A successful allocation can exceed its
+proposed reservation before the actual-capacity check refuses it. A stopped
+scalar check returns no partial <code>Check</code> or statistics. Collective worker
+admission and result retention have separate owners; this is not a total
+process-memory bound.</p>
+<p><code>FormulaLimits::max_support_bytes</code> bounds one evolving canonical support authority
+and its current prefix, relation/equality metadata, postings, borrowed snapshot
+objects and query capacity, including scratch and named growth overlap. Terms
+and atoms are counted by that authority once; predicate relations and pending
+rounds retain scoped IDs. Allocator/tree/control-runtime overhead and unrelated
+grounding state remain separate. The independent cumulative source-expansion
+budget still applies, and this support limit is not RSS.</p>
+<p>The command-line equivalent is the advanced <code>--max-support-bytes</code> option,
+shown by <code>--help-all</code> and recorded by <code>--stats</code>. It defaults to 128 MiB and
+applies to eager formula admission. Zero is a zero-byte ceiling, not unlimited
+memory. Increasing this allowance does not change source-atom, work or other
+independent limits.</p>
+<p>Row identity connects relational semantics to masks, intersections and gathers.
+Combining two column masks means intersecting positions in the same relation
+snapshot; it must not combine values from different tuples. The bounded
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs"><code>relation</code> library</a>
+provides the immutable column view used by eager formula support. It borrows canonical <code>AtomRef</code> rows or construction descriptions,
+then encodes complete typed values through a dictionary of borrowed references.
+It preserves row occurrences and their order, including duplicate tuples, and
+keeps original catalog indices distinct from local positions. Explicit predicate
+arity and row count distinguish an empty relation from a nullary tuple.</p>
+<p>The lazy source grounder retains its candidate-specific relation and world-mask
+contracts; this eager support representation does not make a possible atom true.
+Queries and selections borrow their exact relation owner. A selection validates
+ordered positions; it does not establish complete grounding or answer-set
+membership. Equality filtering is complete relative to its supplied input rows:</p>
+<pre><code class="language-text">query = ResolveEqualities(relation, known_values)
+selected = Filter(AllEqualitiesHold(query), supplied_rows)
+bindings = FilterMap(MatchWholeTuple(pattern, binding), selected)
+</code></pre>
+<p>This conjunction-filter primitive does not replace the eager grounder’s shortest
+posting policy. Additional filtering skips budgeted matcher visits and value
+extraction, which can change their checked-failure boundaries. The production
+change preserves exactly the previous offered rows, preserving that boundary as
+well as successful bindings.</p>
+<p>The same equality predicate can produce ordered positions or packed row bits.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation/selection.rs"><code>Relation::select_mask</code></a>
+writes matching input positions directly into their mask words. This avoids a
+position-vector intermediate when the consumer requires masks. Decoding the
+result over original row order yields the same selected occurrences; distinct
+rows containing equal tuples keep distinct bits. The packed output still spans
+the original relation, so sparse inputs do not imply small mask storage.</p>
+<p>An empty conjunction retains every supplied row; a missing dictionary value
+retains none. Numeric ID order does not implement numeric comparison, ASP term
+order or arithmetic. The existing matcher remains responsible for structural
+terms, repeated variables and checked binding generation. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md">column laws</a>
+state the reconstruction and ordered-selection arguments and their limits.
+The eager support catalog uses this representation as described above. Adoption
+by other grounding consumers requires the same coherent tuple ownership and
+removal of redundant stores; an experimental copy alone establishes neither a
+smaller memory footprint nor faster grounding.</p>
+<p>The formula binding planner also derives finite integer envelopes from directed
+affine comparisons when ordinary binding steps cannot advance. For an inequality
+<code>a₁X₁ + … + aₙXₙ ≤ b</code>, it derives an endpoint for one variable from known
+endpoints of the other terms. Each round reads the previous intervals, combines
+simultaneous proposals by minimum or maximum, and installs only missing
+endpoints. At most two endpoints per variable can be installed. This bounds the
+analysis independently of numeric tightening or contradictory cycles.</p>
+<pre><code class="language-text">intervals = EmptyEndpoints(variables)
+repeat at most 2 × Count(variables):
+    proposals = ReduceBounds(Map(DeriveFrom(intervals), inequalities))
+    additions = MissingEndpoints(intervals, proposals)
+    if Empty(additions): stop
+    intervals = Install(intervals, additions)
+range = FirstFiniteUnboundRange(intervals, boundVariables)
+return range
+</code></pre>
+<p>This is the finite-envelope fallback, not the complete source planner. Existing
+joins and generators remain responsible for their own scopes and dependencies.
+The scheduler consumes the returned range and resumes binding. Its cursor
+enumerates the resulting plan and retains every original condition.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding_guard/envelope.rs">implementation</a>
+uses checked coefficients and bounds, charges analysis work and storage, and
+retains the original scalar conditions. A conservative interval may propose
+extra rows; it may not omit a satisfying substitution.</p>
+<p>For <code>V</code> scoped variables, <code>C</code> inequalities and at most <code>E</code> expression nodes,
+one fallback uses <code>O(EV + CV + V)</code> logical storage and at most <code>O(CV³)</code> endpoint
+work. Existing binding steps run first, so already resolved scopes avoid this
+analysis. These bounds describe the dense implementation, not the size of its
+subsequent substitution family.</p>
+<p>The distinctions matter to parallelism. A union of several worlds’ relations
+can offer shared source instances, but a join can combine atoms that coexist in
+no individual world. Each world must therefore recheck positive truth. Optional
+world-membership masks prune a prefix only if no current world satisfies it.
+They do not prune future snapshots or the candidate carrier.</p>
+<p>See <a href="../rust/parallel.html">lazy checking</a> for the injected execution contract,
+and <a href="../lean/theorems.html">the theorem map</a> for the corresponding coverage laws.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/alignment.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/source-pipeline.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/alignment.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/source-pipeline.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

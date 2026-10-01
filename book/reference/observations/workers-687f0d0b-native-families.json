@@ -1,0 +1,1837 @@
+{
+  "scope": "Retained matrix source/route receipts and complete native family parity, preserving hidden atoms, model multiplicity and objective priorities. No independent solver proof, clingo hidden-family comparison, live filesystem attestation or timing claim.",
+  "passed": true,
+  "memory_allowance_bytes": 25769803776,
+  "reports": [
+    {
+      "path": "cpu/A1-W1.json",
+      "sha256": "a1f63b8bc37b922d8dcd4b5bb782e77ff5047d3291c7982ccfe9df72b9e824e8",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A1-W2.json",
+      "sha256": "bbc7c0ff0b4ff23a84482daaf21fc792d54fe2fde77308cff5acced94605be90",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A1-W4.json",
+      "sha256": "a39b7a611c1afc4b42100df9f3fd4e01e563a31b49b2640ab45c807432b9640e",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A1-W14.json",
+      "sha256": "ea6973d53f4d656f84ed15dd6ad1bac34caac6d5bae09e478f30a313805a59ee",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B1-W1.json",
+      "sha256": "b350eba83228be0e50d56b0cb89f78d37875045d225c3399feb69d0ec31189b0",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B1-W2.json",
+      "sha256": "f5d84c0adb0a739248dcce8a0d5780b59914fdbe0624cfbcd6c5a24d6f4413ff",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B1-W4.json",
+      "sha256": "4ce18802e02540eb843b62a45c627aeb281832d7ed2ee84c5f0d91bf0619b14c",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B1-W14.json",
+      "sha256": "a0c800a508e3c8d02b2b4c08d1cf9014d7ab3c8979227495094254ff7dc0cdb9",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B2-W1.json",
+      "sha256": "534cc501e0bbb85640b345dcc02e8ee010a68cff43439111bc91acaa1590a581",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B2-W2.json",
+      "sha256": "ce1672c4c5ab522d73d92b49ffb630e0307adf423789137e8d1e7d9c832d598c",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B2-W4.json",
+      "sha256": "2d251009fd19c7f5fd9b13229b2db933d45be269239c79274d42053c3a769579",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/B2-W14.json",
+      "sha256": "39f70ac32a5173e14152538be17110da4805da18924c46071b1eebec30930869",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A2-W1.json",
+      "sha256": "bfa99d4579760c2ad0ffa76351db54a5585946f9b797502bf416a5605eadae0b",
+      "backend": "cpu",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A2-W2.json",
+      "sha256": "40b42c2df494c55ced948165dab76488a512a2021b2a01334c1ccb3f179c82ad",
+      "backend": "cpu",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A2-W4.json",
+      "sha256": "6cc0dfde7b75f3101e623881c9588fd4d1d8cdd4fa4a1360f6a6cb2eead0cb5d",
+      "backend": "cpu",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "cpu/A2-W14.json",
+      "sha256": "ebdfed4bd24ac9d4f2a3056061fa4fa67bc79d6a21e5c6cb73ffadd2d1dbbd5b",
+      "backend": "cpu",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/cpu": 205,
+        "tight_support/cpu": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A1-W1.json",
+      "sha256": "51d8ed13a045306c908ba0add4cf6bf584f1d0d968a249faca89f003c0591530",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A1-W2.json",
+      "sha256": "10931cf7f7f297a8301d2881b7927bf80ccb139adfcb4ec473da692554a36370",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A1-W4.json",
+      "sha256": "b64d68799335ed3e1e3fba37abc3a7e3aa114558b125ff060d5b4e73d3d1309f",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A1-W14.json",
+      "sha256": "ae18709886a0b4a0770917be5ff52d08217a88e62ad4586aac09a0021ae888bd",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B1-W1.json",
+      "sha256": "45d46bcc4f499df251b7a3cb74badb8f7c8f2e52f969adeb4e9fb3c723b4352d",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B1-W2.json",
+      "sha256": "b15a359171a224c272f4f3e48576f0c3742d10f5078deefae993b45c04cf1baa",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B1-W4.json",
+      "sha256": "315119df4f7d8588553a875e8dac1e7812bc2b7cef3bf44ea7c399d3fb447362",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B1-W14.json",
+      "sha256": "7d43bf54ef6c25b3c8109aa38a4afa3f0ed196ad99c9cd59ad2418a54e8a5fb4",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B2-W1.json",
+      "sha256": "d0d43764399c53a2f770cda36c9f304e2875048d6d9ae10af296133e5998efbc",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B2-W2.json",
+      "sha256": "172b452996a55d2ed1a3d6ff5ba35ebc098bfc861a817c73ee863634487afb52",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B2-W4.json",
+      "sha256": "bca23a1488bc4683f9e87db6854424d8252cce8832d4a11fd70809ec744dceaa",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/B2-W14.json",
+      "sha256": "a89271d709a1dc9769620290795cf7e46b5a1734401f80c39a1caf77b3ff9929",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A2-W1.json",
+      "sha256": "82dd016862b6cbdc115292fad6c5189f204eee1f7b5c1f74a94ee943421aa7cf",
+      "backend": "metal",
+      "workers": 1,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A2-W2.json",
+      "sha256": "0f9ba01557b58f9826371f10fee1cabf4d3732b0a82e7113db8cb83e37c2e1c6",
+      "backend": "metal",
+      "workers": 2,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A2-W4.json",
+      "sha256": "cb6d9742e9c37b02c9755a7ad1276147281bc3403fe213d918e002670082cd4b",
+      "backend": "metal",
+      "workers": 4,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    },
+    {
+      "path": "metal/A2-W14.json",
+      "sha256": "7cacc36e637880d820091377928dcf7873a8df8bf14e53ca60398d73f168dff2",
+      "backend": "metal",
+      "workers": 14,
+      "native_sha256": "9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "declared_passed": true,
+      "native_families_checked": 470,
+      "decisions": {
+        "pass": 940
+      },
+      "routes": {
+        "countermodel/formula": 205,
+        "tight_support/tight_support": 265
+      },
+      "issues": []
+    }
+  ],
+  "families": [
+    {
+      "case": "scenarios/equality-generalized-tsp/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 1,
+      "canonical_sha256": "c7b3b475f8f8c5919e8b93062115d8431522ce57ad52fe1de1ce4cd83fb19ebe",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/equality-generalized-tsp/02-larger.lp",
+      "first_report": 0,
+      "first_sample": 3,
+      "canonical_sha256": "d8e75e0203a3ebdc5c2f881ab7bcdcaf0a39e180c32982256e5fc548ad9a1b3e",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp",
+      "first_report": 0,
+      "first_sample": 5,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 7,
+      "canonical_sha256": "e8f5da7c027eb155a820eaa336d2766dae581095ab0bcbe130b3ffecb43000ee",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/02-start-equals-end.lp",
+      "first_report": 0,
+      "first_sample": 9,
+      "canonical_sha256": "d72b3637c0c1aeb9fbf3ca30453d8e9e05da2dbbc06c7c4cc4bb043d9c1f7404",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/03-zero-cost-detour.lp",
+      "first_report": 0,
+      "first_sample": 11,
+      "canonical_sha256": "423ff3f76dee0908449a54022d6797f8eb070fcb63057e2ccc06ecb05bbb5276",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/04-no-path.lp",
+      "first_report": 0,
+      "first_sample": 13,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/05-multi-path.lp",
+      "first_report": 0,
+      "first_sample": 15,
+      "canonical_sha256": "a34a26a4ee72f8e5eb72d7033468c8759c7eb9fd44678d38b8ab86bf63468bc4",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/06-layered-dag.lp",
+      "first_report": 0,
+      "first_sample": 17,
+      "canonical_sha256": "ce93ea718f5d9e8b51c8273717b456877582e36e3ec532e97fa395e82a9de84a",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/07-cycles.lp",
+      "first_report": 0,
+      "first_sample": 19,
+      "canonical_sha256": "3e20565cd653d2b1933c6ad37f2ca3a370658086a2861fb79923f51178ee950c",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-01/08-negative-weights.lp",
+      "first_report": 0,
+      "first_sample": 21,
+      "canonical_sha256": "82b5599312094ebe6787957449099ab8bbfbb9dbbd25169fc01b0f46d3b73759",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 23,
+      "canonical_sha256": "10c5eb17020dc45b53e1442258bce877e7fde4e902b637f8f10305855ae2f313",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/02-start-equals-end.lp",
+      "first_report": 0,
+      "first_sample": 25,
+      "canonical_sha256": "d72b3637c0c1aeb9fbf3ca30453d8e9e05da2dbbc06c7c4cc4bb043d9c1f7404",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/03-before-forces-detour.lp",
+      "first_report": 0,
+      "first_sample": 27,
+      "canonical_sha256": "fd8bea716eb4f23ae5d86461cbc81389acdfd687d84132110b0d6fb7824817e5",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/04-after-forces-extension.lp",
+      "first_report": 0,
+      "first_sample": 29,
+      "canonical_sha256": "6d69b0dd9cb0b75798b7c6edf7cce3c967a3facccd00021db97d15682189f117",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/05-ordering-unsat.lp",
+      "first_report": 0,
+      "first_sample": 31,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/06-layered-dag-before.lp",
+      "first_report": 0,
+      "first_sample": 33,
+      "canonical_sha256": "998528c6e4965a9ab29f37ee0dc23257e6bee3e097c270ca6830591927ad4a0c",
+      "models": 2,
+      "costs": [
+        [
+          2,
+          7
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/07-layered-dag-before-after.lp",
+      "first_report": 0,
+      "first_sample": 35,
+      "canonical_sha256": "b3eb9b5adf113b3e925ec11b606813d1110cb51af76e00e2887398ef565a7fa7",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          6
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/08-tie-break-under-ordering.lp",
+      "first_report": 0,
+      "first_sample": 37,
+      "canonical_sha256": "1615e4ed6ce644d09c869c774a51ab05a45b6052fe781658561d3e0645d74d2b",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-02/09-negative-weights.lp",
+      "first_report": 0,
+      "first_sample": 39,
+      "canonical_sha256": "9d3413ff14b37625e42005c6ed9da9f374651d3da34c8d95caeda3333d8fc6ac",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 41,
+      "canonical_sha256": "0999749956871e40bda5cc674caa73e9ab2dcf35c3d762a99cc01451cd08f95f",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/02-start-equals-end.lp",
+      "first_report": 0,
+      "first_sample": 43,
+      "canonical_sha256": "74dd56cc433a578115f67e0f833bac82125418612d0f42e3b697e32959ccd36d",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/03-budget-forces-detour.lp",
+      "first_report": 0,
+      "first_sample": 45,
+      "canonical_sha256": "4e7770d3a05225781031284e1e39a0fb5d1fa358fc9e65da01b53df7f6567b83",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/04-cost-at-cap-allowed.lp",
+      "first_report": 0,
+      "first_sample": 47,
+      "canonical_sha256": "87f32df0e515de5b82e38915de518c4d8ab41abd226f90bbcf366c1b127d2998",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/05-budget-unsat.lp",
+      "first_report": 0,
+      "first_sample": 49,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/06-layered-dag-cap.lp",
+      "first_report": 0,
+      "first_sample": 51,
+      "canonical_sha256": "4864677c1305203000e60c35bd2cf2a602eeef9df6acfe232eb960e7902fd87e",
+      "models": 2,
+      "costs": [
+        [
+          2,
+          7
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/07-layered-dag-tight-cap.lp",
+      "first_report": 0,
+      "first_sample": 53,
+      "canonical_sha256": "16f2aee273c0ca9888e9b7d6de04db662ccfa06deea36e3309191c2ac263857b",
+      "models": 4,
+      "costs": [
+        [
+          2,
+          12
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/08-tie-break-under-cap.lp",
+      "first_report": 0,
+      "first_sample": 55,
+      "canonical_sha256": "33369169a3f53af594d9fbfec466c8b1e5ab7255d82083bad0211a5e4688fc5c",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-03/09-negative-weights.lp",
+      "first_report": 0,
+      "first_sample": 57,
+      "canonical_sha256": "e56a9099009a387d2721ea03ca353e31c76e6cec97eb62fbca698737860e9367",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 59,
+      "canonical_sha256": "dcf5823e0efdaa49e21c52e72ce174af0f4eed928451a9cdfb4c81f14315a952",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/02-start-equals-end.lp",
+      "first_report": 0,
+      "first_sample": 61,
+      "canonical_sha256": "74dd56cc433a578115f67e0f833bac82125418612d0f42e3b697e32959ccd36d",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/03-before-forces-detour-within-budget.lp",
+      "first_report": 0,
+      "first_sample": 63,
+      "canonical_sha256": "f0f0f0a81806daeae030267b8c061c3ccbf063961a887f92305763bc5d14b6b3",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/04-ordering-violates-budget.lp",
+      "first_report": 0,
+      "first_sample": 65,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/05-after-and-budget-interact.lp",
+      "first_report": 0,
+      "first_sample": 67,
+      "canonical_sha256": "8fd7f38cbba11a54f8c1630d676736e15230d7284000c7c18bdac30cf8ceaa09",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          6
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp",
+      "first_report": 0,
+      "first_sample": 69,
+      "canonical_sha256": "988f169e4d3e901feac9b8771ed57820d308e98cebd067a1ef5d4247b82df529",
+      "models": 2,
+      "costs": [
+        [
+          2,
+          8
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/07-layered-dag-combined.lp",
+      "first_report": 0,
+      "first_sample": 71,
+      "canonical_sha256": "05c2f77815ded7db6610e3356acdbfec2df781562405562e45943b99379df030",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          10
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/08-tie-break-under-ordering-and-cap.lp",
+      "first_report": 0,
+      "first_sample": 73,
+      "canonical_sha256": "348b02a28bde2b924dcdc69074bf14b8979c5b1a269e339956bd154c854baaf5",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          4
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/shortest-path/variant-04/09-negative-weights.lp",
+      "first_report": 0,
+      "first_sample": 75,
+      "canonical_sha256": "cf5f953add897a2f16aa7df2a83975bdda9487e14d02c7e8e6d8ef5b49e0bbf4",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-01/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 77,
+      "canonical_sha256": "9b1cc627915283c94c679f655a802519e4773502b1c3e1b13d344669e13b5c0f",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-01/02-agent-reuse.lp",
+      "first_report": 0,
+      "first_sample": 79,
+      "canonical_sha256": "fde310b9b309b7b74d23e8b89cf25ae495a1401b0c4d0531425e64eaad74be6e",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-01/03-selective-compatibility.lp",
+      "first_report": 0,
+      "first_sample": 81,
+      "canonical_sha256": "9e6899326a6b47d04f1214e041b0a1aa3b05a2333fd2fc2627be47afb15af51b",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          10
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp",
+      "first_report": 0,
+      "first_sample": 83,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/task-allocation/variant-01/05-larger-mix.lp",
+      "first_report": 0,
+      "first_sample": 85,
+      "canonical_sha256": "d8b89a8231af76bf0eb73fa1e2903700cbb0c57609d6f75f10e6a4341f8d3347",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          9
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-02/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 87,
+      "canonical_sha256": "36766caaec7dea7b4ac77700b4d9b33fae7b190a5734c3db8495ec71f8b082be",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          5
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp",
+      "first_report": 0,
+      "first_sample": 89,
+      "canonical_sha256": "0bfcacc05e23f9d882231b8bff7f3846f6d75c53fc479524bac730e7905ebf1a",
+      "models": 3,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          5
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-02/03-cost-dominates.lp",
+      "first_report": 0,
+      "first_sample": 91,
+      "canonical_sha256": "86e0825736ff525f1f52d43319307d29ea37f8cc73543cbf3be69d58f3c68e3d",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          15
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-02/04-no-compatible-agent-unsat.lp",
+      "first_report": 0,
+      "first_sample": 93,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/task-allocation/variant-02/05-larger-mix.lp",
+      "first_report": 0,
+      "first_sample": 95,
+      "canonical_sha256": "619b8cd7d463a6084a7dba39e022c660700b92752c10735e871a33dbb89fc253",
+      "models": 1,
+      "costs": [
+        [
+          2,
+          9
+        ],
+        [
+          1,
+          7
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-03/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 97,
+      "canonical_sha256": "ac0d046d97a2a6efe134665ca6a50fda6434c21ebf1c773d3064edee15e6ee26",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-03/02-multiple-groups.lp",
+      "first_report": 0,
+      "first_sample": 99,
+      "canonical_sha256": "01aa71275fd988244d24872b86af7b9f5a11ccec9be53bf55f5b5a0ff03a2ae5",
+      "models": 4,
+      "costs": [
+        [
+          0,
+          12
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-03/03-mixed-grouped-ungrouped.lp",
+      "first_report": 0,
+      "first_sample": 101,
+      "canonical_sha256": "eac8a6009a8186bd644dfb9e5bb386b8f592e890b3a11ca7f2f1d623a57ce92a",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          8
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-03/04-incompatible-group-unsat.lp",
+      "first_report": 0,
+      "first_sample": 103,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/task-allocation/variant-03/05-larger-mix.lp",
+      "first_report": 0,
+      "first_sample": 105,
+      "canonical_sha256": "220135b93dd44699033dc00a5d772d9918ab119fe74a0ffa05a06e373584abed",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-04/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 107,
+      "canonical_sha256": "6b6b927482cea53f2ae50534269c0166e940e04bbf517b148d424ec217aa6b7f",
+      "models": 81,
+      "costs": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-04/02-precedence.lp",
+      "first_report": 0,
+      "first_sample": 109,
+      "canonical_sha256": "cf0e280ff7205cf74ac9c3d67694041b7bd6d54271ba86c146948624203fac0c",
+      "models": 3,
+      "costs": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-04/03-agent-serialization.lp",
+      "first_report": 0,
+      "first_sample": 111,
+      "canonical_sha256": "dd1cdc07124bf57fb552b7c4d4c5f7b650836f9aec5e0fc27350c92c371d4ac3",
+      "models": 30,
+      "costs": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/task-allocation/variant-04/04-window-too-tight-unsat.lp",
+      "first_report": 0,
+      "first_sample": 113,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "first_report": 0,
+      "first_sample": 115,
+      "canonical_sha256": "6dc6418f67bca7f1d5aea7609bb8173849c153eebd0447772c54d8bfee82d74b",
+      "models": 1176,
+      "costs": [
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-01/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 117,
+      "canonical_sha256": "b76c14875ec995ed07e657ff9a06a82562e1c39aaacab2d29bf46102974ecb7a",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-01/02-multiple-tours.lp",
+      "first_report": 0,
+      "first_sample": 119,
+      "canonical_sha256": "9acc7bf8b645cd9f3c310eb70c89cfdefe4404782e50598d5ad63446bcd31ea2",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          8
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-01/03-asymmetric.lp",
+      "first_report": 0,
+      "first_sample": 121,
+      "canonical_sha256": "6fa0519511c3bf4efbbb3c69fed300aee20c420b8c3400e26eaf0c9048e8b932",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-01/04-subtour-unsat.lp",
+      "first_report": 0,
+      "first_sample": 123,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-01/05-ring.lp",
+      "first_report": 0,
+      "first_sample": 125,
+      "canonical_sha256": "cc04c115b37712b2078df4d1bfbaa6c37b788294d9a2d94d2ef2308fd7ab8f8b",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-02/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 127,
+      "canonical_sha256": "85b595add9a748fce1c02b2cbadac95d171d228b37543df33aa0874ea9df2be1",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-02/02-single-salesman.lp",
+      "first_report": 0,
+      "first_sample": 129,
+      "canonical_sha256": "538c23d689e4d2979920d0193fb715ac9a1bfb17eadd9dac19c51147f051cd5a",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-02/03-too-many-salesmen-unsat.lp",
+      "first_report": 0,
+      "first_sample": 131,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-02/04-equal-cost-split.lp",
+      "first_report": 0,
+      "first_sample": 133,
+      "canonical_sha256": "0f389a3a348a29fb154a4be30d1a60a42756ffe41fc460d657538c87b08898bf",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-02/05-larger-asymmetric.lp",
+      "first_report": 0,
+      "first_sample": 135,
+      "canonical_sha256": "aea7e27f15d7644c99be7ce6627b3d8e3ba21d30a354bf95c8f235fcfe3dc712",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          7
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-02/06-unreachable-edge.lp",
+      "first_report": 0,
+      "first_sample": 137,
+      "canonical_sha256": "bc1ec6fa0d4bd2125d16d7d20eb8690273c824b51e175c520515943a20e69de0",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-03/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 139,
+      "canonical_sha256": "6a474dbe86ec3f4fb61b0db9fa02a316ee70ffa2f04355286ba17a399f100f4a",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-03/02-single-salesman.lp",
+      "first_report": 0,
+      "first_sample": 141,
+      "canonical_sha256": "a88c1488b5c3318ffbc10cf825de1465a260ab03bae8931da98f8773876f7952",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-03/03-depot-crossing-unsat.lp",
+      "first_report": 0,
+      "first_sample": 143,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-03/04-equal-cost-split.lp",
+      "first_report": 0,
+      "first_sample": 145,
+      "canonical_sha256": "682548b07f843b0afd41eb66860715216a1417e558a1cb1d536d6953f836c27f",
+      "models": 2,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp",
+      "first_report": 0,
+      "first_sample": 147,
+      "canonical_sha256": "190f88f1800d504cde8f4065e262828a770082b5eb365a9d9a0b9f9b8001f1df",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          9
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-03/06-unreachable-edge.lp",
+      "first_report": 0,
+      "first_sample": 149,
+      "canonical_sha256": "4a29a7673054993ab51c900aead02661b6f2946253c8c08e8814e2239cb9a0a4",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-04/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 151,
+      "canonical_sha256": "becdf31f486ca2d1446c2896c6fabf960473053f1f2c612603b06ea15c1e9884",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-04/02-single-salesman.lp",
+      "first_report": 0,
+      "first_sample": 153,
+      "canonical_sha256": "e279db14491468c3724a03f10629c24d2a3f0e61c317b3d1e8e31fd2abdcac32",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-04/03-window-too-tight-unsat.lp",
+      "first_report": 0,
+      "first_sample": 155,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-04/04-depot-window-too-tight-unsat.lp",
+      "first_report": 0,
+      "first_sample": 157,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-04/05-three-depots-asymmetric-times.lp",
+      "first_report": 0,
+      "first_sample": 159,
+      "canonical_sha256": "bd20b43a345dbf287292c7d6611a2cfd169b96496bd9c10bc664f0d531c29e62",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-04/06-unreachable-edge.lp",
+      "first_report": 0,
+      "first_sample": 161,
+      "canonical_sha256": "9e528846e6bf4636b6c51a3c35a8764585f1a154bd929d4552a30b5f3a484cc5",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-05/01-basic.lp",
+      "first_report": 0,
+      "first_sample": 163,
+      "canonical_sha256": "232035481f4fbcb77dc9d96fa6b298f165d109ded2bc54cadf007cb2a9d7630a",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-05/02-tight-bound-exact.lp",
+      "first_report": 0,
+      "first_sample": 165,
+      "canonical_sha256": "82e582b0d10a6dc4fd339f3134e3a0640e7769a4876c60d8d72dd0bc9725c9b4",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-05/03-revisit-too-tight-unsat.lp",
+      "first_report": 0,
+      "first_sample": 167,
+      "canonical_sha256": "eeb612de40998864d41112230cf8c25a53d04451ad370d787a720e2f3dcb82cb",
+      "models": 0,
+      "costs": null
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-05/04-depot-and-vertex-revisits.lp",
+      "first_report": 0,
+      "first_sample": 169,
+      "canonical_sha256": "8403a6a2e5ae226d2715c015745f31f96c1a98bdb25b53ab0f43e725d205cf94",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp",
+      "first_report": 0,
+      "first_sample": 171,
+      "canonical_sha256": "82ea09425477f600c9869ef17b3a41c841f053d158cd5656c12e5f3f49d78c5f",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "scenarios/traveling-salesman/variant-05/06-unreachable-edge.lp",
+      "first_report": 0,
+      "first_sample": 173,
+      "canonical_sha256": "9e528846e6bf4636b6c51a3c35a8764585f1a154bd929d4552a30b5f3a484cc5",
+      "models": 1,
+      "costs": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    {
+      "case": "standalone/n-queens/variant-01.lp",
+      "first_report": 0,
+      "first_sample": 175,
+      "canonical_sha256": "fd8fb2e527aeec2b8cdfddc55335f18fb5b58a511cc746825ce85b3f7a43d6d9",
+      "models": 92,
+      "costs": null
+    },
+    {
+      "case": "standalone/n-queens/variant-02.lp",
+      "first_report": 0,
+      "first_sample": 177,
+      "canonical_sha256": "fd8fb2e527aeec2b8cdfddc55335f18fb5b58a511cc746825ce85b3f7a43d6d9",
+      "models": 92,
+      "costs": null
+    },
+    {
+      "case": "standalone/n-queens/variant-03.lp",
+      "first_report": 0,
+      "first_sample": 179,
+      "canonical_sha256": "fd8fb2e527aeec2b8cdfddc55335f18fb5b58a511cc746825ce85b3f7a43d6d9",
+      "models": 92,
+      "costs": null
+    },
+    {
+      "case": "standalone/n-queens/variant-04.lp",
+      "first_report": 0,
+      "first_sample": 181,
+      "canonical_sha256": "fd8fb2e527aeec2b8cdfddc55335f18fb5b58a511cc746825ce85b3f7a43d6d9",
+      "models": 92,
+      "costs": null
+    },
+    {
+      "case": "standalone/n-queens/variant-05.lp",
+      "first_report": 0,
+      "first_sample": 183,
+      "canonical_sha256": "81c46eccb715f6087a06aef1104fc88cb50aacd9f4b3f23041499eda0c93b72a",
+      "models": 92,
+      "costs": null
+    },
+    {
+      "case": "standalone/n-queens/variant-06.lp",
+      "first_report": 0,
+      "first_sample": 185,
+      "canonical_sha256": "81c46eccb715f6087a06aef1104fc88cb50aacd9f4b3f23041499eda0c93b72a",
+      "models": 92,
+      "costs": null
+    },
+    {
+      "case": "standalone/send-money/send-money.lp",
+      "first_report": 0,
+      "first_sample": 187,
+      "canonical_sha256": "ed6a7f1bddf1d2d86c4ce70f957ec7cfeea553a0bff64d3c5c443dbc232f9bfe",
+      "models": 1,
+      "costs": null
+    }
+  ]
+}

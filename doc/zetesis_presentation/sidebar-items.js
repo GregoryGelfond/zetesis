@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Alignment","ColorMode","Role","TableError"],"fn":["color_disabled","terminal_width"],"struct":["Column","Layout","Row","Streams","Table","TrackedWriter"]};

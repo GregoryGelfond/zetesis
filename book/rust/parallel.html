@@ -1,0 +1,644 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Parallel and lazy checking - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/rust/parallel.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="parallel-and-lazy-checking"><a class="header" href="#parallel-and-lazy-checking">Parallel and lazy checking</a></h1>
+<p>There are two different opportunities to share work: execute independent checks
+concurrently, or share source traversal while preserving independent worlds.
+Choose a library boundary that makes the distinction explicit.</p>
+<h2 id="reuse-preparation-across-scalar-checks"><a class="header" href="#reuse-preparation-across-scalar-checks">Reuse preparation across scalar checks</a></h2>
+<p><code>PreparedQueries::new</code> inspects one admitted relational <code>Program</code> and retains
+its shared immutable owner plus the dimensions needed by the closure joins.
+It does not enumerate the program’s ground carrier or hold candidate truth.
+Each <code>check_view</code> still computes the least closure of its own frozen seed’s
+reduct and checks the constraints and gate agreement.</p>
+<p>This program has the two answer sets <code>{d(1), left(1)}</code> and <code>{d(1), right(1)}</code>.
+The seeds contain only the selected gate atoms. One workspace serves both
+checks; the first returned closure remains valid after the second check.
+The example compares both complete results with the one-shot checker and the
+explicit expected models:</p>
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_core;
+</span><span class="boring">extern crate zetesis_cpu;
+</span>use zetesis_core::{
+    AdmissionLimits, AtomPattern, ConstructionError, Model, Predicate, Program, Seed, Template,
+    Term, Value,
+};
+use zetesis_cpu::{
+    Cancellation, ClosureWorkspace, Limits, PreparationLimits, PreparedQueries, check,
+};
+
+fn pattern(name: &amp;str, term: Term) -&gt; Result&lt;AtomPattern, ConstructionError&gt; {
+    AtomPattern::new(Predicate::new(name, 1)?, vec![term])
+}
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let domain = pattern("d", Term::Variable(0))?;
+    let left = pattern("left", Term::Variable(0))?;
+    let right = pattern("right", Term::Variable(0))?;
+    // d(1). left(X) :- d(X), not right(X). right(X) :- d(X), not left(X).
+    let program = Program::new(
+        vec![
+            Template::new(
+                Some(pattern("d", Term::Constant(Value::Number(1)))?),
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ),
+            Template::new(
+                Some(left.clone()),
+                vec![domain.clone()],
+                vec![],
+                vec![right.clone()],
+                vec![],
+            ),
+            Template::new(
+                Some(right.clone()),
+                vec![domain.clone()],
+                vec![],
+                vec![left.clone()],
+                vec![],
+            ),
+        ],
+        AdmissionLimits::default(),
+    )?;
+    let assignment = [Value::Number(1)];
+    let left_atom = left.instantiate(&amp;assignment)?;
+    let right_atom = right.instantiate(&amp;assignment)?;
+    let first_seed = Seed::new(&amp;program, [left_atom.clone()])?;
+    let second_seed = Seed::new(&amp;program, [right_atom.clone()])?;
+    let cancellation = Cancellation::default();
+    let prepared = PreparedQueries::new(&amp;program, PreparationLimits::default(), &amp;cancellation)?;
+    let mut workspace = ClosureWorkspace::default();
+    let limits = Limits::default();
+
+    let first = prepared.check_view(first_seed.view(), &amp;mut workspace, limits, &amp;cancellation)?;
+    let second = prepared.check_view(second_seed.view(), &amp;mut workspace, limits, &amp;cancellation)?;
+    // Both results remain independent after the workspace serves another seed.
+    for (result, seed, expected) in [
+        (
+            &amp;first,
+            &amp;first_seed,
+            Model::new([domain.instantiate(&amp;assignment)?, left_atom])?,
+        ),
+        (
+            &amp;second,
+            &amp;second_seed,
+            Model::new([domain.instantiate(&amp;assignment)?, right_atom])?,
+        ),
+    ] {
+        let fresh = check(&amp;program, seed, limits, &amp;cancellation)?;
+        assert!(result.program().same_instance(&amp;program));
+        assert!(result.accepted());
+        assert_eq!(result.closure(), &amp;expected);
+        assert_eq!(result.closure(), fresh.closure());
+        assert_eq!(result.constraint_violated(), fresh.constraint_violated());
+        assert_eq!(result.seed_mismatch(), fresh.seed_mismatch());
+    }
+    Ok(())
+}</code></pre>
+<p><code>PreparationLimits</code> bounds the initial dimension inspections and named retained
+preparation bytes; <code>prepared.statistics()</code> returns their
+<code>PreparationStatistics</code> receipt. Each check has its own <code>Limits</code> and work
+receipt. The one-shot <code>check</code> charges preparation and evaluation together, so
+equal completed results do not imply identical resource cutoffs. These separate
+per-call limits do not bound an entire sequence of checks.</p>
+<p><code>ClosureWorkspace</code> retains a canonical tuple authority over the Program’s frozen
+vocabulary, plus relation and reference-free cursor/undo capacity. A completed
+<code>Check</code> retains a selection over its immutable prefix. The workspace clears
+relation membership, frontiers and pending marks before reuse; retained identity
+supplies no previous candidate truth. Failed evaluation discards dirty workspace
+state. A different <code>PreparedQueries</code> owner retires the old workspace, even
+for the same Program, because its inferred dense layouts can differ.
+Its <code>retained_bytes()</code> includes the authority’s shared frozen vocabulary and
+workspace metadata. Other source/preparation storage, separately retained results
+and documented container/allocator overhead remain outside that receipt;
+it is not RSS. Retained capacity is admitted again under each check’s limits.
+Independent workers need separate mutable workspaces and may share the immutable
+prepared owner. This example executes serially and makes no speed claim.</p>
+<p>The <a href="../../doc/zetesis_cpu/index.html">CPU API reference</a> and
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/prepared.rs">prepared-query implementation</a>
+give the preparation, identity and failure contracts. Run the example directly
+with <code>cargo run --locked -p zetesis-cpu --example book-prepared-queries</code>.</p>
+<h2 id="independent-candidate-checks"><a class="header" href="#independent-candidate-checks">Independent candidate checks</a></h2>
+<p><code>zetesis_cpu::BatchOracle::new</code> takes nonzero worker and maximum-batch counts and
+creates an owned Rayon pool. <code>check_batch</code> takes one <code>Program</code>, a slice of its
+<code>Seed</code> values, per-candidate limits and shared control. It returns results in
+input order. Duplicate seeds are separate submitted occurrences.</p>
+<p>The result has two error layers. An outer <code>BatchError</code> can refuse an oversized
+submission or a concurrent caller before work starts. Inside an admitted batch,
+each candidate has its own <code>Result&lt;Check, Stop&gt;</code>. Do not convert failed members
+into rejected candidates. <code>BatchError::Preparation</code> separately reports a stop
+while preparing the shared queries; no candidate result follows from it.
+There is no unbounded waiting queue: a busy pool
+refuses another simultaneous batch. The static variant accepts an already
+compiled graph and does not compile one implicitly.</p>
+<p>The scalar <code>check_view</code> and <code>check_static_view</code> operations borrow either an owned
+<code>Seed</code> or a <code>SeedSelection</code>. Their batch counterparts, <code>check_batch_views</code> and
+<code>check_static_batch_views</code>, accept indexed Rayon iterators such as
+<code>selections.par_iter().map(SeedSelection::view)</code>. The oracle runs them on its
+owned pool and collects in input order. These doors share the existing checker;
+they create neither a seed tree nor a temporary view vector.
+The owned-seed methods delegate through views. Derived closures retain their
+existing output allocation and ownership contracts.</p>
+<p>Relational batches retain query preparation for the exact program and use
+<code>with_preparation_limits</code> to bound it separately from candidate work.
+<code>query_statistics()</code> reports completed preparation and workspace assignment;
+reused slots are not a count of successfully checked candidates. At most one
+contiguous range per configured worker owns a reusable workspace. Candidates
+inside a range run sequentially, so uneven costs can balance differently from
+per-candidate work stealing. Static and shared-round checks retain their separate
+preparation and resource contracts.</p>
+<p>After its first pull, a bounded <code>Candidates</code> iterator may expose an immutable
+<code>Arc&lt;PreparedQueries&gt;</code> through <code>prepared_queries()</code>. Pass that borrowed owner to
+<code>BatchOracle::check_prepared_batch_views</code> to avoid preparing the same program
+again. The oracle checks its own work, construction-byte and dense-layout limits
+before adopting it; incompatible preparation leaves ordinary construction in
+place. Candidate narrowing and membership checking keep separate workspaces.
+Ordinary independent lazy CPU sessions compose these operations automatically.
+The statistics distinguish oracle-local builds from external-owner adoptions;
+neither is a count of checked candidates.</p>
+<p><code>Candidates::next_selection</code> retains opaque gate atoms minted in canonical
+carrier order. The complete graph’s gate-ID list has that same order, so a
+selected token resolves by one checked array lookup. Its Program, tuple
+coordinates and position cannot be changed separately. The candidate stream checks its carrier
+bound and reserves handle storage before sharing each newly discovered token.
+Selections sort and deduplicate these positions with integer comparisons;
+this still costs <code>O(n log n)</code> comparisons for <code>n</code> selected handles. Manually
+supplied <code>Arc&lt;Atom&gt;</code> descriptions are located in the symbolic carrier during
+admission and then released. Their selections retain Program-bound coordinates,
+not the ingress payload. Both use one entry representation and the same checker,
+with checked static resolution. A <code>CarrierAtom</code> can also enter a selection directly
+without needing a representable full-carrier ordinal. Each token retains a Program
+handle and O(arity) coordinate words; indexed tokens additionally retain a position.
+Sharing payload therefore does not promise fewer bytes for every small candidate.</p>
+<p><code>GroundProgram::seed_words_into</code> writes a view directly into exact-width
+caller storage. Identity and width errors leave that storage unchanged; successful
+packing clears every complement and tail bit. It performs no implicit mapping
+registration or cache allocation. Graphs compiled from the same immutable
+program share canonical positions; independently admitted equal source remains
+foreign. The finite ordering law is
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GatePositions.lean"><code>GatePositions.retained_position_exact</code></a>,
+with Rust’s carrier construction, token ownership and machine bounds remaining
+explicit correspondence obligations.</p>
+<p>Calling <code>Check::into_stable_interpretation</code> on an accepted native check transfers
+its closure into an instance-bound receipt without copying atoms. Rejection
+returns the original check intact. The receipt’s <code>into_interpretation</code> explicitly discards its program
+association. Ordinary CPU session execution uses these consuming operations to
+deliver the owned closure after acceptance.</p>
+<p>Ordinary formula sessions have a separate bounded exact-completion executor.
+Its worker setting is distinct from the relational closure pool. Scalar outer
+candidate search does not become parallel simply because residual membership
+queries use Rayon.</p>
+<p>The formula CPU route with several region workers performs candidate generation
+and membership checking in each worker. Each worker removes the newest region
+from its own deque; an idle worker tries to steal the oldest region from a peer.
+Each deque has its own mutex. A thief skips a busy deque, and narrowing, payload
+cloning, reduct checks and model sends hold no deque lock. Slot growth uses
+fallible reservation before either split child is published; refusal leaves
+enumeration incomplete. Region and knowledge payload cloning remains infallible,
+so this boundary is not an end-to-end guarantee against allocation failure.</p>
+<p>The unresolved-region counter gains one when two children replace a parent and
+loses one when a region is resolved. Idle workers finish only at zero or an
+explicit stop. The resolution that reaches zero, a stop and a close each wake
+idle workers at once; otherwise an idle worker looks for a region again and
+polls cancellation about once a millisecond. Queued models are delivered before
+a worker’s stop is reported.
+Cancellation observed by the coordinator can end a pull immediately; explicit
+<code>stop</code> or dropping the enumerator joins any remaining workers.
+Local depth-first order bounds each deque’s live entries by the atom count plus
+one; capacity grows with the observed frontier instead of reserving that worst
+case for every worker. Joining releases abandoned entries and queue capacity,
+including after a partially successful worker start.</p>
+<p>The device route uses a different execution boundary: an owned Rayon pool
+produces a bounded candidate batch, joins, and then submits that batch for device
+membership checking. CPU residual completion has its own worker setting.
+The routes share semantic region readings and split laws, but their scheduling
+costs differ. A scaling comparison must record the producer and completion worker
+counts, batch size and observed membership route separately; increasing host
+workers does not change the number of GPU execution units.</p>
+<p><code>SolveConfig::gpu_formula_work</code> and <code>gpu_formula_rounds</code> bound device propagation
+per candidate, independently of CPU work and residual-search quotas. Their
+defaults match <code>FormulaLimits</code>: 100,000,000 charged units and 64 sweeps. A work
+limit below mandatory setup refuses before submission; zero sweeps still checks
+original roots and returns unresolved candidates for exact completion.
+<code>FormulaExecutionStatistics::gpu_limits</code> records the effective values when a
+device executor exists. Submitted batch/candidate counters survive readback
+failure, while existing decoded-result counters include only returned batches.
+<code>GpuFormulaOracle::last_submission_candidates</code> provides the underlying receipt
+after queue submission. It says nothing about completion; an unreturned batch’s
+shader work and sweeps remain unknown.</p>
+<p>The formula device graph keeps original node indices for child references and
+frozen truth, but uses dense domain positions only for non-Atom nodes. Atom
+leaves resolve to their semantic atom; repeated leaves alias the same position.
+The non-Atom positions are disjoint from semantic atoms and from one another.
+Initialization visits each original node and writes only those auxiliary
+positions; root constraints and enabled gates resolve through the same output
+mapping. An original-false gate still disables its connective and constrains its
+output to false. Removing unused leaf slots cannot re-enable that connective.</p>
+<p>This uses the variable-independent relation contract in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Propagation.lean"><code>Propagation.narrow_models_iff</code></a>
+and the alias-aware finite transfer in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateProjection.lean"><code>GateProjection</code></a>.
+The dense mapping’s coverage, injectivity outside leaf aliases, initialized
+address range and checked world offsets are Rust/WGSL correspondence obligations;
+those abstract laws do not certify the packing or physical execution.</p>
+<h3 id="the-gate-transfer"><a class="header" href="#the-gate-transfer">The gate transfer</a></h3>
+<p>Each enabled connective narrows its three positions through a finite gate
+transfer. <code>GateProjection::Enumerated</code>, the default, enumerates the relation’s
+rows; <code>GateProjection::Bitwise</code> is an explicit optional implementation. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/device.rs">device constructors</a> accept
+that selection, and the bitwise path assembles the unchanged shader scaffold
+with the <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/bitwise.wgsl">bitwise gate transfer</a>.</p>
+<p>A domain uses two bits: 0 is empty, 1 permits false, 2 permits true and 3
+permits either value. A gate returns the supported values at each position; the
+caller intersects them with the current physical domain slots. Left, right and
+output can alias, and five equality partitions cover the possible physical
+identities. The finite space has 960 transfers: three connectives, five
+partitions and 64 domain triples. It includes different observed masks at
+aliased positions, because separate atomic loads can observe intervening
+monotone narrowing; a coherent snapshot is not assumed.</p>
+<p>The bitwise transfer intersects eight-bit row sets and projects position
+supports, with no table lookup or per-row loop. The row index is <code>x + 2*y + 4*z</code>.
+And, Or and Implies masks are <code>0x87</code>, <code>0xe1</code> and <code>0xd2</code>. False/true position
+masks are <code>(0x55,0xaa)</code>, <code>(0x33,0xcc)</code> and <code>(0x0f,0xf0)</code>. Equality masks for
+left=right, left=output and right=output are <code>0x99</code>, <code>0xa5</code> and <code>0xc3</code>; all
+equal uses <code>0x81</code>. These encode relation rows, not candidate bit planes or the
+physical domain-storage representation. An independent reference enumerates the
+eight Boolean assignments, checks the connective, masks and aliases, and then
+projects support, without the hexadecimal masks.</p>
+<p>zetesis-wgpu’s <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/formula/projection.rs">projection tests</a>
+compare all 960 transfers with that reference, and check that intersecting a
+stale snapshot’s supports into smaller current domains keeps every current
+satisfying completion. Its <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/formula/gate_transfer/contract.rs">contract tests</a>
+check contraction, idempotence, the 10,935 ordered subset-domain pairs for
+monotonicity, each position’s exact support by a separate nested Boolean
+enumeration, the alias partition and the domain encoding.</p>
+<p>In <code>GateProjection</code>, <code>bitwise_support_exact</code> proves equality with independent
+Boolean enumeration for all 960 transfers, and <code>aliased_intersection_exact</code>
+preserves intersections at shared physical slots. These laws do not prove shader
+compilation, memory-model behavior, convergence or physical execution. The
+production <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/projection/tests.rs">projection tests</a>
+assemble both variants through their actual selector, verify that substitution
+changes only the gate-transfer region, validate both modules with pinned Naga and
+compare their device interfaces. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/formula_interface.rs">formula interface contracts</a>
+check the host buffer bindings, uniform layout and compute entry point. These
+portable contracts make no physical-device claim.</p>
+<p>A gate substitution must preserve the three atomic loads and intersections in
+order, M-false suppression, original truth evaluation, barriers, strict
+proper-subset constraints, epochs, result decoding, charged sweep work and round
+limits. It must not turn quiescence into acceptance or a residual into a
+completed membership decision. Interleaving safety requires monotonically
+shrinking domains for one immutable query, and a new candidate needs a fresh
+epoch and reset; exact local transfer alone does not establish the surrounding
+propagation or reduct-completion protocol. Physical qualification must exercise
+the actual selected implementation, including aliases, frozen masks, limits and
+faults. Performance comparison must keep candidates and limits matched, preserve
+scalar and Rayon baselines and separate setup from resident calls: enumeration
+may already be unrolled by a compiler, and extra bit operations need not be
+faster.</p>
+<h2 id="one-source-stream-independent-world-truth"><a class="header" href="#one-source-stream-independent-world-truth">One source stream, independent world truth</a></h2>
+<p><code>zetesis_cpu::lazy::check_with</code> owns the bounded round protocol and accepts an
+injected chunk evaluator. Its callback must implement exactly the consequence
+relation of <code>lazy::evaluate</code>: frozen gates, per-world positive truth, new head
+deltas and constraint violations. Matching output length or valid atom IDs
+alone cannot establish that semantic contract.</p>
+<p><code>check_with_source</code> additionally selects <code>SourceSelection::Union</code> or <code>Worlds</code>.
+<code>Union</code> offers joins over the union of derived snapshots. <code>Worlds</code> intersects
+membership masks to skip prefixes enabled in no current world. Every evaluator
+still checks each world’s positives and gates. Membership is rebuilt for each
+immutable round; neither policy changes candidate-carrier discovery.</p>
+<p><code>check_with_views</code>, <code>check_with_source_views</code> and
+<code>BatchOracle::check_shared_views</code> accept exact-size, cloneable iterators of
+borrowed seeds. Each clone must preserve occurrence order, length and program
+identity. This lets owned seeds and shared selections use the same source and
+world evaluator without materializing input trees. The batch interns each
+distinct demanded atom once. Canonically ordered IDs select borrowed rows from
+the committed catalog while callbacks append to a disjoint tail. No per-round
+Union Model or Worlds atom vector duplicates that payload. The visitor rebuilds
+borrowed relation grouping and lends one bounded instance of checked keys to its
+callback, without copying Atom/Value payload.</p>
+<p>The catalog grows on demand. Its IDs, frozen seeds, snapshots and pending deltas
+survive changes in packed-word width; catalog presence does not establish world
+truth. Successful source scans and evaluation commit all newly demanded
+identities, including underived heads in a final round with no new consequence.
+Finalization transfers the discovery map and shares its immutable canonical
+prefix with one Model catalog; each world retains its own selected positions. Sparse results retain false catalog atoms too.</p>
+<p><code>max_source_work</code> now charges seed initialization, identity comparisons and index
+maintenance, canonical row selection and catalog commits as well as source joins
+and borrowed-instance admission. One work owner spans the batch; these additional explicit
+charges can change resource stopping points without changing reduct semantics.
+Packed transport remains batch-owned and the injected evaluator keeps its own
+execution accounting.</p>
+<p><code>max_host_bytes</code> admits actual catalog/AVL/path and ordered-ID capacities plus
+their named growth overlap and canonical payload, plus requested truth, seed,
+delta, chunk, result, instance scratch and source membership/workspace storage.
+Final model positions have a requested-slot allowance; additional capacity from
+their geometrically growing Vec is excluded. Caller inputs, Arc envelopes,
+allocator overhead and rounding outside the measured catalog/ordered-ID
+capacities, and backend-private transport are also outside that envelope.
+The backend must bound its own transport; this is not a process RSS ceiling.</p>
+<p>Source scans also have an independent <code>max_scan_bytes</code> allowance, 128 MiB by
+default in both <code>source::ScanLimits</code> and lazy <code>Limits</code>. It admits actual borrowed
+row-directory and row-buffer capacities, assignment/cursor/undo scratch, and one
+offered instance’s key buffer, including buffer-growth overlap. The Program and
+catalog payload, world masks and callback-owned chunks remain under their own
+owners and bounds. The simultaneous host envelope therefore composes these
+independent allowances; <code>max_scan_bytes</code> is not taken from <code>max_instance_bytes</code>.
+That per-instance limit still measures referenced typed identity and key metadata,
+including repeated occurrences. A failed workspace admission offers no instance
+and establishes no completed source scan.</p>
+<p>Failure returns <code>Failure&lt;E&gt;</code> with its source, protocol or injected execution
+cause and accumulated progress. No completed checks are published from a batch
+whose required scan or evaluation is incomplete. Failure during identity commit
+retains discovered catalog counts and charged work but establishes no completed
+round. <code>Progress::mask_words</code> includes union-row selection probes under both
+policies and is part of source work, not extra work to add again. Optional masks may reduce offered
+instances while adding mask work and storage; no universal speedup follows.</p>
+<p>Completed lazy checks expose <code>closure()</code> for borrowing and <code>into_closure()</code> for
+ownership transfer. The latter also works on rejected checks: it discards the
+program association and verdict, returning a raw interpretation. Leastness and
+membership still depend on the injected evaluator’s exactness contract. Shared
+CPU and lazy GPU session adapters test acceptance before transferring the closure,
+preserving input occurrence order and leaving incomplete results on their typed
+error paths. Consuming a closure creates no stronger membership evidence.</p>
+<p><code>zetesis_wgpu::GpuLazyOracle</code> supplies a device-backed evaluator using the same
+protocol. The required adapter and resource validation remain runtime concerns.
+Its explicit source-selection wrapper does not change ordinary CLI defaults.
+Within one GPU batch, frozen seed uploads are reused while layout and buffer
+ownership agree. Positive snapshots are reused only within their owning round.
+Catalog-width growth or buffer replacement invalidates the corresponding
+receipt. Source records and output resets still occur for each chunk; completion
+remains synchronous before the coordinator reuses its chunk storage.
+The <a href="../architecture/execution.html">execution chapter</a> explains why per-world
+isolation and whole-round commits are semantic requirements.</p>
+<h2 id="borrowed-gpu-candidate-inputs"><a class="header" href="#borrowed-gpu-candidate-inputs">Borrowed GPU candidate inputs</a></h2>
+<p><code>GpuOracle::check_batch_views</code> accepts a cloneable exact-size iterator of <code>SeedView</code>
+values for an already compiled <code>GroundProgram</code>. An owned batch maps <code>Seed::view</code>;
+a shared batch maps <code>SeedSelection::view</code>. The existing <code>check_batch</code> method
+uses this same implementation. Views retain the original program identity and
+complete true set without copying atom payloads or allocating a view vector.
+Packing writes directly into each candidate’s slice of one checked host mask
+buffer, preserving occurrence order and zero tail bits. The batch byte allowance
+includes that buffer; it no longer needs a separate per-candidate word scratch.</p>
+<p><code>GpuLazyOracle::check_batch_views</code> and <code>check_batch_with_source_views</code> supply the same views
+to the CPU library’s lazy round coordinator and use the existing device chunk
+evaluator. They preserve the source-selection, final coverage, cancellation and
+failure contracts of the owned-seed methods. View construction does not trigger
+GPU discovery or static grounding. Lazy batch atom IDs remain independent of
+any compiled graph’s dense IDs.</p>
+<p>Lazy device upload reuse follows the coordinator’s immutable inputs.
+<code>Chunk::round_index()</code> is local to its invoking batch; seeds are frozen for that
+batch and snapshots for that round. The private batch-owned transport combines
+this index with word width, world count and actual buffer retention. Growth or
+replacement forces fresh writes. No pointer, global index or copied host mask
+serves as a cache key. The upload receipt is installed after queue submission;
+an interrupted read discards that transport. Unknown queue completion or failed
+mapping invalidates the context; a late cancellation/deadline after established
+completion, successful mapping and released access preserves a healthy context
+only after scopes drain and device health is checked. It still returns the
+original stop without successful output. Each
+new public batch starts fresh, even when its round numbers and layout match.</p>
+<p>Actual upload-byte statistics omit those reused prefixes; the byte ceiling
+continues to include the conservative full active-input host allowance and all
+retained device capacity. Logical source work and device instance counts are
+unchanged. The immutable-round law remains the correctness premise; host metadata
+and GPU buffer ownership/queue order must implement it, and physical behavior
+requires qualification. Dispatch/readback remains synchronous at this boundary.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../rust/reducts.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../rust/finite-tables.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../rust/reducts.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../rust/finite-tables.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

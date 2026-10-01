@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ObjectiveBoundErrorKind","ObjectiveBoundResource"],"struct":["ObjectiveBound","ObjectiveBoundError","ObjectiveBoundLimits","ObjectiveBoundStatistics","ObjectivePlan","ObjectivePlanLimits"]};

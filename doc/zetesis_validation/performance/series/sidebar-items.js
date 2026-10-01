@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CAPTURE_BYTES","CELLS","CORPUS_CASES"],"enum":["Native","ReadError","ViewError"],"fn":["compare","limits","native_answers","read_compare","workloads"],"struct":["Breakdown","Cell","Comparison","Labelled","Passed","PhaseTiming","ProfileRow","Provenance","Reference","ReportSource","Scoreboard","Timing","Verdict"]};

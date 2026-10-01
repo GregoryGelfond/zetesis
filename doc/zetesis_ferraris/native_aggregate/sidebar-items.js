@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Bound","ErrorKind","Function","Phase","Resource","Value"],"struct":["AdmissionLimits","Eligibility","EligibilityLimits","Error","Evaluation","Group","GroupData","GroupRef","Guard","Key","Reduction","ReductionLimits","Statistics","Tuple","Tuples"]};

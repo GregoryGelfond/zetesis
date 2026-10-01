@@ -1,0 +1,559 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>From answer-set semantics to exact transforms - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/architecture/alignment.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="from-answer-set-semantics-to-exact-transforms"><a class="header" href="#from-answer-set-semantics-to-exact-transforms">From answer-set semantics to exact transforms</a></h1>
+<p>zetesis has two complementary vocabularies. The semantic layer speaks about
+programs, interpretations, satisfaction, reducts and answer sets. The execution
+layer speaks about relations, masks, reductions, fixed points and batches. The
+connection between them is the architecture: each execution operation must
+implement a stated logical operation, and composition must preserve its subject
+and completion conditions.</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="alignment.svg" alt="The semantic contract maps to execution representations and exact transforms, which are scheduled on the host or GPU."><span class="img-wrapper"><img src="alignment.svg" alt="The semantic contract maps to execution representations and exact transforms, which are scheduled on the host or GPU."></span></label></p>
+<p>The vertical arrows indicate representation obligations. They are not claims
+that every Rust or WGSL correspondence has been formally proved. The horizontal
+semantic path remains the same across execution strategies.</p>
+<p>The pseudocode specifies finite, admitted inputs. Every bounded operation must
+either finish or return an explicit stop; a stop propagates as unfinished work.
+It must never be interpreted as an empty result, a false formula or exhaustion.</p>
+<h2 id="what-the-transformer-inspiration-means"><a class="header" href="#what-the-transformer-inspiration-means">What the transformer inspiration means</a></h2>
+<p>The hardware opportunity is to express repeated logical work through a small
+algebra of composable operations on many interpretations and shared immutable
+program data. Packing truth values, retaining reusable representations, fusing
+equivalent operations and evaluating independent rows can make that work suitable
+for modern CPUs and GPUs.</p>
+<p>Here a <strong>transform</strong> is an exact operation, not a trained approximation. There
+are no learned weights, attention scores or floating-point truth values. In the
+Lean foundation, a <code>Transformer</code> is specifically a function from a set of atoms
+to a set of atoms. Not every execution operation has that type: a join binds
+tuples, a satisfaction test returns truth, and a frozen-reduct constructor retains
+an interpretation-dependent view. Their individual contracts make composition
+meaningful.</p>
+<p>This does not require every operation to become dense matrix multiplication.
+Sparse joins, bitwise operations and integer reductions often preserve the
+problem’s structure more directly. Efficient scheduling follows the representation
+and its dependencies; it does not change the answer-set definition.</p>
+<p>The pseudocode below exposes those compositions before discussing scheduling.
+<code>Bind</code>, <code>Filter</code>, <code>Gate</code> and <code>Project</code> are actual definitions in the lifted Lean
+model. Names such as <code>FoldDAG</code> and <code>RootValues</code> describe operations in the Rust
+implementation; they do not assert that all stages already share an executable
+combinator API. Relations, atom sets, truth arrays and completion evidence remain
+different types of value.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>ASP operation</th><th>Execution interpretation</th><th>Where to read the implementation</th></tr>
+</thead>
+<tbody>
+<tr><td>Instantiate a rule body</td><td>Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs"><code>source::scan</code></a>; <a href="grounding.html">source preparation</a></td></tr>
+<tr><td>Determine the normal reduct</td><td>Evaluate positive/negative gates against one immutable seed</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs"><code>check_static</code></a></td></tr>
+<tr><td>Derive positive consequences</td><td>Test enabled bodies, union their heads, repeat until closed</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs"><code>check_static</code></a>; <a href="../rust/parallel.html">lazy batches</a></td></tr>
+<tr><td>Reconstruct terminal positive definitions</td><td>Join true rows from a verified base answer, project heads, union with that answer</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal/reconstruct.rs"><code>TerminalReconstruction</code></a>; <a href="grounding.html#terminal-definition-analysis">applicability and extension law</a></td></tr>
+<tr><td>Test formula satisfaction</td><td>Evaluate an acyclic Boolean graph; require every asserted root</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs"><code>models</code></a></td></tr>
+<tr><td>Compute least consequences of positive atomic-head formulas</td><td>Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs"><code>PositivePlan</code></a></td></tr>
+<tr><td>Construct and reuse a formula reduct</td><td>Freeze candidate truth at every graph node; mask candidate-false nodes during later queries</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs"><code>FrozenReduct</code></a></td></tr>
+<tr><td>Reuse reduct structure across candidates</td><td>Under the clauses method, compile one parameterized graph and refresh authenticated candidate truth and membership inputs; under the regions method, read the original graph under each candidate’s mask</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs"><code>PreparedReduct</code></a>; <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/regions.rs"><code>ReductQuery</code></a></td></tr>
+<tr><td>Establish subset minimality</td><td>Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md"><code>zetesis-sat</code></a>; <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md"><code>GpuFormulaOracle</code></a></td></tr>
+<tr><td>Evaluate an aggregate</td><td>Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs">Source formula lowering</a>; <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates">native aggregate operations</a></td></tr>
+<tr><td>Score an answer</td><td>Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs">Objective specialization</a>; <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs">cost evaluation</a></td></tr>
+<tr><td>Check several proposals</td><td>Share program data while keeping each interpretation, reduct and verdict separate</td><td><a href="../rust/parallel.html"><code>BatchOracle</code></a>; <a href="execution.html#immutable-rounds-and-commit-boundaries">commit boundaries</a></td></tr>
+</tbody>
+</table>
+</div>
+<p>These are capability mappings. Ordinary relational solving supports lazy source
+rounds, Rayon and GPU closure. Automatic formula admission can defer terminal
+positive definitions, joining true rows after base membership to reconstruct each
+full original answer. Other rules remain eager; explicit lazy CPU execution can
+compose core answer enumeration with streamed
+constraint satisfaction. Formula solving combines host candidate production with membership checking on the selected
+backend. Explicit GPU execution with automatic membership policy uses complete
+tight certificates when available; other formulas use GPU propagation and exact
+host completion.
+With multiple workers, joined Rayon rounds produce bounded candidate batches
+before device checking. Native aggregate reduction remains an explicit library
+capability rather than an automatic formula-dispatch operation.</p>
+<h2 id="positive-inference-is-a-composition-with-a-fixed-point"><a class="header" href="#positive-inference-is-a-composition-with-a-fixed-point">Positive inference is a composition with a fixed point</a></h2>
+<p>Consider <code>reachable(Y) :- reachable(X), open(X,Y), not blocked(Y).</code>
+Binding joins <code>reachable</code> and <code>open</code>; a candidate-fixed gate checks <code>blocked</code>;
+projection produces <code>reachable(Y)</code>. Union combines consequences from all rules.
+For a fixed candidate <code>M</code>, write the resulting consequence operation as <code>T_M</code>.</p>
+<p>The four primitives have separate subjects. <code>Bind(t)</code> maps an interpretation to
+the substitutions whose positive antecedents hold. <code>Filter(t)</code> retains bindings
+satisfying the template’s scalar conditions. <code>Gate(t, M)</code> retains bindings whose
+true/false gates agree with the immutable candidate. <code>Project(t)</code> maps surviving
+bindings to head atoms, coalescing duplicate heads at the set level.</p>
+<p>With composition read from right to left, the normal-program pipeline is:</p>
+<pre><code class="language-text">Rows(t, M)          = Gate(t, M) ∘ Filter(t) ∘ Bind(t)
+RuleTransform(t, M) = Project(t) ∘ Rows(t, M)
+T_M(X)              = Union { RuleTransform(t, M)(X) | t is a head rule of P }
+Gamma(P, M)         = Least(T_M)
+
+ConstraintTriggered(c, M, X) = Exists(Rows(c, M)(X))
+ConstraintsOK(P, M, X)       = NOT Exists { c | c is a constraint of P
+                                             AND ConstraintTriggered(c, M, X) }
+
+NormalMembership(P, M) = Equal(Gamma(P, M), M) AND ConstraintsOK(P, M, M)
+</code></pre>
+<p>This is <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Lifted.lean">the lifted rule composition</a>,
+followed by the closure and constraint condition in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Semantics.lean"><code>Semantics.stable_iff_gamma</code></a>.
+Fixing <code>M</code> supplies the normal reduct by fixing its gates; it need not allocate
+a second program. Constraints reuse the binding/filter/gate pipeline but finish
+with an existential reduction instead of head projection. Facts contribute
+without positive antecedents. The binding relations specify valid substitutions;
+the notation does not require materializing their entire carrier.</p>
+<p>For the positive normal reduct, <code>T_M</code> is monotone. Its least closure is realized
+by the inflationary recurrence:</p>
+<pre><code class="language-text">X_0     = empty interpretation
+X_(n+1) = Union(X_n, T_M(X_n))
+Gamma(P, M) = X_n when a complete round establishes X_(n+1) = X_n
+</code></pre>
+<p><strong>Invariant:</strong> <code>X</code> is contained in the least closure of the frozen positive
+rules. Every changing round adds an atom; a finite carrier bounds such rounds.
+An unchanged <em>complete</em> scan proves closure. Together these facts establish
+leastness; equality with <code>M</code> supplies the answer-set test.</p>
+<p>The bounded implementation lifts these logical operations into explicit
+completion results. Only a completed membership decision can be classified:</p>
+<pre><code class="language-text">Completed(true)  =&gt; Accepted(M)
+Completed(false) =&gt; Rejected
+Stopped(reason) =&gt; Unfinished(reason)
+</code></pre>
+<p>A witnessed constraint can refute membership immediately. An empty <em>prefix</em> of
+its bindings cannot establish that no violation exists. Likewise, a source scan
+must cover the current <code>X</code> and frozen <code>M</code> before its unchanged output certifies
+closure. These obligations belong to the primitives’ realization, not just to
+the outer loop.</p>
+<p>The relational implementation can propose only a <strong>gate seed</strong>, compute its
+closure <code>X</code>, and compare <code>X</code>’s gate projection with that seed:</p>
+<pre><code class="language-text">X = Gamma(P, z)
+AcceptSeed(P, S, z) = Equal(X intersection S, z) AND ConstraintsOK(P, z, X)
+</code></pre>
+<p>Here <code>S</code> contains every gate atom, and <code>z</code> denotes the gates selected true; other
+atoms of <code>S</code> are selected false. This avoids guessing every derived atom. The
+resulting <code>X</code>, not the seed alone, is the answer interpretation.
+Eager scans and lazy joins implement this same contract. Shared lazy scans may
+offer instances from a union of worlds, but each world must recheck its own
+antecedents before deriving a head.</p>
+<p>This least-closure procedure applies to the admitted normal profile. A positive
+disjunctive program may have several incomparable minimal models, so the general
+oracle below retains subset minimality.</p>
+<h2 id="satisfaction-and-the-reduct-share-one-graph"><a class="header" href="#satisfaction-and-the-reduct-share-one-graph">Satisfaction and the reduct share one graph</a></h2>
+<p>Let the original finite theory <code>T</code> be a directed acyclic graph whose children
+precede their parents. A node denotes an atom, falsum, conjunction, disjunction
+or implication. Classical evaluation composes local truth operations with a
+topological fold and a reduction over asserted roots. Define the local operation
+using the already computed child values <code>V</code>:</p>
+<pre><code class="language-text">NodeTruth(I, Atom(a),             V) = Member(I, a)
+NodeTruth(I, Falsum,              V) = false
+NodeTruth(I, And(left,right),     V) = V[left] AND V[right]
+NodeTruth(I, Or(left,right),      V) = V[left] OR V[right]
+NodeTruth(I, Implies(left,right), V) = NOT V[left] OR V[right]
+
+Truth(T, I)  = FoldDAG(NodeTruth(I), T)
+Models(T, I) = All(RootValues(T, Truth(T, I)))
+
+frozen = Truth(T, M)                         // immutable, bound to T and M
+ReductNode(J, node, V) = NodeTruth(J, node, V) AND frozen[node]
+ReductTruth(T, M, J)   = FoldDAG(ReductNode(J), T)
+ModelsReduct(T, M, J)  = All(RootValues(T, ReductTruth(T, M, J)))
+
+Countermodel(T, M, J) = ProperSubset(J, M) AND ModelsReduct(T, M, J)
+GeneralMembership(T, M) = All(RootValues(T, frozen))
+                         AND NOT Exists(J =&gt; Countermodel(T, M, J))
+</code></pre>
+<p><code>FoldDAG</code> visits children before their parents; <code>RootValues</code> gathers the asserted
+roots and <code>All</code> reduces their truth values. The reduct changes the node operation
+by composing it with the fixed candidate mask. Its parents consume the <em>masked</em>
+child values. Masking only after an ordinary evaluation of the whole graph would
+not implement this definition. Default negation is implication to falsum and
+uses the same construction; double negation cannot be collapsed to an atom.</p>
+<p><strong>Invariant:</strong> after each graph step, the stored value is that node’s classical
+truth, or its reduct truth when a frozen mask is supplied. The mask belongs to
+the original <code>M</code> for the entire query. The countermodel search ranges over
+<code>J ⊊ M</code>, excluding <code>M</code> itself; its exhaustion must establish coverage of that
+space. For an empty <code>M</code>, there are no proper subsets. After candidate satisfaction
+has completed successfully, the existential question has three distinct outcomes:</p>
+<pre><code class="language-text">Found(J)        =&gt; RejectedWithCounterexample(J)
+Exhausted       =&gt; Accepted(M)
+Stopped(reason) =&gt; Unfinished(reason)
+</code></pre>
+<p>The small reference checker explicitly enumerates subsets. Ordinary solving
+uses propagation and native search to discharge the same existential question.
+On the GPU, Boolean domains can be narrowed by many local gate operations. A
+propagation fixed point may leave choices unresolved, so it returns residual
+work for exact host completion. A class certificate can justify a cheaper exact
+membership test when its premises hold.</p>
+<p>The ordinary host checker can compile the reduct’s structure once. Under
+<code>J subset M</code>, an atom’s reduct value is simply <code>Member(J, a)</code>; conjunction and
+disjunction combine their reduct children. Only implication needs its original
+truth parameter as an additional guard:</p>
+<pre><code class="language-text">ParametricNode(J, Atom(a),             R) = Member(J, a)
+ParametricNode(J, Falsum,              R) = false
+ParametricNode(J, And(left,right),     R) = R[left] AND R[right]
+ParametricNode(J, Or(left,right),      R) = R[left] OR R[right]
+ParametricNode(J, Implies(left,right), R) = frozen[node]
+                                          AND (NOT R[left] OR R[right])
+</code></pre>
+<p>This is another realization of the same reduct relation, with the subset
+premise made explicit. Under the clauses method <code>PreparedReduct</code> encodes it
+with candidate membership parameters and a strict-subset condition; under the
+regions method <code>ReductQuery</code> walks the candidate’s subsets as a region tree
+with the same mask. Each query receives original truth
+through a subject-bound <code>FormulaEvaluation</code>, resets its search state, and
+independently validates any returned countermodel. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md">parametric correspondence</a> explains
+why the missing explicit And/Or masks are valid under the stated premise.</p>
+<p>For positive atomic-head producers, <code>PositivePlan</code> instead computes least
+consequences before proposing an answer. Its forward incidence graph connects
+atoms to their body occurrences and completed bodies to head atoms. An And
+vertex waits for both child occurrences, an Or vertex for one. Facts and truth
+constants seed propagation. Each vertex becomes true at most once; each outgoing
+incidence is visited at most once. Positive cycles need a supporting seed and do not
+force repeated scans of the whole graph. Original constraints are checked on
+the completed least interpretation; they do not become producers. This is a
+specialized implementation justified by reduct minimality, not a different
+answer-set definition.</p>
+<p>The opportunities for parallelism have different dependencies: candidates and
+frozen-subset queries are independent, while nodes depend on their children and
+closure rounds depend on earlier consequences. Parallel evaluation must respect
+those dependencies. Reusing a frozen mask is useful even on one CPU thread.</p>
+<h2 id="ordered-comparisons-and-objective-reductions"><a class="header" href="#ordered-comparisons-and-objective-reductions">Ordered comparisons and objective reductions</a></h2>
+<p>Aggregate activity, its measured value and a head’s positive permission are
+separate operations. Complete tuple keys coalesce eligible occurrences before
+a count, sum or extremum is taken. A bound tests that result; it does not supply
+support for a head atom. Signed and Boolean operands keep their own activity
+contract throughout this composition.</p>
+<p>For a count or sum, every possible measure is numeric. Against a nonnumeric
+logical bound, its order is the same for every complete tuple selection.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs"><code>numeric_comparison</code></a>
+uses that separation to produce a constant comparison instead of a numeric
+threshold. This requires agreement across all tuple masks, including frozen
+queries; classical truth in one candidate would not suffice. Input validation
+and finite binding work still occur. The affected group does not supply a
+numeric count-plan certificate.</p>
+<p>Objective evaluation is a different reduction. For a nonconstant admitted priority
+expression, grounding resolves the weight, priority, explicit tuple and positive
+condition from one binding. It retains complete rows with fixed integer
+priorities and leaves the answer-set theory unchanged. At each checked answer,
+the semantic composition is:</p>
+<pre><code class="language-text">ActiveRows(M) = Filter(row =&gt; ConditionTrue(row, M), PreparedObjectiveRows)
+Keys(M)       = Distinct { (Normalize(row.weight), row.priority, row.tuple)
+                          | row in ActiveRows(M) }
+Cost(M, p)    = Sum { key.weight | key in Keys(M), key.priority = p }
+Score(M)      = [ Cost(M, p) | p in the fixed descending priority layout ]
+</code></pre>
+<p>The layout comes from complete admitted binding evidence, not from the rows
+active in one answer: a priority with zero cost stays present. Weight and priority
+must both evaluate to numbers before the row contributes a key. Priority and weight
+cannot be projected independently and recombined. The
+<a href="../reference/language.html#objectives-and-observations">worked source example</a>
+shows why a smaller sum across all priorities need not be a better score.</p>
+<p>The current source specialization and score evaluator run on the host with
+explicit work, allocation and arithmetic bounds. Their composition describes
+exact logical reductions; it does not claim GPU objective execution or admission
+of every aggregate-generated priority. The corresponding
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedBounds.lean"><code>OrderedBounds</code></a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean"><code>ObjectivePriorities</code></a>
+laws state the complete-mask and complete-row hypotheses separately.</p>
+<h2 id="batch-the-question-preserve-every-obligation"><a class="header" href="#batch-the-question-preserve-every-obligation">Batch the question, preserve every obligation</a></h2>
+<p>Candidate generation and membership checking have separate completeness
+requirements. A source generator can reduce materialization, and a search
+generator can avoid already excluded interpretations, provided neither loses an
+answer of the original program.</p>
+<p>The scheduling layer applies the appropriate membership composition to
+independent subjects:</p>
+<pre><code class="language-text">BatchCheck(P, proposals) = Map(proposal =&gt; Check(P, proposal), proposals)
+</code></pre>
+<p>This denotes an independent map, not a new uniform backend API. It does not
+require every backend to implement an identical loop or commit granularity.
+Completed verdicts are committed to their corresponding proposals; interrupted
+or uncompleted obligations remain pending and prevent an exhaustion claim.
+Generator feedback must preserve every answer still to be found. Candidate rows
+cannot share truth by accident. A rejected proposal, a pending query and a committed answer remain
+different states. General subset blocking is not licensed merely by finding an
+answer: for example, <code>{a}.</code> admits both the empty answer and <code>{a}</code>. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Feedback.lean"><code>Feedback</code> laws</a>
+prove both: feedback preserves every stable model still to be found
+(<code>feedback_preserves_stability</code>, <code>all_feedback_preserves_stability</code>), and <code>{a}.</code>
+has the empty and the full answer, comparable by inclusion
+(<code>unit_choice_empty_stable</code>, <code>unit_choice_full_stable</code>,
+<code>unit_choice_comparable_stable_models</code>). The laws are denotational; they claim no
+correspondence with Rust.</p>
+<p>Objective selection and display follow checked answers. Complete unrestricted
+enumeration plus complete retention can construct a <code>WorldView</code>; optimal ties
+and projected displays have different contracts. Batched execution must account
+for every proposal before claiming exhaustion.</p>
+<h2 id="the-correspondence-in-lean"><a class="header" href="#the-correspondence-in-lean">The correspondence in Lean</a></h2>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Lifted.lean"><code>Lifted.lean</code></a>
+defines the four rule primitives and <code>RuleTransform</code>. <code>composition_exact</code> equates
+their composition with direct rule consequence; <code>ruleTransform_monotone</code> proves
+growth under positive input. <code>family_exact</code>, <code>materialized_constraint_exact</code> and
+<code>lazy_step_exact</code> require source coverage for the actual candidate and consequence
+snapshot. An exhausted materialization queue alone is insufficient.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Transformers.lean"><code>Transformers.lean</code></a>
+defines composition, parallel union, filters, relational image, least closure
+and world-indexed batches. <code>finiteIter_sound</code> and <code>finiteIter_exact_if_closed</code>
+capture the positive-inference argument. <code>least_batch</code> states that independent
+worlds retain their individual least closures. <code>fusion_preserves_least</code> requires
+pointwise equivalence of the substituted operations, not agreement on one run.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Semantics.lean"><code>Semantics.stable_iff_exists_seed</code></a>
+connects accepted seed projection and its closure to answer sets, under the
+explicit gate-carrier hypothesis.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/NormalFerraris.lean"><code>NormalFerraris.ferraris_answer_set_iff_closure</code></a>
+connects normal-rule closure to formula answer-set semantics.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Ferraris.lean"><code>Ferraris.lean</code></a>
+defines satisfaction, the formula reduct and subset minimality; the
+<a href="../lean/theorems.html">theorem map</a> links the execution and coverage laws.
+These are mathematical bridges. Establishing that concrete source lowering,
+packed layouts, Rust operations and shaders implement them remains part of the
+<a href="../lean/correspondence.html">refinement boundary</a>.</p>
+<h2 id="relation-to-clingo"><a class="header" href="#relation-to-clingo">Relation to clingo</a></h2>
+<p>clingo combines the gringo grounder with clasp. clasp is an ASP solver whose
+primary algorithm uses conflict-driven nogood learning; it also provides
+multithreaded search and dedicated cardinality/weight propagation. Its use of
+Boolean solving techniques does not reduce its semantics to ordinary SAT.
+See Potassco’s descriptions of <a href="https://potassco.org/clingo/">clingo</a> and
+<a href="https://potassco.org/clasp/">clasp</a>.</p>
+<p>zetesis makes candidate coverage and exact reduct membership explicit composition
+boundaries, then maps their operations to shared source scans, packed data,
+Rayon tasks and wgpu batches. This separation is the basis for its hardware
+experiments and proof obligations. Parallelism alone is not a distinction from
+clasp, and this comparison does not classify every earlier ASP architecture.
+The <a href="grounding-comparison.html">grounding comparison</a> explains the materialization
+boundary; measured benefits depend on the input and executed profile.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/semantics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/grounding.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/semantics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/grounding.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-validation/src/corpus_comparison.rs`."><title>corpus_comparison.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis_validation" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_validation/</div>corpus_comparison.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Complete comparison of the pinned 94-case non-clingcon corpus.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Loading verifies the selected source view before invoking trusted solvers.
+<a href=#4 id=4 data-nosnippet>4</a>//! Reference and native complete displayed-model multisets, costs and source
+<a href=#5 id=5 data-nosnippet>5</a>//! contracts are checked independently. Hidden atoms are not reconstructed.
+<a href=#6 id=6 data-nosnippet>6</a>//! Requests for physical formula execution additionally check retained route
+<a href=#7 id=7 data-nosnippet>7</a>//! telemetry; a requested backend alone never establishes physical execution.
+<a href=#8 id=8 data-nosnippet>8</a>//!
+<a href=#9 id=9 data-nosnippet>9</a>//! Execution is sequential. The clean source view uses the defaults of
+<a href=#10 id=10 data-nosnippet>10</a>//! [`crate::examples::Limits`]. The original-source view caps its manifest at
+<a href=#11 id=11 data-nosnippet>11</a>//! 4 MiB and each source at 1 MiB. Each child has a timeout and combined output
+<a href=#12 id=12 data-nosnippet>12</a>//! allowance. At most
+<a href=#13 id=13 data-nosnippet>13</a>//! 188 child captures are retained, so raw capture space is O(94 * allowance),
+<a href=#14 id=14 data-nosnippet>14</a>//! plus parsed answers and JSON rendering. There is no campaign-wide deadline.
+<a href=#15 id=15 data-nosnippet>15</a>//! Executable selection preserves per-invocation PATH lookup for bare names;
+<a href=#16 id=16 data-nosnippet>16</a>//! absolute paths bypass lookup. Environment variables are inherited.
+<a href=#17 id=17 data-nosnippet>17</a>//!
+<a href=#18 id=18 data-nosnippet>18</a>//! Linux/macOS use the shared bounded process-group capture. Other platforms
+<a href=#19 id=19 data-nosnippet>19</a>//! retain the command's direct-child adapter, which has weaker cleanup behavior
+<a href=#20 id=20 data-nosnippet>20</a>//! and a smaller capture report. Neither path proves descendant quiescence.
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">mod </span>config;
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">mod </span>corpus;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">mod </span>decision;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">mod </span>execution;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">mod </span>exit;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">mod </span>normalize;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">mod </span>record;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">mod </span>runner;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">mod </span>view;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">mod </span>capture;
+<a href=#32 id=32 data-nosnippet>32</a>
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub use </span><span class="kw">crate</span>::selected::Oracle <span class="kw">as </span>NativeOracle;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub use </span>config::{NativeInvocation, Request};
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">pub use </span>decision::{CaptureFailure, Decision, Producer};
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">pub use </span>record::{CaseResult, PhysicalStatus, Report};
+<a href=#37 id=37 data-nosnippet>37</a>
+<a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// Failure before a corpus comparison can produce per-source outcomes.
+<a href=#39 id=39 data-nosnippet>39</a></span><span class="attr">#[derive(Debug)]
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">pub enum </span>Error {
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="doccomment">/// The per-child timeout or output allowance is zero.
+<a href=#42 id=42 data-nosnippet>42</a>    </span>InvalidLimits,
+<a href=#43 id=43 data-nosnippet>43</a>    <span class="doccomment">/// The source view could not establish the pinned corpus contract.
+<a href=#44 id=44 data-nosnippet>44</a>    </span>Corpus(String),
+<a href=#45 id=45 data-nosnippet>45</a>}
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">impl </span>std::fmt::Display <span class="kw">for </span>Error {
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+<a href=#48 id=48 data-nosnippet>48</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#49 id=49 data-nosnippet>49</a>            <span class="self">Self</span>::InvalidLimits =&gt; f.write_str(<span class="string">"timeout and output ceilings must be positive"</span>),
+<a href=#50 id=50 data-nosnippet>50</a>            <span class="self">Self</span>::Corpus(error) =&gt; f.write_str(error),
+<a href=#51 id=51 data-nosnippet>51</a>        }
+<a href=#52 id=52 data-nosnippet>52</a>    }
+<a href=#53 id=53 data-nosnippet>53</a>}
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>Error {}
+<a href=#55 id=55 data-nosnippet>55</a>
+<a href=#56 id=56 data-nosnippet>56</a><span class="doccomment">/// Load and compare the complete fixed corpus, retaining unsuccessful case results.
+<a href=#57 id=57 data-nosnippet>57</a>///
+<a href=#58 id=58 data-nosnippet>58</a>/// `on_case` observes each completed case in manifest order and performs no role
+<a href=#59 id=59 data-nosnippet>59</a>/// in acceptance. It must return promptly and must not panic, mutate corpus
+<a href=#60 id=60 data-nosnippet>60</a>/// inputs or the execution environment, or interfere with child processes. It runs outside each invocation's
+<a href=#61 id=61 data-nosnippet>61</a>/// deadline. Presentation failures belong to the caller; they must not be
+<a href=#62 id=62 data-nosnippet>62</a>/// represented as answer-set decisions. Pass `|_| {}` for silent operation.
+<a href=#63 id=63 data-nosnippet>63</a>/// The library performs no global stdout/stderr writes or report publication.
+<a href=#64 id=64 data-nosnippet>64</a>/// Pending cleanup stops further cases and receives one bounded retry; any
+<a href=#65 id=65 data-nosnippet>65</a>/// unresolved direct-child ownership is explicitly recorded as abandoned.
+<a href=#66 id=66 data-nosnippet>66</a>///
+<a href=#67 id=67 data-nosnippet>67</a>/// # Errors
+<a href=#68 id=68 data-nosnippet>68</a>/// Refuses zero process limits or a source view that fails corpus loading.
+<a href=#69 id=69 data-nosnippet>69</a>/// Invocation/output failures are retained in [`Report`] instead.
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub fn </span>run(request: <span class="kw-2">&amp;</span>Request, on_case: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>CaseResult)) -&gt; <span class="prelude-ty">Result</span>&lt;Report, Error&gt; {
+<a href=#71 id=71 data-nosnippet>71</a>    run_with_invocation(request, NativeInvocation::Legacy, on_case)
+<a href=#72 id=72 data-nosnippet>72</a>}
+<a href=#73 id=73 data-nosnippet>73</a>
+<a href=#74 id=74 data-nosnippet>74</a><span class="doccomment">/// Compare the corpus using an explicitly selected native command protocol.
+<a href=#75 id=75 data-nosnippet>75</a>///
+<a href=#76 id=76 data-nosnippet>76</a>/// `Solve` requests structured full-model records and compares their selected
+<a href=#77 id=77 data-nosnippet>77</a>/// displays with clingo. Hidden full atoms are validated by the native decoder,
+<a href=#78 id=78 data-nosnippet>78</a>/// but are not inferred for clingo. Process, callback and cleanup contracts are
+<a href=#79 id=79 data-nosnippet>79</a>/// identical to [`run`]. The legacy entry point retains its original protocol.
+<a href=#80 id=80 data-nosnippet>80</a>/// Structured decoding keeps the native decoder's default atom/value ceilings;
+<a href=#81 id=81 data-nosnippet>81</a>/// its input and selected-display spelling are bounded by the captured input
+<a href=#82 id=82 data-nosnippet>82</a>/// and configured capture allowance, respectively.
+<a href=#83 id=83 data-nosnippet>83</a>///
+<a href=#84 id=84 data-nosnippet>84</a>/// # Errors
+<a href=#85 id=85 data-nosnippet>85</a>/// Refuses invalid process limits or an unverified corpus before execution.
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub fn </span>run_with_invocation(
+<a href=#87 id=87 data-nosnippet>87</a>    request: <span class="kw-2">&amp;</span>Request,
+<a href=#88 id=88 data-nosnippet>88</a>    invocation: NativeInvocation,
+<a href=#89 id=89 data-nosnippet>89</a>    on_case: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>CaseResult),
+<a href=#90 id=90 data-nosnippet>90</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Report, Error&gt; {
+<a href=#91 id=91 data-nosnippet>91</a>    run_with_cancellation(
+<a href=#92 id=92 data-nosnippet>92</a>        request,
+<a href=#93 id=93 data-nosnippet>93</a>        invocation,
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw-2">&amp;</span>std::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>),
+<a href=#95 id=95 data-nosnippet>95</a>        on_case,
+<a href=#96 id=96 data-nosnippet>96</a>    )
+<a href=#97 id=97 data-nosnippet>97</a>}
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a><span class="doccomment">/// Compare the corpus with cooperative cancellation of launches and captures.
+<a href=#100 id=100 data-nosnippet>100</a>///
+<a href=#101 id=101 data-nosnippet>101</a>/// The caller owns a monotone cancellation flag; this library installs no global
+<a href=#102 id=102 data-nosnippet>102</a>/// signal handler. Source verification and callbacks are finite operations but
+<a href=#103 id=103 data-nosnippet>103</a>/// are not preempted. Once cancellation is observed, no later solver starts.
+<a href=#104 id=104 data-nosnippet>104</a>/// Active captures retain partial output and their normal cleanup evidence;
+<a href=#105 id=105 data-nosnippet>105</a>/// completed earlier cases remain unchanged. [`Report::cancelled`] distinguishes
+<a href=#106 id=106 data-nosnippet>106</a>/// the incomplete campaign even when no solver was launched. The platform's
+<a href=#107 id=107 data-nosnippet>107</a>/// existing cleanup limitations still apply. Compatibility entry points use an
+<a href=#108 id=108 data-nosnippet>108</a>/// uncancelled flag.
+<a href=#109 id=109 data-nosnippet>109</a>///
+<a href=#110 id=110 data-nosnippet>110</a>/// # Errors
+<a href=#111 id=111 data-nosnippet>111</a>/// Refuses invalid process limits or an unverified corpus before execution.
+<a href=#112 id=112 data-nosnippet>112</a></span><span class="kw">pub fn </span>run_with_cancellation(
+<a href=#113 id=113 data-nosnippet>113</a>    request: <span class="kw-2">&amp;</span>Request,
+<a href=#114 id=114 data-nosnippet>114</a>    invocation: NativeInvocation,
+<a href=#115 id=115 data-nosnippet>115</a>    cancelled: <span class="kw-2">&amp;</span>std::sync::atomic::AtomicBool,
+<a href=#116 id=116 data-nosnippet>116</a>    on_case: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>CaseResult),
+<a href=#117 id=117 data-nosnippet>117</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Report, Error&gt; {
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">if </span>request.timeout_ms == <span class="number">0 </span>|| request.max_output_bytes == <span class="number">0 </span>{
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::InvalidLimits);
+<a href=#120 id=120 data-nosnippet>120</a>    }
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">let </span>corpus = corpus::load(request).map_err(Error::Corpus)<span class="question-mark">?</span>;
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="prelude-val">Ok</span>(runner::run_with_cancellation(
+<a href=#123 id=123 data-nosnippet>123</a>        request, corpus, invocation, cancelled, on_case,
+<a href=#124 id=124 data-nosnippet>124</a>    ))
+<a href=#125 id=125 data-nosnippet>125</a>}
+</code></pre></div></section></main></body></html>

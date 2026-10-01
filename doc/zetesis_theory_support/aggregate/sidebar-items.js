@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COMPARISONS","FUNCTIONS"],"fn":["ferraris_prefix","ferraris_theory","group","observations","operation","theory","worlds"]};

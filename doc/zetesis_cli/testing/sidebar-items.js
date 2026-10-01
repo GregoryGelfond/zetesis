@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Completion","Error","TestCommand"],"fn":["execute","execute_with_cancellation"],"struct":["BackendOptions","CorpusOptions","ProcessOptions","ScalabilityOptions","ViewOptions"]};

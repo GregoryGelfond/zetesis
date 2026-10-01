@@ -1,0 +1,422 @@
+[
+  {
+    "entry": "generated/chain-1000.lp",
+    "workers": 1,
+    "legs": [
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 1,
+        "report": "A1",
+        "wall_ms": 16.612959,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      },
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 1,
+        "report": "B1",
+        "wall_ms": 15.545625,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      },
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 1,
+        "report": "B2",
+        "wall_ms": 16.628084,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      },
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 1,
+        "report": "A2",
+        "wall_ms": 16.837,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      }
+    ],
+    "wall_change_percent": [
+      -6.424707362487325,
+      -1.240814872008067
+    ],
+    "rule_change_percent": null,
+    "grounding_change_percent": null
+  },
+  {
+    "entry": "generated/chain-1000.lp",
+    "workers": 4,
+    "legs": [
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 4,
+        "report": "A1",
+        "wall_ms": 15.589334,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      },
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 4,
+        "report": "B1",
+        "wall_ms": 16.359875,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      },
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 4,
+        "report": "B2",
+        "wall_ms": 15.5365,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      },
+      {
+        "entry": "generated/chain-1000.lp",
+        "workers": 4,
+        "report": "A2",
+        "wall_ms": 16.488291,
+        "rule_ms": null,
+        "grounding_ms": null,
+        "support_ms": null
+      }
+    ],
+    "wall_change_percent": [
+      4.942744827970191,
+      -5.7725266978851835
+    ],
+    "rule_change_percent": null,
+    "grounding_change_percent": null
+  },
+  {
+    "entry": "generated/chain-arithmetic-1000.lp",
+    "workers": 1,
+    "legs": [
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 1,
+        "report": "A1",
+        "wall_ms": 10.402709,
+        "rule_ms": 0.799167,
+        "grounding_ms": 2.791459,
+        "support_ms": 1.850124
+      },
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 1,
+        "report": "B1",
+        "wall_ms": 10.424208,
+        "rule_ms": 0.829416,
+        "grounding_ms": 2.8895,
+        "support_ms": 1.883291
+      },
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 1,
+        "report": "B2",
+        "wall_ms": 10.398583,
+        "rule_ms": 0.837917,
+        "grounding_ms": 2.867625,
+        "support_ms": 1.886333
+      },
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 1,
+        "report": "A2",
+        "wall_ms": 10.413291,
+        "rule_ms": 0.807333,
+        "grounding_ms": 2.865125,
+        "support_ms": 1.887208
+      }
+    ],
+    "wall_change_percent": [
+      0.20666732098342244,
+      -0.14124257163272702
+    ],
+    "rule_change_percent": [
+      3.785066200180953,
+      3.788275717702616
+    ],
+    "grounding_change_percent": [
+      3.5121776819935224,
+      0.08725622791325716
+    ]
+  },
+  {
+    "entry": "generated/chain-arithmetic-1000.lp",
+    "workers": 4,
+    "legs": [
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 4,
+        "report": "A1",
+        "wall_ms": 10.451917,
+        "rule_ms": 0.787125,
+        "grounding_ms": 2.933625,
+        "support_ms": 1.8925
+      },
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 4,
+        "report": "B1",
+        "wall_ms": 10.432708,
+        "rule_ms": 0.815583,
+        "grounding_ms": 2.940417,
+        "support_ms": 1.898584
+      },
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 4,
+        "report": "B2",
+        "wall_ms": 10.526166,
+        "rule_ms": 0.797249,
+        "grounding_ms": 2.915958,
+        "support_ms": 1.931416
+      },
+      {
+        "entry": "generated/chain-arithmetic-1000.lp",
+        "workers": 4,
+        "report": "A2",
+        "wall_ms": 10.512334,
+        "rule_ms": 0.838541,
+        "grounding_ms": 2.903834,
+        "support_ms": 1.895166
+      }
+    ],
+    "wall_change_percent": [
+      -0.1837844674809408,
+      0.13157877213567648
+    ],
+    "rule_change_percent": [
+      3.615435921867549,
+      -4.924267268982674
+    ],
+    "grounding_change_percent": [
+      0.23152243384889637,
+      0.41751697927636666
+    ]
+  },
+  {
+    "entry": "generated/transitive-dense-20.lp",
+    "workers": 1,
+    "legs": [
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 1,
+        "report": "A1",
+        "wall_ms": 9.254417,
+        "rule_ms": 0.855167,
+        "grounding_ms": 1.583791,
+        "support_ms": 0.549124
+      },
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 1,
+        "report": "B1",
+        "wall_ms": 9.105375,
+        "rule_ms": 0.793541,
+        "grounding_ms": 1.582375,
+        "support_ms": 0.559167
+      },
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 1,
+        "report": "B2",
+        "wall_ms": 9.182083,
+        "rule_ms": 0.800792,
+        "grounding_ms": 1.569666,
+        "support_ms": 0.581376
+      },
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 1,
+        "report": "A2",
+        "wall_ms": 9.182791,
+        "rule_ms": 0.905712,
+        "grounding_ms": 1.693625,
+        "support_ms": 0.586417
+      }
+    ],
+    "wall_change_percent": [
+      -1.6104958313419404,
+      -0.007710074202926798
+    ],
+    "rule_change_percent": [
+      -7.206311749634864,
+      -11.584256364053914
+    ],
+    "grounding_change_percent": [
+      -0.08940573598409385,
+      -7.319152704996679
+    ]
+  },
+  {
+    "entry": "generated/transitive-dense-20.lp",
+    "workers": 4,
+    "legs": [
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 4,
+        "report": "A1",
+        "wall_ms": 9.200375,
+        "rule_ms": 0.837751,
+        "grounding_ms": 1.592041,
+        "support_ms": 0.559918
+      },
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 4,
+        "report": "B1",
+        "wall_ms": 9.060458,
+        "rule_ms": 0.769834,
+        "grounding_ms": 1.480375,
+        "support_ms": 0.556626
+      },
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 4,
+        "report": "B2",
+        "wall_ms": 9.17775,
+        "rule_ms": 0.821708,
+        "grounding_ms": 1.609917,
+        "support_ms": 0.587207
+      },
+      {
+        "entry": "generated/transitive-dense-20.lp",
+        "workers": 4,
+        "report": "A2",
+        "wall_ms": 9.236792,
+        "rule_ms": 0.891415,
+        "grounding_ms": 1.741708,
+        "support_ms": 0.613832
+      }
+    ],
+    "wall_change_percent": [
+      -1.5207749684115979,
+      -0.6392046069674362
+    ],
+    "rule_change_percent": [
+      -8.10706283848065,
+      -7.819814564484551
+    ],
+    "grounding_change_percent": [
+      -7.014015342569701,
+      -7.566767793453321
+    ]
+  },
+  {
+    "entry": "generated/transitive-dense-40.lp",
+    "workers": 1,
+    "legs": [
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 1,
+        "report": "A1",
+        "wall_ms": 25.369458,
+        "rule_ms": 7.066453,
+        "grounding_ms": 10.927292,
+        "support_ms": 3.136832
+      },
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 1,
+        "report": "B1",
+        "wall_ms": 24.323,
+        "rule_ms": 6.406548,
+        "grounding_ms": 10.296792,
+        "support_ms": 3.139874
+      },
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 1,
+        "report": "B2",
+        "wall_ms": 24.349125,
+        "rule_ms": 6.471709,
+        "grounding_ms": 10.473375,
+        "support_ms": 3.182917
+      },
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 1,
+        "report": "A2",
+        "wall_ms": 25.720083,
+        "rule_ms": 7.128083,
+        "grounding_ms": 11.16675,
+        "support_ms": 3.229001
+      }
+    ],
+    "wall_change_percent": [
+      -4.124873302378007,
+      -5.33030161683381
+    ],
+    "rule_change_percent": [
+      -9.338560661197349,
+      -9.208282226792264
+    ],
+    "grounding_change_percent": [
+      -5.769956545500932,
+      -6.209282020283425
+    ]
+  },
+  {
+    "entry": "generated/transitive-dense-40.lp",
+    "workers": 4,
+    "legs": [
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 4,
+        "report": "A1",
+        "wall_ms": 25.57575,
+        "rule_ms": 6.892705,
+        "grounding_ms": 10.911958,
+        "support_ms": 3.114041
+      },
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 4,
+        "report": "B1",
+        "wall_ms": 24.38875,
+        "rule_ms": 6.251001,
+        "grounding_ms": 10.264834,
+        "support_ms": 3.171375
+      },
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 4,
+        "report": "B2",
+        "wall_ms": 25.499667,
+        "rule_ms": 6.457615,
+        "grounding_ms": 10.380792,
+        "support_ms": 3.125166
+      },
+      {
+        "entry": "generated/transitive-dense-40.lp",
+        "workers": 4,
+        "report": "A2",
+        "wall_ms": 26.740375,
+        "rule_ms": 7.17538,
+        "grounding_ms": 11.247584,
+        "support_ms": 3.189666
+      }
+    ],
+    "wall_change_percent": [
+      -4.64111511881371,
+      -4.639830219284513
+    ],
+    "rule_change_percent": [
+      -9.309900829935424,
+      -10.003163595516895
+    ],
+    "grounding_change_percent": [
+      -5.930411389046764,
+      -7.706472785622232
+    ]
+  }
+]

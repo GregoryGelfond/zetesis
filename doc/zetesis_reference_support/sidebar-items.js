@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["admit","canonical","exhaustive","formula","normal"]};

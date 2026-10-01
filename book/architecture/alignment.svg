@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 690" role="img" aria-labelledby="title description">
+  <title id="title">From answer-set semantics to exact execution</title>
+  <desc id="description">The original program and an unchecked proposal enter a reduct membership oracle, producing a checked answer, a rejection or unfinished work. Relational templates, formula graphs, frozen gates and truth masks represent those subjects. Exact joins, filters, projections, Boolean operations, reductions, fixed points and independent batches implement the operations. Scalar CPU, Rayon and wgpu schedule supported operations. Representation arrows denote obligations, not completed formal verification.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#526575"/>
+    </marker>
+  </defs>
+  <rect width="920" height="690" rx="12" fill="#ffffff"/>
+  <g font-family="system-ui, -apple-system, sans-serif" fill="#203343">
+    <text x="24" y="35" font-size="19" font-weight="700" fill="#235e8c">ASP contract</text>
+    <g fill="#edf5fc" stroke="#407da9" stroke-width="1.5">
+      <rect x="24" y="54" width="266" height="125" rx="10"/>
+      <rect x="327" y="54" width="266" height="125" rx="10"/>
+      <rect x="630" y="54" width="266" height="125" rx="10"/>
+    </g>
+    <text x="157" y="86" text-anchor="middle" font-size="18" font-weight="650">Program + proposal</text>
+    <text x="157" y="116" text-anchor="middle" font-size="16">Original P; interpretation M</text>
+    <text x="157" y="143" text-anchor="middle" font-size="15">Proposal coverage is required</text>
+    <text x="460" y="86" text-anchor="middle" font-size="18" font-weight="650">Reduct membership</text>
+    <text x="460" y="116" text-anchor="middle" font-size="16">Satisfaction + minimality</text>
+    <text x="460" y="143" text-anchor="middle" font-size="15">Normal case: least closure</text>
+    <text x="763" y="86" text-anchor="middle" font-size="18" font-weight="650">Semantic result</text>
+    <text x="763" y="116" text-anchor="middle" font-size="16">Checked AnswerSet / rejection</text>
+    <text x="763" y="143" text-anchor="middle" font-size="15">Unfinished is a separate state</text>
+    <g fill="none" stroke="#526575" stroke-width="1.8" marker-end="url(#arrow)">
+      <path d="M 293 116 H 323"/>
+      <path d="M 596 116 H 626"/>
+    </g>
+    <g fill="none" stroke="#526575" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrow)">
+      <path d="M 157 180 V 245"/>
+      <path d="M 460 180 V 245"/>
+      <path d="M 763 180 V 245"/>
+    </g>
+    <rect x="282" y="198" width="356" height="29" fill="#ffffff"/>
+    <text x="460" y="218" text-anchor="middle" font-size="15" fill="#526575">Representation and preservation obligations</text>
+    <g fill="#eef7f2" stroke="#51836a" stroke-width="1.5">
+      <rect x="24" y="249" width="266" height="125" rx="10"/>
+      <rect x="327" y="249" width="266" height="125" rx="10"/>
+      <rect x="630" y="249" width="266" height="125" rx="10"/>
+    </g>
+    <text x="157" y="282" text-anchor="middle" font-size="18" font-weight="650">Execution inputs</text>
+    <text x="157" y="313" text-anchor="middle" font-size="16">Templates / finite formula DAG</text>
+    <text x="157" y="341" text-anchor="middle" font-size="15">Bindings; packed candidate bits</text>
+    <text x="460" y="282" text-anchor="middle" font-size="18" font-weight="650">Frozen subject</text>
+    <text x="460" y="313" text-anchor="middle" font-size="16">Gates / candidate truth masks</text>
+    <text x="460" y="341" text-anchor="middle" font-size="15">Closure / proper-subset queries</text>
+    <text x="763" y="282" text-anchor="middle" font-size="18" font-weight="650">Committed evidence</text>
+    <text x="763" y="313" text-anchor="middle" font-size="16">Per-proposal verdict + coverage</text>
+    <text x="763" y="341" text-anchor="middle" font-size="15">Exact completion of residuals</text>
+    <g fill="none" stroke="#526575" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrow)">
+      <path d="M 157 375 V 424"/>
+      <path d="M 460 375 V 424"/>
+      <path d="M 763 375 V 424"/>
+    </g>
+    <rect x="24" y="428" width="872" height="102" rx="10" fill="#f2f4f6" stroke="#81909b" stroke-width="1.5"/>
+    <text x="460" y="458" text-anchor="middle" font-size="18" font-weight="650">Exact transforms</text>
+    <text x="460" y="486" text-anchor="middle" font-size="16">Joins · filters · projection · union / intersection · Boolean masks</text>
+    <text x="460" y="510" text-anchor="middle" font-size="16">Reductions · fixed points · independent batches</text>
+    <g fill="none" stroke="#526575" stroke-width="1.8" marker-end="url(#arrow)">
+      <path d="M 240 531 V 568"/>
+      <path d="M 680 531 V 568"/>
+    </g>
+    <g fill="#ffffff" stroke="#81909b" stroke-width="1.5">
+      <rect x="24" y="572" width="432" height="64" rx="10"/>
+      <rect x="474" y="572" width="422" height="64" rx="10"/>
+    </g>
+    <text x="240" y="598" text-anchor="middle" font-size="17" font-weight="650">Scalar CPU / Rayon</text>
+    <text x="240" y="622" text-anchor="middle" font-size="15">Host work and independent task execution</text>
+    <text x="685" y="598" text-anchor="middle" font-size="17" font-weight="650">wgpu / physical GPU</text>
+    <text x="685" y="622" text-anchor="middle" font-size="15">Supported kernels, batches and transfers</text>
+    <text x="460" y="670" text-anchor="middle" font-size="14" fill="#526575">Capability map: backend placement and automatic dispatch depend on the admitted profile.</text>
+  </g>
+</svg>

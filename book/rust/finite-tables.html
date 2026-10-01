@@ -1,0 +1,548 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Projecting finite domains through a table - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/rust/finite-tables.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="selecting-and-projecting-finite-table-rows"><a class="header" href="#selecting-and-projecting-finite-table-rows">Selecting and projecting finite table rows</a></h1>
+<p><code>zetesis_cpu::table</code> selects complete rows from an immutable typed relation.
+Callers can retain the selected row positions directly or project the values
+witnessed by those rows. Eager formula grounding can explicitly choose this
+primitive for flat positive joins over completed possible support; the default
+grounder retains shortest-posting joins.</p>
+<p>Suppose a table lists allowed pairs of departure and arrival values. A domain
+restriction on either variable can remove rows; each remaining row witnesses
+one value for each variable. The projected domains contain exactly those
+witnessed values. This operation preserves the table’s solutions. Applying it
+to an ASP program additionally requires proving that the supplied table is a
+complete description of the relevant constraint.</p>
+<h2 id="ownership-and-exact-projection"><a class="header" href="#ownership-and-exact-projection">Ownership and exact projection</a></h2>
+<p><code>Table::prepare</code> borrows one authoritative <code>Relation</code>. Its column scope names
+variables in first-occurrence order: <code>[0, 1, 0]</code> assigns the first and third
+columns to the same variable. Rows violating that equality are excluded.
+Logical values retain their types; duplicate row occurrences retain their
+original positions.</p>
+<p><code>Table::select</code> accepts one <code>Domain</code> per variable: <code>Unrestricted</code>, a borrowed
+<code>Singleton</code>, or a borrowed <code>Finite</code> slice. An empty finite domain permits no
+value; it is distinct from an unrestricted domain. Every call starts from the
+original coherent rows, so domains may narrow, widen or return to an earlier
+state. Equal domain sizes do not imply equal contents.</p>
+<p>The resulting <code>Selection</code> owns a packed row mask and borrows only the original
+relation. It can outlive the prepared index and input domain slices. <code>rows()</code>
+visits increasing original positions without allocating a position vector;
+<code>contains</code> and <code>next_row</code> support direct inspection. Selection does not compute
+projected domains or copy row values.</p>
+<p><code>next_row_with</code> lets a consuming operation charge work or check interruption
+before each inspected mask word, including zero words. A failed check publishes
+no row and leaves the selection and supplied starting position unchanged. The
+ordinary scanning methods use the same decoder without a fallible callback.</p>
+<p><code>Table::project</code> retains its finite-domain interface; <code>project_domains</code> accepts
+the same <code>Domain</code> variants as selection. Both reuse the row restriction operation
+and then compute the witnessed domains. A projection borrows the table; its
+returned values borrow the original source.</p>
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_core;
+</span><span class="boring">extern crate zetesis_cpu;
+</span>use zetesis_core::{Atom, Predicate, Value, relation::Relation};
+use zetesis_cpu::{
+    Cancellation,
+    table::{Domain, Limits, Table},
+};
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let pair = Predicate::new("pair", 2)?;
+    let atoms = [(1, 2), (1, 3), (2, 4)]
+        .into_iter()
+        .map(|(left, right)| {
+            Atom::new(
+                pair.clone(),
+                vec![Value::Number(left), Value::Number(right)],
+            )
+        })
+        .collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()?;
+    let relation = Relation::from_atoms(&amp;pair, &amp;atoms, zetesis_core::relation::Limits::default())?;
+    let cancellation = Cancellation::default();
+    let table = Table::prepare(&amp;relation, &amp;[0, 1], Limits::default(), &amp;cancellation)?;
+    let departure = Value::Number(1);
+    let selected = table.select(
+        &amp;[Domain::Singleton((&amp;departure).into()), Domain::Unrestricted],
+        Limits::default(),
+        &amp;cancellation,
+    )?;
+    assert_eq!(selected.rows().collect::&lt;Vec&lt;_&gt;&gt;(), vec![0, 1]);
+
+    let departures = [Value::Number(1), Value::Number(2)];
+    let arrivals = [Value::Number(3)];
+    let restricted = table.project(&amp;[&amp;departures, &amp;arrivals], Limits::default(), &amp;cancellation)?;
+    assert_eq!(
+        restricted.domain(0).unwrap().collect::&lt;Vec&lt;_&gt;&gt;(),
+        vec![Value::Number(1)]
+    );
+    assert!(restricted.contains(1));
+    assert!(!restricted.contains(0));
+
+    let arrivals = [Value::Number(2), Value::Number(3), Value::Number(4)];
+    let restored = table.project(&amp;[&amp;departures, &amp;arrivals], Limits::default(), &amp;cancellation)?;
+    assert_eq!(
+        restored.domain(0).unwrap().collect::&lt;Vec&lt;_&gt;&gt;(),
+        departures.to_vec()
+    );
+    assert!((0..3).all(|row| restored.contains(row)));
+    Ok(())
+}</code></pre>
+<p>Preparation stores a support bitset for each distinct variable/value pair.
+Projection composes unions, intersections and witness tests:</p>
+<pre><code class="language-text">rows := coherent_original_rows
+for each variable v:
+    allowed := union(support[v, x] for x in domain[v])
+    rows := rows intersect allowed
+for each variable v:
+    projected[v] := {x in domain[v] | rows intersect support[v, x] is nonempty}
+</code></pre>
+<p>Selection stops after restricting <code>rows</code>; projection additionally collects
+the witnessed values. The explicit initial row mask handles a table with no
+columns. The same whole row must witness all its columns; independently
+occurring values cannot create a new tuple.</p>
+<h2 id="positive-joins-in-eager-formula-grounding"><a class="header" href="#positive-joins-in-eager-formula-grounding">Positive joins in eager formula grounding</a></h2>
+<p>On a <code>PreparedFormula</code> or <code>PreparedFormulaBundle</code>,
+<code>with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })</code> selects
+the table strategy. <code>JoinStrategy::Indexed</code> is the default. This is an execution
+choice made before materialization; it changes neither source admission nor the
+formula/reduct solver.</p>
+<p>This example materializes a program using each join strategy and compares the
+complete admitted atoms, formulas and source locations. Repeated <code>X</code> requires
+equal route endpoints; the <code>rail</code> constant restricts the final column. A work
+observer checks that the table index was prepared, queried and reused.</p>
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate themelios_base;
+</span><span class="boring">extern crate zetesis_themelios;
+</span>use std::cell::Cell;
+
+use themelios_base::span::Location;
+use zetesis_themelios::{
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
+    GroundingObserver, GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork,
+    JoinStrategy, prepare_formula,
+};
+
+const SOURCE: &amp;str = "
+    station(1;2;3).
+    route(1,1,rail). route(1,2,rail). route(2,2,rail). route(3,3,road).
+    {selected(X)} :- station(X), route(X,X,rail).
+    eligible(X) :- station(X), route(X,X,rail).
+";
+
+#[derive(Default)]
+struct JoinWork(Cell&lt;GroundingWork&gt;);
+
+impl GroundingObserver for JoinWork {
+    fn enter(&amp;self) {}
+    fn exit(&amp;self) {}
+
+    fn details_enabled(&amp;self) -&gt; bool {
+        true
+    }
+
+    fn phase_exit(
+        &amp;self,
+        _: GroundingPhase,
+        _: Option&lt;Location&gt;,
+        _: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        self.0.set(self.0.get().checked_sum(work));
+    }
+}
+
+fn ground(
+    joins: JoinStrategy,
+    observer: Option&lt;&amp;dyn GroundingObserver&gt;,
+) -&gt; Result&lt;AdmittedFormula, FormulaFailure&gt; {
+    prepare_formula(
+        SOURCE.to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?
+    .with_grounding_options(GroundingOptions { joins })
+    .ground_with_observer(observer)
+}
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let indexed = ground(JoinStrategy::Indexed, None)?;
+    let observed = JoinWork::default();
+    let table = ground(JoinStrategy::Table, Some(&amp;observed))?;
+
+    // Compare complete admitted atoms, formulas and their source locations.
+    assert_eq!(table.atoms(), indexed.atoms());
+    assert_eq!(table.theory().nodes(), indexed.theory().nodes());
+    assert_eq!(table.theory().roots(), indexed.theory().roots());
+    assert_eq!(table.formula_origins(), indexed.formula_origins());
+
+    // Selecting a strategy is insufficient evidence that its index was used.
+    let work = observed.0.get();
+    assert!(work.table_preparations.is_some_and(|count| count &gt; 0));
+    assert!(work.table_probes.is_some_and(|count| count &gt; 0));
+    assert!(work.table_reuses.is_some_and(|count| count &gt; 0));
+    assert!(work.table_rows.is_some_and(|count| count &gt; 0));
+    Ok(())
+}</code></pre>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula/preparation.rs">source preparation API</a>
+owns materialization; the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/grounding_observer.rs">observer API</a>
+reports work without reading a clock. Both strategies return the same
+<code>AdmittedFormula</code> boundary for downstream consumers.</p>
+<p>The CLI exposes the same choice. For example, use the formula countermodel route
+and retain its grounding statistics:</p>
+<pre><code class="language-sh">zetesis --grounder eager --oracle countermodel --formula-joins table --stats input.lp
+</code></pre>
+<p>The requested strategy alone is not route evidence. Inspect <code>table_preparations</code>,
+<code>table_probes</code> and <code>table_rows</code> in the grounding work report; inapplicable patterns
+still use indexed probes. <code>zetesis-bench run</code> accepts the optional
+<code>--formula-joins indexed|table</code> setting for compatible native binaries;
+omission preserves their default. See the
+<a href="https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-validation">validation commands</a>
+for their complete capture and comparison contracts.</p>
+<p>The table strategy applies to flat positive atom patterns over the immutable
+relation supplied by completed possible support. Its index distinguishes signed
+predicates and canonical column scopes. Constants and already-bound source slots
+supply singleton domains; unbound slots are unrestricted. Repeated variables
+share a table label, while distinct anonymous slots remain distinct. Each probe
+derives fresh domains from the current binding.</p>
+<p>Selected row positions feed the existing whole-row matcher. Source-occurrence
+identity, binding extension and the original positive atom remain intact.
+Authored comparisons, negative conditions and aggregates retain their validation
+after positive binding; they do not provide extra table domains. A support row
+is a possible atom, not an assertion of its truth in an answer set.</p>
+<p>Structural patterns and support-growth rounds retain indexed joins. This is a
+declared applicability boundary, not recovery from a failed table operation.
+Table allocation, capacity and work refusals remain grounding failures. The
+enclosing grounding operation owns cumulative index, live-query and work bounds;
+each probe does not receive a fresh independent source budget.</p>
+<h2 id="cost-and-applicability"><a class="header" href="#cost-and-applicability">Cost and applicability</a></h2>
+<p>For R rows and E indexed variable/value entries, support storage uses
+<code>E * ceil(R / 32)</code> words. Many distinct values can make this representation
+larger than the original columns. Repeated queries may amortize preparation;
+that is a measurement question, not a guarantee of the API.</p>
+<p>Every probe first copies the coherent-row mask: <code>ceil(R / 32)</code> words even when
+all supplied domains are unrestricted. A singleton domain then intersects one
+support mask; a finite domain unions its matching support masks before that
+intersection. Finite domains reuse one union buffer within the probe. Thus a
+retained table removes repeated index construction but does not remove per-probe
+mask initialization and traversal. Result and union masks belong to that query;
+they cannot be shared as mutable truth across bindings or workers.</p>
+<p><code>Limits</code> bounds support entries, live operation capacity and charged work.
+Cancellation, exhausted limits and allocation failures return no partial table,
+selection or projection. <code>Statistics</code> distinguishes retained capacity from the
+conservative operation peak. Neither measure is process RSS.</p>
+<p>The implementation is scalar. Independent callers may share the immutable
+table across CPU workers; each query owns its result mask and scratch. That does
+not parallelize the grounder’s mutable bindings, formula builder or source-error
+order. No GPU table kernel or automatic crossover policy is selected.
+The <a href="https://arxiv.org/abs/2507.18413">GPU Compact-Table paper</a>
+motivates examining this family of support operations; its performance results
+do not establish a speedup for zetesis.</p>
+<h2 id="optional-argument-domain-guards"><a class="header" href="#optional-argument-domain-guards">Optional argument-domain guards</a></h2>
+<p>Prepared formula and bundle values also expose
+<code>with_domain_analysis(Some(DomainLimits { .. }))</code>; <code>None</code> is the library
+default and turns the attempt off, and the ordinary command requests the
+attempt with its default limits. This option adds a final-instantiation
+consumer for the exact normalized whole program. It is independent of
+<code>Indexed</code> or <code>Table</code> row selection and has no CLI flag.</p>
+<p>The initial profile admits ordinary positive flat rules and constraints over
+whole named variables, atomic logical values and body comparisons. It excludes
+arithmetic in atoms, generators, negative body literals, structured terms,
+local scopes and richer heads from the complete attempt. A dependency projection cannot qualify.
+Unsupported profiles use the existing complete path; they receive no new
+language refusal. A global Unknown or Stopped analysis supplies no narrowing.
+An individually Unknown argument supplies no restriction.</p>
+<p>For each eligible final rule, the consumer intersects the finite domains of
+all positive argument occurrences naming one variable and removes every value a
+comparison over that variable alone is defined and false at; a value the
+comparison cannot evaluate stays, so the join reaches it. A guard is prepared
+only where the candidates are fewer than the argument’s domain. Borrowed source
+values are resolved through the completed support owner’s existing equality
+dictionary; no second dictionary assigns IDs. A row failing a necessary domain is rejected
+before binding copies and deeper probes, in every support-completion round
+and in final instantiation. Surviving rows keep their original positions,
+matcher and emission order. Objective joins and existing factorized rule
+plans retain their existing paths. The analyzer is an
+upper-bound producer, not a candidate-truth or answer-set certificate.</p>
+<p><code>DomainObservation</code> exposes Disabled, Inapplicable or the actual borrowed
+<code>Analysis</code>, including its owner, status, context and logical statistics. Detailed
+observation emits a sequential <code>domain_analysis</code> phase only when requested.
+<code>domain_prepare_work</code> includes charged applicability, analysis and guard
+preparation, including a stopped or failed prefix. <code>domain_guard_rows</code>,
+<code>domain_guard_checks</code> and <code>domain_rejected_rows</code> count actual row visits,
+dictionary-ID comparisons and rejections; <code>domain_excluded_values</code> counts
+the values comparisons excluded before any row was read, charged to the
+analysis phase that prepares the candidates. Visited rows remain in <code>join_rows</code>
+and <code>table_rows</code>; avoided deeper work appears in the existing probe counts.</p>
+<p>Analyzer populations and inspected source bytes have separate finite
+<code>DomainLimits</code>. Its admitted work is capped by and charged to the remaining
+cumulative formula work budget, with no refund on Stopped. It uses bounded
+standard collections and has no fallible-allocation or caller-control API.
+This is an uninterruptible operation under the existing eager contract, not a
+new cancellation/deadline guarantee. Its heap is outside <code>max_support_bytes</code>.
+Rule guards separately charge their named headers, preparation scratch,
+dictionary IDs and actual vector capacities beside retained support, table
+indices and live masks. Candidate terms remain borrowed canonical references.
+Query-attempt receipts retain original
+failed work and actual capacity peaks. These capacities exclude allocator
+metadata, analyzer heap and a complete stack/RSS measure. Additional analysis,
+guard and mask costs may outweigh avoided bindings or probes.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md">domain-binding guide</a>
+states the necessary argument-coverage and complete-continuation premises.
+Source controls compare enabled/disabled complete atoms, theories and provenance,
+plus actual row/probe counts and failure receipts. They do not prove a general
+source-to-Rust refinement or a performance improvement.</p>
+<h2 id="preservation-argument"><a class="header" href="#preservation-argument">Preservation argument</a></h2>
+<p>A selected row belongs to every variable’s union of permitted supports, hence
+its complete values satisfy the supplied domains. Conversely, a permitted
+coherent row supplies its own value in each union. Projection cannot remove
+any value of a surviving row or introduce a row that lacked a witness.</p>
+<p><code>FiniteTables.indexed_survival_exact</code>,
+<code>narrowing_preserves_rows</code>, <code>narrowing_idempotent</code> and
+<code>widening_preserves_rows</code> formalize these statements in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FiniteTables.lean">the Lean module</a>.
+<code>TableBindings.flat_match_survives</code> derives the necessary domains and aliases
+from successful flat matching. <code>indexed_matches_preserved</code> and
+<code>join_family_preserved</code> retain the ordered source/row witnesses and resulting
+bindings through selection and a fixed finite positive-join schedule. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/table-bindings.md">binding-family guide</a>
+explains their premises and relation to original source atoms.</p>
+<p>These laws do not verify Rust bitsets, resource accounting, fallible execution
+or the complete source-grounding translation. A surviving table row is not by
+itself an answer set; reduct membership remains a separate obligation.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../rust/parallel.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../lean/foundations.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../rust/parallel.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../lean/foundations.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

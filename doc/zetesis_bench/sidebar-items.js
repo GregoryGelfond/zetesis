@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Command","Completion","Error","FormulaJoins","Grounder","NativeInterface","Oracle","Search","Suite"],"fn":["compare","entry","execute","execute_with_cancellation"],"struct":["Cli","CompareOptions","RunOptions","ViewOptions"]};

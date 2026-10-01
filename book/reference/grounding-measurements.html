@@ -1,0 +1,1394 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Earlier grounding measurements - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/reference/grounding-measurements.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="grounding-and-representation-measurements"><a class="header" href="#grounding-and-representation-measurements">Grounding and representation measurements</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>Source links use the <a href="source-revisions.html">revision map</a>; labels retain the
+recorded revision identifiers.</p>
+<p>These reports measure particular changes to grounding, atom storage and release
+optimization. They retain the original programs, settings and compiled sources.
+For a short introduction or a new measurement, start with
+<a href="performance.html">benchmarks and comparisons</a>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Experiment</th><th>Result and detail</th></tr>
+</thead>
+<tbody>
+<tr><td>Reuse prepared grounding data</td><td><a href="#prepared-grounding-cpu-comparison">CPU comparison</a>: less repeated work, mixed solve times, little change in process memory.</td></tr>
+<tr><td>Share an atom catalog</td><td><a href="#earlier-atom-catalog-cpu-comparison">Catalog comparison</a>: inspect time and memory together.</td></tr>
+<tr><td>Use table joins</td><td><a href="#indexed-versus-table-in-ordinary-solving">Ordinary solves</a>, <a href="#larger-queens-and-complete-native-families">larger queens</a>.</td></tr>
+<tr><td>Change release optimization</td><td><a href="#link-time-optimization">Link-time optimization</a>: compare build profiles on fixed inputs.</td></tr>
+<tr><td>Compare eager CPU and Metal</td><td><a href="#matched-eager-cpu-and-metal">Matched runs</a>; a separate <a href="prepared-metal.html">prepared-grounding report</a> covers later sources.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Reducing stored data or operation counts does not by itself establish a faster
+solve. The tables below keep those measurements separate.</p>
+<p>Retained provenance records preserve the paths used at measurement time. Their
+<code>examples/kr-domains</code> paths refer to the corpus now stored in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/README.md"><code>examples/correctness</code></a>; moving the
+fixtures does not rewrite the original evidence or its hashes.</p>
+<h2 id="prepared-grounding-cpu-comparison"><a class="header" href="#prepared-grounding-cpu-comparison">Prepared-grounding CPU comparison</a></h2>
+<p>Three compiled sources were measured on arm64 macOS on 14 September 2026.
+Each measured executable reports version <code>0.1.0</code>; these measurements identify
+the binaries below, not a later build carrying version <code>0.1.1</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Role</th><th>Source</th><th>Native executable SHA-256</th></tr>
+</thead>
+<tbody>
+<tr><td>Earlier atom catalog</td><td><a href="https://github.com/GregoryGelfond/zetesis/tree/84e15f10f1a89f989d36d215755cb19c58d5f912"><code>ca10a5e7</code></a></td><td><code>fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e</code></td></tr>
+<tr><td>Intermediate workspaces</td><td><a href="https://github.com/GregoryGelfond/zetesis/tree/d12674dd926406d2de519471bb974c6b5a13af61"><code>f56a5a24</code></a></td><td><code>fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29</code></td></tr>
+<tr><td>Latest prepared grounding</td><td><a href="https://github.com/GregoryGelfond/zetesis/tree/0e9682342edf66108d51087996335438f92e4e88"><code>679ca856</code></a></td><td><code>a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>All use Rust 1.97.1 and ordinary release optimization without a CPU/LTO override.
+The earlier and latest builds explicitly target <code>aarch64-apple-darwin</code> and select
+CLI, experiments and validation; the intermediate build selects CLI and
+experiments on the native Apple target. Top-level GPU features agree, but the
+retained evidence does not establish full transitive build equivalence. These
+are integrated application comparisons, not isolated algorithm effects.
+The fixed performance runner hashes to
+<code>c83264ce4f459287d79042061a0320884117385ff876185373ae5ba168594d89</code>;
+clingo 5.8.2 hashes to
+<code>31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015</code>.</p>
+<p>The acquisition order is earlier/intermediate/latest/latest/intermediate/earlier.
+Each of six blocks contains 117 positions across six N=8 queens encodings, SEND,
+task allocation variant 04/scenario 05 and shortest path variant 01/scenario 06.
+Each producer/case has qualification, one warmup, three timed runs and one
+separate RSS run; native diagnostics add one position per case. All <strong>702 unique
+positions</strong> pass, without capture faults or unresolved children. Qualification
+checks complete selected displays, multiplicities, final optimum ties and costs;
+it does not independently compare hidden full interpretations.</p>
+<p>Two overlapping four-block views retain every original position. The
+<a href="observations/release-ca10a5e7-679ca856.json">earlier-to-latest observations</a> and
+<a href="observations/release-ca10a5e7-679ca856-provenance.json">their provenance</a> compare
+atom-catalog and prepared-grounding sources. The
+<a href="observations/release-f56a5a24-679ca856.json">intermediate-to-latest observations</a>
+and <a href="observations/release-f56a5a24-679ca856-provenance.json">their provenance</a>
+compare reusable workspaces with the subsequent algorithms. Each view has 468
+positions; the two latest blocks are shared, so these are <strong>702 observations,
+not 936 independent observations</strong>. These derived receipts retain exact integer
+samples, identities and original report hashes, with streams and machine-local
+paths omitted. They neither qualify later code nor publish the separate library
+or device reports. Reproduce both complete table views without running a solver:</p>
+<pre><code class="language-sh">cargo run --locked -p zetesis-validation --example release_observations -- --dataset release-ca10a5e7-679ca856
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset release-f56a5a24-679ca856
+</code></pre>
+<p>Add <code>--check</code> to validate without printing. The historical default selection is
+unchanged. For new acquisitions, use the nine-case <code>ordinary</code> function in
+<a href="#reproduce-the-measurements">Reproduce the measurements</a>, choosing the fixed
+runner and the three executable paths above. All six calls use <code>indexed</code>:</p>
+<pre><code class="language-sh">catalog_solver=/absolute/path/to/ca10a5e7/zetesis
+workspace_solver=/absolute/path/to/f56a5a24/zetesis
+prepared_solver=/absolute/path/to/679ca856/zetesis
+
+ordinary catalog-1 "$catalog_solver" indexed
+ordinary workspaces-1 "$workspace_solver" indexed
+ordinary prepared-1 "$prepared_solver" indexed
+ordinary prepared-2 "$prepared_solver" indexed
+ordinary workspaces-2 "$workspace_solver" indexed
+ordinary catalog-2 "$catalog_solver" indexed
+</code></pre>
+<p>Replace those paths with the corresponding frozen executables. Run each call
+separately and inspect its exit and report before continuing.</p>
+<p>The protocol is CPU/eager/Indexed, automatic membership selection and one closure
+and completion worker. Five-second child and thirty-second campaign limits,
+4 MiB captures, 128 MiB cumulative capture and 512 MiB reports remain fixed.
+Human native output and clingo JSON are inside fresh-process timers; comparison
+is outside. Separate waited-child RSS excludes the helper, may include waited
+descendants, and is neither simultaneous process-tree RSS nor device memory.
+No cold-cache condition, confidence interval or whole-corpus result is claimed.</p>
+<p>Latest task-allocation block medians are 89.481/92.402 ms, below both earlier
+medians of 93.911/95.469 ms. Their midpoint decreases 3.96%, but each block has
+only three timed samples. Other apparent gains are less consistent. The nominal
+11.21% queens 04 decrease depends on the late earlier-source median rising from
+6.230 to 7.773 ms; latest medians remain about 6.216 ms. Shortest path’s nominal
+9.50% decrease combines latest medians of 6.346 and 7.873 ms against earlier
+medians near 7.856 ms. SEND’s earlier blocks span 33.315–36.168 ms. Queens 01/02
+instead increase 0.13%/0.76% between source midpoints. These percentages compare
+the midpoint of two block medians, not a pooled six-sample median.</p>
+<p>Ordinary RSS is broadly unchanged: task allocation moves from 16.000/15.984 MiB
+to 15.844/15.844 MiB, while SEND stays near 24.18 MiB. Latest native RSS means
+are slightly below the earlier atom-catalog means and above the intermediate
+workspace means in all nine cases. In the latest blocks, task allocation and
+queens 02 are faster than matched clingo; the other case midpoints favor clingo,
+with queens 04 nearly equal. The separate times below retain their full ranges.</p>
+<h3 id="earlier-atom-catalog-to-latest-prepared-grounding"><a class="header" href="#earlier-atom-catalog-to-latest-prepared-grounding">Earlier atom catalog to latest prepared grounding</a></h3>
+<p>Native wall time, ms: median [minimum, maximum] of three timed samples per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">ca10a5e7-1</th><th style="text-align: right">679ca856-1</th><th style="text-align: right">679ca856-2</th><th style="text-align: right">ca10a5e7-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">13.761 [13.747, 13.785]</td><td style="text-align: right">13.779 [13.736, 13.810]</td><td style="text-align: right">13.788 [13.768, 13.816]</td><td style="text-align: right">13.770 [13.742, 13.789]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">87.685 [87.536, 87.775]</td><td style="text-align: right">89.100 [87.678, 90.669]</td><td style="text-align: right">90.666 [89.004, 90.697]</td><td style="text-align: right">90.721 [90.697, 92.081]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">15.375 [13.720, 15.401]</td><td style="text-align: right">13.818 [13.758, 13.822]</td><td style="text-align: right">15.254 [13.764, 15.400]</td><td style="text-align: right">15.319 [15.277, 15.356]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.230 [6.218, 7.811]</td><td style="text-align: right">6.216 [6.194, 6.225]</td><td style="text-align: right">6.218 [6.202, 6.247]</td><td style="text-align: right">7.773 [6.195, 7.789]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">9.243 [9.202, 9.274]</td><td style="text-align: right">9.211 [7.683, 9.212]</td><td style="text-align: right">9.195 [9.184, 9.260]</td><td style="text-align: right">9.256 [9.226, 9.269]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">9.218 [9.212, 9.261]</td><td style="text-align: right">9.212 [9.196, 9.230]</td><td style="text-align: right">9.218 [9.202, 9.262]</td><td style="text-align: right">9.225 [9.223, 9.244]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">33.315 [33.287, 34.961]</td><td style="text-align: right">33.281 [33.261, 34.881]</td><td style="text-align: right">34.838 [34.791, 34.908]</td><td style="text-align: right">36.168 [34.828, 37.819]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">93.911 [93.893, 94.068]</td><td style="text-align: right">89.481 [89.301, 92.296]</td><td style="text-align: right">92.402 [91.996, 92.456]</td><td style="text-align: right">95.469 [95.447, 95.494]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7.851 [7.815, 7.855]</td><td style="text-align: right">6.346 [6.324, 7.911]</td><td style="text-align: right">7.873 [6.306, 7.874]</td><td style="text-align: right">7.860 [7.852, 7.862]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Matched clingo wall time, ms, with the same three-sample notation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">ca10a5e7-1</th><th style="text-align: right">679ca856-1</th><th style="text-align: right">679ca856-2</th><th style="text-align: right">ca10a5e7-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">6.214 [6.174, 6.230]</td><td style="text-align: right">6.187 [6.159, 6.192]</td><td style="text-align: right">6.180 [6.030, 6.198]</td><td style="text-align: right">6.213 [6.178, 6.236]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">117.585 [117.431, 117.605]</td><td style="text-align: right">117.593 [116.139, 117.730]</td><td style="text-align: right">119.146 [119.067, 120.669]</td><td style="text-align: right">122.398 [122.092, 123.633]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">6.209 [6.190, 6.297]</td><td style="text-align: right">6.192 [6.176, 6.218]</td><td style="text-align: right">6.194 [6.172, 6.293]</td><td style="text-align: right">6.208 [6.202, 6.238]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.174 [6.155, 6.200]</td><td style="text-align: right">6.169 [6.154, 6.200]</td><td style="text-align: right">6.175 [6.170, 6.175]</td><td style="text-align: right">6.180 [6.174, 6.200]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">6.174 [6.148, 6.174]</td><td style="text-align: right">6.166 [6.145, 6.178]</td><td style="text-align: right">6.156 [6.147, 6.177]</td><td style="text-align: right">6.197 [6.173, 6.197]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">6.161 [6.157, 6.200]</td><td style="text-align: right">6.151 [6.143, 6.172]</td><td style="text-align: right">6.162 [6.154, 6.175]</td><td style="text-align: right">6.174 [6.161, 6.188]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">12.284 [12.193, 12.292]</td><td style="text-align: right">12.274 [12.184, 12.291]</td><td style="text-align: right">12.263 [12.185, 12.333]</td><td style="text-align: right">12.305 [12.159, 12.327]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">185.523 [176.421, 186.998]</td><td style="text-align: right">185.536 [161.424, 190.019]</td><td style="text-align: right">185.561 [173.031, 188.505]</td><td style="text-align: right">186.978 [156.821, 189.726]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">6.231 [6.195, 6.272]</td><td style="text-align: right">6.231 [6.189, 6.286]</td><td style="text-align: right">6.218 [6.187, 6.314]</td><td style="text-align: right">6.277 [6.236, 6.277]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Separate child RSS, MiB. Each cell is <strong>native / clingo</strong>, one fresh-helper observation of each per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">ca10a5e7-1</th><th style="text-align: right">679ca856-1</th><th style="text-align: right">679ca856-2</th><th style="text-align: right">ca10a5e7-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">12.047 / 5.422</td><td style="text-align: right">11.969 / 5.422</td><td style="text-align: right">11.875 / 5.422</td><td style="text-align: right">12.109 / 5.422</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">12.609 / 8.156</td><td style="text-align: right">12.516 / 7.969</td><td style="text-align: right">12.516 / 7.969</td><td style="text-align: right">12.625 / 8.844</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">12.219 / 5.438</td><td style="text-align: right">12.016 / 5.438</td><td style="text-align: right">12.094 / 5.438</td><td style="text-align: right">12.062 / 5.438</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">12.109 / 5.469</td><td style="text-align: right">11.969 / 5.469</td><td style="text-align: right">12.078 / 5.469</td><td style="text-align: right">12.219 / 5.469</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">12.719 / 5.531</td><td style="text-align: right">12.500 / 5.531</td><td style="text-align: right">12.516 / 5.531</td><td style="text-align: right">12.562 / 5.531</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">12.797 / 5.562</td><td style="text-align: right">12.656 / 5.562</td><td style="text-align: right">12.719 / 5.562</td><td style="text-align: right">12.859 / 5.562</td></tr>
+<tr><td>SEND</td><td style="text-align: right">24.188 / 8.281</td><td style="text-align: right">24.203 / 8.281</td><td style="text-align: right">24.156 / 8.281</td><td style="text-align: right">24.188 / 8.281</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">16.000 / 21.438</td><td style="text-align: right">15.844 / 19.391</td><td style="text-align: right">15.844 / 21.438</td><td style="text-align: right">15.984 / 21.438</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">13.234 / 5.641</td><td style="text-align: right">13.156 / 5.641</td><td style="text-align: right">13.156 / 5.641</td><td style="text-align: right">13.266 / 5.641</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="intermediate-workspaces-to-latest-prepared-grounding"><a class="header" href="#intermediate-workspaces-to-latest-prepared-grounding">Intermediate workspaces to latest prepared grounding</a></h3>
+<p>The following view reuses the same two latest blocks. It is useful for locating
+changes after workspace reuse, not another independent replication.</p>
+<p>Native wall time, ms: median [minimum, maximum] of three timed samples per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">f56a5a24-1</th><th style="text-align: right">679ca856-1</th><th style="text-align: right">679ca856-2</th><th style="text-align: right">f56a5a24-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">13.778 [13.726, 13.822]</td><td style="text-align: right">13.779 [13.736, 13.810]</td><td style="text-align: right">13.788 [13.768, 13.816]</td><td style="text-align: right">13.766 [13.761, 15.279]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">89.165 [87.510, 89.239]</td><td style="text-align: right">89.100 [87.678, 90.669]</td><td style="text-align: right">90.666 [89.004, 90.697]</td><td style="text-align: right">90.655 [90.540, 90.682]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">15.337 [13.747, 15.392]</td><td style="text-align: right">13.818 [13.758, 13.822]</td><td style="text-align: right">15.254 [13.764, 15.400]</td><td style="text-align: right">15.326 [15.264, 15.357]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.247 [6.199, 7.777]</td><td style="text-align: right">6.216 [6.194, 6.225]</td><td style="text-align: right">6.218 [6.202, 6.247]</td><td style="text-align: right">7.731 [6.206, 7.751]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">9.238 [9.213, 9.249]</td><td style="text-align: right">9.211 [7.683, 9.212]</td><td style="text-align: right">9.195 [9.184, 9.260]</td><td style="text-align: right">9.214 [9.193, 9.249]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">9.215 [9.209, 9.280]</td><td style="text-align: right">9.212 [9.196, 9.230]</td><td style="text-align: right">9.218 [9.202, 9.262]</td><td style="text-align: right">9.223 [9.206, 9.265]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">34.905 [34.779, 36.366]</td><td style="text-align: right">33.281 [33.261, 34.881]</td><td style="text-align: right">34.838 [34.791, 34.908]</td><td style="text-align: right">34.820 [34.789, 34.901]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">92.361 [92.220, 92.395]</td><td style="text-align: right">89.481 [89.301, 92.296]</td><td style="text-align: right">92.402 [91.996, 92.456]</td><td style="text-align: right">95.314 [93.885, 97.401]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7.861 [6.343, 7.864]</td><td style="text-align: right">6.346 [6.324, 7.911]</td><td style="text-align: right">7.873 [6.306, 7.874]</td><td style="text-align: right">7.878 [7.844, 7.905]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Matched clingo wall time, ms, with the same three-sample notation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">f56a5a24-1</th><th style="text-align: right">679ca856-1</th><th style="text-align: right">679ca856-2</th><th style="text-align: right">f56a5a24-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">6.215 [6.175, 6.219]</td><td style="text-align: right">6.187 [6.159, 6.192]</td><td style="text-align: right">6.180 [6.030, 6.198]</td><td style="text-align: right">6.234 [6.181, 6.279]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">119.186 [117.574, 120.662]</td><td style="text-align: right">117.593 [116.139, 117.730]</td><td style="text-align: right">119.146 [119.067, 120.669]</td><td style="text-align: right">122.091 [120.611, 122.218]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">6.208 [6.189, 6.260]</td><td style="text-align: right">6.192 [6.176, 6.218]</td><td style="text-align: right">6.194 [6.172, 6.293]</td><td style="text-align: right">6.179 [6.179, 6.238]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.174 [6.169, 6.179]</td><td style="text-align: right">6.169 [6.154, 6.200]</td><td style="text-align: right">6.175 [6.170, 6.175]</td><td style="text-align: right">6.167 [6.166, 6.172]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">6.178 [6.173, 6.198]</td><td style="text-align: right">6.166 [6.145, 6.178]</td><td style="text-align: right">6.156 [6.147, 6.177]</td><td style="text-align: right">6.161 [6.148, 6.166]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">6.156 [6.148, 6.185]</td><td style="text-align: right">6.151 [6.143, 6.172]</td><td style="text-align: right">6.162 [6.154, 6.175]</td><td style="text-align: right">6.158 [6.142, 6.185]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">12.284 [12.209, 12.307]</td><td style="text-align: right">12.274 [12.184, 12.291]</td><td style="text-align: right">12.263 [12.185, 12.333]</td><td style="text-align: right">12.261 [12.175, 12.309]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">186.939 [172.008, 188.107]</td><td style="text-align: right">185.536 [161.424, 190.019]</td><td style="text-align: right">185.561 [173.031, 188.505]</td><td style="text-align: right">176.524 [174.952, 186.997]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">6.193 [6.180, 6.279]</td><td style="text-align: right">6.231 [6.189, 6.286]</td><td style="text-align: right">6.218 [6.187, 6.314]</td><td style="text-align: right">6.261 [6.240, 6.295]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Separate child RSS, MiB. Each cell is <strong>native / clingo</strong>, one fresh-helper observation of each per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">f56a5a24-1</th><th style="text-align: right">679ca856-1</th><th style="text-align: right">679ca856-2</th><th style="text-align: right">f56a5a24-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">11.734 / 5.422</td><td style="text-align: right">11.969 / 5.422</td><td style="text-align: right">11.875 / 5.422</td><td style="text-align: right">11.750 / 5.422</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">12.359 / 8.812</td><td style="text-align: right">12.516 / 7.969</td><td style="text-align: right">12.516 / 7.969</td><td style="text-align: right">12.391 / 8.234</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">11.906 / 5.438</td><td style="text-align: right">12.016 / 5.438</td><td style="text-align: right">12.094 / 5.438</td><td style="text-align: right">11.938 / 5.438</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">11.734 / 5.469</td><td style="text-align: right">11.969 / 5.469</td><td style="text-align: right">12.078 / 5.469</td><td style="text-align: right">11.828 / 5.469</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">12.281 / 5.531</td><td style="text-align: right">12.500 / 5.531</td><td style="text-align: right">12.516 / 5.531</td><td style="text-align: right">12.484 / 5.531</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">12.625 / 5.562</td><td style="text-align: right">12.656 / 5.562</td><td style="text-align: right">12.719 / 5.562</td><td style="text-align: right">12.594 / 5.562</td></tr>
+<tr><td>SEND</td><td style="text-align: right">24.062 / 8.281</td><td style="text-align: right">24.203 / 8.281</td><td style="text-align: right">24.156 / 8.281</td><td style="text-align: right">24.078 / 8.281</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">15.859 / 19.406</td><td style="text-align: right">15.844 / 19.391</td><td style="text-align: right">15.844 / 21.438</td><td style="text-align: right">15.656 / 21.438</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">13.031 / 5.641</td><td style="text-align: right">13.156 / 5.641</td><td style="text-align: right">13.156 / 5.641</td><td style="text-align: right">12.859 / 5.641</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="optional-domain-admission-observations"><a class="header" href="#optional-domain-admission-observations">Optional domain admission observations</a></h3>
+<p>An Indexed off/on/on/off comparison of <code>grounding::profile</code> exercises the
+<a href="../rust/source.html#optional-domains-during-final-instantiation">optional domain API</a>
+at <code>679ca856</code>. It uses <code>a(1..8)</code>, <code>b(1..8)</code> and a <code>c</code> square over 5..12, followed
+by <code>r(X,Y) :- a(X), b(Y), c(X,Y)</code>, with facts explicitly enumerated to stay in
+the flat admitted profile. All 36 sampled admissions and four independent
+Indexed/domain-disabled references preserve the exact subject and one complete
+96-atom model. The three observer modes have different overhead and are kept
+separate. Each cell is a three-sample admission median in microseconds:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Observer mode</th><th style="text-align: right">off-1</th><th style="text-align: right">on-1</th><th style="text-align: right">on-2</th><th style="text-align: right">off-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Unobserved</td><td style="text-align: right">1424.750</td><td style="text-align: right">1182.083</td><td style="text-align: right">1132.000</td><td style="text-align: right">1156.084</td></tr>
+<tr><td>Boundary</td><td style="text-align: right">1584.542</td><td style="text-align: right">1176.042</td><td style="text-align: right">1131.583</td><td style="text-align: right">1104.250</td></tr>
+<tr><td>Detailed</td><td style="text-align: right">1514.583</td><td style="text-align: right">1178.666</td><td style="text-align: right">1190.208</td><td style="text-align: right">1134.291</td></tr>
+</tbody>
+</table>
+</div>
+<p>Detailed final-rule probes fall 73→21 and offered rows 200→168, with 84 rejected
+rows and the same sixteen bindings. Domain preparation adds 2,090 counted units;
+peak named support capacity rises 18,072→18,656 bytes and excludes analyzer
+standard collections. Possible-support completion is unchanged. Admission timing
+includes normalization and requested analysis; source loading/parsing, reference
+checking and publication are outside it. The late enabled/disabled comparison
+ranges from −2.08% to +4.93% across modes, and the early disabled block is much
+slower. This is work reduction with setup cost and drift, not a stable speedup.
+Domains remain disabled in ordinary solving. A completed analysis-attempt phase
+does not certify FixedPoint; these profiler records do not serialize the typed
+analysis status. No RSS, clingo or GPU observation is implied.</p>
+<h3 id="larger-queens-screens"><a class="header" href="#larger-queens-screens">Larger queens screens</a></h3>
+<p>The same three natives were screened with all six N=10 queens encodings and
+predeclared N=12 encodings 03/04. Each has qualification plus one timed sample,
+no warmup, CPU/eager/Indexed, four closure/completion workers, clingo one worker,
+batch size 64, ten-second children and ninety-second campaigns. JSON/statistics
+output is included. The finite decoder admits 16,384 witnesses and 1,048,576
+native full atoms; captures remain bounded. This is a completion screen, not a
+precision timing experiment, and it has no RSS phase.</p>
+<p>At N=10, five encodings qualify with 724 selected answers on each source.
+Encoding 02 reaches clingo’s ten-second timeout; native completes 724 but remains
+reference-unavailable. Each report retains twenty passing positions, that timeout,
+the native reference-unavailable position and two blocked timed positions, and
+exits 1. No timeout is replaced with a first-answer observation. Both N=12
+encodings qualify with 14,200 selected answers on all three sources. Latest native
+internal elapsed times are 2.281/1.818 seconds versus earlier 2.273/1.816 seconds,
+but there is only one timed sample per encoding/source. Full native records are
+retained; selected-output agreement with clingo does not reconstruct its hidden
+interpretations. These limits and outcomes do not establish a general scaling law.</p>
+<h2 id="earlier-atom-catalog-cpu-comparison"><a class="header" href="#earlier-atom-catalog-cpu-comparison">Earlier atom catalog CPU comparison</a></h2>
+<p>This comparison is
+<a href="https://github.com/GregoryGelfond/zetesis/tree/e9fb09d51a719eb1f5ee23a8c5ba5152423f16d2"><code>1e5b78ce</code></a>
+against
+<a href="https://github.com/GregoryGelfond/zetesis/tree/84e15f10f1a89f989d36d215755cb19c58d5f912"><code>ca10a5e7</code></a>,
+recorded on arm64 macOS 26.6.2 on 14 September 2026. The ordinary acquisition
+ran from 03:42:07 to 03:43:27 UTC. Both versions use the canonical package build
+recipe without an LTO override, and the same fixed performance runner and
+clingo 5.8.2. Source and binary identities are retained together; rebuilding a
+named source need not reproduce the same executable bytes.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Artifact</th><th>SHA-256</th></tr>
+</thead>
+<tbody>
+<tr><td>Prior canonical zetesis</td><td><code>0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8</code></td></tr>
+<tr><td>Atom-catalog canonical zetesis</td><td><code>fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e</code></td></tr>
+<tr><td>Fixed zetesis-perf</td><td><code>7c05900d8f3e5c0d05224742c5713bfbe37b64198cff8ef986c1f141356ba9f5</code></td></tr>
+<tr><td>clingo</td><td><code>31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The <a href="observations/release-1e5b78ce-ca10a5e7.json">observation data</a> and
+<a href="observations/release-1e5b78ce-ca10a5e7-provenance.json">provenance</a> retain all
+468 ordered positions, exact integer timing/RSS samples, source and executable
+identities, and the original report hashes. This is a derived receipt view;
+output streams and machine-local paths are omitted. It preserves the recorded
+selected-display/cost comparisons, not an independent comparison of hidden
+full interpretations. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md">observation guide</a> states
+that boundary and reproduces the three tables below without running a solver:</p>
+<pre><code class="language-sh">cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog --check
+</code></pre>
+<p>The four blocks run prior/current/current/prior. Each contains all nine original
+workloads: six N=8 queens encodings, SEND, task allocation variant 04/scenario 05,
+and shortest path variant 01/scenario 06. Each producer/case/block has
+qualification, one warmup, three timed runs and one separate child-RSS run;
+native diagnostics are separate. All positions pass, with no capture faults or
+unresolved children. Recorded selected families contain 92 models for queens,
+one for SEND, 1,176 optimum ties at cost <code>[5]</code> for task allocation, and one at
+<code>[4,4]</code> for shortest path.</p>
+<p>Both natives use CPU/eager/Indexed with automatic oracle selection and one
+requested closure and completion worker. All 36 diagnostics identify actual
+<code>tight-support</code>, indexed probes and zero Table probes. Native timed output is
+human-readable without statistics; clingo emits JSON. Timers include process
+startup, capture and reaping, with output comparison outside the interval.
+The limits are five seconds per child, 30 seconds per campaign, 4 MiB per
+capture, 128 MiB total capture and 512 MiB per report. No cold-cache condition or
+confidence interval is claimed. Timed samples do not measure Table joins,
+shared lazy grounding, parallel residual completion or GPU execution.</p>
+<p>Task allocation uses 16.016 MiB in both current RSS samples versus
+19.641/19.531 MiB previously: an 18.23% decrease between the two sample means.
+Its mean block-median wall time decreases 1.60%, with overlapping ranges;
+matched clingo decreases 0.60%. SEND instead increases 7.91%, and every current
+timed value exceeds every prior value in this acquisition. Matched clingo is
+nearly unchanged. These percentages compare the mean of the two current block
+medians with the mean of the two prior block medians, not a pooled population.</p>
+<p>The apparent 7.25% shortest-path decrease depends on the final prior block’s
+9.193 ms median; the other three are about 7.92–7.94 ms. Several queens and
+reference blocks also drift. Separate diagnostics locate higher SEND and task
+grounding times and lower task solving times, but do not isolate a cause.
+Neither these stage observations nor unchanged source-event counts enumerate
+every comparison, allocation or copy. All block ranges remain visible below.</p>
+<p>RSS measures a separate solver child’s peak, excluding the resource helper;
+waited descendants can contribute. It is neither simultaneous process-tree
+RSS nor a measurement of one index’s capacity. The two samples per version
+support the stated task observation, not a general memory-scaling claim.
+MiB means 1,048,576 bytes.</p>
+<p>Native wall time, ms: median [minimum, maximum] of three timed samples per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">current-1</th><th style="text-align: right">current-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">14.102 [14.054, 15.545]</td><td style="text-align: right">15.459 [15.346, 15.464]</td><td style="text-align: right">15.367 [15.356, 16.644]</td><td style="text-align: right">15.236 [15.144, 15.323]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">89.576 [89.556, 89.769]</td><td style="text-align: right">90.657 [90.404, 92.048]</td><td style="text-align: right">91.815 [91.779, 92.996]</td><td style="text-align: right">91.885 [91.517, 91.980]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">15.430 [15.387, 15.480]</td><td style="text-align: right">16.722 [16.604, 16.810]</td><td style="text-align: right">16.687 [16.616, 16.756]</td><td style="text-align: right">16.667 [15.470, 16.763]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">7.812 [7.799, 9.183]</td><td style="text-align: right">7.899 [7.834, 9.096]</td><td style="text-align: right">9.148 [7.836, 9.165]</td><td style="text-align: right">9.114 [9.080, 9.214]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">10.350 [8.980, 10.387]</td><td style="text-align: right">10.428 [10.053, 11.668]</td><td style="text-align: right">10.301 [10.290, 10.365]</td><td style="text-align: right">10.402 [10.298, 11.711]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">10.322 [10.276, 11.698]</td><td style="text-align: right">11.432 [10.404, 11.671]</td><td style="text-align: right">11.658 [11.630, 11.670]</td><td style="text-align: right">11.622 [10.325, 11.627]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">33.847 [32.902, 34.132]</td><td style="text-align: right">36.700 [36.449, 36.800]</td><td style="text-align: right">36.821 [36.765, 36.851]</td><td style="text-align: right">34.285 [34.201, 35.516]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">94.253 [93.360, 94.554]</td><td style="text-align: right">93.412 [93.307, 93.548]</td><td style="text-align: right">93.406 [93.212, 93.666]</td><td style="text-align: right">95.599 [93.591, 95.827]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7.921 [7.835, 7.951]</td><td style="text-align: right">7.935 [7.866, 9.202]</td><td style="text-align: right">7.938 [7.938, 9.165]</td><td style="text-align: right">9.193 [7.881, 9.229]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Matched clingo wall time, ms, with the same three-sample notation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">current-1</th><th style="text-align: right">current-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">6.526 [6.493, 6.532]</td><td style="text-align: right">6.513 [5.244, 6.519]</td><td style="text-align: right">6.562 [6.511, 6.577]</td><td style="text-align: right">5.221 [5.180, 6.677]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">121.563 [120.676, 121.624]</td><td style="text-align: right">121.586 [121.522, 123.060]</td><td style="text-align: right">123.265 [122.855, 123.400]</td><td style="text-align: right">123.990 [123.318, 124.397]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">6.590 [6.586, 6.596]</td><td style="text-align: right">6.590 [6.584, 6.604]</td><td style="text-align: right">6.549 [6.507, 6.579]</td><td style="text-align: right">6.517 [6.459, 6.579]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.479 [5.180, 6.532]</td><td style="text-align: right">6.520 [6.456, 6.520]</td><td style="text-align: right">6.510 [6.477, 6.513]</td><td style="text-align: right">6.442 [5.179, 6.461]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">6.521 [6.445, 6.529]</td><td style="text-align: right">6.506 [6.495, 6.518]</td><td style="text-align: right">6.501 [6.428, 6.506]</td><td style="text-align: right">6.506 [5.159, 6.560]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">5.247 [5.185, 6.442]</td><td style="text-align: right">6.494 [6.444, 6.499]</td><td style="text-align: right">6.480 [6.282, 6.521]</td><td style="text-align: right">5.213 [5.187, 6.633]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">11.589 [11.403, 11.605]</td><td style="text-align: right">11.600 [11.448, 11.613]</td><td style="text-align: right">11.563 [11.448, 12.680]</td><td style="text-align: right">11.556 [11.494, 12.875]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">186.945 [182.191, 188.547]</td><td style="text-align: right">187.135 [175.736, 188.596]</td><td style="text-align: right">183.200 [181.927, 186.255]</td><td style="text-align: right">185.619 [181.670, 190.859]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">5.298 [5.209, 6.508]</td><td style="text-align: right">5.198 [5.195, 5.253]</td><td style="text-align: right">6.508 [5.183, 6.566]</td><td style="text-align: right">6.358 [5.262, 6.569]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Separate child RSS, MiB. Each cell is <strong>native / clingo</strong>, one fresh-helper observation of each per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">current-1</th><th style="text-align: right">current-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">12.109 / 5.656</td><td style="text-align: right">12.109 / 5.656</td><td style="text-align: right">12.156 / 5.656</td><td style="text-align: right">12.125 / 5.656</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">12.672 / 11.000</td><td style="text-align: right">12.781 / 10.000</td><td style="text-align: right">12.812 / 10.016</td><td style="text-align: right">12.703 / 9.688</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">12.234 / 5.656</td><td style="text-align: right">12.219 / 5.656</td><td style="text-align: right">12.172 / 5.672</td><td style="text-align: right">12.172 / 5.656</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">12.219 / 5.703</td><td style="text-align: right">12.250 / 5.703</td><td style="text-align: right">12.234 / 5.922</td><td style="text-align: right">12.281 / 5.703</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">12.625 / 5.766</td><td style="text-align: right">12.719 / 5.766</td><td style="text-align: right">12.594 / 5.766</td><td style="text-align: right">12.688 / 5.766</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">12.703 / 5.812</td><td style="text-align: right">12.844 / 5.812</td><td style="text-align: right">12.922 / 5.812</td><td style="text-align: right">12.719 / 5.812</td></tr>
+<tr><td>SEND</td><td style="text-align: right">24.188 / 8.500</td><td style="text-align: right">24.250 / 8.500</td><td style="text-align: right">24.297 / 8.500</td><td style="text-align: right">24.172 / 8.500</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">19.641 / 22.750</td><td style="text-align: right">16.016 / 22.375</td><td style="text-align: right">16.016 / 22.516</td><td style="text-align: right">19.531 / 21.688</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">13.156 / 6.062</td><td style="text-align: right">13.234 / 5.891</td><td style="text-align: right">13.344 / 5.891</td><td style="text-align: right">13.156 / 5.891</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="explicit-cpu-profile-matrix"><a class="header" href="#explicit-cpu-profile-matrix">Explicit CPU profile matrix</a></h3>
+<p>A separate N=8 queens matrix requests eager and lazy profiles, four closure and
+completion workers, and batch size 64. Across four prior/current/current/prior
+blocks, all 360 positions are accounted: 240 pass, 24 return typed
+<code>unsupported_oracle</code>, and 96 successors are blocked by those refusals. Every
+report therefore exits 1. Both revisions refuse the same CPU/lazy requests
+because the selected countermodel route requires eager or automatic grounding.
+There are no capture faults or unresolved children. A refusal is an incomplete
+outcome, not UNSAT or a successful zero-time sample.</p>
+<p>All 120 successful native observations actually use CPU/eager/Indexed and
+<code>tight_support</code>, exhaust their search and check, verify and publish 92 models.
+The paired references have 92 selected displays. Completion records zero
+residuals and zero effective completion workers, despite four requested workers;
+there is no actual GPU activity. Counts and recorded passing comparisons are
+not a new independent hidden-family reconstruction. These JSON/statistics
+process timings form a different population from ordinary human-output times;
+no RSS or successful lazy timing is available from this matrix. It neither
+qualifies shared lazy performance nor establishes a parallel or GPU gain.</p>
+<h3 id="reproducing-the-ordinary-comparison"><a class="header" href="#reproducing-the-ordinary-comparison">Reproducing the ordinary comparison</a></h3>
+<p>The <a href="#reproduce-the-measurements">ordinary comparison function below</a> uses the
+same nine cases and limits. For this atom-catalog comparison, select the named
+1e5b78ce and ca10a5e7 binaries and the runner hash above, and pass <code>indexed</code> for
+both versions. After defining that function, run the following calls separately,
+retaining and inspecting every report before continuing:</p>
+<pre><code class="language-sh">ordinary catalog-prior-1 "$previous_solver" indexed
+ordinary catalog-current-1 "$current_solver" indexed
+ordinary catalog-current-2 "$current_solver" indexed
+ordinary catalog-prior-2 "$previous_solver" indexed
+</code></pre>
+<p>The new public dataset contains only the ordinary 468-position comparison.
+Shared-lazy and matrix summaries retain their distinct methods and completion
+limits. These CPU acquisitions do not qualify Metal or imply a performance
+claim for later sources.</p>
+<h2 id="earlier-table-grounding-comparisons"><a class="header" href="#earlier-table-grounding-comparisons">Earlier Table-grounding comparisons</a></h2>
+<p>The sections below retain their original 6bebb980 → 1e5b78ce release, Table,
+LTO and Metal evidence. Their previous/current labels refer to those sources,
+not to the atom-catalog comparison above. The historical ordinary artifacts and
+their three published tables are unchanged.</p>
+<p>The ordinary grounder now offers <code>--formula-joins table</code> for eligible positive
+joins over completed eager support. It reuses borrowed relation indices and
+consumes original row positions through the existing matcher. Indexed joins
+remain the default. These measurements establish actual table use and some
+reductions in visited rows; they do not establish a broad application speedup.</p>
+<p>The release profile also remains unchanged after a separate normal/thin/fat
+LTO comparison. Smaller binaries and lower sampled RSS did not produce better
+times on all important inputs. Matched eager CPU/Metal measurements also show
+no broad Table speedup; CPU is faster on these inputs. That comparison spans
+two acquisition windows, kept explicit below. Earlier Metal and standalone table
+results retain their original source scope.</p>
+<h2 id="versions-and-measurement-boundaries"><a class="header" href="#versions-and-measurement-boundaries">Versions and measurement boundaries</a></h2>
+<p>Measurements ran on an Apple M4 Pro with macOS 26.6.2 on 12 September 2026,
+using Rust 1.97.1 and clingo 5.8.2. The previous implementation is
+<a href="https://github.com/GregoryGelfond/zetesis/tree/3d84ee86145677f6293992d08c03d287011fd3f5"><code>6bebb980</code></a>;
+the new implementation is
+<a href="https://github.com/GregoryGelfond/zetesis/tree/e9fb09d51a719eb1f5ee23a8c5ba5152423f16d2"><code>1e5b78ce</code></a>.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/7a9177a574b93df812627f514d87aab851d7726c/docs/book/reference/performance.md">preceding complete comparison</a>
+retains the earlier CPU, Metal and primitive tables and their reproduction commands.</p>
+<p>The canonical release comparison uses the installer’s package selection.
+The LTO experiment uses a separate fixed single-binary build recipe; its normal
+binary is not the canonical installer binary. The same preserved <code>zetesis-perf</code>
+acquires all ordinary comparisons. Native output is human-readable without
+statistics during timing; clingo emits JSON. Separate diagnostic invocations
+retain actual execution and grounding counters.
+These ordinary comparisons use the CPU backend, eager grounding and automatic
+oracle selection, with one requested closure worker and one completion worker.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Artifact</th><th>SHA-256</th></tr>
+</thead>
+<tbody>
+<tr><td>Previous canonical zetesis</td><td><code>35b96c837dd5027853c735044e092f9054d63fc516940ec83d10627ecc2cf5d8</code></td></tr>
+<tr><td>Current canonical zetesis</td><td><code>0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8</code></td></tr>
+<tr><td>Fixed zetesis-perf</td><td><code>5eb1c1d1de5e9076c2d37150dea8d7a869d34468cc88a8fc3627cf1002595e53</code></td></tr>
+<tr><td>Current grounding-profile zetesis-bench</td><td><code>33cbe86ea2913d67685ed1bafd0bb97629f86d9f432aff14c269f62c84b92cd1</code></td></tr>
+<tr><td>clingo 5.8.2</td><td><code>31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015</code></td></tr>
+<tr><td>Corpus manifest</td><td><code>b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>All six queens encodings use N=8 unless stated otherwise. SEND uses the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/send-money/send-money.lp">standalone encoding</a>,
+task allocation uses <a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp">variant04/scenario05</a>,
+and shortest path uses <a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp">variant01/scenario06</a>.
+Their <a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/manifest.json">manifest</a> records companion
+sources and their hashes. Unoptimized programs enumerate all answers; optimized
+programs publish every optimum tie. This is neither time to the first answer
+nor a comparison of unpublished nonoptimal interpretations.</p>
+<p>Each ordinary A/B/B/A comparison has four blocks. A block contains qualification,
+one warmup pair, three timed pairs, one separate memory pair and one native
+statistics run for each of nine cases. All 16 blocks account for 1,872 passing
+positions with no capture faults or unresolved children. Startup and output are
+included; no cold-cache condition or confidence interval is claimed. Block
+medians remain visible because some populations drift substantially.</p>
+<p>Memory samples report solver-child peak RSS from a fresh helper; the helper is
+excluded and waited descendants may contribute to child usage. Two samples per
+side of a four-block comparison are a limited observation, not a process-tree
+memory census or device-memory measure. MiB means 1,048,576 bytes.</p>
+<h2 id="canonical-release-comparison"><a class="header" href="#canonical-release-comparison">Canonical release comparison</a></h2>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md">curated observation data</a> publishes all 468 ordered
+receipts for this historical nine-workload, four-block comparison, with exact
+timing/RSS samples and source, executable and original-report hashes. The
+maintained <code>release_observations</code> Rust example reproduces the three tables below.
+This derived view retains the original selected-display qualification scope;
+it is not a raw-output archive, a new parity check or qualification of the
+current implementation. The other Metal and LTO populations are outside it.</p>
+<p>These tables now round directly from integer nanoseconds and bytes to three
+decimal places, with ties to even. This corrects a few final digits in the
+earlier presentation; the raw observations and comparison scope are unchanged.</p>
+<p>The prior binary uses its default joins; the current binary explicitly requests
+Indexed. Current blocks largely resemble the closing prior block, while many
+first prior timings are lower. Matched clingo observations also drift (for
+example task allocation 170.862 to 196.935 ms between prior blocks, with current
+blocks 200.485 and 197.766 ms). Do not attribute that whole shift to the new code.
+SEND still has higher current medians than either prior block, which remains a
+visible result rather than evidence of universal neutrality. These measurements
+show no broad speed or RSS improvement for this release boundary.</p>
+<p>Native wall time, ms: median [minimum, maximum] of three timed samples per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">current-1</th><th style="text-align: right">current-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">15.302 [14.036, 15.498]</td><td style="text-align: right">16.688 [16.451, 16.693]</td><td style="text-align: right">16.674 [16.430, 16.698]</td><td style="text-align: right">16.694 [16.528, 16.832]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">90.830 [88.143, 92.014]</td><td style="text-align: right">96.748 [96.522, 97.113]</td><td style="text-align: right">95.871 [95.738, 97.597]</td><td style="text-align: right">96.982 [95.416, 97.047]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">15.397 [15.395, 15.404]</td><td style="text-align: right">16.744 [16.721, 16.752]</td><td style="text-align: right">16.715 [16.641, 16.741]</td><td style="text-align: right">16.752 [16.680, 16.754]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">7.819 [7.779, 9.064]</td><td style="text-align: right">9.147 [9.138, 9.230]</td><td style="text-align: right">9.147 [9.135, 9.161]</td><td style="text-align: right">9.036 [8.976, 9.117]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">10.311 [10.296, 10.414]</td><td style="text-align: right">11.487 [11.454, 11.682]</td><td style="text-align: right">11.649 [10.337, 11.760]</td><td style="text-align: right">11.675 [11.597, 11.713]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">10.321 [10.307, 10.350]</td><td style="text-align: right">11.660 [11.594, 11.731]</td><td style="text-align: right">11.638 [11.525, 11.640]</td><td style="text-align: right">11.688 [11.659, 11.730]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">32.872 [32.855, 32.957]</td><td style="text-align: right">36.864 [35.559, 36.877]</td><td style="text-align: right">36.846 [36.777, 36.862]</td><td style="text-align: right">35.530 [35.528, 35.543]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">94.881 [94.600, 96.831]</td><td style="text-align: right">99.692 [99.676, 99.701]</td><td style="text-align: right">99.762 [99.169, 99.803]</td><td style="text-align: right">101.743 [101.006, 102.320]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7.872 [7.810, 7.899]</td><td style="text-align: right">9.214 [9.118, 9.220]</td><td style="text-align: right">9.144 [9.103, 9.210]</td><td style="text-align: right">9.228 [8.958, 9.236]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Matched clingo wall time, ms, with the same three-sample notation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">current-1</th><th style="text-align: right">current-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">5.228 [5.217, 6.458]</td><td style="text-align: right">6.517 [6.514, 6.576]</td><td style="text-align: right">6.546 [6.519, 6.585]</td><td style="text-align: right">6.527 [6.506, 6.680]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">120.825 [120.531, 122.078]</td><td style="text-align: right">130.939 [130.576, 130.940]</td><td style="text-align: right">130.835 [130.720, 130.959]</td><td style="text-align: right">130.706 [130.554, 130.716]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">6.555 [6.479, 6.580]</td><td style="text-align: right">6.550 [6.509, 6.571]</td><td style="text-align: right">6.556 [6.551, 6.565]</td><td style="text-align: right">6.566 [6.529, 6.577]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.460 [5.154, 6.472]</td><td style="text-align: right">6.533 [6.468, 6.659]</td><td style="text-align: right">6.503 [6.450, 6.511]</td><td style="text-align: right">6.514 [6.497, 6.532]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">6.450 [5.172, 6.458]</td><td style="text-align: right">6.492 [6.449, 7.828]</td><td style="text-align: right">6.510 [6.485, 6.511]</td><td style="text-align: right">6.497 [6.462, 6.556]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">5.176 [5.156, 6.518]</td><td style="text-align: right">6.522 [6.507, 6.559]</td><td style="text-align: right">6.507 [6.430, 6.507]</td><td style="text-align: right">6.511 [6.465, 6.530]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">11.604 [11.502, 11.772]</td><td style="text-align: right">12.817 [12.785, 12.851]</td><td style="text-align: right">12.765 [12.597, 12.825]</td><td style="text-align: right">12.822 [12.724, 12.886]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">170.862 [162.112, 178.523]</td><td style="text-align: right">200.485 [200.336, 201.329]</td><td style="text-align: right">197.766 [175.564, 198.352]</td><td style="text-align: right">196.935 [192.598, 200.959]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">5.209 [5.209, 6.569]</td><td style="text-align: right">6.497 [6.488, 6.570]</td><td style="text-align: right">6.557 [6.506, 6.594]</td><td style="text-align: right">6.511 [6.494, 6.541]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Separate child RSS, MiB. Each cell is <strong>native / clingo</strong>, one fresh-helper observation of each per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">current-1</th><th style="text-align: right">current-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">12.109 / 5.656</td><td style="text-align: right">12.156 / 5.656</td><td style="text-align: right">12.203 / 5.656</td><td style="text-align: right">12.109 / 5.656</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">12.656 / 9.547</td><td style="text-align: right">12.625 / 10.953</td><td style="text-align: right">12.656 / 10.531</td><td style="text-align: right">12.672 / 10.344</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">12.078 / 5.656</td><td style="text-align: right">12.250 / 5.953</td><td style="text-align: right">12.234 / 5.656</td><td style="text-align: right">12.094 / 5.656</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">12.078 / 5.703</td><td style="text-align: right">12.250 / 5.922</td><td style="text-align: right">12.172 / 5.703</td><td style="text-align: right">12.156 / 5.703</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">12.656 / 5.766</td><td style="text-align: right">12.656 / 5.766</td><td style="text-align: right">12.625 / 5.938</td><td style="text-align: right">12.703 / 5.766</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">12.750 / 5.812</td><td style="text-align: right">12.797 / 5.812</td><td style="text-align: right">12.750 / 5.812</td><td style="text-align: right">12.812 / 5.812</td></tr>
+<tr><td>SEND</td><td style="text-align: right">24.094 / 9.234</td><td style="text-align: right">24.250 / 9.438</td><td style="text-align: right">24.266 / 9.047</td><td style="text-align: right">24.125 / 8.938</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">19.453 / 21.156</td><td style="text-align: right">19.719 / 21.422</td><td style="text-align: right">19.688 / 22.500</td><td style="text-align: right">19.484 / 23.250</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">13.109 / 5.891</td><td style="text-align: right">13.219 / 6.672</td><td style="text-align: right">13.109 / 6.141</td><td style="text-align: right">12.969 / 5.891</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="indexed-versus-table-in-ordinary-solving"><a class="header" href="#indexed-versus-table-in-ordinary-solving">Indexed versus Table in ordinary solving</a></h2>
+<p>All four blocks use exactly the same canonical binary. Every native invocation
+has its requested strategy flag; no clingo invocation has that flag. Table work
+is observed on every one of the nine inputs in both Table diagnostic blocks.
+Ordinary wall times show small mixed changes and later-block drift, rather than
+a broad application speedup. There is no demonstrated RSS reduction from Table
+on this population. Keeping Indexed as the default is consistent with these
+results; the Table option supplies an applicable, measured alternative.</p>
+<p>Native wall time, ms: median [minimum, maximum] of three timed samples per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">indexed-1</th><th style="text-align: right">table-1</th><th style="text-align: right">table-2</th><th style="text-align: right">indexed-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">13.743 [13.743, 15.275]</td><td style="text-align: right">13.725 [13.721, 13.738]</td><td style="text-align: right">13.730 [13.713, 13.756]</td><td style="text-align: right">15.153 [14.061, 15.415]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">87.671 [87.548, 89.096]</td><td style="text-align: right">88.934 [87.531, 90.587]</td><td style="text-align: right">89.086 [87.526, 89.151]</td><td style="text-align: right">90.405 [90.326, 90.724]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">15.340 [13.754, 15.433]</td><td style="text-align: right">15.272 [13.713, 15.311]</td><td style="text-align: right">15.306 [15.245, 15.409]</td><td style="text-align: right">15.397 [15.364, 16.765]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">7.733 [7.729, 7.738]</td><td style="text-align: right">7.715 [7.701, 7.718]</td><td style="text-align: right">7.742 [7.723, 7.752]</td><td style="text-align: right">7.802 [7.765, 9.229]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">9.213 [9.210, 9.217]</td><td style="text-align: right">9.196 [9.196, 9.202]</td><td style="text-align: right">9.234 [9.205, 10.710]</td><td style="text-align: right">10.275 [10.275, 10.317]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">9.199 [9.179, 9.201]</td><td style="text-align: right">9.191 [9.178, 9.200]</td><td style="text-align: right">10.717 [9.213, 10.767]</td><td style="text-align: right">10.293 [10.285, 10.300]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">31.785 [30.259, 31.847]</td><td style="text-align: right">31.803 [31.759, 31.825]</td><td style="text-align: right">31.778 [31.767, 33.417]</td><td style="text-align: right">32.885 [32.871, 32.901]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">93.930 [92.529, 94.056]</td><td style="text-align: right">93.952 [92.450, 93.956]</td><td style="text-align: right">93.969 [93.967, 95.584]</td><td style="text-align: right">94.851 [93.350, 96.125]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7.842 [7.779, 7.862]</td><td style="text-align: right">7.789 [7.787, 7.867]</td><td style="text-align: right">7.862 [7.818, 7.885]</td><td style="text-align: right">7.886 [7.856, 9.175]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Matched clingo wall time, ms, with the same three-sample notation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">indexed-1</th><th style="text-align: right">table-1</th><th style="text-align: right">table-2</th><th style="text-align: right">indexed-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">6.221 [4.654, 6.228]</td><td style="text-align: right">6.187 [6.178, 6.216]</td><td style="text-align: right">6.219 [6.193, 6.241]</td><td style="text-align: right">5.233 [5.197, 6.280]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">117.564 [116.112, 117.592]</td><td style="text-align: right">119.033 [119.003, 119.116]</td><td style="text-align: right">119.109 [119.052, 119.173]</td><td style="text-align: right">120.612 [120.369, 121.364]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">6.222 [6.186, 6.224]</td><td style="text-align: right">6.166 [6.161, 6.224]</td><td style="text-align: right">6.209 [6.194, 6.210]</td><td style="text-align: right">6.524 [5.201, 6.534]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.177 [6.158, 6.186]</td><td style="text-align: right">6.156 [6.149, 6.171]</td><td style="text-align: right">6.176 [6.151, 6.208]</td><td style="text-align: right">5.176 [5.154, 6.501]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">6.162 [6.160, 6.188]</td><td style="text-align: right">6.153 [6.144, 6.169]</td><td style="text-align: right">6.152 [6.147, 6.168]</td><td style="text-align: right">6.302 [5.165, 6.503]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">6.164 [6.148, 6.176]</td><td style="text-align: right">6.151 [6.149, 6.152]</td><td style="text-align: right">6.170 [6.166, 6.205]</td><td style="text-align: right">5.186 [5.175, 6.495]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">10.725 [10.661, 10.769]</td><td style="text-align: right">10.745 [10.640, 10.807]</td><td style="text-align: right">10.781 [10.681, 12.233]</td><td style="text-align: right">11.518 [11.445, 11.579]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">177.943 [159.819, 182.149]</td><td style="text-align: right">171.897 [162.911, 180.489]</td><td style="text-align: right">184.059 [170.342, 185.564]</td><td style="text-align: right">179.709 [160.830, 180.513]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">6.240 [4.727, 6.273]</td><td style="text-align: right">6.240 [4.736, 6.241]</td><td style="text-align: right">6.258 [4.745, 6.259]</td><td style="text-align: right">5.270 [5.223, 6.563]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Separate child RSS, MiB. Each cell is <strong>native / clingo</strong>, one fresh-helper observation of each per block.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">indexed-1</th><th style="text-align: right">table-1</th><th style="text-align: right">table-2</th><th style="text-align: right">indexed-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">12.203 / 5.656</td><td style="text-align: right">12.234 / 5.656</td><td style="text-align: right">12.125 / 5.656</td><td style="text-align: right">12.156 / 5.656</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">12.750 / 8.406</td><td style="text-align: right">12.781 / 8.406</td><td style="text-align: right">12.797 / 9.141</td><td style="text-align: right">12.578 / 10.094</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">12.203 / 5.656</td><td style="text-align: right">12.250 / 5.656</td><td style="text-align: right">12.297 / 5.656</td><td style="text-align: right">12.188 / 5.656</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">12.234 / 5.703</td><td style="text-align: right">12.266 / 5.703</td><td style="text-align: right">12.250 / 5.703</td><td style="text-align: right">12.188 / 5.703</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">12.656 / 5.766</td><td style="text-align: right">12.688 / 5.766</td><td style="text-align: right">12.703 / 5.766</td><td style="text-align: right">12.641 / 5.766</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">12.859 / 5.813</td><td style="text-align: right">12.766 / 5.813</td><td style="text-align: right">12.906 / 5.813</td><td style="text-align: right">12.844 / 5.813</td></tr>
+<tr><td>SEND</td><td style="text-align: right">24.203 / 8.500</td><td style="text-align: right">24.281 / 8.500</td><td style="text-align: right">24.266 / 8.500</td><td style="text-align: right">24.234 / 8.500</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">19.641 / 19.766</td><td style="text-align: right">19.703 / 19.719</td><td style="text-align: right">19.719 / 19.750</td><td style="text-align: right">19.688 / 22.703</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">13.141 / 5.891</td><td style="text-align: right">13.125 / 5.891</td><td style="text-align: right">13.203 / 5.891</td><td style="text-align: right">13.172 / 5.891</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="what-the-table-consumer-does"><a class="header" href="#what-the-table-consumer-does">What the table consumer does</a></h2>
+<p>The <a href="../rust/finite-tables.html">library API</a> separates immutable relation ownership,
+prepared indices and per-query result masks. A selection can outlive its table
+index while borrowing the original relation. Domain restrictions include typed
+constants, already-bound source values and repeated-variable aliases. Each
+probe derives fresh domains; it does not reuse a previous binding’s mask.</p>
+<p>The completed eager consumer caches tables by signed predicate and canonical
+column scope. Increasing original row positions feed the same whole-row matcher,
+binding extension and authored-body checks used by indexed joins. Possible
+support remains distinct from model truth. Support-growth rounds and structural
+patterns keep indexed matching; this is an explicit scope boundary. Work,
+allocation and capacity failures remain grounding failures. The strategies can
+reach those limits at different points because their charged costs differ.</p>
+<p>In both separate Table diagnostic blocks, actual preparation/reuse/probe/row
+counts agree for all nine ordinary inputs. The comparison below uses the same
+current executable for Indexed and Table. All join rows include support-growth
+work, which remains indexed.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">Preparations / reuses</th><th style="text-align: right">Probes / selected rows</th><th style="text-align: right">All join rows Indexed → Table</th><th style="text-align: right">Index bytes</th><th style="text-align: right">Support peak Indexed → Table</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">3 / 145</td><td style="text-align: right">148 / 8464</td><td style="text-align: right">8752 → 8752</td><td style="text-align: right">560</td><td style="text-align: right">10920 → 14376</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">3 / 267</td><td style="text-align: right">270 / 9608</td><td style="text-align: right">9752 → 9752</td><td style="text-align: right">560</td><td style="text-align: right">11016 → 14376</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">3 / 154</td><td style="text-align: right">157 / 8536</td><td style="text-align: right">8680 → 8680</td><td style="text-align: right">560</td><td style="text-align: right">11016 → 14452</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">3 / 54</td><td style="text-align: right">57 / 2136</td><td style="text-align: right">2280 → 2280</td><td style="text-align: right">560</td><td style="text-align: right">11016 → 14452</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">5 / 198</td><td style="text-align: right">203 / 616</td><td style="text-align: right">1800 → 904</td><td style="text-align: right">1744</td><td style="text-align: right">29064 → 34096</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">5 / 189</td><td style="text-align: right">194 / 544</td><td style="text-align: right">1872 → 976</td><td style="text-align: right">1744</td><td style="text-align: right">29064 → 34096</td></tr>
+<tr><td>SEND</td><td style="text-align: right">6 / 1658</td><td style="text-align: right">1664 / 16404</td><td style="text-align: right">16618 → 16604</td><td style="text-align: right">1320</td><td style="text-align: right">21912 → 26620</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">16 / 483</td><td style="text-align: right">499 / 4767</td><td style="text-align: right">7411 → 7339</td><td style="text-align: right">2504</td><td style="text-align: right">39600 → 45316</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7 / 293</td><td style="text-align: right">300 / 449</td><td style="text-align: right">1153 → 979</td><td style="text-align: right">2496</td><td style="text-align: right">26600 → 31320</td></tr>
+</tbody>
+</table>
+</div>
+<p>Index bytes count retained prepared-index capacity, excluding cache slots.
+Support peak includes admitted support/query capacity, live masks and the
+conservative operation envelope; aggregation takes the maximum. Neither is
+RSS. Table removes many row visits for Queens 5/6 and some for SEND, task
+allocation and shortest path. Queens 1–4 visit the same number. Preparation and
+query work remain, so these counts do not imply shorter grounding time.</p>
+<p>The reduction offers a possible path to larger instances: repeated joins can
+amortize index construction, and selective bindings can limit the growth of
+whole-row matching work as relations expand. Total cost still includes mask
+operations, retained index storage and the final ground program. Measurements
+under fixed time and memory budgets are needed to establish whether more or
+larger instances become tractable; the current counts do not establish an
+asymptotic or measured scalability gain.</p>
+<p>The six additional N=8 grounding profiles each compare an indexed reference
+with one unobserved, one boundary-observed and one detailed Table admission.
+Every sample and reference exhausts the same 92 unique full native answer sets;
+atom/formula catalogs, source evidence and available subject fingerprints agree.
+The detailed records independently confirm table use and reuse. These single
+rotated profile rounds are semantic and work-schedule evidence, not a speedup
+estimate.</p>
+<p>The mathematical <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/table-bindings.md">binding-family laws</a>
+preserve ordered source-row occurrences and binding results under explicit
+matching and completeness premises. They do not verify Rust bitsets,
+allocation/error behavior or the complete grounding translation.</p>
+<p>This integration is scalar. Immutable table queries can be independent library
+work, but the current consumer does not parallelize mutable bindings, formula
+emission or source-error order. It launches no GPU table kernel. Useful next
+measurements would separate preparation amortization from query pruning and
+examine larger repeated flat joins. Any parallel consumer or GPU route would
+also need bounded ownership, failure and source-order contracts; independent
+primitive throughput is insufficient to select it automatically.</p>
+<h2 id="larger-queens-and-complete-native-families"><a class="header" href="#larger-queens-and-complete-native-families">Larger queens and complete native families</a></h2>
+<p>A separate bounded screen changes only the parsed <code>n = 8</code> literal in each
+source closure. It includes all six encodings at N=10 and encodings 3/4 at N=12.
+The N=12 subset was chosen for full-output size before measurement; it is not a
+selection of favorable timings. Previous/default, current/Indexed and
+current/Table use separate CPU/eager JSON/statistics reports, four requested
+closure/completion workers, batch 64, qualification and one timed pair, no
+warmup. Requested worker counts alone establish no parallel work.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Population</th><th style="text-align: right">Complete native family</th><th>External comparison</th></tr>
+</thead>
+<tbody>
+<tr><td>N=10, Queens 1 and 3–6</td><td style="text-align: right">724 answers for each encoding</td><td>Qualification and timed pairs pass in all three configurations</td></tr>
+<tr><td>N=10, Queens 2</td><td style="text-align: right">724 answers in each native qualification capture</td><td>All three clingo qualification calls reach the 10-second limit; no qualified timed pair</td></tr>
+<tr><td>N=12, Queens 3</td><td style="text-align: right">No complete family</td><td>All three native configurations refuse the Work limit</td></tr>
+<tr><td>N=12, Queens 4</td><td style="text-align: right">14,200 answers</td><td>Qualification and timed pairs pass in all three configurations</td></tr>
+</tbody>
+</table>
+</div>
+<p>Across 39 complete native captures, comparison resolves shown atom indices
+against full typed models and preserves signs, recursive values, shown terms
+and costs. Families agree across the relevant versions, strategies and repeat
+phases, with no duplicate full models. This independently establishes more
+native identity than the ordinary human-output protocol. It cannot supply
+missing clingo evidence for N=10 Queens 2 or a family after the N=12 refusal.</p>
+<p>The N=12 Queens 3 refusal reports Work capacity 1,048,576 with the next required
+amount 1,048,577. Table’s added preparation/query charges reach that bound at a
+different partial grounding state; fewer emitted records before failure are
+not a successful pruning result. All 96 scheduled positions remain accounted:
+78 pass, 3 time out, 3 lack the reference, 3 are refused and 9 are blocked.
+The 87 acquired captures have no capture faults or unresolved children.</p>
+<p>The one timed native sample for each passing cell is shown below, in ms.
+These are full JSON/statistics process times, not medians or isolated grounding
+times. There is no RSS sample in this screen.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Population</th><th style="text-align: right">Previous</th><th style="text-align: right">Current Indexed</th><th style="text-align: right">Current Table</th></tr>
+</thead>
+<tbody>
+<tr><td>N=10, Queens 1</td><td style="text-align: right">101.33</td><td style="text-align: right">102.51</td><td style="text-align: right">101.04</td></tr>
+<tr><td>N=10, Queens 3</td><td style="text-align: right">91.54</td><td style="text-align: right">101.82</td><td style="text-align: right">100.84</td></tr>
+<tr><td>N=10, Queens 4</td><td style="text-align: right">64.24</td><td style="text-align: right">70.29</td><td style="text-align: right">69.26</td></tr>
+<tr><td>N=10, Queens 5</td><td style="text-align: right">542.37</td><td style="text-align: right">597.19</td><td style="text-align: right">631.96</td></tr>
+<tr><td>N=10, Queens 6</td><td style="text-align: right">551.98</td><td style="text-align: right">604.04</td><td style="text-align: right">642.62</td></tr>
+<tr><td>N=12, Queens 4</td><td style="text-align: right">1822.70</td><td style="text-align: right">1837.12</td><td style="text-align: right">1824.89</td></tr>
+</tbody>
+</table>
+</div>
+<p>The N=10 Queens 5/6 Table observations are slower than current Indexed in this
+single fixed sequence. Their fewer row visits do not establish an application
+speedup.</p>
+<p>Same-build counters at N=10 reduce Queens 5 row visits from 2,750 to 950 and
+Queens 6 from 2,640 to 840, while probe counts remain 293 and 282.
+Each uses five Table preparations. Its reported index capacity is 4,520 bytes;
+support peak rises from 53,576 to 62,024 bytes. N=12 Queens 4 keeps 7,092 visited
+rows and raises support peak from 30,696 to 37,216 bytes. Less row scanning
+does not imply less storage, and one timed pair supplies no reliable trend.
+These reports include full JSON/statistics output and cannot be pooled with
+the ordinary timing tables.</p>
+<p>Separate corpus qualification passes all 94 cases with the canonical CPU
+countermodel route. A Table-requested eager CPU matrix also passes all 376
+positions over those 94 cases, using a 16-MiB per-child capture/decoder allowance.
+Actual table probes occur on the twenty task-allocation inputs, including
+aggregate/objective and unsatisfiable cases. These are qualification results,
+not timings acquired in a quiet window. Matching clingo displays and optimum
+ties does not reveal its hidden interpretations.</p>
+<h2 id="link-time-optimization"><a class="header" href="#link-time-optimization">Link-time optimization</a></h2>
+<p>The release profile stays normal. Fat LTO reduced the experimental executable
+by 21.2% and reduced each of the nine observed native RSS pairs, but Queens 2,
+SEND and task allocation were slower in both Fat blocks. Thin LTO showed
+substantial drift and no clear overall benefit. No release setting was changed.</p>
+<p>The three single-binary builds use the same source, Rust/Cargo 1.97.1,
+aarch64-apple-darwin target and macOS 26.5 SDK. They build the CLI with its GPU
+feature, separately from the installer package set. Each is one fresh-target
+build in normal/thin/fat order; filesystem caching is uncontrolled. Build times
+therefore do not establish a general compilation-speed ratio. Build peak RSS
+is unavailable.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th style="text-align: right">Build wall / user / system seconds</th><th style="text-align: right">Executable bytes</th><th>SHA-256</th></tr>
+</thead>
+<tbody>
+<tr><td>Normal (lto=false)</td><td style="text-align: right">145.97 / 137.46 / 4.88</td><td style="text-align: right">13,722,232</td><td><code>12b5edf96a25ca591ca88a919c6b040474c8597a85da03e6f8cb233214329a8d</code></td></tr>
+<tr><td>Thin</td><td style="text-align: right">154.68 / 145.05 / 6.14</td><td style="text-align: right">13,915,944</td><td><code>a0a0f34b3f8d770c196f3090ac72ea681f610c85fe3964db53810d25273e9e13</code></td></tr>
+<tr><td>Fat</td><td style="text-align: right">128.78 / 119.30 / 5.36</td><td style="text-align: right">10,806,616</td><td><code>9aa90f55a7fe9c852cc2aece5b3fe32612b74d049e4fe0cfb2e8118629ff7855</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>“Normal” means <code>lto=false</code>, which still permits local ThinLTO across codegen
+units; it is distinct from Cargo’s <code>"off"</code> setting. See the
+<a href="https://doc.rust-lang.org/cargo/reference/profiles.html#lto">Cargo profile contract</a>.
+These settings optimize Rust host code, not the WGSL program.</p>
+<p>The following Thin comparison is Normal/Thin/Thin/Normal. Each cell is the
+three-sample wall median [minimum, maximum], in ms.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">normal-1</th><th style="text-align: right">thin-1</th><th style="text-align: right">thin-2</th><th style="text-align: right">normal-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">16.884 [15.389, 16.932]</td><td style="text-align: right">16.396 [15.442, 16.615]</td><td style="text-align: right">13.753 [13.743, 13.813]</td><td style="text-align: right">13.736 [13.732, 13.766]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">95.221 [93.867, 95.417]</td><td style="text-align: right">96.283 [96.207, 97.678]</td><td style="text-align: right">87.580 [87.524, 87.586]</td><td style="text-align: right">88.763 [87.493, 89.097]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">16.919 [16.879, 16.979]</td><td style="text-align: right">16.979 [16.910, 17.017]</td><td style="text-align: right">13.781 [13.718, 15.357]</td><td style="text-align: right">15.271 [13.729, 15.306]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">9.412 [8.995, 9.419]</td><td style="text-align: right">9.348 [9.309, 9.480]</td><td style="text-align: right">7.725 [7.715, 7.741]</td><td style="text-align: right">7.726 [7.716, 7.813]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">10.859 [10.775, 10.922]</td><td style="text-align: right">10.868 [10.841, 10.875]</td><td style="text-align: right">9.236 [9.211, 9.241]</td><td style="text-align: right">9.239 [9.217, 9.247]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">10.908 [10.870, 12.382]</td><td style="text-align: right">10.912 [10.888, 11.562]</td><td style="text-align: right">9.222 [9.211, 9.230]</td><td style="text-align: right">9.209 [9.193, 10.745]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">36.520 [34.973, 36.627]</td><td style="text-align: right">35.671 [34.580, 36.402]</td><td style="text-align: right">30.304 [30.297, 31.893]</td><td style="text-align: right">31.846 [31.815, 31.854]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">101.440 [100.440, 102.423]</td><td style="text-align: right">100.974 [100.435, 101.089]</td><td style="text-align: right">94.092 [93.958, 95.524]</td><td style="text-align: right">94.030 [93.975, 96.915]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">9.468 [9.234, 9.476]</td><td style="text-align: right">9.448 [7.884, 9.474]</td><td style="text-align: right">7.814 [7.794, 7.880]</td><td style="text-align: right">7.840 [7.814, 7.894]</td></tr>
+</tbody>
+</table>
+</div>
+<p>The closing Normal block is much faster than its opening block on several
+cases. Matched clingo Queens 2 medians also move from 128.362 to 119.085 ms,
+and task allocation from 194.058 to 180.967 ms. This prevents a clean broad
+Thin-LTO speed claim. Its separate native RSS observations are slightly higher
+on this population.</p>
+<p>The Fat comparison is Normal/Fat/Fat/Normal, with the same notation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">normal-1</th><th style="text-align: right">fat-1</th><th style="text-align: right">fat-2</th><th style="text-align: right">normal-2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 1</td><td style="text-align: right">13.726 [13.722, 13.779]</td><td style="text-align: right">13.720 [13.718, 15.238]</td><td style="text-align: right">13.712 [13.711, 13.730]</td><td style="text-align: right">13.768 [13.731, 15.307]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">89.126 [87.539, 89.144]</td><td style="text-align: right">101.157 [101.096, 102.533]</td><td style="text-align: right">101.086 [101.080, 102.641]</td><td style="text-align: right">90.642 [89.048, 90.678]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">15.347 [13.723, 15.474]</td><td style="text-align: right">15.243 [15.237, 15.301]</td><td style="text-align: right">15.311 [15.210, 15.324]</td><td style="text-align: right">15.301 [15.229, 15.332]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">7.742 [7.732, 7.764]</td><td style="text-align: right">7.713 [7.701, 7.732]</td><td style="text-align: right">7.711 [7.217, 7.727]</td><td style="text-align: right">7.726 [7.722, 7.799]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">9.261 [9.214, 9.280]</td><td style="text-align: right">9.209 [9.209, 9.215]</td><td style="text-align: right">9.203 [9.191, 9.213]</td><td style="text-align: right">9.210 [9.209, 9.224]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">9.220 [9.220, 9.222]</td><td style="text-align: right">9.227 [9.176, 10.711]</td><td style="text-align: right">9.192 [9.176, 10.715]</td><td style="text-align: right">10.376 [9.191, 10.737]</td></tr>
+<tr><td>SEND</td><td style="text-align: right">32.969 [31.795, 33.368]</td><td style="text-align: right">36.323 [34.778, 36.366]</td><td style="text-align: right">36.328 [34.755, 36.334]</td><td style="text-align: right">33.304 [33.111, 33.394]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">95.516 [94.042, 95.548]</td><td style="text-align: right">101.473 [99.989, 101.504]</td><td style="text-align: right">99.972 [99.929, 101.493]</td><td style="text-align: right">96.977 [95.446, 98.442]</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">7.814 [7.798, 7.880]</td><td style="text-align: right">7.827 [7.782, 7.844]</td><td style="text-align: right">7.804 [7.802, 7.849]</td><td style="text-align: right">7.806 [7.782, 7.892]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Queens 2 changes from control medians 89.126/90.642 to 101.157/101.086 ms;
+SEND from 32.969/33.304 to 36.323/36.328 ms; task allocation from 95.516/96.977
+to 101.473/99.972 ms. Matched clingo SEND medians stay near 10.7 ms, while
+task allocation’s reference varies from 164.376 to 182.206 ms across the
+control blocks. These are bounded observations, not universal ratios.</p>
+<p>The lower Fat RSS is a separate observed benefit. For example, Queens 2’s
+Normal samples are 12.547/12.516 MiB and Fat’s 11.938/11.953; task allocation’s
+are 19.547/19.484 versus 18.891/18.844 MiB. Binary size alone would not establish
+this result. With only two RSS samples per side and mixed runtime costs, these
+measurements do not justify replacing the normal installation profile. Neither
+LTO comparison measures Table joins, GPU execution or active CPU parallelism.</p>
+<h2 id="matched-eager-cpu-and-metal"><a class="header" href="#matched-eager-cpu-and-metal">Matched eager CPU and Metal</a></h2>
+<p>This comparison uses the canonical executables and corpus identified above,
+with eager grounding and automatic oracle selection. Each case/profile has a
+qualification sample, one warmup and three timed samples. Both native profiles
+request four closure/completion workers and batch 64; clingo uses one worker.
+The matrix includes full native JSON/statistics and clingo JSON. It is a separate
+population from the ordinary human-output and RSS measurements; it has no RSS
+samples. Every sample starts a fresh child; each Metal invocation initializes
+its own GPU context.</p>
+<p>All twelve reports pass: 810 positions, with 540 native and 270 clingo captures.
+There are no refusals, blocked positions, capture faults or unresolved children.
+Complete native families agree across the relevant versions, strategies and
+CPU/Metal routes, including typed signed atoms, resolved shown values and costs.
+SEND has one answer, each queens encoding has 92, and task allocation publishes
+1,176 optimum ties. Clingo corroborates the selected displays and objective
+results; its hidden interpretations remain unavailable.</p>
+<p>The measurements span <strong>two separate windows</strong> on 12 September 2026. The first
+ran 20:48:12–20:54:30 CDT and stopped on its scheduling allowance after seven
+reports. The five unstarted reports ran at 21:25:04–21:28:36, after a
+<strong>30-minute 34-second gap</strong>. Prior-1, Indexed-1, Table-1 and Table-2 baseline are
+in the first window; Table-2 queens, Indexed-2 and prior-2 are in the second.
+The Table-2 column therefore crosses the window boundary. No report was repeated
+or replaced. The original order was retained, but it does not supply an
+uninterrupted mirrored experiment.</p>
+<p>The two suites keep Queens 2 in separate contexts: <code>baseline</code> contains SEND,
+task allocation and Queens 2; <code>queens</code> contains all six encodings. The tables
+preserve those contexts and every block. Cells are <strong>median [minimum, maximum]
+in milliseconds</strong>, with three timed samples each. No confidence interval or
+pooled cross-window estimate is claimed.</p>
+<h3 id="cpu-eager"><a class="header" href="#cpu-eager">CPU eager</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">Indexed-1</th><th style="text-align: right">Table-1</th><th style="text-align: right">Table-2</th><th style="text-align: right">Indexed-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>SEND</td><td style="text-align: right">34.189 [34.161, 35.584]</td><td style="text-align: right">34.209 [34.197, 35.629]</td><td style="text-align: right">35.508 [35.468, 35.632]</td><td style="text-align: right">34.984 [34.974, 35.136]</td><td style="text-align: right">35.169 [34.216, 36.954]</td><td style="text-align: right">34.204 [34.166, 35.625]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">326.493 [325.583, 326.584]</td><td style="text-align: right">325.434 [322.771, 325.741]</td><td style="text-align: right">324.049 [322.956, 325.237]</td><td style="text-align: right">367.010 [365.734, 368.144]</td><td style="text-align: right">323.431 [323.094, 325.910]</td><td style="text-align: right">326.138 [325.402, 327.925]</td></tr>
+<tr><td>Queens 2 (baseline)</td><td style="text-align: right">95.890 [94.654, 95.937]</td><td style="text-align: right">94.566 [93.323, 94.580]</td><td style="text-align: right">94.588 [94.554, 95.967]</td><td style="text-align: right">95.401 [95.356, 98.426]</td><td style="text-align: right">95.905 [94.381, 97.307]</td><td style="text-align: right">94.650 [94.457, 97.052]</td></tr>
+<tr><td>Queens 1</td><td style="text-align: right">17.885 [17.875, 19.294]</td><td style="text-align: right">17.960 [17.929, 19.410]</td><td style="text-align: right">18.500 [17.948, 19.442]</td><td style="text-align: right">19.208 [17.969, 19.299]</td><td style="text-align: right">18.018 [17.951, 19.434]</td><td style="text-align: right">17.928 [17.912, 19.431]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">98.283 [97.948, 98.350]</td><td style="text-align: right">94.665 [94.562, 95.588]</td><td style="text-align: right">94.582 [94.566, 95.317]</td><td style="text-align: right">92.242 [92.205, 93.970]</td><td style="text-align: right">95.876 [94.675, 95.977]</td><td style="text-align: right">95.889 [94.702, 97.117]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">19.151 [19.139, 19.155]</td><td style="text-align: right">19.222 [17.856, 19.246]</td><td style="text-align: right">19.223 [19.181, 19.239]</td><td style="text-align: right">19.155 [18.964, 19.260]</td><td style="text-align: right">19.267 [19.262, 19.301]</td><td style="text-align: right">19.201 [18.935, 19.236]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">11.593 [11.458, 11.697]</td><td style="text-align: right">11.707 [11.671, 11.739]</td><td style="text-align: right">11.722 [10.338, 11.777]</td><td style="text-align: right">11.751 [11.696, 12.989]</td><td style="text-align: right">11.587 [10.338, 11.697]</td><td style="text-align: right">11.777 [10.333, 11.842]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">47.098 [46.952, 48.574]</td><td style="text-align: right">49.471 [47.030, 49.769]</td><td style="text-align: right">49.466 [46.934, 49.653]</td><td style="text-align: right">48.717 [48.039, 49.006]</td><td style="text-align: right">49.454 [47.017, 49.598]</td><td style="text-align: right">49.228 [49.143, 49.810]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">48.409 [48.364, 48.427]</td><td style="text-align: right">49.494 [49.437, 49.570]</td><td style="text-align: right">49.507 [49.424, 53.568]</td><td style="text-align: right">49.328 [48.864, 49.367]</td><td style="text-align: right">49.186 [49.168, 49.530]</td><td style="text-align: right">49.486 [49.466, 49.574]</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="metal-eager"><a class="header" href="#metal-eager">Metal eager</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">Indexed-1</th><th style="text-align: right">Table-1</th><th style="text-align: right">Table-2</th><th style="text-align: right">Indexed-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>SEND</td><td style="text-align: right">66.990 [65.708, 67.082]</td><td style="text-align: right">67.028 [65.707, 67.082]</td><td style="text-align: right">66.878 [65.778, 67.153]</td><td style="text-align: right">66.745 [66.665, 66.774]</td><td style="text-align: right">67.056 [66.840, 68.441]</td><td style="text-align: right">66.980 [66.898, 67.045]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">572.618 [569.779, 586.927]</td><td style="text-align: right">569.372 [564.941, 571.553]</td><td style="text-align: right">571.374 [559.004, 575.246]</td><td style="text-align: right">613.848 [610.517, 648.716]</td><td style="text-align: right">572.346 [563.973, 577.466]</td><td style="text-align: right">573.431 [571.637, 603.987]</td></tr>
+<tr><td>Queens 2 (baseline)</td><td style="text-align: right">111.075 [109.479, 112.129]</td><td style="text-align: right">109.698 [109.691, 109.781]</td><td style="text-align: right">109.710 [108.359, 109.753]</td><td style="text-align: right">111.897 [110.275, 112.073]</td><td style="text-align: right">110.896 [109.745, 113.477]</td><td style="text-align: right">112.216 [111.984, 113.227]</td></tr>
+<tr><td>Queens 1</td><td style="text-align: right">34.255 [34.105, 34.301]</td><td style="text-align: right">32.968 [32.892, 34.175]</td><td style="text-align: right">33.050 [33.043, 35.075]</td><td style="text-align: right">35.185 [34.299, 35.561]</td><td style="text-align: right">33.041 [32.986, 34.357]</td><td style="text-align: right">32.944 [32.816, 35.504]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">114.756 [114.293, 115.889]</td><td style="text-align: right">110.912 [109.693, 111.026]</td><td style="text-align: right">110.118 [109.594, 111.047]</td><td style="text-align: right">110.340 [109.753, 111.024]</td><td style="text-align: right">110.839 [110.719, 111.117]</td><td style="text-align: right">111.072 [109.604, 112.263]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">34.312 [34.254, 35.534]</td><td style="text-align: right">33.047 [32.972, 34.216]</td><td style="text-align: right">34.225 [33.000, 34.392]</td><td style="text-align: right">35.572 [35.541, 39.504]</td><td style="text-align: right">34.246 [34.202, 34.318]</td><td style="text-align: right">33.023 [32.966, 34.374]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">26.678 [26.638, 26.701]</td><td style="text-align: right">25.515 [25.486, 25.536]</td><td style="text-align: right">25.507 [25.486, 25.507]</td><td style="text-align: right">28.005 [27.509, 29.297]</td><td style="text-align: right">25.502 [25.292, 25.508]</td><td style="text-align: right">25.404 [25.250, 25.438]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">63.634 [63.618, 65.951]</td><td style="text-align: right">65.961 [64.798, 65.977]</td><td style="text-align: right">64.542 [63.639, 65.998]</td><td style="text-align: right">67.397 [66.555, 68.377]</td><td style="text-align: right">65.875 [65.785, 65.944]</td><td style="text-align: right">65.740 [64.539, 65.788]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">64.664 [63.454, 64.944]</td><td style="text-align: right">65.930 [65.780, 67.284]</td><td style="text-align: right">65.963 [64.533, 74.453]</td><td style="text-align: right">67.188 [66.939, 69.429]</td><td style="text-align: right">67.042 [65.739, 67.119]</td><td style="text-align: right">65.554 [64.505, 67.010]</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="matched-clingo"><a class="header" href="#matched-clingo">Matched clingo</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Case</th><th style="text-align: right">prior-1</th><th style="text-align: right">Indexed-1</th><th style="text-align: right">Table-1</th><th style="text-align: right">Table-2</th><th style="text-align: right">Indexed-2</th><th style="text-align: right">prior-2</th></tr>
+</thead>
+<tbody>
+<tr><td>SEND</td><td style="text-align: right">11.534 [11.519, 11.621]</td><td style="text-align: right">11.542 [11.498, 11.594]</td><td style="text-align: right">11.540 [11.540, 11.649]</td><td style="text-align: right">12.296 [12.292, 12.404]</td><td style="text-align: right">11.568 [11.548, 11.646]</td><td style="text-align: right">11.551 [11.526, 11.623]</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">179.906 [154.734, 182.434]</td><td style="text-align: right">182.444 [173.605, 184.828]</td><td style="text-align: right">183.691 [182.366, 184.914]</td><td style="text-align: right">175.069 [149.345, 187.131]</td><td style="text-align: right">168.603 [154.642, 177.509]</td><td style="text-align: right">177.486 [174.749, 179.732]</td></tr>
+<tr><td>Queens 2 (baseline)</td><td style="text-align: right">124.401 [123.226, 124.449]</td><td style="text-align: right">123.324 [123.270, 124.563]</td><td style="text-align: right">123.268 [123.231, 123.385]</td><td style="text-align: right">123.721 [123.325, 125.090]</td><td style="text-align: right">123.196 [123.096, 123.309]</td><td style="text-align: right">122.967 [121.812, 123.319]</td></tr>
+<tr><td>Queens 1</td><td style="text-align: right">6.534 [6.527, 6.576]</td><td style="text-align: right">6.521 [6.501, 6.576]</td><td style="text-align: right">6.249 [5.237, 6.606]</td><td style="text-align: right">6.536 [6.153, 6.606]</td><td style="text-align: right">6.537 [6.522, 6.557]</td><td style="text-align: right">6.538 [6.518, 6.675]</td></tr>
+<tr><td>Queens 2</td><td style="text-align: right">129.398 [128.186, 129.572]</td><td style="text-align: right">123.261 [123.207, 123.293]</td><td style="text-align: right">123.274 [122.143, 123.296]</td><td style="text-align: right">120.793 [120.733, 123.033]</td><td style="text-align: right">124.458 [124.033, 124.488]</td><td style="text-align: right">123.196 [121.958, 124.526]</td></tr>
+<tr><td>Queens 3</td><td style="text-align: right">6.541 [6.518, 6.541]</td><td style="text-align: right">6.527 [5.203, 6.538]</td><td style="text-align: right">6.365 [5.225, 6.534]</td><td style="text-align: right">6.529 [6.528, 6.632]</td><td style="text-align: right">6.542 [6.541, 6.563]</td><td style="text-align: right">6.526 [6.515, 6.529]</td></tr>
+<tr><td>Queens 4</td><td style="text-align: right">6.512 [6.487, 6.533]</td><td style="text-align: right">6.537 [6.449, 6.540]</td><td style="text-align: right">6.537 [6.448, 6.539]</td><td style="text-align: right">6.528 [6.462, 6.540]</td><td style="text-align: right">6.528 [6.460, 6.546]</td><td style="text-align: right">6.543 [6.452, 6.580]</td></tr>
+<tr><td>Queens 5</td><td style="text-align: right">6.587 [6.493, 6.589]</td><td style="text-align: right">6.588 [6.469, 6.598]</td><td style="text-align: right">6.599 [6.496, 6.615]</td><td style="text-align: right">6.604 [6.521, 6.620]</td><td style="text-align: right">6.599 [6.464, 6.604]</td><td style="text-align: right">6.614 [6.465, 6.624]</td></tr>
+<tr><td>Queens 6</td><td style="text-align: right">6.598 [6.593, 6.609]</td><td style="text-align: right">6.585 [6.559, 6.615]</td><td style="text-align: right">6.553 [6.380, 6.586]</td><td style="text-align: right">6.597 [6.577, 6.617]</td><td style="text-align: right">6.593 [6.592, 6.600]</td><td style="text-align: right">6.589 [6.577, 6.602]</td></tr>
+</tbody>
+</table>
+</div>
+<p>Metal is slower than its matched CPU route in all nine case/suite contexts.
+The routes use different certified membership procedures, so this is an
+end-to-end execution comparison, not an isolated hardware or Rayon speed ratio.
+There is no broad speedup from Table or from the new release on this population.
+Indexed remains the default.</p>
+<p>SEND’s Metal block medians remain between 66.745 and 67.056 ms. Task allocation
+usually remains near 569–573 ms, while Table-2 baseline reaches 613.848 ms;
+its matched CPU median also rises to 367.010 ms from the other blocks’ 323–326 ms.
+That observation belongs to the first window. The Table-2 solving-stage medians
+are still 95.473 ms CPU and 335.605 ms Metal; its grounding medians are
+2.754 and 2.710 ms. Marginal phase medians do not add to process time, and nested
+phases must not be counted again. These observations do not identify a Table
+regression or remove the visible end-to-end variation.</p>
+<p>All 270 Metal captures report actual, settled GPU work with complete candidate
+accounting. SEND’s one candidate and each queens run’s 92 candidates are decided
+on the GPU with no CPU residuals. Task allocation submits 1,208 candidates:
+13–14 are GPU-decided and the remaining 1,194–1,195 require exact CPU completion
+with four admitted workers. Requested workers alone would not establish that
+activity. Neither route turns a partial answer prefix into a complete family.</p>
+<p>All 180 Table-requested native captures report actual table preparation and
+probes. For example, task allocation records 14 preparations, 483 reuses,
+497 probes and 4,765 selected rows in this matrix. These are host grounding
+operations composed with the selected oracle; they do not execute a GPU table
+kernel. Fewer row visits, library reuse and successful GPU execution establish
+neither a general latency improvement nor lower process/device memory.</p>
+<h2 id="earlier-metal-measurements"><a class="header" href="#earlier-metal-measurements">Earlier Metal measurements</a></h2>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/7a9177a574b93df812627f514d87aab851d7726c/docs/book/reference/performance.md#instrumented-cpu-and-metal-comparison">complete previous comparison</a>
+compared sources <code>15e0f77b</code> and <code>6bebb980</code> on the same Apple M4 Pro.
+Its eager Metal SEND median decreased from 79.853 to 65.836 ms, and task
+allocation from 628.813 to 576.636 ms. Those measurements included host candidate
+search, uploads, dispatch/wait, exact CPU residual completion and JSON/statistics
+output. The matched CPU route was faster on every measured case and used a
+different certified membership procedure.</p>
+<p>Those values belong to <code>6bebb980</code>, not to the new table consumer or an LTO
+variant. Physical regression coverage and release performance are separate
+claims; neither historical throughput nor a requested Metal backend proves
+current device execution.</p>
+<h2 id="reproduce-the-measurements"><a class="header" href="#reproduce-the-measurements">Reproduce the measurements</a></h2>
+<p>Use the <a href="https://github.com/GregoryGelfond/zetesis/blob/main/scripts/install.sh">installer</a>
+to build canonical commands from separate checkouts of the named sources.
+Preserve each binary, actual build arguments, compiler/SDK identity and hash.
+A rebuild may have different bytes even at the same source commit. Use one fixed
+<code>zetesis-perf</code> for every compared solver.</p>
+<p>From the checkout root, set absolute executable paths and a fresh output
+directory. The ordinary comparison includes the same nine paths in each call:</p>
+<pre><code class="language-sh">perf_command=/absolute/path/to/zetesis-perf
+previous_solver=/absolute/path/to/previous/zetesis
+current_solver=/absolute/path/to/current/zetesis
+clingo_command=/absolute/path/to/clingo
+results_dir=$(mktemp -d "${TMPDIR:-/tmp}/zetesis-perf.XXXXXX")
+
+ordinary() {
+    comparison_label=$1
+    comparison_solver=$2
+    comparison_joins=$3
+    set -- "$perf_command" examples/correctness \
+        --zetesis "$comparison_solver" --clingo "$clingo_command" \
+        --report "$results_dir/$comparison_label.json"
+    if [ "$comparison_joins" != default ]; then
+        set -- "$@" --formula-joins "$comparison_joins"
+    fi
+    set -- "$@" \
+        --case standalone/n-queens/variant-01.lp \
+        --case standalone/n-queens/variant-02.lp \
+        --case standalone/n-queens/variant-03.lp \
+        --case standalone/n-queens/variant-04.lp \
+        --case standalone/n-queens/variant-05.lp \
+        --case standalone/n-queens/variant-06.lp \
+        --case standalone/send-money/send-money.lp \
+        --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
+        --case scenarios/shortest-path/variant-01/06-layered-dag.lp \
+        --warmups 1 --repetitions 3 --memory-runs 1 \
+        --timeout-seconds 5 --campaign-seconds 30 \
+        --sample-bytes 4194304 --capture-bytes 134217728 \
+        --report-bytes 536870912
+    if /usr/bin/env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        LC_ALL=C TMPDIR=/private/tmp "$@"; then
+        comparison_exit=0
+    else
+        comparison_exit=$?
+    fi
+    printf '%s\n' "$comparison_exit" &gt; "$results_dir/$comparison_label.exit" || return 2
+    return "$comparison_exit"
+}
+</code></pre>
+<p>Run each call separately in a quiet window and inspect its report before
+continuing, especially after a nonzero result. The prior solver does not accept
+the new strategy flag, so <code>default</code> deliberately omits it.</p>
+<pre><code class="language-sh">ordinary release-prior-1 "$previous_solver" default
+ordinary release-current-1 "$current_solver" indexed
+ordinary release-current-2 "$current_solver" indexed
+ordinary release-prior-2 "$previous_solver" default
+
+ordinary joins-indexed-1 "$current_solver" indexed
+ordinary joins-table-1 "$current_solver" table
+ordinary joins-table-2 "$current_solver" table
+ordinary joins-indexed-2 "$current_solver" indexed
+</code></pre>
+<p>The measured acquisition used a clean environment with a fixed locale, absolute
+executables and no inherited solver flags. Exit 0 means all requested positions
+pass; exit 1 retains nonpassing evidence, including refusals or operational
+failures; setup/publication failure exits 2. Preserve actual exits, raw reports
+and all blocked positions. A refused or uncaptured solve has no imputed time.
+Child and campaign deadlines are polling boundaries; cleanup and publication
+may extend process wall time.</p>
+<p>For the matched eager CPU/Metal matrix, use the same four executables and corpus.
+The <code>baseline</code> suite selects SEND, task allocation and Queens 2; <code>queens</code> selects
+all six N=8 encodings. Keep Queens 2’s two contexts distinct.</p>
+<pre><code class="language-sh">metal_matrix() {
+    comparison_label=$1
+    comparison_suite=$2
+    comparison_solver=$3
+    comparison_joins=$4
+    set -- "$perf_command" examples/correctness \
+        --suite "$comparison_suite" \
+        --zetesis "$comparison_solver" --clingo "$clingo_command" \
+        --report "$results_dir/$comparison_label.json" \
+        --profile cpu-eager --profile metal-eager \
+        --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
+        --warmups 1 --repetitions 3 --timeout-seconds 10 --campaign-seconds 30 \
+        --sample-bytes 33554432 --native-report-bytes 33554432 \
+        --capture-bytes 134217728 --report-bytes 268435456
+    if [ "$comparison_joins" != default ]; then
+        set -- "$@" --formula-joins "$comparison_joins"
+    fi
+    if /usr/bin/env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        LC_ALL=C TMPDIR=/private/tmp "$@"; then
+        comparison_exit=0
+    else
+        comparison_exit=$?
+    fi
+    printf '%s\n' "$comparison_exit" &gt; "$results_dir/$comparison_label.exit" || return 2
+    return "$comparison_exit"
+}
+
+metal_matrix metal-prior-1-baseline baseline "$previous_solver" default
+metal_matrix metal-prior-1-queens queens "$previous_solver" default
+metal_matrix metal-indexed-1-baseline baseline "$current_solver" indexed
+metal_matrix metal-indexed-1-queens queens "$current_solver" indexed
+metal_matrix metal-table-1-baseline baseline "$current_solver" table
+metal_matrix metal-table-1-queens queens "$current_solver" table
+metal_matrix metal-table-2-baseline baseline "$current_solver" table
+
+# The recorded second acquisition window starts here.
+metal_matrix metal-table-2-queens queens "$current_solver" table
+metal_matrix metal-indexed-2-baseline baseline "$current_solver" indexed
+metal_matrix metal-indexed-2-queens queens "$current_solver" indexed
+metal_matrix metal-prior-2-baseline baseline "$previous_solver" default
+metal_matrix metal-prior-2-queens queens "$previous_solver" default
+</code></pre>
+<p>As above, run one call at a time and inspect the retained report before starting
+the next. Preserve any scheduling stop and the window boundary when continuing;
+do not replace an unstarted report with a guessed measurement. This matrix
+captures full native JSON/statistics and retains native model records. It allows
+32 MiB per child/native decoder input, 128 MiB total capture and 256 MiB report
+output, retaining the decoder’s other structural limits. There are no RSS
+samples. Each Metal invocation initializes its own GPU context.</p>
+<p>The larger screen composes the public
+<a href="https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-validation#derive-explicit-parameter-workloads"><code>Workload::amended</code> and <code>run_workloads</code> APIs</a>.
+The <a href="measurement-protocols.html#compare-a-parameterized-workload">runnable workload example</a>
+shows the acquisition boundary. To reproduce the screen, derive <code>n: 8→10</code>
+for all six encodings and <code>8→12</code> for variants 03/04, using a separate request for
+prior/default, current/Indexed and current/Table. Keep original files unchanged.
+Use the CPU backend, eager grounding and automatic oracle selection, with four
+requested closure/completion workers, batch size 64, one clingo worker, no
+warmups and one timed pair after qualification.</p>
+<p>The screen’s child/campaign intervals are 10/90 seconds. It allows 128 MiB
+per captured child, 512 MiB total capture and 1 GiB final report; decoding allows
+16,384 model witnesses, 262,144 shown-symbol occurrences, 1,048,576 native atom
+occurrences and 4,194,304 native value nodes, with 32 MiB shown spelling.
+Those settings are larger than the N=4 example’s defaults. One amended workload
+retains at most 16 KiB each of original/derived source, 64 KiB combined source
+closure and 16 KiB metadata. Bounds and workload hashes remain part of each
+report. This is a library client, not an undocumented solver CLI option.</p>
+<p>For the separate LTO study, use fresh build targets for each setting. The
+following is the normal single-binary recipe; replace only the final
+<code>profile.release.lto=false</code> with <code>profile.release.lto="thin"</code> or
+<code>profile.release.lto="fat"</code> for the other variants:</p>
+<pre><code class="language-sh">cargo +1.97.1 build --locked --offline --release \
+  --target aarch64-apple-darwin --target-dir /absolute/path/to/fresh-target \
+  -p zetesis-cli --bin zetesis --features gpu \
+  --config 'profile.release.opt-level=3' \
+  --config 'profile.release.codegen-units=16' \
+  --config 'profile.release.debug=false' \
+  --config 'profile.release.debug-assertions=false' \
+  --config 'profile.release.overflow-checks=false' \
+  --config 'profile.release.panic="unwind"' \
+  --config 'profile.release.strip="none"' \
+  --config 'profile.release.incremental=false' \
+  --config 'profile.release.rpath=false' \
+  --config 'profile.release.lto=false' \
+  --timings --message-format=json -vv
+</code></pre>
+<p>The measurements used one Cargo job, incremental compilation disabled, no Cargo
+configuration overrides beyond those shown, Xcode 26.6 and its macOS 26.5 SDK.
+Preserve build wall/user/system times separately from runtime RSS. Repeat the
+ordinary A/B/B/A method with normal/thin and normal/fat, always requesting
+Indexed. Do not substitute these artifacts into the canonical release table.</p>
+<p>The repository supplies corpus sources, contracts and measurement APIs.
+Original raw captures are retained privately, not offered as a public download.
+The commands and API settings above generate new self-contained reports with
+captured outputs, identities and bounded outcomes.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/prepared-metal.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/validation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/prepared-metal.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/validation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

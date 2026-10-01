@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Cause","Domain","Resource"],"struct":["Failure","Limits","Projection","Selection","Statistics","Table","Values"]};

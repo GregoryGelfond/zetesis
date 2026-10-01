@@ -1,0 +1,2570 @@
+{
+  "schema": 1,
+  "scope": "Projection of all passed timed native observations from the four retained Metal ABBA reports, with their separately measured native peak-RSS samples; no new measurement.",
+  "units": {
+    "counter_ranges": "inclusive minimum and maximum across three original timed samples",
+    "phase_timings": "host elapsed nanoseconds; median is the sorted middle of three samples; no GPU kernel-time claim",
+    "wall": "fresh-process elapsed nanoseconds from timed captures",
+    "stdout_bytes": "UTF-8 byte count of the retained complete native stdout capture",
+    "peak_accounted_bytes": "conservative logical authored allocation accounting reported by the device API; not physical GPU residency or total process RSS",
+    "peak_rss_bytes": "separate fresh-process memory sample; RUSAGE_CHILDREN as defined in report peak_rss scope; excludes device-memory measurement",
+    "gpu_work": "primitive-specific charged work; baseline general propagation and candidate tight support have different units",
+    "absent_fields": "Unavailable legacy fields remain absent; tight-support inapplicability remains null. No absent residual reason is treated as zero."
+  },
+  "reports": [
+    {
+      "label": "A1-main",
+      "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "raw_report": "A1-main.json",
+      "bytes": 7841137,
+      "sha256": "8e5968661687b095c82fe272e55e77757fa8ef810368258f1bca236287a198b9",
+      "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "route_observations": [
+            "Backend: hybrid GPU propagation + exact CPU residual search (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; search: regions; grounder: eager (requested eager); batch=64; CPU completion requested workers=4"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "gpu_work": {
+              "minimum": 267398,
+              "maximum": 267398
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 349972,
+              "maximum": 349972
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 409024,
+              "maximum": 409024
+            },
+            "candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "peak_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "entered": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 26664500,
+            "maximum": 29295416,
+            "median": 27968291
+          },
+          "stdout_bytes": {
+            "minimum": 12856,
+            "maximum": 12856
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 3218709,
+                "maximum": 3251832,
+                "median": 3225876
+              },
+              "calls": {
+                "minimum": 3,
+                "maximum": 3
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 8078708,
+                "maximum": 8238292,
+                "median": 8162917
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": null,
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 3846833,
+                "maximum": 5996375,
+                "median": 3906708
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 12333,
+                "maximum": 13750,
+                "median": 12750
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": {
+            "work_per_candidate": 100000000,
+            "rounds_per_candidate": 64
+          },
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 28377088,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "route_observations": [
+            "Backend: hybrid GPU propagation + exact CPU residual search (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; search: regions; grounder: eager (requested eager); batch=64; CPU completion requested workers=4"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 368,
+              "maximum": 368
+            },
+            "gpu_work": {
+              "minimum": 16004412,
+              "maximum": 16004412
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2511856,
+              "maximum": 2511856
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 14461401,
+              "maximum": 14461401
+            },
+            "candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "entered": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 92,
+            "maximum": 92
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 154741792,
+            "maximum": 155988875,
+            "median": 154796208
+          },
+          "stdout_bytes": {
+            "minimum": 35404,
+            "maximum": 35404
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 125957421,
+                "maximum": 126535295,
+                "median": 126004748
+              },
+              "calls": {
+                "minimum": 185,
+                "maximum": 185
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7990042,
+                "maximum": 8778958,
+                "median": 8113417
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": null,
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 8364584,
+                "maximum": 8500459,
+                "median": 8491751
+              },
+              "calls": {
+                "minimum": 2,
+                "maximum": 2
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 635536,
+                "maximum": 649416,
+                "median": 638758
+              },
+              "calls": {
+                "minimum": 92,
+                "maximum": 92
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": {
+            "work_per_candidate": 100000000,
+            "rounds_per_candidate": 64
+          },
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 30031872,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "route_observations": [
+            "Backend: hybrid GPU propagation + exact CPU residual search (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; search: regions; grounder: eager (requested eager); batch=64; CPU completion requested workers=4"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_rounds": {
+              "minimum": 77279,
+              "maximum": 77281
+            },
+            "gpu_work": {
+              "minimum": 3029468458,
+              "maximum": 3029546566
+            },
+            "cpu_residuals": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "gpu_decided": {
+              "minimum": 13,
+              "maximum": 13
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2391784,
+              "maximum": 2391784
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 15235864,
+              "maximum": 15235864
+            },
+            "candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "countermodel_queries": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "candidate_restrictions": {
+              "minimum": 2,
+              "maximum": 2
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "effective_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 73120,
+              "maximum": 73120
+            },
+            "entered": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "residuals": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "completed": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1176,
+            "maximum": 1176
+          },
+          "native_selected_costs": [
+            5
+          ],
+          "wall_elapsed_ns": {
+            "minimum": 277033916,
+            "maximum": 280566417,
+            "median": 278457584
+          },
+          "stdout_bytes": {
+            "minimum": 517949,
+            "maximum": 517950
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 30095832,
+                "maximum": 30200960,
+                "median": 30167370
+              },
+              "calls": {
+                "minimum": 2417,
+                "maximum": 2417
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 8098750,
+                "maximum": 8204792,
+                "median": 8191834
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": null,
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 159932752,
+                "maximum": 162509958,
+                "median": 160293624
+              },
+              "calls": {
+                "minimum": 19,
+                "maximum": 19
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 6663244,
+                "maximum": 6746330,
+                "median": 6702034
+              },
+              "calls": {
+                "minimum": 1208,
+                "maximum": 1208
+              }
+            },
+            "objective_scoring_retention": {
+              "elapsed_ns": {
+                "minimum": 1679883,
+                "maximum": 1710192,
+                "median": 1705666
+              },
+              "calls": {
+                "minimum": 1208,
+                "maximum": 1208
+              }
+            }
+          },
+          "gpu_limits": {
+            "work_per_candidate": 100000000,
+            "rounds_per_candidate": 64
+          },
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 31899648,
+            "reported_unit": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "label": "B1-candidate",
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "raw_report": "B1-candidate.json",
+      "bytes": 7852694,
+      "sha256": "feb935b90c0025d6ab06aac9f4f514cfd37a456cdd3ed3e83b569fb0248d27d6",
+      "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "tight_support"
+          ],
+          "device_kinds": [
+            "tight_support"
+          ],
+          "route_observations": [
+            "Backend: GPU tight support (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris ranked support; search: regions; grounder: eager (requested eager); batch=64",
+            "Membership: checked tight support certificate over the original theory",
+            "Parallel candidate production: 4 workers; joined before batch membership checking"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_work": {
+              "minimum": 9126,
+              "maximum": 9126
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 269852,
+              "maximum": 269852
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_scheduled_work": {
+              "minimum": 9126,
+              "maximum": 9126
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 463166,
+              "maximum": 463166
+            },
+            "candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "peak_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "entered": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 31791166,
+            "maximum": 31833834,
+            "median": 31819541
+          },
+          "stdout_bytes": {
+            "minimum": 12926,
+            "maximum": 12927
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 2102791,
+                "maximum": 2166042,
+                "median": 2135917
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 8086167,
+                "maximum": 8154625,
+                "median": 8099458
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": {
+              "elapsed_ns": {
+                "minimum": 133208,
+                "maximum": 138125,
+                "median": 134709
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 8746083,
+                "maximum": 9205166,
+                "median": 9128208
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 15375,
+                "maximum": 16750,
+                "median": 16125
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": null,
+          "tight_work_per_candidate": 100000000,
+          "gpu_residuals": null,
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 30310400,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "tight_support"
+          ],
+          "device_kinds": [
+            "tight_support"
+          ],
+          "route_observations": [
+            "Backend: GPU tight support (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris ranked support; search: regions; grounder: eager (requested eager); batch=64",
+            "Membership: checked tight support certificate over the original theory",
+            "Parallel candidate production: 4 workers; joined before batch membership checking"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_work": {
+              "minimum": 579232,
+              "maximum": 579232
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 1323080,
+              "maximum": 1323080
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_scheduled_work": {
+              "minimum": 579232,
+              "maximum": 579232
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 14497472,
+              "maximum": 14497472
+            },
+            "candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "entered": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 92,
+            "maximum": 92
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 98403833,
+            "maximum": 101785833,
+            "median": 99590125
+          },
+          "stdout_bytes": {
+            "minimum": 35460,
+            "maximum": 35461
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 67227041,
+                "maximum": 70762334,
+                "median": 69309708
+              },
+              "calls": {
+                "minimum": 2,
+                "maximum": 2
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7783417,
+                "maximum": 7943125,
+                "median": 7933625
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": {
+              "elapsed_ns": {
+                "minimum": 91834,
+                "maximum": 95000,
+                "median": 94625
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 11009792,
+                "maximum": 11271124,
+                "median": 11253667
+              },
+              "calls": {
+                "minimum": 2,
+                "maximum": 2
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 607249,
+                "maximum": 681960,
+                "median": 664540
+              },
+              "calls": {
+                "minimum": 92,
+                "maximum": 92
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": null,
+          "tight_work_per_candidate": 100000000,
+          "gpu_residuals": null,
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 35078144,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "tight_support"
+          ],
+          "device_kinds": [
+            "tight_support"
+          ],
+          "route_observations": [
+            "Backend: GPU tight support (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris ranked support; search: regions; grounder: eager (requested eager); batch=64",
+            "Membership: checked tight support certificate over the original theory",
+            "Parallel candidate production: 4 workers; joined before batch membership checking"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 20,
+              "maximum": 20
+            },
+            "gpu_batches": {
+              "minimum": 20,
+              "maximum": 20
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1220,
+              "maximum": 1222
+            },
+            "gpu_candidates": {
+              "minimum": 1220,
+              "maximum": 1222
+            },
+            "gpu_rounds": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_work": {
+              "minimum": 6470880,
+              "maximum": 6481488
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1220,
+              "maximum": 1222
+            },
+            "peak_accounted_bytes": {
+              "minimum": 1263224,
+              "maximum": 1263224
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_scheduled_work": {
+              "minimum": 6470880,
+              "maximum": 6481488
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 2945544,
+              "maximum": 3361445
+            },
+            "candidates": {
+              "minimum": 1220,
+              "maximum": 1222
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 2,
+              "maximum": 3
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "entered": {
+              "minimum": 1220,
+              "maximum": 1222
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 1220,
+              "maximum": 1222
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1176,
+            "maximum": 1176
+          },
+          "native_selected_costs": [
+            5
+          ],
+          "wall_elapsed_ns": {
+            "minimum": 96267958,
+            "maximum": 102738625,
+            "median": 98710125
+          },
+          "stdout_bytes": {
+            "minimum": 517084,
+            "maximum": 518341
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 15204252,
+                "maximum": 16472042,
+                "median": 15974209
+              },
+              "calls": {
+                "minimum": 20,
+                "maximum": 20
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 8016958,
+                "maximum": 8072167,
+                "median": 8033458
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": {
+              "elapsed_ns": {
+                "minimum": 106375,
+                "maximum": 116708,
+                "median": 109334
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 36795419,
+                "maximum": 43489584,
+                "median": 39563789
+              },
+              "calls": {
+                "minimum": 20,
+                "maximum": 20
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 6924032,
+                "maximum": 7067375,
+                "median": 6955803
+              },
+              "calls": {
+                "minimum": 1220,
+                "maximum": 1222
+              }
+            },
+            "objective_scoring_retention": {
+              "elapsed_ns": {
+                "minimum": 1669257,
+                "maximum": 1728481,
+                "median": 1686052
+              },
+              "calls": {
+                "minimum": 1220,
+                "maximum": 1222
+              }
+            }
+          },
+          "gpu_limits": null,
+          "tight_work_per_candidate": 100000000,
+          "gpu_residuals": null,
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 35028992,
+            "reported_unit": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "label": "B2-candidate",
+      "source": "2e80d065dfb286a4a457d788e6b55955f583fae0",
+      "raw_report": "B2-candidate.json",
+      "bytes": 7853349,
+      "sha256": "85b822a32f841a41e02c14809ceaefdefd91146aed8bfc596b87335f264ae00f",
+      "native_sha256": "14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "tight_support"
+          ],
+          "device_kinds": [
+            "tight_support"
+          ],
+          "route_observations": [
+            "Backend: GPU tight support (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris ranked support; search: regions; grounder: eager (requested eager); batch=64",
+            "Membership: checked tight support certificate over the original theory",
+            "Parallel candidate production: 4 workers; joined before batch membership checking"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_work": {
+              "minimum": 9126,
+              "maximum": 9126
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 269852,
+              "maximum": 269852
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_scheduled_work": {
+              "minimum": 9126,
+              "maximum": 9126
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 463166,
+              "maximum": 463166
+            },
+            "candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "peak_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "entered": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 31782125,
+            "maximum": 31814667,
+            "median": 31788375
+          },
+          "stdout_bytes": {
+            "minimum": 12926,
+            "maximum": 12927
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 2068500,
+                "maximum": 2127916,
+                "median": 2101292
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7977834,
+                "maximum": 8044625,
+                "median": 8004833
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": {
+              "elapsed_ns": {
+                "minimum": 133875,
+                "maximum": 145166,
+                "median": 139708
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 8769208,
+                "maximum": 9023625,
+                "median": 8932500
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 13750,
+                "maximum": 17292,
+                "median": 17250
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": null,
+          "tight_work_per_candidate": 100000000,
+          "gpu_residuals": null,
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 30851072,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "tight_support"
+          ],
+          "device_kinds": [
+            "tight_support"
+          ],
+          "route_observations": [
+            "Backend: GPU tight support (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris ranked support; search: regions; grounder: eager (requested eager); batch=64",
+            "Membership: checked tight support certificate over the original theory",
+            "Parallel candidate production: 4 workers; joined before batch membership checking"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_work": {
+              "minimum": 579232,
+              "maximum": 579232
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 1323080,
+              "maximum": 1323080
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_scheduled_work": {
+              "minimum": 579232,
+              "maximum": 579232
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 14497472,
+              "maximum": 14497472
+            },
+            "candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "entered": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 92,
+            "maximum": 92
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 98460166,
+            "maximum": 104699292,
+            "median": 100974333
+          },
+          "stdout_bytes": {
+            "minimum": 35454,
+            "maximum": 35460
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 67530458,
+                "maximum": 72814292,
+                "median": 69284374
+              },
+              "calls": {
+                "minimum": 2,
+                "maximum": 2
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7823916,
+                "maximum": 7963417,
+                "median": 7915416
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": {
+              "elapsed_ns": {
+                "minimum": 90500,
+                "maximum": 97750,
+                "median": 96417
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 11077291,
+                "maximum": 11305999,
+                "median": 11261208
+              },
+              "calls": {
+                "minimum": 2,
+                "maximum": 2
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 599416,
+                "maximum": 651955,
+                "median": 633290
+              },
+              "calls": {
+                "minimum": 92,
+                "maximum": 92
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": null,
+          "tight_work_per_candidate": 100000000,
+          "gpu_residuals": null,
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 35520512,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "tight_support"
+          ],
+          "device_kinds": [
+            "tight_support"
+          ],
+          "route_observations": [
+            "Backend: GPU tight support (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris ranked support; search: regions; grounder: eager (requested eager); batch=64",
+            "Membership: checked tight support certificate over the original theory",
+            "Parallel candidate production: 4 workers; joined before batch membership checking"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 20
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 20
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1215,
+              "maximum": 1222
+            },
+            "gpu_candidates": {
+              "minimum": 1215,
+              "maximum": 1222
+            },
+            "gpu_rounds": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_work": {
+              "minimum": 6444360,
+              "maximum": 6481488
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1215,
+              "maximum": 1222
+            },
+            "peak_accounted_bytes": {
+              "minimum": 1263224,
+              "maximum": 1263224
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_scheduled_work": {
+              "minimum": 6444360,
+              "maximum": 6481488
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 2629484,
+              "maximum": 3342284
+            },
+            "candidates": {
+              "minimum": 1215,
+              "maximum": 1222
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 2,
+              "maximum": 3
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "entered": {
+              "minimum": 1215,
+              "maximum": 1222
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 1215,
+              "maximum": 1222
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1176,
+            "maximum": 1176
+          },
+          "native_selected_costs": [
+            5
+          ],
+          "wall_elapsed_ns": {
+            "minimum": 93744375,
+            "maximum": 97613042,
+            "median": 97289833
+          },
+          "stdout_bytes": {
+            "minimum": 517219,
+            "maximum": 518169
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 13560793,
+                "maximum": 16338751,
+                "median": 14056210
+              },
+              "calls": {
+                "minimum": 19,
+                "maximum": 20
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7927458,
+                "maximum": 8065542,
+                "median": 7992958
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": {
+              "elapsed_ns": {
+                "minimum": 105958,
+                "maximum": 111584,
+                "median": 108709
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 33901960,
+                "maximum": 39856168,
+                "median": 39281456
+              },
+              "calls": {
+                "minimum": 19,
+                "maximum": 20
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 6976704,
+                "maximum": 7363714,
+                "median": 7097207
+              },
+              "calls": {
+                "minimum": 1215,
+                "maximum": 1222
+              }
+            },
+            "objective_scoring_retention": {
+              "elapsed_ns": {
+                "minimum": 1668170,
+                "maximum": 1700022,
+                "median": 1678910
+              },
+              "calls": {
+                "minimum": 1215,
+                "maximum": 1222
+              }
+            }
+          },
+          "gpu_limits": null,
+          "tight_work_per_candidate": 100000000,
+          "gpu_residuals": null,
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 35225600,
+            "reported_unit": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "label": "A2-main",
+      "source": "eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3",
+      "raw_report": "A2-main.json",
+      "bytes": 7841129,
+      "sha256": "a1a587196298fe00216a15f2735fc5dfb6e0c4d247731a890b5464ba22a1ad96",
+      "native_sha256": "f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb",
+      "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+      "passed": true,
+      "accounted": true,
+      "cases": [
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "route_observations": [
+            "Backend: hybrid GPU propagation + exact CPU residual search (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; search: regions; grounder: eager (requested eager); batch=64; CPU completion requested workers=4"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_batches": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "gpu_rounds": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "gpu_work": {
+              "minimum": 267398,
+              "maximum": 267398
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "peak_accounted_bytes": {
+              "minimum": 349972,
+              "maximum": 349972
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 409024,
+              "maximum": 409024
+            },
+            "candidates": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "peak_scratch_bytes": {
+              "minimum": 1121,
+              "maximum": 1121
+            },
+            "entered": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 1,
+              "maximum": 1
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 26708666,
+            "maximum": 30307709,
+            "median": 29274625
+          },
+          "stdout_bytes": {
+            "minimum": 12856,
+            "maximum": 12856
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 3188250,
+                "maximum": 3281625,
+                "median": 3270500
+              },
+              "calls": {
+                "minimum": 3,
+                "maximum": 3
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 8066375,
+                "maximum": 8164250,
+                "median": 8150333
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": null,
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 3778500,
+                "maximum": 6126500,
+                "median": 6005667
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 11833,
+                "maximum": 14000,
+                "median": 13083
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": {
+            "work_per_candidate": 100000000,
+            "rounds_per_candidate": 64
+          },
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 28459008,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "route_observations": [
+            "Backend: hybrid GPU propagation + exact CPU residual search (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; search: regions; grounder: eager (requested eager); batch=64; CPU completion requested workers=4"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_batches": {
+              "minimum": 2,
+              "maximum": 2
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "gpu_rounds": {
+              "minimum": 368,
+              "maximum": 368
+            },
+            "gpu_work": {
+              "minimum": 16004412,
+              "maximum": 16004412
+            },
+            "cpu_residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "gpu_decided": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2511856,
+              "maximum": 2511856
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 14461401,
+              "maximum": 14461401
+            },
+            "candidates": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "countermodel_queries": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "candidate_restrictions": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "effective_workers": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "entered": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "residuals": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "completed": {
+              "minimum": 92,
+              "maximum": 92
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 92,
+            "maximum": 92
+          },
+          "native_selected_costs": null,
+          "wall_elapsed_ns": {
+            "minimum": 154699333,
+            "maximum": 156043333,
+            "median": 154805000
+          },
+          "stdout_bytes": {
+            "minimum": 35403,
+            "maximum": 35404
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 126658497,
+                "maximum": 127479451,
+                "median": 127171081
+              },
+              "calls": {
+                "minimum": 185,
+                "maximum": 185
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7935541,
+                "maximum": 8102333,
+                "median": 7993500
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": null,
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 8269708,
+                "maximum": 8736791,
+                "median": 8389292
+              },
+              "calls": {
+                "minimum": 2,
+                "maximum": 2
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 638871,
+                "maximum": 674627,
+                "median": 645878
+              },
+              "calls": {
+                "minimum": 92,
+                "maximum": 92
+              }
+            },
+            "objective_scoring_retention": null
+          },
+          "gpu_limits": {
+            "work_per_candidate": 100000000,
+            "rounds_per_candidate": 64
+          },
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 29425664,
+            "reported_unit": "bytes"
+          }
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "profile": 0,
+          "timed_samples": 3,
+          "actual_backends": [
+            "metal"
+          ],
+          "actual_adapters": [
+            "Apple M4 Pro"
+          ],
+          "actual_procedures": [
+            "countermodel"
+          ],
+          "device_kinds": [
+            "formula"
+          ],
+          "route_observations": [
+            "Backend: hybrid GPU propagation + exact CPU residual search (Apple M4 Pro, Metal; vendor=0x0000); oracle: Ferraris reduct countermodel; search: regions; grounder: eager (requested eager); batch=64; CPU completion requested workers=4"
+          ],
+          "device_counter_ranges": {
+            "gpu_submitted_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_batches": {
+              "minimum": 19,
+              "maximum": 19
+            },
+            "gpu_submitted_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "gpu_rounds": {
+              "minimum": 77280,
+              "maximum": 77280
+            },
+            "gpu_work": {
+              "minimum": 3029507512,
+              "maximum": 3029507512
+            },
+            "cpu_residuals": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "gpu_decided": {
+              "minimum": 13,
+              "maximum": 13
+            },
+            "peak_accounted_bytes": {
+              "minimum": 2391784,
+              "maximum": 2391784
+            },
+            "pending_candidates": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "queued_models": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "search_counter_ranges": {
+            "work": {
+              "minimum": 15235864,
+              "maximum": 15235864
+            },
+            "candidates": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "countermodel_queries": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "candidate_restrictions": {
+              "minimum": 2,
+              "maximum": 2
+            }
+          },
+          "completion_counter_ranges": {
+            "requested_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "effective_workers": {
+              "minimum": 4,
+              "maximum": 4
+            },
+            "requested_scratch_bytes": {
+              "minimum": 71744,
+              "maximum": 71744
+            },
+            "peak_scratch_bytes": {
+              "minimum": 73120,
+              "maximum": 73120
+            },
+            "entered": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "residuals": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "completed": {
+              "minimum": 1208,
+              "maximum": 1208
+            },
+            "failed": {
+              "minimum": 0,
+              "maximum": 0
+            },
+            "residual_completed": {
+              "minimum": 1195,
+              "maximum": 1195
+            },
+            "residual_failed": {
+              "minimum": 0,
+              "maximum": 0
+            }
+          },
+          "native_selected_models": {
+            "minimum": 1176,
+            "maximum": 1176
+          },
+          "native_selected_costs": [
+            5
+          ],
+          "wall_elapsed_ns": {
+            "minimum": 274036583,
+            "maximum": 275970000,
+            "median": 275861458
+          },
+          "stdout_bytes": {
+            "minimum": 517949,
+            "maximum": 517950
+          },
+          "phases": {
+            "candidate_generation": {
+              "elapsed_ns": {
+                "minimum": 30167469,
+                "maximum": 30439660,
+                "median": 30342671
+              },
+              "calls": {
+                "minimum": 2417,
+                "maximum": 2417
+              }
+            },
+            "execution_setup": {
+              "elapsed_ns": {
+                "minimum": 7969709,
+                "maximum": 8157042,
+                "median": 8126917
+              },
+              "calls": {
+                "minimum": 1,
+                "maximum": 1
+              }
+            },
+            "certificate_setup": null,
+            "gpu_host_oracle": {
+              "elapsed_ns": {
+                "minimum": 156039752,
+                "maximum": 158444374,
+                "median": 157178085
+              },
+              "calls": {
+                "minimum": 19,
+                "maximum": 19
+              }
+            },
+            "original_validation": {
+              "elapsed_ns": {
+                "minimum": 6831488,
+                "maximum": 7083485,
+                "median": 6954860
+              },
+              "calls": {
+                "minimum": 1208,
+                "maximum": 1208
+              }
+            },
+            "objective_scoring_retention": {
+              "elapsed_ns": {
+                "minimum": 1687636,
+                "maximum": 1733293,
+                "median": 1712000
+              },
+              "calls": {
+                "minimum": 1208,
+                "maximum": 1208
+              }
+            }
+          },
+          "gpu_limits": {
+            "work_per_candidate": 100000000,
+            "rounds_per_candidate": 64
+          },
+          "separate_memory_sample": {
+            "sample_count": 1,
+            "peak_rss_bytes": 31899648,
+            "reported_unit": "bytes"
+          }
+        }
+      ]
+    }
+  ]
+}

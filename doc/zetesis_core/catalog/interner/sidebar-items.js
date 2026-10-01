@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AssignedFailure","Failure"],"struct":["AtomAppender","AtomEntry","AtomInterner","CloseFailure","ClosedCatalog","CommittedAtoms","Limits","TermLookup"]};

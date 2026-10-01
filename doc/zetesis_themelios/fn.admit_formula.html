@@ -1,0 +1,126 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Admit the extended scalar profile, finite conditional choices and body count/sum/sum+/min/max aggregates into a Ferraris theory. Choices may have complete logical bounds; each aggregate retains its separate value/endpoint profile. Positive ordinary atoms bind variables in global or element-local scopes; acyclic positive aggregate equalities may additionally bind named values. Positive and double-negated integer-affine comparisons can generate finite domains through directed closed endpoints, including coupled variables. The complete correlated guard remains. Nonlinear expressions and relational endpoints alone supply no new domain. Binding analysis has explicit signed coefficient/accumulation capacity limits, separate from checked source arithmetic. Completed aggregate/scalar proposals may feed ordinary evaluated arguments, signed negative gates, finite ranges, logical choice bounds, nonbinding aggregate guards and admitted universal body conditionals. Aggregate guard comparisons retain their separate default-negation scope and never bind additional variables. Finite count/sum/sum+ results compare with complete bounds in ASP term order, without numeric coercion. A nonnumeric bound has the same order against every integer; its canonical aggregate comparison therefore retains constant original and frozen truth. Eligibility and positive atom permissions are still validated and compiled separately. Conditional local joins inherit the complete outer binding; neither local witnesses nor vacuity establishes an aggregate equality. Every generated rule retains its original equalities. Default-negated anonymous consequent positions project the complete finite witness family before applying `not` or `not not`. Anonymous positions may occur inside positive function or tuple constructors; named and evaluated inputs must be independently bound. Pools and intervals retain their source alternative quantifier outside each projection. Classical-negative predicates and anonymous unary/arithmetic inputs retain their safety refusal. Ground scalar comparisons use ASP term order; arithmetic expressions require numeric operands. Flat tuple equality/disequality is also supported."><title>admit_formula in zetesis_themelios - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="zetesis_themelios" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">admit_formula</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../zetesis_themelios/index.html">zetesis_<wbr>themelios</a><span class="version">0.1.7</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">admit_<wbr>formula</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#errors" title="Errors">Errors</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate zetesis_<wbr>themelios</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">zetesis_themelios</a></div><h1>Function <span class="fn">admit_<wbr>formula</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/zetesis_themelios/formula.rs.html#1007-1014">Source</a> </span></div><pre class="rust item-decl"><code>pub fn admit_formula(
+    text: <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>,
+    options: <a class="struct" href="struct.AdmissionOptions.html" title="struct zetesis_themelios::AdmissionOptions">AdmissionOptions</a>,
+    expansion: <a class="struct" href="struct.ExpansionLimits.html" title="struct zetesis_themelios::ExpansionLimits">ExpansionLimits</a>,
+    limits: <a class="struct" href="struct.FormulaLimits.html" title="struct zetesis_themelios::FormulaLimits">FormulaLimits</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.AdmittedFormula.html" title="struct zetesis_themelios::AdmittedFormula">AdmittedFormula</a>, <a class="enum" href="enum.FormulaFailure.html" title="enum zetesis_themelios::FormulaFailure">FormulaFailure</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Admit the extended scalar profile, finite conditional choices and body
+count/sum/sum+/min/max aggregates into a Ferraris theory. Choices may have
+complete logical bounds; each aggregate retains its separate value/endpoint profile.
+Positive ordinary atoms bind variables in global or element-local scopes;
+acyclic positive aggregate equalities may additionally bind named values.
+Positive and double-negated integer-affine comparisons can generate finite
+domains through directed closed endpoints, including coupled variables.
+The complete correlated guard remains. Nonlinear expressions and relational
+endpoints alone supply no new domain. Binding analysis has explicit signed
+coefficient/accumulation capacity limits, separate from checked source arithmetic.
+Completed aggregate/scalar proposals may feed ordinary evaluated arguments,
+signed negative gates, finite ranges, logical choice bounds, nonbinding
+aggregate guards and admitted universal body conditionals. Aggregate guard
+comparisons retain their separate default-negation scope and never bind
+additional variables. Finite count/sum/sum+ results compare with complete
+bounds in ASP term order, without numeric coercion. A nonnumeric bound has
+the same order against every integer; its canonical aggregate comparison
+therefore retains constant original and frozen truth. Eligibility and
+positive atom permissions are still validated and compiled separately.
+Conditional local joins inherit the complete
+outer binding; neither local witnesses nor vacuity establishes an aggregate
+equality. Every generated rule retains its original equalities.
+Default-negated anonymous consequent positions project the complete finite
+witness family before applying <code>not</code> or <code>not not</code>. Anonymous positions may
+occur inside positive function or tuple constructors; named and evaluated
+inputs must be independently bound. Pools and intervals retain their source
+alternative quantifier outside each projection. Classical-negative
+predicates and anonymous unary/arithmetic inputs retain their safety refusal.
+Ground scalar comparisons use ASP term order; arithmetic expressions
+require numeric operands. Flat tuple equality/disequality is also supported.</p>
+<p>Eligibility remains a formula even for recursive conditions. Duplicate
+grounded head atoms combine permission by disjunction. Ordinary choices
+count distinct signed atoms and original Boolean source occurrences; local
+eligibility witnesses for each key combine by disjunction. Function heads
+measure distinct complete tuples selected by any eligible signed operand.
+All five measures permit either tuple/atom alias direction. Only unsigned
+atoms supply choice permission or producer support; <code>not</code> and <code>not not</code>
+retain their frozen reduct truth. Booleans introduce no atom or support.
+Atom-only count certificates require wholly unsigned atomic groups with
+a tuple/atom bijection. Head bounds are constraints and never invent support.
+Numeric measure is separate from permission: missing/nonnumeric sum weights
+are zero, and sum+ measures only strictly positive numeric weights. Every
+positive head retains its independent permission. Unbounded heads need no
+measure evaluation but still validate source terms and bindings. A bounded
+extremum projects only present first values, using its ordinary empty value
+if none remain. Missing tuples retain their independent permissions under
+this declared extension; some original sources differ from clingo. Positive,
+default-negated and double-negated ordinary element conditions retain their
+original eligibility formulas.
+Min/max first tuple values and guards use complete finite logical values in
+ASP term order, including genuine extrema and structured values. Empty min is
+<code>#sup</code>; empty max is <code>#inf</code>. The integer-endpoint limitation remains separate.
+Necessary producer guards are double-negated and therefore leave reduct subsets
+unconstrained whenever the candidate passes them. Grounding uses complete
+relational joins over a bounded possible-positive closure. Gates are ignored
+only while constructing that support upper bound. Aggregate guards are also
+conservatively ignored there; their exact condition formulas remain in the
+theory. Constraints never derive support. Source scopes are checked before
+pruning. A bounded cursor proposes generated assignment values; each actual
+equality formula remains in the reduct theory.</p>
+<p>The objective profile retains lifted <code>#minimize</code>/<code>#maximize</code> elements and
+admitted scoped weak constraints. Weights, priorities and tuple fields use
+finite checked expressions over safely bound inputs; priority defaults to zero.
+Conditions retain their admitted signed literals, scalar filters, aggregate
+guards and independently checked local scopes. Source
+weights normalize before global tuple deduplication; eligible maximize
+<code>i32::MIN</code> weights receive a located overflow refusal. Nonnumeric priorities
+contribute no key after arithmetic validation. Weight, priority and tuple
+fields participate jointly in the source-family policy below, including
+when the weight is nonnumeric. Pooled fragments of one original objective
+element share its family; distinct elements cannot rescue each other.
+Dynamic priorities read ordinary bound positions or generated values with a
+completed source-carrier certificate. Eligibility precision is selected per
+objective: qualified positive dependencies can use a tighter carrier, while
+other admitted dependencies use completed possible support. Those possible
+values need not all realize in an answer. Source
+priorities survive zero weights and inactive models; templates with no possible
+positive/filter binding are omitted. Default-negated, aggregate and recursive
+producer dependencies retain their original formulas; possible support does
+not establish their truth in an answer. Original objective conditions are
+evaluated over the verified full model, independently of the source carrier
+used to retain priority presence. Unresolved binding dependencies and
+unsupported local generators remain explicit refusals. Objectives supply no
+logical support and are evaluated separately on reduct-verified full models.
+This route invokes no solver, changes no existing S0/extended API contract,
+and claims no parser-to-Lean refinement.</p>
+<h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>
+<p>Returns a typed located refusal on diagnostics, unsupported syntax, unsafe
+variables, fatal arithmetic, an entirely undefined source family, or any
+exceeded source/expansion/formula limit.
+A comparison over relationally bound variables that is defined and false
+excludes its substitution, and nothing in an excluded substitution is
+reached. Arithmetic is checked on every complete possible-positive
+substitution the comparisons leave; an incomplete positive prefix with no
+complete extension creates no such obligation. Row-dependent head atom
+values are evaluated only after their rule or local element’s body scalar
+and range selection. Negative gates and aggregate truth remain formulas and
+do not select this stage. Closed-term syntax and arithmetic validation still
+occur during source preparation. Substitutions a binder, interval check,
+tuple comparison or guard rejects still validate their bodies through
+isolated formula scratch before being discarded; that scratch supplies no
+atoms, roots, producers or objective keys to the admitted program. Rule-body
+scratch uses the existing theory atom/node ceilings; objective-body scratch
+retains its independent ceilings. Cumulative source work still applies.
+Only evaluated numeric division or remainder by zero may omit a source
+instance. Admission requires a jointly defined instance in that same complete
+original family; a defined but false instance is a witness. An empty positive
+join is silent. Each local choice or aggregate element has a separate family
+for each fixed outer binding. Successful owners retain typed warnings,
+deduplicated by source span and bounded by <a href="struct.FormulaLimits.html#structfield.max_warnings" title="field zetesis_themelios::FormulaLimits::max_warnings"><code>FormulaLimits::max_warnings</code></a>.
+Overflow, nonnumeric arithmetic and invalid exponents remain fatal. Source
+evaluation checks independent expression branches and fields after a zero
+divisor within each reached phase. An operation depending on an undefined
+operand is not evaluated.
+An omitted body or condition does not enter its later head, consequent or
+objective-field phase. Defined false body selection likewise skips head and
+consequent evaluation; independent-error checks do not cross that boundary.
+This policy does not weaken closed-term preparation or the strict arithmetic
+errors of post-solve observations. Numeric typing of a variable objective
+weight is checked later when its contribution is active in a verified model.</p>
+</div></details></section></div></main></body></html>

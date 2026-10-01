@@ -1,0 +1,2110 @@
+{
+  "format": "zetesis_public_cpu_comparison",
+  "compiled_sources": {
+    "before": "013ae6d3fc0290533fe98d723647d59451c39df6",
+    "after": "8c84713265cf2f97f5102548be52b431585a2cd6"
+  },
+  "executables": {
+    "before": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+    "after_runner_and_memory_helper": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+    "clingo_5_8_2": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+  },
+  "toolchain": {
+    "rust": "1.97.1",
+    "rustc_commit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)",
+    "llvm": "22.1.6",
+    "target": "aarch64-apple-darwin",
+    "features": "all-features",
+    "profile": "release"
+  },
+  "cargo_lock_sha256": {
+    "before": "cd606ea4eb9701a0bae7f2ae5af3fbad4b19c4fdfaaf9d2b1f115fdab7aa9392",
+    "after": "c0741ee800d0fc9ecfc7613346dcf19238e01ddf3f2e0d30726489c73715dbef"
+  },
+  "themelios_revision": "4f0275875d624fae1817c4811310525c088a0f42",
+  "host": {
+    "os": "macOS 26.6.2 (25G83)",
+    "architecture": "arm64",
+    "processor": "Apple M4 Pro",
+    "model": "Mac16,8",
+    "memory": "48 GB",
+    "processors_system_profiler": "proc 14:10:4:0",
+    "hardware_probe": "system_profiler SPHardwareDataType; sysctl probe denied"
+  },
+  "order": {
+    "suites": [
+      "series",
+      "corpus",
+      "scalability"
+    ],
+    "within_suite": [
+      "A1",
+      "B1",
+      "S",
+      "B2",
+      "A2"
+    ]
+  },
+  "protocol": {
+    "matched_workers": 4,
+    "scaling_workers": [
+      1,
+      2,
+      4,
+      8,
+      14
+    ],
+    "clingo_workers": 1,
+    "grounder": "auto",
+    "device": "cpu",
+    "oracle": "auto",
+    "completion_workers": 1,
+    "batch_size": 64,
+    "completion_scratch_bytes": 268435456,
+    "warmups": 1,
+    "matched_timed_per_block": 2,
+    "scaling_timed": 5,
+    "rss_per_block_profile": 1,
+    "timeout_seconds": 30,
+    "campaign_seconds": 1800,
+    "child_capture_bytes": 16777216,
+    "native_report_bytes": 16777216,
+    "matched_capture_bytes": 536870912,
+    "matched_report_bytes": 1073741824,
+    "scaling_capture_bytes": 1073741824,
+    "scaling_report_bytes": 2147483648,
+    "scaling_reference": "qualification_only; B1/B2 supply the separately measured reference bracket",
+    "native_solver_limits": "defaults of each executable; no override"
+  },
+  "normalization": "Only ephemeral workload path prefixes in failure reasons are replaced. Measurements and dispositions are retained. Integer timestamps preserve their original decimal precision.",
+  "raw_report_availability": "Raw captures are retained privately; no public download is claimed. This repository projection supplies comparison values, workload identities, report hashes and maintained reproduction commands.",
+  "suites": {
+    "corpus": {
+      "count": 94,
+      "reports": {
+        "A1": {
+          "sha256": "740fc25caf98d178b14c42eee236b2daee0de3deb4a62e3a93ba8d9afc14c52c",
+          "bytes": 23434892,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790385930208040000,
+            "finished_unix_ns": 1790385939844104000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "B1": {
+          "sha256": "032e4e6515281577ff588db41d62255fc6e551d3a44a0bd5526f79efe61c6030",
+          "bytes": 25098437,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386161628476000,
+            "finished_unix_ns": 1790386171542454000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "B2": {
+          "sha256": "3780340cab916f635af14be7f9742761a2539d8f64dae1b0438220c3ee0f903d",
+          "bytes": 25097730,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386283292740000,
+            "finished_unix_ns": 1790386293487874000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "A2": {
+          "sha256": "f694177a478972821234195bc44afd60e3d2ac39a45290528846d77fba23c6a0",
+          "bytes": 23435654,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386316585542000,
+            "finished_unix_ns": 1790386326235198000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "S": {
+          "sha256": "c788e1e271e83eeebb8518260d492a67b93bc8178d150522113b0ca51a6d95a9",
+          "bytes": 157367402,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386202061241000,
+            "finished_unix_ns": 1790386245590136000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "qualification_only",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 1,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 2,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 8,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 14,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        }
+      },
+      "workloads": [
+        {
+          "entry": "scenarios/equality-generalized-tsp/01-basic.lp",
+          "label": "equality-generalized-tsp/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/equality-generalized-tsp/02-larger.lp",
+          "label": "equality-generalized-tsp/02-larger",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp",
+          "label": "equality-generalized-tsp/03-unreachable-subset-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/01-basic.lp",
+          "label": "variant-01/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/02-start-equals-end.lp",
+          "label": "variant-01/02-start-equals-end",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/03-zero-cost-detour.lp",
+          "label": "variant-01/03-zero-cost-detour",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/04-no-path.lp",
+          "label": "variant-01/04-no-path",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/05-multi-path.lp",
+          "label": "variant-01/05-multi-path",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/06-layered-dag.lp",
+          "label": "variant-01/06-layered-dag",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/07-cycles.lp",
+          "label": "variant-01/07-cycles",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-01/08-negative-weights.lp",
+          "label": "variant-01/08-negative-weights",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/01-basic.lp",
+          "label": "variant-02/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/02-start-equals-end.lp",
+          "label": "variant-02/02-start-equals-end",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/03-before-forces-detour.lp",
+          "label": "variant-02/03-before-forces-detour",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/04-after-forces-extension.lp",
+          "label": "variant-02/04-after-forces-extension",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/05-ordering-unsat.lp",
+          "label": "variant-02/05-ordering-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/06-layered-dag-before.lp",
+          "label": "variant-02/06-layered-dag-before",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/07-layered-dag-before-after.lp",
+          "label": "variant-02/07-layered-dag-before-after",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/08-tie-break-under-ordering.lp",
+          "label": "variant-02/08-tie-break-under-ordering",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-02/09-negative-weights.lp",
+          "label": "variant-02/09-negative-weights",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/01-basic.lp",
+          "label": "variant-03/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/02-start-equals-end.lp",
+          "label": "variant-03/02-start-equals-end",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/03-budget-forces-detour.lp",
+          "label": "variant-03/03-budget-forces-detour",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/04-cost-at-cap-allowed.lp",
+          "label": "variant-03/04-cost-at-cap-allowed",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/05-budget-unsat.lp",
+          "label": "variant-03/05-budget-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/06-layered-dag-cap.lp",
+          "label": "variant-03/06-layered-dag-cap",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/07-layered-dag-tight-cap.lp",
+          "label": "variant-03/07-layered-dag-tight-cap",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/08-tie-break-under-cap.lp",
+          "label": "variant-03/08-tie-break-under-cap",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-03/09-negative-weights.lp",
+          "label": "variant-03/09-negative-weights",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/01-basic.lp",
+          "label": "variant-04/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/02-start-equals-end.lp",
+          "label": "variant-04/02-start-equals-end",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/03-before-forces-detour-within-budget.lp",
+          "label": "variant-04/03-before-forces-detour-within-budget",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/04-ordering-violates-budget.lp",
+          "label": "variant-04/04-ordering-violates-budget",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/05-after-and-budget-interact.lp",
+          "label": "variant-04/05-after-and-budget-interact",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp",
+          "label": "variant-04/06-layered-dag-ordering-cap",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/07-layered-dag-combined.lp",
+          "label": "variant-04/07-layered-dag-combined",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/08-tie-break-under-ordering-and-cap.lp",
+          "label": "variant-04/08-tie-break-under-ordering-and-cap",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/shortest-path/variant-04/09-negative-weights.lp",
+          "label": "variant-04/09-negative-weights",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-01/01-basic.lp",
+          "label": "variant-01/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-01/02-agent-reuse.lp",
+          "label": "variant-01/02-agent-reuse",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-01/03-selective-compatibility.lp",
+          "label": "variant-01/03-selective-compatibility",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp",
+          "label": "variant-01/04-no-compatible-agent-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-01/05-larger-mix.lp",
+          "label": "variant-01/05-larger-mix",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-02/01-basic.lp",
+          "label": "variant-02/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp",
+          "label": "variant-02/02-makespan-tiebreak",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-02/03-cost-dominates.lp",
+          "label": "variant-02/03-cost-dominates",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-02/04-no-compatible-agent-unsat.lp",
+          "label": "variant-02/04-no-compatible-agent-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-02/05-larger-mix.lp",
+          "label": "variant-02/05-larger-mix",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-03/01-basic.lp",
+          "label": "variant-03/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-03/02-multiple-groups.lp",
+          "label": "variant-03/02-multiple-groups",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-03/03-mixed-grouped-ungrouped.lp",
+          "label": "variant-03/03-mixed-grouped-ungrouped",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-03/04-incompatible-group-unsat.lp",
+          "label": "variant-03/04-incompatible-group-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-03/05-larger-mix.lp",
+          "label": "variant-03/05-larger-mix",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/01-basic.lp",
+          "label": "variant-04/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/02-precedence.lp",
+          "label": "variant-04/02-precedence",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/03-agent-serialization.lp",
+          "label": "variant-04/03-agent-serialization",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/04-window-too-tight-unsat.lp",
+          "label": "variant-04/04-window-too-tight-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "label": "variant-04/05-larger-mix",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-01/01-basic.lp",
+          "label": "variant-01/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-01/02-multiple-tours.lp",
+          "label": "variant-01/02-multiple-tours",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-01/03-asymmetric.lp",
+          "label": "variant-01/03-asymmetric",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-01/04-subtour-unsat.lp",
+          "label": "variant-01/04-subtour-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-01/05-ring.lp",
+          "label": "variant-01/05-ring",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-02/01-basic.lp",
+          "label": "variant-02/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-02/02-single-salesman.lp",
+          "label": "variant-02/02-single-salesman",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-02/03-too-many-salesmen-unsat.lp",
+          "label": "variant-02/03-too-many-salesmen-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-02/04-equal-cost-split.lp",
+          "label": "variant-02/04-equal-cost-split",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-02/05-larger-asymmetric.lp",
+          "label": "variant-02/05-larger-asymmetric",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-02/06-unreachable-edge.lp",
+          "label": "variant-02/06-unreachable-edge",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-03/01-basic.lp",
+          "label": "variant-03/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-03/02-single-salesman.lp",
+          "label": "variant-03/02-single-salesman",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-03/03-depot-crossing-unsat.lp",
+          "label": "variant-03/03-depot-crossing-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-03/04-equal-cost-split.lp",
+          "label": "variant-03/04-equal-cost-split",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp",
+          "label": "variant-03/05-larger-three-depots",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-03/06-unreachable-edge.lp",
+          "label": "variant-03/06-unreachable-edge",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-04/01-basic.lp",
+          "label": "variant-04/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-04/02-single-salesman.lp",
+          "label": "variant-04/02-single-salesman",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-04/03-window-too-tight-unsat.lp",
+          "label": "variant-04/03-window-too-tight-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-04/04-depot-window-too-tight-unsat.lp",
+          "label": "variant-04/04-depot-window-too-tight-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-04/05-three-depots-asymmetric-times.lp",
+          "label": "variant-04/05-three-depots-asymmetric-times",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-04/06-unreachable-edge.lp",
+          "label": "variant-04/06-unreachable-edge",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-05/01-basic.lp",
+          "label": "variant-05/01-basic",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-05/02-tight-bound-exact.lp",
+          "label": "variant-05/02-tight-bound-exact",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-05/03-revisit-too-tight-unsat.lp",
+          "label": "variant-05/03-revisit-too-tight-unsat",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-05/04-depot-and-vertex-revisits.lp",
+          "label": "variant-05/04-depot-and-vertex-revisits",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp",
+          "label": "variant-05/05-three-depots-mixed",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "scenarios/traveling-salesman/variant-05/06-unreachable-edge.lp",
+          "label": "variant-05/06-unreachable-edge",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/n-queens/variant-01.lp",
+          "label": "n-queens/variant-01",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "label": "n-queens/variant-02",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/n-queens/variant-03.lp",
+          "label": "n-queens/variant-03",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/n-queens/variant-04.lp",
+          "label": "n-queens/variant-04",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/n-queens/variant-05.lp",
+          "label": "n-queens/variant-05",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/n-queens/variant-06.lp",
+          "label": "n-queens/variant-06",
+          "manifest": "examples/correctness/manifest.json"
+        },
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "label": "send-money/send-money",
+          "manifest": "examples/correctness/manifest.json"
+        }
+      ],
+      "original_matched_view_sha256": "6aa3eecb9a28c56bd887ffb2328fc3357806327d6f95f3dd14bd98bd3af4ec35",
+      "original_scaling_view_sha256": "e264408faf8a7e19c1c87be73e7f66bf320732f5091619370366bf4109cca157"
+    },
+    "series": {
+      "count": 22,
+      "reports": {
+        "A1": {
+          "sha256": "e4729c953c3f602769ec32f1afd18bf65c0c4332f13d35523c2cbdcf131d0c5d",
+          "bytes": 116392280,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790385323824006000,
+            "finished_unix_ns": 1790385332875468000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "B1": {
+          "sha256": "9873639f82c4a12da3f3660e4ad2282fee639da64d2e62f7b1cea58695de50fe",
+          "bytes": 116623030,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790385470618472000,
+            "finished_unix_ns": 1790385481476476000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "B2": {
+          "sha256": "dba3cbdc6941d4c4c76449282e0d05774fbd6c6d3638728e3cb925db4ae4e78d",
+          "bytes": 116621952,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790385764864517000,
+            "finished_unix_ns": 1790385775881176000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "A2": {
+          "sha256": "d2c81ffbfc29b8a20fc9e9f4a355bdbed06f40807bc21b720b6bddccb600ce4d",
+          "bytes": 116392726,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790385811046073000,
+            "finished_unix_ns": 1790385820295685000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "S": {
+          "sha256": "0c5e37f28e5d9ea4cf45b8acd7b467d9655ff384f4d9335b18c744adbe61e848",
+          "bytes": 519391109,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790385557111812000,
+            "finished_unix_ns": 1790385614816873000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "qualification_only",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 1,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 2,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 8,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "workers": 14,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        }
+      },
+      "workloads": [
+        {
+          "entry": "generated/independent-choice-12.lp",
+          "identity": "d6b6e065e7beb89e708d895bdb15b94f230b2ff47cb9a8a960c4640a43426ec0",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 377,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-choice",
+            "size": 12,
+            "sha256": "7e2a9f79116592676b7193c14b51633d65328253c6f9a09198e59c395f72a512",
+            "bytes": 189
+          },
+          "metadata_bytes": 162,
+          "source_bytes": 189,
+          "label": "independent-choice-12"
+        },
+        {
+          "entry": "generated/independent-choice-16.lp",
+          "identity": "07afc4e616da20bcd6ec63517e8972eff11312529ee594efa03891e153f947cb",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 2584,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-choice",
+            "size": 16,
+            "sha256": "6af88759b6a229f5762345a4877b0ce79e9f1d53d3977755feb6412c2118697f",
+            "bytes": 241
+          },
+          "metadata_bytes": 162,
+          "source_bytes": 241,
+          "label": "independent-choice-16"
+        },
+        {
+          "entry": "generated/independent-negation-8.lp",
+          "identity": "ece5cbc3bede1058b07eff8769aa5a37bec0228e3344a9d405b6101cae5c2cfe",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 55,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-negation",
+            "size": 8,
+            "sha256": "a7482f5ea6b1dc9beafe7b2aba140f613642b88576cdc376fe49d6023f8e249a",
+            "bytes": 177
+          },
+          "metadata_bytes": 163,
+          "source_bytes": 177,
+          "label": "independent-negation-8"
+        },
+        {
+          "entry": "generated/independent-negation-10.lp",
+          "identity": "9d654e0bb044acabadfe5e15799b1a944f660883c028efefce7c46f5c9601896",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 144,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-negation",
+            "size": 10,
+            "sha256": "669b3ec5ab4b718afe7169fc0ba12cd86294aa66a67a4291da83b7a6b5078be1",
+            "bytes": 201
+          },
+          "metadata_bytes": 164,
+          "source_bytes": 201,
+          "label": "independent-negation-10"
+        },
+        {
+          "entry": "generated/independent-negation-aggregate-16.lp",
+          "identity": "fe441c7f0c2af87bce873507ecd50d4ad249a3bc010c62593c892d54af4921d5",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 2584,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "independent-negation-aggregate",
+            "size": 16,
+            "sha256": "24cd645516833a22ec9f09d86228ca436c324d4c81872d4fe785d6c7f77435fb",
+            "bytes": 303
+          },
+          "metadata_bytes": 174,
+          "source_bytes": 303,
+          "label": "independent-negation-aggregate-16"
+        },
+        {
+          "entry": "generated/disjunction-12.lp",
+          "identity": "51d69a8e8935b45199eae409b3fe1a6be7675effa7e6e79807667c08dbf3eac8",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 4096,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "disjunction",
+            "size": 12,
+            "sha256": "b318abf892a80af0babef7e1e79a444e50db8ff13a5febea86fbfea64bc7d6d8",
+            "bytes": 31
+          },
+          "metadata_bytes": 155,
+          "source_bytes": 31,
+          "label": "disjunction-12"
+        },
+        {
+          "entry": "generated/ties-50.lp",
+          "identity": "efa925f3e2811b0234aa31a3961ea56c27aeb698ea7f28baba44a99a6fd57dc5",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "optimal",
+            "model_count": 1225,
+            "cost": [
+              2
+            ],
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "ties",
+            "size": 50,
+            "sha256": "304cc151305c294783f233df7c3a4eac7b4d327eae836c591cfd4fa6812a54aa",
+            "bytes": 77
+          },
+          "metadata_bytes": 148,
+          "source_bytes": 77,
+          "label": "ties-50"
+        },
+        {
+          "entry": "generated/transitive-path-100.lp",
+          "identity": "050fdb1ae49ccfc930a6e13b5e3f3e5ec673b70c26d2e30a9cca21a8ba562a4c",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "transitive-path",
+            "size": 100,
+            "sha256": "8f473e89b377ead1989f0b9d0ea445bf2b85bfb4a61d2ad4a370330ae91851de",
+            "bytes": 1030
+          },
+          "metadata_bytes": 160,
+          "source_bytes": 1030,
+          "label": "transitive-path-100"
+        },
+        {
+          "entry": "generated/transitive-path-200.lp",
+          "identity": "9afe569ccef6999fdb6e9e46d78b8a3107b0769c3e77a0458b1e87ae983d7450",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "transitive-path",
+            "size": 200,
+            "sha256": "7328f662024fd78a5ea26ec81556209291f57f1c81243a0b1e92eaea018ae264",
+            "bytes": 2230
+          },
+          "metadata_bytes": 160,
+          "source_bytes": 2230,
+          "label": "transitive-path-200"
+        },
+        {
+          "entry": "generated/transitive-dense-40.lp",
+          "identity": "436cbef7e47bcde6acba3a09411249575c887875535f30e22349d10da7cd5fe5",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "transitive-dense",
+            "size": 40,
+            "sha256": "0161e9d3008b26fbd43c592607b1489cff8026223bc3f2118ec5d690cab227c1",
+            "bytes": 95
+          },
+          "metadata_bytes": 160,
+          "source_bytes": 95,
+          "label": "transitive-dense-40"
+        },
+        {
+          "entry": "generated/chain-1000.lp",
+          "identity": "c241c45329a5ac9ba44e4f6ee2a6aac2b00cef2e14ebbc43f708ba5462063d63",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "chain",
+            "size": 1000,
+            "sha256": "a41ca83b995331954fbf3194489682e9e56b98757aab683e207d25f8a05cf9c5",
+            "bytes": 11811
+          },
+          "metadata_bytes": 151,
+          "source_bytes": 11811,
+          "label": "chain-1000"
+        },
+        {
+          "entry": "generated/chain-2000.lp",
+          "identity": "8c2ca32d1fa2f7d8df55c0d756b6171a79accc4c32eddb54da44628df55c8d17",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "chain",
+            "size": 2000,
+            "sha256": "6674d81d84d83d5afb88a5de71fab878b2845d7abcbd0dc615b57ed5c1a97a74",
+            "bytes": 25811
+          },
+          "metadata_bytes": 151,
+          "source_bytes": 25811,
+          "label": "chain-2000"
+        },
+        {
+          "entry": "generated/chain-arithmetic-1000.lp",
+          "identity": "e98fcc7310024239bcc4772b1bd87b0d5d70748b7cc0c28fd4c9c79fc97f1bc7",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "chain-arithmetic",
+            "size": 1000,
+            "sha256": "adb0c098d282d43bd65ddd79efe0d9fd0343fe1f34a4fcd72ce012a6826986bd",
+            "bytes": 32
+          },
+          "metadata_bytes": 162,
+          "source_bytes": 32,
+          "label": "chain-arithmetic-1000"
+        },
+        {
+          "entry": "generated/stratified-16.lp",
+          "identity": "3c473cda74a42eee7aa1a11f5a32e300471dcbb9e5ea8d73239c7ea9e1183b8d",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "stratified",
+            "size": 16,
+            "sha256": "b18548d552d62140bbed7ecf00ed4c499026a6ebb2923838d48e9f5d7a30ac2a",
+            "bytes": 572
+          },
+          "metadata_bytes": 154,
+          "source_bytes": 572,
+          "label": "stratified-16"
+        },
+        {
+          "entry": "generated/producer-chain-700.lp",
+          "identity": "1d1ca87aeb2261e057981dd728209c6a06b7a03d2713387ef0edad3097457fe4",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "producer-chain",
+            "size": 700,
+            "sha256": "d368f660717257f380aebdc1e3bc872f9a796f569fcd5119592c7601fc487777",
+            "bytes": 17750
+          },
+          "metadata_bytes": 159,
+          "source_bytes": 17750,
+          "label": "producer-chain-700"
+        },
+        {
+          "entry": "generated/latin-square-5.lp",
+          "identity": "397d7d722cf82317c9c05083f8219b6fff7a110866f10c5d9aac3fa74c2d683b",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1344,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "latin-square",
+            "size": 5,
+            "sha256": "f246f5a6b7383f6d3b01b4c9dec7e4f677569ddaab7733f24c9030fd2d7a28d4",
+            "bytes": 171
+          },
+          "metadata_bytes": 155,
+          "source_bytes": 171,
+          "label": "latin-square-5"
+        },
+        {
+          "entry": "generated/planning-14.lp",
+          "identity": "4a73fa73a211694358df6d7453c6cf8dce2695bbc459f5be2ae5b92f5f522ae6",
+          "sources": [],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 3432,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "generated": {
+            "family": "planning",
+            "size": 14,
+            "sha256": "3d2ec2ce0b3a6f061a4b149ddcef57bc5c8439044b45d1a578ad461e985a1587",
+            "bytes": 189
+          },
+          "metadata_bytes": 152,
+          "source_bytes": 189,
+          "label": "planning-14"
+        },
+        {
+          "entry": "standalone/n-queens/variant-01.lp",
+          "identity": "f94434aff34774408b1a79712a754c4f6a446d2b9e3d90ef8b384905d5b7fe90",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-01.lp",
+              "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+              "derived_sha256": "41078c9e8d03516fe2ef17029e090b2128539c1cc2c5e8155ea34e7bc5eccbae",
+              "derived_bytes": 859,
+              "edits": [
+                {
+                  "start_byte": 368,
+                  "end_byte": 369,
+                  "before": "8",
+                  "after": "10"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": true,
+          "metadata_bytes": 261,
+          "source_bytes": 1717,
+          "label": "n-queens/variant-01 8→10"
+        },
+        {
+          "entry": "standalone/n-queens/variant-01.lp",
+          "identity": "4acf319008559109e20bc0f7ff609dbad20fcd4768c7218652ec276a054af306",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-01.lp",
+              "base_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+              "derived_sha256": "8bc47d20077f526bb292038a7f2eb4bcb265d8f17e8055c715857a36bc843dea",
+              "derived_bytes": 859,
+              "edits": [
+                {
+                  "start_byte": 368,
+                  "end_byte": 369,
+                  "before": "8",
+                  "after": "11"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": true,
+          "metadata_bytes": 261,
+          "source_bytes": 1717,
+          "label": "n-queens/variant-01 8→11"
+        },
+        {
+          "entry": "standalone/n-queens/variant-04.lp",
+          "identity": "6f8a03773a72df7cf9f80ca9549fcc4e99b7d79cb2924a326e9898f4fde762a1",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-04.lp",
+              "base_sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295",
+              "derived_sha256": "4448ed021c98f0b807259e427538f5467b4dadfd7325ddd65905ac945202351f",
+              "derived_bytes": 920,
+              "edits": [
+                {
+                  "start_byte": 389,
+                  "end_byte": 390,
+                  "before": "8",
+                  "after": "11"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": true,
+          "metadata_bytes": 261,
+          "source_bytes": 1839,
+          "label": "n-queens/variant-04 8→11"
+        },
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "identity": "37342affaf8de217743e81d0308b390c53585b484d79c2a88c1bf425a0a9c393",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/send-money/send-money.lp",
+              "base_sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704",
+              "derived_sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704",
+              "derived_bytes": 1954,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [
+              [
+                "assign(d,7)",
+                "assign(e,5)",
+                "assign(m,1)",
+                "assign(n,6)",
+                "assign(o,0)",
+                "assign(r,8)",
+                "assign(s,9)",
+                "assign(y,2)"
+              ]
+            ],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 350,
+          "source_bytes": 3908,
+          "label": "send-money/send-money"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "identity": "4ed76972cd7d8928e8467a907d5749d629e666d5bd3bcc3774c28d20d239b30f",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+              "base_sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe",
+              "derived_sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe",
+              "derived_bytes": 898,
+              "edits": []
+            },
+            {
+              "path": "encodings/task-allocation/variant-04.lp",
+              "base_sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421",
+              "derived_sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421",
+              "derived_bytes": 3672,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "optimal",
+            "model_count": null,
+            "cost": [
+              5
+            ],
+            "witnesses": [],
+            "required_symbols": [
+              "assigned_cost(a1,t1,1)",
+              "assigned_cost(a1,t3,2)",
+              "assigned_cost(a2,t2,1)",
+              "assigned_cost(a2,t4,1)",
+              "assigned_to(a1,t1)",
+              "assigned_to(a1,t3)",
+              "assigned_to(a2,t2)",
+              "assigned_to(a2,t4)"
+            ],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 633,
+          "source_bytes": 9140,
+          "label": "variant-04/05-larger-mix"
+        }
+      ],
+      "original_matched_view_sha256": "b6b2fbff540e92e31ebd202682a60ec28a6356b9e718a9983a8f0563d164ff85",
+      "original_scaling_view_sha256": "23278c7120ca09545e82bd11edd6ecbd6d9882ee0fe98f21aaf7f6f2fe5b5ffd"
+    },
+    "scalability": {
+      "count": 10,
+      "reports": {
+        "A1": {
+          "sha256": "ba6023c59a242b03ef925343a4ed473c41abc930cd584b9341cb3b09d55e0529",
+          "bytes": 10369632,
+          "exit": 1,
+          "acquisition": {
+            "native_sha256": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386388158569000,
+            "finished_unix_ns": 1790386391692692000,
+            "passed": false,
+            "accounted": true
+          },
+          "passed": false,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "B1": {
+          "sha256": "4017c1f60d46c080cb5f963883ee2af280e25b3060d1623bf59052bdb5d69ee4",
+          "bytes": 10739810,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386429173575000,
+            "finished_unix_ns": 1790386433068018000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "B2": {
+          "sha256": "4808c7d9697fb48dcee2d4a21536d364308bd96c7dd583cda8b0e0aabf6c3734",
+          "bytes": 10740355,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386525164530000,
+            "finished_unix_ns": 1790386529105650000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "A2": {
+          "sha256": "60ba70448a8012669b4cb9e544392ac4e2f2c1400abc68a1a44568fb53839aef",
+          "bytes": 10370287,
+          "exit": 1,
+          "acquisition": {
+            "native_sha256": "e644b180309907ad3b78a934ade1e46cc7e079f15b5b16d79d919aa4ff02c47a",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386565170684000,
+            "finished_unix_ns": 1790386568685133000,
+            "passed": false,
+            "accounted": true
+          },
+          "passed": false,
+          "accounted": true,
+          "reference_policy": "all_phases",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        },
+        "S": {
+          "sha256": "098439cd71550c576a592a8abde39b902a8c81ddac9f565e3c7b2e689130d512",
+          "bytes": 47861480,
+          "exit": 0,
+          "acquisition": {
+            "native_sha256": "0dfa108013a7f9e714d9c0bf5d3f13e5ebd019ad3f9d51b79357109710d020b7",
+            "reference_sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+            "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+            "started_unix_ns": 1790386463667632000,
+            "finished_unix_ns": 1790386478648639000,
+            "passed": true,
+            "accounted": true
+          },
+          "passed": true,
+          "accounted": true,
+          "reference_policy": "qualification_only",
+          "profiles": [
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 1,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 2,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 4,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 8,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            },
+            {
+              "backend": "cpu",
+              "oracle": "auto",
+              "grounder": "auto",
+              "formula_joins": "indexed",
+              "search": "regions",
+              "workers": 14,
+              "completion_workers": 1,
+              "batch_size": 64,
+              "max_completion_scratch_bytes": 268435456
+            }
+          ]
+        }
+      },
+      "workloads": [
+        {
+          "entry": "scalability/n-queens.lp",
+          "identity": "23147bd02d5d7e8e231902809066f7f8f7800c8d676a0e8b6ba1cdfae72dd8b2",
+          "sources": [
+            {
+              "path": "scalability/n-queens.lp",
+              "base_sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e",
+              "derived_sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e",
+              "derived_bytes": 793,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": [
+              "Answer-set count grows steeply with n: n=12 -> 14200, n=13 -> 73712.",
+              "Exercises region enumeration and grounding as n rises."
+            ]
+          },
+          "amended": false,
+          "authored": {
+            "source": {
+              "bytes": 793,
+              "sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e"
+            }
+          },
+          "metadata_bytes": 801,
+          "source_bytes": 1586,
+          "label": "scalability/n-queens"
+        },
+        {
+          "entry": "scalability/n-queens.lp",
+          "identity": "6171ec68267c95afd6e2fc02bacd664ea9209e31d39c3054cc2896b9a6f91f1d",
+          "sources": [
+            {
+              "path": "scalability/n-queens.lp",
+              "base_sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e",
+              "derived_sha256": "436fdcd076ea8314f9e7327116bebcf6b5901b4f442c84a0c478bec60239430a",
+              "derived_bytes": 793,
+              "edits": [
+                {
+                  "start_byte": 406,
+                  "end_byte": 407,
+                  "before": "8",
+                  "after": "9"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": [
+              "Answer-set count grows steeply with n: n=12 -> 14200, n=13 -> 73712.",
+              "Exercises region enumeration and grounding as n rises."
+            ]
+          },
+          "amended": true,
+          "authored": {
+            "source": {
+              "bytes": 793,
+              "sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e"
+            }
+          },
+          "metadata_bytes": 827,
+          "source_bytes": 1586,
+          "label": "scalability/n-queens 8→9"
+        },
+        {
+          "entry": "scalability/n-queens.lp",
+          "identity": "345494f2ba435d5a3dc4275e6f00bf42dfc50f7914d93634d05cef74b1861844",
+          "sources": [
+            {
+              "path": "scalability/n-queens.lp",
+              "base_sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e",
+              "derived_sha256": "bc835051191c83bc49ee8a83ccb1762f9f432d0483d592c7ec1c80c08dee77ae",
+              "derived_bytes": 794,
+              "edits": [
+                {
+                  "start_byte": 406,
+                  "end_byte": 407,
+                  "before": "8",
+                  "after": "10"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": [
+              "Answer-set count grows steeply with n: n=12 -> 14200, n=13 -> 73712.",
+              "Exercises region enumeration and grounding as n rises."
+            ]
+          },
+          "amended": true,
+          "authored": {
+            "source": {
+              "bytes": 793,
+              "sha256": "3cf188305c40c443e5aa1c3e7795b30d45849f3d4a7e7cb2cfe88783e0a1947e"
+            }
+          },
+          "metadata_bytes": 828,
+          "source_bytes": 1587,
+          "label": "scalability/n-queens 8→10"
+        },
+        {
+          "entry": "scalability/pigeonhole.lp",
+          "identity": "a6f339cce99fcb6700371da4a41c79d559e745e03017cda35cc44c2d700c6726",
+          "sources": [
+            {
+              "path": "scalability/pigeonhole.lp",
+              "base_sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66",
+              "derived_sha256": "0bfc3eeaf0a1820a827eece523352493ed914e2d2018792b466e92a84188d0fb",
+              "derived_bytes": 528,
+              "edits": [
+                {
+                  "start_byte": 335,
+                  "end_byte": 336,
+                  "before": "7",
+                  "after": "5"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "unsat",
+            "family": "all",
+            "model_count": 0,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": [
+              "h holes, h+1 pigeons: unsatisfiable by construction.",
+              "Measures the work of proving unsatisfiability, not enumeration."
+            ]
+          },
+          "amended": true,
+          "authored": {
+            "source": {
+              "bytes": 528,
+              "sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66"
+            }
+          },
+          "metadata_bytes": 831,
+          "source_bytes": 1056,
+          "label": "scalability/pigeonhole 7→5"
+        },
+        {
+          "entry": "scalability/pigeonhole.lp",
+          "identity": "83ec735c8068fa9b4765384fd198731bf97d7a7f15ec959489af0a397c1fb9cf",
+          "sources": [
+            {
+              "path": "scalability/pigeonhole.lp",
+              "base_sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66",
+              "derived_sha256": "5b72e5d4a6b04868d93823f67c761a7ff91f4632a4f24f2fd719b280b9b3b311",
+              "derived_bytes": 528,
+              "edits": [
+                {
+                  "start_byte": 335,
+                  "end_byte": 336,
+                  "before": "7",
+                  "after": "6"
+                }
+              ]
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "unsat",
+            "family": "all",
+            "model_count": 0,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": [
+              "h holes, h+1 pigeons: unsatisfiable by construction.",
+              "Measures the work of proving unsatisfiability, not enumeration."
+            ]
+          },
+          "amended": true,
+          "authored": {
+            "source": {
+              "bytes": 528,
+              "sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66"
+            }
+          },
+          "metadata_bytes": 831,
+          "source_bytes": 1056,
+          "label": "scalability/pigeonhole 7→6"
+        },
+        {
+          "entry": "scalability/pigeonhole.lp",
+          "identity": "8df5985eea2ab771b8a6496ae155463566bd19ea113843db0efaca57e25f3ea0",
+          "sources": [
+            {
+              "path": "scalability/pigeonhole.lp",
+              "base_sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66",
+              "derived_sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66",
+              "derived_bytes": 528,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "unsat",
+            "family": "all",
+            "model_count": 0,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": [
+              "h holes, h+1 pigeons: unsatisfiable by construction.",
+              "Measures the work of proving unsatisfiability, not enumeration."
+            ]
+          },
+          "amended": false,
+          "authored": {
+            "source": {
+              "bytes": 528,
+              "sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66"
+            }
+          },
+          "metadata_bytes": 803,
+          "source_bytes": 1056,
+          "label": "scalability/pigeonhole"
+        },
+        {
+          "entry": "standalone/n-queens/variant-02.lp",
+          "identity": "7c74096cae6da7fd7d9dc359e4f0d3fee57bf411cc2b04e04b5064da5a2cd1e2",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/n-queens/variant-02.lp",
+              "base_sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02",
+              "derived_sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02",
+              "derived_bytes": 960,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 92,
+            "cost": null,
+            "witnesses": [],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 258,
+          "source_bytes": 1920,
+          "label": "n-queens/variant-02"
+        },
+        {
+          "entry": "standalone/send-money/send-money.lp",
+          "identity": "37342affaf8de217743e81d0308b390c53585b484d79c2a88c1bf425a0a9c393",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "standalone/send-money/send-money.lp",
+              "base_sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704",
+              "derived_sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704",
+              "derived_bytes": 1954,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [
+              [
+                "assign(d,7)",
+                "assign(e,5)",
+                "assign(m,1)",
+                "assign(n,6)",
+                "assign(o,0)",
+                "assign(r,8)",
+                "assign(s,9)",
+                "assign(y,2)"
+              ]
+            ],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 350,
+          "source_bytes": 3908,
+          "label": "send-money/send-money"
+        },
+        {
+          "entry": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+          "identity": "4ed76972cd7d8928e8467a907d5749d629e666d5bd3bcc3774c28d20d239b30f",
+          "manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+          "sources": [
+            {
+              "path": "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+              "base_sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe",
+              "derived_sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe",
+              "derived_bytes": 898,
+              "edits": []
+            },
+            {
+              "path": "encodings/task-allocation/variant-04.lp",
+              "base_sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421",
+              "derived_sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421",
+              "derived_bytes": 3672,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "optimal",
+            "model_count": null,
+            "cost": [
+              5
+            ],
+            "witnesses": [],
+            "required_symbols": [
+              "assigned_cost(a1,t1,1)",
+              "assigned_cost(a1,t3,2)",
+              "assigned_cost(a2,t2,1)",
+              "assigned_cost(a2,t4,1)",
+              "assigned_to(a1,t1)",
+              "assigned_to(a1,t3)",
+              "assigned_to(a2,t2)",
+              "assigned_to(a2,t4)"
+            ],
+            "notes": []
+          },
+          "amended": false,
+          "metadata_bytes": 633,
+          "source_bytes": 9140,
+          "label": "variant-04/05-larger-mix"
+        },
+        {
+          "entry": "einstein-riddle.lp",
+          "identity": "08b026590c8de832ab82fd41d77df03b65e9b600c5014b2d6e9875af11595e0b",
+          "sources": [
+            {
+              "path": "einstein-riddle.lp",
+              "base_sha256": "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b",
+              "derived_sha256": "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b",
+              "derived_bytes": 6361,
+              "edits": []
+            }
+          ],
+          "default_contract": {
+            "satisfiability": "sat",
+            "family": "all",
+            "model_count": 1,
+            "cost": null,
+            "witnesses": [
+              [
+                "solution(1,\"Yellow\",\"The Norwegian\",\"Fox\",\"Water\",\"Kools\")",
+                "solution(2,\"Blue\",\"The Ukrainian\",\"Horse\",\"Tea\",\"Chesterfields\")",
+                "solution(3,\"Red\",\"The Englishman\",\"Snail\",\"Milk\",\"Old Gold\")",
+                "solution(4,\"Ivory\",\"The Spaniard\",\"Dog\",\"Orange Juice\",\"Lucky Strikes\")",
+                "solution(5,\"Green\",\"The Japanese\",\"Zebra\",\"Coffee\",\"Parliaments\")"
+              ]
+            ],
+            "required_symbols": [],
+            "notes": []
+          },
+          "amended": false,
+          "authored": {
+            "source": {
+              "bytes": 6361,
+              "sha256": "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b"
+            }
+          },
+          "metadata_bytes": 1037,
+          "source_bytes": 12722,
+          "label": "einstein-riddle"
+        }
+      ],
+      "original_matched_view_sha256": "09eb7d9bb8a2b7433b54b6b4ef14b2becfa044bc66a0b062454c120eee4ced90",
+      "original_scaling_view_sha256": "62c3886008931afbbb6fd7797b896db3509d58bcc1e34b9cc897d90558c99227"
+    }
+  }
+}

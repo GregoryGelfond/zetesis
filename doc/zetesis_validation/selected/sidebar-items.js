@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CASE_COUNT"],"enum":["Backend","CampaignFault","Decision","Error","FormulaJoins","Grounder","InvocationFault","Oracle","SearchMethod"],"fn":["run"],"struct":["CaseResult","Change","FileSeal","InvocationFailure","InvocationRecord","Limits","NativeExecution","Report","Request"]};

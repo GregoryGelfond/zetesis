@@ -1,0 +1,519 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Eager and hybrid formula grounding - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/reference/hybrid-grounding.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="eager-and-hybrid-formula-grounding"><a class="header" href="#eager-and-hybrid-formula-grounding">Eager and hybrid formula grounding</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>Source links use the <a href="source-revisions.html">revision map</a>; labels retain the
+recorded revision identifiers.</p>
+<p>Hybrid formula execution retains an eager core and checks eligible source
+constraints while searching and before publishing each answer set. Complete
+support and arithmetic admission still precede solving. The measurements below
+record successive changes to this schedule and retain the earlier full-candidate
+experiment separately. See the
+<a href="../architecture/grounding.html#eager-and-lazy-execution">execution contract</a>
+for eligibility and completion boundaries.</p>
+<h2 id="reusing-completed-source-join-plans"><a class="header" href="#reusing-completed-source-join-plans">Reusing completed-source join plans</a></h2>
+<p>The implementation at
+<a href="https://github.com/GregoryGelfond/zetesis/commit/9007f29f751545eecfa681c26d2446c4aef613ee"><code>469d4d87</code></a>
+retains immutable join ordering and comparison readiness for repeated hybrid
+constraint scans. Each scan has fresh bindings, probes, arithmetic state and
+traversal. Eager and hybrid execution share the planner; ordinary joins own
+their plans and hybrid scans borrow them. Zero-amount resource charges also
+avoid a shared atomic write while preserving the cancellation and positive-charge
+checks. The comparison combines both changes.</p>
+<p>The compiled baseline is
+<a href="https://github.com/GregoryGelfond/zetesis/commit/2d6fbc5b85ad398472c5b520f1ee881c6957470e"><code>df99d4bb</code></a>.
+Measurements ran on September 21, 2026 in America/Chicago, on macOS 26.6.2 with
+Rust 1.97.1, using the same 20-workload population as the
+<a href="#original-region-checks">original-region comparison</a>. Each worker setting uses
+one old/new/new/old block. Every leg includes eager and hybrid profiles, one
+warmup, four timed processes and two separate RSS processes per cell.</p>
+<p>All eight campaigns pass 340 positions each. The 2,560 complete native captures
+agree on full typed answer-set families, shown channels and multiplicity across
+versions, grounders and worker settings. Clingo supplies 160 untimed selected-output
+qualifications and complete model counts. These programs have no objectives.
+The <a href="observations/hybrid-preparation-469d4d87-evidence.json">complete observations</a>
+retain every position, integer wall/RSS sample, family-audit receipt, workload
+identity, executable hash and protocol. Original capture streams are retained
+separately; the public projection supports recalculating timing and memory
+summaries, rather than repeating the semantic audit from the original streams.</p>
+<p>The table shows separate leg medians in milliseconds. Compare B1 with A1 and
+B2 with A2; samples are not pooled. Wall time includes the complete process,
+JSON and statistics capture.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Hybrid program</th><th style="text-align: right">Threads</th><th style="text-align: right">Baseline A1 / A2</th><th style="text-align: right">Prepared B1 / B2</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 02, n=5</td><td style="text-align: right">1</td><td style="text-align: right">31.779 / 31.769</td><td style="text-align: right">30.251 / 30.263</td></tr>
+<tr><td>Queens 02, n=5</td><td style="text-align: right">4</td><td style="text-align: right">137.341 / 136.477</td><td style="text-align: right">131.427 / 130.813</td></tr>
+<tr><td>Queens 03, n=6</td><td style="text-align: right">4</td><td style="text-align: right">33.388 / 30.388</td><td style="text-align: right">29.460 / 28.790</td></tr>
+<tr><td>Queens 02, n=4</td><td style="text-align: right">4</td><td style="text-align: right">18.386 / 16.421</td><td style="text-align: right">17.627 / 17.824</td></tr>
+</tbody>
+</table>
+</div>
+<p>Queens 02 at n=5 is about 4–5% faster in both pairings. Other cases show drift
+or reversals, including Queens 02 at n=4. No eager cell has a wall increase
+above 5% in both pairings; that observation does not establish unchanged eager
+cost. Four-thread hybrid execution still trails one thread substantially on
+the representative queens workloads. These results do not isolate either
+change’s contribution or establish a general speedup or Metal performance gain.</p>
+<p>Each RSS cell is the median of two separately measured process peaks. Typical
+paired increases are 0.1–0.2 MiB. RSS excludes the fixed helper, may include
+waited descendants, and is not simultaneous process-tree or device memory.</p>
+<p>Caching preparation changes charged work and retained capacity. Queens 02 at
+n=5 uses 3,394,271 baseline source-work units and 3,395,219 afterward with one
+thread; substitutions remain 14,212. Successful ample-budget runs do not
+establish identical admission at resource ceilings. Plan storage is charged,
+and refused preparation publishes no plan. Reduct membership and final
+original-constraint checks remain mandatory.</p>
+<p>Reproduce with the maintained <code>grounding_comparison</code> example’s <code>--study refutation</code>
+option. Use its compiled baseline revision <code>df99d4bb</code> as the fixed runner and
+use the baseline solver as <code>--helper</code> for every leg. Supply each measured solver
+as <code>--zetesis</code> in A1/B1/B2/A2 order, first with <code>--workers 1</code> and then with
+<code>--workers 4</code>, using a new <code>--report</code> path each time. The evidence retains both
+profiles, all limits, source edits and generated workload hashes. These runs
+use the 2 GiB solver allowance, 10-second process limit and 300-second campaign
+limit described below; they make no cold-cache claim.</p>
+<h2 id="original-region-checks"><a class="header" href="#original-region-checks">Original-region checks</a></h2>
+<p>The refinement at
+<a href="https://github.com/GregoryGelfond/zetesis/commit/2685426214a16fa1431d3c21d64e1fc8d9798cdd"><code>3108acfe</code></a>
+checks original constraints after ordinary region narrowing, before splitting
+or core membership. Necessary predicate tests and held positive-row selection
+avoid constructing join bindings that cannot witness a constraint violation.
+The final full-candidate check remains. The baseline is
+<a href="https://github.com/GregoryGelfond/zetesis/commit/f99221cb849653551ebfa4a925b105b10fe04f47"><code>9bb73da9</code></a>,
+which checks these constraints after finding a core answer set.</p>
+<p>Both executables were measured on September 21, 2026 UTC, in
+old/new/new/old order, first at one CPU thread and then at four. Each leg compares
+eager and explicit lazy requests on the same 20 workloads: all six queens
+encodings at n=4 and n=5, encodings 01 and 03 also at n=6, and monotone-choice
+and redundant-transitivity controls. Every request asks for all answer sets.
+Clingo 5.8.2 supplies an untimed qualification census; these are not
+zetesis-versus-clingo timing results.
+The programs have no objectives, so this comparison does not exercise optimization.</p>
+<p>Each cell has one warmup, four timed processes and two separate RSS processes.
+The table spans the two leg medians for each executable, rather than pooling
+samples. Times include the complete CLI request, JSON and statistics. The
+<a href="observations/hybrid-regions-3108acfe-evidence.json">evidence for all 20 workloads</a>
+retains the individual observations, identities and dispositions.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">Threads</th><th style="text-align: right">Prior hybrid ms</th><th style="text-align: right">Refined hybrid ms</th><th style="text-align: right">Refined eager ms</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 01, n=6</td><td style="text-align: right">1</td><td style="text-align: right">61.892–62.243</td><td style="text-align: right">11.527–11.548</td><td style="text-align: right">7.139–7.240</td></tr>
+<tr><td>Queens 01, n=6</td><td style="text-align: right">4</td><td style="text-align: right">62.953–63.016</td><td style="text-align: right">36.373–37.060</td><td style="text-align: right">7.866–7.969</td></tr>
+<tr><td>Queens 03, n=6</td><td style="text-align: right">1</td><td style="text-align: right">52.125–52.196</td><td style="text-align: right">11.554–11.586</td><td style="text-align: right">6.534–6.589</td></tr>
+<tr><td>Queens 03, n=6</td><td style="text-align: right">4</td><td style="text-align: right">53.104–53.551</td><td style="text-align: right">36.459–36.730</td><td style="text-align: right">7.274–7.961</td></tr>
+<tr><td>Queens 02, n=5</td><td style="text-align: right">1</td><td style="text-align: right">work limit</td><td style="text-align: right">33.478–34.096</td><td style="text-align: right">7.271–7.852</td></tr>
+<tr><td>Queens 02, n=5</td><td style="text-align: right">4</td><td style="text-align: right">work limit</td><td style="text-align: right">142.782–146.976</td><td style="text-align: right">7.274–7.882</td></tr>
+<tr><td>Queens 03, n=5</td><td style="text-align: right">1</td><td style="text-align: right">11.524–11.611</td><td style="text-align: right">8.983–9.012</td><td style="text-align: right">6.531–6.583</td></tr>
+<tr><td>Queens 03, n=5</td><td style="text-align: right">4</td><td style="text-align: right">11.541–11.561</td><td style="text-align: right">12.865–12.926</td><td style="text-align: right">6.513–6.562</td></tr>
+<tr><td>Monotone choices, n=10</td><td style="text-align: right">1</td><td style="text-align: right">13.353–13.356</td><td style="text-align: right">6.397–6.505</td><td style="text-align: right">5.893–6.494</td></tr>
+<tr><td>Monotone choices, n=10</td><td style="text-align: right">4</td><td style="text-align: right">11.611–11.659</td><td style="text-align: right">6.589–7.826</td><td style="text-align: right">5.887–6.508</td></tr>
+<tr><td>Redundant transitivity, n=16</td><td style="text-align: right">1</td><td style="text-align: right">11.638–11.665</td><td style="text-align: right">12.299–12.592</td><td style="text-align: right">10.297–10.335</td></tr>
+<tr><td>Redundant transitivity, n=16</td><td style="text-align: right">4</td><td style="text-align: right">11.558–11.574</td><td style="text-align: right">12.162–12.256</td><td style="text-align: right">10.340–10.403</td></tr>
+</tbody>
+</table>
+</div>
+<p>The early checks reduce complete core candidates substantially on the rejection
+workloads. These one-thread counters are identical in both repeated legs:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">Prior → refined core answers</th><th style="text-align: right">Accepted answers</th><th style="text-align: right">Prior → refined source work</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 01, n=6</td><td style="text-align: right">720 → 4</td><td style="text-align: right">4</td><td style="text-align: right">4,625,076 → 616,106</td></tr>
+<tr><td>Queens 03, n=6</td><td style="text-align: right">720 → 4</td><td style="text-align: right">4</td><td style="text-align: right">4,307,335 → 614,762</td></tr>
+<tr><td>Monotone choices, n=10</td><td style="text-align: right">1,024 → 11</td><td style="text-align: right">11</td><td style="text-align: right">242,854 → 49,731</td></tr>
+<tr><td>Redundant transitivity, n=16</td><td style="text-align: right">2 → 2</td><td style="text-align: right">2</td><td style="text-align: right">1,059,178 → 1,097,017</td></tr>
+</tbody>
+</table>
+</div>
+<p>For Queens 01 at n=6, one-thread initial grounding remains
+0.572–0.607 ms before and 0.565–0.566 ms after. Solving falls from
+54.756–55.264 ms to 4.975–4.995 ms. The change is in searching and checking,
+not a removal of initial source admission. <code>original_validation</code> includes
+region preparation/checking and final checks; it overlaps candidate generation,
+and worker-duration sums are not additive with solving wall time.</p>
+<p>There are measured costs as well. Refined hybrid still trails eager on the
+representative queens cases and is substantially slower with four threads than
+with one. Queens 03 at n=5 regresses by about 11.5–11.8% against prior hybrid
+at four threads. Redundant transitivity refutes no region: n=12 regresses
+16.1–18.6% at four threads, and n=16 regresses about 5–8% at both settings.
+Its n=16 source checks still visit 8,192 substitutions; extra preparation and
+region checks add work. No eager cell has a wall increase above 5% in both
+paired comparisons, which is a bounded observation rather than proof of
+unchanged eager cost. The no-stream Queens 06 n=4 control also rises by
+about 0.54–0.59 ms at four threads; most of that difference is outside the
+recorded driver interval, so it is not evidence of a source-checking cause.</p>
+<p>Separate peak-RSS results illustrate the retained storage tradeoff:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">Threads</th><th style="text-align: right">Prior hybrid MiB</th><th style="text-align: right">Refined hybrid MiB</th><th style="text-align: right">Refined eager MiB</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 01, n=6</td><td style="text-align: right">1</td><td style="text-align: right">13.44–13.57</td><td style="text-align: right">13.40–13.44</td><td style="text-align: right">13.41–13.42</td></tr>
+<tr><td>Queens 01, n=6</td><td style="text-align: right">4</td><td style="text-align: right">13.84–13.89</td><td style="text-align: right">13.73–13.73</td><td style="text-align: right">13.59–13.70</td></tr>
+<tr><td>Redundant transitivity, n=16</td><td style="text-align: right">1</td><td style="text-align: right">13.58–13.65</td><td style="text-align: right">13.51–13.54</td><td style="text-align: right">16.39–16.41</td></tr>
+<tr><td>Redundant transitivity, n=16</td><td style="text-align: right">4</td><td style="text-align: right">13.64–13.68</td><td style="text-align: right">13.58–13.70</td><td style="text-align: right">17.16–17.18</td></tr>
+</tbody>
+</table>
+</div>
+<p>The refinement does not establish a general memory reduction. Redundant
+transitivity retains 547 hybrid roots versus 4,643 eager roots at n=16, with
+lower hybrid RSS here, but the old hybrid schedule already had that smaller
+core. Root counts are not byte counts.</p>
+<p>All four refined campaigns pass <strong>340 of 340 positions</strong> each. Every baseline
+campaign records one Queens 02 n=5 hybrid refusal at its 10,000,000-unit source
+work ceiling, then leaves seven later positions in that cell unattempted. Across
+the eight campaigns, <strong>2,688 positions pass, four refuse and 28 are unattempted</strong>.
+The 2,528 complete native captures agree on full typed answer-set families,
+displayed results, costs and multiplicity across revisions, profiles and worker
+counts. The 160 clingo qualification captures agree on selected results; hidden
+clingo interpretations are unavailable. Incomplete baseline prefixes provide
+neither a completed timing baseline nor a speedup ratio.</p>
+<p>The fixed protocol uses CPU execution, automatic membership selection, indexed
+joins, region search, batch size 64 and one completion worker. Captures record
+a 2 GiB solver allowance; source checking separately allows 10,000,000 work
+units, 10,000,000 substitutions and 16 MiB cumulative copied scalar payload.
+Each process has a 10-second limit and each campaign a 300-second limit;
+output is bounded at 4 MiB per process and 128 MiB per campaign. The reports
+also retain cleanup and normalization limits. The host ran macOS 26.6.2;
+release builds used Rust 1.97.1 and LLVM 22.1.6. These small CPU workloads,
+four timed samples per leg and two RSS samples do not establish a general
+speedup, a fully lazy source pipeline or Metal performance.</p>
+<p>Reproduce the population with the maintained <code>grounding_comparison</code> example’s
+<code>--study refutation</code> option, using one frozen comparison executable and the same
+refined <code>--helper</code> for every leg. Supply the baseline or refined <code>--zetesis</code>
+executable in old/new/new/old order, and repeat with <code>--workers 1</code> and
+<code>--workers 4</code>; every <code>--report</code> path must be new. The retained comparison
+runner was built from <code>5b50286a</code>, while the two measured native executables
+have the revisions above. Their full source and binary identities, generated
+workload hashes and queens constant edits are in the evidence file. See
+<a href="benchmarking.html#a-smaller-fixed-population">corpus measurements</a> for the library/example door.</p>
+<h2 id="historical-full-candidate-comparison"><a class="header" href="#historical-full-candidate-comparison">Historical full-candidate comparison</a></h2>
+<p>The following results retain the original full-candidate checking schedule at
+<code>4a281c96</code>. They do not measure the later original-region checks above.</p>
+<p>Streaming source constraints reduces the stored formula, but can increase the
+number of core answer sets that must be checked. This comparison measures both
+effects using the same zetesis executable. It does not establish a general
+speedup or qualify GPU execution of the hybrid profile.</p>
+<p>The measured source is
+<a href="https://github.com/GregoryGelfond/zetesis/commit/2678bda826a428e34082a62277ce0628471558db"><code>4a281c96</code></a>.
+Explicit lazy formula execution retains producers and ineligible constraints,
+then checks eligible source constraints against each core answer set. Complete
+support and arithmetic admission still precede solving. See the
+<a href="../architecture/grounding.html#eager-and-lazy-execution">grounding contract</a>.</p>
+<h3 id="matched-eager-and-lazy-requests"><a class="header" href="#matched-eager-and-lazy-requests">Matched eager and lazy requests</a></h3>
+<p>Both requests enumerate all answer sets with CPU execution, indexed joins,
+region search, batch size 64 and one completion worker. Each worker setting
+uses one warmup, four timed runs and two separate peak-RSS runs per profile.
+Clingo supplies an untimed qualification census; it is not a timing competitor
+in this experiment. Measurements ran on macOS 26.6.2 with Rust 1.97.1.</p>
+<p>The table gives one-worker medians. Time includes the complete command-line
+request, statistics and output; memory is separate peak resident host memory.
+These are small workloads with short durations, not a scaling study.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">Eager ms</th><th style="text-align: right">Hybrid ms</th><th style="text-align: right">Eager MiB</th><th style="text-align: right">Hybrid MiB</th></tr>
+</thead>
+<tbody>
+<tr><td>Queens 01, n=4</td><td style="text-align: right">5.415</td><td style="text-align: right">6.192</td><td style="text-align: right">13.20</td><td style="text-align: right">13.24</td></tr>
+<tr><td>Queens 01, n=5</td><td style="text-align: right">6.197</td><td style="text-align: right">12.217</td><td style="text-align: right">13.41</td><td style="text-align: right">13.41</td></tr>
+<tr><td>Queens 03, n=4</td><td style="text-align: right">6.204</td><td style="text-align: right">6.212</td><td style="text-align: right">13.36</td><td style="text-align: right">13.18</td></tr>
+<tr><td>Queens 03, n=5</td><td style="text-align: right">6.194</td><td style="text-align: right">10.721</td><td style="text-align: right">13.48</td><td style="text-align: right">13.38</td></tr>
+<tr><td>Queens 02, n=4</td><td style="text-align: right">6.192</td><td style="text-align: right">24.046</td><td style="text-align: right">13.43</td><td style="text-align: right">13.30</td></tr>
+<tr><td>Queens 06, n=4</td><td style="text-align: right">6.198</td><td style="text-align: right">6.190</td><td style="text-align: right">13.59</td><td style="text-align: right">13.55</td></tr>
+<tr><td>Monotone choices, n=6</td><td style="text-align: right">4.656</td><td style="text-align: right">5.433</td><td style="text-align: right">12.63</td><td style="text-align: right">12.70</td></tr>
+<tr><td>Redundant transitivity, n=8</td><td style="text-align: right">6.197</td><td style="text-align: right">6.190</td><td style="text-align: right">13.26</td><td style="text-align: right">12.88</td></tr>
+<tr><td>Redundant transitivity, n=12</td><td style="text-align: right">6.171</td><td style="text-align: right">7.702</td><td style="text-align: right">14.38</td><td style="text-align: right">13.23</td></tr>
+</tbody>
+</table>
+</div>
+<p>The four-worker results show the same principal trade-off. Queens 02 took
+6.196 ms eager and 24.961 ms hybrid. Redundant transitivity at n=12 took
+6.182 ms and 7.730 ms, with peak RSS of 14.78 MiB and 13.41 MiB.</p>
+<p>For Queens 02, hybrid execution checks <strong>1,820 core answers to accept two</strong>.
+The eager constraints can prune earlier. Queens 06 is a control: its scoped
+constraints remain eager, so it streams no constraint templates. Redundant
+transitivity at n=12 keeps the same two core answers while reducing retained
+formula roots from <strong>2,043 to 315</strong>. That saves about 8–9% peak RSS here, but
+rechecking constraints costs time. Root counts are not byte counts.</p>
+<p>Initial grounding time excludes streamed checks. Those checks occur during
+solving and are recorded under <code>original_validation</code>. For redundant transitivity
+at n=12 with one worker, initial grounding falls from 1.040 ms to 0.846 ms while
+solving rises from 0.581 ms to 1.331 ms. Initial grounding alone would therefore
+give an incomplete account of the work.</p>
+<p>All <strong>306 scheduled positions</strong> passed. The <strong>288 native captures</strong> agree on
+complete typed answer-set families, costs and displayed results across profiles,
+repetitions and worker settings. The
+<a href="observations/hybrid-4a281c96-evidence.json">evidence</a> retains per-sample times,
+separate RSS observations, source and executable hashes, work counts and family
+checks. This is bounded experimental evidence, not a proof of implementation
+correctness or a claim about larger instances.</p>
+<p>Reproduce the workload and protocol through the maintained
+<a href="benchmarking.html#a-smaller-fixed-population">grounding comparison example</a>, once with
+<code>--workers 1</code> and once with <code>--workers 4</code>. It uses unchanged corpus files with
+recorded constant substitutions and the library’s generated workloads.</p>
+<h3 id="preservation-of-eager-execution"><a class="header" href="#preservation-of-eager-execution">Preservation of eager execution</a></h3>
+<p>A separate comparison uses the prior eager executable
+<a href="https://github.com/GregoryGelfond/zetesis/commit/7161ec59b33a742f21bcc547d8139cbf7a1006fb"><code>3d7454d8</code></a>
+and the measured source above in old/new/new/old order. Each leg has seven timed
+runs and two separate RSS runs, at one and four workers. The four workloads are
+dense transitive closure at sizes 20 and 40, a 1,000-edge chain and its arithmetic
+variant. Auto grounding selects eager formula execution for the dense and
+arithmetic cases; the ordinary chain is a lazy relational control.</p>
+<p>Complete wall-time changes are near zero on the eager cases. This does not
+establish unchanged cost at every stage: dense grounding is <strong>1.7–4.4% slower</strong>,
+with unchanged work counts, and peak RSS is slightly higher. The chain control
+has one faster four-worker leg that is not repeated. No speedup is attributed
+to that observation.</p>
+<p>All <strong>576 positions</strong> and <strong>384 complete native families</strong> passed their checks.
+The <a href="observations/eager-preservation-4a281c96.json">separate evidence</a> records the
+leg medians and identities. These results preserve the distinction between
+earlier <a href="grounding-row-lending.html">row-lending gains</a>, the old/new implementation
+comparison, and the eager-versus-hybrid choice within one executable.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/canonical-storage.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/grounding-row-lending.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/canonical-storage.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/grounding-row-lending.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CaptureFailure","Decision","Error","NativeInvocation","PhysicalStatus","Producer"],"fn":["run","run_with_cancellation","run_with_invocation"],"struct":["CaseResult","Report","Request"]};

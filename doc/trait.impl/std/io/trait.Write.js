@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["zetesis_presentation",[["impl&lt;W: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a>&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for <a class=\"struct\" href=\"zetesis_presentation/struct.TrackedWriter.html\" title=\"struct zetesis_presentation::TrackedWriter\">TrackedWriter</a>&lt;'_, W&gt;",0]]],["zetesis_test_support",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for <a class=\"struct\" href=\"zetesis_test_support/io/struct.BoundedWriter.html\" title=\"struct zetesis_test_support::io::BoundedWriter\">BoundedWriter</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for <a class=\"struct\" href=\"zetesis_test_support/io/struct.Closed.html\" title=\"struct zetesis_test_support::io::Closed\">Closed</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.97.1/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for <a class=\"struct\" href=\"zetesis_test_support/io/struct.FailAt.html\" title=\"struct zetesis_test_support::io::FailAt\">FailAt</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[463,870]}

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error","Issue","Resource"],"fn":["clingo_json","native_text","parse_costs","same_displays","split_display"],"mod":["native_json"],"struct":["Limits","ReportedAnswers"]};

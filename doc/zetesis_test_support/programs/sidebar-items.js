@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["atom","fact","function","model","nullary","nullary_pattern","number","numbered","pattern","program","signed","signed_numbered","unary","value","variable"]};

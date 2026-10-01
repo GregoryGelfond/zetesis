@@ -1,0 +1,667 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Composing exact execution - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/architecture/execution.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="composing-exact-execution"><a class="header" href="#composing-exact-execution">Composing exact execution</a></h1>
+<p>The semantic layer asks about satisfaction, a frozen reduct and minimality. The
+execution layer represents the required work as joins, masks, Boolean evaluations,
+reductions and independent candidate queries. These primitives are exact
+operations; they are not learned approximations or neural attention layers.</p>
+<p>The <a href="alignment.html">alignment chapter</a> connects the two vocabularies with a
+diagram, primitive map and pseudocode for closure, frozen satisfaction and
+batched membership.
+The <a href="ownership.html">ownership chapter</a> describes prepared data, shared device
+contexts, invocation lifetimes and the dependencies that permit parallel work.</p>
+<h2 id="the-composed-solver-boundary"><a class="header" href="#the-composed-solver-boundary">The composed solver boundary</a></h2>
+<p><code>zetesis-solve</code> owns the ordinary computation from a coherent <code>PreparedInput</code>
+to checked <code>AnswerSet</code> values and a <code>SemanticOutcome</code>. Its configuration contains
+execution policy and resource limits. It contains no command-line options,
+source-file loading or output writers. <code>zetesis-cli</code> admits input and consumes
+the same public session interface as an embedding application.</p>
+<pre><code class="language-text">source or native program
+    → admission and preparation
+    → PreparedInput + SolveConfig + Cancellation
+    → SessionBuilder + optional resources and measurements
+    → Session: candidate generation → exact membership → checked AnswerSet
+    → consumer retention or publication
+</code></pre>
+<p>The membership step follows one of the reduct paths below. <code>SessionBuilder</code>
+composes the effects before execution; it does not add a second semantic engine.
+Streaming permits partial consumption. <code>SessionBuilder::collect</code> instead owns
+unrestricted enumeration and complete retention, producing a <code>WorldView</code> only
+when both succeed. Output formatting consumes checked values after membership;
+an output failure cannot retract checked membership or prove search exhaustion.</p>
+<p>This boundary is implemented by
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/session.rs"><code>Session</code></a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view.rs"><code>WorldView</code></a>
+and the CLI’s
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/publication.rs">publication adapter</a>.
+The <a href="../rust/sessions.html">library manual</a> gives checked examples and operation
+contracts; the <a href="../lean/correspondence.html">proof correspondence</a> distinguishes
+the semantic laws from the remaining executable refinement obligations.</p>
+<h2 id="two-exact-membership-paths"><a class="header" href="#two-exact-membership-paths">Two exact membership paths</a></h2>
+<p>For the normal profile, a seed fixes the reduct’s gates. Positive inference
+starts empty, derives consequences, checks constraints, then compares the
+result’s gate projection with the seed. The dense graph and source-driven
+oracles implement this same acceptance question.</p>
+<p>Ordinary sessions retain shared atom selections across each candidate batch.
+CPU and GPU checkers borrow their true atoms through <code>SeedView</code>; an owned <code>Seed</code>
+uses the same checking implementation. Eager device packing writes into the
+admitted batch buffer without constructing a temporary word vector for each
+seed. These ownership and transport choices do not change the frozen gates or
+the least-consequence check. Returned answer sets still own their interpretations.</p>
+<p>For finite general formulas, the candidate must first satisfy the original
+theory. A frozen truth mask then permits repeated evaluations of its reduct
+without constructing a separate formula tree. Finding a proper-subset model
+rejects the candidate. Proving that none exists accepts it. The exhaustive
+<code>zetesis-ferraris</code> checker is an exact small-instance reference; ordinary formula
+search uses the native candidate and countermodel machinery in <code>zetesis-sat</code>.
+Its Boolean search representation does not redefine ASP as classical
+satisfiability: auxiliary encoding variables do not participate in answer-set
+identity or minimality.</p>
+<p>Candidates on the formula route can be proposed by regions
+(<code>--search regions</code>), the same coverage tree the closure route walks
+(<code>Search.lean</code>), over the theory’s atoms. The root leaves every atom open. Under a region every node of the formula DAG
+has two readings, decided by one pass over the DAG: sure, when every
+candidate of the region satisfies it, and never, when no candidate does; a
+held atom is sure, a cut atom never, and the connectives combine the
+readings as the closure route’s definite and possible gates combine a
+rule’s. The narrowing closes what every candidate must make of each node
+in both directions: every root holds, a node learns from its operands, and
+a node teaches its operands what its knowledge leaves them, a conjunction
+that holds both operands, a disjunction that holds with one operand
+failing the other, and so on through the connectives, until nothing
+changes; an atom known is decided and a node known both ways refutes,
+which is what unit propagation over a clause form decides. An atom none
+of whose producers can support it, each having a failing body or another
+head held, is cut, a held one refuting the region, and an atom held with
+one producer left demands that producer’s body. The <code>zetesis-ferraris</code> crate narrows a region by
+these rules to a fixed point over the theory’s own DAG, without a clause
+form (<code>FormulaBounds.read_sound</code>, <code>never_root_refutes</code>, <code>known_sound</code>,
+<code>unsupported_cut</code>). A region no reading refutes is split
+on the open atom the narrowing found most constrained, cut branch first;
+a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
+root is sure or never (<code>FormulaBounds.decided_leaf_models</code>). The leaf
+is the candidate the reduct decides.
+The knowledge of a region holds in every region inside it
+(<code>FormulaBounds.known_mono</code>), so a split hands each child a copy of its
+parent’s knowledge and the child learns only what the split decided; the
+regions still share nothing. The readings are arrays over the DAG, and the
+regions partition the space exactly, so generation has the closure route’s
+shape: data-parallel work inside a region and share-nothing regions beside
+one another. A candidate-only restriction narrows the regions still to visit
+without a restart, and no exclusion index is kept, because a leaf is visited
+once. The traversal itself is one operation in <code>zetesis-cpu</code>, shared by both
+routes when one worker walks; with several workers the formula route walks
+the same tree in <code>zetesis-sat</code>’s parallel regions, each worker owning a stack
+of regions and a shared pool offering regions to idle workers. The closure
+route narrows by its two closures, the formula route by
+the readings.</p>
+<p>Under the same method the reduct’s proper-subset query is a second region
+tree: its root cuts every atom outside the candidate and leaves the
+candidate’s atoms open, its regions are narrowed by the knowledge of the
+frozen reduct, read as the original DAG under the candidate’s truth mask,
+without the support cut, since a model of the reduct need not be supported;
+a leaf other than the candidate is a proper-subset model, the countermodel,
+and a covered tree with no such leaf is the proof of minimality
+(<code>ReductRegions.stable_iff_no_countermodel</code>). Generation and membership
+are then the same operation over the same index of the theory, and no
+clause form is built anywhere on the route.</p>
+<p>Because the regions share nothing, several workers can walk the tree at
+once (<code>--threads</code>, the host’s available parallelism by default), each deciding
+the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
+answer arriving once, by the partition law; the order in which answers
+arrive is the schedule’s, is not promised to repeat between runs, and is
+not a property of the result. Verification rests on the laws and on the
+oracle comparison of answer sets as sets, not on order or determinism.</p>
+<p>Candidate production and membership need not run on the same executor.
+<code>StableModels::with_region_producers</code> uses the same original-theory readings
+and disjoint splits in bounded Rayon rounds. A worker returns a classical leaf;
+the coordinator independently checks original satisfaction before admitting it
+to the membership batch. The device then checks the selected reduct-preserving
+plan, and native completion finishes any general-reduct residuals. Producers
+never complete membership merely to ask the device to repeat it.</p>
+<pre><code class="language-text">while candidate_frontier is unfinished:
+    candidates := bounded_parallel_leaves(frontier, original_readings)
+    join_producers_and_settle_work()
+    admitted := check_original_satisfaction(candidates)
+    verdicts := execute_selected_membership_plan(admitted)
+    answers := complete_residuals_and_commit(verdicts)
+    yield answers
+</code></pre>
+<p>One output slot is reserved for every active producer region. Refutation or
+splitting returns the reservation; an emitted leaf consumes it. The batch is
+bounded even when workers finish together. A stopped validation retains its
+admitted prefix and reports the unfinished suffix explicitly. Every producer
+joins before membership begins, so these stages share one cumulative work
+allowance without concurrent resets. This schedule does not overlap production
+with device execution. Pending-byte limits cover candidate transport, not the
+entire region frontier, thread stacks or process memory.</p>
+<p>The original CPU <code>with_region_workers</code> operation remains useful when each
+worker should perform both operations. The two schedules share the original
+formula readings, support conditions, candidate partitions and reduct semantics.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/batch.rs">batch API</a>
+owns proposal validation and publication; the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/region_proposals.rs">producer</a>
+owns the bounded parallel frontier. <code>Frontier</code> and <code>BatchAccounting</code> state the
+coverage and completion laws; concrete synchronization remains a refinement
+obligation.</p>
+<p>The regions method is the default, chosen by
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md#the-regions-default-and-one-worker-count">measurement</a>
+beside the classical search over a clause form on the same cells, with the
+host’s workers on the tree; the classical search remains reachable for
+comparison. Read as regions the classical search is the same tree:
+a search node holds some atoms in and some out, propagation adds the atoms
+every classical model agrees on under those decisions, a conflict closes the
+node, and a complete assignment is a leaf the reduct decides
+(<code>FormulaRegions.classical_consequence_forces</code>, <code>no_model_refutes</code>). Under
+the clauses method the reduct’s proper-subset query is the Boolean search
+too. Neither method decides membership by anything but the reduct, and
+neither keeps learned clauses.</p>
+<p>Both paths can restrict candidate generation by necessary conditions. A normal
+source constraint supplies a forbidden positive gate conjunction when its
+remaining antecedents are witnessed by actual unconditional facts. The binary
+seed cursor can skip a whole interval while those gate bits remain true.
+Possible support alone cannot supply that witness. Ineligible constraints stay
+with the full closure check.</p>
+<p>Before its first seed, the closure route narrows the region of seeds it
+must enumerate. The region starts with nothing decided. Each pass computes
+the region’s two closures: the lower one, in which a rule fires only if its
+gates hold under every seed of the region, and the upper one, in which each
+gate is tested for possibility separately. The upper reading is conservative:
+it can enable a rule even when no single seed satisfies all its gates. For
+example, an open atom can pass both a required-true and a required-false gate.
+A gate atom the lower closure
+derives belongs to every answer set and is held in every seed; a gate atom
+the upper closure does not derive belongs to no answer set and is cut,
+never offered. The next pass reads those decisions, and the passes stop
+when one changes nothing. The statistics report the passes and the atoms
+held and cut; the rest are open. A constraint that fires in a
+lower closure holds under every seed of the region, so no seed is offered
+and the program has no answer set.</p>
+<p>A completed upper bound supplies the root’s potentially present gate atoms
+directly. The root takes those atoms outside the lower bound, without scanning
+the excluded Cartesian tuples. <code>GateIndex</code> computes each retained atom’s rank
+in the full original gate carrier using signature offsets and domain ranks.
+It does not assign new positions to the compact subset. The original program,
+gate universe and frozen interpretation therefore retain their identity.
+Possible support is not truth: it supplies a covering candidate domain, and
+the reduct still decides each candidate. An incomplete upper computation cannot
+justify an exclusion. Existing resource-stopped narrowing uses its conservative
+incremental fallback; full-carrier position overflow remains an explicit limit.</p>
+<p>The narrowed root is then visited region by region rather than counted. A
+region holds some of the root’s open gate atoms in, cuts some out and
+leaves the rest open; it is narrowed to its fixed point by the same two
+closures, and the passes decide more of its atoms. A region a definite
+constraint refutes, or in which a held atom is not derivable, offers no seed.
+A region with no atom left open offers its one seed. Otherwise the
+region is split on its highest open atom, into the region where that
+atom is out and the region where it is in, visited in that order, which is
+the order the flat counter would offer the same seeds in; the root is always
+split. A region whose narrowing decided nothing beyond the split that formed
+it is counted as a flat interval instead, with the counter’s restrictions
+inside it, so a program whose gates do not propagate pays two closures per
+counted region and no more. The statistics report the regions visited,
+refuted, reached as leaves and counted, and the narrowing passes below the root. Each
+offered seed is still checked in full against the whole gate carrier. The
+laws are <code>Bounds.narrowed_contains_accepted</code>, the iterated narrowing of the
+open cube (<code>Bounds.undecided</code> in the Lean), <code>Bounds.lower_constraint_refutes</code> and
+<code>Bounds.conflicting_atom_refutes</code> for the refutations, and the coverage
+tree of <code>Search.lean</code>, whose <code>split</code> node with <code>Cube.split_partition</code> and
+<code>Cube.split_disjoint</code> makes the regions a partition of their parent and
+whose <code>CoverageTree.mem_outputs_iff</code> makes the leaves exactly the accepted
+seeds of the root.
+The program is prepared once for the narrowing and charged as one
+preparation; each closure then runs on that preparation in one retained
+workspace and is charged as one candidate check. A resource stop inside a
+region keeps the completed passes’ decisions and counts the region, a stop
+in the preparation or the root keeps the bounds of the completed passes, and
+a program without gate predicates computes no closure.</p>
+<p>For a theory whose complete asserted-head grammar combines ordinary disjunction
+and exact atomic choices, every true atom in an answer set needs original support:
+an ordinary producer whose body is true and whose other head atoms are false,
+or an atomic choice for that atom with a true body. Otherwise removing that atom
+leaves a proper-subset model of the reduct. The resulting support condition
+restricts only outer proposals; independent producers can still support several
+atoms in one disjunctive head. Richer or cross-atom choice forms decline the
+certificate, and choices alone do not trigger its construction: at least one
+ordinary head must contain a syntactic disjunction. The original theory and
+frozen reduct are unchanged.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean">gate restriction laws</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean">disjunctive support laws</a>
+state these necessary conditions. Source binding coverage and the executable
+certificate constructors retain separate refinement obligations.</p>
+<p>Under the clauses method, exact projection exclusions have one owner across
+candidate restrictions: the outer cursor retains an index of previously
+proposed semantic interpretations, and strengthening the candidate query
+rebuilds its traversal while preserving that index; the regions method keeps
+no such index, since it visits a leaf once. Original and restriction clauses alone enter the watch lists. A completed
+assignment is independently checked against those clauses and looked up in the
+exclusion index before becoming another candidate. The original theory and its
+reduct remain separate from both operations. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md">projection contract</a>
+states its transactional insertion and logical admission units.</p>
+<p>Admitted classical queries use a single packed literal arena and clause-end
+offsets. A literal occupies one machine word; repeated offsets preserve empty
+clauses. Public <code>Literal</code> values remain lossless inputs until range admission.
+<code>Cnf::clauses()</code> yields ordered borrowed <code>Clause</code> views, and <code>Cnf::clause(index)</code>
+provides checked access. Decoding allocates nothing and preserves variable,
+polarity and canonical order. This is a query representation change, with
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean">separate arithmetic laws</a>;
+it does not replace the formula reduct or establish a process-memory bound.</p>
+<p>Local search operations can specialize while preserving the candidate sequence
+of completed search. In a three-literal clause, two distinct watched positions
+leave one possible replacement position: <code>3 - first - second</code>, with indices from zero to
+two. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/search.rs">replacement operation</a>
+tests that occurrence once, after polling control and charging work. It returns
+the same replacement as the general scan. Omitting watched positions can reduce
+charged work, so a fixed work limit can permit more progress. The
+<a href="../lean/correspondence.html">ternary law</a> states the position invariant; original
+satisfaction and reduct membership retain their existing obligations.</p>
+<p>A sufficient class certificate can avoid a full countermodel query. For example,
+ranked support under a complete original-producer representation justifies a
+tight-program specialization. Refused certificate construction leaves general
+reduct checking available. A completed check under a complete tight certificate
+can refute an unsupported candidate by the support theorem. These are different procedures
+for the same reduct-based membership contract.</p>
+<p>The device <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/tight/check.wgsl">ranked-support checker</a>
+stores support as one bit per semantic atom in each candidate’s row. By default it clears
+the row, then each enabled original producer atomically sets its head bit.
+After the storage barrier, a bit is set exactly when that head has an enabled
+producer. Atomic OR preserves updates from different heads sharing a word and
+from repeated producers. The final atom scan retains the least unsupported
+atom as its witness. This representation reduces the support buffer to
+<code>4 * max(worlds * ceil(atoms / 32), 1)</code> bytes; it does not describe total device
+memory or establish a speedup. Shared-word contention remains a measurement
+question. Ordinary formula sessions with automatic membership policy select this
+primitive on an explicit device backend when complete tight preparation succeeds.
+Preparation shares the CPU certificate constructor and cumulative search budget,
+but does not activate CPU certificate checking. The executor is selected before
+pipeline creation, so these batches do not first run the general propagator.
+Stable support results establish membership; failed original truth is rejected;
+an unsupported present atom refutes membership by complete producer coverage.
+Theories without a complete tight certificate retain general device propagation
+with exact CPU residual completion. Positive programs can also be tight; their
+checked certificate determines eligibility. Explicit countermodel policy retains
+the general route. There is no device implementation of <code>PositivePlan</code> in this
+selection.</p>
+<p>General device propagation retains decoded residual reasons separately: a
+fixed point that leaves the query unresolved, the full-sweep ceiling, or the
+device work ceiling. These counters precede exact CPU completion and batch
+commit. A later completion failure does not erase them; a submitted batch with
+no validated result supplies no decoded reason. Tight support and CPU execution
+leave this record absent. Aggregate sweep totals alone cannot identify the
+reason for each residual.</p>
+<p>With several requested workers, the region proposer produces a bounded batch
+in parallel and joins before its device checker starts. CPU production and
+device checking do not overlap. Membership, scoring and objective feedback keep
+the same original-theory and completed-batch boundaries. Failed device execution
+never triggers a hidden CPU replacement.</p>
+<p>The library also exposes <code>TightSupport::Grouped</code> through
+<code>GpuTightOracle::new_with_support</code>. Packing places each original producer in the
+group for its head’s support word, retaining duplicate occurrences. One
+invocation reduces that complete group into a local bit mask and overwrites the
+word once. Empty groups write zero. This replaces contended producer ORs with
+word ownership; original truth, root precedence, barriers and the least-atom
+witness scan retain the same contract. The graph adds <code>ceil(atoms / 32) + 1</code>
+32-bit offsets; fresh packing also needs one temporary 32-bit cursor per word.
+Both payloads are charged before allocation. Few or uneven groups can limit
+parallelism, so grouped construction is an explicit alternative, not the default.
+The result marker identifies the branch that constructed support. A mismatched
+policy marker is a readback failure even if the reported verdict agrees; this
+validates the protocol, without proving the shader or device implementation.</p>
+<p>The four physical
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware_tight.rs">tight-oracle tests</a>
+exercise both policies on Apple M4 Pro Metal. They cover original-root precedence,
+least unsupported atoms, duplicate and skewed producers, packed-word boundaries,
+batch isolation, resource refusals and retained-theory identity. The
+<a href="../reference/measurement-protocols.html#performance-evidence">performance evidence</a> separates
+these correctness checks from latency and occupancy measurements.</p>
+<p>For 256 atoms and 128 candidates, the packed support buffer occupies 4,096 bytes
+instead of the earlier per-atom buffer’s 131,072 bytes. This saves 126,976 bytes
+of logical device buffer storage. Bit packing alone leaves uploaded and
+downloaded payloads unchanged; grouped construction additionally uploads its
+immutable offsets on a fresh theory.</p>
+<h2 id="formula-evaluation-on-the-device"><a class="header" href="#formula-evaluation-on-the-device">Formula evaluation on the device</a></h2>
+<p>The general formula kernel assigns one workgroup to each candidate. A prepared
+theory groups original DAG nodes by dependency depth. Nodes in one level read
+only earlier levels, so the lanes can compute them independently:</p>
+<pre><code class="language-text">for level in dependency_order:
+    frozen[level] := map(evaluate_original_node, level, candidate, frozen)
+    make_level_writes_visible
+</code></pre>
+<p>This constructs the original truth used by the Ferraris reduct. Node and root
+identities remain unchanged. The order is reused for the same retained theory;
+truth is recomputed for every candidate. A chain with one node per level keeps
+the serial fold because it contains no independent node work. Other narrow
+levels may still pay more in barriers than they gain in parallel evaluation.</p>
+<p>During propagation, only semantic atoms can witness a proper subset. Each lane
+scans its atom positions and the workgroup combines exact summaries:</p>
+<pre><code class="language-text">eligible := candidate_true_atoms_whose_domain_allows_false
+(count, last) := reduce(sum_counts, maximum_index, lane_summaries(eligible))
+if count = 0: refute_the_proper_subset_query
+if count = 1: intersect_domain(last, {false})
+</code></pre>
+<p><code>last</code> identifies an atom only when the count is one; zero is a valid atom index.
+Auxiliary formula nodes never participate in this subset test. An original-false
+subformula remains disabled by the frozen mask throughout propagation.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/preparation.rs">Preparation</a>
+owns temporary depth and schedule storage and releases staging after upload.
+Only a finalized graph enters residency. Actual staging capacity participates
+in cold admission. A later preparation failure can discard old residency while
+leaving a healthy context; it cannot publish a result or advance the oracle’s epoch.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula.wgsl">kernel</a>
+implements the level map and subset reduction. Their
+<a href="../lean/correspondence.html">Lean laws and remaining obligations</a> are distinct
+from device qualification and timing evidence.</p>
+<h2 id="cpu-and-gpu-responsibilities"><a class="header" href="#cpu-and-gpu-responsibilities">CPU and GPU responsibilities</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Capability</th><th>Execution boundary</th></tr>
+</thead>
+<tbody>
+<tr><td>Source loading, parsing, admission and output</td><td>Host libraries</td></tr>
+<tr><td>Independent relational membership</td><td>Scalar CPU or owned Rayon pool</td></tr>
+<tr><td>Shared lazy relational rounds</td><td>Host source stream with CPU or GPU chunk evaluation</td></tr>
+<tr><td>Ordinary GPU formula membership</td><td>Complete tight support when certified; otherwise device propagation plus exact native CPU completion of residuals</td></tr>
+<tr><td>Native aggregate reductions</td><td>Bounded reusable CPU/device primitive; availability alone does not imply use by every solve</td></tr>
+</tbody>
+</table>
+</div>
+<p>wgpu supplies portable device access, including Metal on supported macOS
+adapters. With default resources, device availability is discovered at runtime.
+Requesting a backend is
+not evidence that it ran; adapter identity, submitted work, completed work and
+residual work are separate observations. GPU support does not mean the complete
+solver is device-resident.</p>
+<p>The static reduct oracle reads one framed closure record per candidate. A checked
+nonzero epoch identifies the submission, an ordinal identifies the input seed,
+and a nonzero marker follows synchronized closure writes. The host validates
+these fields, the exact record population, verdict bits and unused closure bits.
+It also checks the gate-carrier projection against the original seed. A missing
+or inconsistent record fails the whole batch instead of becoming acceptance.
+The 32-byte parameter buffer and four-word per-record header count toward the
+ordinary authored payload ceiling. Empty batches validate context health and
+graph admission without consuming dispatch resources or an epoch. The epoch
+sequence survives residency clearing and refuses overflow.</p>
+<p>These checks establish transport identity and representation consistency, not
+an independent proof of every rule consequence or constraint verdict. Actual
+shader execution still relies on the device API contract and requires physical
+qualification for each claimed backend; an observed driver fault is not presumed.</p>
+<p>For admitted relational programs, automatic materialization selects lazy source
+grounding on both CPU and GPU. Hardware changes do not require a complete ground
+rule store. Explicit eager grounding retains its compiled graph. Automatic
+formula admission can defer eligible terminal positive definitions and reconstruct
+them after base membership; other formulas are materialized eagerly. Explicit lazy
+CPU execution can stream eligible constraints against answers of its retained
+producer core. Formula device membership consumes the materialized theory; terminal
+reconstruction runs on the host.</p>
+<p>CPU is the default backend throughout the solve. Existing measurements do not
+establish a device crossover for an automatic hardware policy; batch size alone
+is insufficient evidence. Explicit shared CPU source batching also
+remains a CPU policy. An explicit GPU backend prepares its executor during
+session setup. Default resources discover a device at that boundary;
+caller-supplied <a href="../rust/sessions.html#share-execution-resources">ExecutionResources</a>
+reuse their exact context after policy and capability checks, without discovering
+a replacement. Supplying a context does not override a CPU request.</p>
+<p>An explicit device failure is returned without a hidden CPU retry. A source
+limit or cancellation remains an incomplete result. Device statistics count
+actual device attempts and never include seeds checked only by the CPU. This
+policy leaves device scheduling separate from the reduct membership contract.</p>
+<h2 id="immutable-rounds-and-commit-boundaries"><a class="header" href="#immutable-rounds-and-commit-boundaries">Immutable rounds and commit boundaries</a></h2>
+<p>Each lazy batch has independent frozen seeds and positive snapshots. All chunks
+in one round read those same snapshots. Deltas become the next snapshots only
+after the source scan and every required evaluation complete. Catalog growth
+preserves atom identity and each world’s stride; it cannot turn another world’s
+truth into a local fact.</p>
+<p>An incomplete scan or failed evaluation returns progress without completed
+checks from that batch. A formula batch similarly separates pending proposals,
+completed local checks and committed results. Cancellation or a device error
+must not turn an unfinished operation into acceptance, rejection or exhaustion.</p>
+<p>Performance work measures the actual boundary: admission, source work,
+candidate generation, oracle calls, residual completion, scoring and output.
+Host elapsed time around a GPU call includes transport and waiting; it is not
+kernel time. Logical storage budgets are not process RSS or total device memory.
+The <a href="../rust/outcomes.html">outcome contracts</a> preserve these distinctions for
+library consumers.</p>
+<p>The <a href="../appendices/neuromorphic.html">neuromorphic appendix</a> describes a proposed
+mapping of the same semantic operations to Loihi 2 and SpiNNaker2. Its event
+protocol and qualification steps are design obligations; these targets are not
+implemented backends.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../architecture/grounding-comparison.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../architecture/ownership.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../architecture/grounding-comparison.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../architecture/ownership.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

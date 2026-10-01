@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLOSED","FAILED","FULL"],"struct":["BoundedText","BoundedWriter","Closed","FailAt"]};

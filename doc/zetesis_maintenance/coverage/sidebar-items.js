@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_INPUT_BYTES","SUPPORT_SOURCES"],"enum":["Mode"],"fn":["executable_identity","metadata","physical_result","previous_revision","ratchet","render","selection"],"struct":["Floor","Group","Metadata","Observation","Physical","Selection","Tool"]};

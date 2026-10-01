@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ErrorKind","EvaluationError","Feature","Resource","Symbol","SymbolSign"],"fn":["prepare_selection"],"mod":["json","view"],"struct":["AdmissionLimits","ConstructionLimits","Error","Evaluation","Limits","Name","ObservationProgram","Rendered","Statistics"]};

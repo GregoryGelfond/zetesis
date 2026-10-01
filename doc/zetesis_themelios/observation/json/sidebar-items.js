@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RECORD_SCHEMA_VERSION"],"struct":["AtomTable","Encoded","Failure","Statistics"]};

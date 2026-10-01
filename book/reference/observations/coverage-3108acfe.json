@@ -1,0 +1,43 @@
+{
+  "compiled_source": "3108acfe40a1bf834ab44a6a991863ac4893829d",
+  "validated_at": "2026-09-21T22:05:39.013Z",
+  "totals": {
+    "workspace": {
+      "lines": {
+        "count": 90177,
+        "covered": 84983,
+        "percent": 94.24021646317797
+      },
+      "sha256": "c4a7b26ff3b1f1586aa8f714768d896ffda535418371a73b410fde45d8c7c61f"
+    },
+    "workspace-portable": {
+      "lines": {
+        "count": 90177,
+        "covered": 82409,
+        "percent": 91.38583008971244
+      },
+      "sha256": "4c8e40524fa5ba324eeed38a1d52028663562a2137498d5d346366acb042829b"
+    },
+    "cli-cpu": {
+      "lines": {
+        "count": 9644,
+        "covered": 8857,
+        "percent": 91.83948569058482
+      },
+      "sha256": "cd103882f3d3e4c83938d4def9809824ea1c2a78eef251227b893e41a62ec157"
+    }
+  },
+  "workspace_profiles": 2416,
+  "portable_profiles": 2400,
+  "physical_profiles": 16,
+  "physical_tests": 59,
+  "physical_groups": 16,
+  "excluded_listing_profiles": 16,
+  "ordinary_cli_backend_cases": 3,
+  "ordinary_cli_backend_instrumented": false,
+  "cpu_profiles": 326,
+  "physical_evidence_sha256": "aa4415ba50cef0323308da3c82870ef3a88f5d72ea1878b4b51edd8d1ebc31cc",
+  "floors_sha256": "2b1a8809c412156d61081dc5141279fca9a8e2c24ff4af0c3ec49cff1afdd378",
+  "report_log_sha256": "381843783d811137cc4bc30010b0f932873d36a5f4020c1f2b24f67e3ecaa5ef",
+  "status": "gate-passed"
+}

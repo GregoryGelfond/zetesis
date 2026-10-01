@@ -1,0 +1,1005 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Admitted language - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/reference/language.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="admitted-language"><a class="header" href="#admitted-language">Admitted language</a></h1>
+<p>zetesis targets clingo-compatible source and answer-set semantics within an
+explicit scope. Parsing a construct does not establish that its current
+lowering, grounding or execution profile supports it. The tables below describe
+implemented forms and their boundaries; they are not a whole-language parity
+claim or a promise that every combination of individually supported forms works.</p>
+<p>The ordinary source driver selects a supported profile automatically. Explicit
+library admission doors are narrower: <code>admit</code> accepts the strict relational
+profile, <code>admit_extended</code> adds its scalar expansions, and <code>admit_formula</code> builds
+the broader finite Ferraris representation. Automatic formula admission can
+defer eligible terminal positive definitions and reconstruct them from verified
+base answers; the remaining rules are materialized eagerly.
+Explicit lazy CPU execution can retain a producer core and stream
+eligible ordinary constraints; objectives and table joins are currently refused
+by this hybrid profile. Complete possible support and source arithmetic
+admission remain required. See the <a href="../architecture/grounding.html#eager-and-lazy-execution">grounding profiles</a>.
+Selecting a GPU does not expand the accepted source language.</p>
+<h2 id="source-loading-and-finite-admission-limits"><a class="header" href="#source-loading-and-finite-admission-limits">Source loading and finite admission limits</a></h2>
+<p>Original file roots and supported <code>#include</code> directives form one bounded source
+bundle. An include targeting a file on the active include chain is refused as a
+cycle. Reusing a file after its earlier traversal has completed is permitted and
+includes that file once, as with a diamond-shaped include graph. clingo 5.8.2
+warns and skips an already included file even on a cycle; zetesis requires an
+acyclic include chain. This is a source-loading contract, separate from the
+answer-set semantics of the resulting program. See
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/bundle.rs"><code>SourceBundle</code></a>
+for canonical identity, path and resource requirements.</p>
+<p>Formula admission has independent inclusive ceilings. <code>--max-atoms</code> and
+<code>--max-ground-rules</code> set the ordinary CLI’s formula atom and theory-root limits
+directly, each defaulting to 1,000,000. They can raise or lower those limits;
+there is no hidden clamp to the standalone formula library’s defaults of 65,536
+atoms and 262,144 roots. Formula nodes retain their independent 1,048,576 limit.</p>
+<p>Value and round limits count different populations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Population and lifetime</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--max-domain-values</code></td><td>Distinct source values across the selected admission profile</td><td>1,000,000 for both profiles</td></tr>
+<tr><td><code>--max-assignment-values</code></td><td>Candidate values in one formula assignment, range or objective-presence subset</td><td>1,000,000 per operation</td></tr>
+<tr><td><code>--max-generated-values</code></td><td>Distinct generated binding values across formula grounding: support, objective preparation and final instantiation</td><td>1,000,000 cumulatively</td></tr>
+<tr><td><code>--max-support-rounds</code></td><td>Complete eager possible-support rounds, including the final no-change round</td><td>1,000,000</td></tr>
+</tbody>
+</table>
+</div>
+<p>The domain and generated populations are sets, not counters: each distinct
+value is retained once so that its payload is charged to the byte budget once,
+however many source terms or generator steps produce it.</p>
+<p>An explicit domain override applies to both profiles. The assignment and
+generated-value limits are independent: many small assignments can exceed the
+cumulative generated-value limit. Support rounds are not a direct recursion-depth
+measure. Exhaustion refuses admission and cannot establish completed support or
+unsatisfiability. Zero is a real limit for every resource.</p>
+<p>Without <code>--max-expansion-work</code>, ordinary admission preserves the independent
+library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
+formula-grounding operations.
+<code>--max-expansion-bytes</code> separately bounds the canonical payload the grounder
+retains, 16 MiB by default, counted once per retained atom. An explicit work
+value overrides both work ceilings; each counter applies it independently. <code>--stats</code> reports both effective limits.
+Formula work includes checked atom comparisons, index construction, copying and
+commit operations. Accounting these operations changes the work needed to admit
+a source; formula admission now uses its library default instead of the earlier
+shared 1,048,576 default. Explicit lower overrides remain effective. These finite
+operation ceilings are neither a summed request budget, elapsed-time limits nor
+performance measurements. Separate source, value, atom and storage bounds remain.</p>
+<p><code>--stats</code> reports both requested grounding limits and formula profile ceilings.
+Library callers configure formula limits through
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs"><code>FormulaLimits</code></a>,
+with the same checked refusal contracts. Relational lazy execution has its own
+source-work and derived-atom limits; these formula limits do not describe it.</p>
+<h2 id="rules-terms-and-bindings"><a class="header" href="#rules-terms-and-bindings">Rules, terms, and bindings</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>Implemented scope</th><th>Remaining boundary</th></tr>
+</thead>
+<tbody>
+<tr><td>Normal rules and constraints</td><td>Safe finite relational rules, default and double negation, singleton unbounded choices</td><td>More general constructs use the formula profile</td></tr>
+<tr><td>Strong negation</td><td>Signed atom identities and coherence constraints; signed source and observation forms</td><td>Remaining constructor and condition profiles still apply</td></tr>
+<tr><td>Disjunction</td><td>Finite signed/evaluated disjunctive heads and conditional disjuncts with independent local bindings; direct formula compilation without shifting</td><td>Unresolved local bindings and unsupported inverse generators</td></tr>
+<tr><td>Boolean literals</td><td>Signed <code>#true</code>/<code>#false</code> in rule bodies and choice/aggregate conditions; Boolean singleton heads and disjuncts with finite local conditions; signed Boolean choice and function-head elements</td><td>Separate objective/observation condition profiles</td></tr>
+<tr><td>Logical values</td><td>Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs, nested pools/intervals and structural comparisons</td><td>Unbound expression inputs and unbounded recursive construction</td></tr>
+<tr><td>Positive witnesses</td><td>Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs</td><td>Arithmetic inversion; a negative atom cannot supply a missing binding</td></tr>
+<tr><td>Comparisons</td><td>Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables</td><td>Nonlinear inverse binders and simultaneous systems without directed finite bounds</td></tr>
+<tr><td>Finite generators</td><td>Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and scoped finite pools in rules, local elements and objectives</td><td>Unresolved or circular binding dependencies and unsupported arithmetic inversion</td></tr>
+<tr><td>Universal body conditionals</td><td>Complete local implication families with signed atom and comparison alternatives, scoped pools/intervals, positive local witnesses and finite anonymous projections under <code>not</code> or <code>not not</code></td><td>Unbound local inputs and unsupported arithmetic inversion</td></tr>
+</tbody>
+</table>
+</div>
+<p>A conditional disjunct <code>H:C</code> contributes <code>(C → H) ∧ not not C</code> at each
+completed local binding. Those instances join the same head disjunction;
+an empty family contributes false. Each local condition starts with the same
+outer bindings, and its private variables cannot bind the enclosing rule.
+The condition determines eligibility, while its original implication remains
+in the frozen reduct. A positive head atom obtains support only from its own
+condition together with the rule body; default and double negation retain their
+original form. See the <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/conditional-heads.md">conditional-head laws</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/conditional_heads.rs">complete-family controls</a>.</p>
+<p>For example, <code>q(X) :- d(X), p(X+1).</code> checks the complete supporting <code>p</code> atom
+after <code>d(X)</code> binds <code>X</code>. By contrast, <code>q(X) :- p(X+1).</code> requires arithmetic
+inversion and receives the typed <code>UnboundArgumentInput</code> refusal.</p>
+<p>Comparisons use ASP term order across admitted value types: <code>5 &lt; a</code> and
+<code>"foo" &gt; a</code> are true, while <code>5 &gt; a</code> is false. Thus <code>X &gt; Y</code> does not imply
+numeric operands. Arithmetic is evaluated before comparison; defined <code>X + Y</code>
+requires numbers and remains subject to the
+<a href="#numeric-boundaries-and-refusal-meaning">arithmetic refusal policy</a>.</p>
+<p>The current flat-tuple comparison profile requires tuple operands on both sides
+when a tuple still contains variables after normalization. It cannot bind that
+whole tuple to a variable, even when a positive atom supplies its component bindings:</p>
+<pre><code class="language-asp">d(1;2).p(Y):-d(X),Y=(-f(X),(X,))=(-f(2),(2,)).
+</code></pre>
+<p>Parsing and raising accept this program, but formula admission returns the
+located <code>ProfileFeature::Term</code> refusal. The same boundary applies when the
+comparison chain is preceded by <code>not not</code>. clingo 5.8.2 completes both forms
+with the single answer <code>{d(1), d(2), p((-f(2),(2,)))}</code>. This is an existing
+admission limitation, not a disagreement about answer-set semantics. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_values.rs">finite-value controls</a>
+check the exact refusal separately from admitted constructor comparisons.</p>
+<p>A generating comparison chain may bound several variables before their values
+are known:</p>
+<pre><code class="language-asp">p(X,Y) :- 0 &lt; 2*X &lt; 3*Y &lt; 7.
+</code></pre>
+<p>Its single answer is <code>{p(1,1),p(1,2),p(2,2)}</code>. The formula binding planner derives
+finite integer intervals, enumerates their values, then checks the original
+whole comparison. Intervals cover possible substitutions; they do not discard
+the correlation between <code>X</code> and <code>Y</code>.</p>
+<p>The fallback analysis accepts integer-affine addition, subtraction, negation
+and multiplication by a closed integer. Closed means syntactically free of
+variables after normalization; an already bound variable is still a variable
+for this analysis. An endpoint can be inferred only when
+the required endpoints of every other term are available. This covers directed
+chains, shared variables and finite local scopes. Single default negation does
+not supply a generator; double negation retains the comparison’s binding
+profile. Nonlinear inversion and simultaneous equation solving are outside this
+profile. Independently bound expressions still use the ordinary scalar evaluator.
+Positive relational values alone do not supply closed endpoints: <code>d(Y), 0&lt;X+Y&lt;3</code> cannot use <code>Y</code> to generate <code>X</code>. Independent source equalities or ranges
+can supply the required anchors.</p>
+<p>The analysis uses checked 64-bit coefficients and 128-bit intermediate bounds;
+exhausting either width gives a located analysis limit. Source integer values
+remain 32-bit. Evaluation failures follow the
+<a href="#numeric-boundaries-and-refusal-meaning">arithmetic family policy</a>; coefficient
+and bound capacity refusals do not become skippable instances.
+Expansion work and retained storage are charged before enumeration. See the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_chains.rs">finite-chain contracts</a>
+for scoped formulas, complete answer families and resource boundaries.</p>
+<p>A positive conditional consequent may bind a local variable from one part of
+the same complete witness and then check a dependent expression:</p>
+<pre><code class="language-asp">{p(1,2); p(2,4)}.
+q :- p(X,X+1) : #true.
+</code></pre>
+<p>The witness plan can extract <code>X</code> before evaluating <code>X+1</code>; it does not solve an
+equation for an otherwise unbound variable. Local witness variables cannot
+establish outer-rule or condition safety. Empty completed universal families
+are true, while recursive conditions retain their original implications.
+The maintained <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/evaluated_witnesses.rs">witness tests</a>
+exercise these distinctions.</p>
+<p>Under <code>not</code> or <code>not not</code>, anonymous positions instead denote an existential
+projection of complete matching atoms. Negation applies to that projection,
+before source alternatives are disjoined and condition rows are conjoined:</p>
+<pre><code class="language-asp">{p(1); p(2)}.
+q :- not p(_): #true.
+</code></pre>
+<p>Its answer sets are <code>{q}</code>, <code>{p(1)}</code>, <code>{p(2)}</code> and <code>{p(1),p(2)}</code>. Here <code>q</code> requires
+the absence of every matching <code>p</code> atom. Replacing <code>not</code> with <code>not not</code> tests for
+the presence of a witness in the candidate; it does not produce a <code>p</code> atom.
+The same projection contract covers multiple anonymous positions and anonymous
+descendants of positive constructors and tuples. Other inputs must already be
+bound; arithmetic is evaluated before witness matching. Admitted finite interval
+and pool alternatives retain separate projections.</p>
+<p>An empty witness family, an empty source-alternative family and an empty
+condition-row family have different meanings. Only completed enumeration can
+establish any of them:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Completed empty family</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>Witnesses of one source alternative</td><td>That projection is false; <code>not</code> makes it true and <code>not not</code> leaves it false</td></tr>
+<tr><td>Source alternatives for one condition row</td><td>That row has a false consequent, so its implication requires a false condition</td></tr>
+<tr><td>Condition rows</td><td>The entire universal conditional is true</td></tr>
+</tbody>
+</table>
+</div>
+<p>Anonymous inputs inside arithmetic or unary wrappers,
+classical-negative anonymous predicates and genuinely unbound named inputs
+remain refused. Expanding a pool does not let one alternative supply another
+alternative’s missing input. See the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/consequent_alternatives.rs">conditional contracts</a>
+and the finite-carrier laws in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean"><code>ProjectedConditionals</code></a>.</p>
+<p>Finite pools retain source occurrence boundaries. In an ordinary rule, each
+head, body or guard occurrence chooses independently and the product emits
+complete rules. Thus <code>q :- p(1;2).</code> supplies the two rules <code>q :- p(1).</code> and
+<code>q :- p(2).</code>; it does not require both body atoms. Pool alternatives inside a
+choice, aggregate or optimization element remain in that same group. Complete
+atom or tuple keys still coalesce by the group’s established semantics. Boolean
+choice contributions retain their original source occurrence keys.</p>
+<p>A local conditional condition has its own environment for every pool selection.
+Universal body conditions contribute separate conjuncts; conditional head
+instances remain alternatives in one disjunction. A bound variable shared within
+one occurrence keeps its identity, while identical pool spellings in two
+occurrences do not force equal selections.</p>
+<p>Comparison consequents use the same inner alternative order. For example,
+<code>q :- X=(1;2) : d(X).</code> requires each completed <code>d(X)</code> condition to have at least
+one matching value alternative. Comparison alternatives cannot bind a missing
+source name. A range in the middle of a comparison chain chooses one value for
+both adjacent tests. All reached alternatives are checked, including those
+after a true result. A numeric zero divisor contributes to the complete family’s
+definedness check; a fatal arithmetic error cannot disappear through a true
+alternative.</p>
+<p>Nested pools distribute through constructors and checked expressions before
+scope compilation. Nested intervals use fresh data slots in that scope; their
+values are combined with the other constructor arguments only after the required
+inputs are bound. Every interval occurrence is independent, including repeated
+spellings. An empty range can yield no instances, but cannot hide an unsafe
+source name or a required arithmetic failure. Source expansion, value storage,
+substitution and work limits still refuse the whole operation. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/finite_pools.rs">finite occurrence controls</a>
+compare complete answers and every original/frozen pair with explicit expansions.
+Their mathematical coverage premises are described in the
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-occurrences.md">finite occurrence guide</a>.</p>
+<h2 id="choices-and-aggregates"><a class="header" href="#choices-and-aggregates">Choices and aggregates</a></h2>
+<p>Choices admit complete logical bounds, including symbols, strings, signed
+constructors, tuples, <code>#inf</code> and <code>#sup</code>, as well as integers. Scoped variables,
+duplicate eligibility, recursive conditions, evaluated arguments and admitted
+top-level numeric intervals retain their existing meanings. Complete outer scalar
+or dependency-ordered aggregate-assignment values can supply bounds; their original
+equalities and whole-group activation remain in the resulting formulas.
+Unsupported local generators remain restricted.</p>
+<p>For example:</p>
+<pre><code class="language-asp">{a;b} word.
+</code></pre>
+<p>Its answer sets are <code>{}</code>, <code>{a}</code>, <code>{b}</code> and <code>{a,b}</code>. The upper bound <code>word</code> is
+greater than every integer count. Using it as a lower bound instead gives no
+answer set; <code>#inf {a;b} #sup.</code> admits all four. This is logical term ordering,
+not conversion of a symbol to a numeric threshold.</p>
+<p>The same comparison contract applies to all six relations in admitted body and
+head <code>#count</code>, <code>#sum</code> and <code>#sum+</code> contexts. Every finite numeric measure is above
+<code>#inf</code> and below every other nonnumeric logical value. Its comparison with such
+a bound therefore has one truth value across every tuple selection, including
+the empty selection. The canonical aggregate can be replaced by that constant
+in both the original formula and every frozen reduct. Head permissions and signed
+activity remain separate: a true bound cannot supply support for an atom.
+Source bindings, eligibility, measured values and reached arithmetic still undergo
+their required validation before a comparison is folded. A missing extremum-head
+value is neutral under the explicit rule below; it does not bypass validation.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/logical_bounds.rs">logical-bound contracts</a>
+cover declared answer families, all comparison relations, arbitrary frozen
+<code>M/J</code> queries, source comparisons and resource boundaries. Their preservation
+law is described under <a href="../lean/correspondence.html">implementation correspondence</a>.</p>
+<p>Signed <code>#true</code> and <code>#false</code> may occupy ordinary choice elements and elements
+of <code>#count</code>, <code>#sum</code>, <code>#sum+</code>, <code>#min</code> and <code>#max</code> heads. A Boolean operand affects
+activity through its truth and its own condition. It introduces no atom and
+supplies no support for atoms in that condition. Thus <code>1{#true;a}1.</code> has only
+the empty answer set, while <code>1{#false;a}1.</code> has only <code>{a}</code>.</p>
+<p>For ordinary Boolean choices, zetesis adopts a source-occurrence counting
+contract: each written Boolean element has its own key within an activated
+outer group. All eligible local witnesses of that one element share its key.
+For example, <code>2{#true;#true}2.</code> has the empty answer set, but
+<code>d(1..2).2{#true:d(X)}2.</code> has no answer set: the two <code>d(X)</code> witnesses activate
+one occurrence. Separate written rules retain separate groups. In particular,
+<code>1{#true}1.1{#true;#true}1.</code> is inconsistent. Ordinary atomic choices identify
+their contributions by default-negation sign and complete atom; explicit
+function heads use complete tuple identity.</p>
+<p>Both atomic and Boolean operands admit <code>not</code> and <code>not not</code>. These forms evaluate
+their operand truth in the candidate and supply no positive producer support.
+Eligibility conditions retain their own reduct. Thus <code>{not not a}.</code> does not
+support <code>a</code>, while <code>{a}.</code> does. Ordinary <code>a</code> and <code>not not a</code> are distinct
+contributions: <code>1{a;not a;not not a}1.</code> has only the empty answer set, and
+<code>2{a;not not a}2.</code> has only <code>{a}</code>. Repeated occurrences of the same signed atom
+coalesce; repeated Boolean elements retain their separate occurrence keys.</p>
+<p>This Boolean counting rule is an adopted language extension. Its intended
+reduct laws and the remaining source-to-implementation correspondence are
+separated in the <a href="../lean/correspondence.html">Lean proof boundary</a>.
+Pool alternatives in one Boolean element also share that element’s key.
+Thus <code>{p(1);p(2)}.1{#true:p(1;2)}1.</code> admits <code>{p(1)}</code>, <code>{p(2)}</code> and
+<code>{p(1),p(2)}</code> under this contract, like the single element <code>#true:p(X)</code>.
+Writing <code>#true:p(1);#true:p(2)</code> instead introduces two keys and excludes the
+both-atom answer. Clingo treats this pooled condition like the latter form;
+this specific case is an explicit semantic difference, not a parity claim.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aggregate form</th><th>Implemented scope</th><th>Remaining boundary</th></tr>
+</thead>
+<tbody>
+<tr><td>Body <code>#count</code>, <code>#sum</code>, <code>#sum+</code></td><td>Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and fresh-target assignments with completed finite support</td><td>Unresolved dependencies within a binding scope and unsupported local generators</td></tr>
+<tr><td>Body <code>#min</code>, <code>#max</code></td><td>Comparisons over complete logical values; empty extrema; dependency-ordered assignments with completed finite support</td><td>Missing tuple values, the numeric endpoint guard below and unsupported local consumers</td></tr>
+<tr><td>Assignment consumers</td><td>Dependency-ordered scalar/tuple filters and equalities, evaluated arguments/heads, outer negative atoms and ranges, logical choice bounds and nonbinding aggregate guards; complete outer proposals can feed finite local choice, aggregate-element, conditional-head and universal-conditional scopes while retaining the original equality</td><td>Unresolved dependencies within a binding scope and local generators outside the admitted finite profiles</td></tr>
+<tr><td><code>#count</code> heads</td><td>Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies</td><td>Unsupported local eligibility scopes</td></tr>
+<tr><td><code>#sum</code>, <code>#sum+</code> heads</td><td>Signed numeric <code>#sum</code> and positive-only numeric <code>#sum+</code>; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive <code>#sum+</code> weights and objective dependencies</td><td>Unsupported local eligibility scopes</td></tr>
+<tr><td><code>#min</code>, <code>#max</code> heads</td><td>Complete first values use ASP term order; missing values are neutral under the declared extension; positive atomic permission coalesces by head atom and signed activity by complete tuple, including both alias directions, Boolean operands and objective dependencies</td><td>The numeric endpoint guard and unsupported local eligibility scopes</td></tr>
+</tbody>
+</table>
+</div>
+<p>A tuple becomes active when any occurrence has a true head operand and satisfies
+its own condition. An unsigned atomic operand is true when that atom is selected;
+<code>#true</code> is true and <code>#false</code> is false. A sum counts each active tuple’s weight
+once. Thus <code>1#sum{1:a;1:b}1.</code> admits <code>{a}</code>, <code>{b}</code> and <code>{a,b}</code>. Distinct
+complete tuples remain distinct contributions even if they share an atom:
+<code>3#sum{1:a;2:a}3.</code> admits <code>{a}</code>, as does <code>2#sum{1,k:a;1,l:a}2.</code>. Conditions
+retain their model-relative truth and reduct implications. Atom permission is
+independent of contribution, so <code>0#sum+{0:a;0:b}0.</code> retains all four choices.
+Missing or nonnumeric sum measures also contribute zero without removing
+permission. Thus <code>0#sum{:a;word:b}0.</code> has those same four answer sets. For
+<code>#sum+</code>, a negative numeric weight contributes zero: <code>0#sum+{-2:a;2:b}0.</code>
+admits <code>{}</code> and <code>{a}</code>. A head with no bound retains its permissions without an
+aggregate constraint; no extremum result is required in that case.
+Boolean and atomic occurrences may share one explicit tuple: in
+<code>{a}.1#count{1:#true:a;1:b}1.</code>, either a selected <code>a</code> or a selected <code>b</code>
+activates tuple <code>1</code>, giving <code>{a}</code>, <code>{b}</code> and <code>{a,b}</code>. Repeating that tuple
+does not add a contribution: <code>2#sum{1:#true;1:#true}2.</code> is inconsistent.</p>
+<p>Extrema use the same tuple-selection rule. <code>1#min{1:a;1:b}1.</code> admits
+<code>{a}</code>, <code>{b}</code> and <code>{a,b}</code>: either selected atom activates the shared tuple.
+Conversely, <code>1#max{0:a;1:a}1.</code> admits <code>{a}</code>, whose selection activates both
+complete tuples. An extremum bound supplies no support for an otherwise
+unsupported atom. The optional count specialization still requires its stronger
+tuple/atom bijection certificate; admitting aliases does not grant that certificate.
+Default-negated or Boolean operands also prevent a group from supplying that
+atom-only certificate. Any nonnumeric logical bound excludes its whole group
+from this numeric certificate, even when another bound is numeric. Other independently
+qualified numeric groups remain eligible for the specialization. Model-relative
+operand or body truth does not bypass required source validation. A nonnumeric sum measure is
+valid and neutral. An evaluated numeric zero divisor follows the arithmetic
+family policy; it is never replaced by a zero contribution. Other arithmetic
+failures remain errors.</p>
+<p>An extremum measure retains the complete first value of its tuple. For example:</p>
+<pre><code class="language-asp">m #min {m:a; n:b} m.
+</code></pre>
+<p>This program has answer sets <code>{a}</code> and <code>{a,b}</code>: the minimum selected value must
+be <code>m</code>, while selecting the tuple beginning with <code>n</code> remains optional. Numbers,
+symbols, strings, signed constructors and tuples use the same logical term order
+as body extrema. Empty minima and maxima remain <code>#sup</code> and <code>#inf</code>; a selected
+tuple whose value is that extremum still retains its own activity and permission.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean">ordered-head laws</a>
+separate these concerns and state the required order and carrier assumptions.</p>
+<p>Within each rule, aggregate assignments may depend on earlier assignments
+through scalar and range values. The binding plan needs a finite dependency
+order. Recursive dependencies between producer rules are admitted when their
+possible-support construction completes within its bounds. A proposed value
+remains guarded by the original aggregate equality; support membership cannot
+replace model-relative truth.</p>
+<p>For a finite selected tuple set <code>T</code>, let <code>V(T)</code> contain the first values of its
+nonempty tuples. An extremum head uses the least/greatest value in <code>V(T)</code>, or
+<code>#sup</code>/<code>#inf</code> respectively when <code>V(T)</code> is empty. Empty tuples have no measure
+contribution and retain their independent head permission. A first value that
+is itself <code>()</code> is present, as are symbols, strings and both infinite values.
+This conserves ordinary extrema on empty aggregates and complete nonempty
+tuples. It is a declared extension at the all-missing boundary, not a rule
+uniquely determined by the published nonempty-set definition.</p>
+<p>For example:</p>
+<pre><code class="language-asp">#min{:a;0:b}=0.
+</code></pre>
+<p>This checked source has answer sets <code>{b}</code> and <code>{a,b}</code>. Its head
+translation is <code>(a ∨ ¬a) ∧ (b ∨ ¬b) ∧ ¬¬b</code>: the bound checks the candidate,
+while the choices provide permission. At those two candidates, the reducts
+reduce to <code>b</code> and <code>a ∧ b</code>. Erasing the neutral <code>a</code> permission would change the
+second reduct and lose <code>{a,b}</code>. clingo 5.8.2 returns only <code>{b}</code> for this exact
+source. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md#missing-extrema-the-declared-extension">full rationale</a>
+states the finite rule, conservation domain and source correspondence boundary.
+The extension applies to heads; body, assignment and observation extrema keep
+their existing nonempty-tuple admission profile.</p>
+<p>The head permissions and sum contributions follow <a href="https://arxiv.org/pdf/1507.06576v2">Abstract Gringo,
+§§2.1 and 3</a>; missing extrema use the declared
+extension above. Some source forms produce
+different answer-set families in clingo 5.8.2. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md">contribution contract and
+comparison table</a> give the original
+programs, both results and the remaining source-correspondence limits. Those
+differences are tested explicitly and do not count as clingo parity.</p>
+<h3 id="interpreting-source-analysis"><a class="header" href="#interpreting-source-analysis">Interpreting source analysis</a></h3>
+<p>For ordinary Boolean choices, <code>analysis_basis()</code> reports
+<code>AnalysisBasis::DependencyProjection</code>. The returned <code>analyzed_program()</code> is a
+signature/polarity projection; <code>source_analysis()</code> reports structural facts
+about that projection. Its safety and class verdicts are not conclusions about
+the original source semantics. The formula compiler retains the original
+occurrence groups separately and refuses with <code>FormulaFailure::ChoiceSource</code>
+if it cannot preserve their source evidence.</p>
+<p>Boolean operands in explicit tuple-keyed aggregate heads do not by themselves
+require that projection. Always inspect <code>analysis_basis()</code> before interpreting
+analysis results; other admitted constructs can also require a projection.</p>
+<h2 id="objectives-and-observations"><a class="header" href="#objectives-and-observations">Objectives and observations</a></h2>
+<p><code>#minimize</code>, <code>#maximize</code> and weak constraints admit finite safely bound priority
+expressions; an omitted priority is zero. Priority inputs come from the element’s
+admitted outer bindings. Weight, priority and tuple values must
+belong to the same completed binding. Grounding retains the model-relative
+conditions in fixed-priority objective templates; it does not add producer support
+or change the original answer-set theory.</p>
+<pre><code class="language-asp">row(1,2). row(2,1).
+1 {a;b} 1.
+selected(1) :- a.
+selected(2) :- b.
+#minimize {W@P,key:row(P,W),selected(P)}.
+</code></pre>
+<p>Both answer sets contain the two <code>row</code> facts. The answer containing <code>a</code> and
+<code>selected(1)</code> has costs <code>[0,2]</code> at priorities <code>[2,1]</code>; the answer containing <code>b</code>
+and <code>selected(2)</code> has costs <code>[1,0]</code>. The first is optimal because the higher
+priority is compared first, even though its total numeric cost is larger.
+Evaluating weight and priority from independent row projections would lose
+this correlation.</p>
+<p>A resolved nonnumeric weight or priority contributes neither cost nor a priority
+slot after required structure and evaluation checks. Weight, priority and tuple
+fields participate jointly in the arithmetic family policy, including when the
+weight is nonnumeric. Pooled alternatives from one original element share its
+family; a defined element cannot rescue a different entirely undefined element.
+For numeric weight and priority pairs, contributions coalesce globally by normalized weight,
+priority and the complete explicit tuple. Maximization negates weights before
+this coalescing; checked overflow remains an error. A numeric zero weight retains
+its numeric priority, as does a numeric contribution whose condition is false in
+a particular answer. A completed empty binding family contributes no priority.</p>
+<p>Search preserves all optimal ties within its resource and delivery limits.
+Objectives admit signed atomic and Boolean conditions, default and double
+negation, scalar comparisons and checked expressions in their weight, priority
+and complete tuple. Producer dependencies can include disjunctions, aggregate
+heads and recursive aggregate assignments or universal conditionals whose
+possible-support construction completes within its bounds. Weak-constraint bodies can directly use the admitted finite
+aggregate guards, assignments and universal conditionals. Scalar binders,
+intervals and structural positive patterns also supply outer bindings in weak
+constraints and optimization elements where their grammar permits them. A local
+aggregate or conditional variable cannot bind an outer weight, priority or tuple.
+Pooled conditional consequents in weak bodies retain their local alternatives:
+<code>p(X;X+1):d(X)</code> requires, for each completed <code>d(X)</code> binding, at least one of
+<code>p(X)</code> and <code>p(X+1)</code>. Negation applies to each alternative before their disjunction.
+The analyzed program uses the same bounded signature/polarity projection as rule
+bodies and reports <code>AnalysisBasis::DependencyProjection</code>; this bounded syntax
+projection preserves signed dependencies and arities, not the objective’s truth
+condition. Weight, priority, complete tuple and runtime query remain attached to
+the original weak constraint.</p>
+<p>Pools in ordinary weak-body atoms and guards form independent observations.
+Pools in local conditions or aggregate tuples remain local to their element;
+weight, priority and complete objective-tuple pools form independent complete
+keys. Repeated complete keys still contribute once if any corresponding
+condition is true. Nested interval fields use the same scoped data generators.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_pools.rs">objective pool contracts</a>
+compare the complete scored families with explicit observations. An alternative
+must establish its own required bindings: <code>d(X;X+1)</code> cannot use the first
+alternative to make <code>X</code> safe in the second. Unresolved binding dependencies and
+unsupported arithmetic inversion remain refused.</p>
+<p>For example:</p>
+<pre><code class="language-asp">1 #count { 1:a; 2:b } 2.
+:~ N = #count { 1:a; 2:b }. [N@2, count]
+:~ a : b. [1@1, implication]
+#show.
+#show score(N) : N = #count { 1:a; 2:b }.
+</code></pre>
+<p>The full answers are <code>{a}</code>, <code>{b}</code> and <code>{a,b}</code>, with costs <code>[1,1]</code>, <code>[1,0]</code>
+and <code>[2,1]</code> at priorities <code>[2,1]</code>. The count supplies the higher-priority cost;
+the conditional <code>a : b</code> supplies the lower-priority cost precisely when <code>b</code>
+implies <code>a</code> in that answer. Only <code>{b}</code> is optimal. The shown count is a separate
+query; it does not supply support or change either cost.</p>
+<p>Scoped body compilation uses a separate value domain and transient formula
+storage. Each completed eligible row undergoes required body validation before
+activity exclusion or numeric selection. Only retained numeric rows allocate
+closed objective query nodes. <code>FormulaLimits::max_objective_formula_atoms</code> and
+<code>max_objective_formula_nodes</code> bound each transient body independently of the
+original theory and retained <code>objective.max_condition_nodes</code>; cumulative source
+work and value budgets still apply. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_scopes.rs">scoped objective contracts</a>
+check full costs, scope, required errors and independent limits.</p>
+<p>Transient rich producer and projection-condition validation instead apply
+<code>theory.max_atoms</code> and <code>theory.max_nodes</code> independently to each temporary
+builder. They do not add atoms or roots to the original theory.
+<code>max_objective_presence_entries</code> bounds shared source-activity planning slots,
+including predicate and scope traversal and simultaneous old/new activity
+tables, as well as objective-presence carriers. These limits count their stated
+formula or planning populations. They are not allocator or process-memory caps;
+activity folding does not consume retained <code>objective.max_condition_nodes</code>.</p>
+<p>Each objective has its own source-eligibility plan. The shared source-activity
+fold reads the existing lowered bodies, including aggregate assignments, guards
+and universal conditionals. It can establish absent or required atoms, or leave
+them optional. Recursive dependencies start from completed possible support and
+refine only after aggregating every producer for a whole round. An optional atom
+and its negation remain optional; the analysis does not decide their joint
+realizability. Heads outside this refinement profile retain the conservative
+carrier. An independently absent producer supplies no row or redundant zero-cost
+priority slot, while original-model queries determine the actual costs of all
+retained rows. Removing an always-zero slot preserves costs aligned by priority
+and every optimum tie, although the raw vector becomes shorter.</p>
+<p>A completed support round adds no new positive head atom after all its joins and
+binding proposals finish. Resource exhaustion returns a typed failure, not a
+program with incomplete objective coverage. Recursive value generation need not
+terminate; finite storage in an intermediate round supplies no completion result.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_rich_cycles.rs">cyclic producer contracts</a>
+cover complete scored families, source order, independent precision and resource
+exits. Their <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md">coverage argument</a>
+separates observed closure from the source-to-reduct projection premise.</p>
+<p>Applicable source-carrier refinements can exclude impossible generated values.
+Their errors remain errors; lack of an applicable refinement does not invalidate
+a complete conservative carrier. A flat unary observer over closed facts and
+unbounded choices supplies one such refinement. Let R be its required
+complete tuple keys and P its possible keys. The carrier is
+{measure(S) | R ⊆ S ⊆ P}. It includes invariant results as singleton carriers.
+Unique unary renamings preserve the carrier. Original aggregate equalities
+remain in the theory; carrier membership filters objective proposal rows before
+priority evaluation.</p>
+<p>The base predicate and each forwarding edge qualify independently. A filtered
+or multiply produced descendant uses its own source-support carrier; observing
+it cannot discard an established base or sibling refinement. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_carrier_composition.rs">composition contracts</a>
+check this independence under source order, additional observers and competing
+producers, including the shared work and storage limits.</p>
+<pre><code class="language-asp">{ a }.
+n(N) :- N = #count { 1 : a; 2 : a }.
+#minimize { 1@N,k : n(N) }.
+</code></pre>
+<p>Both count keys depend on <code>a</code>, so the answer sets contain either <code>n(0)</code> or
+<code>a,n(2)</code>. The source carrier is {0,1,2}; priority 1 remains as a zero slot.
+The respective cost vectors at priorities [2,1,0] are [0,0,1] and [1,0,0].
+A source carrier describes possible key selections, not realizable answers.
+Several admitted observers use the existing complete binding join; their
+original equalities retain correlations in each answer.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_priority_certificates.rs">invariant-priority tests</a>
+include empty endpoints, complete tuple identities and correlated weight/priority
+inputs. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/tests/integration/finite_carrier_sessions.rs">source-carrier tests</a>
+check changing counts, sums, extrema and forwarding through complete scored
+answers. Carrier construction has explicit value, work and retained-entry
+limits; numeric subset construction may require exponential work and space.
+Filtered and multiple observers, mixed extrema, negative dependencies and
+conditional producers use their complete finite source relations when the
+flat refinement does not apply. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_rich_producers.rs">producer contracts</a>
+check full scored families and unchanged original formulas. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_priorities.rs">priority contracts</a>
+check complete scored answers, same-binding numeric presence, empty and zero
+cases, evaluation failures and inclusive specialization limits.</p>
+<p>Finite source eligibility does not promise clingo’s exact retained priority
+layout. An extra slot may be zero across all answers even when clingo omits it.
+These <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_priority_reporting.rs">versioned reporting cases</a>
+preserve explicit raw differences while comparing full answer identities,
+costs at named priorities, pairwise ordering and every optimum tie. They are
+distinct from the aggregate-head answer-family differences documented above.</p>
+<p><code>#defined</code> and <code>#show</code> retain signed signature metadata. Ground and admitted
+conditional term observations operate over full models; they do not change
+answer-set identity. Shown terms can use checked arithmetic, constructors,
+tuples, finite intervals and pools. Conditions admit signed atoms, Boolean
+operands, scalar comparisons and directed equalities, aggregates and universal
+conditionals. Positive patterns bind structural components from actual model
+atoms. Arithmetic reads established inputs or uses the inverse profile for one
+unresolved occurrence described below. Nested structural
+pool alternatives preserve their own captures, and only captures common to
+every alternative can supply another body element without an independent binder.</p>
+<p>Positive equality edges can bind from an already finite operand within a whole
+comparison chain. A middle pool or interval chooses one value shared by both
+adjacent comparisons; the original guards remain. Positive constructor and tuple
+equalities can capture ordered components from a finite evaluated operand in
+either direction, preserving sign, constructor identity and repeated-variable
+agreement. Arithmetic positions can read structural captures from the same
+pattern or supply one admitted inverse candidate. Strict comparisons and
+default-negated chains remain consumers.</p>
+<p>Local scopes retain their own variables. Aggregate keys remain complete tuples;
+positive cardinality elements use the complete matched atom. Aggregate result
+assignments can supply other guards and later consumers, but element inputs
+must be independently established. Constructor-valued <code>#min</code> and <code>#max</code> equality
+guards use the actual supplied-model measure for the same structural capture and
+retain every original guard. Empty extrema remain <code>#sup</code> and <code>#inf</code>. Numeric
+aggregate comparisons retain their widened arithmetic; structural capture does
+not narrow a <code>#count</code> or <code>#sum</code> measure to an ordinary scalar value. A failed query
+returns a typed error rather than partial shown output. Post-solve observations
+retain strict arithmetic errors, including division or remainder by zero; source
+admission’s policy of omission with warnings does not apply to them. These
+operations neither add values to the grounding domain nor create atom support.</p>
+<p>Anonymous atom matching projects over the supplied model before applying
+default negation. zetesis applies this rule uniformly to both strong signs.
+For example, <code>#show seen:not -p(_).</code> shows <code>seen</code> precisely when no strongly
+negative <code>p/1</code> atom occurs in that model. This is an explicit observation
+extension: clingo 5.8.2 rejects that form as unsafe. Separate
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl">diagnostic fixtures</a>
+record the difference; it is not a parity pass or an answer-set semantics change.</p>
+<p>Finite observation binding includes the following forms:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Observation context</th><th>Exact source witness</th></tr>
+</thead>
+<tbody>
+<tr><td>Arithmetic inversion in an atom</td><td><code>p(2). #show. #show X:p(X+1).</code></td></tr>
+<tr><td>Arithmetic inversion in an equality</td><td><code>#show. #show X:X+1=2.</code></td></tr>
+<tr><td>Pools on the capturing side of an equality</td><td><code>#show. #show 1:f((X;2))=f(1).</code> and <code>#show. #show X:(f(X);g(X))=f(1).</code></td></tr>
+<tr><td>Repeated unary sign around a capturing constructor</td><td><code>#show. #show X: -(-f(X))=f(1).</code></td></tr>
+<tr><td>Anonymous keys under negated cardinality elements</td><td><code>#show. #show N:N={not p(_)}.</code> and <code>p(1). #show. #show N:N={not not p(_)}.</code></td></tr>
+<tr><td>Structural equality against a numeric aggregate</td><td><code>#show. #show X:f(X)=#count{}.</code> and <code>#show. #show X:f(X)=#sum{2147483647,a;1,b}.</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>One unresolved occurrence can be recovered through unary minus, addition,
+subtraction or multiplication by already bound operands. The evaluator checks
+the complete authored expression after deriving the candidate. An out-of-range
+or nonintegral inverse supplies no scalar match; reached undefined authored
+arithmetic still returns an error. A zero multiplier is refused as an unsafe
+binder because it cannot provide a unique inverse.
+Division, powers, bit operations, multiple unresolved occurrences and
+simultaneous equations are not inverse binders in this profile.</p>
+<p>Capturing pool alternatives retain independent bindings. Fully bound alternatives
+can supply finite values after earlier binders run. Anonymous cardinality keys
+preserve the complete signed atom pattern and default-negation kind. A pattern
+contributes once when its existential condition holds, regardless of how many
+atoms witness it; equal concrete branches coalesce before counting. The numeric
+aggregate examples above have an impossible constructor match and show no value. They neither coerce
+numbers into constructors nor narrow widened aggregate arithmetic.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_bindings.rs">binding contracts</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_inverse.rs">inverse contracts</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_expressions.rs">expression contracts</a>
+retain original source witnesses. Cyclic or unseeded local bindings and missing
+measures in authored extremum elements retain their separate explicit boundaries;
+an empty extremum itself remains valid. Source-template limits bound admitted
+alternatives; canonical metadata vocabulary and component capacities have a
+separate <code>MetadataStorageLimits</code> allowance. Each observation operation has
+independent work, substitution, symbol construction, logical local payload and
+output limits. <code>max_term_storage_bytes</code> bounds its derived arena and retained
+typed wildcard-key graph, excluding borrowed inputs. Transient ID frames use
+that ceiling independently; their combined capacities and process RSS are not
+that measure. The <a href="../rust/costs-and-output.html">output API guide</a> states these
+ownership and accounting boundaries.</p>
+<h3 id="projected-enumeration"><a class="header" href="#projected-enumeration">Projected enumeration</a></h3>
+<p><code>#project p/1.</code> selects all original possible atoms with that signed predicate.
+<code>#project p(X):body.</code> selects the finite instances retained by source activity.
+All declarations contribute to one fixed domain. They do not produce logical
+heads, change the original theory or choose which atoms <code>#show</code> displays.</p>
+<p>The CLI returns one full answer-set representative for each distinct restriction
+to that domain. An explicit empty domain has one class for a nonempty selected
+family. Objective selection happens before representatives are chosen. A model
+count limits representatives; full-model verification and optimization counts
+remain separate. Programs without <code>#project</code> retain full answer identity.</p>
+<p>Source activity is an independent-literal abstraction computed during grounding,
+not a query evaluated on each answer. For example, <code>{p;q}. #project p:q,not q.</code>
+still selects <code>p</code>: both literals remain optional source possibilities. In
+<code>q. {p}. #project p:not q.</code>, the required fact makes the declaration inactive.
+Complete producer refinement also recognizes facts in dependency cycles and
+constant aggregate conditions. It does not solve correlations between optional
+literals. Declaration atoms absent from original possible support are omitted.</p>
+<p>The library requests this behavior explicitly through
+<a href="../rust/sessions.html#projected-enumeration"><code>SessionBuilder::projected</code></a>.
+<code>WorldView</code> always collects the complete original answer family. The current
+projection source profile prepares a complete finite projection domain for both
+eager and hybrid formula owners; work and retained-domain
+limits can refuse preparation, and separate history limits can stop enumeration
+without claiming complete projected coverage.</p>
+<p>Ordered input bundles support includes and global constants with bounded
+source traversal and retained resolution evidence. Parameter-free <code>#program base</code>
+sections are admitted. Named or parameterized program parts, <code>#external</code>,
+assumptions and incremental solving do not yet have a public executable contract.
+Mixed stdin/file input and broader include alias or redirection behavior remain
+separate input-boundary limitations.
+Rust ground-time <code>@</code> functions are intended as a first-class extension, but the
+current source bridge refuses external calls. Neither libclingo ABI compatibility
+nor general ASPIF import/export is implemented.</p>
+<p>Theory atoms/terms, embedded Python/Lua scripting, <code>#heuristic</code> and <code>#edge</code> are
+deliberate exclusions from the current target. Their refusal is not an outstanding
+ordinary-language implementation obligation. Future theory integration would
+need its own semantics and interface; current solving does not ignore such atoms.</p>
+<h2 id="numeric-boundaries-and-refusal-meaning"><a class="header" href="#numeric-boundaries-and-refusal-meaning">Numeric boundaries and refusal meaning</a></h2>
+<p>An interval contributes integers only when its evaluated endpoints are numeric
+and ascending. Defined nonnumeric or descending endpoints give an empty range
+in both facts and generated bindings: <code>p(a..b).</code> contributes no fact. Endpoint
+errors remain errors, so <code>p(a..(1/0)).</code> refuses admission. An empty range also
+does not hide an unbound variable or invalid sibling argument.</p>
+<p>A rule is grounded over candidate substitutions for its relationally bound
+variables, and a comparison between terms over those variables that is
+defined and false excludes a substitution: nothing in an excluded
+substitution is reached, neither the arithmetic beside the comparison nor the
+head, a gate, a guard or an aggregate element under it. <code>d(0..2). p(X) :- d(X), X != 0, 1/X = 1.</code> therefore answers, with <code>p(1)</code>: the
+substitution <code>X = 0</code> is excluded by <code>X != 0</code>, so <code>1/0</code> is never evaluated.
+The verdict is taken over the complete substitution, whatever order the
+comparisons are met in, so a failure met before the relation that decides an
+exclusion is still no refusal.</p>
+<p>The remaining substitutions are checked as a complete source family. Only an
+evaluated numeric division or remainder with a zero divisor may omit an instance:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Complete family</th><th>Result</th></tr>
+</thead>
+<tbody>
+<tr><td>Empty positive join</td><td>Admit silently; there is no instance to evaluate</td></tr>
+<tr><td>Defined instances only</td><td>Admit silently</td></tr>
+<tr><td>Both defined and zero-divisor instances</td><td>Admit the defined instances and issue a source-located warning</td></tr>
+<tr><td>Zero-divisor instances with no defined instance</td><td>Refuse with a source-located arithmetic error</td></tr>
+<tr><td>Any fatal arithmetic failure</td><td>Refuse, even if other instances are defined</td></tr>
+</tbody>
+</table>
+</div>
+<p>Defined does not mean true. For example,
+<code>d(0;2). p(X,Y) :- d(X), 1/X=1, Y=X+1.</code> is admitted with a warning and only the
+two <code>d</code> facts. The <code>X=2</code> substitution is defined but fails the comparison; it
+still establishes that the family is not entirely undefined. With <code>d(0..3)</code>
+instead, the answer also contains <code>p(1,2)</code>. With only <code>d(0)</code>, admission fails.
+Adding <code>X != 0</code> explicitly excludes the bad instance and removes the warning.
+The warning reports omitted source instances and suggests guarding the divisor.
+Successful formula owners retain typed warnings, deduplicated by source span and
+bounded by <code>FormulaLimits::max_warnings</code>. The CLI renders them once on its
+diagnostic stream before solving; JSON answer output remains separate.</p>
+<p>Local choice and aggregate elements have separate families for each fixed outer
+binding. In <code>d(0;1). e(0,0). e(1,1). {p(K,X):e(K,X),1/X=1} :- d(K).</code>, the entirely undefined <code>K=0</code> family is refused;
+the defined <code>K=1</code> family does not rescue it. If no <code>e(0,X)</code> fact is present, that
+local family is empty and has no arithmetic error. An absent fact is not an
+undefined arithmetic value.</p>
+<p>Overflow, arithmetic on nonnumeric values and invalid exponents remain hard
+errors. They cannot be hidden by a defined instance elsewhere. Within a reached
+evaluation phase, a zero divisor does not stop checks of independent branches: an
+overflow in another branch still refuses admission. An operation depending on
+an undefined operand is not evaluated. The same rule applies to independent
+fields of one source instance; a definedness witness requires them to be jointly
+defined, not successful values drawn from different instances. Every arithmetic
+intermediate must fit the signed 32-bit carrier; values do not wrap. This differs
+deliberately from clingo 5.8.2’s wrapping integer arithmetic. The zero-divisor
+policy also differs from dropping every undefined instance unconditionally:
+an entirely undefined family is treated as a modeling error.</p>
+<p>A binder, interval check, tuple comparison, aggregate guard or comparison over
+a generated value does not provide the relational exclusion described above.
+Negative gates remain formulas, so <code>d(0). p(1/X) :- d(X), not d(X).</code> is refused.
+Closed-term arithmetic is validated as written during source preparation,
+before any substitution exists: <code>p :- 1 = 2, 1/0 = 1.</code> is refused. The family
+policy does not weaken this closed-term check or post-solve observation errors.
+An incomplete positive join with no complete extension creates no obligation.</p>
+<p>Evaluation retains its body-before-head and condition-before-consequent stages.
+A body or condition omitted for zero arithmetic does not start the later head,
+consequent or objective-field phase; defined false body selection likewise does
+not evaluate a head or consequent. Independent-error checking does not cross
+that boundary. Row-dependent head atom arguments are a later stage: <code>d(0;1). p((X+1)**31):-d(X),X=0.</code> evaluates the head only for <code>X=0</code>. The same
+distinction applies to local choice elements. Negative gates and aggregate
+truth remain formulas and do not prune that stage. Aggregate-head tuple
+contribution checks retain their own scopes.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/arithmetic_validation.rs">arithmetic validation contracts</a>
+check defined complete families, incomplete joins, required failures and explicit
+clingo differences.</p>
+<p>There is also a conservative <strong>zetesis extrema guard</strong>: numeric values
+<code>-2147483648</code> and <code>2147483647</code> are refused when reached as <code>#min</code>/<code>#max</code> bounds or
+the first component of a possible aggregate tuple, including assignment values.
+It does not ban these integers as ordinary data, later tuple-key components or
+integers nested inside a structured value. The guard applies independently of
+the comparison operator or recursion.</p>
+<p>The typed refusal is <code>AdmissionFailure::ExtremumEndpoint</code>, with the evaluated
+value and its source location. Its diagnostic code is <code>zetesis::extremum-endpoint</code>;
+the message names the numeric endpoint and the zetesis guard.</p>
+<p>This is an internal source-admission guard, not a themelios parser rejection.
+Separately, the pinned themelios program raiser cannot represent the unsigned
+magnitude in the literal <code>-2147483648</code>; <code>(-2147483647-1)</code> can reach that value by
+evaluation and then encounter zetesis’s guard. The former is a raising
+limitation and the latter a zetesis refusal. Neither is a syntax error.</p>
+<p>The guard protects unresolved correspondence between source extrema semantics
+and the native formula interpretation. It is not proof that every guarded input
+is undefined or a modeling error. The lower-level finite formula library can
+represent endpoint formulas. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs">admission predicate</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/extrema_source.rs">source regressions</a>
+locate the current boundary.</p>
+<p><code>#inf</code> and <code>#sup</code> are distinct extremal terms. Empty minimum and maximum results
+use <code>#sup</code> and <code>#inf</code>, respectively. Substituting one of those terms, a neighboring
+integer or a finite endpoint for another is not a generally semantics-preserving
+repair.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Failure origin</th><th>What to conclude</th></tr>
+</thead>
+<tbody>
+<tr><td>themelios parsing</td><td>Input was rejected by the pinned grammar</td></tr>
+<tr><td>themelios raising/evaluation</td><td>That representation or operation could not handle the construct</td></tr>
+<tr><td>zetesis admission/lowering</td><td>Current native implementation or resource contract refused it</td></tr>
+<tr><td>Explicit exclusion</td><td>The feature lies outside the declared target</td></tr>
+</tbody>
+</table>
+</div>
+<p>None of these failures establishes UNSAT. A correct refusal regression can pass
+without establishing answer-set parity for its source. Keep genuine source
+errors, representation limits, unresolved semantics and missing implementation
+mechanisms distinct when interpreting a diagnostic.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/coverage-0.1.5.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/language-coverage.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/coverage-0.1.5.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/language-coverage.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

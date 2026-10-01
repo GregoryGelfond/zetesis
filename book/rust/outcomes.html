@@ -1,0 +1,800 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Completion, resources, and output - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-a4b7822a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/rust/outcomes.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="completion-resources-and-output"><a class="header" href="#completion-resources-and-output">Completion, resources, and output</a></h1>
+<p>Keep three questions separate: what has been proved about the program, how much
+search has completed, and what an external consumer received.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Evidence</th><th>What it establishes</th><th>What it does not establish</th></tr>
+</thead>
+<tbody>
+<tr><td>Verified model</td><td>Completed membership for the original subject</td><td>Exhaustive enumeration or optimality</td></tr>
+<tr><td>Evaluated score</td><td>Cost of that verified model</td><td>A globally best cost</td></tr>
+<tr><td>Exhausted search</td><td>Relevant candidate coverage completed</td><td>Successful external publication</td></tr>
+<tr><td>Proved optimum</td><td>Complete relevant search establishes the incumbent</td><td>Every optimal tie was delivered</td></tr>
+<tr><td><code>WorldView</code></td><td>All full answers of the original subject were captured after unrestricted exhaustion</td><td>Successful external publication</td></tr>
+<tr><td>Published record</td><td>The sink accepted one whole record</td><td>Flush, durability or complete search</td></tr>
+</tbody>
+</table>
+</div>
+<p>The CLI owns its standard-output buffer and explicitly flushes it before
+returning an exit code, including for <code>devices</code>. A failed flush returns exit 2;
+any original failure and later output failures remain separate diagnostics.
+Redirected output has a fixed 8 KiB staging buffer, while terminal output
+bypasses staging to preserve prompt answers. <code>HumanRenderer</code> also flushes its
+sink after the terminal summary so appended statistics cannot overtake buffered
+answers. A failed human summary flush preserves semantic evidence but leaves
+that summary unacknowledged. JSON and custom-renderer callers retain ownership
+of flushing their supplied writers. Flushing does not establish durability.</p>
+<p><code>SemanticOutcome::unsatisfiable()</code> requires exhausted coverage and zero verified
+models. A zero display count, an empty consumer vector, or <code>completion() == None</code>
+cannot establish inconsistency. A requested model limit and an interrupted
+search are distinct completion states. If membership execution ends without
+an exhausted candidate stream, <code>SolveError::CandidateStreamNotExhausted</code> retains
+the checked prefix and leaves coverage unestablished. This check is also active
+in release builds.</p>
+<p><code>SemanticOutcome::search_state()</code> carries the status and its reason together.
+<code>SearchState::PendingInterruption(reason)</code> records a known batch stop while
+previously checked answers remain to be consumed. After that prefix is drained,
+<code>Interrupted(reason)</code> is final. The compatibility <code>completion()</code> and
+<code>interruption()</code> accessors derive from this state; a pending interruption has
+no final completion classification. An absent state makes no claim about why
+the caller has not obtained a stopping classification.</p>
+<p><code>Interruption::Preparation</code> identifies cancellation or an expired deadline
+observed before candidate checking starts. It does not attribute work to a
+closure oracle, countermodel search or device that was never entered. JSON
+uses the interruption kind <code>preparation</code>, with <code>cancelled</code> or <code>deadline</code> as
+its control code.</p>
+<p>JSON interruption <code>kind</code> and <code>code</code> classify the outcome for machine consumers.
+<code>detail</code> is its human-readable explanation and may change as diagnostics improve;
+consumers should not parse Rust debug spellings or infer completion from that text.
+The public lazy source API reports exhausted rounds as <code>Stop::RoundLimit</code>,
+separately from charged-work exhaustion. A stopped round sequence has not
+established its final least consequence set.</p>
+<p>Formula enumeration bounds retained projection history separately from authored
+encoding. <code>max_projection_entries</code> counts distinct excluded keys;
+<code>max_projection_nodes</code> counts logical trie nodes; <code>max_projection_bytes</code> admits
+named capacity and its conservative growth overlap. The same fields are available
+as advanced CLI options. <code>statistics.search.projection_history</code> reports entries,
+nodes, retained/peak bytes and its subtotal of cumulative search work. A history
+refusal retains any already checked answer prefix and reports incomplete coverage;
+it does not turn a completed answer into a rejected candidate. Under
+<code>--search regions</code> the history stays empty and
+<code>statistics.search.candidate_regions</code> reports the regions visited, refuted and reached as
+leaves, the propagations, atoms held and cut, whether the support cut
+applied, and the reading work, a subtotal of cumulative search work, and
+<code>statistics.search.reduct_query_regions</code> the regions of the reduct queries; under
+<code>--search clauses</code> the former is <code>null</code> and the latter zero.</p>
+<p>Under <code>--workers</code> above one the answer sets of the formula route
+arrive in the schedule’s order: the family is exact and each answer appears
+once, but no order is promised, nor the same order between runs. Consumers
+compare answer sets as sets, as the oracle comparison does.</p>
+<p><code>SemanticOutcome::selection()</code> identifies the family requested by the session.
+<code>All</code> ranges over the original program; <code>Optimal</code> permits sound exclusion of
+worse candidates. <code>Completion::Exhausted</code> therefore does not by itself identify
+the unrestricted family, and an optimum proof does not prove that a consumer
+retained every tie. <code>WorldView</code> owns both unrestricted enumeration and complete
+capture; callers cannot attach an arbitrary vector to this evidence.</p>
+<p>Objective presence is also semantic data. An absent objective is not an active
+objective whose cost happens to be zero. Preserve the priority structure and
+optional score in typed results and comparisons; flattening both cases to an
+empty or zero vector can conceal a disagreement.</p>
+<p>Unrestricted enumeration evaluates scores without retaining incumbents. Its
+<code>scored_models()</code> can be positive while <code>incumbent()</code> is absent and
+<code>retained_models()</code> is zero. Those fields describe objective-search retention,
+not the number of answers in a <code>WorldView</code> or a consumer’s own collection.</p>
+<h2 id="check-selection-and-complete-capture"><a class="header" href="#check-selection-and-complete-capture">Check selection and complete capture</a></h2>
+<p>The next example uses <code>1{a;b}1.</code> with costs <code>1</code> for <code>{a}</code> and <code>2</code> for <code>{b}</code> at
+priority <code>2</code>. Its <code>#show.</code> declaration hides both atoms from display. Every
+library answer still contains its complete interpretation: two visually empty
+answers are not one answer set.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Requested family</th><th>Completed result in this example</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Session::new</code></td><td>Objective-selected answers</td><td><code>{a}</code> at cost <code>1</code>; optimum proved</td></tr>
+<tr><td><code>Session::enumerate</code></td><td>All original answers</td><td><code>{a}</code> at cost <code>1</code> and <code>{b}</code> at cost <code>2</code></td></tr>
+<tr><td><code>WorldView::collect</code></td><td>All original answers, completely retained</td><td>The same two scored answers</td></tr>
+<tr><td>Collection limited to one answer</td><td>All original answers</td><td>Typed failure retaining one checked answer</td></tr>
+</tbody>
+</table>
+</div>
+<p>Each operation starts a fresh session over the same admitted owner. The example
+checks exact full interpretations and priority/cost pairs without depending on
+enumeration order. It pins CPU execution and one-at-a-time batches to make the
+small failure-accounting example easy to inspect.</p>
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_solve;
+</span><span class="boring">extern crate zetesis_core;
+</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_themelios;
+</span>use std::collections::BTreeSet;
+use std::num::NonZeroUsize;
+use zetesis_core::{Atom, Model, Predicate};
+use zetesis_cpu::Cancellation;
+use zetesis_solve::{
+    AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
+    WorldViewError, WorldViewFailureParts, WorldViewLimits,
+};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+
+fn check_optimum(
+    input: PreparedInput&lt;'_&gt;,
+    config: SolveConfig,
+    expected: Atom,
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let mut selected = Session::new(input, config, Cancellation::default())?;
+    let optimum = selected.by_ref().collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()?;
+    assert_eq!(optimum.len(), 1);
+    assert_eq!(optimum[0].interpretation(), &amp;Model::new([expected])?);
+    assert_eq!(
+        optimum[0].score().expect("active objective").costs(),
+        &amp;[(2, 1)]
+    );
+    let outcome = selected.outcome().expect("finished selection");
+    assert_eq!(outcome.selection(), Some(AnswerSelection::Optimal));
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert!(outcome.optimum_proved());
+    Ok(())
+}
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let owner = admit_formula(
+        "1{a;b}1. #minimize{1@2,a:a;2@2,b:b}. #show.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?;
+    let input = PreparedInput::formula(&amp;owner);
+    let config = SolveConfig {
+        backend: Backend::Cpu,
+        models: 0,
+        batch_size: NonZeroUsize::MIN,
+        workers: NonZeroUsize::MIN,
+        completion_workers: NonZeroUsize::MIN,
+        ..SolveConfig::default()
+    };
+    let a = Atom::new(Predicate::new("a", 0)?, vec![])?;
+    let b = Atom::new(Predicate::new("b", 0)?, vec![])?;
+    assert!(!owner.metadata().output().includes(&amp;a));
+    assert!(!owner.metadata().output().includes(&amp;b));
+
+    check_optimum(input, config, a.clone())?;
+
+    let mut all = Session::enumerate(input, config, Cancellation::default())?;
+    let streamed = all.by_ref().collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()?;
+    let full_answers = streamed
+        .iter()
+        .map(|answer| {
+            (
+                answer.interpretation().clone(),
+                answer.score().expect("active objective").costs().to_vec(),
+            )
+        })
+        .collect::&lt;BTreeSet&lt;_&gt;&gt;();
+    assert_eq!(
+        full_answers,
+        BTreeSet::from([
+            (Model::new([a])?, vec![(2, 1)]),
+            (Model::new([b])?, vec![(2, 2)]),
+        ])
+    );
+    let outcome = all.outcome().expect("finished enumeration");
+    assert_eq!(outcome.selection(), Some(AnswerSelection::All));
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert!(!outcome.optimum_proved());
+
+    let family = WorldView::collect(
+        input,
+        config,
+        WorldViewLimits::default(),
+        Cancellation::default(),
+    )?;
+    assert_eq!(family.len(), 2);
+    assert_eq!(family.outcome().selection(), Some(AnswerSelection::All));
+    assert_eq!(family.outcome().completion(), Some(Completion::Exhausted));
+    let collected = family
+        .answer_sets()
+        .iter()
+        .map(|answer| {
+            (
+                answer.interpretation().clone(),
+                answer.score().expect("active objective").costs().to_vec(),
+            )
+        })
+        .collect::&lt;BTreeSet&lt;_&gt;&gt;();
+    assert_eq!(collected, full_answers);
+
+    let failure = WorldView::collect(
+        input,
+        config,
+        WorldViewLimits {
+            max_answer_sets: 1,
+            ..WorldViewLimits::default()
+        },
+        Cancellation::default(),
+    )
+    .expect_err("the original family has two answers");
+    let WorldViewFailureParts {
+        cause,
+        subject,
+        answer_sets,
+        outcome,
+    } = failure.into_parts();
+    assert!(matches!(cause, WorldViewError::AnswerSets));
+    assert_eq!(answer_sets.len(), 1);
+    let retained = &amp;answer_sets[0];
+    assert!(full_answers.contains(&amp;(
+        retained.interpretation().clone(),
+        retained.score().expect("active objective").costs().to_vec(),
+    )));
+    assert!(retained.subject().same_instance(&amp;subject));
+    let outcome = outcome.expect("search started before collection failed");
+    assert_eq!(outcome.selection(), Some(AnswerSelection::All));
+    assert_eq!(outcome.verified_models(), 2);
+    assert_eq!(outcome.completion(), None);
+    assert!(!outcome.unsatisfiable());
+    Ok(())
+}</code></pre>
+<p>Run it from the checkout root with:</p>
+<pre><code class="language-sh">cargo run --locked -p zetesis-solve --no-default-features --example book-selection
+</code></pre>
+<p>The failed collection has checked two models but retained only one. The second
+model was already verified when the collection refused its storage, and the
+iterator has not completed the final exhaustion step. Thus the failure carries
+<code>verified_models() == 2</code> and <code>completion() == None</code>; its checked prefix cannot be
+relabelled a complete one-answer world view. Larger batches can also retain
+queued membership results in verification accounting before those answers are
+scored or yielded. The retained answer’s subject remains the original owner.
+The example uses <code>WorldViewFailure::into_parts()</code> to move that prefix and its
+typed cause, subject and outcome together. This transfers ownership without
+cloning answers or strengthening the incomplete evidence. <code>into_answer_sets()</code>
+instead deliberately discards the cause and coverage context.</p>
+<p><code>Session::new</code> with an objective must finish its search phase before yielding
+retained incumbents. Streaming all answers can release each answer after use;
+complete collection retains the full family. With <code>K</code> answers and full payload
+sizes <code>s₁, …, sₖ</code>, collection requires space proportional to their sum in addition
+to the search engine and shared subject. <code>K</code> can be exponential in the atom
+carrier. Objective selection retains incumbent ties under its separate limits;
+the one optimum in this fixture does not bound the number of ties in general.</p>
+<p>See the implementation contracts in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/session.rs"><code>Session</code></a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/semantic_outcome.rs"><code>SemanticOutcome</code></a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view.rs"><code>WorldView::collect</code></a>.
+The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/world_views.rs">world-view regressions</a>
+cover additional search, scoring and storage failures. The
+<a href="source.html">source preparation example</a> separately checks empty and inconsistent
+programs; neither an empty display nor a retained prefix decides inconsistency.</p>
+<h2 id="replace-answer-presentation"><a class="header" href="#replace-answer-presentation">Replace answer presentation</a></h2>
+<p><code>AnswerRenderer</code> receives <code>AnswerView</code> callbacks one answer at a time, then a
+borrowed <code>PublicationView</code>. Its optional <code>configuration(ConfigurationView)</code>
+callback reports the selected backend, configured worker capacity and effective
+grounding mode. The mode distinguishes eager, lazy, hybrid and an eager base
+with host answer reconstruction. Selection does not establish completed work or
+worker utilization. A later backend change can produce another callback. The
+default emits nothing; a custom view decides whether to present these facts.
+The controller evaluates <code>#show</code> in the themelios observation layer once per
+yielded answer. Both <code>HumanRenderer</code> and
+<code>JsonRenderer</code> consume that same typed <code>ModelView</code>: the complete interpretation,
+selected original atoms, evaluated terms and optional priority/cost pairs remain
+separate. An empty displayed projection never changes answer identity.</p>
+<p><code>publish_prepared</code> accepts an admitted owner and <code>PublicationConfig</code>, containing
+ordinary <code>SolveConfig</code> and observation limits. It needs no argument parser,
+global stream or complete <code>WorldView</code> buffer. <code>run_with_renderer</code> and
+<code>run_bundle_with_renderer</code> are source conveniences using the existing CLI options;
+their <code>json</code> flag does not replace the injected renderer. The prepared entry
+suppresses routine execution messages; warning diagnostics and typed failures
+remain available.</p>
+<p><code>needs_stage_timings()</code> defaults to <code>false</code>. A custom renderer that needs coarse
+host stages overrides it; a wrapper delegates the preference of the view it
+wraps. The controller fixes this choice after <code>begin</code> succeeds. <code>HumanRenderer</code>
+requests coarse stages for its default timing line without enabling detailed
+phase clocks. <code>JsonRenderer</code> requests none; its optional statistics object may
+be <code>null</code>, and any represented timing fields remain <code>null</code>, unless detailed
+measurements are enabled through <code>SolveConfig::stats</code> or source options.
+Renderer selection, including this preference, is independent of <code>Options::json</code>.
+Available snapshots reach <code>PublicationView::phase_timings()</code>.
+Configuration callbacks are measured as observation/output work, not solving.</p>
+<p>The controller acknowledges a complete answer only after its renderer returns
+success. A renderer can write into a supplied sink or accept typed data directly.
+Failure after a partial write acknowledges no answer. Cooperative cancellation
+remains a publication stop, independently of any established exhaustion or
+optimum; a later writer failure remains a failure. Neither an accepted callback
+nor <code>SummaryDelivery::Accepted</code> implies durability. The human renderer flushes
+its terminal summary before returning <code>Accepted</code>; a flush error remains a typed
+output failure. Other renderers leave flushing to their callers unless their
+own contract states otherwise. The process still performs its final explicit
+flush, and a successful later flush cannot clear an earlier publication failure.</p>
+<p>The human renderer preflights one complete record under its byte ceiling. The
+JSON renderer additionally retains a bounded document atom table; each invocation
+starts fresh indices. Structural equality decides each atom’s index, so equal
+atoms of independent owners share one; once a canonical atom has been found, the
+table answers its later occurrences from the same owner by owner-scoped identity
+instead of hashing the atom’s structure. A refused record withdraws the atoms it
+entered together with their identities. Custom renderers own their encoding
+limits and any copies they retain. The controller retains no complete family
+for presentation, although objective selection still uses the solver’s
+separately bounded incumbent store.</p>
+<p><code>SummaryStage::SearchFinished</code> preserves the human result and compact timing
+summary before statistics are written. The command appends optional human tables
+on stderr. That view cannot claim later reporting succeeded, and the callback is
+not reached after a source or execution failure. The default <code>Finalized</code> stage,
+used by JSON and custom renderers, includes attempted timings and later reporting
+failures. The controller invokes the chosen terminal callback at most once; a
+failed footer never replaces an earlier original cause.</p>
+<p>This consumer inspects full and shown channels while retaining only two scalar
+fields. It deliberately accepts typed records without producing text:</p>
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_cli;
+</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_themelios;
+</span>use std::{io, num::NonZeroUsize};
+use zetesis_cli::{
+    AnswerRenderer, AnswerView, Backend, Completion, PreparedInput, PublicationConfig,
+    PublicationView, RunError, SummaryDelivery, publish_prepared,
+};
+use zetesis_cpu::Cancellation;
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+
+#[derive(Default)]
+struct CountViews {
+    records: usize,
+    completion: Option&lt;Completion&gt;,
+}
+
+impl AnswerRenderer for CountViews {
+    fn answer(&amp;mut self, answer: AnswerView&lt;'_&gt;, _: &amp;Cancellation) -&gt; Result&lt;(), RunError&gt; {
+        // Full identity includes hidden; #show selects a separate atom channel
+        // and evaluates item(X) into a separate typed term channel.
+        let view = answer.model();
+        assert_eq!(view.model().atoms().len(), 2);
+        assert!(
+            view.model()
+                .atoms()
+                .iter()
+                .any(|atom| atom.predicate().name() == "hidden")
+        );
+        assert_eq!(view.shown_atoms().count(), 1);
+        assert_eq!(view.shown_terms().len(), 1);
+        assert!(view.score().is_none());
+        self.records = answer.number();
+        Ok(())
+    }
+
+    fn finish(&amp;mut self, result: PublicationView&lt;'_&gt;) -&gt; Result&lt;SummaryDelivery, RunError&gt; {
+        self.completion = result
+            .semantic()
+            .and_then(zetesis_cli::SemanticOutcome::completion);
+        // This consumer accepts typed evidence; it need not write a text record.
+        Ok(SummaryDelivery::Accepted)
+    }
+}
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let input = admit_formula(
+        "1{p(1);p(2)}1. hidden. #show p/1. #show item(X):p(X).".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?;
+    let config = PublicationConfig {
+        solve: zetesis_cli::SolveConfig {
+            backend: Backend::Cpu,
+            workers: NonZeroUsize::MIN,
+            models: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut renderer = CountViews::default();
+    let outcome = publish_prepared(
+        PreparedInput::formula(&amp;input),
+        &amp;config,
+        &amp;mut renderer,
+        &amp;mut io::sink(),
+        &amp;Cancellation::default(),
+    )?;
+    assert_eq!(renderer.records, 2);
+    assert_eq!(renderer.completion, Some(Completion::Exhausted));
+    assert_eq!(outcome.publication().models(), 2);
+    assert!(outcome.publication().summary());
+    Ok(())
+}</code></pre>
+<p>Run the checked example with:</p>
+<pre><code class="language-sh">cargo run --locked -p zetesis-cli --no-default-features --example book-answer-renderer
+</code></pre>
+<p>See the <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/view.rs">view contract</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/publication.rs">publication controller</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/observation/view.rs">bounded model views</a>.</p>
+<h2 id="resource-contracts"><a class="header" href="#resource-contracts">Resource contracts</a></h2>
+<p>Each operation names the resources it bounds: source bytes, syntax depth, atoms,
+substitutions, nodes, work, candidate occurrences, retained results or transport
+storage. Zero is a real ceiling where those limits apply; it does not mean
+unlimited. Work and storage limits are independent.</p>
+<p>Ordinary sessions and CLI flags share <code>SolveConfig::DEFAULT</code>: ten billion
+cumulative search-work units, ten million branch decisions, ten million
+candidates and one hundred million CPU oracle-work units under that field’s
+per-candidate or shared-batch contract. These are finite logical allowances,
+not wall-clock deadlines or performance claims. Standalone primitive limit
+types keep their own operation-specific defaults. Source admission, derived
+atoms, carrier storage, batch bytes, objective retention and complete <code>WorldView</code>
+capture remain independently bounded; requesting every answer does not make
+those resources unlimited. A smaller explicit work, decision or candidate
+allowance still yields an interrupted prefix when exhausted.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/streaming_defaults.rs">streaming regression</a>
+checks every full answer for independent selections on a 24-vertex path against
+an independently generated bitmask family, using both automatic specialization
+and the general countermodel oracle. The former already completes within the
+previous search-work allowance; the latter needs more work and still interrupts
+when explicitly given that earlier ceiling. The test releases each answer after
+checking its identity; it does not collect a <code>WorldView</code> or bypass that type’s
+retention limits. This demonstrates completed enumeration within the ordinary
+allowances, not a running-time guarantee or a change to answer-set semantics.</p>
+<h3 id="cancellation-and-deadlines"><a class="header" href="#cancellation-and-deadlines">Cancellation and deadlines</a></h3>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/cancellation.rs"><code>zetesis_cpu::Cancellation</code></a>
+carries shared cancellation and an optional absolute deadline. <code>Session</code> owns
+solving; callers pass this value to the session and can cancel it through a clone.
+<code>Cancellation::default()</code> sets no deadline. <code>with_deadline(Instant)</code> can fail if
+the timer thread cannot be started; an already expired deadline starts no thread.
+Clones observe the same flags, and <code>poll()</code> reports <code>Stop::Cancelled</code> before
+<code>Stop::Deadline</code> when both apply.</p>
+<p>Cancellation is observed at cooperative polling boundaries, not by forcibly
+terminating arbitrary work. A future deadline owns a timer that sets an expiry
+flag and retires then or when the last clone drops. Polling reads shared flags
+without reading the clock. An already-started bounded static compilation is not
+preemptible; session setup polls before it and subsequent work polls again. A
+deadline is therefore not a hard process-kill guarantee.</p>
+<p>For Rust consumers migrating from the previous API, <code>Cancellation</code> replaces
+<code>Control</code>, and operations named <code>with_control</code> or ending in <code>_with_control</code> now
+use <code>with_cancellation</code> or <code>_with_cancellation</code>. Update imports, named fields and
+calls; no compatibility alias is retained. The cancellation/deadline behavior is
+unchanged.
+Typed interruption variants named <code>Control</code> that wrap broader stop reasons,
+and existing serialized control codes, keep their own meaning.</p>
+<p>The installed CLI maps <code>--time-limit DURATION</code> to this <code>Cancellation</code>.
+The duration accepts nonnegative whole seconds, or a whole number with <code>s</code>, <code>m</code>
+or <code>h</code>, measured from completion of input loading. Zero requests an immediate
+stop; omission sets no deadline.
+<code>--stats</code> reports the requested process duration. A deadline during search leaves
+its coverage incomplete. A later deadline during publication preserves already
+established coverage. Either stop exits with code 3, in both human and JSON output.
+Input, device and output errors remain distinct failures. Source loading,
+frontend operations, blocking output and a running device kernel are not
+preempted. Rust library consumers construct and supply their own <code>Cancellation</code>;
+the process option does not replace an explicitly supplied library value.</p>
+<p>Admission limits also do not retroactively bound vectors constructed by the
+caller. A documented logical payload budget excludes what its contract names,
+such as allocator bookkeeping or worker threads. It must not be reported as
+process RSS. Read the operation’s own limit type rather than assuming one global
+memory bound covers the entire solver.</p>
+<h2 id="views-and-failures"><a class="header" href="#views-and-failures">Views and failures</a></h2>
+<p>Use <code>Session</code> when the consumer wants semantic values and owns its presentation.
+Use <code>zetesis_cli::run_finalized</code> when it wants the ordinary source driver and an
+injected output sink. Its finalized result is <code>Result&lt;PublicationOutcome, PublicationFailure&gt;</code>. <code>PublicationOutcome::Completed</code> carries a
+<code>PublicationReport</code>, separating semantic evidence from
+<code>Publication</code>. A writer failure can coexist with already established exhaustion;
+it cannot retract that proof, and it cannot claim a partially written record as
+fully published. <code>PublicationFailure</code> preserves the original cause and available
+semantic, publication and timing evidence. The solver library’s <code>SolveFailure</code>
+retains only execution cause, subject, semantics and timings. Its owned
+decomposition allows a consumer to preserve those values in its own failure
+representation without constructing new semantic evidence.</p>
+<p><code>PublicationOutcome::Stopped</code> carries the original control reason, its
+publication phase, the semantic snapshot, and complete record/summary counts.
+Observation stops also retain their located observation evidence. A cooperative
+stop does not itself invalidate the writer; the adapter attempts an incomplete
+footer, whose write can independently fail. JSON keeps semantic
+<code>completion</code> and <code>optimization.optimal</code> unchanged and adds <code>publication_stop</code>;
+its overall <code>status</code> is <code>incomplete</code>. For example, cancellation between proved
+optimal ties can leave <code>completion: "exhausted"</code>, <code>optimal: true</code>, and fewer
+published ties. It does not establish complete delivery.</p>
+<p>The process returns exit 3 for a cooperative publication stop and exit 2 for a
+writer failure. The finalized API retains a preceding publication stop separately.
+A subsequent process flush failure returns exit 2 and emits a flush diagnostic;
+that process boundary has already mapped the publication outcome to an exit code.
+A partial record is never counted. Encoding/resource refusals remain actual
+failures, distinct from a cancellation or deadline.</p>
+<p>The finalized API now returns the outcome enum. Match <code>Completed</code> or <code>Stopped</code>,
+or call <code>semantic()</code> and <code>publication()</code> for their common evidence. <code>report()</code>
+returns an optional legacy report. <code>PublicationOutcome::into_legacy()</code> is the
+explicit adapter used by <code>run</code> and <code>run_detailed</code>: it maps a cooperative stop to
+<code>RunError::PublicationStopped</code> while preserving semantic and partial-report
+metadata. Those convenience APIs retain their original return shapes.</p>
+<p>The driver retains one semantic snapshot and separate publication and timing
+state. Legacy reports, statistics and JSON are derived views; their fields are
+not copied back into the session’s evidence. A successful legacy <code>Report</code>
+requires an established completion classification. Requesting it before that
+point is a typed driver protocol failure. Partial views retain absent completion
+without substituting exhaustion or a logical interruption. Mutating a detached
+compatibility report cannot change the retained semantic outcome.</p>
+<p>The CLI’s <code>--json</code> output is a versioned view. The document spells each atom
+once, in the record that first holds it; a record refers to its full model and
+its shown atoms by index into the document’s atom table, and shown terms and
+costs stay per record. Human output and JSON do not
+define different solving modes. Applications should consume typed library
+values or the JSON contract rather than parse styled answer lines.</p>
+<p>The default human summary reports the selected configuration and coarse elapsed
+time. Eager grounding and solving have separate intervals; lazy source work
+occurs within membership and is reported together with solving. Human <code>--stats</code>
+adds nonitalic tables after this summary, reporting requested policy separately
+from observed execution and distinguishing unavailable measurements from zero.
+Host intervals around device calls include transport, waits and readback.
+Enabled session elapsed time can include the consumer’s delay between pulls;
+active solving spans do not include that delay. These scopes matter when using
+the same library in a server or comparing it with a command-line run.</p>
+<p>The compact human work table projects retained accounting without collecting
+extra counters. Its formula region reading work is a search-work subtotal;
+closure work covers completed checks and omits stopped-check partial work.
+GPU submissions do not imply a decoded result, and only decoded primitive work
+is shown. Eager rule/table rows cover rule instantiation. The typed statistics,
+JSON and compatibility record views retain the complete counter catalog.</p>
+<p>Closure sessions expose <code>SemanticOutcome::candidate_statistics()</code> separately
+from membership results. These counters report necessary source restrictions,
+their preparation and traversal work, and skipped impossible binary intervals.
+An interval can contain several seeds; it is not an examined-candidate count.
+Prepared and peak copied payload bytes exclude allocator and index overhead and
+are not process memory. The peak includes temporary restriction templates.
+Failed preparation retains its work but has no completed preparation footprint.
+The CLI exposes the same fields as <code>statistics.candidate_restrictions</code> in JSON.
+<code>--max-candidate-bytes</code> bounds copied payload; <code>--max-search-work</code> bounds cumulative
+restriction work on this route. Both advanced controls appear in <code>--help-all</code>.</p>
+<p>Under <code>--search clauses</code>, formula search records its necessary
+disjunctive support attempt separately from user or objective refinements.
+<code>statistics.search.necessary_support</code> identifies application, an inapplicable
+head grammar, or a configured construction/encoding shape limit; under
+<code>--search regions</code> it is <code>null</code>, and <code>statistics.search.regions</code> says
+whether the support cut applied. Its construction and encoding work are included in search work,
+including a rolled-back encoding. A shape refusal retains general search;
+cancellation, work exhaustion and allocation failure remain explicit stops.
+Every proposed interpretation still needs membership checking against the
+original theory and its frozen reduct.</p>
+<p><code>CompletionAccounting</code> reports requested workers and the greatest concurrency
+selected at preflight. This selection alone does not mean a candidate entered
+execution. <code>requested_scratch_bytes</code> records the greatest minimum envelope;
+<code>peak_scratch_bytes</code> records retained query-vector and map entry capacities plus
+the conservative transient/result allowance. Reservation can exceed the minimum request.
+If the resulting capacity exceeds <code>max_completion_scratch_bytes</code>, the attempt
+refuses before candidate work and can report a peak above the ceiling with zero
+entered slots. Both byte counters exclude allocator and hash-table control
+overhead, thread stacks, the original theory, the candidate cursor and GPU
+storage. Neither counter measures RSS. These fields are preserved in failed
+attempts and in the CLI’s JSON completion statistics.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../rust/costs-and-output.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../rust/libraries.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../rust/costs-and-output.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../rust/libraries.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
