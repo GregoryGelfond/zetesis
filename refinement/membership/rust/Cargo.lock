@@ -55,11 +55,11 @@ dependencies = [
 
 [[package]]
 name = "zetesis-core"
-version = "0.1.5"
+version = "0.1.6"
 
 [[package]]
 name = "zetesis-cpu"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "rayon",
  "zetesis-core",
@@ -67,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-ferraris"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "zetesis-core",
  "zetesis-cpu",
