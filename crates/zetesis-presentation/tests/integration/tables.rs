@@ -35,7 +35,7 @@ fn styled_tables_preserve_plain_content() {
         )
         .unwrap();
     let mut text = String::from_utf8(styled).unwrap();
-    for escape in ["\u{1b}[34m", "\u{1b}[3;90m", "\u{1b}[1;3;90m", "\u{1b}[0m"] {
+    for escape in ["\u{1b}[34m", "\u{1b}[90m", "\u{1b}[1;90m", "\u{1b}[0m"] {
         assert!(text.contains(escape));
         text = text.replace(escape, "");
     }

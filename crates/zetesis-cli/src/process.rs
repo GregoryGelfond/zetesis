@@ -50,7 +50,15 @@ pub fn entry() -> ExitCode {
     let width = terminal_width(columns.as_deref());
     let layout = zetesis_presentation::Layout::new(width, colors.output);
     let mut output = buffered_output(output, output_terminal);
-    let mut diagnostics = Diagnostics::new(diagnostics, colors.diagnostics).with_width(width);
+    let mut diagnostics = match &invocation {
+        Invocation::Solve(options) => {
+            Diagnostics::for_solve(diagnostics, colors.diagnostics, options)
+        }
+        Invocation::Devices | Invocation::Test(_) => {
+            Diagnostics::new(diagnostics, colors.diagnostics)
+        }
+    }
+    .with_width(width);
     let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     // Only conformance checks own child solvers that an interrupt must settle.
     #[cfg(any(target_os = "linux", target_os = "macos"))]

@@ -7,14 +7,14 @@ use zetesis_telemetry::{SolveStage, StageRecorder, StageSpan};
 // boundaries would require retaining a stack of stage guards.
 pub(crate) struct Observer<'a> {
     recorder: &'a StageRecorder,
-    grounding: &'a crate::grounding_timing::Recorder,
+    grounding: Option<&'a crate::grounding_timing::Recorder>,
     span: RefCell<Option<StageSpan<'a>>>,
     phase: RefCell<Option<crate::grounding_timing::Attempt>>,
 }
 impl<'a> Observer<'a> {
     pub(crate) const fn new(
         recorder: &'a StageRecorder,
-        grounding: &'a crate::grounding_timing::Recorder,
+        grounding: Option<&'a crate::grounding_timing::Recorder>,
     ) -> Self {
         Self {
             recorder,
@@ -32,7 +32,7 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
         self.span.borrow_mut().take();
     }
     fn details_enabled(&self) -> bool {
-        true
+        self.grounding.is_some()
     }
     fn terminal_definitions(&self) {
         self.recorder.mark_terminal_definitions();
@@ -42,6 +42,9 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
         phase: crate::GroundingPhase,
         _location: Option<zetesis_themelios::base::span::Location>,
     ) {
+        if self.grounding.is_none() {
+            return;
+        }
         assert!(
             self.phase
                 .replace(Some(crate::grounding_timing::Attempt::start(phase)))
@@ -56,7 +59,10 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
         outcome: crate::GroundingOutcome,
         work: crate::GroundingWork,
     ) {
+        let Some(grounding) = self.grounding else {
+            return;
+        };
         let attempt = self.phase.take().expect("phase exit follows its entry");
-        self.grounding.exit(attempt, phase, outcome, &work);
+        grounding.exit(attempt, phase, outcome, &work);
     }
 }

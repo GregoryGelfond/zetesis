@@ -1,12 +1,21 @@
 //! Actual solve outcomes remain unchanged by optional attempted host timing.
 
-use std::io;
-
-use crate::support::options::serial_with_statistics as options;
+use crate::support::options::serial_with_statistics;
 use zetesis_cli::{
-    Completion, Options, PhaseTimings, Report, RunError, SolvePhase, run_with_diagnostics,
+    Completion, Options, PhaseTimings, Report, RunError, SolvePhase, StatisticsView,
+    run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
+
+fn options(arguments: &[&str], statistics: bool) -> Options {
+    let mut options = serial_with_statistics(arguments, statistics);
+    options.statistics_view = StatisticsView::Records;
+    options
+}
+
+fn before_timing(output: &str) -> &str {
+    output.split_once("\nTime:").expect("human elapsed time").0
+}
 
 fn solve(source: &str, options: &Options) -> (Report, String, String) {
     let mut output = Vec::new();
@@ -67,7 +76,7 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
         let (mut plain, plain_output, plain_diagnostics) =
             solve(source, &options(&arguments, false));
         let (mut measured, output, diagnostics) = solve(source, &options(&arguments, true));
-        assert_eq!(output, plain_output);
+        assert_eq!(before_timing(&output), before_timing(&plain_output));
         assert_eq!(measured.completion, Completion::Exhausted);
         assert_eq!(measured.models, plain.models);
         assert_eq!(measured.checked, plain.checked);
@@ -81,7 +90,10 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
         );
         assert!(diagnostics.starts_with(&plain_diagnostics));
         assert!(!plain_diagnostics.contains("Phase timings:"));
-        assert!(plain.phase_timings.is_none());
+        let coarse = plain.phase_timings.as_ref().unwrap();
+        for phase in SolvePhase::ALL {
+            assert!(coarse.get(phase).is_none());
+        }
         let timing = measured.phase_timings.unwrap();
         for phase in [
             SolvePhase::AdmissionMaterialization,
@@ -158,7 +170,7 @@ fn admission_and_candidate_setup_failures_retain_attempts_not_false_work() {
     let (report, output, diagnostics) = solve("a|b.", &options(&["--max-search-work", "0"], true));
     assert_eq!(report.completion, Completion::Interrupted);
     assert!(!output.contains("SATISFIABLE"));
-    assert!(output.contains("Coverage: partial"));
+    assert!(output.contains("Models: 0 (search incomplete)"));
     entered(&report.phase_timings.unwrap(), SolvePhase::CandidateSetup);
     assert!(diagnostics.contains("phase candidate_generation: unmeasured"));
 }
@@ -179,29 +191,32 @@ fn retention_stop_and_failed_answer_write_never_claim_complete_output() {
     let error = run_with_diagnostics(
         "a|b.".into(),
         &options(&[], true),
-        &mut ClosedOutput,
+        &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
         &mut diagnostics,
         &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Output(_)));
     let text = String::from_utf8(diagnostics).unwrap();
-    assert!(text.contains("phase observation_output: calls=1;"));
+    let output_calls: u64 = text
+        .lines()
+        .find_map(|line| {
+            line.trim_start()
+                .strip_prefix("phase observation_output: calls=")
+        })
+        .unwrap()
+        .split_once(';')
+        .unwrap()
+        .0
+        .parse()
+        .unwrap();
+    // Configuration delivery and the failed answer are separate output attempts.
+    assert!(output_calls >= 2);
     assert!(text.contains("phase exact_reduct_membership: calls="));
     assert!(text.contains("failed_attempts=included"));
     // Failed Reports still do not recover their local semantic ledger. The
     // external recorder supplies attempted time only, never invented counts.
     assert!(text.contains("counters=unavailable"));
-}
-
-struct ClosedOutput;
-impl io::Write for ClosedOutput {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed output"))
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
 }
 
 #[test]
@@ -228,7 +243,10 @@ fn already_loaded_original_bundle_receives_driver_phases_on_both_oracles() {
         )
         .unwrap();
         let (direct, direct_output, _) = solve(&source, &options);
-        assert_eq!(String::from_utf8(output).unwrap(), direct_output);
+        assert_eq!(
+            before_timing(std::str::from_utf8(&output).unwrap()),
+            before_timing(&direct_output)
+        );
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 1);
         assert_eq!(report.checked, direct.checked);

@@ -27,7 +27,7 @@ fn exhaustive_models_are_streamed_once_with_coverage() {
         (report.models, report.checked, report.discovered_gate_atoms),
         (2, 2, 2)
     );
-    assert!(text.contains("Answer: 1\na\nAnswer: 2\nb\nSATISFIABLE\nCoverage: exhausted"));
+    assert!(text.contains("Answer: 1\na\nAnswer: 2\nb\nSATISFIABLE\nModels:"));
 }
 
 #[test]

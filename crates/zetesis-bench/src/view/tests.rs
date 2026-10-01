@@ -354,8 +354,8 @@ fn comparison_styles_only_the_human_view() {
     super::comparison(&comparison, false, layout(ColorMode::Always), &mut human).unwrap();
     let text = String::from_utf8(human).unwrap();
     assert!(text.contains("\u{1b}[34mCorpus benchmark — timed medians\u{1b}[0m"));
-    assert!(text.contains("\u{1b}[3;90m2.000\u{1b}[0m"));
-    assert!(text.contains("\u{1b}[1;3;90mfalse\u{1b}[0m"));
+    assert!(text.contains("\u{1b}[90m2.000\u{1b}[0m"));
+    assert!(text.contains("\u{1b}[1;90mfalse\u{1b}[0m"));
     let mut machine = Vec::new();
     super::comparison(&comparison, true, layout(ColorMode::Always), &mut machine).unwrap();
     assert!(!machine.contains(&0x1b));

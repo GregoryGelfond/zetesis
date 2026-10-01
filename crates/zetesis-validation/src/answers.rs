@@ -250,11 +250,14 @@ pub fn clingo_json(bytes: &[u8], limits: Limits) -> Result<ReportedAnswers, Erro
     clingo::parse(text(bytes, limits)?, limits)
 }
 
-/// Check the historical plain native report used by the correctness adapter.
+/// Check a complete plain native report used by the correctness adapter.
 ///
+/// Current summaries require an unqualified numeric `Models:` count and one
+/// terminal status. Historical summaries instead require the unique
+/// `Coverage: exhausted` record and may append statistics to their model count.
 /// `optimized` is the caller's objective contract. Exhausted weighted native
-/// enumeration retains the exact best vector and all ties. This is a legacy
-/// presentation protocol, not the native typed model-record interface.
+/// enumeration retains the exact best vector and all ties. This presentation
+/// protocol is distinct from the native typed model-record interface.
 ///
 /// # Errors
 /// Refuses invalid UTF-8, limits, missing/contradictory completion summaries,

@@ -16,8 +16,11 @@ The CLI owns its standard-output buffer and explicitly flushes it before
 returning an exit code, including for `devices`. A failed flush returns exit 2;
 any original failure and later output failures remain separate diagnostics.
 Redirected output has a fixed 8 KiB staging buffer, while terminal output
-bypasses staging to preserve prompt answers. Library callers retain ownership
-of flushing and durability for their supplied writers.
+bypasses staging to preserve prompt answers. `HumanRenderer` also flushes its
+sink after the terminal summary so appended statistics cannot overtake buffered
+answers. A failed human summary flush preserves semantic evidence but leaves
+that summary unacknowledged. JSON and custom-renderer callers retain ownership
+of flushing their supplied writers. Flushing does not establish durability.
 
 `SemanticOutcome::unsatisfiable()` requires exhausted coverage and zero verified
 models. A zero display count, an empty consumer vector, or `completion() == None`
@@ -150,8 +153,14 @@ programs; neither an empty display nor a retained prefix decides inconsistency.
 ## Replace answer presentation
 
 `AnswerRenderer` receives `AnswerView` callbacks one answer at a time, then a
-borrowed `PublicationView`. The controller evaluates `#show` in the themelios
-observation layer once per yielded answer. Both `HumanRenderer` and
+borrowed `PublicationView`. Its optional `configuration(ConfigurationView)`
+callback reports the selected backend, configured worker capacity and effective
+grounding mode. The mode distinguishes eager, lazy, hybrid and an eager base
+with host answer reconstruction. Selection does not establish completed work or
+worker utilization. A later backend change can produce another callback. The
+default emits nothing; a custom view decides whether to present these facts.
+The controller evaluates `#show` in the themelios observation layer once per
+yielded answer. Both `HumanRenderer` and
 `JsonRenderer` consume that same typed `ModelView`: the complete interpretation,
 selected original atoms, evaluated terms and optional priority/cost pairs remain
 separate. An empty displayed projection never changes answer identity.
@@ -161,15 +170,30 @@ ordinary `SolveConfig` and observation limits. It needs no argument parser,
 global stream or complete `WorldView` buffer. `run_with_renderer` and
 `run_bundle_with_renderer` are source conveniences using the existing CLI options;
 their `json` flag does not replace the injected renderer. The prepared entry
-retains requested phase timings in the terminal view; the consumer chooses how
-to present them. Its diagnostics writer receives plain execution diagnostics.
+suppresses routine execution messages; warning diagnostics and typed failures
+remain available.
+
+`needs_stage_timings()` defaults to `false`. A custom renderer that needs coarse
+host stages overrides it; a wrapper delegates the preference of the view it
+wraps. The controller fixes this choice after `begin` succeeds. `HumanRenderer`
+requests coarse stages for its default timing line without enabling detailed
+phase clocks. `JsonRenderer` requests none; its optional statistics object may
+be `null`, and any represented timing fields remain `null`, unless detailed
+measurements are enabled through `SolveConfig::stats` or source options.
+Renderer selection, including this preference, is independent of `Options::json`.
+Available snapshots reach `PublicationView::phase_timings()`.
+Configuration callbacks are measured as observation/output work, not solving.
 
 The controller acknowledges a complete answer only after its renderer returns
 success. A renderer can write into a supplied sink or accept typed data directly.
 Failure after a partial write acknowledges no answer. Cooperative cancellation
 remains a publication stop, independently of any established exhaustion or
 optimum; a later writer failure remains a failure. Neither an accepted callback
-nor `SummaryDelivery::Accepted` implies durability. Callers own flushing.
+nor `SummaryDelivery::Accepted` implies durability. The human renderer flushes
+its terminal summary before returning `Accepted`; a flush error remains a typed
+output failure. Other renderers leave flushing to their callers unless their
+own contract states otherwise. The process still performs its final explicit
+flush, and a successful later flush cannot clear an earlier publication failure.
 
 The human renderer preflights one complete record under its byte ceiling. The
 JSON renderer additionally retains a bounded document atom table; each invocation
@@ -182,8 +206,9 @@ limits and any copies they retain. The controller retains no complete family
 for presentation, although objective selection still uses the solver's
 separately bounded incumbent store.
 
-`SummaryStage::SearchFinished` preserves the human summary before statistics are
-written. That view cannot claim later reporting succeeded, and the callback is
+`SummaryStage::SearchFinished` preserves the human result and compact timing
+summary before statistics are written. The command appends optional human tables
+on stderr. That view cannot claim later reporting succeeded, and the callback is
 not reached after a source or execution failure. The default `Finalized` stage,
 used by JSON and custom renderers, includes attempted timings and later reporting
 failures. The controller invokes the chosen terminal callback at most once; a
@@ -334,9 +359,11 @@ costs stay per record. Human output and JSON do not
 define different solving modes. Applications should consume typed library
 values or the JSON contract rather than parse styled answer lines.
 
-`--stats` reports requested policy separately from observed execution and
-distinguishes unavailable measurements from zero. Eager grounding and solving
-can be measured as separate stages; lazy source work occurs within membership.
+The default human summary reports the selected configuration and coarse elapsed
+time. Eager grounding and solving have separate intervals; lazy source work
+occurs within membership and is reported together with solving. Human `--stats`
+adds nonitalic tables after this summary, reporting requested policy separately
+from observed execution and distinguishing unavailable measurements from zero.
 Host intervals around device calls include transport, waits and readback.
 Enabled session elapsed time can include the consumer's delay between pulls;
 active solving spans do not include that delay. These scopes matter when using

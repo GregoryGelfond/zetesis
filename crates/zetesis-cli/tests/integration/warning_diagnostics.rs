@@ -128,7 +128,7 @@ fn warning_writer_failure_stops_before_semantic_search() {
             assert!(matches!(failure.cause.as_ref(), RunError::Output(error)
                 if error.kind() == io::ErrorKind::BrokenPipe));
             assert!(failure.semantic().is_none());
-            assert!(output.is_empty());
+            assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
             assert_eq!(diagnostics.bytes(), &complete.as_bytes()[..capacity]);
         }
     }

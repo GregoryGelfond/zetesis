@@ -10,7 +10,7 @@ use std::{
     num::NonZeroUsize,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_test_support::io::BoundedWriter;
+use zetesis_test_support::io::{BoundedWriter, FAILED, FailAt};
 use zetesis_test_support::repository;
 
 fn options() -> Options {
@@ -154,8 +154,8 @@ fn requested_publication_limit_reports_partial_coverage() {
     assert_eq!(execution.queued_models, 2);
     assert_eq!(records(&output).len(), 1);
     let text = std::str::from_utf8(&output).unwrap();
-    assert!(text.contains("Coverage: partial"));
-    assert!(!text.contains("Coverage: exhausted"));
+    assert!(text.contains("Models: 1 (answer limit reached)\n"));
+    assert!(!text.contains("Models: 1\n"));
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn proposal_limit_publishes_an_incomplete_prefix() {
     assert_eq!(records(&output).len(), 2);
     let text = std::str::from_utf8(&output).unwrap();
     assert!(text.contains("INCOMPLETE"));
-    assert!(!text.contains("Coverage: exhausted"));
+    assert!(text.contains("Models: 2 (search incomplete)\n"));
 }
 
 struct CancelOnAnswer {
@@ -238,6 +238,8 @@ fn hidden_optimal_ties_keep_display_multiplicity() {
     let source = "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.";
     for enabled in [false, true] {
         let mut options = options();
+        options.stats = true;
+        options.statistics_view = crate::StatisticsView::Records;
         if !enabled {
             options.max_objective_bound_work = 0;
         }
@@ -297,7 +299,7 @@ fn bounded_search_never_publishes_optimum_status() {
         let text = std::str::from_utf8(&output).unwrap();
         assert!(text.contains("INCOMPLETE"));
         assert!(!text.contains("OPTIMUM FOUND"));
-        assert!(!text.contains("Coverage: exhausted"));
+        assert!(text.contains(" (search incomplete)\n"));
         if kind == 1 {
             assert_eq!(captured.publication().models(), 1);
             assert_eq!(captured.semantic().incumbent().unwrap().tied_models, 2);
@@ -306,12 +308,14 @@ fn bounded_search_never_publishes_optimum_status() {
 }
 
 #[test]
-fn every_publication_truncation_preserves_its_prefix() {
+fn publication_prefixes_preserve_accepted_bytes() {
     for source in [
         "{a;b}. #show x.",
         "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}.",
     ] {
-        let options = options();
+        let mut options = options();
+        options.stats = true;
+        options.statistics_view = crate::StatisticsView::Records;
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
         let captured = run(
@@ -323,7 +327,20 @@ fn every_publication_truncation_preserves_its_prefix() {
         )
         .unwrap();
         require_cpu_batches(captured.semantic().formula_execution().unwrap());
-        for (cut_diagnostics, reference) in [(false, &output), (true, &diagnostics)] {
+        // Sweep every deterministic output byte. Real host durations differ
+        // between solves; timing failure has its own marker-based regression,
+        // and statistics rendering uses fixed durations in its prefix tests.
+        let output_end = std::str::from_utf8(&output).unwrap().find("Time:").unwrap();
+        let diagnostics_end = std::str::from_utf8(&diagnostics)
+            .unwrap()
+            .find("Statistics:")
+            .unwrap();
+        assert!(output_end > 0);
+        assert!(diagnostics_end > 0);
+        for (cut_diagnostics, reference) in [
+            (false, &output[..output_end]),
+            (true, &diagnostics[..diagnostics_end]),
+        ] {
             for capacity in 0..reference.len() {
                 let mut broken = BoundedWriter::new(capacity);
                 let mut other = Vec::new();
@@ -350,6 +367,34 @@ fn every_publication_truncation_preserves_its_prefix() {
                 assert_eq!(broken.bytes(), &reference[..capacity]);
             }
         }
+    }
+}
+
+#[test]
+fn timing_failure_preserves_completed_answers() {
+    for (source, models, optimum) in [
+        ("{a;b}. #show x.", 4, false),
+        ("1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}.", 2, true),
+    ] {
+        // The label can be written independently of its colon and value.
+        // Fail at that label instead of comparing durations from distinct runs.
+        let failure = run(
+            source,
+            &options(),
+            &Cancellation::default(),
+            &mut FailAt::new(b"Time"),
+            &mut Vec::new(),
+        )
+        .unwrap_err();
+        assert!(matches!(failure.cause.as_ref(), RunError::Output(error)
+            if error.kind() == io::ErrorKind::BrokenPipe && error.to_string() == FAILED));
+        let semantic = failure.semantic().unwrap();
+        require_cpu_batches(semantic.formula_execution().unwrap());
+        assert_eq!(semantic.completion(), Some(Completion::Exhausted));
+        assert_eq!(semantic.optimum_proved(), optimum);
+        assert_eq!(failure.publication().unwrap().models(), models);
+        assert!(!failure.publication().unwrap().summary());
+        assert!(failure.phase_timings.is_some());
     }
 }
 

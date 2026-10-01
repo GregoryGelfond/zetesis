@@ -339,7 +339,9 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
         let phases = super::Recorder::new(false);
         let mut renderer = crate::view::builtin::Builtin::new(&mut output, &options);
         crate::AnswerRenderer::begin(&mut renderer).unwrap();
-        let progress = super::complete(&mut renderer, &mut io::sink(), progress, &phases).unwrap();
+        let mut diagnostics =
+            crate::presentation::Diagnostics::new(io::sink(), crate::ColorMode::Never);
+        let progress = super::complete(&mut renderer, &mut diagnostics, progress, &phases).unwrap();
         let outcome = super::finalize(&mut renderer, Ok(progress)).unwrap();
         assert!(matches!(outcome, PublicationOutcome::Stopped(_)));
         assert_eq!(outcome.semantic().completion(), None);

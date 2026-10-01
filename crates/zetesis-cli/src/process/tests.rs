@@ -1,4 +1,4 @@
-//! The process owns flushing; a library record acknowledgement does not.
+//! Process final flushing remains independent of earlier renderer acknowledgements.
 
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -217,3 +217,5 @@ fn cooperative_publication_has_the_incomplete_process_status() {
     let outcome = progress.finalize().unwrap();
     assert_eq!(super::publication_status(&outcome), ExitCode::from(3));
 }
+
+mod human_summary;

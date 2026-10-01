@@ -8,6 +8,7 @@ pub(crate) mod finite_carrier_sources;
 pub(crate) mod language_value_sources;
 pub(crate) mod logical_extremum_sources;
 pub(crate) mod options;
+pub(crate) mod human;
 #[cfg(feature = "gpu")]
 pub(crate) mod physical_backend;
 pub(crate) mod projected_conditional_sources;

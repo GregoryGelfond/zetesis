@@ -10,7 +10,7 @@ use crate::{
     run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_test_support::io::{BoundedWriter, FULL};
+use zetesis_test_support::io::{BoundedWriter, FULL, FailAt};
 
 fn options(arguments: &[&str]) -> Options {
     Options::try_parse_from(
@@ -289,7 +289,7 @@ fn failed_statistics_preserve_missing_completion() {
     let failure = run_finalized_with_diagnostics(
         "a.".into(),
         &options,
-        &mut BoundedWriter::new(0),
+        &mut FailAt::new(b"Answer:"),
         &mut io::sink(),
         &Cancellation::default(),
     )

@@ -32,7 +32,7 @@ fn formula(source: &str, arguments: &[&str]) -> Result<Completion, RunError> {
     );
     if result.is_err() {
         assert!(
-            output.is_empty(),
+            crate::support::human::preamble(std::str::from_utf8(&output).unwrap()),
             "admission must precede answer publication"
         );
     }

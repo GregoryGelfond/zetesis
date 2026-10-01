@@ -6,16 +6,115 @@ fn optimal() -> String {
     "Answer: 1\na\nOptimization: -2 7\nAnswer: 2\na\nOptimization: -2 7\nOPTIMUM FOUND\nModels: 2\nCoverage: exhausted\n".into()
 }
 
+fn compact_optimal() -> String {
+    format!(
+        "zetesis 0.1.6\nCopyright (c) 2026 Gregory Gelfond\n\n\
+         Backend: CPU · 1 thread · eager grounding\n\n{}\n\
+         Time: grounding 0.100 ms · solving 0.200 ms\n",
+        optimal().replace("Coverage: exhausted\n", "")
+    )
+}
+
+#[test]
+fn compact_optima_preserve_display_multiplicity() {
+    let source = compact_optimal().replace("\na\n", "\na a\n");
+    let parsed = answers::native_text(source.as_bytes(), true, Limits::default()).unwrap();
+    assert_eq!(parsed.cost(), Some([-2, 7].as_slice()));
+    assert_eq!(parsed.model_count(), 2);
+    assert_eq!(
+        parsed.displays(),
+        &[(vec!["a".to_owned(), "a".to_owned()], 2)]
+    );
+}
+
+#[test]
+fn compact_terminal_status_matches_witnesses() {
+    for (source, satisfiable) in [
+        ("Answer: 1\na\nSATISFIABLE\nModels: 1\n", true),
+        ("UNSATISFIABLE\nModels: 0\n", false),
+    ] {
+        let parsed = answers::native_text(source.as_bytes(), false, Limits::default()).unwrap();
+        assert_eq!(parsed.satisfiable(), satisfiable);
+    }
+    for source in [
+        "Answer: 1\na\nUNSATISFIABLE\nModels: 1\n",
+        "SATISFIABLE\nModels: 0\n",
+    ] {
+        assert!(answers::native_text(source.as_bytes(), false, Limits::default()).is_err());
+    }
+}
+
+#[test]
+fn compact_counts_must_be_unqualified_decimal_integers() {
+    for count in [
+        "",
+        "+2",
+        "-2",
+        "2.0",
+        "2; candidates examined: 2",
+        "2 (answer limit reached)",
+        "2 (search incomplete)",
+        "18446744073709551616",
+    ] {
+        let source = compact_optimal().replace("Models: 2", &format!("Models: {count}"));
+        assert!(
+            answers::native_text(source.as_bytes(), true, Limits::default()).is_err(),
+            "{count}"
+        );
+    }
+}
+
+#[test]
+fn compact_summary_counts_must_match_witnesses() {
+    for count in [0, 1, 3] {
+        let source = compact_optimal().replace("Models: 2", &format!("Models: {count}"));
+        assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+    }
+}
+
+#[test]
+fn compact_finish_records_must_be_present_and_unique() {
+    for record in ["OPTIMUM FOUND\n", "Models: 2\n"] {
+        let missing = compact_optimal().replace(record, "");
+        let duplicate = compact_optimal() + record;
+        for source in [missing, duplicate] {
+            assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+        }
+    }
+}
+
+#[test]
+fn compact_reports_cannot_override_incomplete_evidence() {
+    for suffix in [
+        "SATISFIABLE\n",
+        "UNSATISFIABLE\n",
+        "INCOMPLETE\n",
+        "INCOMPLETE: timeout\n",
+        "Coverage: partial\n",
+        "Coverage: exhausted\nCoverage: exhausted\n",
+    ] {
+        let source = compact_optimal() + suffix;
+        assert!(
+            answers::native_text(source.as_bytes(), true, Limits::default()).is_err(),
+            "{suffix}"
+        );
+    }
+}
+
 #[test]
 fn native_final_optimum_cannot_include_worse_witnesses() {
-    let source = optimal().replacen("Optimization: -2 7", "Optimization: -1 7", 1);
-    assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+    for source in [optimal(), compact_optimal()] {
+        let source = source.replacen("Optimization: -2 7", "Optimization: -1 7", 1);
+        assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+    }
 }
 
 #[test]
 fn optimized_native_reports_require_optimality_evidence() {
-    let source = optimal().replace("OPTIMUM FOUND", "SATISFIABLE");
-    assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+    for source in [optimal(), compact_optimal()] {
+        let source = source.replace("OPTIMUM FOUND", "SATISFIABLE");
+        assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+    }
 }
 
 #[test]
@@ -25,10 +124,13 @@ fn multiline_displays_cannot_supply_finish_metadata() {
         "Answer: 1\n{symbol}\nOptimization: -2 7\nOPTIMUM FOUND\nModels: 1\nCoverage: exhausted\n"
     );
     let reference = json!({"Result":"OPTIMUM FOUND", "Models":{"More":"no","Number":2,"Optimal":1,"Optimum":"yes","Costs":[-2,7]}, "Call":[{"Witnesses":[{"Value":[symbol],"Costs":[-2,7]},{"Value":[symbol],"Costs":[-2,7]}]}]});
-    let native = answers::native_text(native.as_bytes(), true, Limits::default()).unwrap();
     let reference =
         answers::clingo_json(&serde_json::to_vec(&reference).unwrap(), Limits::default()).unwrap();
-    assert!(answers::same_displays(&reference, &native));
+    let compact = native.replace("Coverage: exhausted\n", "");
+    for native in [native, compact] {
+        let native = answers::native_text(native.as_bytes(), true, Limits::default()).unwrap();
+        assert!(answers::same_displays(&reference, &native));
+    }
 }
 
 #[test]
@@ -58,15 +160,17 @@ fn incomplete_markers_prevent_completed_evidence() {
 
 #[test]
 fn every_optimal_native_witness_requires_one_cost_vector() {
-    for source in [
-        optimal().replacen("Optimization: -2 7\n", "", 1),
-        optimal().replacen(
-            "Optimization: -2 7",
-            "Optimization: -2 7\nOptimization: -2 7",
-            1,
-        ),
-    ] {
-        assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+    for source in [optimal(), compact_optimal()] {
+        for source in [
+            source.replacen("Optimization: -2 7\n", "", 1),
+            source.replacen(
+                "Optimization: -2 7",
+                "Optimization: -2 7\nOptimization: -2 7",
+                1,
+            ),
+        ] {
+            assert!(answers::native_text(source.as_bytes(), true, Limits::default()).is_err());
+        }
     }
 }
 

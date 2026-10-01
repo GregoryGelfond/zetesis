@@ -61,21 +61,28 @@ Classical satisfaction alone does not establish stability.
 
 ## Results and presentation
 
-Statistics are off by default; `--stats` requests them on stderr. Human output separates answer headings, atoms, optimization metadata and the
-terminal result. `--color auto` resolves stdout and stderr independently,
-respects nonempty `NO_COLOR` and `TERM=dumb`, and leaves redirected streams
-plain. `always` and `never` provide explicit overrides.
+Human output starts with version, copyright and license information, then the
+selected backend, configured thread capacity and effective grounding mode.
+An eager base with answer reconstruction is named explicitly. These describe
+the prepared execution, not a claim that every configured thread or GPU was busy.
+Answer headings, atoms, optimization metadata and the terminal result follow.
+A short timing line separates eager grounding from solving; lazy and hybrid
+execution report their combined time because source work is interleaved.
 
-Explicit human `solve --stats` uses compact phase, execution and work tables.
-Requested settings remain separate from retained execution receipts; unavailable
-measurements are not zeros. Work rows name their units and scope, including
-completed-check closure totals and decoded device work. They are not additive
-across operations. JSON statistics and the compatibility record view retain the
-full counter catalog; selected eager rule/table rows in the compact view cover
-rule instantiation only.
+Detailed measurements are off by default. Human `solve --stats` appends stage,
+execution and work tables on stderr after the answer summary. Requested settings
+remain separate from retained execution receipts; unavailable measurements are
+not zeros. Work rows name their units and scope, including completed-check
+closure totals and decoded device work. They are not additive across operations.
+JSON statistics and the compatibility record view retain the full counter
+catalog; selected eager rule/table rows cover rule instantiation only.
+Warnings and errors remain visible without `--stats`.
 
-Answer headings use cyan with a bold label; optimization metadata uses italic
-green. Source/oracle/grounder/backend labels use blue with italic gray values.
+`--color auto` resolves stdout and stderr independently, respects nonempty
+`NO_COLOR` and `TERM=dumb`, and leaves redirected streams plain. `always` and
+`never` provide explicit overrides. Answer headings use cyan with a bold label;
+optimization metadata uses italic green. Configuration and timing labels use
+blue with italic gray values; statistics tables use no italics.
 Untagged satisfiability verdicts use bold italic gray. Fatal diagnostics use red;
 themelios syntax messages retain source locations and excerpts. ANSI palette
 colors inherit the terminal theme. Styling never changes the semantic result.
@@ -106,9 +113,10 @@ stdout can discard output without a write error. The command cannot recover the
 parent's intent from those descriptors. Library callers own source loading and
 supply explicit writers; observed I/O errors retain their original causes.
 
-`--json` streams one schema-2 document without ANSI styling. Failed outcomes
-retain a stable `error.kind`, the typed cause's human-readable `error.detail`,
-and secondary-output-failure status. Detail is admitted under the same bounded
+`--json` streams one schema-2 document without human headers or ANSI styling.
+Timing fields are `null` unless measurements are requested with `--stats`.
+Failed outcomes retain a stable `error.kind`, the typed cause's human-readable
+`error.detail`, and secondary-output-failure status. Detail is admitted under the same bounded
 footer capacity as the rest of the outcome. Consumers should use the kind for
 classification and retain the detail for diagnosis; historical schema-2 records
 can omit this additive detail field. The document
@@ -335,12 +343,13 @@ work, templates, values, scalar bytes and origin locations, and the JSON
 `expansion` object holds the charges. The formula route admits through its
 own budgets and reports no expansion usage.
 
-Stage timings separate source preparation, eager grounding, solving and output.
-Lazy joins are interleaved with solving, so a separate lazy grounding duration
-is unavailable. Detailed phases distinguish candidate generation, membership,
-objective work and output. GPU host-call time includes transport, submission,
-waits and readback; it is not shader time. Worker intervals can overlap and are
-reported separately from coordinator wall time.
+Coarse host stages support the default human timing line without enabling
+detailed clocks. With `--stats`, tables separate source preparation, eager
+grounding, solving and output. Lazy joins are interleaved with solving, so a
+separate lazy grounding duration is unavailable. Detailed phases distinguish
+candidate generation, membership, objective work and output. GPU host-call time
+includes transport, submission, waits and readback; it is not shader time.
+Worker intervals can overlap and are reported separately from coordinator wall time.
 
 Eager formula attribution renders the frontend's optional `domain_analysis`
 phase and domain preparation, guard-row, comparison and rejection counters.
@@ -372,6 +381,13 @@ presentation without parsing command arguments. Both built-in `HumanRenderer`
 and `JsonRenderer` consume the same borrowed `AnswerView` and `PublicationView`
 as custom consumers. The controller evaluates `#show` once in the observation
 layer, streams one answer at a time and owns publication acknowledgements.
+The optional `configuration(ConfigurationView)` callback receives typed backend,
+effective grounding and worker-capacity information when execution is selected.
+It defaults to no output and can recur after a backend change.
+`needs_stage_timings()` defaults to `false`; custom renderers that display host
+stages must request them. `HumanRenderer` requests coarse stages by default;
+`JsonRenderer` retains opt-in measurement behavior. The injected renderer owns
+this choice independently of `Options::json`.
 Renderers cannot strengthen membership or coverage by accepting a record.
 See the [checked renderer example](../../docs/book/examples/answer-renderer.rs)
 and [view contract](src/view.rs) for bounds, terminal stages and failure behavior.

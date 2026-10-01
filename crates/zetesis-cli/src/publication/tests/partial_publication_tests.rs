@@ -109,7 +109,8 @@ fn late_output_failure_retains_published_prefix() {
     assert_eq!(failure.publication().unwrap().models(), 2);
     let text = std::str::from_utf8(&output.bytes).unwrap();
     assert_eq!(text.matches("Answer:").count(), 2);
-    assert!(!text.contains("Coverage:"));
+    assert!(!text.contains("Models:"));
+    assert!(!text.contains("Time:"));
     let execution = failure.semantic().unwrap().formula_execution().unwrap();
     assert_eq!(
         (
@@ -145,11 +146,14 @@ impl Write for RefuseBound {
 
 #[test]
 fn failed_bound_diagnostics_leave_incumbents_unpublished() {
+    let mut options = options();
+    options.stats = true;
+    options.statistics_view = crate::StatisticsView::Records;
     let mut output = Vec::new();
     let mut diagnostics = RefuseBound::default();
     let failure = run(
         "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.",
-        &options(),
+        &options,
         &mut output,
         &mut diagnostics,
     );
@@ -157,7 +161,10 @@ fn failed_bound_diagnostics_leave_incumbents_unpublished() {
         if error.kind() == io::ErrorKind::BrokenPipe && error.to_string() == "bound diagnostic closed"));
     assert_eq!(diagnostics.refusals, 1);
     require_cpu_batches(&failure);
-    assert!(output.is_empty());
+    let text = std::str::from_utf8(&output).unwrap();
+    assert!(text.contains("Backend:"));
+    assert!(!text.contains("Answer:"));
+    assert!(!text.contains("OPTIMUM FOUND"));
     let semantic = failure.semantic().unwrap();
     assert_eq!(semantic.verified_models(), 3);
     assert_eq!(semantic.retained_models(), 1);
@@ -225,13 +232,28 @@ fn secondary_reporting_failure_preserves_primary_cause() {
 
 #[test]
 fn partial_answer_retains_unpublished_membership() {
-    let mut output = BoundedWriter::new(4);
-    let failure = run("{a;b}.", &options(), &mut output, &mut Vec::new());
+    let options = options();
+    let mut reference = Vec::new();
+    run_finalized_with_diagnostics(
+        "{a;b}.".into(),
+        &options,
+        &mut reference,
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let answer = std::str::from_utf8(&reference)
+        .unwrap()
+        .find("Answer:")
+        .unwrap();
+    let mut output = BoundedWriter::new(answer + 4);
+    let failure = run("{a;b}.", &options, &mut output, &mut Vec::new());
     require_cpu_batches(&failure);
     assert!(
         matches!(failure.cause.as_ref(), RunError::Output(error) if error.kind() == io::ErrorKind::BrokenPipe)
     );
-    assert_eq!(output.bytes(), b"Answ");
+    assert_eq!(output.bytes(), &reference[..answer + 4]);
+    assert_eq!(&output.bytes()[answer..], b"Answ");
     let partial = failure.partial_report.as_ref().unwrap();
     assert_eq!((partial.published_models, partial.verified_models), (0, 3));
     let execution = partial.formula_execution.as_ref().unwrap();

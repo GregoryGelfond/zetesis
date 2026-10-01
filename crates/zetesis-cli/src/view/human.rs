@@ -6,12 +6,18 @@ use zetesis_cpu::Cancellation;
 
 use crate::display::record::{Contents, Record};
 use crate::{
-    AnswerRenderer, AnswerView, ColorMode, Interruption, PublicationView, RunError, SearchState,
-    SummaryDelivery, SummaryStage,
+    AnswerRenderer, AnswerView, ColorMode, ConfigurationView, PublicationView, RunError,
+    SearchState, SummaryDelivery, SummaryStage,
 };
+
+mod summary;
 
 /// Streaming human renderer with an inclusive per-answer byte ceiling.
 /// It buffers one complete record, never the complete answer-set family.
+/// The terminal callback flushes the sink before acknowledging the summary,
+/// so subsequent statistics cannot overtake buffered human output. A flush
+/// failure preserves semantic evidence without acknowledging the summary;
+/// successful flushing does not establish durable storage.
 pub struct HumanRenderer<W> {
     output: W,
     color: ColorMode,
@@ -37,6 +43,26 @@ impl<W: Write> HumanRenderer<W> {
 }
 
 impl<W: Write> AnswerRenderer for HumanRenderer<W> {
+    fn needs_stage_timings(&self) -> bool {
+        true
+    }
+
+    fn begin(&mut self) -> Result<(), RunError> {
+        self.color.styled(
+            &mut self.output,
+            zetesis_presentation::Role::Metadata,
+            format_args!("zetesis {}", crate::command::VERSION_INFORMATION),
+        )?;
+        writeln!(self.output)?;
+        Ok(())
+    }
+
+    fn configuration(&mut self, view: ConfigurationView<'_>) -> Result<(), RunError> {
+        summary::configuration(&mut self.output, self.color, view)?;
+        writeln!(self.output)?;
+        Ok(())
+    }
+
     fn summary_stage(&self) -> SummaryStage {
         SummaryStage::SearchFinished
     }
@@ -75,19 +101,12 @@ impl<W: Write> AnswerRenderer for HumanRenderer<W> {
         let Ok(progress) = view.result else {
             return Ok(SummaryDelivery::Omitted);
         };
-        if progress.stop.is_none()
-            && let Some(best) = view.semantic().and_then(crate::SemanticOutcome::incumbent)
-        {
-            self.color.metadata(
-                &mut self.output,
-                "Incumbent ties",
-                format_args!(
-                    "{}; stable models scored: {}; objective work: {}",
-                    best.tied_models, best.scored_models, best.work
-                ),
-            )?;
-        }
         finish(&mut self.output, progress, self.color)?;
+        if let Some(timings) = view.phase_timings() {
+            writeln!(self.output)?;
+            summary::timing(&mut self.output, self.color, &timings.stages)?;
+        }
+        self.output.flush()?;
         Ok(SummaryDelivery::Accepted)
     }
 }
@@ -131,51 +150,26 @@ pub(crate) fn finish(
             } else {
                 color.status(output, "SATISFIABLE")?;
             }
-            color.metadata(output, "Coverage", format_args!("exhausted"))?;
         }
         SearchState::RequestedModels => {
             color.status(output, "SATISFIABLE")?;
-            color.metadata(
-                output,
-                "Coverage",
-                format_args!("partial (requested model count reached)"),
-            )?;
         }
         SearchState::Interrupted(reason) => {
             verdict(output, color, format_args!("INCOMPLETE: {reason}"))?;
-            color.metadata(output, "Coverage", format_args!("partial"))?;
         }
         SearchState::PendingInterruption(_) => return Err(RunError::CompletionUnavailable),
     }
-    if semantic.countermodel_statistics().is_some()
-        || matches!(semantic.interruption(), Some(Interruption::Countermodel(_)))
-    {
-        color.metadata(
-            output,
-            "Models",
-            format_args!(
-                "{}; candidates examined: {}; gate tuples discovered: n/a (formula search)",
-                progress.publication.models,
-                semantic.candidate_progress()
-            ),
-        )?;
-    } else {
-        let examined = if semantic.shared_execution().is_some() {
-            "closure result/control records examined"
-        } else {
-            "candidates examined"
-        };
-        color.metadata(
-            output,
-            "Models",
-            format_args!(
-                "{}; {examined}: {}; gate tuples discovered: {}",
-                progress.publication.models,
-                semantic.candidate_progress(),
-                semantic.discovered_gate_atoms()
-            ),
-        )?;
-    }
+    let qualification = match state {
+        SearchState::Exhausted => "",
+        SearchState::RequestedModels => " (answer limit reached)",
+        SearchState::Interrupted(_) => " (search incomplete)",
+        SearchState::PendingInterruption(_) => return Err(RunError::CompletionUnavailable),
+    };
+    color.metadata(
+        output,
+        "Models",
+        format_args!("{}{qualification}", progress.publication.models),
+    )?;
     Ok(())
 }
 

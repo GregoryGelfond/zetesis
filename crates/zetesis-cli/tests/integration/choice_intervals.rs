@@ -42,13 +42,13 @@ fn automatic_interval_choices_keep_group_bounds_products_costs_and_hidden_ties()
         ),
     ];
     for &(source, expected, cost) in cases {
-        let (result, output, diagnostics) = solve(source, &[]);
+        let (result, output, diagnostics) = solve(source, &["--stats"]);
         let report = result.unwrap_or_else(|error| panic!("{source}: {error}"));
         assert_eq!(report.completion, Completion::Exhausted, "{source}");
         assert_eq!(report.models, expected.len(), "{source}");
         assert_eq!(displays(&output), expected, "{source}");
         assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
-        assert!(output.contains("Coverage: exhausted"));
+        assert!(crate::support::human::exhausted(&output));
         assert!(!output.contains("INCOMPLETE"));
         if let Some(cost) = cost {
             let optimum = report.optimization.expect("present objective priority");
@@ -86,7 +86,7 @@ fn explicit_closure_refuses_interval_choices_without_emitting_answers() {
             }
         )))
     ));
-    assert!(output.is_empty(), "{output}");
+    assert!(crate::support::human::preamble(&output), "{output}");
 }
 
 #[test]
@@ -106,7 +106,10 @@ fn explicit_lazy_device_choices_are_refused_before_discovery() {
         let (result, output, diagnostics) = solve("1 {p(1..4)} 1.", &arguments);
         let error = result.expect_err("lazy choice route must be refused");
         assert!(matches!(error, RunError::HybridBackend { backend } if backend == expected));
-        assert!(output.is_empty(), "{arguments:?}: {output}");
+        assert!(
+            crate::support::human::preamble(&output),
+            "{arguments:?}: {output}"
+        );
         assert!(diagnostics.is_empty(), "{arguments:?}: {diagnostics}");
     }
 }
@@ -129,6 +132,6 @@ fn exhausted_choice_admission_never_emits_answers() {
             ),
             "{flag}"
         );
-        assert!(output.is_empty(), "{flag}: {output}");
+        assert!(crate::support::human::preamble(&output), "{flag}: {output}");
     }
 }

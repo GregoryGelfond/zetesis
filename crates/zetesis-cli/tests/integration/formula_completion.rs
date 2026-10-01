@@ -8,7 +8,7 @@ use zetesis_cli::{Completion, Interruption, Options, RunError, run_detailed_with
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 
-use zetesis_test_support::io::BoundedWriter;
+use zetesis_test_support::io::FailAt;
 
 /// The batched completion and its pool belong to the clause search; the
 /// region walk decides its leaves in its workers.
@@ -148,7 +148,7 @@ fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
 #[test]
 fn output_failure_preserves_verified_queued_models_after_join() {
     for workers in [2, 4] {
-        let mut writer = BoundedWriter::new(0);
+        let mut writer = FailAt::new(b"Answer:");
         let failure = run_detailed_with_diagnostics(
             "{a;b}.".into(),
             &options(workers, 3),
@@ -158,7 +158,7 @@ fn output_failure_preserves_verified_queued_models_after_join() {
         )
         .unwrap_err();
         assert!(matches!(*failure.cause, RunError::Output(_)));
-        assert!(writer.bytes().is_empty());
+
         let partial = failure.partial_report.unwrap();
         assert_eq!(
             (

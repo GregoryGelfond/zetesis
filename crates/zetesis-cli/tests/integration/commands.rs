@@ -66,14 +66,14 @@ fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(report.checked, 1);
     assert_eq!(report.discovered_gate_atoms, 1);
-    assert!(models.starts_with("Answer: 1\nnode(a)\n"));
+    assert!(models.contains("Answer: 1\nnode(a)\n"));
 }
 
 #[test]
-fn diagnostics_are_written_apart_from_the_models() {
+fn default_configuration_precedes_the_models() {
     let (_, models, diagnostics) = tiny_auto_run();
-    assert!(!models.contains("Backend:"));
-    assert!(diagnostics.contains("Backend: cpu"));
+    assert!(models.contains("Backend: CPU"));
+    assert!(diagnostics.is_empty());
     assert!(!diagnostics.contains("Answer:"));
 }
 
@@ -82,14 +82,16 @@ fn diagnostics_failure_is_propagated_before_model_output() {
     let mut models = Vec::new();
     let error = run_with_diagnostics(
         "a.".into(),
-        &options(&["--backend", "cpu"]),
+        &options(&["--backend", "cpu", "--stats"]),
         &mut models,
         &mut Closed,
         &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Output(_)));
-    assert!(models.is_empty());
+    assert!(crate::support::human::preamble(&String::from_utf8_lossy(
+        &models
+    )));
 }
 
 #[test]
@@ -99,7 +101,7 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
         source.into(),
-        &options(&["--backend", "cpu"]),
+        &options(&["--backend", "cpu", "--stats"]),
         &mut models,
         &mut diagnostics,
         &Cancellation::default(),
@@ -177,7 +179,7 @@ fn bench_names_the_separate_benchmarking_tool() {
 }
 
 #[test]
-fn process_keeps_backend_reporting_on_stderr() {
+fn process_includes_configuration_in_the_human_view() {
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/correctness/excerpts/task-allocation-projections.lp"
@@ -190,9 +192,9 @@ fn process_keeps_backend_reporting_on_stderr() {
     assert!(result.status.success());
     let output = String::from_utf8(result.stdout).unwrap();
     let errors = String::from_utf8(result.stderr).unwrap();
-    assert!(output.starts_with("Answer: 1\n"));
-    assert!(!output.contains("Backend:"));
-    assert!(errors.contains("Backend: cpu"));
+    assert!(output.contains("Answer: 1\n"));
+    assert!(output.contains("Backend: CPU"));
+    assert!(errors.is_empty());
     assert!(!errors.contains("Answer:"));
 }
 
@@ -219,7 +221,9 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
         )
         .unwrap_err();
         assert!(matches!(error, RunError::BackendUnavailable));
-        assert!(output.is_empty());
+        assert!(crate::support::human::preamble(&String::from_utf8_lossy(
+            &output
+        )));
     }
 }
 
@@ -268,7 +272,7 @@ fn default_execution_ignores_device_transport_limits() {
         .collect();
     assert_eq!(answers, expected);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    assert!(diagnostics.contains("Backend: cpu"));
+    assert!(models.contains("Backend: CPU"));
     assert!(!diagnostics.contains("Backend: gpu"));
 }
 
@@ -293,7 +297,9 @@ fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Gpu(_)));
-    assert!(models.is_empty());
+    assert!(crate::support::human::preamble(&String::from_utf8_lossy(
+        &models
+    )));
     assert!(
         !String::from_utf8(diagnostics)
             .unwrap()

@@ -118,7 +118,7 @@ fn rendered_structural_output_is_admitted_before_publication() {
                 result,
                 Err(RunError::ObservationOutputLimit { .. })
             ));
-            assert!(output.is_empty());
+            assert!(!output.contains("Answer:"));
         }
     }
 }

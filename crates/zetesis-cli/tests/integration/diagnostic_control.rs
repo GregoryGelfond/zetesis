@@ -91,7 +91,7 @@ fn real_optional_plan_and_bound_refusals_propagate_diagnostic_writer_errors() {
             assert_eq!(diagnostics.bytes(), &complete[..capacity]);
             let output = String::from_utf8(output).unwrap();
             assert!(!output.contains("OPTIMUM FOUND"));
-            assert!(!output.contains("Coverage: exhausted"));
+            assert!(!crate::support::human::exhausted(&output));
             assert!(!output.contains("UNSATISFIABLE"));
         }
     }

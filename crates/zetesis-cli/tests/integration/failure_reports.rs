@@ -5,11 +5,11 @@ use std::io;
 
 use clap::Parser;
 use zetesis_cli::{
-    Completion, Interruption, Options, RunError, SolvePhase, run_detailed,
+    Completion, Interruption, Options, RunError, SolvePhase, StatisticsView, run_detailed,
     run_detailed_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_test_support::io::{BoundedWriter, FULL, FailAt};
+use zetesis_test_support::io::{BoundedWriter, FAILED, FailAt};
 
 fn options(oracle: &str) -> Options {
     Options::try_parse_from([
@@ -61,7 +61,10 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
         assert_eq!(complete.models, 2);
         let ends = answer_ends(&reference, false);
         assert_eq!(ends.len(), 2);
-        for capacity in 0..reference.len() {
+        let text = std::str::from_utf8(&reference).unwrap();
+        let first_answer = text.find("Answer:").unwrap();
+        let timing = text.find("\nTime:").unwrap();
+        for capacity in first_answer..=timing {
             let mut output = BoundedWriter::new(capacity);
             let failure = run_detailed(
                 "{a}.".into(),
@@ -74,7 +77,6 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
                 matches!(&*failure.cause, RunError::Output(error) if error.kind() == io::ErrorKind::BrokenPipe)
             );
             assert_eq!(output.bytes(), &reference[..capacity]);
-            assert!(failure.phase_timings.is_none());
             assert!(failure.secondary_output.is_none());
             let partial = failure.partial_report.unwrap();
             let published = ends.iter().filter(|&&end| end <= capacity).count();
@@ -100,6 +102,7 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
 fn exhausted_objective_search_retains_all_hidden_ties_before_failed_cost_publication() {
     let mut options = options("countermodel");
     options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let source = "1 {a;b} 1. #minimize {1,a:a;1,b:b}. #show.";
     let mut reference = Vec::new();
     run_detailed(
@@ -111,7 +114,11 @@ fn exhausted_objective_search_retains_all_hidden_ties_before_failed_cost_publica
     .unwrap();
     let ends = answer_ends(&reference, true);
     assert_eq!(ends.len(), 2);
-    for capacity in 0..=ends[1] {
+    let first_answer = std::str::from_utf8(&reference)
+        .unwrap()
+        .find("Answer:")
+        .unwrap();
+    for capacity in first_answer..=ends[1] {
         let mut output = BoundedWriter::new(capacity);
         let failure = run_detailed(
             source.into(),
@@ -158,13 +165,14 @@ fn observation_refusal_retains_verified_membership_without_an_answer_prefix() {
     assert_eq!((partial.published_models, partial.verified_models), (0, 1));
     assert_eq!(partial.completion, None);
     assert_eq!(partial.countermodel_statistics.unwrap().stable_models, 1);
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
 fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_mapping() {
     let mut options = options("countermodel");
     options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
         "a :- . @".into(),
@@ -196,7 +204,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
             .calls,
         1
     );
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
     let original = run_with_diagnostics(
         "a :- . @".into(),
         &options,
@@ -212,6 +220,7 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
 fn failure_of_post_summary_statistics_preserves_completed_output_and_search() {
     let mut options = options("countermodel");
     options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let mut diagnostics = FailAt::new(b"Statistics:");
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
@@ -231,7 +240,7 @@ fn failure_of_post_summary_statistics_preserves_completed_output_and_search() {
     assert!(
         std::str::from_utf8(&output)
             .unwrap()
-            .contains("Coverage: exhausted")
+            .contains("SATISFIABLE\nModels: 1\n")
     );
     assert!(failure.phase_timings.is_some());
 }
@@ -240,6 +249,7 @@ fn failure_of_post_summary_statistics_preserves_completed_output_and_search() {
 fn failed_restriction_diagnostic_retains_the_committed_restriction_and_incumbent() {
     let mut options = options("countermodel");
     options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let mut diagnostics = FailAt::new(b"Objective pruning:");
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
@@ -265,7 +275,7 @@ fn failed_restriction_diagnostic_retains_the_committed_restriction_and_incumbent
     );
     assert_eq!(partial.optimization.unwrap().scored_models, 1);
     assert!(
-        output.is_empty(),
+        !std::str::from_utf8(&output).unwrap().contains("Answer:"),
         "unrelated failure must not publish a retained incumbent"
     );
 }
@@ -277,7 +287,7 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
     let failure = run_detailed(
         "a.".into(),
         &options("countermodel"),
-        &mut BoundedWriter::new(0),
+        &mut FailAt::new(b"INCOMPLETE"),
         &cancellation,
     )
     .unwrap_err();
@@ -285,7 +295,7 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
         panic!("summary writer remains the primary failure")
     };
     assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
-    assert_eq!(error.to_string(), FULL);
+    assert_eq!(error.to_string(), FAILED);
     let partial = failure.partial_report.unwrap();
     assert_eq!(partial.completion, Some(Completion::Interrupted));
     assert_eq!(
@@ -367,6 +377,7 @@ fn completed_closure_batch_membership_survives_a_later_requested_output_statisti
     options.batch_size = std::num::NonZeroUsize::new(64).unwrap();
     options.models = 2;
     options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let mut diagnostics = FailAt::new(b"Statistics:");
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
@@ -389,6 +400,22 @@ fn completed_closure_batch_membership_survives_a_later_requested_output_statisti
     assert!(
         std::str::from_utf8(&output)
             .unwrap()
-            .contains("Coverage: partial")
+            .contains("Models: 2 (answer limit reached)\n")
     );
+}
+
+#[test]
+fn a_failed_timing_line_preserves_exhaustion() {
+    let failure = run_detailed(
+        "a.".into(),
+        &options("countermodel"),
+        &mut FailAt::new(b"Time"),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(*failure.cause, RunError::Output(_)));
+    let partial = failure.partial_report.unwrap();
+    assert_eq!(partial.completion, Some(Completion::Exhausted));
+    assert_eq!((partial.published_models, partial.verified_models), (1, 1));
+    assert!(!partial.summary_published);
 }

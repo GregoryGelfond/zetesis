@@ -3,7 +3,7 @@
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, SourceBatching, run_with_diagnostics};
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_test_support::io::Closed;
+use zetesis_test_support::io::FailAt;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -251,7 +251,7 @@ fn output_failure_retains_completed_shared_evidence() {
     let error = zetesis_cli::run_detailed_with_diagnostics(
         "a.".into(),
         &selected,
-        &mut Closed,
+        &mut FailAt::new(b"Answer:"),
         &mut Vec::new(),
         &Cancellation::default(),
     )

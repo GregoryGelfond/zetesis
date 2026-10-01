@@ -19,7 +19,7 @@ use zetesis_cli::{
 use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{formula, normal};
-use zetesis_test_support::io::{CLOSED, Closed};
+use zetesis_test_support::io::{CLOSED, Closed, FailAt};
 
 fn atoms(model: &SessionModel) -> Vec<String> {
     model
@@ -439,7 +439,7 @@ fn failed_publication_preserves_established_optimum() {
     let failure = run_finalized_with_diagnostics(
         "a. #minimize{1,k:a}.".into(),
         &options(&[]),
-        &mut Closed,
+        &mut FailAt::new(b"Answer:"),
         &mut io::sink(),
         &Cancellation::default(),
     )
@@ -458,7 +458,7 @@ fn failed_first_answer_preserves_unknown_coverage() {
     let failure = run_finalized_with_diagnostics(
         "a.".into(),
         &options(&[]),
-        &mut Closed,
+        &mut FailAt::new(b"Answer:"),
         &mut io::sink(),
         &Cancellation::default(),
     )
@@ -544,7 +544,7 @@ fn compatibility_mutation_cannot_rewrite_publication() {
     let mut failure = run_finalized_with_diagnostics(
         "a. #minimize{1,k:a}.".into(),
         &options(&[]),
-        &mut Closed,
+        &mut FailAt::new(b"Answer:"),
         &mut io::sink(),
         &Cancellation::default(),
     )

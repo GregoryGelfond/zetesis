@@ -9,6 +9,7 @@ use crate::SolvePhase;
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
 use crate::presentation::Diagnostics;
+use crate::view::configuration::{Configuration, Observer};
 use crate::{
     AnswerRenderer, PreparedInput, PublicationConfig, PublicationFailure, PublicationView, Session,
     SummaryDelivery, SummaryStage,
@@ -43,11 +44,22 @@ pub(crate) fn solve(
     {
         request = request.projected(zetesis_solve::ProjectionLimits::default());
     }
-    let mut session = request.start_observed(diagnostics)?;
+    let mut configuration = Configuration::new(config.solve.workers);
+    let mut session = request.start_observed(&mut Observer::new(
+        renderer,
+        diagnostics,
+        &mut configuration,
+        phases,
+    ))?;
     let mut progress = Progress::new();
     progress.expansion = expansion;
     loop {
-        let next = session.next_observed(diagnostics);
+        let next = session.next_observed(&mut Observer::new(
+            renderer,
+            diagnostics,
+            &mut configuration,
+            phases,
+        ));
         progress.apply(session.progress());
         match next {
             Some(Ok(answer)) => {
@@ -77,7 +89,7 @@ pub(crate) fn solve(
 
 fn complete(
     renderer: &mut impl AnswerRenderer,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     mut progress: Progress,
     phases: &Recorder,
 ) -> Result<Progress, PublicationFailure> {
@@ -86,31 +98,32 @@ fn complete(
     {
         return Err(progress.fail(cause));
     }
+    // Human summaries run before the later statistics snapshot. Supply the
+    // available timing evidence now without claiming that output has finished.
+    progress.phase_timings = phases.snapshot();
     let _output = phases.enter(SolvePhase::ObservationOutput);
     let result = (|| {
         if let Some(projection) = progress
             .semantic()
             .and_then(crate::SemanticOutcome::projection)
         {
-            writeln!(
-                diagnostics,
+            diagnostics.information(format_args!(
                 "Projection: {} representatives, {} duplicate answers, complete={}",
                 projection.representatives, projection.duplicates, projection.complete
-            )?;
+            ))?;
         }
         if let Some(statistics) = progress
             .semantic()
             .and_then(crate::SemanticOutcome::countermodel_statistics)
         {
-            writeln!(
-                diagnostics,
+            diagnostics.information(format_args!(
                 "Reduct search: {} work, {} decisions, {} classical candidates, {} reduct queries, {} countermodels",
                 statistics.search.work,
                 statistics.search.decisions,
                 statistics.candidates,
                 statistics.countermodel_queries,
                 statistics.countermodels
-            )?;
+            ))?;
         }
         if renderer.summary_stage() == SummaryStage::SearchFinished {
             acknowledge(renderer, &mut progress)?;
@@ -125,7 +138,7 @@ fn complete(
 
 pub(crate) fn check_cancellation(
     renderer: &mut impl AnswerRenderer,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Option<Progress>, PublicationFailure> {

@@ -211,11 +211,11 @@ impl Table {
                     self.columns[index].alignment,
                     color,
                     if row.conclusion {
-                        Role::Conclusion
+                        Role::Total
                     } else if index == 0 {
                         Role::Label
                     } else {
-                        Role::Metadata
+                        Role::Data
                     },
                 )?;
             }
@@ -240,9 +240,9 @@ impl Table {
                     layout.width.get(),
                     layout.color,
                     if row.conclusion {
-                        Role::Conclusion
+                        Role::Total
                     } else {
-                        Role::Metadata
+                        Role::Data
                     },
                 )?;
             }

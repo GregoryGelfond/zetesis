@@ -267,7 +267,11 @@ fn atom_only_human_view_needs_no_observation_work() {
     )
     .unwrap();
     assert_eq!(outcome.publication().models(), 1);
-    assert!(renderer.into_inner().starts_with(b"Answer: 1\np\n"));
+    assert!(
+        String::from_utf8(renderer.into_inner())
+            .unwrap()
+            .contains("Answer: 1\np\n")
+    );
 }
 
 #[test]

@@ -53,7 +53,9 @@ fn plain_record_ceiling_is_inclusive() {
             let mut output = Vec::new();
             let report = solve(source, &options(maximum), &mut output).unwrap();
             assert_eq!(report.models, 1, "{source}");
-            assert!(output.starts_with(record.as_bytes()), "{source}");
+            let text = std::str::from_utf8(&output).unwrap();
+            let answer = text.find("Answer:").unwrap();
+            assert!(text[answer..].starts_with(record), "{source}");
         }
     }
 }
@@ -72,7 +74,10 @@ fn oversized_plain_records_publish_no_prefix() {
             let progress = failure.partial_report.unwrap();
             assert_eq!(progress.published_models, 0);
             assert_eq!(progress.verified_models, 1);
-            assert!(output.is_empty(), "{source}");
+            assert!(
+                !std::str::from_utf8(&output).unwrap().contains("Answer:"),
+                "{source}"
+            );
         }
     }
 }
@@ -80,14 +85,20 @@ fn oversized_plain_records_publish_no_prefix() {
 #[test]
 fn partial_plain_records_do_not_count_as_published() {
     for (source, record) in records() {
+        let mut reference = Vec::new();
+        solve(source, &options(record.len()), &mut reference).unwrap();
+        let preamble = std::str::from_utf8(&reference)
+            .unwrap()
+            .find("Answer:")
+            .unwrap();
         for maximum in 0..record.len() {
-            let mut output = BoundedWriter::new(maximum);
+            let mut output = BoundedWriter::new(preamble + maximum);
             let failure = solve(source, &options(record.len()), &mut output).unwrap_err();
             assert!(matches!(*failure.cause, RunError::Output(_)));
             let progress = failure.partial_report.unwrap();
             assert_eq!(progress.verified_models, 1);
             assert_eq!(progress.published_models, 0);
-            assert_eq!(output.bytes(), &record.as_bytes()[..maximum]);
+            assert_eq!(output.bytes(), &reference[..preamble + maximum]);
         }
     }
 }

@@ -14,12 +14,14 @@ use zetesis_themelios::{
 };
 
 fn options(arguments: &[&str]) -> Options {
-    Options::try_parse_from(
+    let mut options = Options::try_parse_from(
         ["zetesis", "--backend", "cpu", "--models", "0"]
             .into_iter()
             .chain(arguments.iter().copied()),
     )
-    .expect("valid CLI arguments")
+    .expect("valid CLI arguments");
+    options.stats = true;
+    options
 }
 
 fn run(source: &str, options: &Options) -> (Result<Report, RunError>, String, String) {
@@ -58,7 +60,10 @@ fn answers(output: &str) -> Vec<BTreeSet<&str>> {
 
 fn assert_refused_without_output(source: &str, options: &Options) -> RunError {
     let (result, output, diagnostics) = run(source, options);
-    assert!(output.is_empty(), "no partial semantic claim: {output}");
+    assert!(
+        crate::support::human::preamble(&output),
+        "no partial semantic claim: {output}"
+    );
     assert!(!diagnostics.contains("Reduct search:"));
     result.expect_err("source or execution policy must be refused")
 }
@@ -136,7 +141,7 @@ fn empty_and_unsupported_positive_cycles_have_one_empty_stable_model() {
             assert_eq!(report.completion, Completion::Exhausted);
             assert_eq!(report.models, 1);
             assert_eq!(answers(&output), vec![BTreeSet::new()], "{source}");
-            assert!(output.contains("SATISFIABLE\nCoverage: exhausted"));
+            assert!(output.contains("SATISFIABLE\nModels:"));
             assert!(!output.contains("UNSATISFIABLE"));
         }
     }
@@ -247,7 +252,7 @@ fn explicit_work_override_bounds_eager_admission() {
                 high = middle;
             }
             Err(RunError::FormulaAdmission(error)) => {
-                assert!(output.is_empty());
+                assert!(crate::support::human::preamble(&output));
                 let (observed, limit) = match error {
                     FormulaFailure::Limit {
                         resource: FormulaResource::Work,
@@ -290,7 +295,7 @@ fn explicit_work_override_bounds_eager_admission() {
         "{diagnostics}"
     );
     let (result, output, _) = attempt(low - 1);
-    assert!(output.is_empty());
+    assert!(crate::support::human::preamble(&output));
     assert!(
         matches!(result, Err(RunError::FormulaAdmission(FormulaFailure::Limit {
         resource: FormulaResource::Work, observed, limit, location,
@@ -322,7 +327,7 @@ fn support_byte_limit_is_inclusive() {
                 limit,
                 location,
             })) => {
-                assert!(output.is_empty());
+                assert!(crate::support::human::preamble(&output));
                 assert_eq!(limit, middle as u128);
                 assert!(observed > limit);
                 assert_eq!(

@@ -99,7 +99,7 @@ fn complete_without_restrictions(report: &Report, text: &str) {
             .candidate_restrictions,
         0
     );
-    assert!(text.contains("OPTIMUM FOUND\nCoverage: exhausted"));
+    assert!(text.contains("OPTIMUM FOUND\nModels: 2\n"));
     assert!(!text.contains("INCOMPLETE"));
     assert!(!text.contains("UNSATISFIABLE"));
 }

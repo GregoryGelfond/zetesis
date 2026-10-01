@@ -64,8 +64,10 @@ pub struct Report {
     /// Best retained objective score and tied models found so far.
     /// A retained score is optimal only when `optimum_proved` is true.
     pub optimization: Option<crate::Optimization>,
-    /// Opt-in attempted host timings; unavailable phases are absent.
-    /// A timing snapshot does not establish semantic or output completion.
+    /// Attempted host timings requested by statistics or the selected renderer.
+    /// The default human view requests coarse stages; detailed phases remain
+    /// absent unless statistics are enabled. A timing snapshot establishes
+    /// neither semantic completion nor successful output.
     pub phase_timings: Option<crate::PhaseTimings>,
 }
 
@@ -510,7 +512,8 @@ pub fn run_finalized_with_diagnostics(
     diagnostics: &mut impl Write,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    let mut diagnostics =
+        Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
     run_source_with_writer(source, options, output, &mut diagnostics, cancellation)
 }
 
@@ -583,7 +586,8 @@ pub fn run_bundle_finalized_with_diagnostics(
     diagnostics: &mut impl Write,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    let mut diagnostics =
+        Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
     run_bundle_with_writer(bundle, options, output, &mut diagnostics, cancellation)
 }
 
@@ -614,7 +618,8 @@ pub fn run_with_renderer(
     diagnostics: &mut impl Write,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    let mut diagnostics =
+        Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
     run_source_with_renderer(source, options, renderer, &mut diagnostics, cancellation)
 }
 
@@ -627,7 +632,7 @@ fn run_source_with_renderer(
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut invocation = crate::view::session::Session::start(renderer)?;
     let renderer = &mut invocation;
-    let phases = Recorder::new(options.stats);
+    let phases = crate::phase_timing::recorder(options.stats, renderer);
     let result = crate::admission::source(
         source,
         options,
@@ -652,7 +657,8 @@ pub fn run_bundle_with_renderer(
     diagnostics: &mut impl Write,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    let mut diagnostics =
+        Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
     run_bundle_renderer_inner(bundle, options, renderer, &mut diagnostics, cancellation)
 }
 
@@ -665,7 +671,7 @@ fn run_bundle_renderer_inner(
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut invocation = crate::view::session::Session::start(renderer)?;
     let renderer = &mut invocation;
-    let phases = Recorder::new(options.stats);
+    let phases = crate::phase_timing::recorder(options.stats, renderer);
     let result = crate::admission::bundle(
         bundle,
         options,
@@ -692,10 +698,10 @@ pub fn publish_prepared(
     diagnostics: &mut impl Write,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
-    let mut diagnostics = Diagnostics::new(diagnostics, crate::ColorMode::Never);
+    let mut diagnostics = Diagnostics::new(diagnostics, crate::ColorMode::Never).with_quiet(true);
     let mut invocation = crate::view::session::Session::start(renderer)?;
     let renderer = &mut invocation;
-    let phases = Recorder::new(config.solve.stats);
+    let phases = crate::phase_timing::recorder(config.solve.stats, renderer);
     let mut result = crate::publication::solve(
         input,
         None,
@@ -725,6 +731,9 @@ fn report_progress_statistics(
             Ok(progress) => progress.phase_timings = Some(timings),
             Err(failure) => failure.phase_timings = Some(Box::new(timings)),
         }
+        if !options.stats {
+            return result;
+        }
         let emitted = match options.statistics_view {
             crate::StatisticsView::Records => crate::statistics::write_progress(
                 diagnostics,
@@ -748,7 +757,7 @@ fn report_progress_statistics(
                     failed: view.failure().is_some(),
                 };
                 let layout = diagnostics.layout();
-                statistics.write_human(diagnostics, layout)
+                writeln!(diagnostics).and_then(|()| statistics.write_human(diagnostics, layout))
             }
         };
         if let Err(error) = emitted {
@@ -817,9 +826,12 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::Gpu(error) => Self::Gpu(error),
             #[cfg(feature = "gpu")]
             SolveError::LazyGpu(error) => Self::LazyGpu(error),
-            SolveError::ExecutionObservation(error) => match error.downcast::<std::io::Error>() {
-                Ok(error) => Self::Output(*error),
-                Err(error) => Self::ExecutionObservation(error),
+            SolveError::ExecutionObservation(error) => match error.downcast::<RunError>() {
+                Ok(error) => *error,
+                Err(error) => match error.downcast::<std::io::Error>() {
+                    Ok(error) => Self::Output(*error),
+                    Err(error) => Self::ExecutionObservation(error),
+                },
             },
         }
     }

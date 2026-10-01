@@ -360,7 +360,7 @@ mod physical {
                 "3",
                 "--stats",
             ]),
-            &mut zetesis_test_support::io::Closed,
+            &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
             &mut Vec::new(),
             &Cancellation::default(),
         )

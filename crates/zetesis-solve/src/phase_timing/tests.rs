@@ -5,6 +5,40 @@ use std::time::Duration;
 use super::{PhaseMeasurement, Recorder, SearchPhaseTimings, SolvePhase};
 
 #[test]
+fn disabled_details_never_start_a_phase_clock() {
+    for recorder in [Recorder::new(false), Recorder::stages_only()] {
+        for phase in SolvePhase::ALL {
+            let span = recorder.start(phase);
+            assert!(span.started.is_none(), "{phase:?}");
+            drop(span);
+        }
+    }
+}
+
+#[test]
+fn stages_only_ignores_detailed_search_imports() {
+    let recorder = Recorder::stages_only();
+    recorder.search(
+        SearchPhaseTimings::default(),
+        SearchPhaseTimings {
+            candidates: PhaseMeasurement {
+                calls: 2,
+                elapsed: Duration::from_nanos(7),
+                overflowed: false,
+            },
+            ..SearchPhaseTimings::default()
+        },
+    );
+    assert!(
+        recorder
+            .snapshot()
+            .unwrap()
+            .get(SolvePhase::CandidateGeneration)
+            .is_none()
+    );
+}
+
+#[test]
 fn disabled_recorder_and_returned_errors_do_not_invent_semantic_completion() {
     let disabled = Recorder::new(false);
     assert_eq!(

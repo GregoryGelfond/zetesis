@@ -4,7 +4,9 @@ pub(crate) mod human;
 mod json;
 pub(crate) mod builtin;
 pub(crate) mod session;
+pub(crate) mod configuration;
 
+pub use configuration::{BackendView, ConfigurationView, GroundingDisplay};
 pub use human::HumanRenderer;
 pub use json::JsonRenderer;
 
@@ -166,11 +168,30 @@ impl<'a> PublicationView<'a> {
 /// verification by the renderer. Terminal callbacks may run after cancellation
 /// so that retained evidence can still be reported.
 pub trait AnswerRenderer {
+    /// Request coarse host stages for this view, independently of detailed
+    /// statistics. The controller fixes this preference when publication starts.
+    fn needs_stage_timings(&self) -> bool {
+        false
+    }
+
     /// Start one document before source admission or prepared execution.
     ///
     /// # Errors
     /// Return a typed encoding or external-output failure.
     fn begin(&mut self) -> Result<(), RunError> {
+        Ok(())
+    }
+
+    /// Present configuration when an execution backend is selected.
+    ///
+    /// Automatic execution may select a later backend and call this again.
+    /// The default emits nothing, preserving machine-readable documents and
+    /// custom views that do not present setup metadata.
+    ///
+    /// # Errors
+    /// Return a typed rendering or writer failure; execution then stops before
+    /// its next step, preserving any preceding semantic and publication evidence.
+    fn configuration(&mut self, _view: ConfigurationView<'_>) -> Result<(), RunError> {
         Ok(())
     }
 

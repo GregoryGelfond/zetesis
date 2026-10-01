@@ -38,7 +38,7 @@ fn solve(source: &str, options: &Options) -> (Report, String) {
 fn assert_incomplete(report: &Report, output: &str) {
     assert_eq!(report.completion, Completion::Interrupted);
     assert!(output.contains("INCOMPLETE:"));
-    assert!(output.contains("Coverage: partial"));
+    assert!(output.contains(&format!("Models: {} (search incomplete)", report.models)));
     assert!(!output.contains("OPTIMUM FOUND"));
     assert!(!output.contains("UNSATISFIABLE"));
 }
@@ -55,7 +55,7 @@ fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count
         Some(Interruption::Incumbent(OptimizationStop::Atoms))
     ));
     assert_eq!(report.models, 1);
-    assert!(output.starts_with("Answer: 1\n\nOptimization: 0\n"));
+    assert!(output.contains("\nAnswer: 1\n\nOptimization: 0\n"));
     let retained = report.optimization.expect("previous valid empty incumbent");
     assert_eq!(retained.score.costs(), &[(0, 0)]);
     assert_eq!(

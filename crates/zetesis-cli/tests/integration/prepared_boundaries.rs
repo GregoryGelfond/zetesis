@@ -322,8 +322,7 @@ fn silent_diagnostics_preserve_finalized_evidence() {
     assert_eq!(result.semantic().verified_models(), 1);
     assert_eq!(result.publication().models(), 1);
     assert!(result.publication().summary());
-    assert_eq!(
-        String::from_utf8(output).unwrap(),
-        "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1; candidates examined: 1; gate tuples discovered: 0\n"
-    );
+    let text = String::from_utf8(output).unwrap();
+    assert!(text.starts_with(crate::support::human::banner()));
+    assert!(text.contains("Answer: 1\na\nSATISFIABLE\nModels: 1\n\nTime:"));
 }

@@ -13,6 +13,7 @@ mod clingo;
 mod color;
 mod command_options;
 mod command_views;
+mod compact_output;
 mod commands;
 mod comparison_sources;
 mod contribution_sessions;

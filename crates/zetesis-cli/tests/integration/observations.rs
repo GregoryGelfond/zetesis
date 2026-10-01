@@ -25,9 +25,9 @@ fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String,
 }
 #[test]
 fn auto_observation_uses_original_models_and_separate_output_channels() {
-    let (result, output, diagnostics) = solve("a. #show a.", &[]);
+    let (result, output, diagnostics) = solve("a. #show a.", &["--stats"]);
     assert_eq!(result.unwrap().models, 1);
-    assert!(output.starts_with("Answer: 1\na a\n"), "{output}");
+    assert!(output.contains("Answer: 1\na a\n"), "{output}");
     assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
     let (result, output, _) = solve(
         "p(1;2). #show. #show f(g(X),(X,)):p(X).",
@@ -35,7 +35,7 @@ fn auto_observation_uses_original_models_and_separate_output_channels() {
     );
     assert_eq!(result.unwrap().completion, Completion::Exhausted);
     assert!(
-        output.starts_with("Answer: 1\nf(g(1),(1,)) f(g(2),(2,))\n"),
+        output.contains("Answer: 1\nf(g(1),(1,)) f(g(2),(2,))\n"),
         "{output}"
     );
 }
@@ -55,7 +55,7 @@ fn hidden_full_models_and_every_optimal_tie_keep_their_multiplicity() {
             assert_eq!(report.completion, Completion::Exhausted);
             assert_eq!(report.models, 4);
             assert_eq!(output.lines().filter(|line| *line == "x").count(), 4);
-            assert!(output.contains("Coverage: exhausted"));
+            assert!(crate::support::human::exhausted(&output));
             if source.contains("@1") {
                 assert!(output.contains("OPTIMUM FOUND"));
                 assert_eq!(output.matches("Optimization: 0\n").count(), 4);
@@ -74,7 +74,7 @@ fn incompatible_observation_routes_are_refused_without_fallback() {
         let (result, output, _) = solve(source, &arguments);
         assert!(result.is_err(), "{arguments:?}");
         assert!(
-            output.is_empty(),
+            crate::support::human::preamble(&output),
             "no answer from unsupported route: {output}"
         );
     }
@@ -93,7 +93,7 @@ fn observation_failures_emit_no_partial_answer_or_false_completion() {
                 matches!(result, Err(RunError::Observation(error)) if matches!(error.kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)),
                 "{flag}"
             );
-            assert!(output.is_empty(), "{flag}: {output}");
+            assert!(crate::support::human::preamble(&output), "{flag}: {output}");
         }
     }
     let (result, output, _) = solve(
@@ -104,7 +104,7 @@ fn observation_failures_emit_no_partial_answer_or_false_completion() {
         result,
         Err(RunError::ObservationOutputLimit { .. })
     ));
-    assert!(output.is_empty());
+    assert!(crate::support::human::preamble(&output));
 }
 #[test]
 fn plain_models_do_not_consume_observation_work() {
@@ -122,5 +122,5 @@ fn plain_models_do_not_consume_observation_work() {
         ],
     );
     assert_eq!(result.unwrap().models, 1);
-    assert!(output.starts_with("Answer: 1\na\n"));
+    assert!(output.contains("Answer: 1\na\n"));
 }

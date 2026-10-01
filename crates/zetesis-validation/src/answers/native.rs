@@ -101,12 +101,12 @@ fn native_summary(metadata: &[&str], optimized: bool) -> Result<(bool, u64), Err
         .copied()
         .filter(|line| line.starts_with("Coverage:"))
         .collect();
-    if coverage != ["Coverage: exhausted"]
+    if (!coverage.is_empty() && coverage != ["Coverage: exhausted"])
         || metadata.iter().any(|line| line.starts_with("INCOMPLETE"))
     {
         return Err(invalid(
             Issue::Incomplete,
-            "native output requires exactly one exhausted coverage record",
+            "native output contains incomplete or conflicting coverage evidence",
         ));
     }
     let statuses: Vec<_> = metadata
@@ -137,11 +137,25 @@ fn native_summary(metadata: &[&str], optimized: bool) -> Result<(bool, u64), Err
             "native output requires exactly one Models summary",
         ));
     }
-    let count = summaries[0]
-        .split(';')
-        .next()
-        .ok_or_else(|| invalid(Issue::MissingField, "missing Models count"))?
-        .trim()
+    let summary = summaries[0].trim();
+    let count = if coverage.is_empty() {
+        // Without legacy coverage evidence, only the complete compact spelling
+        // establishes enumeration. Requested limits and interruptions qualify it.
+        if !summary.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(invalid(
+                Issue::MalformedField,
+                "invalid complete Models count",
+            ));
+        }
+        summary
+    } else {
+        summary
+            .split(';')
+            .next()
+            .ok_or_else(|| invalid(Issue::MissingField, "missing Models count"))?
+            .trim()
+    };
+    let count = count
         .parse()
         .map_err(|_| invalid(Issue::MalformedField, "invalid Models count"))?;
     Ok((statuses[0] != "UNSATISFIABLE", count))

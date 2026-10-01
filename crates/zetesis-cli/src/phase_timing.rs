@@ -5,6 +5,14 @@ use std::io::{self, Write};
 use zetesis_sat::PhaseMeasurement;
 pub(crate) use zetesis_solve::SolveMeasurements as Recorder;
 
+pub(crate) fn recorder(stats: bool, renderer: &impl crate::AnswerRenderer) -> Recorder {
+    if !stats && renderer.needs_stage_timings() {
+        Recorder::stages_only()
+    } else {
+        Recorder::new(stats)
+    }
+}
+
 pub(crate) fn write(sink: &mut impl Write, timings: &PhaseTimings) -> io::Result<()> {
     writeln!(
         sink,

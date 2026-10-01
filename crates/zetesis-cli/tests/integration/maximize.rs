@@ -88,6 +88,7 @@ fn options(pruning: bool, models: usize) -> Options {
         Options::try_parse_from(["zetesis", "--backend", "cpu", "--workers", "1"]).unwrap();
     assert_eq!(options.oracle, Oracle::Auto);
     options.models = models;
+    options.stats = true;
     if !pruning {
         options.max_objective_bound_work = 0;
     }
@@ -177,8 +178,8 @@ fn assert_complete(report: &Report, text: &str, case: &Case) {
     );
     assert_eq!(report.models, case.displays.len());
     assert_eq!(records(text), expected(case), "{}", case.source);
-    assert!(text.contains("Coverage: exhausted\n"));
-    assert!(text.contains(&format!("Models: {};", case.displays.len())));
+    assert!(crate::support::human::exhausted(text));
+    assert!(text.contains(&format!("Models: {}\n", case.displays.len())));
     let terminal = if case.displays.is_empty() {
         "UNSATISFIABLE"
     } else if case.costs.is_some() {
@@ -215,7 +216,7 @@ fn assert_complete(report: &Report, text: &str, case: &Case) {
             optimum.tied_models,
             u64::try_from(case.displays.len()).unwrap()
         );
-        assert!(text.contains(&format!("Incumbent ties: {};", case.displays.len())));
+        assert!(!text.contains("Incumbent ties:"));
     } else {
         assert!(report.optimization.is_none());
     }
@@ -262,8 +263,8 @@ fn default_display_limit_still_proves_all_hidden_optimal_ties() {
         assert_eq!(optimum.tied_models, 2);
         assert_eq!(optimum.score.costs(), [(7, 0), (1, -2)]);
         assert_eq!(records(&text), [(vec!["a".to_owned()], Some(vec![0, -2]))]);
-        assert!(text.contains("OPTIMUM FOUND\nCoverage: exhausted"));
-        assert!(text.contains("Incumbent ties: 2;"));
+        assert!(text.contains("OPTIMUM FOUND\nModels:"));
+        assert!(text.contains("Models: 1\n"));
     }
 }
 
@@ -276,7 +277,7 @@ fn maximizing_literal_and_evaluated_minimum_have_distinct_typed_source_refusals(
     ] {
         let (result, text, _) = solve(source, &options(true, 0));
         let error = result.unwrap_err();
-        assert!(text.is_empty());
+        assert!(crate::support::human::preamble(&text));
         let RunError::FormulaAdmission(FormulaFailure::Expansion(ExpansionFailure::Admission(
             error,
         ))) = error
@@ -354,7 +355,7 @@ fn original_stdin_command_proves_normalized_optimum_without_feature_flags() {
         );
         let text = String::from_utf8(output.stdout).unwrap();
         assert_eq!(records(&text), expected(case));
-        assert!(text.contains("OPTIMUM FOUND\nCoverage: exhausted\nModels: 3;"));
+        assert!(text.contains("OPTIMUM FOUND\nModels: 3\n"));
     }
 }
 
@@ -415,7 +416,7 @@ fn incomplete_maximizing_evaluation_cannot_claim_optimality() {
     let (report, output, _) = solve(CASES[0].source, &bounded);
     assert_eq!(report.unwrap().completion, Completion::Interrupted);
     assert!(output.contains("INCOMPLETE:"));
-    assert!(output.contains("Coverage: partial"));
+    assert!(output.contains("(search incomplete)"));
     assert!(!output.contains("OPTIMUM FOUND"));
     assert!(!output.contains("UNSATISFIABLE"));
 }

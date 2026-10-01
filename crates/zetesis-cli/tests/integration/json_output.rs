@@ -636,7 +636,7 @@ fn human_output_remains_the_default() {
     assert!(
         std::str::from_utf8(&output)
             .unwrap()
-            .starts_with("Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\n")
+            .contains("Answer: 1\na\nSATISFIABLE\nModels: 1\n")
     );
 }
 

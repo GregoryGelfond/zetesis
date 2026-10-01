@@ -124,7 +124,7 @@ fn native_records(output: Output) -> Records {
         String::from_utf8_lossy(&output.stderr)
     );
     let text = String::from_utf8(output.stdout).unwrap();
-    assert!(text.contains("Coverage: exhausted"), "{text}");
+    assert!(crate::support::human::exhausted(&text), "{text}");
     let lines: Vec<_> = text.lines().collect();
     let mut records = Vec::new();
     for (index, line) in lines.iter().enumerate() {
@@ -218,7 +218,9 @@ fn mixed_and_repeated_standard_input_fail_before_reading_any_source() {
     for roots in [&["-", "missing.lp"][..], &["missing.lp", "-"], &["-", "-"]] {
         let result = fixture.native(roots);
         assert_eq!(result.status.code(), Some(2));
-        assert!(result.stdout.is_empty());
+        assert!(crate::support::human::preamble(
+            std::str::from_utf8(&result.stdout).unwrap()
+        ));
         assert!(
             String::from_utf8(result.stderr)
                 .unwrap()
@@ -252,7 +254,9 @@ fn cumulative_source_and_root_limits_refuse_before_model_output() {
     ] {
         let result = fixture.native(&["a.lp", "b.lp", flag, value]);
         assert_eq!(result.status.code(), Some(2));
-        assert!(result.stdout.is_empty());
+        assert!(crate::support::human::preamble(
+            std::str::from_utf8(&result.stdout).unwrap()
+        ));
         assert!(String::from_utf8(result.stderr).unwrap().contains(label));
     }
     fixture.close();
@@ -266,7 +270,9 @@ fn later_original_file_errors_name_the_original_path() {
         fixture.write("b.lp", source);
         let result = fixture.native(&["a.lp", "b.lp"]);
         assert_eq!(result.status.code(), Some(2));
-        assert!(result.stdout.is_empty());
+        assert!(crate::support::human::preamble(
+            std::str::from_utf8(&result.stdout).unwrap()
+        ));
         assert!(String::from_utf8(result.stderr).unwrap().contains("b.lp"));
     }
     fixture.close();
@@ -402,7 +408,9 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
     fixture.write("unreadable.lp", "invalid(");
     let invalid = fixture.native(&["sub/entry.lp"]);
     assert_eq!(invalid.status.code(), Some(2));
-    assert!(invalid.stdout.is_empty());
+    assert!(crate::support::human::preamble(
+        std::str::from_utf8(&invalid.stdout).unwrap()
+    ));
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("unreadable.lp"));
 
     fixture.write("sub/bound.lp", "#include \"x\".");
@@ -410,7 +418,9 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
     fixture.write("sub/x", "fallback.");
     let over_limit = fixture.native(&["sub/bound.lp", "--max-source-bytes", "16"]);
     assert_eq!(over_limit.status.code(), Some(2));
-    assert!(over_limit.stdout.is_empty());
+    assert!(crate::support::human::preamble(
+        std::str::from_utf8(&over_limit.stdout).unwrap()
+    ));
     assert!(String::from_utf8_lossy(&over_limit.stderr).contains("FileBytes"));
     fixture.close();
 }
@@ -431,7 +441,9 @@ fn nonregular_roots_and_includes_are_refused_before_blocking_open() {
     for name in ["pipe.lp", "entry.lp"] {
         let result = fixture.native(&[name]);
         assert_eq!(result.status.code(), Some(2));
-        assert!(result.stdout.is_empty());
+        assert!(crate::support::human::preamble(
+            std::str::from_utf8(&result.stdout).unwrap()
+        ));
         assert!(String::from_utf8_lossy(&result.stderr).contains("regular file"));
     }
     fixture.close();

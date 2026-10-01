@@ -107,7 +107,8 @@ pub struct PhaseTimings {
     measurements: [Option<PhaseMeasurement>; SolvePhase::ALL.len()],
 }
 impl PhaseTimings {
-    /// An entered phase's attempted time; `None` means unentered or inapplicable.
+    /// An entered phase's attempted time; `None` means detailed measurements
+    /// were disabled, or the phase was unentered or inapplicable.
     #[must_use]
     pub const fn get(&self, phase: SolvePhase) -> Option<PhaseMeasurement> {
         self.measurements[phase as usize]
@@ -116,6 +117,7 @@ impl PhaseTimings {
 
 pub(crate) struct Recorder {
     stages: StageRecorder,
+    details: bool,
     grounding: crate::grounding_timing::Recorder,
     measurements: Mutex<[Option<PhaseMeasurement>; SolvePhase::ALL.len()]>,
 }
@@ -123,8 +125,16 @@ impl Recorder {
     pub(crate) fn new(enabled: bool) -> Self {
         Self {
             stages: StageRecorder::new(enabled),
+            details: enabled,
             grounding: crate::grounding_timing::Recorder::default(),
             measurements: Mutex::new([None; SolvePhase::ALL.len()]),
+        }
+    }
+
+    pub(crate) fn stages_only() -> Self {
+        Self {
+            stages: StageRecorder::new(true),
+            ..Self::new(false)
         }
     }
 
@@ -132,11 +142,15 @@ impl Recorder {
         self.stages.enabled()
     }
 
+    pub(crate) const fn details_enabled(&self) -> bool {
+        self.details
+    }
+
     pub(crate) fn start(&self, phase: SolvePhase) -> Span<'_> {
         Span {
             recorder: self,
             phase,
-            started: self.stages.enabled().then(Instant::now),
+            started: self.details.then(Instant::now),
             _stage: match phase {
                 SolvePhase::AdmissionMaterialization => {
                     Some(self.stage(SolveStage::SourcePreparation))
@@ -153,7 +167,7 @@ impl Recorder {
     }
 
     pub(crate) fn search(&self, previous: SearchPhaseTimings, current: SearchPhaseTimings) {
-        if self.stages.enabled() {
+        if self.details {
             let mut values = self.lock_measurements();
             for (phase, before, after) in [
                 (
@@ -204,9 +218,12 @@ impl Recorder {
     }
 
     pub(crate) fn grounding_observer(&self) -> Option<crate::stage_timing::Observer<'_>> {
-        self.stages
-            .enabled()
-            .then(|| crate::stage_timing::Observer::new(&self.stages, &self.grounding))
+        self.stages.enabled().then(|| {
+            crate::stage_timing::Observer::new(
+                &self.stages,
+                self.details.then_some(&self.grounding),
+            )
+        })
     }
 
     // No caller code runs under this lock. A poisoned accumulator retains its
@@ -227,8 +244,16 @@ impl Recorder {
         self.stages.snapshot().map(|stages| PhaseTimings {
             driver_elapsed: stages.driver_elapsed,
             stages,
-            grounding: self.grounding.snapshot(),
-            measurements: *self.lock_measurements(),
+            grounding: if self.details {
+                self.grounding.snapshot()
+            } else {
+                crate::GroundingTimings::default()
+            },
+            measurements: if self.details {
+                *self.lock_measurements()
+            } else {
+                [None; SolvePhase::ALL.len()]
+            },
         })
     }
 }

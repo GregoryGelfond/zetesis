@@ -83,8 +83,8 @@ fn queens_variant_one_completes_all_92_boards() {
         String::from_utf8_lossy(&result.stderr)
     );
     let text = String::from_utf8(result.stdout).unwrap();
-    assert!(text.contains("Coverage: exhausted"));
-    assert!(text.contains("Models: 92;"));
+    assert!(crate::support::human::exhausted(&text));
+    assert!(text.contains("Models: 92\n"));
     let mut boards = BTreeSet::new();
     let mut lines = text.lines();
     while let Some(line) = lines.next() {

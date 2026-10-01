@@ -11,15 +11,17 @@ use zetesis_telemetry::StageSpan;
 /// Cloning shares one recorder and its original start time. It does not copy or
 /// restart measurements. The last owner releases the recorder; guards and
 /// grounding observers borrow an owner and cannot outlive it. Independent calls
-/// to [`Self::new`] create independent scopes. Clones are `Send` and `Sync`;
-/// brief internal locks protect bookkeeping without enclosing application work,
-/// frontend calls or observer callbacks.
+/// to [`Self::new`] or [`Self::stages_only`] create independent scopes. Clones
+/// are `Send` and `Sync`; brief internal locks protect bookkeeping without
+/// enclosing application work, frontend calls or observer callbacks.
 ///
 /// Each owner retains a fixed set of phase, stage and grounding slots. Creating
 /// an owner allocates one fixed-size shared record; cloning and all recording
 /// operations take constant space. Snapshots and recording visit only those
 /// fixed slots; concurrent bookkeeping may briefly wait for a lock. Enabled
-/// operations read the host clock. Disabled operations read no clocks, and
+/// stages read the host clock. Detailed measurements additionally time phase
+/// attempts and collect frontend work. A stages-only scope leaves those
+/// detailed measurements absent. Disabled operations read no clocks, and
 /// snapshots remain absent.
 ///
 /// Callers define the measured scope and may record arbitrary attempted work.
@@ -37,11 +39,27 @@ pub struct SolveMeasurements {
 }
 
 impl SolveMeasurements {
-    /// Create one fixed-size recorder with optional host-clock measurements.
+    /// Create one fixed-size recorder with optional detailed host measurements.
+    /// `true` enables stages, phase attempts and frontend work attribution;
+    /// `false` disables all measurement clocks and returns no snapshots.
     #[must_use]
     pub fn new(enabled: bool) -> Self {
         Self {
             recorder: Arc::new(Recorder::new(enabled)),
+        }
+    }
+
+    /// Record exclusive host stages without detailed phase or grounding work.
+    ///
+    /// Snapshots retain their stage intervals and driver elapsed time, while
+    /// every detailed phase and grounding measurement remains absent. Passing
+    /// this scope to a session disables its optional detailed statistics.
+    /// Admission and observation phase guards still enter their coarse stages;
+    /// other phase guards read no clocks. Each scope has independent ownership.
+    #[must_use]
+    pub fn stages_only() -> Self {
+        Self {
+            recorder: Arc::new(Recorder::stages_only()),
         }
     }
 
@@ -52,11 +70,20 @@ impl SolveMeasurements {
         self.recorder().enabled()
     }
 
+    /// Whether detailed phase clocks and frontend work attribution are enabled.
+    /// A stages-only scope returns `false`. This inspection reads no clock.
+    #[must_use]
+    pub fn details_enabled(&self) -> bool {
+        self.recorder().details_enabled()
+    }
+
     /// Enter one phase attempt, recording its duration when the guard is dropped.
     ///
     /// Phase intervals are nonexclusive. Admission and observation phases also
-    /// enter their corresponding exclusive host stage. Keep those stage guards
-    /// in stack order; overlapping phase intervals cannot be added as a total.
+    /// enter their corresponding exclusive host stage, including in a stages-only
+    /// scope. Other phase guards read no clock when detailed timing is disabled.
+    /// Keep those stage guards in stack order; overlapping phase intervals
+    /// cannot be added as a total.
     pub fn enter(&self, phase: SolvePhase) -> MeasurementSpan<'_> {
         MeasurementSpan {
             _span: self.recorder().start(phase),
@@ -86,6 +113,8 @@ impl SolveMeasurements {
     /// attempts, whose durations and work are summed. The frontend's callbacks
     /// establish measurement boundaries, not evidence that admission or
     /// grounding succeeded.
+    /// A stages-only observer requests no detailed counters and ignores phase
+    /// callbacks, but still records the coarse grounding interval and route.
     /// A disabled scope returns `None` without reading a clock.
     #[must_use]
     pub fn grounding_observer(&self) -> Option<impl zetesis_themelios::GroundingObserver + '_> {
@@ -97,6 +126,7 @@ impl SolveMeasurements {
     /// Active exclusive stages contribute their elapsed prefix. Phase and
     /// grounding measurements include only closed attempts. The returned value
     /// can be inspected or edited without changing the shared recorder.
+    /// A stages-only snapshot has no detailed phase or grounding measurements.
     #[must_use]
     pub fn snapshot(&self) -> Option<PhaseTimings> {
         self.recorder().snapshot()

@@ -10,11 +10,14 @@ use zetesis_core::StaticError;
 use zetesis_cpu::{Cancellation, Stop};
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String, String) {
+    let mut configured = options(arguments);
+    configured.stats = true;
+    configured.statistics_view = zetesis_cli::StatisticsView::Records;
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
         source.into(),
-        &options(arguments),
+        &configured,
         &mut output,
         &mut diagnostics,
         &Cancellation::default(),
@@ -131,7 +134,7 @@ fn eager_cpu_enforces_every_static_lowering_cap() {
         assert!(
             matches!(error, RunError::Static(StaticError::LimitExceeded { resource: actual, .. }) if actual == resource)
         );
-        assert!(output.is_empty());
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
     }
 }
 
@@ -147,7 +150,7 @@ fn eager_auto_never_silently_substitutes_lazy_when_lowering_is_refused() {
     )
     .unwrap_err();
     assert!(matches!(error, RunError::Static(_)));
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
@@ -177,7 +180,7 @@ fn lazy_device_selection_preserves_source_diagnostics() {
             std::mem::discriminant(&baseline)
         );
         assert_eq!(error.to_string(), baseline.to_string());
-        assert!(output.is_empty());
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
         assert!(diagnostics.is_empty());
     }
 }
@@ -204,7 +207,7 @@ fn both_cpu_modes_keep_work_and_candidate_stops_incomplete() {
             Some(zetesis_cli::Interruption::Oracle(Stop::WorkLimit))
         );
         assert_eq!(report.models, 0);
-        assert!(output.contains("Coverage: partial"));
+        assert!(output.contains("Models: 0 (search incomplete)"));
         assert!(!output.contains("UNSATISFIABLE"));
         let (report, output, _) = solve(
             "{a}. {b}.",

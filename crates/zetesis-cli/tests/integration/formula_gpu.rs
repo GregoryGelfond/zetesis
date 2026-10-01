@@ -1,6 +1,6 @@
 //! Ordinary formula invocations select the hybrid before answer-set publication.
 
-use crate::support::options::enumerating as options;
+use crate::support::options::enumerating;
 use zetesis_cli::{Completion, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 
@@ -26,6 +26,12 @@ use crate::support::finite_carrier_sources;
 use crate::support::language_value_sources;
 #[cfg(feature = "gpu")]
 use crate::support::physical_backend;
+
+fn options(arguments: &[&str]) -> zetesis_cli::Options {
+    let mut options = enumerating(arguments);
+    options.statistics_view = zetesis_cli::StatisticsView::Records;
+    options
+}
 
 fn cpu_output(source: &str, json: bool) -> Vec<u8> {
     let mut configuration = options(&["--backend", "cpu"]);
@@ -199,6 +205,8 @@ fn cancellation_precedes_explicit_formula_device_initialization() {
         assert!(!String::from_utf8(diagnostics).unwrap().contains("Backend:"));
         let text = String::from_utf8(output).unwrap();
         assert!(text.contains("INCOMPLETE"));
+        assert!(!text.contains("Backend:"));
+        assert!(!text.contains("Answer:"));
         assert!(!text.contains("UNSATISFIABLE"));
     }
 }
@@ -215,7 +223,7 @@ fn formula_admission_precedes_device_initialization() {
     )
     .unwrap_err();
     assert!(matches!(error, RunError::FormulaAdmission(_)));
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
@@ -235,7 +243,7 @@ fn formula_device_route_refuses_explicit_lazy_grounding() {
             backend: zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
         }
     ));
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
@@ -271,7 +279,7 @@ fn cpu_only_formula_hardware_request_is_explicitly_unavailable() {
     )
     .unwrap_err();
     assert!(matches!(error, RunError::BackendUnavailable));
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[cfg(feature = "gpu")]
@@ -509,9 +517,9 @@ mod physical {
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(report.models, 3);
         assert!(
-            !std::str::from_utf8(&output)
+            std::str::from_utf8(&output)
                 .unwrap()
-                .contains("coverage=exhausted")
+                .contains("Models: 3 (search incomplete)")
         );
         let mut limited = options(&["--backend", backend.argument(), "--oracle", "countermodel"]);
         limited.max_batch_bytes = Some(0);
@@ -530,7 +538,13 @@ mod physical {
         let mut broken = zetesis_test_support::io::BoundedWriter::new(0);
         let error = run_with_diagnostics(
             source.into(),
-            &options(&["--backend", backend.argument(), "--oracle", "countermodel"]),
+            &options(&[
+                "--backend",
+                backend.argument(),
+                "--oracle",
+                "countermodel",
+                "--stats",
+            ]),
             &mut output,
             &mut broken,
             &Cancellation::default(),
@@ -539,7 +553,7 @@ mod physical {
         assert!(
             matches!(error, super::RunError::Output(ref cause) if cause.kind() == std::io::ErrorKind::BrokenPipe)
         );
-        assert!(output.is_empty());
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
         assert!(broken.bytes().is_empty());
     }
 
@@ -581,9 +595,9 @@ mod physical {
             );
             let text = std::str::from_utf8(&output).unwrap();
             assert!(text.contains("INCOMPLETE"));
-            assert!(text.contains("Coverage: partial"));
+            assert!(text.contains("(search incomplete)"));
             assert!(!text.contains("OPTIMUM FOUND"));
-            assert!(!text.contains("Coverage: exhausted"));
+            assert!(!crate::support::human::exhausted(text));
         }
     }
 }

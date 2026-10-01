@@ -156,8 +156,20 @@ its styling independently; redirected streams stay plain in automatic mode.
 A nonempty `NO_COLOR` or `TERM=dumb` disables automatic styling. `--color always` and
 `--color never` explicitly override human styling. JSON is always unstyled.
 
-Statistics are off by default. `--stats` requests phase and work measurements on
-stderr; the human view groups them by subject. Required resource and correctness
+The default human view shows the version and license, selected backend, host
+thread allowance and effective grounding mode, followed by answers, the result
+and model count. An answer limit is marked beside the count; it does not claim
+exhaustive search. A stopped search remains `INCOMPLETE`.
+
+Basic grounding and solving times follow the results. These are exclusive host
+intervals, excluding source preparation and output. Lazy or mixed execution shows
+one combined duration because grounding is interleaved with solving. Eager base
+execution counts original-answer reconstruction as solving. Unavailable intervals
+are reported as unavailable, never zero.
+
+Detailed statistics are off by default. `--stats` appends phase and work tables
+on stderr after the basic summary. Configuration and basic timings use italic
+metadata styling; explicitly requested table data is upright. Required resource and correctness
 accounting still operates when statistics are disabled. Optional statistics can
 add measurement and output overhead.
 

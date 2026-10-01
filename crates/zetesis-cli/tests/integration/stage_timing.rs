@@ -1,6 +1,5 @@
 //! Actual routes expose exclusive typed stages without changing model output.
 use crate::support::options::serial_with_statistics as options;
-use std::io;
 use zetesis_cli::{
     Completion, GroundingMode, PhaseTimings, SolvePhase, SolveStage, run_detailed_with_diagnostics,
 };
@@ -79,11 +78,17 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                         GroundingMode::Eager | GroundingMode::EagerBaseTerminalDefinitions
                     )
                 );
-                assert!(
-                    text.find("Stage timings:").unwrap() < text.find("Phase timings:").unwrap()
-                );
-                assert!(text.contains("failed_attempts=included; schema=5"));
-                if source == "1{p;q}1." {
+                if enabled {
+                    assert!(
+                        text.find("Stage timings:").unwrap() < text.find("Phase timings:").unwrap()
+                    );
+                    assert!(text.contains("failed_attempts=included; schema=5"));
+                } else {
+                    for phase in SolvePhase::ALL {
+                        assert!(timings.get(phase).is_none());
+                    }
+                }
+                if enabled && source == "1{p;q}1." {
                     // One parse, one closure admission and one formula admission.
                     // Retrying the grammar reuses the original parsed owner.
                     assert_eq!(
@@ -108,7 +113,11 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
             }
             outputs.push(output);
         }
-        assert_eq!(outputs[0], outputs[1], "{source}");
+        assert_eq!(
+            crate::support::human::before_timing(std::str::from_utf8(&outputs[0]).unwrap()),
+            crate::support::human::before_timing(std::str::from_utf8(&outputs[1]).unwrap()),
+            "{source}"
+        );
     }
 }
 
@@ -164,15 +173,6 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
     assert!(timings.get(SolvePhase::CandidateSetup).is_some());
 }
 
-struct Closed;
-impl io::Write for Closed {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::ErrorKind::BrokenPipe.into())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 #[test]
 fn early_cancellation_and_output_failure_retain_typed_attempts() {
     let cancellation = Cancellation::default();
@@ -200,7 +200,7 @@ fn early_cancellation_and_output_failure_retain_typed_attempts() {
     let failure = run_detailed_with_diagnostics(
         "a|b.".into(),
         &options(&[], true),
-        &mut Closed,
+        &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
         &mut Vec::new(),
         &Cancellation::default(),
     )
@@ -208,13 +208,14 @@ fn early_cancellation_and_output_failure_retain_typed_attempts() {
     assert!(matches!(*failure.cause, zetesis_cli::RunError::Output(_)));
     let timings = *failure.phase_timings.unwrap();
     partition(&timings);
-    assert_eq!(
+    // Configuration and answer publication are both exclusive output attempts.
+    assert!(
         timings
             .stages
             .get(SolveStage::ObservationOutput)
             .unwrap()
-            .calls,
-        1
+            .calls
+            >= 2
     );
 }
 

@@ -1,9 +1,9 @@
 //! Ordinary source execution preserves exact reduct, objective and publication contracts.
 use crate::support::runs::detailed as solve;
 use clap::Parser;
-use std::io;
 use zetesis_cli::{
-    Completion, Options, Oracle, RunFailure, SolvePhase, run_detailed_with_diagnostics,
+    Completion, Options, Oracle, RunFailure, SolvePhase, StatisticsView,
+    run_detailed_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
 
@@ -21,6 +21,7 @@ fn options(oracle: Oracle, workers: usize) -> Options {
             "2147483648",
         ])
             .unwrap();
+    o.statistics_view = StatisticsView::Records;
     o.oracle = oracle;
     // The batched completion protocol these tests exercise is the clause
     // method's.
@@ -114,18 +115,6 @@ fn unsupported_class_falls_back_and_explicit_general_oracle_keeps_comparison_pat
     assert!(diag.contains("optional class certificate refused"));
     assert!(diag.contains("storage limit=0"));
 }
-struct Broken;
-impl io::Write for Broken {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        Err(io::Error::new(
-            io::ErrorKind::BrokenPipe,
-            "test output failure",
-        ))
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 #[test]
 fn early_requested_models_and_writer_failure_keep_unpublished_certified_models_explicit() {
     let mut o = options(Oracle::Auto, 4);
@@ -139,7 +128,7 @@ fn early_requested_models_and_writer_failure_keep_unpublished_certified_models_e
     let failure: RunFailure = run_detailed_with_diagnostics(
         "1{a;b;c}1.".into(),
         &o,
-        &mut Broken,
+        &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
         &mut Vec::new(),
         &Cancellation::default(),
     )

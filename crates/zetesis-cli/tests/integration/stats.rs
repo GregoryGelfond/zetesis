@@ -4,7 +4,8 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::PathBuf;
 
-use crate::support::options::serial as options;
+use crate::support::human::before_timing;
+use crate::support::options::serial;
 use clap::Parser;
 use zetesis_cli::{
     Completion, Options, Report, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
@@ -12,6 +13,12 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
+
+fn options(arguments: &[&str]) -> Options {
+    let mut options = serial(arguments);
+    options.statistics_view = zetesis_cli::StatisticsView::Records;
+    options
+}
 
 fn solve(source: &str, options: &Options) -> (Report, Vec<u8>, String) {
     let mut output = Vec::new();
@@ -129,7 +136,7 @@ fn statistics_report_the_support_cut_in_place_of_the_disjunctive_certificate() {
 fn requested_statistics_use_accepted_policy_spelling() {
     for backend in ["cpu"] {
         for oracle in ["auto", "closure", "countermodel"] {
-            let configured = Options::try_parse_from([
+            let mut configured = Options::try_parse_from([
                 "zetesis",
                 "--stats",
                 "--workers",
@@ -142,6 +149,7 @@ fn requested_statistics_use_accepted_policy_spelling() {
                 oracle,
             ])
             .unwrap();
+            configured.statistics_view = zetesis_cli::StatisticsView::Records;
             let (_, _, diagnostics) = solve("a.", &configured);
             assert!(
                 diagnostics.contains(&format!(
@@ -192,7 +200,10 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
         assert!(!ordinary.contains("Statistics:"));
         configured.stats = true;
         let (report, output, diagnostics) = solve(source, &configured);
-        assert_eq!(output, expected);
+        assert_eq!(
+            before_timing(std::str::from_utf8(&output).unwrap()),
+            before_timing(std::str::from_utf8(&expected).unwrap())
+        );
         assert_eq!(report.completion, baseline.completion);
         assert_eq!(report.models, baseline.models);
         assert!(diagnostics.starts_with(&ordinary));
@@ -278,12 +289,13 @@ fn cancellation_and_source_refusal_have_unavailable_execution_not_zero_work() {
     assert!(text.contains("status: failed; completion=unavailable"));
     assert!(text.contains("effective execution: unavailable; counters=unavailable"));
     assert!(!text.contains("completion: exhausted"));
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
 fn automatic_execution_reports_cpu() {
-    let options = Options::try_parse_from(["zetesis", "--stats", "--workers", "1"]).unwrap();
+    let mut options = Options::try_parse_from(["zetesis", "--stats", "--workers", "1"]).unwrap();
+    options.statistics_view = zetesis_cli::StatisticsView::Records;
     let (_, _, text) = solve("p.", &options);
     assert!(text.contains("backend=cpu; oracle=closure; grounder=lazy"));
     assert!(!text.contains("backend=untracked"));
@@ -314,7 +326,10 @@ fn bundled_sources_use_the_same_statistics_boundary_without_rewriting_stdout() {
         &Cancellation::default(),
     )
     .unwrap();
-    assert_eq!(output, baseline);
+    assert_eq!(
+        before_timing(std::str::from_utf8(&output).unwrap()),
+        before_timing(std::str::from_utf8(&baseline).unwrap())
+    );
     assert_eq!(report.models, first.models);
     assert_eq!(report.completion, first.completion);
     let text = String::from_utf8(diagnostics).unwrap();
@@ -344,8 +359,9 @@ fn statistics_writer_failure_is_a_typed_error_with_the_exact_written_prefix() {
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
         assert_eq!(diagnostics.bytes(), &text.as_bytes()[..capacity]);
         assert_eq!(
-            output, expected_output,
-            "completed answers remain byte-identical even if later statistics cannot be written"
+            before_timing(std::str::from_utf8(&output).unwrap()),
+            before_timing(std::str::from_utf8(&expected_output).unwrap()),
+            "completed answers and status remain byte-identical if later statistics fail"
         );
     }
 }
@@ -389,7 +405,7 @@ fn cpu_closure_refuses_an_oversized_reservation() {
         "{text}"
     );
     assert!(text.contains("671088640"), "{text}");
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]

@@ -13,6 +13,7 @@ use zetesis_test_support::repository;
 
 // One worker: the bytes of two runs are compared, and several walkers of
 // the region tree deliver models in the schedule's order.
+use crate::support::human::before_timing;
 use crate::support::options::serial as options;
 
 fn output(source: &str, options: &Options) -> String {
@@ -75,22 +76,28 @@ fn styled_model_headings_leave_atom_lines_plain() {
     for source in ["a.", "a. #show seen : a."] {
         let plain = output(source, &options(&["--color", "never"]));
         let colored = output(source, &options(&["--color", "always"]));
-        let mut lines = colored.lines();
+        let mut lines = colored.lines().skip(3);
         assert_eq!(
             lines.next(),
             Some("\u{1b}[1;36mAnswer:\u{1b}[22;36m 1\u{1b}[0m")
         );
-        assert_eq!(lines.next(), plain.lines().nth(1));
+        assert_eq!(lines.next(), plain.lines().nth(4));
         assert_eq!(lines.next(), Some("\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m"));
-        assert_eq!(
-            lines.next(),
-            Some("\u{1b}[34mCoverage:\u{1b}[3;90m exhausted\u{1b}[0m")
-        );
         let models = lines.next().unwrap();
         assert!(models.starts_with("\u{1b}[34mModels:\u{1b}[3;90m "));
         assert!(models.ends_with("\u{1b}[0m"));
+        assert_eq!(lines.next(), Some(""));
+        assert!(
+            lines
+                .next()
+                .unwrap()
+                .starts_with("\u{1b}[34mTime:\u{1b}[3;90m ")
+        );
         assert_eq!(lines.next(), None);
-        assert_eq!(without_styles(&colored), plain);
+        assert_eq!(
+            before_timing(&without_styles(&colored)),
+            before_timing(&plain)
+        );
     }
 }
 
@@ -100,21 +107,21 @@ fn objective_metadata_resets_its_style_before_the_status() {
     let plain = output(source, &options(&["--color", "never"]));
     let colored = output(source, &options(&["--color", "always"]));
     assert!(plain.contains("Optimization: 2\n"));
-    assert!(colored.starts_with(
+    assert!(colored.contains(
         "\u{1b}[1;36mAnswer:\u{1b}[22;36m 1\u{1b}[0m\na\n\u{1b}[3;32mOptimization: 2\u{1b}[0m\n"
     ));
-    let ties = colored.lines().nth(3).unwrap();
-    assert!(ties.starts_with("\u{1b}[34mIncumbent ties:\u{1b}[3;90m "));
-    assert!(ties.ends_with("\u{1b}[0m"));
-    assert!(colored.contains("\u{1b}[0m\n\u{1b}[1;3;90mOPTIMUM FOUND\u{1b}[0m\n\u{1b}[34mCoverage:\u{1b}[3;90m exhausted\u{1b}[0m\n"));
-    assert_eq!(without_styles(&colored), plain);
+    assert!(colored.contains("\u{1b}[0m\n\u{1b}[1;3;90mOPTIMUM FOUND\u{1b}[0m\n\u{1b}[34mModels:\u{1b}[3;90m 1\u{1b}[0m\n"));
+    assert_eq!(
+        before_timing(&without_styles(&colored)),
+        before_timing(&plain)
+    );
 }
 
 #[test]
 fn automatic_library_output_is_plain() {
     assert_eq!(
-        output("a.", &options(&[])),
-        output("a.", &options(&["--color", "never"]))
+        before_timing(&output("a.", &options(&[]))),
+        before_timing(&output("a.", &options(&["--color", "never"])))
     );
 }
 
@@ -132,19 +139,19 @@ fn color_policy_cannot_change_json() {
 
 #[test]
 fn satisfiable_status_is_untagged_styled_metadata() {
-    for source in ["a.", "a|b."] {
+    for (source, models) in [("a.", 1), ("a|b.", 2)] {
         let rendered = output(source, &options(&["--color", "always"]));
         assert!(
             rendered
                 .lines()
                 .any(|line| line == "\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m")
         );
-        assert!(
-            rendered.contains("\u{1b}[0m\n\u{1b}[34mCoverage:\u{1b}[3;90m exhausted\u{1b}[0m\n")
-        );
+        assert!(rendered.contains(&format!(
+            "\u{1b}[0m\n\u{1b}[34mModels:\u{1b}[3;90m {models}\u{1b}[0m\n"
+        )));
         assert_eq!(
-            without_styles(&rendered),
-            output(source, &options(&["--color", "never"]))
+            before_timing(&without_styles(&rendered)),
+            before_timing(&output(source, &options(&["--color", "never"])))
         );
     }
 }
@@ -153,12 +160,12 @@ fn satisfiable_status_is_untagged_styled_metadata() {
 fn unsatisfiable_status_is_untagged_styled_metadata() {
     for source in [":-.", "1{}1."] {
         let rendered = output(source, &options(&["--color", "always"]));
-        assert!(
-            rendered.starts_with("\u{1b}[1;3;90mUNSATISFIABLE\u{1b}[0m\n\u{1b}[34mCoverage:\u{1b}[3;90m exhausted\u{1b}[0m\n")
-        );
+        assert!(rendered.contains(
+            "\u{1b}[1;3;90mUNSATISFIABLE\u{1b}[0m\n\u{1b}[34mModels:\u{1b}[3;90m 0\u{1b}[0m\n"
+        ));
         assert_eq!(
-            without_styles(&rendered),
-            output(source, &options(&["--color", "never"]))
+            before_timing(&without_styles(&rendered)),
+            before_timing(&output(source, &options(&["--color", "never"])))
         );
     }
 }
@@ -180,7 +187,7 @@ fn requested_model_completion_styles_its_status() {
         assert_eq!(report.completion, Completion::RequestedModels);
         let colored = String::from_utf8(bytes).unwrap();
         assert!(colored.contains(
-            "\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m\n\u{1b}[34mCoverage:\u{1b}[3;90m partial"
+            "\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m\n\u{1b}[34mModels:\u{1b}[3;90m 1 (answer limit reached)"
         ));
         settings.color = ColorMode::Never;
         let mut plain = Vec::new();
@@ -194,7 +201,10 @@ fn requested_model_completion_styles_its_status() {
         .unwrap();
         settings.color = ColorMode::Always;
         assert_eq!(plain_report.completion, Completion::RequestedModels);
-        assert_eq!(without_styles(&colored).as_bytes(), plain);
+        assert_eq!(
+            before_timing(&without_styles(&colored)).as_bytes(),
+            before_timing(std::str::from_utf8(&plain).unwrap()).as_bytes()
+        );
     }
 }
 
@@ -231,8 +241,12 @@ fn styling_bytes_obey_the_complete_record_limit() {
     let mut settings = options(&["--color", "always"]);
     let full = output("a.", &settings);
     let record_end = full.find("\na\n").unwrap() + "\na\n".len();
-    settings.max_observation_bytes = record_end;
-    assert_eq!(output("a.", &settings), full);
+    let record_start = full.find("\u{1b}[1;36mAnswer:").unwrap();
+    settings.max_observation_bytes = record_end - record_start;
+    assert_eq!(
+        before_timing(&output("a.", &settings)),
+        before_timing(&full)
+    );
     settings.max_observation_bytes -= 1;
     let mut bytes = Vec::new();
     let failure = run_detailed_with_diagnostics(
@@ -247,7 +261,7 @@ fn styling_bytes_obey_the_complete_record_limit() {
         *failure.cause,
         RunError::ObservationOutputLimit { .. }
     ));
-    assert!(bytes.is_empty());
+    assert_eq!(bytes, full.as_bytes()[..record_start]);
     assert_eq!(failure.partial_report.unwrap().published_models, 0);
 }
 
@@ -258,7 +272,8 @@ fn interrupted_styled_records_are_not_published_models() {
     let complete = output(source, &settings);
     let marker = "Optimization: 2\u{1b}[0m\n";
     let record_end = complete.find(marker).unwrap() + marker.len();
-    for maximum in 0..record_end {
+    let record_start = complete.find("\u{1b}[1;36mAnswer:").unwrap();
+    for maximum in record_start..record_end {
         let mut prefix = BoundedWriter::new(maximum);
         let failure = run_detailed_with_diagnostics(
             source.into(),
@@ -285,6 +300,15 @@ fn redirected_process_output_defaults_to_plain_text() {
         .output()
         .unwrap();
     assert!(result.status.success());
-    assert!(result.stdout.starts_with(b"Answer: 1\n"));
+    assert!(
+        result
+            .stdout
+            .starts_with(crate::support::human::banner().as_bytes())
+    );
+    assert!(
+        std::str::from_utf8(&result.stdout)
+            .unwrap()
+            .contains("\nAnswer: 1\n")
+    );
     assert!(!result.stdout.contains(&0x1b));
 }

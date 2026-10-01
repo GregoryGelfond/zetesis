@@ -6,7 +6,9 @@ use std::num::NonZeroUsize;
 use std::process::{Command, Stdio};
 
 use crate::support::options::serial as options;
-use zetesis_cli::{Completion, RunError, run_with_diagnostics};
+use zetesis_cli::{
+    Completion, RunError, StatisticsView, run_finalized_with_diagnostics, run_with_diagnostics,
+};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL};
 
@@ -19,8 +21,15 @@ fn output_error(error: &RunError) {
     assert_eq!(error.source().unwrap().to_string(), source.to_string());
 }
 
+fn before_timing(bytes: &[u8]) -> usize {
+    std::str::from_utf8(bytes)
+        .unwrap()
+        .find("\nTime:")
+        .expect("the human summary includes elapsed time")
+}
+
 #[test]
-fn every_output_truncation_propagates_through_each_cpu_oracle() {
+fn deterministic_output_prefix_failures_propagate_on_both_oracles() {
     let scenarios: &[(&str, &[&str])] = &[
         (
             "p(1,foo). q(\"a b\\\"c\\\\d\\ne\").",
@@ -50,7 +59,7 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
         )
         .unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
-        for capacity in 0..complete.len() {
+        for capacity in 0..=before_timing(&complete) {
             let mut output = BoundedWriter::new(capacity);
             let error = run_with_diagnostics(
                 source.into(),
@@ -63,17 +72,6 @@ fn every_output_truncation_propagates_through_each_cpu_oracle() {
             output_error(&error);
             assert_eq!(output.bytes(), &complete[..capacity]);
         }
-        let mut output = BoundedWriter::new(complete.len());
-        let report = run_with_diagnostics(
-            source.into(),
-            &options,
-            &mut output,
-            &mut io::sink(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-        assert_eq!(report.completion, Completion::Exhausted);
-        assert_eq!(output.bytes(), complete);
     }
 }
 
@@ -84,7 +82,9 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
         ("{a}.", vec!["--oracle", "closure", "--grounder", "eager"]),
         ("{a;b}. #minimize{1:a}.", vec!["--oracle", "countermodel"]),
     ] {
-        let options = options(&arguments);
+        let mut options = options(&arguments);
+        options.stats = true;
+        options.statistics_view = StatisticsView::Records;
         let mut complete = Vec::new();
         run_with_diagnostics(
             source.into(),
@@ -94,10 +94,14 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
             &Cancellation::default(),
         )
         .unwrap();
-        for capacity in 0..complete.len() {
+        let text = std::str::from_utf8(&complete).unwrap();
+        let backend = text.find("Backend:").expect("selected CPU backend");
+        let setup_end = backend + text[backend..].find('\n').unwrap() + 1;
+        // Later statistics contain elapsed times and follow completed solving.
+        for capacity in 0..setup_end {
             let mut diagnostics = BoundedWriter::new(capacity);
             let mut output = Vec::new();
-            let error = run_with_diagnostics(
+            let failure = run_finalized_with_diagnostics(
                 source.into(),
                 &options,
                 &mut output,
@@ -105,13 +109,21 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
                 &Cancellation::default(),
             )
             .unwrap_err();
-            output_error(&error);
+            output_error(&failure.cause);
             assert_eq!(diagnostics.bytes(), &complete[..capacity]);
-            assert!(
-                !String::from_utf8(output)
-                    .unwrap()
-                    .contains("Coverage: exhausted")
+            assert_eq!(
+                failure
+                    .publication()
+                    .map_or(0, zetesis_cli::Publication::models),
+                0
             );
+            assert_eq!(
+                failure
+                    .semantic()
+                    .and_then(zetesis_cli::SemanticOutcome::completion),
+                None
+            );
+            assert!(!String::from_utf8(output).unwrap().contains("Answer:"));
         }
     }
 }
@@ -161,7 +173,7 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
             assert!(message.starts_with("source admission:"), "{message}");
             assert!(message.contains("bytes "), "{message}");
         }
-        assert!(output.is_empty());
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
     }
     let mut options = options(&[]);
     options.max_observation_bytes = 20;
@@ -180,7 +192,7 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
     ));
     assert!(error.source().is_none());
     assert!(error.to_string().contains("human Answer requires at least"));
-    assert!(output.is_empty());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
@@ -319,8 +331,13 @@ fn hybrid_device_policy_is_refused_before_parsing() {
         "{message}"
     );
     assert!(error.source().is_none());
-    assert!(output.is_empty());
-    assert!(diagnostics.is_empty(), "no backend may be initialized");
+    let output = std::str::from_utf8(&output).unwrap();
+    assert!(!output.contains("Answer:"));
+    assert!(
+        !output.contains("Backend:"),
+        "no backend may be initialized"
+    );
+    assert!(diagnostics.is_empty());
 }
 
 #[test]
@@ -362,7 +379,7 @@ fn device_output_failure_is_reported_before_adapter_discovery() {
 }
 
 #[test]
-fn partial_and_interrupted_summaries_propagate_every_output_failure() {
+fn incomplete_summaries_propagate_deterministic_prefix_failures() {
     let mut requested = options(&["--oracle", "closure"]);
     requested.models = 1;
     for options in [
@@ -381,9 +398,14 @@ fn partial_and_interrupted_summaries_propagate_every_output_failure() {
         .unwrap();
         assert_ne!(report.completion, Completion::Exhausted);
         let text = std::str::from_utf8(&complete).unwrap();
-        assert!(text.contains("Coverage: partial"));
+        let qualification = match report.completion {
+            Completion::RequestedModels => "(answer limit reached)",
+            Completion::Interrupted => "(search incomplete)",
+            Completion::Exhausted => unreachable!("an incomplete scenario"),
+        };
+        assert!(text.contains(qualification));
         assert!(!text.contains("UNSATISFIABLE"));
-        for capacity in 0..complete.len() {
+        for capacity in 0..=before_timing(&complete) {
             let mut output = BoundedWriter::new(capacity);
             let error = run_with_diagnostics(
                 "{a}.".into(),
@@ -415,7 +437,9 @@ fn cpu_only_inventory_propagates_failures_after_each_capability_record() {
 #[cfg(not(feature = "gpu"))]
 #[test]
 fn cpu_only_default_eager_routing_stays_on_the_cpu() {
-    let options = options(&["--oracle", "closure", "--grounder", "eager"]);
+    let mut options = options(&["--oracle", "closure", "--grounder", "eager"]);
+    options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -458,7 +482,9 @@ fn device_inventory_exposes_availability_without_claiming_execution() {
 
 #[test]
 fn a_tiny_lazy_run_uses_the_cpu_by_default() {
-    let options = options(&["--oracle", "closure", "--grounder", "lazy"]);
+    let mut options = options(&["--oracle", "closure", "--grounder", "lazy"]);
+    options.stats = true;
+    options.statistics_view = StatisticsView::Records;
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -496,7 +522,7 @@ fn cpu_only_binary_reports_explicit_gpu_unavailability_without_fallback() {
         assert!(matches!(error, RunError::BackendUnavailable));
         assert!(error.source().is_none());
         assert!(error.to_string().contains("built without GPU support"));
-        assert!(output.is_empty());
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
     }
     let mut output = Vec::new();
     zetesis_cli::devices(&mut output).unwrap();

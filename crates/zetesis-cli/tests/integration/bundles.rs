@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+use crate::support::human::before_timing;
 use crate::support::options::enumerating as options;
 use zetesis_cli::{Completion, RunError, run_bundle_with_diagnostics, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
@@ -79,7 +80,11 @@ fn stdin_syntax_failure_renders_each_diagnostic_once() {
             .unwrap();
         let result = child.wait_with_output().unwrap();
         assert_eq!(result.status.code(), Some(2));
-        assert!(result.stdout.is_empty());
+        assert!(
+            !std::str::from_utf8(&result.stdout)
+                .unwrap()
+                .contains("Answer:")
+        );
         let text = String::from_utf8(result.stderr).unwrap();
         assert_eq!(text.matches("error[syntax::").count(), 3, "{text}");
         assert!(text.contains("<input>:1:3"), "{text}");
@@ -189,7 +194,8 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
         "#const upper=lower+1. #include \"data.lp\". {pick(X)} :- d(X).",
     );
     fixture.write("data.lp", "#const lower=1. d(lower..upper).");
-    let options = options(&["--backend", "cpu"]);
+    let mut options = options(&["--backend", "cpu", "--stats"]);
+    options.statistics_view = zetesis_cli::StatisticsView::Records;
     let mut original = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_bundle_with_diagnostics(
@@ -209,7 +215,10 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
         &Cancellation::default(),
     )
     .unwrap();
-    assert_eq!(original, explicit);
+    assert_eq!(
+        before_timing(std::str::from_utf8(&original).unwrap()),
+        before_timing(std::str::from_utf8(&explicit).unwrap())
+    );
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!((report.models, report.checked), (4, 4));
     assert_eq!(report.checked, direct.checked);
@@ -220,11 +229,14 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
     );
     let process = fixture.process(&[]);
     assert!(process.status.success());
-    assert_eq!(process.stdout, original);
+    assert_eq!(
+        before_timing(std::str::from_utf8(&process.stdout).unwrap()),
+        before_timing(std::str::from_utf8(&original).unwrap())
+    );
     assert!(
-        !String::from_utf8(process.stdout)
+        String::from_utf8(process.stdout)
             .unwrap()
-            .contains("Backend:")
+            .contains("Backend: CPU")
     );
 }
 
@@ -241,8 +253,7 @@ fn bundled_show_filters_output_without_merging_hidden_models() {
         assert!(result.status.success(), "{:?}", result.stderr);
         let output = String::from_utf8(result.stdout).unwrap();
         assert!(output.contains("Answer: 1\np(1) q\nAnswer: 2\np(1) q\n"));
-        assert!(output.contains("Coverage: exhausted"));
-        assert!(output.contains("Models: 2; candidates examined: 2;"));
+        assert!(output.contains("SATISFIABLE\nModels: 2\n"));
     }
 }
 
@@ -261,7 +272,7 @@ fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
         &Cancellation::default(),
     )
     .unwrap_err();
-    assert!(models.is_empty());
+    assert!(!std::str::from_utf8(&models).unwrap().contains("Answer:"));
     let RunError::BundleAdmission(failure) = &error else {
         panic!("expected located semantic refusal: {error}");
     };
@@ -294,7 +305,7 @@ fn combined_expansion_budget_applies_across_original_files() {
     )
     .unwrap_err();
     assert!(matches!(error, RunError::BundleAdmission(_)));
-    assert!(models.is_empty());
+    assert!(!std::str::from_utf8(&models).unwrap().contains("Answer:"));
     assert!(error.to_string().contains("Templates"));
 }
 

@@ -91,7 +91,9 @@ fn observation_failure_preserves_verified_unpublished_evidence() {
     let (failure, output) = fail_source(SOURCE);
     // The first #show succeeds locally; the later refusal still publishes no
     // partial model or completion and never erases checked membership evidence.
-    assert!(output.is_empty());
+    assert!(crate::support::human::preamble(
+        std::str::from_utf8(&output).unwrap()
+    ));
     assert!(failure.subject().is_some());
     assert!(failure.semantic().is_some());
     assert_eq!(failure.publication().unwrap().models(), 0);
@@ -175,7 +177,9 @@ fn process_observation_diagnostic_uses_the_existing_color_policy() {
     let colored = fixture.process(&["--color", "always"]);
     for result in [&plain, &colored] {
         assert_eq!(result.status.code(), Some(2));
-        assert!(result.stdout.is_empty());
+        assert!(crate::support::human::preamble(&without_styles(
+            std::str::from_utf8(&result.stdout).unwrap()
+        )));
         assert!(String::from_utf8_lossy(&result.stderr).contains("child.lp:3:1"));
     }
     assert!(!plain.stderr.contains(&0x1b));
@@ -184,7 +188,11 @@ fn process_observation_diagnostic_uses_the_existing_color_policy() {
         colored.contains("\u{1b}[1;31merror[zetesis::observation]"),
         "{colored}"
     );
-    let mut chunks = colored.split("\u{1b}[");
+    assert_eq!(without_styles(&colored).as_bytes(), plain.stderr);
+}
+
+fn without_styles(text: &str) -> String {
+    let mut chunks = text.split("\u{1b}[");
     let mut unpainted = chunks.next().unwrap().to_owned();
     for chunk in chunks {
         let (style, rest) = chunk.split_once('m').expect("terminated SGR");
@@ -195,7 +203,7 @@ fn process_observation_diagnostic_uses_the_existing_color_policy() {
         );
         unpainted.push_str(rest);
     }
-    assert_eq!(unpainted.as_bytes(), plain.stderr);
+    unpainted
 }
 
 #[test]

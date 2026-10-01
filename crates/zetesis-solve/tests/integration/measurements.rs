@@ -332,6 +332,7 @@ fn clones_retain_the_original_measurements() {
 fn disabled_measurements_remain_absent() {
     let owner = SolveMeasurements::new(false);
     assert!(!owner.is_enabled());
+    assert!(!owner.details_enabled());
     assert_eq!(
         owner.measure(SolvePhase::ExecutionSetup, || Err::<(), _>(17)),
         Err(17)
@@ -350,6 +351,7 @@ fn disabled_measurements_remain_absent() {
 fn returned_errors_close_the_measured_attempt() {
     let owner = SolveMeasurements::new(true);
     assert!(owner.is_enabled());
+    assert!(owner.details_enabled());
     assert_eq!(
         owner.measure(SolvePhase::ExecutionSetup, || Err::<(), _>(17)),
         Err(17)
@@ -433,4 +435,154 @@ fn editing_a_snapshot_does_not_mutate_the_recorder() {
     assert_ne!(current.driver_elapsed, Duration::MAX);
     assert!(current.stages.is_complete());
     assert_eq!(current.get(SolvePhase::ExecutionSetup).unwrap().calls, 1);
+}
+
+#[test]
+fn stages_only_phase_guards_preserve_coarse_intervals() {
+    let owner = SolveMeasurements::stages_only();
+    assert!(owner.is_enabled());
+    assert!(!owner.details_enabled());
+    let shared = owner.clone();
+    for phase in [
+        SolvePhase::AdmissionMaterialization,
+        SolvePhase::ObservationOutput,
+    ] {
+        assert_eq!(shared.measure(phase, || Err::<(), _>(17)), Err(17));
+    }
+    let snapshot = owner.snapshot().unwrap();
+    assert!(snapshot.stages.is_complete());
+    for stage in [SolveStage::SourcePreparation, SolveStage::ObservationOutput] {
+        assert_eq!(snapshot.stages.get(stage).unwrap().calls, 1);
+    }
+    for phase in SolvePhase::ALL {
+        assert!(snapshot.get(phase).is_none(), "{phase:?}");
+    }
+}
+
+#[test]
+fn stages_only_grounding_omits_detailed_attribution() {
+    use zetesis_themelios::{ExpansionLimits, FormulaLimits, prepare_formula};
+
+    let owner = SolveMeasurements::stages_only();
+    let observer = owner.grounding_observer().unwrap();
+    assert!(!observer.details_enabled());
+    let prepared = prepare_formula(
+        "p(0). p(X+1):-p(X),X<3.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
+    assert_eq!(admitted.atom_catalog().atoms().len(), 4);
+    let snapshot = owner.snapshot().unwrap();
+    assert_eq!(snapshot.stages.get(SolveStage::Grounding).unwrap().calls, 1);
+    assert_eq!(
+        snapshot.stages.grounding_mode,
+        zetesis_solve::GroundingMode::Eager
+    );
+    for phase in GroundingPhase::ALL {
+        assert!(snapshot.grounding.get(phase).is_none(), "{phase:?}");
+    }
+}
+
+#[test]
+fn stages_only_observers_ignore_detailed_callbacks() {
+    let owner = SolveMeasurements::stages_only();
+    let observer = owner.grounding_observer().unwrap();
+    let mut work = GroundingWork::default();
+    work.support_rounds = Some(7);
+    observer.enter();
+    observer.phase_enter(GroundingPhase::RuleInstantiation, None);
+    observer.phase_exit(
+        GroundingPhase::RuleInstantiation,
+        None,
+        GroundingOutcome::Failed,
+        work,
+    );
+    observer.exit();
+    let snapshot = owner.snapshot().unwrap();
+    assert_eq!(snapshot.stages.get(SolveStage::Grounding).unwrap().calls, 1);
+    assert!(
+        snapshot
+            .grounding
+            .get(GroundingPhase::RuleInstantiation)
+            .is_none()
+    );
+}
+
+#[test]
+fn stages_only_sessions_disable_detailed_search_clocks() {
+    use zetesis_themelios::{ExpansionLimits, FormulaLimits, admit_formula};
+
+    let admitted = admit_formula(
+        "a | b.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let owner = SolveMeasurements::stages_only();
+    let mut session = Session::builder(
+        PreparedInput::formula(&admitted),
+        SolveConfig {
+            oracle: zetesis_solve::Oracle::Countermodel,
+            workers: std::num::NonZeroUsize::MIN,
+            stats: true,
+            ..cpu_config()
+        },
+        Cancellation::default(),
+    )
+    .measurements(&owner)
+    .start()
+    .unwrap();
+    let answers = session.by_ref().collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(answers.len(), 2);
+    let outcome = session.outcome().unwrap();
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert!(
+        outcome
+            .countermodel_statistics()
+            .unwrap()
+            .phase_timings
+            .is_none()
+    );
+    let snapshot = session.phase_timings().unwrap();
+    assert!(snapshot.stages.get(SolveStage::Solving).is_some());
+    assert!(snapshot.stages.is_complete());
+    for phase in SolvePhase::ALL {
+        assert!(snapshot.get(phase).is_none(), "{phase:?}");
+    }
+}
+
+#[test]
+fn stages_only_lazy_grounding_remains_interleaved() {
+    let admitted = admit("p:-not q. q:-not p.".into(), AdmissionOptions::default()).unwrap();
+    let owner = SolveMeasurements::stages_only();
+    let mut session = Session::builder(
+        PreparedInput::admitted(&admitted),
+        SolveConfig {
+            grounder: zetesis_solve::Grounder::Lazy,
+            ..cpu_config()
+        },
+        Cancellation::default(),
+    )
+    .measurements(&owner)
+    .start()
+    .unwrap();
+    assert_eq!(
+        session
+            .by_ref()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .len(),
+        2
+    );
+    let stages = session.phase_timings().unwrap().stages;
+    assert_eq!(
+        stages.grounding_mode,
+        zetesis_solve::GroundingMode::LazyInterleaved
+    );
+    assert!(stages.get(SolveStage::Grounding).is_none());
+    assert!(stages.get(SolveStage::Solving).is_some());
 }

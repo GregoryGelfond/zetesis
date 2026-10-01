@@ -393,7 +393,9 @@ does no validation, grounding or device discovery. Starting it preserves the
 ordinary strategy checks and control polling order.
 
 `measurements(&measurements)` supplies an explicit shared host-measurement scope;
-its enabled setting replaces `config.stats`. Source preparation and publication
+its detailed setting replaces `config.stats`. `SolveMeasurements::stages_only()`
+records coarse host stages without enabling detailed search clocks or grounding
+counters; `new(false)` remains fully disabled. Source preparation and publication
 can record into the same scope without entering the solver's private state.
 Each formula session imports only new cumulative timing work, so repeated
 snapshots cannot count it again. Measurements never establish semantic coverage.

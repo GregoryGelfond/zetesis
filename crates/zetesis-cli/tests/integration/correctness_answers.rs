@@ -27,7 +27,7 @@ fn every_case_matches_the_recorded_complete_answers() {
             "{path}: {}\n{text}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(text.contains("Coverage: exhausted"), "{path}: {text}");
+        assert!(crate::support::human::exhausted(&text), "{path}: {text}");
         let expected = &case["answer"];
         let expected_models: BTreeSet<BTreeSet<&str>> = expected["models"]
             .as_array()
@@ -76,7 +76,7 @@ fn every_case_matches_the_recorded_complete_answers() {
             if expected_cost.is_some() { count } else { 0 },
             "{path}"
         );
-        assert!(text.contains(&format!("Models: {count};")), "{path}");
+        assert!(text.contains(&format!("Models: {count}\n")), "{path}");
         let status = if !expected["satisfiable"].as_bool().unwrap() {
             "UNSATISFIABLE"
         } else if expected_cost.is_some() {

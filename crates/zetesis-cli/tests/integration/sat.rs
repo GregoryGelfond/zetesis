@@ -13,9 +13,16 @@ fn solve(
     cancellation: &Cancellation,
 ) -> (Report, String, String) {
     let options = Options::try_parse_from(
-        ["zetesis", "--oracle", "countermodel", "--models", "0"]
-            .into_iter()
-            .chain(arguments.iter().copied()),
+        [
+            "zetesis",
+            "--oracle",
+            "countermodel",
+            "--models",
+            "0",
+            "--stats",
+        ]
+        .into_iter()
+        .chain(arguments.iter().copied()),
     )
     .unwrap();
     let mut output = Vec::new();
@@ -158,7 +165,9 @@ fn hybrid_device_requests_are_refused_before_source() {
         );
         assert!(matches!(result, Err(RunError::HybridBackend { backend })
             if backend == options.backend));
-        assert!(output.is_empty());
+        assert!(crate::support::human::preamble(&String::from_utf8_lossy(
+            &output
+        )));
     }
 }
 

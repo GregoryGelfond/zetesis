@@ -37,6 +37,10 @@ pub enum Role {
     Metadata,
     /// A total or terminal result, in bold italic gray.
     Conclusion,
+    /// Explicitly requested table data, in upright gray.
+    Data,
+    /// A table total, in bold upright gray.
+    Total,
     /// An optimization label or value, in italic green.
     Objective,
     /// A recoverable diagnostic, in yellow.
@@ -153,6 +157,8 @@ impl Role {
             Self::Label => "\u{1b}[34m",
             Self::Metadata => "\u{1b}[3;90m",
             Self::Conclusion => "\u{1b}[1;3;90m",
+            Self::Data => "\u{1b}[90m",
+            Self::Total => "\u{1b}[1;90m",
             Self::Objective => "\u{1b}[3;32m",
             Self::Warning => "\u{1b}[33m",
             Self::Error => "\u{1b}[31m",

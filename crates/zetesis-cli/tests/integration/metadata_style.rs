@@ -6,14 +6,14 @@ use std::{
     process::{Command, Stdio},
 };
 use zetesis_cli::{
-    ColorMode, Completion, Options, RunError, run_bundle_finalized_with_diagnostics,
-    run_finalized_with_diagnostics,
+    ColorMode, Completion, Options, RunError, StatisticsView,
+    run_bundle_finalized_with_diagnostics, run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::repository;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-use zetesis_test_support::io::BoundedWriter;
+use zetesis_test_support::io::{BoundedWriter, FailAt};
 
 fn options(mode: ColorMode) -> Options {
     let mut options = Options::try_parse_from([
@@ -35,6 +35,19 @@ fn options(mode: ColorMode) -> Options {
     options
 }
 
+fn record_options(mode: ColorMode) -> Options {
+    let mut options = options(mode);
+    options.stats = true;
+    options.statistics_view = StatisticsView::Records;
+    options
+}
+
+fn setup_metadata(text: &str) -> &str {
+    let backend = text.find("Backend:").expect("selected CPU backend");
+    let end = backend + text[backend..].find('\n').unwrap() + 1;
+    &text[..end]
+}
+
 fn bundle() -> SourceBundle {
     SourceBundle::load(
         repository::examples().join("network-repair.lp"),
@@ -44,7 +57,11 @@ fn bundle() -> SourceBundle {
 }
 
 fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
-    let mut options = options(mode);
+    let mut options = if json {
+        options(mode)
+    } else {
+        record_options(mode)
+    };
     options.json = json;
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
@@ -57,7 +74,14 @@ fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
     )
     .unwrap();
     assert_eq!(report.semantic().completion(), Some(Completion::Exhausted));
-    (output, String::from_utf8(diagnostics).unwrap())
+    let diagnostics = String::from_utf8(diagnostics).unwrap();
+    // The metadata prefix ends before solving and variable statistics output.
+    let diagnostics = if json {
+        diagnostics
+    } else {
+        setup_metadata(&diagnostics).to_owned()
+    };
+    (output, diagnostics)
 }
 
 #[test]
@@ -90,8 +114,8 @@ fn styled_metadata_retains_its_exact_plain_text() {
 #[test]
 fn automatic_library_metadata_is_plain() {
     assert_eq!(
-        diagnostics(ColorMode::Auto, false),
-        diagnostics(ColorMode::Never, false)
+        diagnostics(ColorMode::Auto, false).1,
+        diagnostics(ColorMode::Never, false).1
     );
 }
 
@@ -114,7 +138,7 @@ fn metadata_prefix_failures_cannot_publish_a_model() {
         let mut output = Vec::new();
         let failure = run_bundle_finalized_with_diagnostics(
             bundle(),
-            &options(ColorMode::Always),
+            &record_options(ColorMode::Always),
             &mut output,
             &mut prefix,
             &Cancellation::default(),
@@ -123,7 +147,7 @@ fn metadata_prefix_failures_cannot_publish_a_model() {
         assert!(matches!(*failure.cause, RunError::Output(ref error)
             if error.kind() == io::ErrorKind::BrokenPipe));
         assert_eq!(prefix.bytes(), &complete.as_bytes()[..limit]);
-        assert!(output.is_empty());
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
         assert_eq!(
             failure
                 .publication()
@@ -141,18 +165,8 @@ fn metadata_prefix_failures_cannot_publish_a_model() {
 
 #[test]
 fn later_diagnostic_failure_retains_exhaustion() {
-    let mut settings = options(ColorMode::Always);
-    let mut initial = Vec::new();
-    run_finalized_with_diagnostics(
-        "a.".into(),
-        &settings,
-        &mut io::sink(),
-        &mut initial,
-        &Cancellation::default(),
-    )
-    .unwrap();
-    settings.stats = true;
-    let mut diagnostics = BoundedWriter::new(initial.len());
+    let settings = record_options(ColorMode::Always);
+    let mut diagnostics = FailAt::new(b"Statistics:");
     let mut output = Vec::new();
     let failure = run_finalized_with_diagnostics(
         "a.".into(),
@@ -164,7 +178,6 @@ fn later_diagnostic_failure_retains_exhaustion() {
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::Output(ref error)
         if error.kind() == io::ErrorKind::BrokenPipe));
-    assert_eq!(diagnostics.bytes(), initial);
     let semantic = failure.semantic().expect("completed search evidence");
     assert_eq!(semantic.completion(), Some(Completion::Exhausted));
     assert_eq!(semantic.verified_models(), 1);
@@ -172,7 +185,7 @@ fn later_diagnostic_failure_retains_exhaustion() {
 }
 
 #[test]
-fn redirected_process_diagnostics_remain_plain() {
+fn redirected_process_output_remains_plain() {
     for (no_color, term) in [("", "xterm-256color"), ("1", "xterm"), ("", "dumb")] {
         let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
             .args(["--backend", "cpu", "--grounder", "lazy", "--models", "0"])
@@ -183,7 +196,8 @@ fn redirected_process_diagnostics_remain_plain() {
             .output()
             .unwrap();
         assert!(result.status.success());
-        assert!(result.stderr.starts_with(b"Source: "));
+        assert!(result.stdout.starts_with(b"zetesis "));
+        assert!(result.stderr.is_empty());
         assert!(!result.stdout.contains(&0x1b));
         assert!(!result.stderr.contains(&0x1b));
     }

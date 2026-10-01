@@ -200,8 +200,7 @@ fn assert_status(progress: Progress, human: &str, json: &str, coverage: &str) {
     let mut bytes = Vec::new();
     crate::view::human::finish(&mut bytes, &progress, crate::ColorMode::Never).unwrap();
     let text = String::from_utf8(bytes).unwrap();
-    assert!(text.starts_with(human), "{text}");
-    assert!(text.contains("Models: 0;"), "{text}");
+    assert_eq!(text, human);
 
     let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
@@ -222,7 +221,7 @@ fn unpublished_membership_is_satisfiable() {
     assert_eq!(progress.completion().unwrap(), Completion::Exhausted);
     assert_status(
         progress,
-        "SATISFIABLE\nCoverage: exhausted\n",
+        "SATISFIABLE\nModels: 0\n",
         "satisfiable",
         "exhausted",
     );
@@ -243,7 +242,7 @@ fn unpublished_optimum_retains_its_status() {
     assert!(semantic.optimum_proved());
     assert_status(
         progress,
-        "OPTIMUM FOUND\nCoverage: exhausted\n",
+        "OPTIMUM FOUND\nModels: 0\n",
         "satisfiable",
         "exhausted",
     );
@@ -261,7 +260,7 @@ fn exhausted_empty_family_is_unsatisfiable() {
     assert!(progress.semantic().unwrap().unsatisfiable());
     assert_status(
         progress,
-        "UNSATISFIABLE\nCoverage: exhausted\n",
+        "UNSATISFIABLE\nModels: 0\n",
         "unsatisfiable",
         "exhausted",
     );
@@ -281,7 +280,7 @@ fn requested_membership_retains_its_status() {
     assert_eq!(progress.completion().unwrap(), Completion::RequestedModels);
     assert_status(
         progress,
-        "SATISFIABLE\nCoverage: partial (requested model count reached)\n",
+        "SATISFIABLE\nModels: 0 (answer limit reached)\n",
         "satisfiable",
         "partial",
     );
@@ -302,7 +301,7 @@ fn interrupted_empty_prefix_remains_incomplete() {
     let reason = progress.semantic().unwrap().interruption().unwrap();
     assert_status(
         progress,
-        &format!("INCOMPLETE: {reason}\nCoverage: partial\n"),
+        &format!("INCOMPLETE: {reason}\nModels: 0 (search incomplete)\n"),
         "incomplete",
         "partial",
     );

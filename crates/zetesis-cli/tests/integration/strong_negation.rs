@@ -167,7 +167,7 @@ fn coherence_is_enforced_by_closure_and_frozen_reduct_routes() {
         let report = report.unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 0);
-        assert!(output.starts_with("UNSATISFIABLE\n"), "{output}");
+        assert!(output.contains("\nUNSATISFIABLE\nModels: 0\n"), "{output}");
         assert!(!output.contains("Answer:"));
     }
 }
@@ -313,7 +313,7 @@ fn closure_preserves_its_term_output_boundary() {
             }
         )))
     ));
-    assert!(output.is_empty());
+    assert!(!output.contains("Answer:"));
 }
 
 #[test]
@@ -344,7 +344,7 @@ fn signed_display_limits_refuse_before_any_partial_answer() {
                 matches!(error.kind(), ErrorKind::Limit {resource: actual, ..} if *actual == resource)),
                 "{flag}: {source}"
             );
-            assert!(output.is_empty());
+            assert!(!output.contains("Answer:"));
         }
     }
 }
@@ -394,10 +394,10 @@ fn both_signs_have_the_same_retained_tag_size() {
                     assert_eq!(optimum.scored_models, 1);
                     let displayed = if hidden { "" } else { atom };
                     assert!(
-                        output.starts_with(&format!("Answer: 1\n{displayed}\nOptimization: 0\n")),
+                        output.contains(&format!("\nAnswer: 1\n{displayed}\nOptimization: 0\n")),
                         "{output}"
                     );
-                    assert!(output.contains("OPTIMUM FOUND\nCoverage: exhausted"));
+                    assert!(output.contains("OPTIMUM FOUND\nModels: 1\n"));
                 } else {
                     assert_eq!(report.completion, Completion::Interrupted);
                     assert!(matches!(
@@ -410,18 +410,12 @@ fn both_signs_have_the_same_retained_tag_size() {
                         "the first model could not be retained"
                     );
                     assert!(
-                        output.starts_with(
-                            "INCOMPLETE: incumbent retention stopped: Bytes\nCoverage: partial\n"
+                        output.contains(
+                            "INCOMPLETE: incumbent retention stopped: Bytes\nModels: 0 (search incomplete)\n"
                         ),
                         "{output}"
                     );
-                    for forbidden in [
-                        "Answer:",
-                        "Optimization:",
-                        "OPTIMUM FOUND",
-                        "SATISFIABLE",
-                        "Coverage: exhausted",
-                    ] {
+                    for forbidden in ["Answer:", "Optimization:", "OPTIMUM FOUND", "SATISFIABLE"] {
                         assert!(!output.contains(forbidden), "{output}");
                     }
                 }

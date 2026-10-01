@@ -86,7 +86,7 @@ fn completed_unsat_output_exits_successfully() {
         } else {
             let text = String::from_utf8(output.stdout).unwrap();
             assert!(text.contains("UNSATISFIABLE"), "{text}");
-            assert!(text.contains("Coverage: exhausted"), "{text}");
+            assert!(crate::support::human::exhausted(&text), "{text}");
         }
     }
 }
@@ -107,7 +107,7 @@ fn completed_model_output_reaches_the_reader() {
         } else {
             let text = String::from_utf8(output.stdout).unwrap();
             assert!(text.contains("Answer: 1\na\n"), "{text}");
-            assert!(text.contains("Coverage: exhausted"), "{text}");
+            assert!(crate::support::human::exhausted(&text), "{text}");
         }
     }
 }
@@ -126,7 +126,7 @@ fn interrupted_output_exits_three() {
             let text = String::from_utf8(output.stdout).unwrap();
             assert!(text.contains("INCOMPLETE"), "{text}");
             assert!(!text.contains("UNSATISFIABLE"), "{text}");
-            assert!(!text.contains("Coverage: exhausted"), "{text}");
+            assert!(!crate::support::human::exhausted(&text), "{text}");
         }
     }
 }

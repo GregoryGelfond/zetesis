@@ -435,12 +435,14 @@ impl<'a> SessionBuilder<'a> {
 
     /// Share a caller-owned host measurement scope with this solve.
     ///
-    /// Its enabled setting replaces config.stats. Admission and publication
-    /// can record into the same scope; each session retains its own search state.
+    /// Its detailed-measurement setting replaces config.stats. A stages-only
+    /// scope records coarse intervals without enabling detailed solver statistics.
+    /// Admission and publication can record into the same scope; each session
+    /// retains its own search state.
     /// This performs no solve work, device discovery or clock reads.
     #[must_use]
     pub fn measurements(mut self, measurements: &crate::SolveMeasurements) -> Self {
-        self.config.stats = measurements.is_enabled();
+        self.config.stats = measurements.details_enabled();
         self.measurements = Some(measurements.clone());
         self
     }

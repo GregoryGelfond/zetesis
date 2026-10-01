@@ -58,6 +58,18 @@ Compiling GPU support does not select a device.
 `SolveMeasurements`, and an `ExecutionObserver`. Membership is always decided by
 zetesis's own reduct check. Shared resources do not reuse candidate truth, search
 coverage or budgets.
+
+`SolveMeasurements::stages_only()` records exclusive grounding, solving and
+other host stages without detailed search clocks or frontend work counters.
+Its snapshots contain stage measurements and driver elapsed time; detailed
+phase and grounding entries remain absent. `SolveMeasurements::new(true)`
+retains full instrumentation, while `new(false)` reads no measurement clocks
+and returns no snapshots. `is_enabled()` includes stage-only scopes;
+`details_enabled()` identifies detailed instrumentation. An injected scope's
+detailed setting replaces `SolveConfig::stats`, so requesting a stage summary
+does not enable detailed solver statistics. Lazy grounding remains interleaved
+with solving, rather than appearing as a zero-duration eager stage.
+
 Failures and interrupted searches preserve available evidence without claiming
 exhaustion, inconsistency or optimality. Lean laws do not yet certify the complete
 Rust or device implementation.

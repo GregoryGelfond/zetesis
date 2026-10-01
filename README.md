@@ -73,7 +73,8 @@ for the current limits. Use `zetesis devices` to list GPU devices and
 
 A stopped search is incomplete; it does not prove unsatisfiability or optimality.
 The time and memory options are not hard process-time or RSS caps.
-Human output is the default, and diagnostics go to stderr.
+Human output shows the answers, result, model count and basic grounding/solving
+times. `--stats` adds detailed tables; diagnostics go to stderr.
 See `zetesis help solve`, or add `--advanced` for resource controls.
 
 ## Use from Rust

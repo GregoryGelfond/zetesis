@@ -30,6 +30,7 @@ impl Label {
 pub(crate) struct Diagnostics<W> {
     writer: W,
     color: ColorMode,
+    quiet: bool,
     width: std::num::NonZeroUsize,
     core: Option<Core>,
 }
@@ -43,9 +44,22 @@ impl<W: Write> Diagnostics<W> {
         Self {
             writer,
             color,
+            quiet: false,
             width: std::num::NonZeroUsize::new(80).unwrap(),
             core: None,
         }
+    }
+
+    /// Suppress informational setup and execution records; warnings and errors remain.
+    pub(crate) const fn with_quiet(mut self, quiet: bool) -> Self {
+        self.quiet = quiet;
+        self
+    }
+
+    pub(crate) fn for_solve(writer: W, color: ColorMode, options: &crate::Options) -> Self {
+        let execution_details = options.json
+            || (options.stats && matches!(options.statistics_view, crate::StatisticsView::Records));
+        Self::new(writer, color).with_quiet(!execution_details)
     }
 
     pub(crate) const fn with_width(mut self, width: std::num::NonZeroUsize) -> Self {
@@ -58,7 +72,19 @@ impl<W: Write> Diagnostics<W> {
     }
 
     pub(crate) fn metadata(&mut self, label: Label, value: fmt::Arguments<'_>) -> io::Result<()> {
-        self.color.metadata(&mut self.writer, label.text(), value)
+        if self.quiet {
+            Ok(())
+        } else {
+            self.color.metadata(&mut self.writer, label.text(), value)
+        }
+    }
+
+    pub(crate) fn information(&mut self, value: fmt::Arguments<'_>) -> io::Result<()> {
+        if self.quiet {
+            Ok(())
+        } else {
+            writeln!(self.writer, "{value}")
+        }
     }
 
     pub(crate) fn diagnostic(&mut self, diagnostic: &impl fmt::Display) -> io::Result<()> {
@@ -85,6 +111,18 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
     type Error = io::Error;
     fn observe(&mut self, observation: crate::ExecutionObservation<'_>) -> Result<(), Self::Error> {
         use crate::ExecutionObservation as Event;
+        if self.quiet
+            && !matches!(
+                &observation,
+                Event::KeyAnalysisStopped(_)
+                    | Event::ObjectiveUnavailable(_)
+                    | Event::ObjectiveBoundStopped(_)
+                    | Event::ObjectiveTheoryMismatch
+                    | Event::ObjectiveRestrictionStopped(_)
+            )
+        {
+            return Ok(());
+        }
         match observation {
             Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
                 Label::Grounding,

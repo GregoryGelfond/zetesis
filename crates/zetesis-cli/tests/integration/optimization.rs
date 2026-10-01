@@ -27,11 +27,8 @@ fn default_request_proves_optimum_before_returning_one_model() {
     let optimum = report.optimization.unwrap();
     assert_eq!(optimum.score.costs(), &[(0, 2)]);
     assert_eq!(optimum.tied_models, 1);
-    assert!(
-        text.starts_with("Answer: 1\nb\nOptimization: 2\n"),
-        "{text}"
-    );
-    assert!(text.contains("OPTIMUM FOUND\nCoverage: exhausted"));
+    assert!(text.contains("Answer: 1\nb\nOptimization: 2\n"), "{text}");
+    assert!(text.contains("OPTIMUM FOUND\nModels:"));
     // One worker reaches b first and the bound then prunes a; several
     // workers may decide both leaves before the bound reaches them.
     let (pruned, _) = solve(
@@ -108,7 +105,7 @@ fn absent_objectives_and_present_zero_cost_remain_distinct() {
     let (absent, text) = solve("a :- a. #minimize { 3,k:a }.", &["--models", "0"]);
     assert!(absent.optimization.is_none());
     assert!(!text.contains("Optimization:"));
-    assert!(text.contains("SATISFIABLE\nCoverage: exhausted"));
+    assert!(text.contains("SATISFIABLE\nModels:"));
     let (present, text) = solve("a. #minimize { 0,k:a }.", &[]);
     assert_eq!(present.optimization.unwrap().score.costs(), &[(0, 0)]);
     assert!(text.contains("Optimization: 0\n"));

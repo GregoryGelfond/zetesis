@@ -172,7 +172,7 @@ fn shown_answers_preserve_hidden_model_multiplicity() {
     assert_eq!(models.len(), 1);
     assert_eq!(models.values().sum::<usize>(), 2);
     assert!(output.contains("Answer: 1\nvisible\nAnswer: 2\nvisible\n"));
-    assert!(output.contains("Models: 2;"));
+    assert!(output.contains("Models: 2\n"));
     let (empty, output) = native("{hidden}. #show.");
     assert_eq!(empty.get(&BTreeSet::new()), Some(&2));
     assert!(output.contains("Answer: 1\n\nAnswer: 2\n\n"));
