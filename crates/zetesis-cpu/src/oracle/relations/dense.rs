@@ -715,8 +715,8 @@ impl PendingMarks {
     /// of marking each offered position singly. One unit for each word of
     /// the block that can hold a selected row.
     ///
-    /// Each pass reads the next `width` positions of the block, at most a
-    /// word, so the passes partition it and the loop ends with it.
+    /// Each pass reads the next `width` positions of the possible range, at
+    /// most a word, so the passes partition that range and end with it.
     pub(in crate::oracle) fn join_row(
         &mut self,
         slot: usize,
