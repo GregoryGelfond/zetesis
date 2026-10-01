@@ -6,7 +6,7 @@ use crate::catalog::TermRef;
 
 use super::{Failure, Limits, Relation, Row, Work, storage};
 
-/// A dictionary-resolved equality. Its meaning requires the owning query.
+/// A dictionary-resolved equality. Its IDs belong to the resolving relation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Equality {
     column: usize,
@@ -56,6 +56,30 @@ pub struct QueryAttempt<'owner, 'source, E = Failure> {
     /// Refused proposed allocations are excluded; actual allocator slack can
     /// exceed the byte limit and is retained even when the attempt then fails.
     pub peak_bytes: usize,
+}
+
+/// One whole-value equality resolved without allocating a query buffer.
+///
+/// The returned coordinates belong only to the relation receiving the call.
+/// `None` means the value is absent from its dictionary, not that a program is
+/// inconsistent. No coordinate is returned when resolution is interrupted.
+pub struct EqualityAttempt<'owner, 'source, E> {
+    relation: &'owner Relation<'source>,
+    /// Complete local equality, dictionary absence, or the original refusal.
+    pub result: Result<Option<Equality>, E>,
+    /// Accepted inspection/comparison work, including a refused attempt's prefix.
+    pub work: u128,
+    /// Admitted relation capacity; no query frame or heap buffer is retained.
+    /// Zero means initial shape or capacity admission failed.
+    pub peak_bytes: usize,
+}
+
+impl<'owner, 'source, E> EqualityAttempt<'owner, 'source, E> {
+    /// The exact immutable relation whose dictionary supplied the coordinates.
+    #[must_use]
+    pub const fn relation(&self) -> &'owner Relation<'source> {
+        self.relation
+    }
 }
 
 /// A relation refusal or an enclosing caller's refused work permit.
@@ -303,6 +327,43 @@ impl<'source> Relation<'source> {
         }
     }
 
+    /// Resolve one equality through the same checked dictionary operation as
+    /// [`Self::query_attempt_with`], without materializing an equality vector.
+    ///
+    /// The operation checks its own work ceiling before requesting each caller
+    /// permit. All outcomes retain the accepted work prefix. The returned
+    /// equality is meaningful only in this relation; callers combining several
+    /// equalities must still inspect later columns after a missing value.
+    /// Limits include the borrowed relation; the by-value receipt and other
+    /// caller storage are outside that named capacity.
+    #[must_use]
+    pub fn equality_attempt_with<E>(
+        &self,
+        column: usize,
+        value: TermRef<'_>,
+        limits: Limits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> EqualityAttempt<'_, 'source, QueryFailure<E>> {
+        let mut work = match self.work(limits, 0) {
+            Ok(work) => work,
+            Err(error) => {
+                return EqualityAttempt {
+                    relation: self,
+                    result: Err(QueryFailure::Relation(error)),
+                    work: 0,
+                    peak_bytes: 0,
+                };
+            }
+        };
+        let result = self.resolve_equality(column, value, &mut work, &mut before);
+        EqualityAttempt {
+            relation: self,
+            result,
+            work: work.used,
+            peak_bytes: work.peak,
+        }
+    }
+
     fn resolve_query<E>(
         &self,
         equalities: &[(usize, TermRef<'_>)],
@@ -311,27 +372,9 @@ impl<'source> Relation<'source> {
     ) -> Result<Query<'_, 'source>, QueryFailure<E>> {
         let mut resolved = work.reserve(equalities.len())?;
         let mut possible = true;
-        let mut tick = || -> Result<(), QueryFailure<E>> {
-            let next = work.used.checked_add(1).ok_or(Failure::Overflow)?;
-            super::ceiling(
-                super::Resource::Work,
-                next,
-                u128::from(work.limits.max_work),
-            )?;
-            before().map_err(QueryFailure::Stopped)?;
-            work.used = next;
-            Ok(())
-        };
         for &(column, value) in equalities {
-            tick()?;
-            if column >= self.predicate.arity() {
-                return Err(Failure::Column.into());
-            }
-            if let Some(index) = storage::lookup_with(&self.layout, &self.source, value, &mut tick)?
-            {
-                let value_id = index;
-                tick()?;
-                resolved.push(Equality { column, value_id });
+            if let Some(equality) = self.resolve_equality(column, value, work, before)? {
+                resolved.push(equality);
             } else {
                 possible = false;
             }
@@ -343,6 +386,36 @@ impl<'source> Relation<'source> {
             bytes: work.live - self.storage.retained_bytes,
             work: work.used,
         })
+    }
+
+    fn resolve_equality<E>(
+        &self,
+        column: usize,
+        value: TermRef<'_>,
+        work: &mut Work,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<Equality>, QueryFailure<E>> {
+        let mut tick = || -> Result<(), QueryFailure<E>> {
+            let next = work.used.checked_add(1).ok_or(Failure::Overflow)?;
+            super::ceiling(
+                super::Resource::Work,
+                next,
+                u128::from(work.limits.max_work),
+            )?;
+            before().map_err(QueryFailure::Stopped)?;
+            work.used = next;
+            Ok(())
+        };
+        tick()?;
+        if column >= self.predicate.arity() {
+            return Err(Failure::Column.into());
+        }
+        let Some(value_id) = storage::lookup_with(&self.layout, &self.source, value, &mut tick)?
+        else {
+            return Ok(None);
+        };
+        tick()?;
+        Ok(Some(Equality { column, value_id }))
     }
 
     /// Copy a structurally valid ordered subset into this owner's selection.

@@ -196,9 +196,84 @@ impl Interpretation {
     }
 
     /// Atom indices in ascending order, without materializing a second carrier.
-    /// Construction is constant time; complete traversal scans the entire atom
-    /// universe, including false atoms, in O(U) time and constant auxiliary space.
+    /// Construction is constant time; complete traversal visits ceil(U/64)
+    /// packed words and S selected atoms in O(ceil(U/64) + S) time, with constant
+    /// auxiliary space. Each nonzero word loses its least set bit at each step.
     pub fn atoms(&self) -> impl Iterator<Item = usize> + '_ {
-        (0..self.theory.atom_count()).filter(|atom| self.contains(*atom))
+        self.words.iter().enumerate().flat_map(|(index, &word)| {
+            let mut remaining = word;
+            std::iter::from_fn(move || {
+                if remaining == 0 {
+                    return None;
+                }
+                let bit = remaining.trailing_zeros() as usize;
+                remaining &= remaining - 1;
+                Some(index * 64 + bit)
+            })
+        })
+    }
+
+    /// Borrow membership as ascending low-bit-first 32-bit words.
+    ///
+    /// The iterator retains this interpretation and its exact theory owner;
+    /// equal dimensions never substitute for that identity. It exports exactly
+    /// ceil(U/32) words, including zero words, with zero unused tail bits. No
+    /// padding word is exported for an empty universe. Each step extracts one
+    /// numeric half of a stored word, independently of host byte order.
+    /// Construction and each step take constant time and allocate no storage.
+    #[must_use]
+    pub fn words32(&self) -> InterpretationWords<'_> {
+        InterpretationWords {
+            interpretation: self,
+            next: 0,
+            end: self.theory.atom_count().div_ceil(32),
+        }
     }
 }
+
+/// Borrowed 32-bit membership words belonging to one exact interpretation.
+///
+/// Produced by [`Interpretation::words32`]. Advancing or cloning this iterator
+/// changes only its cursor; membership and theory identity remain borrowed.
+#[derive(Clone)]
+pub struct InterpretationWords<'a> {
+    interpretation: &'a Interpretation,
+    next: usize,
+    end: usize,
+}
+
+impl InterpretationWords<'_> {
+    /// Exact theory whose atom positions these words encode; constant time.
+    #[must_use]
+    pub fn theory(&self) -> &Theory {
+        self.interpretation.theory()
+    }
+}
+
+impl Iterator for InterpretationWords<'_> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next == self.end {
+            return None;
+        }
+        let word = self.interpretation.words[self.next / 2];
+        let bytes = (word >> ((self.next % 2) * 32)).to_le_bytes();
+        let half = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        self.next += 1;
+        Some(half)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.len();
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for InterpretationWords<'_> {
+    fn len(&self) -> usize {
+        self.end - self.next
+    }
+}
+
+impl std::iter::FusedIterator for InterpretationWords<'_> {}

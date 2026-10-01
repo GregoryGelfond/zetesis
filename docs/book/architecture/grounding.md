@@ -499,6 +499,10 @@ for pivot in PositiveSourceOccurrences(rule):
     proposals = Union(proposals, JoinAndEvaluate(rule, inputs))
 ```
 
+Each variant supplies these populations to initial join preparation. Ordering
+and comparison readiness are built once from its old/new/current row counts;
+the cursor does not first prepare an unrestricted order and then replace it.
+
 An ordinary producer without positive inputs runs once, even if it has negative
 non-input atoms. Changing such atoms' possible presence cannot enable another
 head proposal, because support generation ignores their truth. Aggregate,
@@ -775,6 +779,21 @@ the selector offers all relation rows; a missing bound key selects none:
 rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
 bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
 ```
+
+Each cursor resolves a positive occurrence to its borrowed snapshot relation on
+first entry and retains that reference across backtracking. Row access and later
+probes use the same immutable row owner, without searching the predicate directory
+again. References remain local to the cursor's snapshot; a new support round
+resolves its own relations, including predicates newly inserted in the directory.
+
+The indexed selector folds known equalities directly into its shortest posting.
+It uses the core relation's checked single-equality resolver, shared with owned
+`Query` construction, without allocating temporary key or equality vectors.
+Every later variable slot and column is still checked after a missing value;
+interruption returns no partial posting. Per-step work admission and completed
+failure prefixes remain observable. Owned public queries retain their existing
+frame and equality-vector capacity receipts. The cursor's resolved-reference
+capacity is charged with its other retained join storage.
 
 This describes witness selection, not complete grounding. Scope, generators,
 scalar guards and candidate gates retain their separate contracts. The

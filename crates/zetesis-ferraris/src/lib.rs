@@ -44,7 +44,9 @@ pub use regions::{
     Extraction, Knowledge, Narrower, NarrowingAttempt, NarrowingStatistics, Producers,
     RegionLimits, producers,
 };
-pub use theory::{AdmissionError, AdmissionLimits, Interpretation, Node, Theory};
+pub use theory::{
+    AdmissionError, AdmissionLimits, Interpretation, InterpretationWords, Node, Theory,
+};
 pub use zetesis_cpu::regions::{Narrowing, Region};
 
 pub use tight::{

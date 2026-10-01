@@ -570,15 +570,13 @@ fn derive_variants<'source>(
             },
     } = context;
     while let Some(variant) = variants.next(limits, counters)? {
-        let mut outer =
-            Join::domain_rule(rule, support, guards, computation, limits, budget, counters)?;
-        outer.partition(
+        let mut outer = Join::variant_rule(
+            rule,
             variant,
-            computation,
-            limits,
+            support,
+            guards,
             budget,
-            counters,
-            rule.location,
+            Context::new(computation, limits, counters, rule.location),
         )?;
         derive_rule(
             rule,
@@ -846,6 +844,8 @@ pub(crate) struct Join<'a, 'source> {
     slots: Vec<Slot>,
     positions: Vec<usize>,
     probes: Vec<Option<Probe<'a, 'source>>>,
+    /// Borrowed relations are resolved once per occurrence in this snapshot.
+    resolutions: Vec<Resolution<'source>>,
     changes: Vec<Vec<usize>>,
     depth: usize,
     traversal: Traversal,
@@ -863,6 +863,21 @@ pub(crate) struct Row<'a> {
 enum Probe<'a, 'source> {
     Indexed(delta::Rows<'a>),
     Table(queries::Rows<'a, 'source>),
+}
+
+#[derive(Clone, Copy)]
+enum Resolution<'source> {
+    Unresolved,
+    Resolved(Option<&'source relations::RelationRows<'source>>),
+}
+
+impl<'source> Resolution<'source> {
+    fn rows(self) -> Option<&'source relations::RelationRows<'source>> {
+        match self {
+            Self::Unresolved => unreachable!("a prepared probe has resolved its relation"),
+            Self::Resolved(rows) => rows,
+        }
+    }
 }
 impl Probe<'_, '_> {
     fn next(
@@ -989,13 +1004,49 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Self, FormulaFailure> {
+        Self::variant_rule(
+            rule,
+            delta::Variant::Full,
+            support,
+            domains,
+            budget,
+            Context::new(computation, limits, counters, rule.location),
+        )
+    }
+
+    fn variant_rule(
+        rule: &'a crate::formula_ir::RuleIr,
+        variant: delta::Variant,
+        support: &'a Support<'source>,
+        domains: Option<&'a queries::Guards<'a, 'source>>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location: _,
+                },
+        } = context;
         if domains.is_some_and(|guards| !guards.belongs_to(rule, support)) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location: rule.location,
             });
         }
-        let mut join = Self::rule(rule, support, computation, limits, budget, counters)?;
+        let mut join = Self::new_with_rows(
+            &rule.body,
+            &Binding::new(computation, limits, counters, rule.location)?,
+            rule.variables,
+            support,
+            budget,
+            Context::new(computation, limits, counters, rule.location),
+            variant,
+        )?;
+        join.configure_rule(rule, limits, counters)?;
         join.domains = domains;
         Ok(join)
     }
@@ -1154,6 +1205,26 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::new_with_rows(
+            literals,
+            prefix,
+            variables,
+            support,
+            budget,
+            context,
+            delta::Variant::Full,
+        )
+    }
+
+    fn new_with_rows(
+        literals: &'a [LiteralIr],
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+        variant: delta::Variant,
+    ) -> Result<Self, FormulaFailure> {
         let Context {
             computation,
             work:
@@ -1169,7 +1240,13 @@ impl<'a, 'source> Join<'a, 'source> {
             literals,
             prefix,
             variables,
-            support,
+            order::SourceRows {
+                relations: support,
+                pivot: match variant {
+                    delta::Variant::Full => None,
+                    delta::Variant::Delta(pivot) => Some(pivot),
+                },
+            },
             budget,
             location,
             Some(&mut admit),
@@ -1202,6 +1279,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 },
         } = context;
         let count = plan.patterns.len();
+        let delta = plan.pivot;
         let mut lease = computation.lease();
         let plan_bytes = match &plan {
             Cow::Owned(plan) => plan.retained_bytes(),
@@ -1242,7 +1320,7 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            delta: None,
+            delta,
             domains: None,
             row_filter: None,
             support,
@@ -1252,6 +1330,7 @@ impl<'a, 'source> Join<'a, 'source> {
             slots: Vec::new(),
             positions: Vec::new(),
             probes: Vec::new(),
+            resolutions: Vec::new(),
             changes: Vec::new(),
             depth: 0,
             traversal: Traversal::Searching,
@@ -1302,6 +1381,7 @@ impl<'a, 'source> Join<'a, 'source> {
             + self.verdicts.capacity() * size_of::<bool>()
             + self.positions.capacity() * size_of::<usize>()
             + self.probes.capacity() * size_of::<Option<Probe<'_, '_>>>()
+            + self.resolutions.capacity() * size_of::<Resolution<'_>>()
             + self.changes.capacity() * size_of::<Vec<usize>>()
     }
     fn initialize_storage(
@@ -1360,6 +1440,18 @@ impl<'a, 'source> Join<'a, 'source> {
         for _ in 0..count {
             counters.work(limits, location)?;
             self.probes.push(None);
+        }
+        let other = self.storage_bytes();
+        reserve(
+            &mut self.resolutions,
+            count,
+            &mut self.lease,
+            other,
+            Context::new(computation, limits, counters, location),
+        )?;
+        for _ in 0..count {
+            counters.work(limits, location)?;
+            self.resolutions.push(Resolution::Unresolved);
         }
         let other = self.storage_bytes();
         reserve(
@@ -1467,48 +1559,6 @@ impl<'a, 'source> Join<'a, 'source> {
             counters,
             location,
         )
-    }
-    /// Restrict this round's join to the rows `variant` offers each source
-    /// occurrence and order the join by those counts: the pivot occurrence
-    /// offers only the round's new rows, so it is joined first when they are
-    /// the fewest.
-    fn partition(
-        &mut self,
-        variant: delta::Variant,
-        computation: &Computation<'_, '_>,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<(), FormulaFailure> {
-        self.delta = match variant {
-            delta::Variant::Full => None,
-            delta::Variant::Delta(pivot) => Some(pivot),
-        };
-        let mut bound = self.bound_slots(computation, limits, counters, location)?;
-        let mut admit =
-            |capacity| computation.preparation_capacity(capacity, limits, counters, location);
-        let (support, delta) = (self.support, self.delta);
-        let literals = self.literals;
-        order::arrange_checked(
-            &mut self.owned_plan().patterns,
-            literals,
-            bound.slice_mut(),
-            |pattern, budget| {
-                let predicate = pattern.atom().predicate();
-                let (old, total) = support.row_counts_with(predicate, || {
-                    budget
-                        .charge(crate::ExpansionResource::TermWork, 1, location)
-                        .map_err(FormulaFailure::from)
-                })?;
-                Ok(delta::interval(delta, pattern.source, old, total).len())
-            },
-            budget,
-            location,
-            &mut admit,
-        )?;
-        self.decide(computation, limits, budget, counters, location)?;
-        Ok(())
     }
     pub fn next(
         &mut self,
@@ -1902,7 +1952,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 .as_ref()
                 .expect("prepared probe")
                 .next(&mut self.positions[self.depth], limits, counters, location)?;
-            let atom = row.and_then(|row| self.support.row(pattern.atom().predicate(), row));
+            let atom = row.and_then(|row| self.resolutions[self.depth].rows()?.row(row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
                 self.probes[self.depth] = None;
@@ -1946,23 +1996,43 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 },
         } = context;
+        // Relation ownership is independent of how the row source was prepared.
+        // A preselected probe still needs this snapshot's owner before row access.
+        if matches!(self.resolutions[self.depth], Resolution::Unresolved) {
+            self.resolutions[self.depth] = Resolution::Resolved(self.support.resolve(
+                pattern.atom(),
+                limits,
+                counters,
+                location,
+            )?);
+        }
         if self.probes[self.depth].is_none() {
+            let source = self.resolutions[self.depth].rows();
             let binding = self
                 .values
                 .view(computation.read(), limits, counters, location)?;
             self.probes[self.depth] = Some(
-                if let Some(rows) =
-                    self.support
-                        .select(pattern.pattern, binding, limits, counters, location)?
-                {
+                if let Some(rows) = self.support.select_at(
+                    source,
+                    pattern.pattern,
+                    binding,
+                    limits,
+                    counters,
+                    location,
+                )? {
                     Probe::Table(rows)
                 } else {
-                    let posting =
-                        self.support
-                            .probe(pattern.atom(), binding, limits, counters, location)?;
-                    let total = self.support.row_count(pattern.atom().predicate());
+                    let posting = self.support.probe_at(
+                        source,
+                        pattern.atom(),
+                        binding,
+                        limits,
+                        counters,
+                        location,
+                    )?;
+                    let total = source.map_or(0, relations::RelationRows::row_count);
                     Probe::Indexed(if self.delta.is_some() {
-                        let old = self.support.old_rows(pattern.atom().predicate());
+                        let old = source.map_or(0, relations::RelationRows::old_rows);
                         let range = delta::interval(self.delta, pattern.source, old, total);
                         delta::Rows::within(posting, range, limits, counters, location)?
                     } else {

@@ -18,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 mod formula;
+mod candidates;
 mod packing;
 mod residency;
 mod runtime;

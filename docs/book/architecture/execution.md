@@ -297,12 +297,25 @@ stores support as one bit per semantic atom in each candidate's row. By default 
 the row, then each enabled original producer atomically sets its head bit.
 After the storage barrier, a bit is set exactly when that head has an enabled
 producer. Atomic OR preserves updates from different heads sharing a word and
-from repeated producers. The final atom scan retains the least unsupported
-atom as its witness. This representation reduces the support buffer to
+from repeated producers. The final scan compares candidate and support words:
+`candidate & ~support` contains precisely that word's unsupported candidate bits.
+Each nonzero word contributes its least set-bit position; the workgroup minimum
+retains the least unsupported atom across all words. Candidate tail bits are
+zero, and a failed original root still takes precedence over this witness. This representation reduces the support buffer to
 `4 * max(worlds * ceil(atoms / 32), 1)` bytes; it does not describe total device
 memory or establish a speedup. Shared-word contention remains a measurement
 question. Ordinary formula sessions with automatic membership policy select this
 primitive on an explicit device backend when complete tight preparation succeeds.
+
+The complete device-work allowance is now
+`nodes + roots + producers + 2 * ceil(atoms / 32)`: one word scan constructs or
+initializes support and one checks missing support. This replaces the former
+`nodes + roots + producers + atoms + ceil(atoms / 32)` contract. Work receipts
+and pre-dispatch admission use the same new allowance; an exact allowance is
+admitted and one less is refused. Historical work counts therefore need their
+source identity when compared. This change describes logical operation counts,
+not measured latency or a new membership criterion.
+
 Preparation shares the CPU certificate constructor and cumulative search budget,
 but does not activate CPU certificate checking. The executor is selected before
 pipeline creation, so these batches do not first run the general propagator.

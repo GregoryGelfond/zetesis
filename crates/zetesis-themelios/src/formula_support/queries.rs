@@ -15,7 +15,8 @@ use themelios_base::span::Location;
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 use zetesis_cpu::table::{self, Cause, Domain, Resource, Selection, Table};
 
-use super::{Counters, PositivePattern, Relations};
+use super::relations::RelationRows;
+use super::{Counters, GroundingWork, PositivePattern, Relations};
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, JoinStrategy};
@@ -124,6 +125,21 @@ impl<'source> Support<'source> {
             .map_err(|error| self.indexed_failure(error))
     }
 
+    /// A borrowed row owner is scoped to this query snapshot. It remains valid
+    /// across join backtracking; no growing-directory index is retained.
+    pub(super) fn resolve(
+        &self,
+        pattern: PatternRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<&'source RelationRows<'source>>, FormulaFailure> {
+        Self::admit(self.live_bytes(), limits, counters, location)?;
+        self.relations
+            .find_with(pattern.predicate(), limits, counters, location)
+    }
+
+    #[cfg(test)]
     pub(super) fn probe(
         &self,
         pattern: PatternRef<'_>,
@@ -132,15 +148,27 @@ impl<'source> Support<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
+        let rows = self.resolve(pattern, limits, counters, location)?;
+        self.probe_at(rows, pattern, values, limits, counters, location)
+    }
+
+    pub(super) fn probe_at(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<&'source [usize]>, FormulaFailure> {
         Self::admit(self.live_bytes(), limits, counters, location)?;
         counters.record(Event::IndexedProbe);
-        self.relations.probe_with_bytes(
+        self.relations.probe_at(
+            rows,
             pattern,
             values,
-            limits,
-            counters,
-            location,
             self.live_bytes() - self.relations.current_bytes(),
+            GroundingWork::new(limits, counters, location),
         )
     }
 
@@ -178,8 +206,26 @@ impl<'source> Support<'source> {
 
     /// Only an absent strategy, structural pattern or absent relation declines
     /// this operation. Every attempted preparation/selection failure propagates.
+    #[cfg(test)]
     pub(super) fn select(
         &self,
+        pattern: PositivePattern<'_>,
+        values: BindingView<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
+        let rows = if self.tables.is_some() && matches!(pattern, PositivePattern::Flat(_)) {
+            self.resolve(pattern.atom(), limits, counters, location)?
+        } else {
+            None
+        };
+        self.select_at(rows, pattern, values, limits, counters, location)
+    }
+
+    pub(super) fn select_at(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
         pattern: PositivePattern<'_>,
         values: BindingView<'_>,
         limits: &FormulaLimits,
@@ -194,10 +240,7 @@ impl<'source> Support<'source> {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
         };
-        let Some(relation) =
-            self.relations
-                .relation_with(pattern.predicate(), limits, counters, location)?
-        else {
+        let Some(relation) = rows.map(|rows| &rows.relation) else {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
         };

@@ -27,19 +27,28 @@ use std::cmp::Reverse;
 use themelios_base::span::Location;
 use zetesis_core::TemplateTerm;
 
-use super::{PatternOccurrence, PositivePattern, Relations, comparison};
+use super::{PatternOccurrence, PositivePattern, Relations, comparison, delta};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::LiteralIr;
 use crate::{ExpansionResource, FormulaFailure};
 use themelios_program::program::DefaultNegation;
 
-/// Immutable ordering and comparison readiness. Ordinary cursors own this
-/// plan and may replace it after partitioning; admitted hybrid scans borrow it.
+/// The populations offered by one immutable support snapshot. A delta pivot
+/// names an original source occurrence, independently of the chosen join order.
+#[derive(Clone, Copy)]
+pub(super) struct SourceRows<'view, 'source> {
+    pub(super) relations: &'view Relations<'source>,
+    pub(super) pivot: Option<usize>,
+}
+
+/// Immutable ordering and comparison readiness, built once for the offered
+/// populations. Ordinary cursors own this plan; admitted hybrid scans borrow it.
 #[derive(Clone)]
 pub(super) struct Plan<'a> {
     pub(super) patterns: Vec<PatternOccurrence<'a>>,
     pub(super) decisions: Decisions,
+    pub(super) pivot: Option<usize>,
 }
 
 impl<'a> Plan<'a> {
@@ -47,7 +56,7 @@ impl<'a> Plan<'a> {
         literals: &'a [LiteralIr],
         prefix: &Binding,
         variables: usize,
-        support: &Relations<'a>,
+        rows: SourceRows<'_, 'a>,
         budget: &mut Budget,
         location: Location,
         admit: Option<&mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
@@ -68,7 +77,8 @@ impl<'a> Plan<'a> {
                 LiteralIr::PatternAtom(pattern) => pattern.atom,
                 _ => continue,
             };
-            let components = support
+            let components = rows
+                .relations
                 .components()
                 .ok_or_else(|| super::components::missing(location))?;
             let flat = flat.get_with(components, location, || {
@@ -116,9 +126,11 @@ impl<'a> Plan<'a> {
             literals,
             &mut bound,
             |pattern, budget| {
-                support
+                rows.relations
                     .row_counts_with(pattern.atom().predicate(), || work(budget, 1, location))
-                    .map(|(_, total)| total)
+                    .map(|(old, total)| {
+                        delta::interval(rows.pivot, pattern.source, old, total).len()
+                    })
             },
             budget,
             &mut space,
@@ -127,6 +139,7 @@ impl<'a> Plan<'a> {
         Ok(Self {
             patterns,
             decisions,
+            pivot: rows.pivot,
         })
     }
 
@@ -484,29 +497,6 @@ pub(super) fn arrange(
             bytes: 0,
             location: Some(location),
             admit: None,
-        },
-    )
-}
-
-pub(super) fn arrange_checked(
-    occurrences: &mut [PatternOccurrence<'_>],
-    literals: &[LiteralIr],
-    bound: &mut [bool],
-    row_count: impl FnMut(&PatternOccurrence<'_>, &mut Budget) -> Result<usize, FormulaFailure>,
-    budget: &mut Budget,
-    location: Location,
-    admit: &mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>,
-) -> Result<(), FormulaFailure> {
-    arrange_with(
-        occurrences,
-        literals,
-        bound,
-        row_count,
-        budget,
-        &mut Workspace {
-            bytes: 0,
-            location: Some(location),
-            admit: Some(admit),
         },
     )
 }

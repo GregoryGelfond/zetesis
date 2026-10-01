@@ -85,12 +85,20 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     );
     let a = Interpretation::new(&graph.shape.theory, [0]).unwrap();
     let b = Interpretation::new(&graph.shape.theory, [1]).unwrap();
-    assert_eq!(plan.pack(&graph, &[a, b]).unwrap(), vec![1, 2]);
+    assert_eq!(
+        plan.pack(&graph, &[a, b], &zetesis_cpu::Cancellation::default())
+            .unwrap(),
+        vec![1, 2]
+    );
     let foreign = Interpretation::new(&theory(), []).unwrap();
     assert_eq!(
-        plan.pack(&graph, &[foreign.clone(), foreign])
-            .unwrap_err()
-            .kind(),
+        plan.pack(
+            &graph,
+            &[foreign.clone(), foreign],
+            &zetesis_cpu::Cancellation::default()
+        )
+        .unwrap_err()
+        .kind(),
         GpuErrorKind::Seed
     );
 }
@@ -174,7 +182,9 @@ fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
         let graph = prepared.graph;
         let plan = Plan::new(&graph, 1, FormulaLimits::default(), &device(), true, 1).unwrap();
         let candidate = Interpretation::new(&theory, 0..count).unwrap();
-        let packed = plan.pack(&graph, &[candidate]).unwrap();
+        let packed = plan
+            .pack(&graph, &[candidate], &zetesis_cpu::Cancellation::default())
+            .unwrap();
         assert_eq!(packed.len(), count.div_ceil(32).max(1));
         if count > 0 {
             assert_eq!(

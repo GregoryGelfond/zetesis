@@ -5,6 +5,7 @@ mod masks;
 mod mask_selection;
 mod query_attempt;
 mod query_metering;
+mod equality_attempt;
 mod canonical;
 
 fn predicate(arity: usize) -> Predicate {

@@ -101,10 +101,10 @@ fn certificate_packing_retains_original_formula_structure() {
     );
     assert_eq!(packed.roots, [8, 5, 7, 1]);
     assert_eq!(packed.producers, [1, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(graph.work, 20);
+    assert_eq!(graph.work, 18);
     assert_eq!(
         plan(&graph, 2, true).params(&graph),
-        [3, 9, 4, 3, 1, 2, 20, 7]
+        [3, 9, 4, 3, 1, 2, 18, 7]
     );
 }
 
@@ -272,16 +272,16 @@ fn support_storage_uses_packed_world_rows() {
 }
 
 #[test]
-fn support_work_charges_word_initialization() {
+fn support_work_charges_both_word_scans() {
     for (atoms, expected) in [
         (0, 0),
         (1, 2),
-        (31, 32),
-        (32, 33),
-        (33, 35),
-        (63, 65),
-        (64, 66),
-        (65, 68),
+        (31, 2),
+        (32, 2),
+        (33, 4),
+        (63, 4),
+        (64, 4),
+        (65, 6),
     ] {
         let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
         let certificate = TightPlan::compile(
@@ -334,7 +334,7 @@ fn byte_ceiling_includes_its_exact_boundary() {
 #[test]
 fn full_scan_work_is_required_before_dispatch() {
     let graph = graph();
-    for (max_work_per_candidate, success) in [(20, true), (19, false)] {
+    for (max_work_per_candidate, success) in [(18, true), (17, false)] {
         assert_eq!(
             Plan::new(
                 &graph,
@@ -463,11 +463,11 @@ fn zero_epoch_cannot_alias_cleared_result_storage() {
 fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 1, 0, 20, RESULT_MAGIC, 7, 1, 1, 3, 20, RESULT_MAGIC];
+    let records = [7, 0, 1, 0, 18, RESULT_MAGIC, 7, 1, 1, 3, 18, RESULT_MAGIC];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
-    assert_eq!(result[0].work(), 20);
+    assert_eq!(result[0].work(), 18);
 }
 
 #[test]
@@ -479,19 +479,19 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
         0,
         0,
         0,
-        20,
+        18,
         RESULT_MAGIC,
         7,
         1,
         2,
         2,
-        20,
+        18,
         RESULT_MAGIC,
         7,
         2,
         1,
         1,
-        20,
+        18,
         RESULT_MAGIC,
     ];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
@@ -514,7 +514,7 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
 fn corrupt_records_never_produce_a_partial_batch() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let valid = [7, 0, 0, 0, 20, RESULT_MAGIC, 7, 1, 2, 2, 20, RESULT_MAGIC];
+    let valid = [7, 0, 0, 0, 18, RESULT_MAGIC, 7, 1, 2, 2, 18, RESULT_MAGIC];
     for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 19), (11, 0), (8, 0)] {
         let mut corrupt = valid;
         corrupt[index] = value;
@@ -539,7 +539,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         decode_present(
-            &[7, 0, 1, 4, 20, RESULT_MAGIC],
+            &[7, 0, 1, 4, 18, RESULT_MAGIC],
             &graph,
             &plan,
             &Cancellation::default()
@@ -562,7 +562,7 @@ fn cancellation_prevents_completed_results() {
         graph.pack(&certificate, &cancellation).err().unwrap(),
         plan.pack(&graph, &input, &cancellation).unwrap_err(),
         decode_present(
-            &[7, 0, 0, 0, 20, RESULT_MAGIC],
+            &[7, 0, 0, 0, 18, RESULT_MAGIC],
             &graph,
             &plan,
             &cancellation,
@@ -577,7 +577,7 @@ fn cancellation_prevents_completed_results() {
 fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 2, 2, 20, RESULT_MAGIC, 7, 1, 2, 2, 20, RESULT_MAGIC];
+    let records = [7, 0, 2, 2, 18, RESULT_MAGIC, 7, 1, 2, 2, 18, RESULT_MAGIC];
     let error =
         super::decode(&records, &graph, &plan, &[7, 3], &Cancellation::default()).unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Readback);
@@ -590,7 +590,7 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         super::decode(
-            &[7, 0, 0, 0, 20, RESULT_MAGIC],
+            &[7, 0, 0, 0, 18, RESULT_MAGIC],
             &graph,
             &plan,
             &[],

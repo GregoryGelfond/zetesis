@@ -646,6 +646,13 @@ the specified old/new intervals. Rich producers and final authored-body
 validation retain separate complete scans. These laws establish the partition,
 not the source evaluator or termination of value generation.
 
+The join planner receives the partition before choosing its execution order.
+It need not first prepare an unrestricted order. Relation handles belong to the
+join's immutable support snapshot; a prepared rule cannot retain a directory
+position across support publication. These choices preserve the same occurrence
+partition. Handle resolution, comparison readiness and admitted work remain
+Rust obligations.
+
 Parallel exact queries lease bounded work allowances from one shared owner.
 `WorkPermits` partitions the allowance into spent, available and outstanding
 permits. Granting preserves that total; settlement records consumed work and
@@ -837,6 +844,12 @@ provides checked owner-bound views. Construction, catalog mapping, resource
 accounting, fallible matching and any device masks still need executable
 correspondence arguments. The [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
 explains the hypotheses with a correlated-tuple example.
+
+A consumer needing only the shortest posting can resolve each equality and
+retain that posting without materializing an owned query. Every requested
+equality must still be validated, including later columns after an absent value.
+The dictionary and posting laws apply to completed resolution; they do not
+justify skipping errors or charging work only after it has occurred.
 
 The append dictionary's canonical inverse implements the same encoder. Each
 published representative must have exactly one inverse entry naming its local
@@ -1362,6 +1375,18 @@ argument. Rust grouping, word addressing, atomic execution, barriers and
 readback remain unproved implementation correspondences. The packed membership
 refinement below concerns a different, 64-bit Rust representation and does not
 certify either shader schedule.
+
+Candidate export splits each stored 64-bit word into ordered low and high
+32-bit words. Only words covering the declared atom universe are exported;
+unused final bits remain zero. Atom enumeration visits set bits in increasing
+order. Both operations retain the original interpretation's theory identity.
+The tight shader finds unsupported atoms from each candidate word intersected
+with the complement of its support word. Reducing the first set bit of every
+nonempty difference gives the least unsupported atom; an original-root failure
+still takes precedence. `support_true_iff` states the corresponding per-atom
+support obligation. The concrete word conversion, set-bit iterator, witness
+reduction and their resource bounds require separate executable refinement;
+the retained proof of `Interpretation::contains` does not cover these operations.
 
 CPU and device membership can consume the same immutable original-theory
 `TightPlan`; preparation does not itself classify a candidate. A completed

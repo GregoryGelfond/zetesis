@@ -42,7 +42,9 @@ mod dictionary;
 
 pub use catalog::{Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, Runs};
 
-pub use selection::{Equality, Mask, Query, QueryAttempt, QueryFailure, Selection};
+pub use selection::{
+    Equality, EqualityAttempt, Mask, Query, QueryAttempt, QueryFailure, Selection,
+};
 
 /// Inclusive construction and operation ceilings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

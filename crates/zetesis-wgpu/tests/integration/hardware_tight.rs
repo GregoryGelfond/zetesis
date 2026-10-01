@@ -306,6 +306,7 @@ fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupp
         compare_conditional_support(&mut oracle, atoms);
     }
     compare_skewed_support(&mut oracle);
+    compare_word_witnesses(&mut oracle);
     for atoms in [1, 31, 32, 33, 63, 64, 65, 4097] {
         let certificate = certificate(atoms, vec![Node::Atom(atoms - 1)], vec![0]);
         let theory = certificate.theory();
@@ -345,6 +346,40 @@ fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupp
             assert!(stats.transport_allocated);
         }
     }
+}
+
+fn compare_word_witnesses(oracle: &mut GpuTightOracle) {
+    let certificate = certificate(129, vec![Node::Atom(0), Node::Atom(128)], vec![0, 1]);
+    let theory = certificate.theory();
+    // Every bit offset appears as the least unsupported atom. A later missing
+    // bit also tests the global minimum across words, including empty words.
+    let mut candidates: Vec<_> = (1..128)
+        .map(|atom| Interpretation::new(theory, [0, atom, 127, 128]).unwrap())
+        .collect();
+    candidates.push(Interpretation::new(theory, [0, 128]).unwrap());
+    candidates.push(Interpretation::new(theory, [1, 63, 64]).unwrap());
+    candidates.push(Interpretation::new(theory, [0, 1, 63, 64]).unwrap());
+    let results = oracle
+        .check_batch(
+            &certificate,
+            &candidates,
+            TightGpuLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(results.len(), candidates.len());
+    for (atom, result) in (1..128).zip(&results) {
+        assert_eq!(
+            result.verdict(),
+            TightVerdict::Residual {
+                unsupported_atom: atom
+            }
+        );
+    }
+    assert_eq!(results[127].verdict(), TightVerdict::Stable);
+    assert_eq!(results[128].verdict(), TightVerdict::NotModel { root: 0 });
+    assert_eq!(results[129].verdict(), TightVerdict::NotModel { root: 1 });
+    assert!(results.iter().all(|result| result.work() == 16));
 }
 
 fn compare_skewed_support(oracle: &mut GpuTightOracle) {

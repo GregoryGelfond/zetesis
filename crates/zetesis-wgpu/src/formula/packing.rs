@@ -284,6 +284,7 @@ impl Plan {
         &self,
         graph: &Graph,
         candidates: &[Interpretation],
+        cancellation: &zetesis_cpu::Cancellation,
     ) -> Result<Vec<u32>, GpuError> {
         if candidates.len() != self.worlds as usize {
             return Err(capacity(
@@ -294,17 +295,7 @@ impl Plan {
             .map_err(|_| capacity("formula candidate bytes exceed host"))?;
         let mut words = vector(length)?;
         words.resize(length, 0u32);
-        for (world, candidate) in candidates.iter().enumerate() {
-            if !graph.shape.theory.same_instance(candidate.theory()) {
-                return Err(GpuError::new(
-                    GpuErrorKind::Seed,
-                    "candidate belongs to another Theory",
-                ));
-            }
-            for atom in candidate.atoms() {
-                words[world * graph.shape.words as usize + atom / 32] |= 1 << (atom % 32);
-            }
-        }
+        crate::candidates::pack(&graph.shape.theory, candidates, &mut words, cancellation)?;
         Ok(words)
     }
 }

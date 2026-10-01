@@ -72,7 +72,10 @@ impl<'source> PreparedRule<'source> {
             &rule.body,
             &empty,
             rule.variables,
-            &completed.relations,
+            order::SourceRows {
+                relations: &completed.relations,
+                pivot: None,
+            },
             budget,
             rule.location,
             Some(&mut |capacity| match capacity {
