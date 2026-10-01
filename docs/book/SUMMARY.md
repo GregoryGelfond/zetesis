@@ -46,6 +46,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Reusing support-publication directories](reference/support-publication.md)
   - [Canonical storage and CPU worker scaling](reference/canonical-storage.md)
   - [Eager and hybrid formula grounding](reference/hybrid-grounding.md)
   - [Lending completed grounding rows](reference/grounding-row-lending.md)

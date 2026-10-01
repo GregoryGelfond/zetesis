@@ -8,7 +8,7 @@ program.
 The [0.1.5 CPU comparison](canonical-storage.md) includes every case in the
 94-program corpus, the 22-case execution series and the ten-case scalability
 selection, with separate measurements at 1, 2, 4, 8 and 14 workers. These
-selections overlap. The current executable admits Einstein's Riddle within its
+selections overlap. The measured executable admits Einstein's Riddle within its
 default limits and takes about 20.4 ms against clingo's 35.4–36.1 ms. It also
 regresses on many other cases: the corpus retains four timing wins over clingo,
 while the series falls from nine to four. Full timing, memory, refusal and
@@ -148,6 +148,7 @@ their original programs and executables; they are not a cumulative speedup chart
 
 | Question | Report |
 | --- | --- |
+| What changes when exclusive support-publication directories are reused? | [Support-publication CPU comparison](support-publication.md) |
 | What changed with canonical storage and answer construction? | [0.1.5 CPU comparison and worker scaling](canonical-storage.md) |
 | What changes when source constraints are checked during solving? | [Eager and hybrid grounding](hybrid-grounding.md) |
 | What does lending completed eager join rows change? | [Grounding row lending](grounding-row-lending.md) |
