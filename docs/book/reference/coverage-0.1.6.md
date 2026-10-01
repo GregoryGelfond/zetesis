@@ -3,19 +3,21 @@
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
 The README badge reports this local coverage measurement at
-[`0f787751`](https://github.com/GregoryGelfond/zetesis/tree/0f787751888f2fbdc7e166c5862b6d8cdd71bfd8).
-It is not a hosted-CI status. Later documentation changes do not alter the
-measured implementation or tests.
+[`9589f965`](https://github.com/GregoryGelfond/zetesis/tree/9589f96559dc8188451baa0202d63f2f4db831ae).
+It is not a hosted-CI status. The `v0.1.7` source release changes version metadata
+and the README; it retains this solver implementation. These measurements remain
+attached to the qualified `0.1.6` source. The [earlier snapshot](observations/coverage-0f787751.json)
+is retained separately.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests | 104,748 / 113,674 | 92.15% |
-| CPU-only solver library and CLI, separate instrumentation | 9,193 / 9,903 | 92.83% |
+| Workspace, all features, portable tests | 104,849 / 113,775 | 92.15% |
+| CPU-only solver library and CLI, separate instrumentation | 9,207 / 9,917 | 92.84% |
 
 Both populations passed their independent 91% floor using Rust 1.97.1,
 cargo-llvm-cov 0.8.7 and LLVM 22.1.6. Test-support crates are excluded by the
 maintained coverage policy. Neither population includes physical-device tests.
-The [verification receipt](observations/coverage-0f787751.json) records exact
+The [verification receipt](observations/coverage-9589f965.json) records exact
 counts, report hashes, commands and the separate hardware qualification.
 
 All 58 selected Metal tests passed in 14 groups on Apple M4 Pro. These
@@ -42,5 +44,5 @@ sh scripts/check.sh hardware --metal
 The last command requires an accessible Metal adapter. Retain coverage reports
 and hardware logs separately. Adding `--metal` to the coverage command produces
 a different test population from the portable measurement reported here.
-The [performance comparison](instantiation-lazy.md) identifies its measured
-executables separately and includes the combined grounding and closure changes.
+Performance measurements identify their executables separately; see the
+[comparison overview](performance.md).

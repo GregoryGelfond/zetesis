@@ -17,8 +17,11 @@ explains their place in ordinary solving, and the
 | `GpuAggregateOracle` | An `AggregateGpuPlan` and Group-bound eligibility occurrences; count, sum, sum-plus, minimum and maximum | Source completeness, head permission and reduct minimality |
 | `GpuRelationExecutor` | One immutable typed relation and equality queries; ordered row masks | Complete pattern matching, source coverage and answer-set checking |
 
-The tight, native aggregate and relation operations are explicit library
-operations; ordinary solver dispatch does not currently select them.
+On an explicit GPU backend, ordinary formula sessions with automatic membership
+policy select `GpuTightOracle` when complete tight preparation succeeds. Other
+formulas use `GpuFormulaOracle` with exact CPU completion of residual queries;
+explicit countermodel policy also retains that general route. Native aggregate
+and relation operations remain explicit library capabilities.
 
 Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
 reproducibility requires a particular backend. Selection distinguishes physical
@@ -34,9 +37,12 @@ profile. A bare `GpuContext` requires compute support and the chosen identity
 policy; a primitive built on that context checks its own granted limits.
 
 `GpuContext` lets distinct primitives retain prepared subjects on one device.
-Existing constructors create independent contexts; `from_context` shares device
-resources and their failure boundary. Overlapping operations return `Busy`
-without waiting. Primitive byte ceilings retain their local scope. See
+Standalone `new` and `new_selected` constructors create independent contexts;
+`from_context` shares device resources and their failure boundary.
+`GpuFormulaProfile` additionally retains a compiled formula pipeline on its exact
+context; `GpuFormulaOracle::from_profile` shares that compilation while starting
+fresh theory residency, transport, epochs and statistics. Overlapping operations
+return `Busy` without waiting. Primitive byte ceilings retain their local scope. See
 [execution ownership](../../docs/book/architecture/ownership.md) and the
 [ordinary session example](../../docs/book/rust/sessions.md#share-execution-resources).
 

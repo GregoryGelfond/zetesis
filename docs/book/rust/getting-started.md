@@ -16,11 +16,12 @@ facts. `#show run/1` changes only the displayed channel, not those typed answers
 ## Set up a Rust application
 
 The packages are not published on crates.io. Use their paths in a pinned local
-checkout. These commands create sibling repository and application directories:
+checkout. These commands select the official `v0.1.7` source release and create
+sibling repository and application directories:
 
 ```sh
 git clone https://github.com/GregoryGelfond/zetesis.git
-git -C zetesis switch --detach
+git -C zetesis switch --detach v0.1.7
 git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app

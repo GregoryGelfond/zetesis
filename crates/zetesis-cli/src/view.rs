@@ -184,7 +184,7 @@ pub trait AnswerRenderer {
 
     /// Present configuration when an execution backend is selected.
     ///
-    /// Automatic execution may select a later backend and call this again.
+    /// Preparation may call this again with the effective configuration.
     /// The default emits nothing, preserving machine-readable documents and
     /// custom views that do not present setup metadata.
     ///

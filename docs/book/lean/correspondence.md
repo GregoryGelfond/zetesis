@@ -104,7 +104,8 @@ remain executable correspondence obligations.
 Ordinary sessions can retain the same device through explicit execution
 resources. Each start creates a fresh candidate stream, budget and outcome over
 its original logical subject. The correspondence must preserve that independence under
-sequential reuse, automatic CPU selection with supplied device resources and shared device failure.
+sequential reuse, CPU execution with supplied device resources and shared device
+failure.
 The builder changes request composition; it does not change candidate coverage,
 the frozen reduct or the point at which a checked result is committed.
 

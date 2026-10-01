@@ -501,10 +501,12 @@ The profile includes its exact context and gate projection. It cannot be paired
 with a different device through an independent field. The builder clones shared
 handles, so the original variables need not outlive the session.
 
-Resource ownership does not choose an execution policy. CPU and automatic
-execution ignore a supplied context. An explicit GPU request consumes those
-resources, checks the requested backend and vendor against the supplied adapter,
-and refuses a mismatch. It does not discover a replacement device.
+Resource ownership does not choose an execution policy. `Backend::Cpu` ignores
+a supplied context. `Backend::Gpu(None)` requests the platform's native API;
+`Backend::Gpu(Some(GpuApi::Metal))` and `Backend::Gpu(Some(GpuApi::Vulkan))`
+request the named API. A GPU request uses the supplied adapter only if it matches
+that API and the hardware-GPU requirement. A mismatch is refused; the session
+does not discover a replacement device.
 
 Operations sharing a context are serialized through nonblocking leases. A busy
 context refuses the overlapping operation; no hidden queue is created. Device
@@ -527,9 +529,9 @@ and their scores. It requires an accessible physical GPU.
 
 ### Retain the original subject
 
-`AnswerSet::subject()` retains the checked `Program`, `Theory` or original
-`HybridFormula`. A hybrid answer retains the full source owner, not merely its
-core theory.
+`AnswerSet::subject()` retains the checked `Program`, `Theory`, original
+`HybridFormula` or `TerminalFormula`. Hybrid and terminal-definition answers
+retain their full source owners, not merely their core or base theories.
 `Subject::same_instance` distinguishes shared owners from independently admitted but
 structurally equal inputs. `into_interpretation()` explicitly discards the
 subject association for raw-model interoperability; use it only when your own

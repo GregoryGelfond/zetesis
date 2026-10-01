@@ -54,5 +54,8 @@ needs a Vulkan driver. Vulkan has not yet been qualified on physical hardware.
 
 ## Contributing
 
-Developer tools, such as the corpus validation commands, run from the checkout
-and are not installed; see [CONTRIBUTING.md](CONTRIBUTING.md).
+The installed `zetesis test` commands check corpus, scalability and backend
+contracts. Corpus and scalability checks read fixtures from the checkout.
+Repository maintenance and qualification scripts, and the separate
+`zetesis-corpus` and `zetesis-validate` developer tools, run from the checkout
+and are not installed by the script; see [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -89,13 +89,14 @@ Certified positive producers use disjoint joins containing newly derived rows;
 other producers retain complete round traversal. Final formula emission still
 validates every authored body instance.
 
-Whole normalized positive-flat programs prepare a borrowed occurrence plan
-using the existing signed dependency graph and SCC order. The plan preserves
-every original IR occurrence and caches its positive inputs. Bootstrap handles
+Normalized positive-flat programs without objective declarations prepare a
+borrowed occurrence plan using the existing signed dependency graph and SCC order.
+The plan preserves every original IR occurrence and caches its positive inputs. Bootstrap handles
 zero-input producers; subsequent rounds select affected producers through signed
 reverse postings and a packed active set, retaining their original order.
 Completed publication precedes every new round. Optional domain guards share the
-same source applicability check. This is support preparation, not an answer-set
+rule certificate but also admit accompanying objectives; producer scheduling
+retains its objective-free profile. This is support preparation, not an answer-set
 membership or unique-model certificate; richer source retains its existing
 traversal and final authored-error validation.
 
@@ -109,8 +110,10 @@ lookup consume grounding work; the byte ceiling is not a process-memory measurem
 
 Prepared formula and bundle values can additionally request
 `with_domain_analysis(Some(DomainLimits { .. }))`, disabled by default. The
-analysis requires the exact normalized whole positive flat program;
-unsupported profiles, Unknown and Stopped retain complete fallback. Where it
+analysis retains the exact normalized program and requires its logical rules to
+be positive and flat. Objectives may accompany those rules: they produce no
+argument values, and their grounding, arithmetic and scoring remain separate.
+Unsupported rule profiles, Unknown and Stopped retain complete fallback. Where it
 prepares candidates, a rule's variable is narrowed to the meet of its
 argument domains less the values a comparison over that variable alone
 excludes, decided before any row is read, and the guards apply in every
@@ -177,9 +180,16 @@ Selections cannot supply another alternative's missing binding. The
 [finite occurrence guide](../../proofs/guide/finite-occurrences.md) records these
 separate composition laws and their bounded resource contracts.
 
-Arithmetic uses checked `i32` operations. Undefined or overflowing evaluation
-refuses admission instead of silently dropping a substitution. Descending or
-nonnumeric interval endpoints yield no rows in facts and generated bindings.
+Arithmetic uses checked `i32` operations. Overflow, nonnumeric arithmetic and
+invalid exponents refuse admission. In formula source families, evaluated numeric
+division or remainder by zero may omit an instance with a warning only when the
+same complete family has a jointly defined instance; an entirely undefined
+family refuses admission. Independent faults in a reached phase remain fatal.
+Closed-term preparation and post-solve observations retain strict checks. See
+[source-family evaluation](../../docs/book/architecture/grounding.md#source-instances-as-a-composition)
+for the binding and phase boundaries.
+Descending or nonnumeric interval endpoints yield no rows in facts and generated
+bindings.
 For example, `p(a..b).` contributes no fact; `p(a..(1/0)).` remains an
 evaluation failure. Both endpoints are checked before an empty range is
 selected. Numeric `i32::MIN`/`i32::MAX` extrema tuple values
@@ -321,15 +331,15 @@ same eligible binding; specialization retains the original model query.
 Runtime objective templates always have fixed integer priorities.
 
 Resolved nonnumeric weights or priorities, including `#inf`/`#sup`,
-contribute neither cost nor priority. Their source syntax, tuple shape, variable scope, filter and resource checks
-still run. Resolved tuple expressions are evaluated for numeric contributing
-rows; source exclusion retains its defined field-evaluation order. A numeric zero retains a priority; an omitted weight
-does not. Eligible unrepresentable maximize negation is a located failure;
-an excluded nonnumeric priority needs no weight normalization. Undefined priority
-arithmetic remains a located source-evaluation failure. Weight and tuple
-expressions reuse that same scalar evaluator and are specialized after source
-eligibility selects a complete binding. Arithmetic, structural constructors and
-logical extrema retain typed value identity. Simple fields retain lifted joins;
+contribute neither cost nor priority. Their source syntax, tuple shape, variable
+scope, filter and resource checks still run. Weight, priority and tuple fields
+participate jointly in the source-family arithmetic policy, including when the
+weight is nonnumeric. Source exclusion retains its defined phase order. A numeric
+zero retains a priority; an omitted weight does not. Eligible unrepresentable
+maximize negation is a located failure; an excluded nonnumeric priority needs no
+weight normalization. The fields reuse the checked scalar evaluator and are
+specialized after source eligibility selects a complete binding. Arithmetic,
+structural constructors and logical extrema retain typed value identity. Simple fields retain lifted joins;
 resolved fields feed the same global key, score and candidate-bound operations.
 Optimization directives share finite scalar binders and structural patterns
 where their grammar permits them. Weak bodies additionally use the admitted

@@ -57,7 +57,7 @@ impl ExecutionResources {
     /// session compiles its own primitive on the profile's exact context.
     /// Each formula session validates policy, Busy, health and
     /// granted capabilities before starting independent residency and search.
-    /// CPU and automatic formula policies continue to ignore these resources.
+    /// CPU sessions ignore these resources.
     #[cfg(feature = "gpu")]
     #[must_use]
     pub fn with_formula_profile(profile: &zetesis_wgpu::GpuFormulaProfile) -> Self {

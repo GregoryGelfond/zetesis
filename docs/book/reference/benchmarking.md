@@ -160,6 +160,14 @@ suite. The evidence records the policy the run used: `all_phases`,
 qualified each cell: clingo, the recorded contract, or nothing, because the
 cell needs clingo.
 
+In 0.1.7, the clingo report reader rejects lower-bound progress entries
+(`Lower` without model `Value`) that can appear during parallel optimization.
+Such a capture is retained as an invalid report, even when clingo completed
+normally. It cannot qualify answers or supply an accepted timing comparison;
+it does not establish a clingo solving failure. The examples use the default
+`--clingo-threads 1`; a complete parallel comparison remains unqualified when
+any required report is rejected.
+
 ### Evidence
 
 `--report NEW.json` names the evidence file; by default it is

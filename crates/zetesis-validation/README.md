@@ -41,10 +41,10 @@ reference with `cargo doc --locked -p zetesis-validation --no-deps --open`.
 From the repository root:
 
 ```sh
-zetesis-corpus verify-examples examples/correctness
-zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
-zetesis-validate --repo . --report target/validation-report.json
-zetesis-validate --repo . --reference-only --report target/reference-report.json
+target/release/zetesis-corpus verify-examples examples/correctness
+target/release/zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
+target/release/zetesis-validate --repo . --report target/validation-report.json
+target/release/zetesis-validate --repo . --reference-only --report target/reference-report.json
 ```
 
 The default correctness collection is self-contained and excludes clingcon.
@@ -98,8 +98,11 @@ establish arbitrary full hidden-model identity.
 The clingo `optN` decoder reconciles witness and summary counts, removing exactly
 the repeated final incumbent that accompanies the supported optimal enumeration
 format. Unsupported or contradictory output is a failure, not a smaller answer
-collection. Refusal, timeout, incomplete coverage, output limits, malformed
-reports and semantic mismatch remain separate outcomes.
+collection. The current reader also rejects clingo lower-bound progress entries
+(`Lower` without `Value`), which can occur during parallel optimization; this is
+a report-compatibility limitation, not evidence that clingo failed to solve.
+Refusal, timeout, incomplete coverage, output limits, malformed reports and
+semantic mismatch remain separate outcomes.
 
 `answers::native_json::parse` reads the native view, schema 2 or the schema-1
 form of earlier executables, with typed full atoms, shown positions/terms,
@@ -113,7 +116,7 @@ The selected-corpus API can check full-model identity for fixtures whose source
 contract excludes projection and objectives:
 
 ```sh
-zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
+target/release/zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
   --clingo /path/to/clingo --zetesis /path/to/zetesis \
   --report target/upstream-parity.json
 ```
@@ -126,7 +129,7 @@ See [reported answers](src/answers.rs),
 ## Require actual GPU execution
 
 ```sh
-zetesis-validate --repo . --native-backend metal \
+target/release/zetesis-validate --repo . --native-backend metal \
   --native-oracle countermodel --native-batch-size 64 \
   --report target/metal-validation.json
 ```
@@ -347,9 +350,8 @@ the library does not check.
 Its default profile requests the shipped defaults, automatic grounding and
 oracle; the observation retains the grounding mode actually taken, so an
 automatic cell cannot be read as an explicit eager or lazy one. `--time-limit`
-adds a cooperative deadline to every native profile, which changes what the
-solver polls at every charged unit and is therefore part of the profile's
-identity; `--oracle` requests a reduct procedure explicitly. Cells a change is meant to move, a refusal or a timeout, stay in the
+adds a cooperative deadline to every native profile and is retained as part of
+the profile's identity; `--oracle` requests a reduct procedure explicitly. Cells a change is meant to move, a refusal or a timeout, stay in the
 set: their typed decisions are the observation.
 
 `zetesis-bench compare LABEL=PATH … --markdown` derives one comparison from published

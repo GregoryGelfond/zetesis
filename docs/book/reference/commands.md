@@ -259,7 +259,7 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
-60-test physical qualification suite.
+58-test physical qualification suite.
 
 Corpus and backend checks accept every backend: `--backend cpu` (the default),
 `gpu`, `metal` or `vulkan`. GPU corpus checks request the eager general formula

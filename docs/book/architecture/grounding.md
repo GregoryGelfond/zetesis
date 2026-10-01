@@ -444,11 +444,12 @@ and collects new positive head atoms. Aggregate and conditional truth remains in
 the emitted formulas; it does not prune possible producers. A proposed aggregate
 assignment value retains its original equality.
 
-For a whole normalized positive-flat program, a private
+For a normalized positive-flat program without objective declarations, a private
 [producer plan](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers.rs)
-checks every original IR occurrence against the same source applicability used
-by optional domain guards. It checks signed predicate names and arities,
-positive dependency edges and the existing themelios SCC order. Canonical source
+checks every original IR occurrence against the rule certificate also used by
+optional domain guards. Scheduling separately excludes objectives, including
+empty declarations; domain guards permit them. The plan checks signed predicate
+names and arities, positive dependency edges and the existing themelios SCC order. Canonical source
 rules may coalesce duplicates; plan slots still refer to the original IR rule
 array and preserve its provenance. The plan borrows that preparation and caches
 positive body occurrence IDs. Reverse signed-predicate postings mark original

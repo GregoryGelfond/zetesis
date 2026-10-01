@@ -235,8 +235,9 @@ development records should not be needed to understand a public claim.
 ## Coverage
 
 The README badge reports workspace line coverage from the most recently
-qualified source. It is a recorded local measurement, not a live hosted-CI
-status, and a newer source remains unqualified until its own checks complete.
+qualified source identified by the snapshot below. It is a recorded local
+measurement, not a live hosted-CI status. A release version does not change the
+source identity or test population of that measurement.
 The [version 0.1.6 coverage record](coverage-0.1.6.md) holds that snapshot:
 its exact counts, source identities, qualification scope and the commands
 that reproduce it at the revisions it measured.

@@ -1,9 +1,11 @@
 # Benchmarks and comparisons
 
 Use a **solver benchmark** to compare the time and memory needed to answer a
-program.
+program. The [README overview](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#performance-at-a-glance)
+summarizes the latest complete CPU corpus comparison. The studies below retain
+their own source revisions, workloads and measurement conditions.
 
-## What the results show
+## Recorded comparisons
 
 The [grounding and prepared-closure comparison](instantiation-lazy.md) measures
 all three maintained CPU selections at four and fourteen workers. The arithmetic

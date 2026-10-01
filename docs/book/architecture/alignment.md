@@ -66,8 +66,9 @@ positive definitions, joining true rows after base membership to reconstruct eac
 full original answer. Other rules remain eager; explicit lazy CPU execution can
 compose core answer enumeration with streamed
 constraint satisfaction. Formula solving combines host candidate production with membership checking on the selected
-backend. Automatic device execution uses complete tight certificates when
-available; other formulas use GPU propagation and exact host completion.
+backend. Explicit GPU execution with automatic membership policy uses complete
+tight certificates when available; other formulas use GPU propagation and exact
+host completion.
 With multiple workers, joined Rayon rounds produce bounded candidate batches
 before device checking. Native aggregate reduction remains an explicit library
 capability rather than an automatic formula-dispatch operation.

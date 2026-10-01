@@ -50,9 +50,10 @@ pub struct Options {
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
-    /// Lazy uses source joins for the relational profile on CPU or GPU.
-    /// General formulas require eager grounding, bounded by atom, substitution
-    /// and ground-rule ceilings.
+    /// Relational lazy grounding uses source joins on CPU or GPU. For formula
+    /// inputs, lazy CPU grounding retains an eager producer core and streams
+    /// eligible constraints; objectives and table joins are refused. Formula
+    /// GPU execution requires eager materialization. Grounding limits still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.
@@ -514,7 +515,7 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
         (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. A GPU backend checks them in immutable relational rounds; the CPU backend on the host.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU hybrid formula grounding with an eager producer core and streamed eligible constraints.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }

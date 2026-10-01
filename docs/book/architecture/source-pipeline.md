@@ -103,8 +103,8 @@ those instructions rather than interpreting the plan as new program semantics.
 | Measurement | `grounding_observer` | Injected phase/work observations, separate from semantic completion |
 | Public composition | `lib` | Exports, strict admission and retained source evidence |
 
-Some private modules use a `#[path]` declaration: for example,
-`formula_ir::objective_scope` is stored in `formula_objective_scope.rs`.
+Nested modules follow their owning module's directory: for example,
+`formula_ir::objective_scope` is stored in `formula_ir/objective_scope.rs`.
 The owning module declaration determines Rust visibility. Filename proximity does
 not grant access or establish dependency direction.
 

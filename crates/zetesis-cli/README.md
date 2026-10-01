@@ -48,7 +48,8 @@ Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
 zero requests an immediate stop and
 omission imposes no deadline. Search polls the same `Cancellation` used by library
 consumers; a timer thread marks the deadline and each poll reads that mark
-beside the cancellation flag, so an unreached deadline does not slow the run. A deadline during search leaves coverage incomplete. A later deadline
+beside the cancellation flag, without reading the clock at each poll.
+A deadline during search leaves coverage incomplete. A later deadline
 during publication preserves the already established search coverage. Either
 stop returns exit 3; the deadline is not a hard process timeout for source I/O,
 frontend work or a running device kernel.
@@ -202,16 +203,15 @@ but successful discovery alone does not guarantee shader initialization.
 
 For relational closure:
 
-| Grounder | CPU | Automatic hardware | Explicit GPU |
-|---|---|---|---|
-| `auto` | Lazy source joins | Lazy CPU source joins | Host source joins with per-world GPU consequences |
-| `lazy` | Candidate-specific source joins | Lazy CPU source joins | Host source joins with per-world GPU consequences |
-| `eager` | Packed static closure | Packed static CPU closure | Static lowering |
+| Grounder | CPU (the default backend) | Explicit GPU |
+|---|---|---|
+| `auto` | Lazy source joins | Host source joins with per-world GPU consequences |
+| `lazy` | Candidate-specific source joins | Host source joins with per-world GPU consequences |
+| `eager` | Packed static closure | Static GPU closure |
 
-Automatic hardware selection retains CPU until measurements establish a GPU
-crossover for a supported execution profile. An explicit GPU request prepares
-its device during session setup and never silently falls back to CPU. Static
-GPU closure admits at most 4,096 atoms.
+Backend selection is explicit; `--backend auto` is refused. An explicit GPU
+request prepares its device during session setup and never silently falls back
+to CPU. Static GPU closure admits at most 4,096 atoms.
 
 Automatic finite formula admission can defer eligible terminal positive definitions
 and reconstruct them from verified base answers; it grounds the remaining rules
@@ -220,8 +220,7 @@ can stream ordinary constraints after complete support and arithmetic admission,
 while retaining producers and ineligible constraints. This hybrid profile currently
 refuses objectives, table joins and explicit devices; see the
 [grounding contract](../../docs/book/architecture/grounding.md#eager-and-lazy-execution).
-Automatic backend selection
-uses CPU. With `--oracle auto`, complete-theory checks can select ranked support
+With `--oracle auto`, complete-theory checks can select ranked support
 on CPU or a device. Device tight checking evaluates original truth and complete
 positive support without CPU residual queries. When no tight certificate is
 selected, explicit GPU execution uses general propagation and completes
@@ -257,10 +256,10 @@ submission does not establish how much shader work completed.
 the tree or a device route runs; with more than one CPU worker under regions
 the workers decide their leaves and it is unused. The default of one keeps
 exact completion on the calling thread when that completion route applies;
-it does not make parallel region search scalar. `--workers` is described above.
-`--memory` is the session's memory allowance in bytes, half of the host's
+it does not make parallel region search scalar. `--threads` is described above.
+`--memory-budget` is the session's memory allowance, half of the host's
 physical memory by default and at least two gibibytes, or two gibibytes when
-the host does not report its memory (Linux and macOS report it). The session's
+the host does not report its memory. The session's
 byte ceilings, the projection, objective key, optimal, reduct, completion
 scratch, candidate, closure, closure batch and batch bytes, are the shares of
 a two-gibibyte allowance; each one not given on the command line is that
@@ -286,14 +285,16 @@ limit. Optional class preparation and checking separately use the completion
 scratch ceiling; the two uses do not establish a combined process-memory bound.
 
 Advanced `--source-batching independent|union|worlds` selects relational source
-sharing. Union/Worlds require lazy or automatic grounding with CPU/automatic
-backend; explicit sharing resolves automatic hardware to CPU.
+sharing. Union/Worlds require lazy or automatic grounding with the CPU backend.
 Source and per-world work have distinct ceilings. A stopped world makes the
 whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.md).
 
-Independent relational CPU execution prepares query dimensions once per session
-and retains empty workspace capacities across batches. `--max-source-work` bounds
-that preparation separately from candidate `--max-work`.
+Independent relational CPU execution can adopt the compatible immutable query
+preparation retained by candidate narrowing; otherwise, the oracle prepares its
+own. It reuses that preparation and empty workspace capacities across batches,
+while each candidate keeps private truth state. `--max-source-work` bounds
+preparation separately from candidate `--max-work`; importing an owner retains
+its original preparation work and checks the oracle's preparation policy.
 `--max-closure-bytes` bounds one candidate's reserved named capacity;
 `--max-closure-batch-bytes` admits preparation, idle retained workspaces and
 assigned candidate allowances together. CPU closure setup conservatively admits
@@ -321,10 +322,12 @@ cap.
 execution counters, completion and host timings to stderr. JSON exposes typed
 views of the same information. Unavailable counters remain unavailable, not zero.
 
-For independent relational CPU execution, `query_execution` reports actual
-preparation builds/work, assigned and reused workspace slots, current retained
-capacity and the latest reservation envelope. These count what was reserved, not
-completed candidates or RSS. Reports retain a typed snapshot fault
+For independent relational CPU execution, `query_execution` reports oracle
+preparation builds and adoptions, the retained owner's original preparation work,
+assigned and reused workspace slots, current retained capacity and the latest
+reservation envelope. An adoption avoids another build; zero oracle builds does
+not mean no preparation work occurred. Capacity receipts describe reserved
+storage, not completed candidates or RSS. Reports retain a typed snapshot fault
 separately from any earlier successful snapshot and any checked answers. Other
 execution routes leave this observation absent.
 
@@ -353,11 +356,12 @@ Worker intervals can overlap and are reported separately from coordinator wall t
 
 Eager formula attribution renders the frontend's optional `domain_analysis`
 phase and domain preparation, guard-row, comparison and rejection counters.
-The ordinary command leaves this library option disabled: its phase is absent
-and entered phases have zero domain work. A caller that prepares source through
-the frontend's opt-in API may use the same `SolveMeasurements` observer to retain
-actual domain work. These counters describe final-rule guards, not support
-completion savings; unavailable values remain distinct from zero.
+Ordinary formula admission enables bounded domain analysis. A completed analysis
+can guard eligible positive-flat rules during support completion and final rule
+instantiation, including programs with objective declarations. Inapplicable or
+incomplete analysis retains conservative domains; objective-local evaluation and
+observations keep their own contracts. The counters report actual domain work
+and rejected rows, not a speedup; unavailable values remain distinct from zero.
 
 Failed attempts retain available timing/accounting. Timing completeness does not
 prove semantic completeness. Instrumentation is optional and adds overhead.

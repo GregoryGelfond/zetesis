@@ -3,6 +3,8 @@
 zetesis is an answer-set solver built around the reduct, with lazy grounding,
 parallel CPU execution and optional GPU computation. This manual covers using
 the command, embedding the libraries and understanding the solver.
+The [source releases](https://github.com/GregoryGelfond/zetesis/releases) include
+the documentation for each tagged version; the repository manual follows `main`.
 
 ## Start here
 

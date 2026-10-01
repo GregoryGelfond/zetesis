@@ -2,6 +2,11 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+The latest [coverage snapshot](../coverage-0.1.6.md) records portable coverage
+and separate Metal qualification at `9589f965`. Its [receipt](coverage-9589f965.json)
+preserves exact counts, source identity and report hashes. The `v0.1.7` release
+changes version metadata and the README from that implementation.
+
 The recorded [0.1.5 verification receipt](coverage-318c8238.json) identifies the
 independent portable workspace and CPU coverage populations. Sixty physical
 Metal tests and three ordinary CLI backend checks passed separately, without
@@ -1171,7 +1176,7 @@ time an answer holds it and refers to it by number afterwards, and what
 is shown is still decided by the program's `#show` directives. Three
 cells now run faster than the reference on the harness's terms
 (aggregate-16 at 0.82, the larger mix at 0.64, queens variant-04 at
-0.91), and the formula cells that had not moved in the whole tranche
+0.91), and the formula cells that had not moved in the combined change
 turn out to have been waiting on the writer. A document of one answer
 pays nothing for the numbering: its one record is deferred whole and
 indexed only if a second record asks.
@@ -2045,8 +2050,7 @@ and in this repository's normalization and fact expansion, which rebuild
 every statement; the split between the two is not measured, the executables
 carrying no frame pointers. For a program of many facts, reading it is now
 the larger part of the run on this route. This is recorded as an
-observation: no change to source preparation belongs to this tranche, and
-what to do about it is left to the review that follows it.
+observation: these measurements do not evaluate a source-preparation optimization.
 
 The series is flat under both steps: `after` is between 0.95 and 1.08 of
 `before` on every cell, the transitive cells at 0.99 and 0.98, and the one
@@ -2103,7 +2107,7 @@ than closing it.
 
 ## A correction: a keyed constraint with an anonymous key
 
-The review of the tranche as one change found that the keyed-constraint
+Review of the combined changes found that the keyed-constraint
 rewrite of `808530bf` changed the answer sets of a program whose demanded
 atom has an anonymous variable in a key position. For
 
@@ -2170,7 +2174,7 @@ report SHA-256
 `f4c191ffb80d10a226f7b3bae463e6ba496b5e73a938048774c5eec204c9da15`
 (corpus, one worker, clauses).
 
-The review of the tranche as one change found that each narrowing pass ran
+Review of the combined changes found that each narrowing pass ran
 a region's two closures through a door that prepared the program from
 nothing and allocated a fresh workspace, twice per pass, for the root and
 for every region below it, while preparation had grown to infer the

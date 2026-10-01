@@ -239,13 +239,16 @@ region keeps the completed passes' decisions and counts the region, a stop
 in the preparation or the root keeps the bounds of the completed passes, and
 a program without gate predicates computes no closure.
 
-For a theory whose complete asserted-head grammar is ordinary disjunction,
-every true atom in an answer set must have an original producer whose body is
-true and whose other head atoms are false. Otherwise removing that atom leaves
-a proper-subset model of the reduct. The resulting support condition restricts
-only outer proposals; independent producers can still support several atoms in
-one disjunctive head. Choices and other rich asserted heads decline this
-certificate. The original theory and frozen reduct are unchanged.
+For a theory whose complete asserted-head grammar combines ordinary disjunction
+and exact atomic choices, every true atom in an answer set needs original support:
+an ordinary producer whose body is true and whose other head atoms are false,
+or an atomic choice for that atom with a true body. Otherwise removing that atom
+leaves a proper-subset model of the reduct. The resulting support condition
+restricts only outer proposals; independent producers can still support several
+atoms in one disjunctive head. Richer or cross-atom choice forms decline the
+certificate, and choices alone do not trigger its construction: at least one
+ordinary head must contain a syntactic disjunction. The original theory and
+frozen reduct are unchanged.
 
 The [gate restriction laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean)
 and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean)
@@ -430,19 +433,21 @@ qualification for each claimed backend; an observed driver fault is not presumed
 
 For admitted relational programs, automatic materialization selects lazy source
 grounding on both CPU and GPU. Hardware changes do not require a complete ground
-rule store. Explicit eager grounding retains its compiled graph. Formula programs
-default to eager grounding; the CPU hybrid profile can stream eligible constraints
-against answers of its retained producer core. Formula device execution still
-requires an eager theory.
+rule store. Explicit eager grounding retains its compiled graph. Automatic
+formula admission can defer eligible terminal positive definitions and reconstruct
+them after base membership; other formulas are materialized eagerly. Explicit lazy
+CPU execution can stream eligible constraints against answers of its retained
+producer core. Formula device membership consumes the materialized theory; terminal
+reconstruction runs on the host.
 
-Automatic hardware selection retains CPU throughout the solve. Existing
-measurements do not establish a device crossover for an automatic policy; batch
-size alone is insufficient evidence. Explicit shared CPU source batching also
+CPU is the default backend throughout the solve. Existing measurements do not
+establish a device crossover for an automatic hardware policy; batch size alone
+is insufficient evidence. Explicit shared CPU source batching also
 remains a CPU policy. An explicit GPU backend prepares its executor during
 session setup. Default resources discover a device at that boundary;
 caller-supplied [ExecutionResources](../rust/sessions.md#share-execution-resources)
 reuse their exact context after policy and capability checks, without discovering
-a replacement. Supplying a context does not override automatic CPU selection.
+a replacement. Supplying a context does not override a CPU request.
 
 An explicit device failure is returned without a hidden CPU retry. A source
 limit or cancellation remains an incomplete result. Device statistics count

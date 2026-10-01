@@ -27,10 +27,17 @@ return `None`. The failure retains any established evidence and original subject
 
 ## Define a measurement scope
 
-`SolveMeasurements::new(true)` creates one optional host-measurement scope.
+`SolveMeasurements::new(true)` records host stages, detailed phase intervals and
+frontend grounding work. `stages_only()` records exclusive host stages and driver
+elapsed time while leaving detailed phase and grounding entries absent.
+`new(false)` disables every measurement clock and returns no snapshots.
+`is_enabled()` includes stage-only scopes; `details_enabled()` identifies full
+instrumentation.
+
 Clones share the recorder and its original start time. Pass `&owner` through
-`SessionBuilder::measurements`, which clones the handle; its enabled setting replaces
-`SolveConfig::stats`. Independently created owners measure independent scopes.
+`SessionBuilder::measurements`, which clones the handle; its detailed setting
+replaces `SolveConfig::stats`. Independently created owners measure independent
+scopes.
 
 | Operation | Recorded scope |
 | --- | --- |
@@ -40,7 +47,10 @@ Clones share the recorder and its original start time. Pass `&owner` through
 | `snapshot()` | Available measurements without resetting the recorder |
 
 Source preparation and consumer output can use the same owner as the session.
-The application supplies those boundaries explicitly. A label cannot attest
+The application supplies those boundaries explicitly. In a stage-only scope,
+admission and observation phase guards still enter their coarse stages; other
+phase guards read no clocks. The grounding observer records its coarse interval
+and route without detailed counters. A label cannot attest
 that the work was performed, and no timing record establishes source admission,
 membership, complete search or delivery.
 

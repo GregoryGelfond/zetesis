@@ -285,8 +285,7 @@ its context from that profile, preventing mismatched context/profile pairs.
 Each session still owns its executor, subject residency, search, candidate queue,
 counters and incumbent. Context-only resources compile per session; neither
 form installs a global cache. Hard adapter policy is checked before profile
-reuse; CPU and automatic formula policies retain their existing CPU route. The
-[session example](../rust/sessions.md#reuse-and-identity) shows this composition.
+reuse; CPU requests retain their CPU route. The [session example](../rust/sessions.md#reuse-and-identity) shows this composition.
 
 ## Parallelism follows the dependencies
 

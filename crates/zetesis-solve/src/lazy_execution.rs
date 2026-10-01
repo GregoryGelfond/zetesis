@@ -4,13 +4,13 @@ mod transport;
 pub use transport::{LazyBufferUsage, LazyTransportUsage};
 
 /// Cumulative work from an explicitly requested lazy device executor.
-/// Automatic backend selection currently keeps lazy execution on the CPU;
-/// a failed explicit device execution does not fall back. A selected
+/// CPU is the default backend; device execution must be requested explicitly.
+/// A failed device execution does not fall back. A selected
 /// adapter does not establish execution: actual dispatch and transfer counts do.
 /// Source work is shared across candidate occurrences, not a per-world CPU cost.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LazyExecutionStatistics {
-    /// Requested hardware policy, including automatic selection.
+    /// Requested execution backend.
     pub requested_backend: crate::Backend,
     /// Reported selected device name.
     pub adapter: String,
