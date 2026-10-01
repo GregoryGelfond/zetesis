@@ -11,7 +11,7 @@ use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
 
-use super::Bounds;
+use super::{Bounds, Preparation};
 use crate::countermodel::Input;
 use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig};
@@ -87,14 +87,12 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
     assert!(!planned.theory().same_instance(original.theory()));
     let options = SolveConfig::default();
     let mut observations = Observations::default();
-    let mut bounds = Bounds::new(
-        input(&planned),
-        &options,
-        &mut Observer(&mut observations),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    assert!(bounds.plan.is_some());
+    let preparation = Preparation::new(input(&planned), &options, &Cancellation::default());
+    preparation
+        .observe(&mut Observer(&mut observations))
+        .unwrap();
+    let mut bounds = Bounds::new(&options);
+    assert!(preparation.plan().is_some());
     let nodes = original.theory().nodes().to_vec();
     let mut models = StableModels::new(
         original.theory(),
@@ -104,6 +102,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
     .unwrap();
     bounds
         .improve(
+            preparation.plan(),
             &score(&planned, &["a"]),
             &mut models,
             &options,
@@ -111,13 +110,15 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
             &Cancellation::default(),
         )
         .unwrap();
-    assert!(bounds.plan.is_none());
+    assert!(!bounds.enabled);
+    assert!(preparation.plan().is_some());
     assert_eq!(original.theory().nodes(), nodes);
     assert_eq!(observations.mismatches, 1);
     assert!(observations.restrictions.is_empty());
     let previous = observations.clone();
     bounds
         .improve(
+            preparation.plan(),
             &score(&planned, &[]),
             &mut models,
             &options,
@@ -148,14 +149,12 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
     let admitted = admitted("{a;b}. #minimize{1:a;1:b}.");
     let options = SolveConfig::default();
     let mut observations = Observations::default();
-    let mut bounds = Bounds::new(
-        input(&admitted),
-        &options,
-        &mut Observer(&mut observations),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    assert!(bounds.plan.is_some());
+    let preparation = Preparation::new(input(&admitted), &options, &Cancellation::default());
+    preparation
+        .observe(&mut Observer(&mut observations))
+        .unwrap();
+    let mut bounds = Bounds::new(&options);
+    assert!(preparation.plan().is_some());
     // The original independent choices need no auxiliary candidate variables.
     // The cost guard does; refusing it must roll back that candidate owner.
     // Exact reduct checking has a separate admission allowance.
@@ -170,6 +169,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
     let original_nodes = models.theory().nodes().to_vec();
     bounds
         .improve(
+            preparation.plan(),
             &score(&admitted, &["a"]),
             &mut models,
             &options,
@@ -177,7 +177,8 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
             &Cancellation::default(),
         )
         .unwrap();
-    assert!(bounds.plan.is_none());
+    assert!(!bounds.enabled);
+    assert!(preparation.plan().is_some());
     assert_eq!(models.statistics().candidate_restrictions, 0);
     assert!(models.theory().same_instance(admitted.theory()));
     assert_eq!(models.theory().nodes(), original_nodes);

@@ -9,38 +9,41 @@ use crate::{
     ObjectiveTemplateRef, Score, Statistics, Stop,
 };
 
-struct Work<'a> {
-    limits: Limits,
-    cancellation: &'a Cancellation,
-    statistics: Statistics,
-    template: Option<usize>,
+pub(super) struct Work<'a> {
+    pub(super) limits: Limits,
+    pub(super) cancellation: &'a Cancellation,
+    pub(super) statistics: Statistics,
+    pub(super) template: Option<usize>,
 }
 impl Work<'_> {
-    fn error(&self, kind: ErrorKind) -> Error {
+    pub(super) fn error(&self, kind: ErrorKind) -> Error {
         Error {
             kind,
             template: self.template,
             statistics: self.statistics,
         }
     }
-    fn stop(&self, reason: Stop) -> Error {
+    pub(super) fn stop(&self, reason: Stop) -> Error {
         self.error(ErrorKind::Stopped(reason))
     }
-    fn tick(&mut self) -> Result<(), Error> {
+    pub(super) fn poll(&self) -> Result<(), Error> {
         self.cancellation.poll().map_err(|reason| {
             self.stop(match reason {
                 zetesis_cpu::Stop::Cancelled => Stop::Cancelled,
                 zetesis_cpu::Stop::Deadline => Stop::Deadline,
                 other => Stop::Control(other),
             })
-        })?;
+        })
+    }
+    pub(super) fn tick(&mut self) -> Result<(), Error> {
+        self.poll()?;
         if self.statistics.work >= self.limits.max_work {
             return Err(self.stop(Stop::WorkLimit));
         }
         self.statistics.work += 1;
         Ok(())
     }
-    fn reserve<T>(&self, count: usize) -> Result<Vec<T>, Error> {
+    pub(super) fn reserve<T>(&self, count: usize) -> Result<Vec<T>, Error> {
         let mut result = Vec::new();
         result
             .try_reserve_exact(count)
@@ -171,7 +174,7 @@ pub fn evaluate<'input>(
     })
 }
 
-fn final_cost(priority: i32, total: i128) -> Result<i64, ErrorKind> {
+pub(super) fn final_cost(priority: i32, total: i128) -> Result<i64, ErrorKind> {
     i64::try_from(total).map_err(|_| ErrorKind::CostOverflow { priority })
 }
 

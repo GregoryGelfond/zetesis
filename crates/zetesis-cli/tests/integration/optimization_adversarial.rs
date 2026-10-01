@@ -107,7 +107,7 @@ fn display_limits_discard_extra_ties_but_do_not_stop_optimality_search() {
 }
 
 #[test]
-fn partial_objective_evaluation_is_charged_without_counting_a_complete_score() {
+fn partial_prepared_score_preserves_the_incumbent() {
     let source = "{a}. #minimize {0@0,k:a}.";
     let mut first_only = options();
     first_only.max_candidates = 1;
@@ -117,17 +117,22 @@ fn partial_objective_evaluation_is_charged_without_counting_a_complete_score() {
     limited.max_objective_work = first_work + 1;
     let (report, output) = solve(source, &limited);
     assert_incomplete(&report, &output);
-    let Some(Interruption::Objective(error)) = &report.interruption else {
+    let Some(Interruption::PreparedObjective(error)) = &report.interruption else {
         panic!(
             "expected partial objective evaluation: {:?}",
             report.interruption
         );
     };
-    assert!(error.statistics().work > 0);
+    assert_eq!(error.work(), 1);
+    assert!(matches!(error.kind(),
+        zetesis_themelios::objective_bound::ObjectiveScoreErrorKind::Eligibility(error)
+        if error.kind() == zetesis_themelios::objective_bound::ObjectiveBoundErrorKind::Limit(
+            zetesis_themelios::objective_bound::ObjectiveBoundResource::Work)
+    ));
     let retained = report.optimization.expect("first score remains valid");
     assert_eq!(retained.scored_models, 1);
     assert_eq!(retained.tied_models, 1);
-    assert_eq!(retained.work, first_work + error.statistics().work);
+    assert_eq!(retained.work, first_work + error.work());
 }
 
 #[test]

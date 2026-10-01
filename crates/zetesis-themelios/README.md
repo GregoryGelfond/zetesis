@@ -626,6 +626,25 @@ A planning stop does not invalidate the already admitted theory or prove UNSAT.
 constraints over the original carrier. Callers must establish catalog coverage
 and verify the incumbent. Bounds preserve ties; the original theory and reduct
 remain the acceptance subject. These plans have independent work/storage limits.
+
+The same immutable plan provides `ObjectivePlan::score` over an interpretation
+of its exact original theory. Preparation globally coalesces each normalized
+priority/weight/tuple key, combining alternative eligibility with OR. A score
+read evaluates that retained eligibility DAG once, then reduces active weights
+at the objective's fixed descending priorities. No tuple-key cache or source
+join is rebuilt for that read. For `N` retained DAG nodes, `K` keys and `P`
+priorities, it visits `O(N + K + P log(P + 1))` data with `O(N + P)` temporary
+storage; priority map probes remain part of the one logical priority charge.
+The interpretation supplies truth only: scoring proves neither stable-model
+membership nor the caller's completed-catalog coverage.
+
+`None` declines prepared scoring when the plan's complete possible population
+cannot establish a requested binding, key or key-byte ceiling. This zero-work
+decline lets the detailed evaluator enforce that ceiling on the selected model.
+Cancellation and exact owner identity are checked before decline. A typed
+`ObjectiveScoreError` instead preserves its actual accepted work prefix and no
+score. Consumers needing borrowed contribution tuples continue to call
+`zetesis_objective::evaluate`; the plan deliberately does not retain those tuples.
 See [count planning](src/formula_count_plan.rs) and
 [objective bounds](src/objective_bound.rs).
 

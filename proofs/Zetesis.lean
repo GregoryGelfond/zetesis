@@ -1,4 +1,5 @@
 import Zetesis.Core
+import Zetesis.AdjacencyRows
 import Zetesis.Transformers
 import Zetesis.Semantics
 import Zetesis.Iteration

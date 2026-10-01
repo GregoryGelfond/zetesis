@@ -3,41 +3,10 @@
 use clap::Parser;
 use zetesis_cli::{Completion, Options, Report, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const SOURCE: &str = "1 {a;b} 1. {hidden}. #minimize { 5,a:a; 2,b:b }.";
 const STOPPED: &str = "Objective pruning stopped: objective candidate bound Limit(Work) \
 (template None); exact search continues";
-
-fn exact_plan_work(source: &str) -> u64 {
-    let admitted = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("the complete fixture is admitted");
-    let build = |max_work| {
-        ObjectivePlan::new(
-            admitted.theory(),
-            admitted.atoms(),
-            admitted.objectives(),
-            ObjectivePlanLimits {
-                max_work,
-                ..Default::default()
-            },
-            &Cancellation::default(),
-        )
-        .expect("planning succeeds at the inclusive work ceiling")
-    };
-    let work = build(ObjectivePlanLimits::default().max_work)
-        .statistics()
-        .work;
-    assert!(work > 0, "the CLI's zero budget disables planning");
-    assert_eq!(build(work).statistics().work, work);
-    work
-}
 
 fn solve(source: &str, bound_work: u64) -> (Report, String, String) {
     let options = Options::try_parse_from([
@@ -105,15 +74,16 @@ fn complete_without_restrictions(report: &Report, text: &str) {
 }
 
 #[test]
-fn first_bound_work_refusal_preserves_full_and_hidden_optimal_ties() {
+fn first_bound_refusal_preserves_optimal_ties() {
     for project_hidden in [false, true] {
         let source = if project_hidden {
             format!("{SOURCE} #show a/0. #show b/0.")
         } else {
             SOURCE.to_owned()
         };
-        let work = exact_plan_work(&source);
-        let (actual, output, diagnostics) = solve(&source, work);
+        // Preparation is charged to objective scoring. This independent bound
+        // allowance admits initialization and refuses the first node copy.
+        let (actual, output, diagnostics) = solve(&source, 1);
         let (baseline, expected, disabled_diagnostics) = solve(&source, 0);
         complete_without_restrictions(&actual, &output);
         complete_without_restrictions(&baseline, &expected);

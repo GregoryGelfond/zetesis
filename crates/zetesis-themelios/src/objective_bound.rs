@@ -7,6 +7,8 @@
 
 mod bound;
 mod join;
+mod score;
+pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -175,6 +177,7 @@ impl std::error::Error for ObjectiveBoundError {}
 #[derive(Debug)]
 pub struct ObjectivePlan {
     original: Theory,
+    objectives: ObjectiveProgram,
     nodes: Vec<Node>,
     levels: BTreeMap<i32, Vec<AggregateElement>>,
     statistics: ObjectiveBoundStatistics,

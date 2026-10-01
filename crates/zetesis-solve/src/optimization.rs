@@ -6,7 +6,9 @@ use std::fmt;
 use zetesis_core::Model;
 use zetesis_core::retention::{ModelRetention, RetentionError};
 use zetesis_cpu::Cancellation;
+use zetesis_ferraris::Interpretation;
 use zetesis_objective::{ObjectiveProgram, Score};
+use zetesis_themelios::objective_bound::ObjectivePlan;
 
 use crate::{Interruption, SolveConfig};
 
@@ -20,7 +22,7 @@ pub struct Optimization {
     pub tied_models: u64,
     /// Number of stable models whose objective was completely evaluated.
     pub scored_models: u64,
-    /// Cumulative charged evaluation work.
+    /// Cumulative charged objective preparation and evaluation work.
     pub work: u64,
 }
 
@@ -65,50 +67,75 @@ pub(crate) struct Incumbents {
     scored: u64,
 }
 impl Incumbents {
-    /// Evaluate without retaining or selecting the model. Both unrestricted
-    /// enumeration and optimization spend this same cumulative score budget.
+    /// Charge the one preparation attempt before any diagnostic or score read.
+    pub(crate) fn prepare(&mut self, work: u64) -> Result<(), Interruption> {
+        self.charge(work)
+    }
+
+    fn charge(&mut self, work: u64) -> Result<(), Interruption> {
+        self.work = self
+            .work
+            .checked_add(work)
+            .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
+        if let Some(best) = &mut self.best {
+            best.work = self.work;
+        }
+        Ok(())
+    }
+
+    /// Score without retaining the model. Prepared reads and detailed fallback
+    /// share one cumulative account, including every refused prefix.
     pub(crate) fn evaluate(
         &mut self,
         program: &ObjectiveProgram,
         model: &Model,
         options: &SolveConfig,
         cancellation: &Cancellation,
+        prepared: Option<(&ObjectivePlan, &Interpretation)>,
     ) -> Result<Score, Interruption> {
-        let evaluation = zetesis_objective::evaluate(
-            program,
-            model,
-            zetesis_objective::Limits {
-                max_work: options.max_objective_work.saturating_sub(self.work),
-                max_bindings: options.max_objective_bindings,
-                max_keys: options.max_objective_keys,
-                max_key_bytes: options.max_objective_key_bytes,
-            },
-            cancellation,
-        )
-        .map_err(|error| {
-            // Each call receives only the remaining cumulative work allowance.
-            self.work = self
-                .work
-                .checked_add(error.statistics().work)
-                .expect("evaluation work fits the remaining allowance");
-            if let Some(best) = &mut self.best {
-                best.work = self.work;
+        let limits = zetesis_objective::Limits {
+            max_work: options.max_objective_work.saturating_sub(self.work),
+            max_bindings: options.max_objective_bindings,
+            max_keys: options.max_objective_keys,
+            max_key_bytes: options.max_objective_key_bytes,
+        };
+        let score = if let Some((plan, interpretation)) = prepared {
+            match plan.score(interpretation, limits, cancellation) {
+                Ok(Some(score)) => {
+                    self.charge(score.work())?;
+                    Some(score.into_score())
+                }
+                Ok(None) => None,
+                Err(error) => {
+                    self.charge(error.work())?;
+                    return Err(Interruption::PreparedObjective(error));
+                }
             }
-            Interruption::Objective(error)
-        })?;
-        self.work = self
-            .work
-            .checked_add(evaluation.statistics().work)
-            .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
+        } else {
+            None
+        };
+        let score = if let Some(score) = score {
+            score
+        } else {
+            match zetesis_objective::evaluate(program, model, limits, cancellation) {
+                Ok(evaluation) => {
+                    self.charge(evaluation.statistics().work)?;
+                    evaluation.into_score()
+                }
+                Err(error) => {
+                    self.charge(error.statistics().work)?;
+                    return Err(Interruption::Objective(error));
+                }
+            }
+        };
         self.scored = self
             .scored
             .checked_add(1)
             .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
         if let Some(best) = &mut self.best {
             best.scored_models = self.scored;
-            best.work = self.work;
         }
-        Ok(evaluation.into_score())
+        Ok(score)
     }
 
     pub(crate) fn consider(
@@ -117,8 +144,9 @@ impl Incumbents {
         model: Model,
         options: &SolveConfig,
         cancellation: &Cancellation,
+        prepared: Option<(&ObjectivePlan, &Interpretation)>,
     ) -> Result<bool, Interruption> {
-        let score = self.evaluate(program, &model, options, cancellation)?;
+        let score = self.evaluate(program, &model, options, cancellation, prepared)?;
         let order = self
             .best
             .as_ref()
@@ -206,6 +234,10 @@ impl Incumbents {
 
     pub(crate) fn metadata(&self) -> Option<&Optimization> {
         self.best.as_ref()
+    }
+
+    pub(crate) const fn work(&self) -> u64 {
+        self.work
     }
 
     pub(crate) const fn scored(&self) -> u64 {

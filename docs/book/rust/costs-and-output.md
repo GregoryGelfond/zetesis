@@ -37,6 +37,46 @@ Resolved contribution tuples contain borrowed term references. A distinct key
 retains that tuple buffer directly; a duplicate discards it. Neither operation
 copies the referenced logical payload.
 
+After source admission, formula sessions reuse the same immutable
+[`ObjectivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
+for score reads and optional incumbent constraints. Preparation combines every
+alternative for one normalized `(priority, weight, tuple)` key with OR. Each
+`ObjectivePlan::score` evaluates the retained eligibility DAG on an
+interpretation of that exact original theory, then calls the typed
+`zetesis_objective::reduce_costs` reduction. It retains inactive priority slots,
+objective presence and signed totals, without rebuilding joins or tuple keys.
+The caller must still establish complete catalog coverage and answer-set
+membership. Equal-looking theories are distinct owners.
+
+The ordinary `evaluate` API remains the contribution-evidence path. Prepared
+scoring also declines to it when possible-population binding, key or byte counts
+cannot establish the requested per-model ceilings. That decline spends no work;
+other typed failures retain their actual prefix instead of silently retrying.
+Optional pruning has separate mutable status: disabling it, or refusing an
+incumbent constraint, leaves scoring preparation available. Enumerating all
+answers also reuses preparation while leaving pruning disabled.
+
+For region search, each improved incumbent replaces the previous optimizer
+bound through `StableModels::tighten_candidate_bound`. Independent caller
+restrictions remain. The caller must establish that the new bound implies the
+previous one; the API does not check that implication. Active workers may finish
+under an older bound, so returned answers are still scored against the current
+incumbent. The original theory and reduct remain unchanged.
+[`ObjectiveBounds.replacement_preserves_candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean)
+states the preservation law; it does not verify worker synchronization.
+
+`SolveConfig::max_objective_work` counts one preparation attempt plus every
+score read or detailed fallback, including refused prefixes. Preparation is
+capped by both the remaining objective allowance and the standalone plan's
+10-million-unit default. The ordinary 100-million-unit objective default leaves
+at least 90 million units after that attempt. A smaller explicit work limit can
+be consumed by preparation; detailed fallback remains subject to the actual
+remainder and cannot report a score or complete optimum after exhaustion.
+Zero skips optional preparation and preserves the mandatory evaluator's zero-work
+refusal. `max_objective_bound_work` counts optional constraint generation alone;
+zero disables pruning without disabling scoring preparation. These are logical
+operation accounts, so numerical cutoffs can differ from earlier scoring routes.
+
 Admission consumes the owned template descriptions. `ObjectiveTemplateRef`
 borrows weight and tuple terms, positive patterns and filters from the shared
 core `TemplateCatalog` representation. Priorities remain a fixed distinct

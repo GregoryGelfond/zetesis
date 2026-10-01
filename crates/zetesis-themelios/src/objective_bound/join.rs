@@ -90,6 +90,7 @@ pub(super) fn compile(
     }
     Ok(ObjectivePlan {
         original: original.clone(),
+        objectives: objectives.clone(),
         nodes: compiler.nodes,
         levels,
         statistics: compiler.work.statistics,

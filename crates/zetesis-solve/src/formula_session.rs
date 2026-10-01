@@ -11,7 +11,7 @@ use zetesis_sat::StableModels;
 
 use crate::countermodel::Input;
 use crate::formula_execution::{Failure, MembershipExecution};
-use crate::objective_bounds::Bounds;
+use crate::objective_bounds::{Bounds, Preparation};
 use crate::optimization::Incumbents;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
@@ -23,7 +23,8 @@ pub(crate) struct FormulaSession<'a, E> {
     models: Option<StableModels>,
     model_order: Option<ModelOrder<'a>>,
     construction: Option<crate::model_construction::Account>,
-    bounds: Option<Bounds>,
+    objective_plan: Option<Preparation>,
+    bounds: Bounds,
     incumbents: Incumbents,
     ready: std::vec::IntoIter<Model>,
     yielded: usize,
@@ -94,7 +95,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             models: None,
             model_order: None,
             construction: None,
-            bounds: None,
+            objective_plan: None,
+            bounds: Bounds::default(),
             incumbents: Incumbents::default(),
             ready: Vec::new().into_iter(),
             yielded: 0,
@@ -202,17 +204,33 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             );
             return Ok(());
         }
-        if self.selection == AnswerSelection::Optimal {
-            self.bounds = Some(
-                if self.input.objectives.is_present() && config.max_objective_bound_work != 0 {
-                    phases.measure(SolvePhase::ObjectiveFeedback, || {
-                        Bounds::new(self.input, config, observations, cancellation)
-                    })?
-                } else {
-                    Bounds::new(self.input, config, observations, cancellation)?
-                },
-            );
+        self.prepare_objectives(config, observations, cancellation, phases)
+    }
+
+    /// Retain and charge preparation before exposing its optional refusal.
+    fn prepare_objectives(
+        &mut self,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> Result<(), SolveError> {
+        if self.input.objectives.is_present() {
+            self.objective_plan =
+                Some(phases.measure(SolvePhase::ObjectiveScoringRetention, || {
+                    Preparation::new(self.input, config, cancellation)
+                }));
+            let preparation = self
+                .objective_plan
+                .as_ref()
+                .expect("prepared objective attempt");
+            if let Err(reason) = self.incumbents.prepare(preparation.work()) {
+                self.complete(SearchState::Interrupted(reason), phases);
+                return Ok(());
+            }
+            preparation.observe(observations)?;
         }
+        self.bounds = Bounds::new(config);
         Ok(())
     }
 
@@ -290,42 +308,34 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 return Some(Ok((model, None)));
             }
             if self.selection == AnswerSelection::All {
-                let score = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
-                    self.incumbents
-                        .evaluate(self.input.objectives, &model, config, cancellation)
-                });
-                return match score {
-                    Ok(score) => {
-                        self.yielded += 1;
-                        Some(Ok((model, Some(score))))
-                    }
-                    Err(reason) => {
-                        self.complete(SearchState::Interrupted(reason), phases);
-                        None
-                    }
-                };
+                return self.score_model(model, &interpretation, config, cancellation, phases);
             }
             let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
-                self.incumbents
-                    .consider(self.input.objectives, model, config, cancellation)
+                self.incumbents.consider(
+                    self.input.objectives,
+                    model,
+                    config,
+                    cancellation,
+                    self.objective_plan
+                        .as_ref()
+                        .and_then(Preparation::plan)
+                        .map(|plan| (plan, &interpretation)),
+                )
             });
             match scored {
                 Ok(true) => {
                     let _feedback = (config.max_objective_bound_work != 0)
                         .then(|| phases.start(SolvePhase::ObjectiveFeedback));
-                    let improved = self
-                        .bounds
-                        .as_mut()
-                        .expect("initialized objective plan")
-                        .improve(
-                            self.incumbents
-                                .score()
-                                .expect("retained improvement has a score"),
-                            self.models.as_mut().expect("owned candidate stream"),
-                            config,
-                            observations,
-                            cancellation,
-                        );
+                    let improved = self.bounds.improve(
+                        self.objective_plan.as_ref().and_then(Preparation::plan),
+                        self.incumbents
+                            .score()
+                            .expect("retained improvement has a score"),
+                        self.models.as_mut().expect("owned candidate stream"),
+                        config,
+                        observations,
+                        cancellation,
+                    );
                     if let Err(error) = improved {
                         self.fail(error, phases);
                         return self.pending_error.take().map(Err);
@@ -336,6 +346,39 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     self.complete(SearchState::Interrupted(reason), phases);
                     return self.next_retained().map(Ok);
                 }
+            }
+        }
+    }
+
+    /// Score one verified model without selecting or retaining an incumbent.
+    fn score_model(
+        &mut self,
+        model: Model,
+        interpretation: &zetesis_ferraris::Interpretation,
+        config: &SolveConfig,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> Option<Result<(Model, Option<Score>), SolveError>> {
+        let score = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
+            self.incumbents.evaluate(
+                self.input.objectives,
+                &model,
+                config,
+                cancellation,
+                self.objective_plan
+                    .as_ref()
+                    .and_then(Preparation::plan)
+                    .map(|plan| (plan, interpretation)),
+            )
+        });
+        match score {
+            Ok(score) => {
+                self.yielded += 1;
+                Some(Ok((model, Some(score))))
+            }
+            Err(reason) => {
+                self.complete(SearchState::Interrupted(reason), phases);
+                None
             }
         }
     }
@@ -444,6 +487,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             retained: self.incumbents.retained(),
             search_state: None,
             optimization: self.incumbents.metadata().cloned(),
+            objective_work: self.incumbents.work(),
             checked: statistics.map_or(0, |s| s.candidates),
             gate_atoms: self.input.gate_atoms,
             candidate_statistics: None,

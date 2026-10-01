@@ -27,6 +27,7 @@ use zetesis_ferraris::{
     Interpretation, Knowledge, Narrower, NarrowingAttempt, Producers, RegionLimits, Theory,
 };
 
+use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use crate::Incomplete;
 use crate::search::{Budget, Quota};
 
@@ -172,11 +173,11 @@ pub(crate) struct IndexedTheory {
 }
 
 impl IndexedTheory {
-    pub(crate) fn new(theory: &Theory) -> Self {
-        Self {
+    pub(crate) fn new(theory: &Theory) -> Result<Self, Incomplete> {
+        Ok(Self {
             theory: theory.clone(),
-            narrower: Narrower::new(theory),
-        }
+            narrower: Narrower::try_new(theory).map_err(stopped)?,
+        })
     }
 
     pub(crate) fn theory(&self) -> &Theory {
@@ -204,9 +205,9 @@ pub(crate) struct RegionSearch {
     /// Each region carries what is known about it under the theory and
     /// under each restriction, in order; a restriction added after a region
     /// was reached gets fresh knowledge when the region is next narrowed.
-    traversal: Traversal<Vec<Knowledge>>,
+    traversal: Traversal<CandidateKnowledge>,
     /// Each restriction with its own index.
-    restrictions: Vec<(Theory, Narrower)>,
+    restrictions: Conditions<(Theory, Narrower)>,
     statistics: RegionSearchStatistics,
     pub(super) filter: Option<crate::region_filter::Filter>,
 }
@@ -226,7 +227,7 @@ pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, I
     let extraction = zetesis_ferraris::producers(theory, limits(budget), budget.cancellation)
         .map_err(stopped)?;
     budget.charge(extraction.work)?;
-    let index = IndexedTheory::new(theory);
+    let index = IndexedTheory::new(theory)?;
     let indexed_work = index.narrower().work();
     budget.charge(indexed_work)?;
     Ok(Opened {
@@ -270,10 +271,10 @@ impl RegionSearch {
             traversal: Traversal::with_state(
                 Region::all_open(theory.atom_count()),
                 Counting::Never,
-                vec![index.narrower().knowledge()],
+                CandidateKnowledge::new(index.narrower().knowledge()),
             ),
             index,
-            restrictions: Vec::new(),
+            restrictions: Conditions::default(),
             filter: None,
         })
     }
@@ -304,12 +305,37 @@ impl RegionSearch {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         self.restrictions
+            .permanent
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        let narrower = Narrower::new(restriction);
+        let narrower = Narrower::try_new(restriction).map_err(stopped)?;
         budget.charge(narrower.work())?;
         self.statistics.counts.work += narrower.work();
-        self.restrictions.push((restriction.clone(), narrower));
+        self.restrictions
+            .permanent
+            .push((restriction.clone(), narrower));
+        Ok(())
+    }
+
+    /// Commit only after preparation and every charge succeeds.
+    pub(crate) fn tighten(
+        &mut self,
+        restriction: &Theory,
+        generation: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        budget.cancellation.poll()?;
+        let bound = Bound::prepare(restriction, generation)?;
+        budget.charge(bound.work())?;
+        let work = self
+            .statistics
+            .counts
+            .work
+            .checked_add(bound.work())
+            .ok_or(Incomplete::CounterOverflow)?;
+        self.statistics.counts.work = work;
+        budget.cancellation.poll()?;
+        self.restrictions.bound = Some(bound);
         Ok(())
     }
 
@@ -385,12 +411,12 @@ impl RegionSearch {
 /// point is reached when a full round changes nothing. Every charged read
 /// acquires its budget permit first, and even a failed narrowing contributes
 /// its admitted prefix to the counts.
-pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
+pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,
-    restrictions: &[R],
+    restrictions: &Conditions<R>,
     region: &mut Region,
-    knowledge: &mut Vec<Knowledge>,
+    knowledge: &mut CandidateKnowledge,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
@@ -398,25 +424,36 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     loop {
         let mut round = false;
         for (index, (formulas, narrower)) in std::iter::once(theory)
-            .chain(restrictions.iter().map(|restriction| {
+            .chain(restrictions.permanent.iter().map(|restriction| {
                 let (theory, narrower) = restriction.borrow();
                 (theory, narrower)
             }))
             .enumerate()
         {
             let producers = if index == 0 { producers } else { None };
-            if knowledge.len() <= index {
-                knowledge
-                    .try_reserve(1)
-                    .map_err(|_| Incomplete::Allocation)?;
-                knowledge.push(narrower.knowledge());
-            }
+            let known = knowledge.permanent(index, narrower)?;
             let cancellation = budget.cancellation;
             let attempt = narrower.narrow_known_metered(
                 formulas,
                 producers,
                 region,
-                &mut knowledge[index],
+                known,
+                cancellation,
+                || budget.tick().map_err(NarrowingStop),
+            );
+            match account(attempt, counts)? {
+                Narrowing::Refuted => return Ok(Narrowing::Refuted),
+                Narrowing::Fixed { changed: moved } => round |= moved,
+            }
+        }
+        if let Some(bound) = &restrictions.bound {
+            let (formulas, narrower) = bound.index.as_ref();
+            let cancellation = budget.cancellation;
+            let attempt = narrower.narrow_known_metered(
+                formulas,
+                None,
+                region,
+                knowledge.bound(bound)?,
                 cancellation,
                 || budget.tick().map_err(NarrowingStop),
             );
@@ -436,7 +473,7 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
 /// No original-theory propagation or search decision is required. Existing
 /// restriction owners and their accounted narrowing primitive are reused.
 pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
-    restrictions: &[R],
+    restrictions: &Conditions<R>,
     filter: Option<&crate::region_filter::Filter>,
     candidate: &Interpretation,
     budget: &mut Budget<'_>,
@@ -456,8 +493,7 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
             region.cut(atom);
         }
     }
-    for restriction in restrictions {
-        let (theory, narrower) = restriction.borrow();
+    for (theory, narrower) in restrictions.iter() {
         let mut knowledge = narrower.knowledge();
         let cancellation = budget.cancellation;
         let attempt = narrower.narrow_known_metered(

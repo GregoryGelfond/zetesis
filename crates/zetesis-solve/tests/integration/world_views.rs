@@ -573,17 +573,36 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
     .next()
     .unwrap()
     .unwrap();
-    let evaluation = zetesis_objective::evaluate(
+    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new(
+        owner.theory(),
+        owner.atoms(),
         owner.objectives(),
-        first.interpretation(),
-        zetesis_objective::Limits::default(),
+        zetesis_themelios::objective_bound::ObjectivePlanLimits::default(),
         &Cancellation::default(),
     )
     .unwrap();
+    let candidate = zetesis_ferraris::Interpretation::new(
+        owner.theory(),
+        owner
+            .atoms()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, atom)| first.interpretation().contains(atom).then_some(index)),
+    )
+    .unwrap();
+    let score = plan
+        .score(
+            &candidate,
+            zetesis_objective::Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap()
+        .unwrap();
+    let maximum = plan.statistics().work + score.work();
     let failure = WorldView::collect(
         PreparedInput::formula(&owner),
         SolveConfig {
-            max_objective_work: evaluation.statistics().work,
+            max_objective_work: maximum,
             ..config()
         },
         WorldViewLimits::default(),
@@ -596,9 +615,10 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
     let outcome = failure.outcome().unwrap();
     assert_eq!(outcome.verified_models(), 2);
     assert_eq!(outcome.scored_models(), 1);
+    assert_eq!(outcome.objective_work(), maximum);
     assert!(matches!(
         outcome.interruption(),
-        Some(Interruption::Objective(_))
+        Some(Interruption::PreparedObjective(_))
     ));
 }
 

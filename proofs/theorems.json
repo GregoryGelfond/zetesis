@@ -1,5 +1,15 @@
 [
   {
+    "name": "Zetesis.AdjacencyRows.slice_exact",
+    "file": "Zetesis/AdjacencyRows.lean",
+    "line": 31
+  },
+  {
+    "name": "Zetesis.AdjacencyRows.fold_exact",
+    "file": "Zetesis/AdjacencyRows.lean",
+    "line": 41
+  },
+  {
     "name": "Zetesis.AggregateAssignment.mem_unique",
     "file": "Zetesis/AggregateAssignment.lean",
     "line": 46
@@ -3732,42 +3742,52 @@
   {
     "name": "Zetesis.ObjectiveBounds.mem_prune",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 25
+    "line": 28
   },
   {
     "name": "Zetesis.ObjectiveBounds.incumbent_survives",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 29
+    "line": 32
   },
   {
     "name": "Zetesis.ObjectiveBounds.tighten",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 35
+    "line": 38
+  },
+  {
+    "name": "Zetesis.ObjectiveBounds.replacement_preserves_candidates",
+    "file": "Zetesis/ObjectiveBounds.lean",
+    "line": 54
+  },
+  {
+    "name": "Zetesis.ObjectiveBounds.consequence_survives_tightening",
+    "file": "Zetesis/ObjectiveBounds.lean",
+    "line": 69
   },
   {
     "name": "Zetesis.ObjectiveBounds.optimum_survives",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 48
+    "line": 80
   },
   {
     "name": "Zetesis.ObjectiveBounds.excluded_is_worse",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 53
+    "line": 85
   },
   {
     "name": "Zetesis.ObjectiveBounds.bounded_best_is_global",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 59
+    "line": 91
   },
   {
     "name": "Zetesis.ObjectiveBounds.bounded_ties_exact",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 76
+    "line": 108
   },
   {
     "name": "Zetesis.ObjectiveBounds.bounded_optimum_keeps_original_reduct",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 102
+    "line": 134
   },
   {
     "name": "Zetesis.ObjectiveConditionTable.node_correspondence",

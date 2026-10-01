@@ -383,22 +383,20 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::CounterOverflow => "counter_overflow",
             }
         }
-        Interruption::Objective(error) => {
-            use zetesis_objective::{ErrorKind, Stop};
+        Interruption::Objective(error) => objective_code(error),
+        Interruption::PreparedObjective(error) => {
+            use zetesis_themelios::objective_bound::{
+                ObjectiveBoundErrorKind, ObjectiveScoreErrorKind,
+            };
             match error.kind() {
-                ErrorKind::WeightNormalizationOverflow => "weight_normalization_overflow",
-                ErrorKind::CostOverflow { .. } => "cost_overflow",
-                ErrorKind::UnboundVariable { .. } => "unbound_variable",
-                ErrorKind::Stopped(reason) => match reason {
-                    Stop::Cancelled => "cancelled",
-                    Stop::Deadline => "deadline",
-                    Stop::WorkLimit => "work_limit",
-                    Stop::BindingLimit => "binding_limit",
-                    Stop::KeyLimit => "key_limit",
-                    Stop::KeyBytesLimit => "key_bytes_limit",
-                    Stop::Allocation => "allocation",
-                    Stop::ArithmeticOverflow => "arithmetic_overflow",
-                    Stop::Control(_) => "control",
+                ObjectiveScoreErrorKind::WrongTheory => "wrong_theory",
+                ObjectiveScoreErrorKind::Reduction(error) => objective_code(error),
+                ObjectiveScoreErrorKind::Eligibility(error) => match error.kind() {
+                    ObjectiveBoundErrorKind::Control(stop) => stop_code(stop),
+                    ObjectiveBoundErrorKind::Limit(_) => "work_limit",
+                    ObjectiveBoundErrorKind::Allocation => "allocation",
+                    ObjectiveBoundErrorKind::Overflow => "arithmetic_overflow",
+                    _ => "objective_preparation",
                 },
             }
         }
@@ -408,6 +406,26 @@ fn reason_code(reason: Interruption) -> &'static str {
             crate::OptimizationStop::Bytes => "bytes",
             crate::OptimizationStop::Overflow => "overflow",
             crate::OptimizationStop::Allocation => "allocation",
+        },
+    }
+}
+
+fn objective_code(error: zetesis_objective::Error) -> &'static str {
+    use zetesis_objective::{ErrorKind, Stop};
+    match error.kind() {
+        ErrorKind::WeightNormalizationOverflow => "weight_normalization_overflow",
+        ErrorKind::CostOverflow { .. } => "cost_overflow",
+        ErrorKind::UnboundVariable { .. } => "unbound_variable",
+        ErrorKind::Stopped(reason) => match reason {
+            Stop::Cancelled => "cancelled",
+            Stop::Deadline => "deadline",
+            Stop::WorkLimit => "work_limit",
+            Stop::BindingLimit => "binding_limit",
+            Stop::KeyLimit => "key_limit",
+            Stop::KeyBytesLimit => "key_bytes_limit",
+            Stop::Allocation => "allocation",
+            Stop::ArithmeticOverflow => "arithmetic_overflow",
+            Stop::Control(_) => "control",
         },
     }
 }
@@ -528,6 +546,7 @@ fn write_interruption(
             Interruption::Reconstruction(_) => "answer_reconstruction",
             Interruption::ModelConstruction(_) => "model_construction",
             Interruption::Objective(_) => "objective",
+            Interruption::PreparedObjective(_) => "prepared_objective",
             Interruption::Incumbent(_) => "incumbent",
         };
         out.text("{\"kind\":")?;
@@ -578,6 +597,8 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         hybrid_statistics(out, view.hybrid_execution)?;
         out.text(",\"terminal_execution\":")?;
         terminal_statistics(out, view.terminal_execution)?;
+        out.text(",\"objective_work\":")?;
+        out.optional_number(view.objective_work)?;
         out.text(",\"model_construction\":")?;
         model_construction_statistics(out, view.model_construction)?;
         out.text(",\"candidate_restrictions\":")?;
@@ -723,6 +744,7 @@ struct SummaryView<'a> {
     checked: Option<u64>,
     interruption: Option<Interruption>,
     optimization: Option<&'a crate::Optimization>,
+    objective_work: Option<u64>,
     search: Option<&'a zetesis_sat::Statistics>,
     candidates: Option<zetesis_cpu::CandidateStatistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
@@ -750,6 +772,7 @@ impl<'a> SummaryView<'a> {
                     checked: semantic.map(crate::SemanticOutcome::candidate_progress),
                     interruption: semantic.and_then(crate::SemanticOutcome::interruption),
                     optimization: semantic.and_then(crate::SemanticOutcome::incumbent),
+                    objective_work: semantic.map(crate::SemanticOutcome::objective_work),
                     search: semantic.and_then(crate::SemanticOutcome::countermodel_statistics),
                     candidates: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
@@ -781,6 +804,9 @@ impl<'a> SummaryView<'a> {
                     checked: partial.map(|p| p.checked),
                     interruption: partial.and_then(|p| p.interruption),
                     optimization: partial.and_then(|p| p.optimization.as_ref()),
+                    objective_work: failure
+                        .semantic()
+                        .map(crate::SemanticOutcome::objective_work),
                     search: partial.and_then(|p| p.countermodel_statistics.as_ref()),
                     candidates: partial.and_then(|p| p.candidate_statistics),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),

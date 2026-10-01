@@ -4,6 +4,7 @@ mod support;
 mod batch_interruptions;
 mod batches;
 mod candidate_support;
+mod candidate_bounds;
 mod certified;
 mod cnf;
 mod completion;

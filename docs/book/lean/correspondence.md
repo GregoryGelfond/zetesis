@@ -788,6 +788,25 @@ ownership, not the definition of a reduct. Index construction, identity checks,
 mutable-state separation and attribution of construction work remain Rust
 refinement obligations.
 
+The immutable region adjacency stores each ordered incidence row as a slice
+between two offsets in one contiguous entry vector.
+[`AdjacencyRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AdjacencyRows.lean)
+proves exact slices from concatenated mathematical rows and unchanged ordered
+row folds. Decoding every Rust row must recover that original occurrence list
+exactly, including duplicate atom
+occurrences and original producer identity; equality of membership sets alone
+would not preserve chain counters, split ranking or bounded traversal prefixes.
+The same node used on both sides of an implication is still coalesced by the
+existing incidence construction, before storage compaction. Distinct atom nodes
+carrying the same atom remain distinct incidences. Exact row decoding leaves the
+`FormulaBounds`, `FormulaChains` and frozen `ReductRegions` rules unchanged.
+Those semantic laws do not establish the Rust count/prefix/scatter construction,
+machine offsets, reservation failures or event order. Ordered-row and existing
+propagation regressions provide executable evidence for those correspondences.
+The checked compact builder adds linear construction passes while retaining the
+existing logical node-index receipt; it does not change mutable `Knowledge` or
+its copy behavior, and does not claim that all index allocations are fallible.
+
 The batched parallel proposer separates classical candidate production from
 membership. Its workers use the original region readings and disjoint splits;
 they do not certify stable models. Read `Frontier` with a proposal family that
@@ -1254,6 +1273,22 @@ the original truth of its unfolded query. One node preserves that invariant;
 induction over the remaining nodes gives the complete table. Backward admission
 separately proves that all lookups succeed. The result is the last node, or true
 when the table is empty.
+
+The Rust
+[`ObjectivePlan::score`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/score.rs)
+reuses the compiler's already coalesced eligibility DAG to read a score without
+reconstructing contribution tuples. `ObjectiveDirections.normalization_preserves_vector`
+connects normalized complete-key groups with OR eligibility to the reference
+fixed-priority vector; `ObjectiveConditions.condition_vector` transports exact
+original-model condition truth into those scores. The table laws supply the
+mathematical backward-reference invariant. The retained Rust DAG also contains
+implication, whose original truth has the `formula_query_truth` interpretation;
+it is not the table datatype verbatim. Complete catalog joins, global key
+identity, translation of DAG operations, exact original-theory ownership,
+finite-width reduction and admitted work prefixes remain Rust obligations.
+This score reuse is distinct from source priority specialization and from
+constructing a nonnegative candidate bound. It neither substitutes a new
+original theory nor establishes search completion.
 
 For example, `atom a; neg 0; disj 0 1` shares the first node and computes the
 original truth of `a or not a`. This is a query-evaluation law, not permission to

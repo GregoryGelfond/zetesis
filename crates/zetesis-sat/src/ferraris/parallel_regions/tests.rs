@@ -35,12 +35,12 @@ fn shared_narrowing_never_executes_an_unleased_read() {
     };
     let narrower = Narrower::new(&theory);
     let mut region = Region::all_open(theory.atom_count());
-    let mut knowledge = vec![narrower.knowledge()];
+    let mut knowledge = CandidateKnowledge::new(narrower.knowledge());
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
         (&theory, &narrower),
         None,
-        &[] as &[(Theory, Narrower)],
+        &Conditions::<(Theory, Narrower)>::default(),
         &mut region,
         &mut knowledge,
         &mut budget,
@@ -165,5 +165,5 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     assert!(!search.exhausted);
 }
 
-mod timing_tests;
 mod coordination_tests;
+mod timing_tests;

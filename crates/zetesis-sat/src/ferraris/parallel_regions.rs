@@ -63,9 +63,10 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
+use zetesis_ferraris::{Interpretation, Narrower, Producers, Theory};
 
 use super::certified::{self, Certification};
+use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::regions::{IndexedTheory, RegionCounts, RegionSearchStatistics};
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::ferraris::Decision;
@@ -83,14 +84,14 @@ const CHANNEL_SLACK: usize = 16;
 const SPIN_ROUNDS_BEFORE_WAIT: u32 = 16;
 
 /// A region with its per-narrower knowledge, the unit workers steal.
-type Entry = (Region, Vec<Knowledge>);
+type Entry = (Region, CandidateKnowledge);
 
 struct Shared {
     producers: Option<Producers>,
     index: Arc<IndexedTheory>,
     certificate: Option<Arc<Certification>>,
     filter: Option<crate::region_filter::Filter>,
-    restrictions: RwLock<Vec<Arc<(Theory, Narrower)>>>,
+    restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
     /// Owner pops newest, thieves take oldest. Only one deque is locked at a
     /// time; all entry preparation and evaluation happens outside these locks.
     queues: Vec<Mutex<VecDeque<Entry>>>,
@@ -419,7 +420,7 @@ impl ParallelRegions {
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let root = (
             Region::all_open(theory.atom_count()),
-            vec![index.narrower().knowledge()],
+            CandidateKnowledge::new(index.narrower().knowledge()),
         );
         let mut queues = crate::search::storage(workers.get())?;
         let mut first = VecDeque::new();
@@ -435,7 +436,7 @@ impl ParallelRegions {
                 index,
                 certificate: None,
                 filter: None,
-                restrictions: RwLock::new(Vec::new()),
+                restrictions: RwLock::new(Conditions::default()),
                 queues,
                 termination: Termination::new(),
                 stopped: Mutex::new(None),
@@ -558,7 +559,7 @@ impl ParallelRegions {
         if !self.started {
             self.synchronize_budget(budget.statistics)?;
         }
-        let narrower = Narrower::new(restriction);
+        let narrower = Narrower::try_new(restriction).map_err(super::regions::stopped)?;
         self.shared.budget.charge(narrower.work())?;
         self.account(budget);
         self.statistics.counts.work += narrower.work();
@@ -568,9 +569,48 @@ impl ParallelRegions {
             .write()
             .unwrap_or_else(PoisonError::into_inner);
         restrictions
+            .permanent
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        restrictions.push(Arc::new((restriction.clone(), narrower)));
+        restrictions
+            .permanent
+            .push(Arc::new((restriction.clone(), narrower)));
+        Ok(())
+    }
+
+    /// A worker's existing snapshot may finish under the old generation;
+    /// future snapshots see this replacement and all permanent restrictions.
+    pub(crate) fn tighten(
+        &mut self,
+        restriction: &Theory,
+        generation: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        budget.cancellation.poll()?;
+        if !self.started {
+            self.synchronize_budget(budget.statistics)?;
+        }
+        let bound = Bound::prepare(restriction, generation)?;
+        let charged = self.shared.budget.charge(bound.work());
+        self.account(budget);
+        charged?;
+        let work = self
+            .statistics
+            .counts
+            .work
+            .checked_add(bound.work())
+            .ok_or(Incomplete::CounterOverflow)?;
+        self.statistics.counts.work = work;
+        budget.cancellation.poll()?;
+        let previous = self
+            .shared
+            .restrictions
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .bound
+            .replace(bound);
+        // Release retired storage outside the readers' snapshot lock.
+        drop(previous);
         Ok(())
     }
 
@@ -967,7 +1007,7 @@ fn step<'a>(
 ) -> Result<Stepped, Incomplete> {
     // The restrictions current when the region is taken, held for its
     // narrowing without the lock.
-    let restrictions: Vec<Arc<(Theory, Narrower)>> = shared
+    let restrictions = shared
         .restrictions
         .read()
         .unwrap_or_else(PoisonError::into_inner)

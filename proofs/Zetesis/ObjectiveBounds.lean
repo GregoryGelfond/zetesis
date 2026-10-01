@@ -7,9 +7,12 @@ A verified incumbent permits discarding only candidates with strictly greater
 cost. Bounds remain non-strict to retain every optimum tie. The candidate filter
 does not change original Ferraris stability or form a different program reduct.
 
-This source-free layer uses one unbounded integer cost. Tuple contributions,
-priority-vector ordering, the bound-formula compiler, SAT restriction encoding,
-restarts, exact blocking and machine limits remain separate obligations.
+The cost-filter laws use one unbounded integer cost. The replacement laws use
+arbitrary predicates with an explicit strengthening premise, so they also apply
+to multiple priorities once their bound implication is established. Tuple
+contributions, priority-vector ordering, the bound-formula compiler, retained
+worker generations, restriction encoding, exact blocking and machine limits
+remain separate obligations.
 -/
 
 namespace Zetesis.ObjectiveBounds
@@ -42,6 +45,35 @@ theorem tighten (cost : β → Int) (earlier later : Int) (values : List β)
   · have old := Int.le_trans within lower
     simp [within, old]
   · simp [within]
+
+/-- A stronger candidate bound makes its predecessor redundant, while all
+independent restrictions remain in force. The strengthening premise is logical
+implication, not a relation between construction times or generation numbers.
+Retain the independent restriction and the new bound in each direction; only
+the reverse direction needs implication to recover the old bound. -/
+theorem replacement_preserves_candidates (permanent earlier later : β → Prop)
+    (stronger : ∀ value, later value → earlier value) (value : β) :
+    (permanent value ∧ earlier value ∧ later value) ↔
+      (permanent value ∧ later value) := by
+  constructor
+  · intro retained
+    exact ⟨retained.1, retained.2.2⟩
+  · intro retained
+    exact ⟨retained.1, stronger value retained.2, retained.2⟩
+
+/-- Every consequence of an earlier bound within a restricted region remains a
+consequence after strengthening the bound. Thus dropping the old bound's stored
+formula need not undo region decisions already justified by it. This statement
+does not justify reusing mutable propagation knowledge from a different formula;
+the implementation must establish its new knowledge separately. -/
+theorem consequence_survives_tightening
+    (region permanent earlier later consequence : β → Prop)
+    (stronger : ∀ value, later value → earlier value)
+    (known : ∀ value, region value → permanent value → earlier value → consequence value) :
+    ∀ value, region value → permanent value → later value → consequence value := by
+  intro value inside restricted bounded
+  have earlierBound : earlier value := stronger value bounded
+  exact known value inside restricted earlierBound
 
 /-- An incumbent is a stable model of the original theory, not merely a cheap
     classical assignment. Therefore every global optimum survives its bound. -/

@@ -1,5 +1,7 @@
 import Zetesis
 
+#print axioms Zetesis.AdjacencyRows.slice_exact
+#print axioms Zetesis.AdjacencyRows.fold_exact
 #print axioms Zetesis.AggregateAssignment.mem_unique
 #print axioms Zetesis.AggregateAssignment.unique_nodup
 #print axioms Zetesis.AggregateAssignment.unique_length_le
@@ -749,6 +751,8 @@ import Zetesis
 #print axioms Zetesis.ObjectiveBounds.mem_prune
 #print axioms Zetesis.ObjectiveBounds.incumbent_survives
 #print axioms Zetesis.ObjectiveBounds.tighten
+#print axioms Zetesis.ObjectiveBounds.replacement_preserves_candidates
+#print axioms Zetesis.ObjectiveBounds.consequence_survives_tightening
 #print axioms Zetesis.ObjectiveBounds.optimum_survives
 #print axioms Zetesis.ObjectiveBounds.excluded_is_worse
 #print axioms Zetesis.ObjectiveBounds.bounded_best_is_global

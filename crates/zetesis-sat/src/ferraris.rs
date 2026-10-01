@@ -15,6 +15,7 @@ mod completion;
 pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics};
 
 mod certified;
+mod conditions;
 pub use certified::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
     CertifiedStatistics,
@@ -106,8 +107,8 @@ pub struct Statistics {
     /// Outer clause queries started, including a final UNSAT query. Direct
     /// positive proposals and region traversal do not increment this counter.
     pub candidate_queries: u64,
-    /// Successfully appended candidate-only restrictions. Exhaustion then
-    /// covers their intersection with the original answer-set family.
+    /// Successful permanent restrictions and bound updates, cumulatively.
+    /// This is an installation count, not the population of retained indexes.
     pub candidate_restrictions: u64,
     /// Classical candidates admitted for membership checking, including retained
     /// pending proposals in the batched protocol.
@@ -338,6 +339,7 @@ pub struct StableModels {
     batch: batch::State,
     certificate: Option<certified::Certificate>,
     positive_candidates: Option<certified::PositiveCandidates>,
+    bound_generation: u64,
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
@@ -405,6 +407,7 @@ impl StableModels {
             batch: batch::State::default(),
             certificate: None,
             positive_candidates: None,
+            bound_generation: 0,
             reduct,
         })
     }
@@ -456,6 +459,7 @@ impl StableModels {
             batch: batch::State::default(),
             certificate: None,
             positive_candidates: None,
+            bound_generation: 0,
             reduct,
         })
     }
@@ -517,6 +521,7 @@ impl StableModels {
             batch: batch::State::default(),
             certificate: None,
             positive_candidates: None,
+            bound_generation: 0,
             reduct,
         })
     }
@@ -578,6 +583,68 @@ impl StableModels {
         let result = self.proposer.restrict(restriction, &mut budget);
         self.statistics.search = budget.statistics;
         if result.is_ok() {
+            self.statistics.candidate_restrictions = count;
+        }
+        result
+    }
+
+    /// Install a successively stronger candidate-only bound.
+    ///
+    /// # Caller obligation
+    /// Each bound must use the original atom count and semantic index meanings.
+    /// Every classical model of this bound must satisfy the previous bound,
+    /// if any. This logical implication is **not checked**. Violating it can
+    /// omit models because regions pruned earlier are not reopened. The first
+    /// bound has no implication obligation. Bounds never support original atoms
+    /// and never change the original theory or its reduct.
+    ///
+    /// Region search retains only the latest bound separately from permanent
+    /// [`Self::restrict_candidates`] constraints. Active worker snapshots may
+    /// finish under an older bound, and already pending candidates are retained;
+    /// their original membership checks still apply. An optimizer must compare
+    /// every returned model with its current incumbent. Exhaustion covers the
+    /// remaining constrained family, not the original unrestricted world view.
+    /// The optional clauses method appends each bound instead of retiring it;
+    /// the implication obligation makes that conjunction equivalent.
+    ///
+    /// # Errors
+    /// Refuses a different atom count, a closed iterator, pending blocking error,
+    /// generation overflow, resource exhaustion or cancellation. Failed setup
+    /// leaves the active bound and generation unchanged; admitted work stays
+    /// charged. Region knowledge retains its existing infallible allocation
+    /// contract; this operation does not make all search allocation fallible.
+    pub fn tighten_candidate_bound(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
+        if self.terminal {
+            return Err(Incomplete::ClosedEnumerator);
+        }
+        if let Some(error) = self.pending_error {
+            return Err(error);
+        }
+        if restriction.atom_count() != self.theory.atom_count() {
+            return Err(Incomplete::RestrictionUniverse {
+                expected: self.theory.atom_count(),
+                actual: restriction.atom_count(),
+            });
+        }
+        let generation = self
+            .bound_generation
+            .checked_add(1)
+            .ok_or(Incomplete::CounterOverflow)?;
+        let count = self
+            .statistics
+            .candidate_restrictions
+            .checked_add(1)
+            .ok_or(Incomplete::CounterOverflow)?;
+        let mut budget = Budget {
+            quota: crate::search::LocalQuota,
+            limits: self.limits.search,
+            cancellation: &self.cancellation,
+            statistics: self.statistics.search,
+        };
+        let result = self.proposer.tighten(restriction, generation, &mut budget);
+        self.statistics.search = budget.statistics;
+        if result.is_ok() {
+            self.bound_generation = generation;
             self.statistics.candidate_restrictions = count;
         }
         result
@@ -919,6 +986,20 @@ impl Proposer {
         match self {
             Self::Clauses(clauses) => clauses.cursor.exclude(&clauses.cnf, candidate, budget),
             Self::Regions(_) | Self::Parallel(_) | Self::Proposals(_) => Ok(()),
+        }
+    }
+
+    fn tighten(
+        &mut self,
+        restriction: &Theory,
+        generation: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        match self {
+            Self::Clauses(_) => self.restrict(restriction, budget),
+            Self::Regions(regions) => regions.tighten(restriction, generation, budget),
+            Self::Parallel(parallel) => parallel.tighten(restriction, generation, budget),
+            Self::Proposals(proposals) => proposals.tighten(restriction, generation, budget),
         }
     }
 

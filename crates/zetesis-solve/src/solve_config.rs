@@ -52,9 +52,10 @@ pub struct SolveConfig {
     /// Named projection-history capacity and conservative growth overlap.
     /// This excludes allocator overhead and the separate authored CNF encoding.
     pub max_projection_bytes: usize,
-    /// Cumulative objective evaluation work.
+    /// Cumulative objective preparation and evaluation work, including refusals.
     pub max_objective_work: u64,
-    /// Cumulative optional objective-bound work; zero disables pruning.
+    /// Cumulative optional bound-generation work, excluding shared preparation;
+    /// zero disables pruning while prepared scoring remains available.
     pub max_objective_bound_work: u64,
     /// Complete objective bindings per verified model.
     pub max_objective_bindings: u64,

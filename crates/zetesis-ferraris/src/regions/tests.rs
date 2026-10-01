@@ -2,6 +2,170 @@ use std::mem::size_of;
 
 use super::{Knowledge, Known};
 
+fn shared_occurrences() -> crate::Theory {
+    use crate::Node::{Atom, Implies, Or};
+
+    crate::Theory::new(
+        4,
+        vec![
+            Atom(0),
+            Atom(0),
+            Atom(1),
+            Atom(2),
+            Or(0, 1),
+            Or(4, 2),
+            Implies(0, 0),
+            Implies(1, 3),
+            Implies(1, 3),
+        ],
+        vec![5, 6, 7, 8],
+        crate::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn compact_narrower_keeps_shared_and_aliased_occurrences() {
+    let theory = shared_occurrences();
+    let index = super::Narrower::try_new(&theory).unwrap();
+    // Chain 5 absorbs node 4. Its distinct leaves 0 and 1 both name atom 0,
+    // while implication 6 reads node 0 on both sides and contributes once.
+    assert_eq!(
+        index.parents.iter().collect::<Vec<_>>(),
+        vec![
+            &[5, 6][..],
+            &[5, 7, 8][..],
+            &[5][..],
+            &[7, 8][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+        ]
+    );
+    assert_eq!(
+        index.atom_nodes.iter().collect::<Vec<_>>(),
+        vec![&[0, 1][..], &[2][..], &[3][..], &[][..]]
+    );
+    assert_eq!(
+        index.atom_operands.iter().collect::<Vec<_>>(),
+        vec![
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[0, 0, 1][..],
+            &[0][..],
+            &[0, 2][..],
+            &[0, 2][..],
+        ]
+    );
+    assert_eq!(index.knowledge().known.unknown, [5, 1, 2, 0]);
+    assert_eq!(index.work(), 9);
+}
+
+#[test]
+fn compact_support_keeps_original_producer_occurrences() {
+    let theory = shared_occurrences();
+    let extracted = super::producers(
+        &theory,
+        super::RegionLimits::default(),
+        &zetesis_cpu::Cancellation::default(),
+    )
+    .unwrap();
+    let producers = extracted.producers.unwrap();
+    // The head-set extraction coalesces atom 0 in the first disjunction as
+    // before. The two original rules 7 and 8 remain separate producers.
+    assert_eq!(
+        producers.by_head.iter().collect::<Vec<_>>(),
+        vec![&[0, 1][..], &[0][..], &[2, 3][..], &[][..]]
+    );
+    assert_eq!(
+        producers.by_body.iter().collect::<Vec<_>>(),
+        vec![
+            &[1][..],
+            &[2, 3][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+            &[][..],
+        ]
+    );
+}
+
+#[test]
+fn compact_adjacency_uses_less_retained_storage() {
+    use crate::Node;
+
+    // Sparse immutable incidence is the representation's intended population:
+    // a ring of ordinary implications gives each atom two parents, one atom
+    // node and one supporting producer, with many empty node-indexed rows.
+    let atoms = 4096;
+    let mut nodes: Vec<_> = (0..atoms).map(Node::Atom).collect();
+    nodes.extend((0..atoms).map(|atom| Node::Implies(atom, (atom + 1) % atoms)));
+    let theory = crate::Theory::new(
+        atoms,
+        nodes,
+        (atoms..2 * atoms).collect(),
+        crate::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let index = super::Narrower::try_new(&theory).unwrap();
+    let extracted = super::producers(
+        &theory,
+        super::RegionLimits::default(),
+        &zetesis_cpu::Cancellation::default(),
+    )
+    .unwrap();
+    let producers = extracted.producers.unwrap();
+    let maps = [
+        &index.parents,
+        &index.atom_nodes,
+        &index.atom_operands,
+        &producers.by_head,
+        &producers.by_body,
+    ];
+    let mut previous = 0_u128;
+    let mut compact = 0_u128;
+    let mut rows = 0;
+    let mut entries = 0;
+    for map in maps {
+        // Recreate the previous representation's allocations with the same
+        // rows, entry order and push growth policy. Measure actual capacities,
+        // not only logical entry lengths or assumed allocator sizes.
+        let mut nested = vec![Vec::new(); map.len()];
+        for (row, values) in map.iter().enumerate() {
+            for &value in values {
+                nested[row].push(value);
+            }
+            assert_eq!(nested[row], values);
+            entries += values.len();
+        }
+        rows += nested.len();
+        previous += size_of::<Vec<Vec<usize>>>() as u128
+            + nested.capacity() as u128 * size_of::<Vec<usize>>() as u128
+            + nested
+                .iter()
+                .map(|row| row.capacity() as u128)
+                .sum::<u128>()
+                * size_of::<usize>() as u128;
+        compact += map.retained_bytes();
+    }
+    assert!(compact < previous);
+    // A receipt for the retained maps only: chain/rule/theory/Knowledge storage,
+    // construction scratch, allocator bookkeeping and RSS are excluded.
+    eprintln!(
+        "adjacency rows={rows} entries={entries} nested_bytes={previous} \
+         compact_bytes={compact} saved_bytes={}",
+        previous - compact
+    );
+}
+
 #[test]
 fn retained_bytes_counts_the_seen_mask() {
     // 130 atoms give a three-word seen mask (ceil(130/64) = 3).

@@ -222,6 +222,7 @@ impl<'a> ClosureSession<'a> {
                     .map(|stop| SearchState::PendingInterruption(Interruption::Oracle(stop)))
             }),
             optimization: None,
+            objective_work: 0,
             checked: self.checked,
             gate_atoms: self.candidates.discovered_atoms(),
             candidate_statistics: Some(self.candidates.statistics()),

@@ -199,7 +199,48 @@ The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
 
-`proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
+The immutable index stores five incidence maps in compact row form: parents,
+atom nodes and atom operands in `Narrower`, and producers by head and by body
+in `Producers`. Each map has one offset vector and one contiguous entry vector.
+A row is a borrowed slice, in its original order and with its original duplicate
+occurrences. Compaction does not change chain formation, producer identity,
+propagation order, split ranking or mutable `Knowledge`. In particular, two
+distinct atom nodes for one atom remain two atom-operand occurrences, while the
+existing rule for an implication with the same node on both sides still counts
+that node once.
+
+For N theory nodes and A atoms, the five maps contain R = 3N + 2A rows in total.
+Their logical payload is R + 5 offset words and E incidence words. On a 64-bit
+host, replacing each row's 24-byte vector header by its 8-byte offset saves
+approximately 16R bytes plus unused incidence capacity, less the small fixed
+map-header/sentinel difference. This is a retained-storage model, not a measured
+RSS or timing result. Each builder makes two traversals of its unchanged edge
+stream plus linear row scans and storage initialization: O(rows + incidences)
+placement work, with one temporary cursor word per row. Enumerating the source
+streams also scans the nodes or producer records twice per map, so total added
+construction remains linear in nodes, atoms, producer records and incidences.
+There is no per-row allocation. The existing chain-building algorithm and its temporary operands are unchanged.
+The logical indexing receipt remains one visit per theory node; these storage
+construction passes are outside that receipt, just as allocation and the
+existing chain-building passes were. Propagation's charged reads are unchanged.
+
+`Narrower::try_new` returns `Stop::Allocation` if compact incidence sizes overflow
+or their storage cannot be reserved. Operational SAT callers propagate that
+refusal. `Narrower::new` remains the infallible convenience constructor and
+panics on those refusals. Neither constructor makes the existing chain and
+knowledge allocations fallible, and neither adds a cancellation API. Producer
+extraction retains its existing control/work contract and also propagates
+compact-index allocation refusals. The row tests compare complete ordered
+subsequences, including empty rows, shared nodes and duplicates; the existing
+original/frozen propagation and quota-prefix tests cover the consumers. The
+private `compact_adjacency_uses_less_retained_storage` test reports actual
+before/after capacities on an implication ring; its receipt excludes all other
+index fields, knowledge, scratch and allocator overhead.
+
+`proofs/Zetesis/AdjacencyRows.lean` proves exact ordered row decoding from
+concatenated rows and identical folds over the decoded row. Connecting the Rust
+count/prefix/scatter construction to those mathematical lists remains a
+representation obligation. `proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
 sound (`Known`, `known_sound`), and the support cut and the sole-support
 rule sound for stable models on the fragment `DisjunctiveSupport` names
 (`unsupported_cut`, `sole_support_forces`); the

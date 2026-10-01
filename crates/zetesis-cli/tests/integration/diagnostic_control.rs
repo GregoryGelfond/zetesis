@@ -6,8 +6,6 @@ use clap::Parser;
 use zetesis_cli::{Completion, Interruption, Options, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL};
-use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const SOURCE: &str = "1 {a;b} 1. #minimize{1,a:a;2,b:b}.";
 
@@ -24,77 +22,63 @@ fn options() -> Options {
     .unwrap()
 }
 
-fn planning_work() -> u64 {
-    let admitted = admit_formula(
+fn diagnostic_refusal(options: &Options, marker: &str, cause: &str) {
+    let mut complete = Vec::new();
+    let report = run_with_diagnostics(
         SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    ObjectivePlan::new(
-        admitted.theory(),
-        admitted.atoms(),
-        admitted.objectives(),
-        ObjectivePlanLimits::default(),
+        options,
+        &mut io::sink(),
+        &mut complete,
         &Cancellation::default(),
     )
-    .unwrap()
-    .statistics()
-    .work
+    .unwrap();
+    if cause == "Work" {
+        assert_eq!(report.completion, Completion::Exhausted);
+    }
+    let text = std::str::from_utf8(&complete).unwrap();
+    let start = text
+        .find(marker)
+        .expect("the real resource refusal is reached");
+    let end = start + text[start..].find('\n').unwrap();
+    assert!(text[start..end].contains(cause), "{text}");
+    for capacity in [start, start + marker.len(), end] {
+        let mut diagnostics = BoundedWriter::new(capacity);
+        let mut output = Vec::new();
+        let error = run_with_diagnostics(
+            SOURCE.into(),
+            options,
+            &mut output,
+            &mut diagnostics,
+            &Cancellation::default(),
+        )
+        .unwrap_err();
+        let RunError::Output(error) = error else {
+            panic!("expected output failure: {error}");
+        };
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(error.to_string(), FULL);
+        assert_eq!(diagnostics.bytes(), &complete[..capacity]);
+        let output = String::from_utf8(output).unwrap();
+        assert!(!output.contains("OPTIMUM FOUND"));
+        assert!(!crate::support::human::exhausted(&output));
+        assert!(!output.contains("UNSATISFIABLE"));
+    }
 }
 
 #[test]
-fn real_optional_plan_and_bound_refusals_propagate_diagnostic_writer_errors() {
-    let mut no_keys = options();
-    no_keys.max_objective_keys = 0;
-    let mut no_bound_work = options();
-    no_bound_work.max_objective_bound_work = planning_work();
-    for (options, marker, cause) in [
-        (no_keys, "Objective pruning unavailable:", "Keys"),
-        (no_bound_work, "Objective pruning stopped:", "Work"),
-    ] {
-        let mut complete = Vec::new();
-        let report = run_with_diagnostics(
-            SOURCE.into(),
-            &options,
-            &mut io::sink(),
-            &mut complete,
-            &Cancellation::default(),
-        )
-        .unwrap();
-        if cause == "Work" {
-            assert_eq!(report.completion, Completion::Exhausted);
-        }
-        let text = std::str::from_utf8(&complete).unwrap();
-        let start = text
-            .find(marker)
-            .expect("the real resource refusal is reached");
-        let end = start + text[start..].find('\n').unwrap();
-        assert!(text[start..end].contains(cause), "{text}");
-        for capacity in [start, start + marker.len(), end] {
-            let mut diagnostics = BoundedWriter::new(capacity);
-            let mut output = Vec::new();
-            let error = run_with_diagnostics(
-                SOURCE.into(),
-                &options,
-                &mut output,
-                &mut diagnostics,
-                &Cancellation::default(),
-            )
-            .unwrap_err();
-            let RunError::Output(error) = error else {
-                panic!("expected output failure: {error}");
-            };
-            assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
-            assert_eq!(error.to_string(), FULL);
-            assert_eq!(diagnostics.bytes(), &complete[..capacity]);
-            let output = String::from_utf8(output).unwrap();
-            assert!(!output.contains("OPTIMUM FOUND"));
-            assert!(!crate::support::human::exhausted(&output));
-            assert!(!output.contains("UNSATISFIABLE"));
-        }
-    }
+fn preparation_refusal_preserves_diagnostic_failure() {
+    let mut options = options();
+    options.max_objective_keys = 0;
+    diagnostic_refusal(&options, "Objective preparation unavailable:", "Keys");
+}
+
+#[test]
+fn bound_refusal_preserves_diagnostic_failure() {
+    let mut options = options();
+    // Preparation has its own objective receipt. One bound unit admits its
+    // initialization, then refuses the first copied eligibility node.
+    options.max_objective_bound_work = 1;
+    diagnostic_refusal(&options, "Objective pruning stopped:", "Work");
 }
 
 #[test]
