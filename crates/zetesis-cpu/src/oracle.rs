@@ -498,6 +498,7 @@ struct RoundWorkspace<'a> {
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
     block_steps: &'a BlockSteps,
+    heads: &'a prepared::Heads,
     pending: &'a mut PendingMarks,
     overhead: u128,
 }
@@ -516,6 +517,7 @@ fn least_closure_with(
         rules,
         layouts,
         block_steps,
+        heads,
         pending,
         overhead,
     } = workspace;
@@ -553,6 +555,7 @@ fn least_closure_with(
                     rules,
                     layouts,
                     block_steps,
+                    heads,
                 },
                 RoundScratch {
                     assignment: &mut assignment,
@@ -630,7 +633,7 @@ fn admits_more(held: usize, more: usize, work: &Work<'_>) -> Result<(), Stop> {
 
 fn record_head(
     key: AtomKey<'_>,
-    dense_head: Option<(usize, &Dense)>,
+    dense_head: Option<DenseHead<'_>>,
     closure: &RoundRead<'_>,
     appender: &mut AtomAppender<'_>,
     result: &mut RoundConsequences,
@@ -638,11 +641,19 @@ fn record_head(
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
     let held = atoms_held(closure, result, pending)?;
-    if let Some((slot, dense)) = dense_head {
+    if let Some(DenseHead {
+        slot,
+        relation,
+        position,
+    }) = dense_head
+    {
         // The bounds cover every derivable head: a key without a position
         // violates the admitted program's invariant.
-        let position = dense.position(&key, work)?.ok_or(Stop::InvalidProgram)?;
-        if !dense.contains(position) && pending.mark(slot, position) {
+        let position = match position {
+            Some(position) => position,
+            None => relation.position(&key, work)?.ok_or(Stop::InvalidProgram)?,
+        };
+        if !relation.contains(position) && pending.mark(slot, position) {
             admits_more(held, 1, work)?;
             work.statistics.dense_heads += 1;
         }
@@ -687,6 +698,7 @@ struct RoundPlan<'a> {
     rules: &'a prepared::Rules,
     layouts: &'a Layouts,
     block_steps: &'a BlockSteps,
+    heads: &'a prepared::Heads,
 }
 
 impl RoundPlan<'_> {
@@ -769,13 +781,23 @@ where
     }
 }
 
+/// A template's head relation with an optional prepared ground coordinate.
+#[derive(Clone, Copy)]
+struct DenseHead<'a> {
+    slot: usize,
+    relation: &'a Dense,
+    /// The head's whole ground tuple in the exact prepared layout. A
+    /// nonground head is ranked under the current binding instead.
+    position: Option<usize>,
+}
+
 /// The consumer of one template's joins in a closure round.
 struct RoundSink<'a, 'source, 'writer> {
     template: TemplateRef<'a>,
     closure: &'source RoundRead<'source>,
     appender: &'a mut AtomAppender<'writer>,
     /// The head's pending-marks slot and relation, when the head is laid out.
-    dense_head: Option<(usize, &'source Dense)>,
+    dense_head: Option<DenseHead<'source>>,
     /// The template's block-step plan, by positive occurrence.
     block_steps: &'a [bool],
     result: &'a mut RoundConsequences,
@@ -821,7 +843,15 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source, '_> {
         assignment: &[Option<TermRef<'source>>],
         work: &mut Work<'_>,
     ) -> Result<u64, Stop> {
-        let (Some(head), Some((slot, dense))) = (self.template.head(), self.dense_head) else {
+        let (
+            Some(head),
+            Some(DenseHead {
+                slot,
+                relation: dense,
+                ..
+            }),
+        ) = (self.template.head(), self.dense_head)
+        else {
             return Err(Stop::InvalidProgram);
         };
         let bound = head.terms().len().saturating_sub(1);
@@ -899,12 +929,13 @@ fn visit_round<'source>(
                 .slot(head.predicate())
                 .zip(Some(head.predicate()))
         }) {
-            Some((slot, predicate)) => Some((
+            Some((slot, predicate)) => Some(DenseHead {
                 slot,
-                closure
+                relation: closure
                     .dense(predicate, work)?
                     .ok_or(Stop::InvalidProgram)?,
-            )),
+                position: plan.heads.position(index, slot)?,
+            }),
             None => None,
         };
         let mut emit = RoundSink {

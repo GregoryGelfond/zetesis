@@ -1,6 +1,6 @@
 //! Immutable query dimensions and reference-free candidate workspaces.
 
-use std::mem::size_of;
+use std::{mem::size_of, sync::Arc};
 
 use zetesis_core::{
     Program, SeedView,
@@ -14,15 +14,19 @@ use super::{
 };
 use crate::{Cancellation, Stop};
 
+mod heads;
+pub(super) use heads::Heads;
+
 /// Independent bounds for preparing queries for one exact admitted program.
 /// Source program payload is already owned by `Program` and is not copied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationLimits {
-    /// The three parts of preparation: the template and positive-pattern
+    /// The parts of preparation: the template and positive-pattern
     /// dimension inspections, linear in the templates and occurrences; the
-    /// argument-bound inference, a fixed point over every head term; and
+    /// argument-bound inference, a fixed point over every head term;
     /// the block-step plan, which reads every term of a template once for
-    /// each of its occurrences.
+    /// each of its occurrences; and constant dense-head coordinates, which
+    /// rank each constant argument once in its inferred bound.
     pub max_work: u64,
     /// Named immutable preparation bytes, excluding the shared source
     /// program: what preparation retains, admitted once it is built. The
@@ -50,7 +54,7 @@ impl Default for PreparationLimits {
 /// Completed preparation receipt, separate from every candidate's work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PreparationStatistics {
-    /// Charged work of the three parts of preparation, as
+    /// Charged preparation work, as
     /// [`PreparationLimits::max_work`] bounds it.
     pub work: u64,
     /// Named retained preparation storage, excluding the source program.
@@ -69,19 +73,22 @@ pub struct PreparationStatistics {
 /// within each selected source occurrence tuples keep canonical storage order.
 /// Preparation inspects the dimensions, linear in templates and
 /// positive-pattern occurrences; infers the argument bounds, a fixed point
-/// over every head term whose passes are bounded by the values admitted; and
+/// over every head term whose passes are bounded by the values admitted;
 /// plans the block steps, at most the square of the largest template's terms
-/// for each template. The dimensions bound the assignment, cursor and undo
-/// buffers actually used by [`Self::check_view`]. They are not a class
+/// for each template; and ranks ground heads once in those layouts, retaining
+/// one optional coordinate per template. The dimensions bound the assignment,
+/// cursor and undo buffers actually used by [`Self::check_view`]. They are not a class
 /// certificate or semantic index.
 pub struct PreparedQueries {
     program: Program,
     dimensions: Dimensions,
     rules: Rules,
     /// The dense layouts, for the predicates the argument bounds admit.
-    layouts: Layouts,
+    layouts: Arc<Layouts>,
     /// Where a template's innermost join may be taken a block at a time.
     block_steps: BlockSteps,
+    /// Ground head positions in these exact layouts, independent of truth.
+    heads: Heads,
     statistics: PreparationStatistics,
 }
 
@@ -227,12 +234,15 @@ impl PreparedQueries {
             }
         }
         let block_steps = BlockSteps::plan(program, &layouts, work)?;
-        let retained_bytes = rules
+        let base = rules
             .bytes()
             .and_then(|bytes| bytes.checked_add(block_steps.bytes()?))
             .and_then(|bytes| bytes.checked_add(layouts.bytes()?))
             .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
+            .and_then(|bytes| bytes.checked_add(size_of::<Layouts>() as u128))
             .ok_or(Stop::StorageLimit)?;
+        let heads = Heads::prepare(program, &layouts, base, work)?;
+        let retained_bytes = base.checked_add(heads.bytes()).ok_or(Stop::StorageLimit)?;
         storage::admit(work, retained_bytes)?;
         storage::record(work, retained_bytes)?;
         Ok(Self {
@@ -245,8 +255,13 @@ impl PreparedQueries {
                 predicates: program.predicates().len(),
                 dense_predicates: layouts.len(),
             },
-            layouts,
+            // This immutable layout aggregate also authenticates the exact
+            // preparation of every reusable workspace. Its payload header
+            // was admitted above; Arc counters follow the existing storage
+            // ledger's exclusion of reference-count bookkeeping.
+            layouts: Arc::new(layouts),
             block_steps,
+            heads,
         })
     }
 
@@ -271,8 +286,9 @@ impl PreparedQueries {
     /// are cleared before another candidate is evaluated. Retained identity
     /// never establishes truth in that next candidate.
     /// Assignment references live
-    /// within one immutable round. A different program instance retires the old
-    /// workspace before reuse. Retained capacity is admitted under the supplied
+    /// within one immutable round. A different prepared owner retires the old
+    /// workspace before reuse, even for the same Program: its argument bounds
+    /// and dense layouts can differ. Retained capacity is admitted under the supplied
     /// limits, including when they are tighter than the preceding call.
     ///
     /// Preparation work is separate. One-shot [`super::check_view`] instead
@@ -321,7 +337,7 @@ impl PreparedQueries {
     }
 
     /// Run `evaluate` in `workspace`: a workspace left dirty by a failed
-    /// call, or used for another program instance, is replaced by an empty
+    /// call, or used for another preparation, is replaced by an empty
     /// one first; a completed call leaves it clean and reusable, a failed
     /// one retires it.
     fn with_workspace<T>(
@@ -331,14 +347,14 @@ impl PreparedQueries {
     ) -> Result<T, Stop> {
         if !workspace.clean
             || workspace
-                .program
+                .layouts
                 .as_ref()
-                .is_some_and(|old| !old.same_instance(&self.program))
+                .is_some_and(|old| !Arc::ptr_eq(old, &self.layouts))
         {
             *workspace = ClosureWorkspace::default();
         }
         workspace.clean = false;
-        workspace.program = Some(self.program.clone());
+        workspace.layouts = Some(Arc::clone(&self.layouts));
         let result = evaluate(workspace);
         if result.is_ok() {
             workspace.clean = true;
@@ -437,6 +453,7 @@ impl PreparedQueries {
                 rules: &self.rules,
                 layouts: &self.layouts,
                 block_steps: &self.block_steps,
+                heads: &self.heads,
                 pending: &mut workspace.pending,
                 overhead,
             },
@@ -453,8 +470,12 @@ impl PreparedQueries {
 /// Failed or unwound candidates retire their workspace before reuse. Returned
 /// `Check` values retain immutable prefixes and their own selections; later
 /// appends cannot alter those interpretations.
+/// Reuse belongs to one exact [`PreparedQueries`] owner. Switching owners
+/// retires its catalogs and layout-dependent scratch before any new check.
 pub struct ClosureWorkspace {
-    program: Option<Program>,
+    /// The exact immutable preparation whose relation coordinates this
+    /// workspace uses. Holding it also prevents allocator-address reuse.
+    layouts: Option<Arc<Layouts>>,
     catalogs: Catalogs,
     buffers: Buffers,
     pending: PendingMarks,
@@ -464,7 +485,7 @@ pub struct ClosureWorkspace {
 impl Default for ClosureWorkspace {
     fn default() -> Self {
         Self {
-            program: None,
+            layouts: None,
             catalogs: Catalogs::default(),
             buffers: Buffers::default(),
             pending: PendingMarks::default(),

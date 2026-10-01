@@ -251,17 +251,20 @@ The useful lower-level operations have logical contracts:
 The formula path evaluates terms as finite expression plans. In strict mode,
 each operation reads the completed prefix of earlier results. The final operation uses the same
 checked evaluator and returns its value directly; only intermediate results
-occupy scratch storage. Storage reuse preserves strict work, operand-copy charges
-and first-error order. Source mode separately tracks missing results in a
-transient mask bounded by the admitted expression's node count. The mask is
-reserved fallibly and released after each evaluation; it does not consume the
+occupy scratch storage. Storage reuse retains each executed operation's work
+admission and strict first-error order. Source mode separately tracks missing
+results in a transient mask bounded by the admitted expression's node count.
+The mask is reserved fallibly and cleared after each evaluation; it does not consume the
 cumulative scalar-payload allowance. Continued independent checks retain their
 per-node work charges. The [evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
 clears its value prefix on success, failure and unwind, retaining at most 32 empty
-integer cells and 32 empty value cells between evaluations. A one-node expression
-needs no intermediate value cells, but source mode may still allocate its mask;
-constructing or copying the returned value can also allocate. This storage
-schedule has a separate [preservation law](../lean/correspondence.md).
+integer cells and 32 empty term-ID cells between evaluations. A single constant
+or variable returns its authenticated existing canonical key, including numeric
+leaves, without reconstructing that term. It needs no intermediate cells or
+missing mask; an unavailable partial variable still reports typed undefined
+arithmetic. Workspace admission and node work remain charged. Constructing
+composite results can allocate. This storage schedule has a separate
+[preservation law](../lean/correspondence.md).
 
 A positive body is joined in an order chosen once per join, before a row is
 read, from what the body says: each relation's size, the variables each
@@ -829,7 +832,10 @@ no atom is allocated or compared by value until the model is assembled, and
 the model is read off the bits in order without sorting. The New rows of a
 round are a second bit array cleared when the cutoff advances, over the words
 the round touched, so an unchanged relation costs a round one unit whatever
-its size; Old is present and not new. A round records a derived head of a
+its size; Old is present and not new. New-row scans intersect their prefix
+window with that touched-word range: outer words are known zero. Scalar and
+block scans retain the original tuple positions and body-to-head offsets;
+this adds no storage. A round records a derived head of a
 dense relation as a pending bit: the key is ranked once, the position is
 tested against the relation, and an absent position is marked in a row of
 words the closure workspace keeps for the layout, beside the catalogs the
@@ -921,8 +927,13 @@ none of these counters establishes an elapsed-time gain.
 `zetesis_cpu::PreparedQueries` inspects one exact admitted `Program` once to
 bound the assignment, cursor and undo buffers used by its joins, to infer its
 argument bounds and to choose its dense layouts, which every candidate's
-closure shares and admits first. Its preparation work and bytes have
-independent finite limits and a separate receipt. A
+closure shares and admits first. A ground head's complete ordered tuple has a
+fixed position in its dense layout. Preparation retains this position so later
+firings need not rank its arguments again. Each candidate still visits the
+source, checks its guards and marks its own consequences; variable and tree
+heads keep their existing operations. The optional coordinate per template
+adds linear storage, admitted as preparation bytes. Preparation work and bytes
+have independent finite limits and a separate receipt. A
 `ClosureWorkspace` retains one Program-scoped canonical tuple authority and
 reusable relation, cursor/undo and old/new ID metadata between candidates.
 Assignments borrow terms only within one immutable round. Per-predicate catalogs
@@ -934,8 +945,10 @@ then constructs the result `Model` without exporting owned atoms. The workspace
 retains discovered identities and capacity, while resetting relation membership,
 frontiers, dense truth and pending marks. No candidate truth survives completion.
 Previously returned models keep their immutable prefixes. Any failed check
-discards dirty workspace state before reuse. A different Program instance retires
-the old workspace, even when its source text is equal.
+discards dirty workspace state before reuse. A different `PreparedQueries`
+owner retires the old workspace, even for the same Program: its inferred axes
+and block plans may differ. The shared immutable layout owner authenticates
+that boundary. Its separately allocated header is included in preparation bytes.
 
 The one-shot `check_view` uses the same evaluator and charges preparation plus
 candidate work to its existing cumulative work limit. Reused preparation has a

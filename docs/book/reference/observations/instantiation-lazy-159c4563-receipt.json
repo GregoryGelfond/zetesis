@@ -1,0 +1,48 @@
+{
+  "evidence": {
+    "filename": "instantiation-lazy-159c4563-evidence.json",
+    "bytes": 1504540,
+    "sha256": "f4c8b511ca3de6d5f8cf67e7dd6176a027ff522022bda089b48288108321fc82"
+  },
+  "families": {
+    "filename": "instantiation-lazy-159c4563-families.json",
+    "bytes": 264164,
+    "sha256": "0efd31f49193f615f40023cc0d8e90ed13f279d71571f6747b9229abf1dd5ba2"
+  },
+  "table_rows": 252,
+  "family_statuses": {
+    "matched": 252
+  },
+  "artifacts": [
+    {
+      "filename": "instantiation-lazy-159c4563-corpus-14.md",
+      "bytes": 38800,
+      "sha256": "19dc54a2fe3960ed1ef3db7d997d7eb77fed6ef536c695dbdddbfc81deaa7141"
+    },
+    {
+      "filename": "instantiation-lazy-159c4563-corpus-4.md",
+      "bytes": 38798,
+      "sha256": "38b6184b7ef32a9761921e046d18d7242ed4758ec53abfc13ad75232d50a569f"
+    },
+    {
+      "filename": "instantiation-lazy-159c4563-scalability-14.md",
+      "bytes": 5145,
+      "sha256": "5b6950de6f19686d5400bde630a245d5d85f62a778d0c8a021f304b162b3977a"
+    },
+    {
+      "filename": "instantiation-lazy-159c4563-scalability-4.md",
+      "bytes": 5149,
+      "sha256": "0aa2a7fa4e0ecc5966fe70a64928679db1bd4a2bd24ee5b2ecd358256318f580"
+    },
+    {
+      "filename": "instantiation-lazy-159c4563-series-14.md",
+      "bytes": 10055,
+      "sha256": "95a186c8a17ad8fa71747d7613a28239a8e99f327792a474ae5d43a526822da9"
+    },
+    {
+      "filename": "instantiation-lazy-159c4563-series-4.md",
+      "bytes": 10045,
+      "sha256": "2fef608a91a3574789265e1b70cedcb305e0db19cae35f64cde75a2ce0d00e9a"
+    }
+  ]
+}

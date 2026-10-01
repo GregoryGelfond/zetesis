@@ -236,6 +236,24 @@ obligations, the closure over dense relations is the closure over catalogs,
 step for step; the consequence step and constraint verdict of `DeltaRounds`
 are the same whichever store holds the rows.
 
+The dense New-word range must contain every new bit. Intersecting a prefix
+window with this range therefore skips only zero words and preserves ordered
+row coverage. Block offsets still refer to the original window, and an
+exhausted scalar cursor still reaches its original end. Rust tests cover
+advance/reset, partial words, shifted blocks and work refusal; the existing
+Lean laws do not verify this concrete range bookkeeping.
+
+Prepared ground-head coordinates specialize the same ordered substitution and
+injective dense-position premises: every binding of a ground head denotes the
+same tuple. Preparation computes its position once, without establishing that
+the rule fires. The workspace is bound to the exact immutable layout owner;
+switching preparations retires its retained relations before evaluation. This
+also keeps block plans aligned with their actual relations. Tuple order, guard
+evaluation, candidate-local marks, owner authentication and storage admission
+remain Rust obligations. Regressions compare ordinary ranking with prepared
+coordinates, alternate preparations with different inferred axes and retain
+earlier interpretations across those calls.
+
 The objective consumers use `AtomLookup` over immutable model selections or an
 `AtomIndex` over the original catalog. The index owns permutations of row IDs,
 not additional atoms. Its required laws are exact full-key membership and
@@ -1274,19 +1292,21 @@ arithmetic value or evidence of completed enumeration.
 equates returning a final operation's result with appending it to the completed
 prefix and observing the last value. Both strict schedules preserve the first error.
 The Rust [expression evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
-uses one checked operation for intermediate nodes and the root. The law assumes
-pure partial operations and stopping at the first fault. It does not cover the
-source mode's missing-operand mask or continued independent branches after a
-zero divisor. Source-plan validity, operand indices, checked scalar
-arithmetic, resource charges, allocation and cleanup remain implementation
-correspondences. A smaller scratch prefix does not establish a timing or
+returns its root without appending another result slot. Single constants and
+variables return authenticated existing term keys without numeric reconstruction.
+The law assumes pure partial operations and stopping at the first fault. It does
+not cover the source mode's missing-operand mask or continued independent branches after a
+zero divisor. Scope and prefix authentication for reused keys, source-plan
+validity, operand indices, checked scalar arithmetic, resource charges,
+allocation and cleanup remain implementation correspondences. A smaller scratch
+prefix does not establish a timing or
 process-memory result.
 
 `EvaluationPrefix.reset_preservation` states that an empty live prefix hides all
 earlier workspace values. A Rust join lends its existing workspace to partial
-comparisons, binding generators and final filters. Each evaluation returns an
-owned value and clears its prefix before the next borrow. Preserving expression
-order, complete-filter error precedence, copy charges and cleanup is a concrete
+comparisons, binding generators and final filters. Each evaluation returns a
+scoped term key and clears its prefix before the next borrow. Preserving expression
+order, complete-filter error precedence, work admission and cleanup is a concrete
 caller obligation. The reset law neither establishes source-family exclusions
 nor permits an earlier final filter to hide an independently required check.
 

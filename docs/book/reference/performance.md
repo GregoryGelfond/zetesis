@@ -5,6 +5,13 @@ program.
 
 ## What the results show
 
+The [grounding and prepared-closure comparison](instantiation-lazy.md) measures
+all three maintained CPU selections at four and fourteen workers. The arithmetic
+chain takes about 15% less process time and independent negation about 7% less;
+the ordinary 2,000-step chain regresses about 4%. Corpus sums are nearly unchanged,
+and some faster queens cells use more memory. Complete tables retain every
+workload and the combined source and output changes being compared.
+
 The [0.1.5 CPU comparison](canonical-storage.md) includes every case in the
 94-program corpus, the 22-case execution series and the ten-case scalability
 selection, with separate measurements at 1, 2, 4, 8 and 14 workers. These
@@ -148,6 +155,7 @@ their original programs and executables; they are not a cumulative speedup chart
 
 | Question | Report |
 | --- | --- |
+| What changes with grounding reuse and prepared CPU closure? | [Grounding and prepared CPU closure](instantiation-lazy.md) |
 | What changes when exclusive support-publication directories are reused? | [Support-publication CPU comparison](support-publication.md) |
 | What changed with canonical storage and answer construction? | [0.1.5 CPU comparison and worker scaling](canonical-storage.md) |
 | What changes when source constraints are checked during solving? | [Eager and hybrid grounding](hybrid-grounding.md) |

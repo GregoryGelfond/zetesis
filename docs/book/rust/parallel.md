@@ -36,7 +36,8 @@ vocabulary, plus relation and reference-free cursor/undo capacity. A completed
 `Check` retains a selection over its immutable prefix. The workspace clears
 relation membership, frontiers and pending marks before reuse; retained identity
 supplies no previous candidate truth. Failed evaluation discards dirty workspace
-state, and a different Program instance retires the old workspace.
+state. A different `PreparedQueries` owner retires the old workspace, even
+for the same Program, because its inferred dense layouts can differ.
 Its `retained_bytes()` includes the authority's shared frozen vocabulary and
 workspace metadata. Other source/preparation storage, separately retained results
 and documented container/allocator overhead remain outside that receipt;

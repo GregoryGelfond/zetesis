@@ -46,6 +46,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Grounding and prepared CPU closure](reference/instantiation-lazy.md)
   - [Reusing support-publication directories](reference/support-publication.md)
   - [Canonical storage and CPU worker scaling](reference/canonical-storage.md)
   - [Eager and hybrid formula grounding](reference/hybrid-grounding.md)

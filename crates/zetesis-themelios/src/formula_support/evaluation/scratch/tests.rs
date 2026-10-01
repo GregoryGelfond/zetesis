@@ -1,5 +1,6 @@
 //! Observe live scoped scratch and its cleanup without exposing a test API.
 mod callers;
+mod leaves;
 use super::super::{Evaluation, Expression, Operation};
 use super::RETAINED_CELLS;
 use crate::formula_support::testing::{Fixture, binding};
