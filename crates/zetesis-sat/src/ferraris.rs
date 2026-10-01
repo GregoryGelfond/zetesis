@@ -103,10 +103,11 @@ pub struct Statistics {
     /// Exact history retained across candidate queries and restrictions.
     /// Its work is included in `search.work`, never added to it.
     pub projections: ProjectionStatistics,
-    /// Outer classical SAT queries started, including a final UNSAT query.
+    /// Outer clause queries started, including a final UNSAT query. Direct
+    /// positive proposals and region traversal do not increment this counter.
     pub candidate_queries: u64,
     /// Successfully appended candidate-only restrictions. Exhaustion then
-    /// covers their intersection with the original classical candidate region.
+    /// covers their intersection with the original answer-set family.
     pub candidate_restrictions: u64,
     /// Classical candidates admitted for membership checking, including retained
     /// pending proposals in the batched protocol.
@@ -314,7 +315,9 @@ pub(crate) fn checked_countermodel(
     Ok(Check::NonMinimal(subset))
 }
 
-/// Native all-model search over classical candidates with exact semantic blocking.
+/// Native answer-set enumeration over classical candidates with exact semantic blocking.
+/// A complete positive certificate can restrict proposals to the unique possible
+/// answer; larger classical models need not be enumerated or refuted individually.
 /// SAT assignments include Tseitin variables, but returned interpretations and
 /// exact exclusions contain only the original theory's atom universe.
 ///
@@ -334,6 +337,7 @@ pub struct StableModels {
     pending_error: Option<Incomplete>,
     batch: batch::State,
     certificate: Option<certified::Certificate>,
+    positive_candidates: Option<certified::PositiveCandidates>,
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
@@ -400,6 +404,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
+            positive_candidates: None,
             reduct,
         })
     }
@@ -450,6 +455,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
+            positive_candidates: None,
             reduct,
         })
     }
@@ -510,6 +516,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
+            positive_candidates: None,
             reduct,
         })
     }
@@ -531,7 +538,8 @@ impl StableModels {
     /// earlier restrictions stay in the CNF, and the separate exact projection
     /// index retains every earlier exclusion without turning it into watched
     /// CNF storage. The regions proposer narrows the regions still to visit by
-    /// it and continues. Original theory and reduct acceptance stay unchanged.
+    /// it and continues. A positive cursor tests the least interpretation
+    /// against these same restrictions. Original theory and reduct acceptance stay unchanged.
     ///
     /// The restriction must use the original semantic atom count and index
     /// meanings. Its separate immutable instance is expected. Restrictions
@@ -639,9 +647,10 @@ impl StableModels {
         Ok(())
     }
 
-    /// True only after a completed outer query refutes every unblocked model
+    /// True only after successful coverage of every unreturned answer set
     /// satisfying all successful candidate restrictions and the original-region
-    /// filter, if either was configured.
+    /// filter, if either was configured. A complete positive certificate can
+    /// establish this without refuting larger classical models individually.
     #[must_use]
     pub const fn exhausted(&self) -> bool {
         self.exhausted
@@ -662,7 +671,7 @@ impl StableModels {
                 regions: Some(proposals.statistics()),
                 ..self.statistics
             },
-            Proposer::Parallel(parallel) => {
+            Proposer::Parallel(parallel) if self.positive_candidates.is_none() => {
                 let merged = parallel.merged();
                 let merged = &merged;
                 let mut certified = self.statistics.certified;
@@ -689,6 +698,10 @@ impl StableModels {
                     ..self.statistics
                 }
             }
+            Proposer::Parallel(parallel) => Statistics {
+                regions: Some(parallel.statistics()),
+                ..self.statistics
+            },
         };
         statistics.region_filter = self
             .proposer
@@ -713,6 +726,7 @@ impl StableModels {
                     .as_ref()
                     .and_then(certified::Certificate::cpu),
                 reduct: &mut self.reduct,
+                positive_candidates: self.positive_candidates.as_mut(),
             },
             &mut self.proposer,
             &mut budget,
@@ -782,6 +796,7 @@ struct Membership<'a> {
     /// share it; the coordinator reads through it.
     certificate: Option<&'a std::sync::Arc<certified::Certification>>,
     reduct: &'a mut crate::prepared_reduct::State,
+    positive_candidates: Option<&'a mut certified::PositiveCandidates>,
 }
 
 /// The component that proposes classical candidates: it realizes the
@@ -832,9 +847,15 @@ impl Proposer {
         theory: &Theory,
         limits: Limits,
         certificate: Option<&std::sync::Arc<certified::Certification>>,
+        positive_candidates: Option<&mut certified::PositiveCandidates>,
         budget: &mut Budget<'_>,
         statistics: &mut Statistics,
     ) -> Result<Option<Proposal>, Incomplete> {
+        if let Some(candidates) = positive_candidates {
+            return candidates
+                .propose(self, theory, limits, budget, statistics)
+                .map(|candidate| candidate.map(Proposal::Candidate));
+        }
         let proposal = match self {
             Self::Clauses(clauses) => {
                 increment(&mut statistics.candidate_queries)?;
@@ -932,15 +953,23 @@ fn advance(
         limits,
         certificate,
         reduct,
+        mut positive_candidates,
     } = membership_input;
     loop {
         // The parallel walk's workers time their own phases; the wait for
         // their models is not a phase.
         let started = match proposer {
-            Proposer::Parallel(_) => None,
+            Proposer::Parallel(_) if positive_candidates.is_none() => None,
             _ => timing::start(statistics.phase_timings.as_ref()),
         };
-        let proposal = proposer.propose(theory, limits, certificate, budget, statistics);
+        let proposal = proposer.propose(
+            theory,
+            limits,
+            certificate,
+            positive_candidates.as_deref_mut(),
+            budget,
+            statistics,
+        );
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         let candidate = match proposal? {
             None => return Ok(None),

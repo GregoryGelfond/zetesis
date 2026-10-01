@@ -138,7 +138,7 @@ impl<'p> Engine<'p> {
                             if inputs.is_empty() {
                                 Transfer::Unknown(Widening::UnboundVariable)
                             } else {
-                                Transfer::Union(inputs)
+                                Transfer::Intersection(inputs)
                             }
                         }
                         _ => Transfer::Unknown(Widening::HeadTerm),

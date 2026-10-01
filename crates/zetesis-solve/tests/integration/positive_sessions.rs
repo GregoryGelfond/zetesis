@@ -177,6 +177,68 @@ fn positive_sessions_return_the_literal_least_families() {
 }
 
 #[test]
+fn positive_regions_complete_without_candidate_search() {
+    for (source, names) in [
+        ("", &[][..]),
+        ("a:-b. b:-a.", &[][..]),
+        ("a. b:-a. a:-b.", &["a", "b"][..]),
+    ] {
+        let owner = formula(source);
+        let expected = BTreeSet::from([(model(names), None)]);
+        for workers in [1, 4] {
+            let (view, observations) = collect(
+                &owner,
+                SolveConfig {
+                    search: SearchMethod::Regions,
+                    max_reduct_bytes: 0,
+                    ..config(workers, Oracle::Auto)
+                },
+            );
+            assert_eq!(family(&view), expected);
+            assert_eq!(observations.membership, [Membership::Positive]);
+            let statistics = view.outcome().countermodel_statistics().unwrap();
+            assert_eq!(statistics.candidates, 1);
+            assert_eq!(statistics.countermodel_queries, 0);
+            assert_eq!(statistics.search.decisions, 0);
+            assert_eq!(statistics.regions.unwrap().counts.regions, 0);
+            assert_eq!(statistics.certified.unwrap().stable, 1);
+        }
+    }
+}
+
+#[test]
+fn positive_regions_preserve_scored_observations() {
+    let owner = formula("a. b:-a. a:-b. #minimize {2@3,k:b;1@1,k:a}. #show a/0.");
+    let expected = BTreeSet::from([(model(&["a", "b"]), Some(vec![(3, 2), (1, 1)]))]);
+    for workers in [1, 4] {
+        let (view, observations) = collect(
+            &owner,
+            SolveConfig {
+                search: SearchMethod::Regions,
+                ..config(workers, Oracle::Auto)
+            },
+        );
+        assert_eq!(observations.membership, [Membership::Positive]);
+        assert_eq!(family(&view), expected);
+        assert_eq!(view.outcome().scored_models(), 1);
+        assert!(
+            view.answer_sets()[0]
+                .interpretation()
+                .catalog()
+                .same_owner(owner.atom_catalog())
+        );
+        assert_eq!(
+            view.outcome()
+                .countermodel_statistics()
+                .unwrap()
+                .search
+                .decisions,
+            0
+        );
+    }
+}
+
+#[test]
 fn positive_sessions_preserve_original_constraints() {
     for (source, expected) in [
         ("a. b:-a. a:-b. :-b.", Family::new()),

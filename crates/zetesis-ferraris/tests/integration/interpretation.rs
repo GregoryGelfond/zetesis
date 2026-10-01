@@ -81,3 +81,62 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn fallible_clone_preserves_packed_words() {
+    for atoms in [0, 1, 31, 32, 33, 63, 64, 65, 127, 128, 129] {
+        let owner = theory(atoms);
+        for selected in [
+            Vec::new(),
+            (0..atoms).collect(),
+            (0..atoms).step_by(3).collect(),
+        ] {
+            let source = Interpretation::new(&owner, selected.iter().copied()).unwrap();
+            let before = source.words32().collect::<Vec<_>>();
+            let copied = source.try_clone().unwrap();
+            assert_eq!(copied.atoms().collect::<Vec<_>>(), selected);
+            assert_eq!(copied.words32().collect::<Vec<_>>(), before);
+            if let Some(&last) = before.last() {
+                let tail = atoms % 32;
+                if tail != 0 {
+                    assert_eq!(last >> tail, 0);
+                }
+            }
+        }
+    }
+}
+
+proptest! {
+    #[test]
+    fn fallible_clone_denotes_the_input_population(
+        selected in prop::collection::vec(any::<bool>(), 0..2049)
+    ) {
+        let owner = theory(selected.len());
+        let expected: Vec<_> = selected.iter().enumerate()
+            .filter_map(|(atom, &present)| present.then_some(atom)).collect();
+        let source = Interpretation::new(&owner, expected.iter().copied()).unwrap();
+        let copied = source.try_clone().unwrap();
+        prop_assert!(copied.theory().same_instance(&owner));
+        prop_assert_eq!(copied.atoms().collect::<Vec<_>>(), expected.clone());
+        prop_assert_eq!(source.atoms().collect::<Vec<_>>(), expected);
+    }
+}
+
+#[test]
+fn fallible_clone_retains_exact_owner() {
+    let owner = theory(129);
+    let equal = theory(129);
+    let source = Interpretation::new(&owner, [0, 64, 128]).unwrap();
+    let copied = source.try_clone().unwrap();
+    assert!(copied.theory().same_instance(&owner));
+    assert!(!copied.theory().same_instance(&equal));
+}
+
+#[test]
+fn fallible_clone_leaves_its_source_unchanged() {
+    let owner = theory(97);
+    let source = Interpretation::new(&owner, [0, 63, 96]).unwrap();
+    let before = source.words32().collect::<Vec<_>>();
+    drop(source.try_clone().unwrap());
+    assert_eq!(source.words32().collect::<Vec<_>>(), before);
+}

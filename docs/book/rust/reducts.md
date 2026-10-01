@@ -34,6 +34,11 @@ An `Interpretation` belongs to one immutable `Theory`. Cloning the theory shares
 identity. Independently constructing equal node lists produces another identity,
 and passing an interpretation from it returns `Stop::WrongProgram`.
 
+`Interpretation::try_clone` copies the packed words while sharing that exact
+theory owner. It takes O(ceil(U/64)) time and owned words for a universe of U
+atoms, reports allocation failure, and neither evaluates formulas nor owns a
+cancellation token. An execution caller retains its own work and control checks.
+
 `Interpretation::atoms` visits packed words and removes their set bits in
 ascending order. With U atoms and S selected positions, complete traversal costs
 O(ceil(U/64) + S), with constant auxiliary space. `words32` instead lends exactly

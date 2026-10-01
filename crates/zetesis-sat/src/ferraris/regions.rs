@@ -313,6 +313,22 @@ impl RegionSearch {
         Ok(())
     }
 
+    pub(super) fn permits_positive(
+        &mut self,
+        candidate: &Interpretation,
+        budget: &mut Budget<'_>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
+    ) -> Result<bool, Incomplete> {
+        permits(
+            &self.restrictions,
+            self.filter.as_ref(),
+            candidate,
+            budget,
+            &mut self.statistics.counts,
+            timings,
+        )
+    }
+
     /// The next leaf, a classical model of the theory and the restrictions,
     /// or `None` once the tree is covered.
     pub(crate) fn propose(
@@ -414,6 +430,63 @@ pub(crate) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             return Ok(Narrowing::Fixed { changed });
         }
     }
+}
+
+/// Check only accumulated candidate conditions on a certified singleton.
+/// No original-theory propagation or search decision is required. Existing
+/// restriction owners and their accounted narrowing primitive are reused.
+pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
+    restrictions: &[R],
+    filter: Option<&crate::region_filter::Filter>,
+    candidate: &Interpretation,
+    budget: &mut Budget<'_>,
+    counts: &mut RegionCounts,
+    timings: &mut Option<crate::SearchPhaseTimings>,
+) -> Result<bool, Incomplete> {
+    budget.cancellation.poll()?;
+    if restrictions.is_empty() && filter.is_none() {
+        return Ok(true);
+    }
+    let mut region = Region::all_open(candidate.theory().atom_count());
+    for atom in 0..candidate.theory().atom_count() {
+        budget.tick()?;
+        if candidate.contains(atom) {
+            region.hold(atom);
+        } else {
+            region.cut(atom);
+        }
+    }
+    for restriction in restrictions {
+        let (theory, narrower) = restriction.borrow();
+        let mut knowledge = narrower.knowledge();
+        let cancellation = budget.cancellation;
+        let attempt = narrower.narrow_known_metered(
+            theory,
+            None,
+            &mut region,
+            &mut knowledge,
+            cancellation,
+            || budget.tick().map_err(NarrowingStop),
+        );
+        if account(attempt, counts)? == Narrowing::Refuted {
+            return Ok(false);
+        }
+    }
+    if let Some(filter) = filter {
+        let mut worker = None;
+        if filter.check(
+            &mut worker,
+            candidate.theory(),
+            &region,
+            budget.cancellation,
+            timings,
+        )? == crate::RegionFeasibility::Refuted
+        {
+            return Ok(false);
+        }
+    }
+    budget.cancellation.poll()?;
+    Ok(true)
 }
 
 /// Keep the search-level work refusal distinct from a verification refusal,

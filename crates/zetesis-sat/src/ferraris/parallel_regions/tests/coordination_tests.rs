@@ -485,3 +485,18 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
         .charge(search.shared.limits.search.max_work - settled.work)
         .unwrap();
 }
+
+#[test]
+fn coordinator_observations_saturate_with_worker_receipts() {
+    let mut search = search(2);
+    search.statistics.counts.propagations = u64::MAX;
+    search.statistics.counts.held = u64::MAX;
+    search.statistics.counts.cut = u64::MAX;
+    Live::add(&search.shared.live.propagations, 1);
+    Live::add(&search.shared.live.held, 1);
+    Live::add(&search.shared.live.cut, 1);
+    let counts = search.statistics().counts;
+    assert_eq!(counts.propagations, u64::MAX);
+    assert_eq!(counts.held, u64::MAX);
+    assert_eq!(counts.cut, u64::MAX);
+}

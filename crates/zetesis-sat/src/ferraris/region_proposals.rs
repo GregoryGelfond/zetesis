@@ -209,6 +209,22 @@ impl RegionProposals {
         Ok(())
     }
 
+    pub(super) fn permits_positive(
+        &mut self,
+        candidate: &Interpretation,
+        budget: &mut Budget<'_>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
+    ) -> Result<bool, Incomplete> {
+        regions::permits(
+            &self.restrictions,
+            self.filter.as_ref(),
+            candidate,
+            budget,
+            &mut self.statistics.counts,
+            timings,
+        )
+    }
+
     /// Fill pre-admitted output slots without evaluating a reduct. The output
     /// is empty on entry; its allocation remains the caller's batch ownership.
     /// A zero remaining candidate allowance still permits coverage work until

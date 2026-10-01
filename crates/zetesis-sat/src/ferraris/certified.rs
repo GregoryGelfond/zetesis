@@ -1,6 +1,8 @@
 //! Optional complete-theory certificates under the enumeration budget.
 
 mod positive;
+mod candidates;
+pub(super) use candidates::PositiveCandidates;
 mod types;
 pub use types::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
@@ -171,8 +173,9 @@ impl StableModels {
     /// For clause search, a positive plan installs exact original-atom units for
     /// its least model, or an empty clause for a violated original constraint.
     /// Units are transactional and consume the existing candidate CNF admission;
-    /// no restriction formula DAG is copied. Region search independently checks
-    /// original satisfaction and refutes models larger than the least closure.
+    /// no restriction formula DAG is copied. Region modes propose only the least
+    /// interpretation, if it satisfies the original constraints and accumulated
+    /// candidate conditions. Independent membership checks retain the original owner.
     /// Original theory and reduct semantics are unchanged.
     ///
     /// Optional shape/storage refusals leave the next plan and general reduct
@@ -240,10 +243,14 @@ impl StableModels {
                         }
                     });
                     stats.refusal = None;
-                    self.certificate = Some(Certificate {
-                        plan: Arc::new(plan),
-                        usage,
-                    });
+                    let plan = Arc::new(plan);
+                    if usage == Use::Cpu
+                        && matches!(plan.as_ref(), Certification::Positive { .. })
+                        && !matches!(self.proposer, super::Proposer::Clauses(_))
+                    {
+                        self.positive_candidates = Some(PositiveCandidates::new(Arc::clone(&plan)));
+                    }
+                    self.certificate = Some(Certificate { plan, usage });
                     return Ok(true);
                 }
             }
@@ -325,9 +332,8 @@ impl StableModels {
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
-        // Units restrict only clause candidates. Regions retain their general
-        // traversal; positive classification refutes any larger original model
-        // using the least consequences as its proper-subset reduct model.
+        // Clauses retain their transactional units. Region modes activate the
+        // singleton cursor only after this complete plan has been installed.
         let result = match &mut self.proposer {
             super::Proposer::Clauses(clauses) => {
                 positive::restrict(&plan, &mut clauses.cnf, &mut budget)

@@ -283,7 +283,9 @@ impl StableModels {
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
-        if let super::Proposer::Proposals(proposals) = &mut self.proposer {
+        if self.positive_candidates.is_none()
+            && let super::Proposer::Proposals(proposals) = &mut self.proposer
+        {
             let started = timing::start(self.statistics.phase_timings.as_ref());
             let produced = proposals.fill(
                 &self.theory,
@@ -336,6 +338,7 @@ impl StableModels {
             match proposal(
                 &self.theory,
                 &mut self.proposer,
+                self.positive_candidates.as_mut(),
                 self.limits,
                 &mut budget,
                 &mut self.statistics,
@@ -441,12 +444,20 @@ impl StableModels {
 fn proposal(
     theory: &Theory,
     proposer: &mut super::Proposer,
+    positive_candidates: Option<&mut super::certified::PositiveCandidates>,
     limits: super::Limits,
     budget: &mut Budget<'_>,
     statistics: &mut super::Statistics,
 ) -> Result<Option<Interpretation>, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let proposal = proposer.propose(theory, limits, None, budget, statistics);
+    let proposal = proposer.propose(
+        theory,
+        limits,
+        None,
+        positive_candidates,
+        budget,
+        statistics,
+    );
     timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
     // The batched protocol checks its proposals itself; a worker-decided
     // model is refused here rather than checked twice.

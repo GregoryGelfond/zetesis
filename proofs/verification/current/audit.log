@@ -402,6 +402,8 @@
  Classical.choice,
  Quot.sound]
 'Zetesis.DomainContraction.empty_domain_excludes_completions' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DomainProducers.transfer_monotone' does not depend on any axioms
+'Zetesis.DomainProducers.derivation_covered' does not depend on any axioms
 'Zetesis.EvaluatedWitnesses.successful_selection' depends on axioms: [propext]
 'Zetesis.EvaluatedWitnesses.completed_condition_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluatedWitnesses.undefined_selection' depends on axioms: [propext]

@@ -183,6 +183,28 @@ impl Interpretation {
         })
     }
 
+    /// Copy the packed interpretation while retaining the exact immutable theory.
+    ///
+    /// This fallible clone initializes and copies ceil(U/64) words for U atoms,
+    /// using O(ceil(U/64)) work and owned storage. It evaluates no formula and
+    /// does not poll cancellation or charge an enclosing operation's budget;
+    /// callers provide those controls around the bounded copy. The source is
+    /// unchanged, including when allocation fails.
+    ///
+    /// # Errors
+    /// Refuses failed storage reservation without publishing a partial copy.
+    pub fn try_clone(&self) -> Result<Self, AdmissionError> {
+        let mut words = Vec::new();
+        words
+            .try_reserve_exact(self.words.len())
+            .map_err(|_| AdmissionError::Allocation)?;
+        words.extend_from_slice(&self.words);
+        Ok(Self {
+            theory: self.theory.clone(),
+            words,
+        })
+    }
+
     /// The theory instance to which this interpretation belongs.
     #[must_use]
     pub fn theory(&self) -> &Theory {

@@ -1940,6 +1940,16 @@
     "line": 259
   },
   {
+    "name": "Zetesis.DomainProducers.transfer_monotone",
+    "file": "Zetesis/DomainProducers.lean",
+    "line": 62
+  },
+  {
+    "name": "Zetesis.DomainProducers.derivation_covered",
+    "file": "Zetesis/DomainProducers.lean",
+    "line": 96
+  },
+  {
     "name": "Zetesis.EvaluatedWitnesses.successful_selection",
     "file": "Zetesis/EvaluatedWitnesses.lean",
     "line": 59

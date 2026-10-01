@@ -891,6 +891,17 @@ atoms in the emitted formulas. The [binding guide](https://github.com/GregoryGel
 separates these obligations from the independent support-coverage and reduct
 arguments.
 
+[`DomainProducers`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainProducers.lean)
+models possible argument values before binding enumeration. One producer
+intersects its mandatory inputs and local bound; alternative producers contribute
+their union. `transfer_monotone` preserves pointwise inclusion, while
+`derivation_covered` puts every finite abstract derivation inside any closed
+upper-bound assignment, including through recursive dependencies. Unknown is
+the universal predicate. Rust must establish that source extraction covers
+actual values, finite sets implement these operations, and a reported fixed point
+is closed after widening. The laws do not prove source admission, termination of
+the Rust attempt, arithmetic diagnostics or its resource behavior.
+
 [`DomainBindings`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean)
 addresses a different filtering boundary: a local match may have no complete
 continuation. Conservative argument coverage makes the intersection for each
@@ -994,6 +1005,16 @@ producer is an invariant refusal, not a constraint verdict. Exact evaluation
 consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.
+
+The CPU positive candidate cursor uses `positive_stable_iff` as a coverage law:
+only the completed least interpretation can belong to the answer-set family.
+It proposes that interpretation once if the original constraints and candidate
+conditions permit it, retaining ordinary membership checking. A failed original
+constraint instead completes the empty family. Rust must preserve the exact
+certificate owner, every additional restriction and region filter, and successful
+completion before reporting exhaustion. Cancellation or a work/allocation refusal
+cannot be substituted for the empty-family case. The mathematical law does not
+verify that cursor, its packed copy, batch publication or worker accounting.
 
 [`TerminalDefinitions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean)
 separates arbitrary base atoms from new derived atoms using a disjoint sum. Each

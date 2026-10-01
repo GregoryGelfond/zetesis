@@ -16,6 +16,7 @@ mod partition;
 mod partition_search;
 mod phase_timing;
 mod positive_certified;
+mod positive_candidates;
 mod prepared_reduct;
 mod projection_history;
 mod reduct_regions;

@@ -636,6 +636,15 @@ existing paths. This permission does not extend the profile to choice or
 aggregate producers. Producer scheduling retains its separate applicability
 conditions.
 
+The source analyzer intersects the positive argument domains binding one head
+variable within each producer, then unions the results of alternative producers.
+For `p(X) :- a(X), b(X).`, the bound on `p/1` is therefore the intersection of
+the bounds on `a/1` and `b/1`. This information propagates to downstream rules.
+Unknown is unrestricted: another finite input can still bound the conjunction.
+Inflationary passes continue to a fixed point, including recursive dependencies;
+a stopped analysis publishes no partial finite bounds. Argument domains do not
+assert correlations between different columns of a relation.
+
 Every complete binding must belong to the upper domain of each mandatory
 positive argument. Intersecting those domains for one source variable remains
 necessary, including repeated occurrences. A comparison that reads one
@@ -661,6 +670,10 @@ include rows that fail another bound column; Table intersects its equalities
 before offering rows. Thus offered-row and guard-rejection counts need not
 match across strategies, even when complete bindings do.
 
+`DomainProducers.transfer_monotone` and `derivation_covered` state the abstract
+producer contract: enlarging inputs cannot shrink proposals, and every finite
+producer derivation belongs to a closed upper-bound assignment. Concrete source
+extraction and completed Rust iteration remain correspondence obligations.
 `DomainBindings.complete_binding_survives` states the necessary-meet law under
 explicit argument coverage, and `kept_binding_survives` the narrowed-candidate
 law for the bindings the exclusion rule keeps. `guarded_continuations_exact` preserves the ordered

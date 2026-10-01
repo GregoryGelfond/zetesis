@@ -127,6 +127,7 @@ import Zetesis.SourceContributions
 import Zetesis.FiniteTables
 import Zetesis.TableBindings
 import Zetesis.DomainBindings
+import Zetesis.DomainProducers
 import Zetesis.FormulaRegions
 import Zetesis.FormulaBounds
 import Zetesis.FormulaChains

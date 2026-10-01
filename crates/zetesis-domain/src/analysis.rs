@@ -1,4 +1,4 @@
-//! Monotone in-place union passes over bounded source-derived transfers.
+//! Monotone producer unions over bounded source-derived intersections.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -13,7 +13,7 @@ use crate::{
 
 pub(super) enum Transfer<'p> {
     Value(&'p Symbol),
-    Union(Vec<usize>),
+    Intersection(Vec<usize>),
     Unknown(Widening),
 }
 pub(super) struct Producer<'p> {
@@ -148,39 +148,74 @@ impl<'p> Engine<'p> {
                 match &self.producers[index].transfer {
                     Transfer::Value(value) => changed |= self.merge(target, value)?,
                     Transfer::Unknown(reason) => changed |= self.widen(target, *reason),
-                    Transfer::Union(inputs) => {
-                        let length = inputs.len();
-                        for input in 0..length {
-                            self.work()?;
-                            let Transfer::Union(inputs) = &self.producers[index].transfer else {
-                                unreachable!("immutable transfer kind")
-                            };
-                            let from = inputs[input];
-                            // Snapshot only borrowed value references. Scratch length
-                            // is bounded by one completed finite argument width.
-                            let count = match &self.result.arguments[from].domain {
-                                Domain::Unknown => {
-                                    changed |= self.widen(target, Widening::Dependency);
-                                    break;
-                                }
-                                Domain::Finite(values) => values.len(),
-                            };
-                            self.steps(count)?;
-                            let Domain::Finite(values) = &self.result.arguments[from].domain else {
-                                unreachable!("work charging does not change domains")
-                            };
-                            let snapshot = values.iter().copied().collect::<Vec<_>>();
-                            for value in snapshot {
-                                changed |= self.merge(target, value)?;
-                            }
-                        }
-                    }
+                    Transfer::Intersection(_) => changed |= self.intersection(index)?,
                 }
             }
             if !changed {
                 return Ok(());
             }
         }
+    }
+    // A producer binds its head variable at every listed positive body column.
+    // Unknown is top: a finite column still bounds the conjunction. Growing an
+    // input can only grow this intersection, so unioning the result into the
+    // target preserves the inflationary fixed-point iteration, including cycles.
+    fn intersection(&mut self, producer: usize) -> Result<bool, Stop> {
+        let Transfer::Intersection(inputs) = &self.producers[producer].transfer else {
+            unreachable!("intersection transfer")
+        };
+        let length = inputs.len();
+        let target = self.producers[producer].target;
+        let mut smallest: Option<(usize, usize, usize)> = None;
+        for input in 0..length {
+            self.work()?;
+            let Transfer::Intersection(inputs) = &self.producers[producer].transfer else {
+                unreachable!("immutable transfer kind")
+            };
+            let from = inputs[input];
+            if let Domain::Finite(values) = &self.result.arguments[from].domain
+                && smallest.is_none_or(|(_, _, count)| values.len() < count)
+            {
+                smallest = Some((input, from, values.len()));
+            }
+        }
+        let Some((selected, from, count)) = smallest else {
+            return Ok(self.widen(target, Widening::Dependency));
+        };
+        // Snapshot only borrowed references, before the target can change. It
+        // may itself be an input. Admit every copy before allocating scratch;
+        // its length is at most one finite argument's admitted width.
+        self.steps(count)?;
+        let Domain::Finite(values) = &self.result.arguments[from].domain else {
+            unreachable!("work charging does not change domains")
+        };
+        let snapshot = values.iter().copied().collect::<Vec<_>>();
+        let mut changed = false;
+        for value in snapshot {
+            let mut permitted = true;
+            // The selected occurrence needs no visit: snapshot iteration
+            // already establishes membership. Every other occurrence is
+            // charged before inspecting it, including duplicates of the source.
+            for input in (0..selected).chain(selected + 1..length) {
+                self.work()?;
+                let Transfer::Intersection(inputs) = &self.producers[producer].transfer else {
+                    unreachable!("immutable transfer kind")
+                };
+                let other = inputs[input];
+                // A repeated source occurrence needs no additional set lookup.
+                if other == from {
+                    continue;
+                }
+                if !self.result.arguments[other].domain.permits(value) {
+                    permitted = false;
+                    break;
+                }
+            }
+            if permitted {
+                changed |= self.merge(target, value)?;
+            }
+        }
+        Ok(changed)
     }
     pub fn symbol(&mut self, symbol: &'p Symbol) -> Result<bool, Stop> {
         if self.limits.max_symbol_nodes == 0 || self.limits.max_symbol_depth == 0 {

@@ -158,7 +158,7 @@ fn region_positive_cycles_preserve_the_clause_family() {
 }
 
 #[test]
-fn region_positive_constraints_refute_larger_models() {
+fn region_positive_constraints_exclude_the_answer_family() {
     // The least producer closure is empty and violates `:- not a.`.
     // {a,b} satisfies every original root, but its reduct also admits empty.
     let original = theory(
@@ -209,7 +209,8 @@ fn region_positive_constraints_refute_larger_models() {
         ));
         assert_eq!(collect(&mut regions), expected);
         assert!(regions.exhausted());
-        assert_eq!(regions.statistics().certified.unwrap().refuted, 1);
+        assert_eq!(regions.statistics().certified.unwrap().refuted, 0);
+        assert_eq!(regions.statistics().candidates, 0);
         assert_eq!(regions.statistics().countermodel_queries, 0);
     }
 }

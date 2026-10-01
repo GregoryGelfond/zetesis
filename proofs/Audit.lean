@@ -388,6 +388,8 @@ import Zetesis
 #print axioms Zetesis.DomainContraction.compatible_contraction
 #print axioms Zetesis.DomainContraction.bounded_filters_preserve_completions
 #print axioms Zetesis.DomainContraction.empty_domain_excludes_completions
+#print axioms Zetesis.DomainProducers.transfer_monotone
+#print axioms Zetesis.DomainProducers.derivation_covered
 #print axioms Zetesis.EvaluatedWitnesses.successful_selection
 #print axioms Zetesis.EvaluatedWitnesses.completed_condition_preserved
 #print axioms Zetesis.EvaluatedWitnesses.undefined_selection

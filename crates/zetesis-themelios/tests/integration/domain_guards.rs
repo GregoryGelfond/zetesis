@@ -197,6 +197,33 @@ fn eligible_domain_guards_preserve_complete_grounding() {
 }
 
 #[test]
+fn producer_meets_prune_downstream_empty_joins() {
+    // The producer of p bounds X by a intersect b. Propagating that bound
+    // makes q's domain empty before it probes p, rather than rediscovering
+    // the disjoint domains for each offered c row.
+    let source = include_str!("../fixtures/domain-producer-meets.lp");
+    for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+        let off = Observation::default();
+        let on = Observation::default();
+        let complete = ground(source, strategy, None, &off).unwrap();
+        let narrowed = ground(source, strategy, Some(DomainLimits::default()), &on).unwrap();
+        equal(&complete, &narrowed);
+        assert_eq!(on.status.get(), Some(Status::FixedPoint));
+        assert!(
+            narrowed
+                .atoms()
+                .iter()
+                .all(|atom| atom.predicate().name() != "q")
+        );
+        let before = *off.rules.borrow().last().unwrap();
+        let after = *on.rules.borrow().last().unwrap();
+        assert!(after.domain_rejected_rows.unwrap() > 0);
+        assert!(after.join_probes < before.join_probes);
+        assert_eq!(after.roots, Some(0));
+    }
+}
+
+#[test]
 fn completion_reads_the_narrowed_rows() {
     // The candidates are prepared once, with the analysis; the first
     // completion round rejects the 198 rows X < 3 excludes, and the delta
@@ -609,6 +636,8 @@ fn objective_sources_keep_reached_arithmetic_refusals() {
         "d(0..1).p(X):-d(X).#minimize{1/X+((2147483647+(1-X))\\2):p(X)}.",
         "d(1;foo).p(X):-d(X),X+1>0.#minimize{1:p(X)}.",
         "d(1;foo).p(X):-d(X).#minimize{X+1:p(X)}.",
+        "d(0..2).e(0).p(X):-d(X),e(X).#minimize{1/X:p(X)}.",
+        "d(1;foo;2).e(1;foo).p(X):-d(X),e(X).q(X):-p(X),X+1>0.#minimize{1:q(X)}.",
     ] {
         for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
             let off = ground(source, strategy, None, &Observation::default()).unwrap_err();

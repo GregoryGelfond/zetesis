@@ -507,9 +507,21 @@ impl ParallelRegions {
                 regions: count(&live.regions),
                 refuted: count(&live.refuted),
                 leaves: count(&live.leaves),
-                propagations: Live::read(&live.propagations),
-                held: Live::read(&live.held),
-                cut: Live::read(&live.cut),
+                propagations: self
+                    .statistics
+                    .counts
+                    .propagations
+                    .saturating_add(Live::read(&live.propagations)),
+                held: self
+                    .statistics
+                    .counts
+                    .held
+                    .saturating_add(Live::read(&live.held)),
+                cut: self
+                    .statistics
+                    .counts
+                    .cut
+                    .saturating_add(Live::read(&live.cut)),
                 work: self
                     .statistics
                     .counts
@@ -560,6 +572,30 @@ impl ParallelRegions {
             .map_err(|_| Incomplete::Allocation)?;
         restrictions.push(Arc::new((restriction.clone(), narrower)));
         Ok(())
+    }
+
+    pub(super) fn permits_positive(
+        &mut self,
+        candidate: &Interpretation,
+        budget: &mut Budget<'_>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
+    ) -> Result<bool, Incomplete> {
+        if self.started {
+            return Err(Incomplete::LateCertificate);
+        }
+        let restrictions = self
+            .shared
+            .restrictions
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        super::regions::permits(
+            &restrictions,
+            self.shared.filter.as_ref(),
+            candidate,
+            budget,
+            &mut self.statistics.counts,
+            timings,
+        )
     }
 
     /// The next verified stable model, or `None` once the workers have

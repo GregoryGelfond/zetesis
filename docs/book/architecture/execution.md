@@ -255,6 +255,17 @@ and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/ma
 state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.
 
+For a complete positive atomic-head theory, `PositivePlan` computes the least
+consequences once and checks every original constraint. CPU region modes then
+propose only that interpretation, or none when a constraint fails. Accumulated
+candidate restrictions and the region filter still apply to the singleton;
+the ordinary membership and publication checks retain the original theory owner.
+No worker needs to explore candidate regions or allocate a reduct query for this
+case. Larger classical models need not be individually refuted: the certificate
+already rules them out as answer sets. An unsupported or resource-refused plan
+keeps general solving available; an interrupted attempt never establishes
+exhaustion. This CPU policy does not change explicit device checking.
+
 Under the clauses method, exact projection exclusions have one owner across
 candidate restrictions: the outer cursor retains an index of previously
 proposed semantic interpretations, and strengthening the candidate query
