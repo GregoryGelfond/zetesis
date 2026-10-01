@@ -1,5 +1,7 @@
 # zetesis
 
+ζήτησις, *inquiry* — an answer-set solver in Rust.
+
 [![CI](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml)
 [![Source release: v0.1.7](https://img.shields.io/badge/source-v0.1.7-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.1.7)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
@@ -11,7 +13,6 @@
 zetesis is an experimental answer-set solver written in Rust. It finds solutions
 to logic programs and checks them against the program's reduct. It supports
 lazy grounding, parallel CPU execution and optional GPU computation.
-Solving does not require clingo.
 
 zetesis uses [themelios](https://github.com/GregoryGelfond/themelios) for parsing,
 program representation and analysis. Integration with themelios-solve is planned
