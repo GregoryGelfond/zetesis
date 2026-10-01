@@ -188,6 +188,19 @@ family refuses admission. Independent faults in a reached phase remain fatal.
 Closed-term preparation and post-solve observations retain strict checks. See
 [source-family evaluation](../../docs/book/architecture/grounding.md#source-instances-as-a-composition)
 for the binding and phase boundaries.
+
+Final formula materialization and hybrid capture can certify total arithmetic
+for a flat constraint from completed positive argument columns. Every checked expression
+must be a leaf or depend on one variable covered by a whole column domain;
+generated scopes, nested scopes and constructors remain outside this gate.
+Successful preparation permits ordinary comparison selection. An arithmetic
+failure in that possibly larger domain declines the optimization without
+creating a source diagnostic; resource and owner failures remain typed refusals.
+Source-family evidence always retains complete traversal. Hybrid runtime
+cursors repeat the shared preparation over the same immutable carrier before
+candidate filtering; capture has already admitted its speculative successful
+computed values, so frozen checking needs no new term admission.
+
 Descending or nonnumeric interval endpoints yield no rows in facts and generated
 bindings.
 For example, `p(a..b).` contributes no fact; `p(a..(1/0)).` remains an
@@ -203,6 +216,16 @@ disjunction shifting is used. Singleton and disjunctive heads admit positive,
 default-negated and double-negated atoms and Boolean constants. Boolean constants
 create no atoms or support. Complete sibling and body validation precedes
 simplification, so a true head cannot hide unsafe source or exhausted limits.
+
+An ordinary singleton comparison head is a nonbinding truth requirement over
+its completed body row. It uses the existing scalar/tuple comparison and chain
+profile, including default and double negation: `X=Y :- body.` lowers to a
+constraint over `body` and the complemented comparison guard. The guard checks
+all arithmetic intermediates and participates in ordinary family diagnostics.
+Its head role remains explicit: a true head cannot suppress arithmetic evidence
+or warnings from nested original body scopes. Head equality cannot bind an
+otherwise unsafe variable. Comparison operands in
+conditional/disjunctive, choice and function-head elements remain unsupported.
 
 Conditional disjuncts admit finite local conditions and independent local
 bindings. Each completed `H:C` contributes `(C → H) ∧ not not C` to the head

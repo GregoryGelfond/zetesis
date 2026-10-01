@@ -102,6 +102,14 @@ For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
 inversion and receives the typed `UnboundArgumentInput` refusal.
 
+Ordinary singleton comparison heads, such as `X=Y :- selected(X), selected(Y).`,
+require the comparison at every completed body binding. Equality in a head never
+binds a variable. These heads use the existing nonbinding comparison profile,
+including default/double negation and complete chain evaluation, and retain
+source arithmetic diagnostics, including failures and warnings in nested body
+conditions even when the head is true. Comparison heads in conditional/disjunctive,
+choice and function-head elements remain unsupported.
+
 Comparisons use ASP term order across admitted value types: `5 < a` and
 `"foo" > a` are true, while `5 > a` is false. Thus `X > Y` does not imply
 numeric operands. Arithmetic is evaluated before comparison; defined `X + Y`

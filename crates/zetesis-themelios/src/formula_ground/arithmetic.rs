@@ -10,6 +10,8 @@
 //! visited. Each push spends grounding work and reserves fallibly; transient
 //! frame cells do not consume the cumulative scalar-payload allowance.
 
+mod constant_divisors;
+
 use crate::formula_support::{Context, GroundingWork};
 
 use themelios_base::span::Location;
@@ -69,7 +71,13 @@ pub(super) fn prepare<'a, 'source>(
     let mut warnings = Warnings::default();
     let mut affected = Vec::new();
     for rule in prepared.rules.iter().chain(&prepared.projection) {
-        if contains_partial(rule, limits, counters)? {
+        if contains_partial(rule, limits, counters)?
+            && !constant_divisors::deferred(
+                rule,
+                prepared,
+                Context::new(&*computation, limits, counters, rule.location),
+            )?
+        {
             affected
                 .try_reserve(1)
                 .map_err(|_| allocation(rule.location))?;
@@ -615,7 +623,7 @@ impl<'a> SyntaxScan<'a, '_> {
                         return Ok(true);
                     }
                 }
-                LiteralIr::Guard(guard) => {
+                LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => {
                     if self.guard(guard)? {
                         return Ok(true);
                     }

@@ -199,6 +199,91 @@ The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
 
+The three mutable occurrence-count arrays use fixed-length storage: two counts
+per chain and one unresolved-parent count per atom. They use `u32` only when it
+is narrower than `usize` and the total number of parent incidences fits `u32`;
+otherwise they keep `usize`. Every chain operand and every parent counted for
+an atom is an occurrence in that same incidence stream, so its length bounds
+every counter. Checked additions and decrements preserve the exact count;
+width never changes while propagating. This adds no theory-size admission cap
+and does not narrow cumulative work statistics. Knowledge clones retain
+independent arrays, with unchanged original/frozen ownership requirements.
+
+For A atoms and C chains, the counter payload on a 64-bit host decreases from
+8(A + 2C) to 4(A + 2C) bytes when the bound fits. Header layout is counted by
+`Knowledge::retained_bytes`; masks, worklists, immutable indexes, scheduler
+state and allocator overhead are separate. Each copied Knowledge carries the
+same payload reduction. This is a storage model, not an RSS or timing result.
+Construction directly allocates the selected width, with no temporary native
+counter array; the incidence bound is read from the existing compact index.
+The three nonempty arrays still require three allocations per copied Knowledge.
+All count reads and updates retain the same charged propagation operations;
+storage initialization and copying remain outside that work receipt. Existing
+knowledge allocation behavior remains infallible.
+
+The private `compact_counters_reduce_clone_payload` test reports counter and
+complete Knowledge storage for 4,096 atoms with four-operand chains. Reproduce
+its storage receipt through the normal test harness:
+
+```sh
+cargo test -p zetesis-ferraris --lib \
+  regions::tests::counters::compact_counters_reduce_clone_payload -- --exact --nocapture
+```
+
+The `traversal_copies_only_live_knowledge_arrays` test wraps actual
+`Traversal` state clones at 64, 512 and 4,096 atoms. Each fixture leaves eight
+atoms free, visits all 256 complete candidates and compares native and selected
+counter widths. The receipt counts completed `Knowledge::clone` calls,
+initialized array representation bytes and the returned clones' nonempty
+backing allocations. It separately records source worklist spare capacity:
+`Vec::clone` copies initialized elements, so retained source capacity is not
+copy payload. The test verifies the expected counter-width reduction across
+every measured split.
+
+```sh
+cargo test -p zetesis-ferraris --lib \
+  regions::tests::copy_costs::traversal_copies_only_live_knowledge_arrays -- --exact --nocapture
+```
+
+This structural receipt excludes inline headers, region masks, shared indexes,
+measurement storage and allocator bookkeeping. It is neither an allocator-call
+trace nor a timing, RSS or memory-bus measurement. It covers the sequential
+`Traversal` fixture, not application-wide clone traffic or parallel workers'
+active and queued frontier. Those require separate observations; the retained
+bytes reported by a queued frontier do not include active worker state.
+
+Counter tests cover the representable boundary and native fallback, compare
+both widths' complete original/frozen closures and split preferences, and
+check clone independence. The existing packed-knowledge and metered-prefix
+regressions exercise inherited knowledge and refusal receipts. The integer
+representation must continue to realize the counts used by `FormulaChains`
+and the `Known` relation in `FormulaBounds`; those semantic laws do not by
+themselves prove the Rust width conversion. Mutable snapshots remain fully
+copied; partial sharing and narrower incidence entries remain separate work.
+
+The immutable node-to-chain map stores `Option<NonZeroUsize>`: a present link
+encodes the zero-based chain position plus one, while absence remains `None`.
+Both chain construction and its temporary live-chain renumbering map use this
+layout. Encoding checks addition; positions in the allocated chain vectors
+cannot reach `usize::MAX`, so the representation adds no admission limit.
+Consumers decode to the original zero-based positions before reading chains or
+counters. Absorption, live-chain order, operand order and charged work stay the
+same. On a 64-bit host each map slot occupies 8 bytes instead of the previous
+16-byte `Option<usize>`; the retained map has one slot per theory node. Its
+vector header and allocation count are unchanged. This index belongs to the
+shared `Narrower`, outside the owned `Knowledge::retained_bytes` receipt.
+
+The private chain-link tests cover absence, checked encoding, live-chain
+renumbering and original/frozen propagation under equivalent reordered chain
+storage. Its storage fixture reports actual map capacities and element widths;
+it excludes other index fields, temporary renumbering, knowledge, allocator
+overhead and RSS. Reproduce that receipt with:
+
+```sh
+cargo test -p zetesis-ferraris --lib \
+  regions::tests::chain_links::compact_chain_links_reduce_retained_storage -- --exact --nocapture
+```
+
 The immutable index stores five incidence maps in compact row form: parents,
 atom nodes and atom operands in `Narrower`, and producers by head and by body
 in `Producers`. Each map has one offset vector and one contiguous entry vector.

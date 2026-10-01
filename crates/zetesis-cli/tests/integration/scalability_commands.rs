@@ -36,9 +36,9 @@ fn scalability_tests_have_only_qualification_positions() {
     assert!(!options.view.stats);
     let plan = options.plan().unwrap();
     let slots = plan
-        .slots(9, Some(ReferencePolicy::QualificationOnly))
+        .slots(10, Some(ReferencePolicy::QualificationOnly))
         .unwrap();
-    assert_eq!(slots.len(), 9 * 6);
+    assert_eq!(slots.len(), 10 * 6);
     assert!(slots.iter().all(|s| s.phase == Phase::Qualification));
     assert!(
         plan.profiles()
@@ -186,7 +186,7 @@ mod campaigns {
         );
         assert_eq!(
             qualified["report"]["workloads"].as_array().unwrap().len(),
-            9
+            10
         );
         assert!(
             qualified["report"]["samples"]
@@ -306,7 +306,7 @@ mod campaigns {
             .enumerate()
             .filter(|(_, check)| check["slot"]["producer"]["solver"] == "native")
             .collect::<Vec<_>>();
-        assert_eq!(native.len(), 9);
+        assert_eq!(native.len(), 10);
         for (index, check) in native {
             assert_eq!(check["decision"], "refused", "{check}");
             let retained = &evidence["report"]["samples"][index];

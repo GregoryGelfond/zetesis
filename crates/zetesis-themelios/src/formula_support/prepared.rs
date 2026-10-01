@@ -115,11 +115,14 @@ impl<'source> PreparedRule<'source> {
 
     /// The exact rule is retained here; the query must authenticate the same
     /// completed catalog before the shared join borrows its immutable plan.
+    /// Original capture already attempted complete-column totality with a term
+    /// appender. Repeat that same optional preparation before candidate row
+    /// selection, using its admitted values and the full immutable carrier.
     pub(crate) fn rows<'a, 'queries>(
         &'a self,
         queries: &'a CompletedQueries<'queries>,
         filter: Option<&'a dyn RowFilter>,
-        computation: &Computation<'_, '_>,
+        computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -130,14 +133,21 @@ impl<'source> PreparedRule<'source> {
                 location: self.rule.location,
             });
         }
-        Join::filtered_rule(
+        let mut rows = Join::filtered_rule(
             self.rule,
             queries.support(),
             filter,
             Some(&self.plan),
             budget,
-            crate::formula_support::Context::new(computation, limits, counters, self.rule.location),
-        )
+            crate::formula_support::Context::new(
+                &*computation,
+                limits,
+                counters,
+                self.rule.location,
+            ),
+        )?;
+        rows.select_total_constraint(self.rule, computation, limits, counters)?;
+        Ok(rows)
     }
 }
 

@@ -453,6 +453,8 @@ fn streamed_satisfaction_composes_with_the_retained_core() {
         "d(1..2). {p(2..3)}. :-d(X),Y=X+1,p(Y),Y>2.",
         "{p(1);p(2)}. :-#count{X:p(X)}>1. :-p(1),not p(2).",
         "{p(f(1));p(f(2))}. :-p(f(X)),X=2.",
+        "{p(4,4);p(4,5);p(5,5)}.q(2). :-p(X,X),q(Y),X/2=Y.",
+        "{p(1..3)}. X=2 :-p(X),X/2=1.",
     ] {
         let eager = prepare(source).ground().unwrap();
         let hybrid = admit(source);
@@ -493,6 +495,86 @@ fn streamed_satisfaction_composes_with_the_retained_core() {
             let streamed =
                 checker.check(&candidate, &cancellation).unwrap() == ConstraintVerdict::Satisfied;
             assert_eq!(original, retained && streamed, "{source}: mask {mask}");
+        }
+    }
+}
+
+#[test]
+fn frozen_checks_reuse_speculative_column_values() {
+    // X=100 never completes p(X,keep), but totality visits the whole X
+    // column and needs the canonical result 50 before checking is frozen.
+    for source in [
+        "p(1,keep).p(100,skip). :-p(X,keep),X/2=5.",
+        // A nonnumeric overapproximation declines totality without becoming
+        // a source fault; the frozen retry must preserve that same boundary.
+        "p(2,keep).p(symbol,skip). :-p(X,keep),X/2=5.",
+    ] {
+        let owner = admit(source);
+        assert_eq!(owner.streamed_templates(), 1);
+        let all =
+            Model::from_positions(owner.atom_catalog(), 0..owner.atom_catalog().atoms().len())
+                .unwrap();
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                checker.check(&all, &Cancellation::default()).unwrap(),
+                ConstraintVerdict::Satisfied,
+                "{source}"
+            );
+        }
+    }
+}
+
+#[test]
+fn computed_domains_select_only_matching_substitutions() {
+    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    for count in 1..=2 {
+        // Omitting all candidate atoms makes checking exhaust the streamed
+        // family. Only X=4 and X=5 can satisfy its computed equality.
+        assert_eq!(
+            checker
+                .check(&model(&owner, &[]), &Cancellation::default())
+                .unwrap(),
+            ConstraintVerdict::Satisfied
+        );
+        assert_eq!(checker.statistics().substitutions, 2 * count);
+    }
+}
+
+#[test]
+fn computed_selection_keeps_inclusive_work_limits() {
+    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
+    let candidate = model(&owner, &[]);
+    let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    assert_eq!(
+        baseline
+            .check(&candidate, &Cancellation::default())
+            .unwrap(),
+        ConstraintVerdict::Satisfied
+    );
+    let complete = baseline.statistics();
+    for max_work in [0, 1, complete.work - 1, complete.work] {
+        let result = owner.checker(ConstraintCheckLimits {
+            max_work,
+            ..Default::default()
+        });
+        let result = result.and_then(|mut checker| {
+            let result = checker.check(&candidate, &Cancellation::default());
+            assert!(checker.statistics().work <= max_work);
+            result
+        });
+        if max_work == complete.work {
+            assert_eq!(result.unwrap(), ConstraintVerdict::Satisfied);
+        } else {
+            let failure = result.unwrap_err();
+            assert!(failure.statistics.work <= max_work);
+            assert!(
+                matches!(failure.cause, ConstraintCheckCause::Source(ref error)
+                if matches!(error.as_ref(), FormulaFailure::Limit {
+                    resource: FormulaResource::Work, limit, ..
+                } if *limit == u128::from(max_work)))
+            );
         }
     }
 }

@@ -422,6 +422,10 @@
 'Zetesis.EvaluationPrefix.reset_preservation' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluationPrefix.evaluate_append' does not depend on any axioms
 'Zetesis.EvaluationPrefix.root_preservation' depends on axioms: [propext]
+'Zetesis.EvaluationPrefix.remember_success_sound' depends on axioms: [propext]
+'Zetesis.EvaluationPrefix.reuse_success_exact' does not depend on any axioms
+'Zetesis.EvaluationPrefix.reuse_complete_filter' depends on axioms: [Quot.sound]
+'Zetesis.EvaluationPrefix.success_preimage_exact' depends on axioms: [propext]
 'Zetesis.insertAtom_grows' does not depend on any axioms
 'Zetesis.insertAtom_contains' does not depend on any axioms
 'Zetesis.insertAtom_duplicate' depends on axioms: [propext, Quot.sound]
@@ -613,6 +617,7 @@
 'Zetesis.GateRestrictions.suffix_region_rejected' depends on axioms: [propext]
 'Zetesis.GroundGuards.constant_original' depends on axioms: [propext]
 'Zetesis.GroundGuards.constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.GroundGuards.constant_head_constraint' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.GroundGuards.guard_original' depends on axioms: [propext]
 'Zetesis.GroundGuards.guard_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.GroundGuards.evaluated_guard_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]

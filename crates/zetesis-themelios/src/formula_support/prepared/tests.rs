@@ -115,7 +115,7 @@ fn prepared_rows_restart_without_replanning() {
             .rows(
                 &queries,
                 None,
-                &computation,
+                &mut computation,
                 &limits,
                 &mut no_planning,
                 &mut counters,
@@ -168,9 +168,9 @@ fn prepared_rows_refuse_an_equal_foreign_catalog() {
             rule.location,
         )
         .unwrap();
-    let computation = queries.computation(rule.location).unwrap();
+    let mut computation = queries.computation(rule.location).unwrap();
     assert!(
-        matches!(prepared.rows(&queries, None, &computation, &limits, &mut budget(), &mut counters),
+        matches!(prepared.rows(&queries, None, &mut computation, &limits, &mut budget(), &mut counters),
         Err(FormulaFailure::SupportRelation { error: zetesis_core::relation::Failure::Owner, location }) if location == rule.location)
     );
 }

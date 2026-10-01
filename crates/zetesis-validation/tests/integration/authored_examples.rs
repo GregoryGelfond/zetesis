@@ -11,6 +11,7 @@ use zetesis_validation::{
 
 fn defaults() -> Vec<Workload> {
     let mut workloads = scalability::defaults(&root(), WorkloadLimits::default()).unwrap();
+    workloads.push(scalability::sudoku(&root(), WorkloadLimits::default()).unwrap());
     workloads.push(scalability::einstein(&root(), WorkloadLimits::default()).unwrap());
     workloads
 }
@@ -23,10 +24,11 @@ fn reviewed_default_sources_retain_their_shared_typed_contracts() {
         [
             "scalability/n-queens.lp",
             "scalability/pigeonhole.lp",
+            "sudoku.lp",
             "einstein-riddle.lp"
         ]
     );
-    for (workload, count) in workloads.iter().zip([92, 0, 1]) {
+    for (workload, count) in workloads.iter().zip([92, 0, 1, 1]) {
         assert!(workload.is_authored());
         assert!(!workload.is_amended());
         assert!(!workload.is_generated());
@@ -49,7 +51,8 @@ fn reviewed_default_sources_retain_their_shared_typed_contracts() {
             value["sources"][0]["derived_sha256"]
         );
     }
-    assert_eq!(workloads[2].contract().unwrap().witnesses()[0].len(), 5);
+    assert_eq!(workloads[2].contract().unwrap().witnesses()[0].len(), 81);
+    assert_eq!(workloads[3].contract().unwrap().witnesses()[0].len(), 5);
 }
 
 #[test]
@@ -57,21 +60,21 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
     let corpus = examples::load(&root().join("correctness"), examples::Limits::default()).unwrap();
     let workloads =
         scalability::workloads(&corpus, &root(), true, WorkloadLimits::default()).unwrap();
-    assert_eq!(workloads.len(), 10);
+    assert_eq!(workloads.len(), 11);
     assert_eq!(
         workloads
             .iter()
             .map(Workload::identity)
             .collect::<BTreeSet<_>>()
             .len(),
-        10
+        11
     );
     assert_eq!(
         workloads
             .iter()
             .filter(|workload| workload.is_authored())
             .count(),
-        7
+        8
     );
     assert_eq!(
         workloads
@@ -80,6 +83,8 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
             .count(),
         4
     );
+    assert_eq!(workloads[9].entry(), "sudoku.lp");
+    assert_eq!(workloads[10].entry(), "einstein-riddle.lp");
     for workload in &workloads {
         assert_eq!(workload.contract().is_none(), workload.is_amended());
     }

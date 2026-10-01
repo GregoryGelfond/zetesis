@@ -60,7 +60,7 @@ inputs.
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
-| `scalability` | Nine authored and corpus workloads, with indexed formula joins and region search |
+| `scalability` | Ten authored and corpus workloads, with indexed formula joins and region search |
 
 `--case PATH` measures one case of the suite, named relative to the corpus
 directory; repeat it to measure several, in the order given. For `series`, use
@@ -70,7 +70,9 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no `--case`; it alone accepts `--examples`, its
 authored root, which defaults to `examples`, and `--include-einstein`, which
-adds the unchanged Einstein riddle. The series suite raises the per-invocation,
+adds the unchanged Einstein riddle as an eleventh workload. The maintained
+Sudoku case has eight givens per row: it tests grounding and language handling,
+not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.
 
 ### Profiles
@@ -193,7 +195,9 @@ duration. Validated memory rounds have their own median and may be unavailable.
 Non-pass summaries include the recorded reason and schedule phase. If a failed
 qualification prevented later samples, those slots identify the original
 blocker. A refusal, timeout or process failure never counts as an UNSAT result
-or a successful timing sample. A child stopped by the campaign's own deadline
+or a successful timing sample. A baseline that refuses a workload therefore
+supplies no timing ratio for that workload; its refusal remains in the report.
+A child stopped by the campaign's own deadline
 or retained-capture budget, before its per-child timeout or sample limit, is
 recorded as `campaign_deadline` or `campaign_capture_budget`, never as its own
 `timeout` or `capture_limit`: it says nothing of the workload.

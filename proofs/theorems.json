@@ -2007,27 +2007,47 @@
   {
     "name": "Zetesis.EvaluationPrefix.write_prefix",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 31
+    "line": 39
   },
   {
     "name": "Zetesis.EvaluationPrefix.storage_preservation",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 57
+    "line": 65
   },
   {
     "name": "Zetesis.EvaluationPrefix.reset_preservation",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 79
+    "line": 87
   },
   {
     "name": "Zetesis.EvaluationPrefix.evaluate_append",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 88
+    "line": 96
   },
   {
     "name": "Zetesis.EvaluationPrefix.root_preservation",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 113
+    "line": 121
+  },
+  {
+    "name": "Zetesis.EvaluationPrefix.remember_success_sound",
+    "file": "Zetesis/EvaluationPrefix.lean",
+    "line": 165
+  },
+  {
+    "name": "Zetesis.EvaluationPrefix.reuse_success_exact",
+    "file": "Zetesis/EvaluationPrefix.lean",
+    "line": 183
+  },
+  {
+    "name": "Zetesis.EvaluationPrefix.reuse_complete_filter",
+    "file": "Zetesis/EvaluationPrefix.lean",
+    "line": 199
+  },
+  {
+    "name": "Zetesis.EvaluationPrefix.success_preimage_exact",
+    "file": "Zetesis/EvaluationPrefix.lean",
+    "line": 228
   },
   {
     "name": "Zetesis.insertAtom_grows",
@@ -2985,54 +3005,59 @@
     "line": 56
   },
   {
+    "name": "Zetesis.GroundGuards.constant_head_constraint",
+    "file": "Zetesis/GroundGuards.lean",
+    "line": 68
+  },
+  {
     "name": "Zetesis.GroundGuards.guard_original",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 60
+    "line": 83
   },
   {
     "name": "Zetesis.GroundGuards.guard_frozen",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 69
+    "line": 92
   },
   {
     "name": "Zetesis.GroundGuards.evaluated_guard_equivalent",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 82
+    "line": 105
   },
   {
     "name": "Zetesis.GroundGuards.chain_evaluation",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 107
+    "line": 130
   },
   {
     "name": "Zetesis.GroundGuards.negative_chain_scope",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 113
+    "line": 136
   },
   {
     "name": "Zetesis.GroundGuards.double_negative_chain_scope",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 117
+    "line": 140
   },
   {
     "name": "Zetesis.GroundGuards.negating_each_comparison_is_different",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 123
+    "line": 146
   },
   {
     "name": "Zetesis.GroundGuards.replacement_in_formula_context",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 142
+    "line": 165
   },
   {
     "name": "Zetesis.GroundGuards.replacement_preserves_stability",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 157
+    "line": 180
   },
   {
     "name": "Zetesis.GroundGuards.classical_tautology_is_not_a_guard_replacement",
     "file": "Zetesis/GroundGuards.lean",
-    "line": 166
+    "line": 189
   },
   {
     "name": "Zetesis.HeadContributions.neutral_values_are_zero",

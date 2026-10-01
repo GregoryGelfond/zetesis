@@ -28,6 +28,23 @@ impl Compiler<'_> {
     ) -> Result<(), FormulaFailure> {
         use themelios_program::program::Head;
         match head {
+            Head::Literal(Literal {
+                inner: LiteralInner::Comparison(comparison),
+                ..
+            }) => {
+                for term in std::iter::once(comparison.get().first())
+                    .chain(comparison.get().steps().map(|(_, term)| term))
+                    .flat_map(Term::subterms)
+                {
+                    self.budget
+                        .charge(ExpansionResource::TermWork, 1, self.location)?;
+                    if let Term::Variable(variable @ Variable::Named(_)) = term {
+                        variables.slot(variable);
+                        self.variable_limit(variables)?;
+                    }
+                }
+                Ok(())
+            }
             Head::Literal(literal) => self.head_global_literal(literal, variables),
             Head::Disjunction(disjunction) => {
                 for element in disjunction.elements() {
@@ -96,6 +113,28 @@ impl Compiler<'_> {
         Ok(match head {
             Head::Falsum => Some(HeadIr::Normal(None)),
             Head::Verum => Some(self.verum_head()?),
+            Head::Literal(Literal {
+                inner: LiteralInner::Comparison(comparison),
+                negation,
+            }) => {
+                // A data comparison has interpretation-independent truth. Thus
+                // B -> C is exactly the constraint B and not C -> false, in
+                // both the original formula and every frozen reduct. The
+                // nonbinding guard evaluates the entire comparison chain and
+                // stays in the existing arithmetic-family validation path. Its
+                // head role keeps truth from excluding nested body evidence.
+                let complement = match negation {
+                    DefaultNegation::None | DefaultNegation::NotNot => DefaultNegation::Not,
+                    DefaultNegation::Not => DefaultNegation::None,
+                };
+                let LiteralIr::Guard(guard) =
+                    self.comparison_guard(comparison.get(), complement, variables)?
+                else {
+                    unreachable!("comparison compilation produces a guard")
+                };
+                values.push(LiteralIr::HeadGuard(guard));
+                Some(HeadIr::Normal(None))
+            }
             Head::Literal(literal)
                 if literal.negation == DefaultNegation::None
                     && matches!(literal.inner, LiteralInner::Atom(_)) =>

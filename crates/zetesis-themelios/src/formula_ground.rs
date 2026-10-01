@@ -1,15 +1,16 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
-mod objectives;
 mod arithmetic;
+mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
-pub(crate) mod atoms;
-mod nodes;
-mod metadata;
-mod projection;
-mod cache;
+mod aggregate_guards;
 mod aggregate_order;
+pub(crate) mod atoms;
+mod cache;
+mod metadata;
+mod nodes;
+mod projection;
 mod retained;
 use retained::RetainedState;
 pub(crate) use retained::{RetainedGrounding, ground_retained};
@@ -29,9 +30,8 @@ use themelios_program::program::{AggregateFunction, DefaultNegation};
 use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_core::{AtomCatalog, ValueNodeRef};
 use zetesis_ferraris::{
-    AggregateComparison, AggregateElement, AggregateExtremum, AggregateFamilyLimits,
-    AggregateGuard as NumericGuard, Node, Theory, ValueExtremumElement, append_aggregate,
-    append_aggregate_family, append_value_extremum_refs,
+    AggregateComparison, AggregateElement, AggregateExtremum, AggregateGuard as NumericGuard, Node,
+    Theory, ValueExtremumElement, append_aggregate, append_value_extremum_refs,
 };
 
 use crate::expansion::Budget;
@@ -619,6 +619,10 @@ impl Builder<'_, '_, '_> {
             self.budget,
             &mut self.counters,
         )?;
+        // The same complete-column attempt precedes frozen checker scans.
+        // Admit even speculative successful values here: a covering column can
+        // include rows excluded by another argument of this source pattern.
+        join.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
         while let Some(row) = join.next_row(
             self.computation,
             self.limits,
@@ -693,6 +697,7 @@ impl Builder<'_, '_, '_> {
             self.budget,
             &mut self.counters,
         )?;
+        outer.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
         while let Some(row) = outer.next_row(
             self.computation,
             self.limits,
@@ -2026,22 +2031,15 @@ impl Builder<'_, '_, '_> {
                 unreachable!("handled extrema");
             };
             let guards = self.assignment_guards(&values, location)?;
-            let limits = AggregateFamilyLimits {
-                aggregate: self.aggregate_limits(),
-                max_guards: self.limits.max_assignment_values,
-            };
             let first = self.nodes.len();
-            let build = append_aggregate_family(
-                &mut self.nodes,
+            let family = self.append_guard_family(
                 elements.slice(),
                 guards.slice(),
-                limits,
-                &zetesis_cpu::Cancellation::default(),
-            )
-            .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-            self.counters.accounting.work += build.statistics().work;
+                self.limits.max_assignment_values,
+                location,
+            )?;
             let canonical = self.intern_appended(first, location)?;
-            for (slot, root) in build.roots().iter().enumerate() {
+            for (slot, root) in family.build.roots().iter().enumerate() {
                 self.work(location)?;
                 let key = values.key(slot, location)?;
                 let value = self.term(&key, location)?;
@@ -2431,6 +2429,20 @@ impl Builder<'_, '_, '_> {
         location: Location,
         mut capture: Option<&mut crate::formula_count_plan::Bounds>,
     ) -> Result<usize, FormulaFailure> {
+        if guards.len() > 1 && kind.is_none() {
+            let GroundAggregate::Numeric(elements) = elements else {
+                unreachable!("numeric contribution")
+            };
+            if self.nonnegative_elements(elements.slice(), location)? {
+                return self.numeric_guard_family(
+                    elements.slice(),
+                    guards,
+                    assignment,
+                    location,
+                    capture,
+                );
+            }
+        }
         let mut result = VERUM;
         for guard in guards {
             let bound = formula_support::expression(

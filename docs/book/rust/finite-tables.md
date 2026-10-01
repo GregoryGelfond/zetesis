@@ -70,9 +70,11 @@ occurring values cannot create a new tuple.
 
 On a `PreparedFormula` or `PreparedFormulaBundle`,
 `with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` selects
-the table strategy. `JoinStrategy::Indexed` is the default. This is an execution
-choice made before materialization; it changes neither source admission nor the
-formula/reduct solver.
+the table strategy. `JoinStrategy::Indexed` is the default for ordinary probes.
+A separately certified computed equality can supply finite domains to the same
+selector under either strategy, as described below. These execution choices
+preserve complete source meaning and the formula/reduct solver; their different
+work and storage costs can change bounded admission.
 
 This example materializes a program using each join strategy and compares the
 complete admitted atoms, formulas and source locations. Repeated `X` requires
@@ -109,15 +111,34 @@ for their complete capture and comparison contracts.
 The table strategy applies to flat positive atom patterns over the immutable
 relation supplied by completed possible support. Its index distinguishes signed
 predicates and canonical column scopes. Constants and already-bound source slots
-supply singleton domains; unbound slots are unrestricted. Repeated variables
+supply singleton domains; ordinary probes leave unbound slots unrestricted. Repeated variables
 share a table label, while distinct anonymous slots remain distinct. Each probe
 derives fresh domains from the current binding.
 
 Selected row positions feed the existing whole-row matcher. Source-occurrence
 identity, binding extension and the original positive atom remain intact.
-Authored comparisons, negative conditions and aggregates retain their validation
-after positive binding; they do not provide extra table domains. A support row
-is a possible atom, not an assertion of its truth in an answer set.
+Authored comparisons, negative conditions and aggregates retain their residual
+validation after positive binding. A support row is a possible atom, not an
+assertion of its truth in an answer set.
+
+For a completed flat constraint, a separate finite totality check can cover all
+scalar inputs using positive source columns. Covered unary equality results can
+then provide finite domains for unbound variables of the next occurrence. The
+selector intersects those domains with ordinary bound values, constants and
+repeated-variable coherence. It shares this same cached table owner under either
+join strategy; it introduces no second tuple store. Missing known-side inputs
+and all-allowed input groups retain the ordinary probe. Eager materialization,
+hybrid capture and frozen hybrid model/region checks share this selector; hybrid
+capture prepares speculative computed values before freezing the source owner.
+The explicit hybrid table-strategy restriction still applies to ordinary probes.
+Source-family evidence continues to traverse complete rows, and all residual
+comparisons remain in place. See [grounding](../architecture/grounding.md) for the
+exact coverage and failure obligations.
+
+This is a formula-grounding selector. The CLI's `--grounder lazy` uses hybrid
+checking for formula input; successfully admitted relational input instead uses
+source-lazy reduct closure and its separate joins. That relational closure path
+does not acquire this computed-domain certificate or selector.
 
 Structural patterns and support-growth rounds retain indexed joins. This is a
 declared applicability boundary, not recovery from a failed table operation.

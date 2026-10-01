@@ -20,8 +20,8 @@ use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 mod append;
-mod publication;
 mod close;
+mod publication;
 pub(super) use append::SupportAppend;
 pub(crate) use append::{SourceAtom, SourceScope};
 pub(crate) use close::ClosedSource;

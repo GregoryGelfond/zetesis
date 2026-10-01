@@ -50,6 +50,19 @@ receive an explicit diagnostic. Source diagnostics and arithmetic warnings go
 to stderr. See the [language reference](language.md) for supported constructs
 and the policy for evaluated zero divisors.
 
+The self-contained [Sudoku example](https://github.com/GregoryGelfond/zetesis/blob/main/examples/sudoku.lp)
+combines exact-one choices with arithmetic block constraints:
+
+```sh
+zetesis solve examples/sudoku.lp --all
+```
+
+It has one answer containing 81 `digit(Row,Column,Value)` atoms. Eight given
+digits per row make the example a grounding and language check rather than a
+difficult search benchmark. Its complete displayed grid is checked by the CLI tests
+under default resource limits and independently compared with clingo. The same
+authored source and exact display contract are included in the scalability suite.
+
 ## Select answers
 
 The default displays one answer set. Use a positive `--answers N` to request a
@@ -266,9 +279,10 @@ Corpus and backend checks accept every backend: `--backend cpu` (the default),
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same nine workloads as `zetesis-bench run --suite
+`test scalability` uses the same ten workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
-unchanged queens variant 02, SEND+MORE=MONEY and task allocation. It checks one
+unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
+Sudoku grid. It checks one
 complete clingo family and one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
 indexed formula joins, region search and one exact completion worker. Thread
@@ -276,7 +290,7 @@ counts default to `1,2,4,8,14`; one through eight profiles, each at most 256
 threads, are admitted. The positional corpus root defaults to
 `examples/correctness`, and `--examples` defaults to `examples`. Both must come
 from the maintained checkout. `--include-einstein` adds the unchanged Einstein
-riddle; `--max-expansion-work` supplies an explicit native grounding ceiling.
+riddle as an eleventh workload; `--max-expansion-work` supplies an explicit native grounding ceiling.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in `--report NEW.json`.
 Amended inputs use the complete reference family rather than the original

@@ -150,6 +150,7 @@ fn literal_reads<'ir>(
         | LiteralIr::ArgumentCheck { .. }
         | LiteralIr::TupleCompare(..)
         | LiteralIr::Guard(_)
+        | LiteralIr::HeadGuard(_)
         | LiteralIr::Bind { .. }
         | LiteralIr::Range { .. } => Ok(false),
     }

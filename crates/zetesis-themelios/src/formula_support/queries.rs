@@ -7,11 +7,12 @@
 #[cfg(test)]
 mod tests;
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::mem::size_of;
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 
 use themelios_base::span::Location;
+use zetesis_core::catalog::TermRef;
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 use zetesis_cpu::table::{self, Cause, Domain, Resource, Selection, Table};
 
@@ -29,7 +30,8 @@ pub(crate) use domains::{Candidates, Guards};
 /// immutable after publication, while every query owns its independent mask.
 pub(crate) struct Support<'source> {
     relations: &'source Relations<'source>,
-    tables: Option<TableWorkspace<'source>>,
+    tables: OnceCell<TableWorkspace<'source>>,
+    table_strategy: bool,
     live: Cell<usize>,
     entries: Cell<usize>,
     workspace: super::storage::Workspace,
@@ -103,10 +105,8 @@ impl<'source> Support<'source> {
         Ok(Self {
             relations,
             workspace: counters.accounting.workspace.clone(),
-            tables: (strategy == JoinStrategy::Table).then(|| TableWorkspace {
-                indices: RefCell::new(Vec::new()),
-                cancellation: zetesis_cpu::Cancellation::default(),
-            }),
+            tables: OnceCell::new(),
+            table_strategy: strategy == JoinStrategy::Table,
             live: Cell::new(bytes),
             entries: Cell::new(relations.entries),
         })
@@ -215,7 +215,7 @@ impl<'source> Support<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
-        let rows = if self.tables.is_some() && matches!(pattern, PositivePattern::Flat(_)) {
+        let rows = if self.table_strategy && matches!(pattern, PositivePattern::Flat(_)) {
             self.resolve(pattern.atom(), limits, counters, location)?
         } else {
             None
@@ -232,10 +232,37 @@ impl<'source> Support<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
-        let Some(workspace) = &self.tables else {
+        if !self.table_strategy {
             return Ok(None);
-        };
-        let cancellation = &workspace.cancellation;
+        }
+        self.select_domains_at(
+            rows,
+            pattern,
+            values,
+            FiniteDomains::default(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// Select necessary finite domains with the same table and mask workspace
+    /// used by ordinary table joins, including when ordinary joins are indexed.
+    /// The caller establishes coverage before excluding source values. A finite
+    /// restriction names one unbound variable present in this flat pattern;
+    /// ordinary bound variables and constants retain their singleton domains.
+    /// Ranges are borrowed for this call only; returned rows keep source IDs.
+    pub(super) fn select_domains_at<'value>(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
+        pattern: PositivePattern<'value>,
+        values: BindingView<'value>,
+        finite: FiniteDomains<'value>,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
         let PositivePattern::Flat(pattern) = pattern else {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
@@ -246,7 +273,12 @@ impl<'source> Support<'source> {
         };
         Self::admit(self.live_bytes(), limits, counters, location)?;
         let mut scratch = Scratch::new(self, limits, counters, location)?;
-        let bound = bind_domains(pattern, values, &mut scratch, counters)?;
+        let bound = bind_domains(pattern, values, finite, &mut scratch, counters)?;
+        let workspace = self.tables.get_or_init(|| TableWorkspace {
+            indices: RefCell::new(Vec::new()),
+            cancellation: zetesis_cpu::Cancellation::default(),
+        });
+        let cancellation = &workspace.cancellation;
         let mut tables = workspace.indices.borrow_mut();
         let found = find_table(&tables, pattern, &bound.scope, limits, counters, location)?;
         let index = if let Some(index) = found {
@@ -425,6 +457,73 @@ impl<'source> Support<'source> {
     }
 }
 
+/// Borrowed necessary domains over source variable slots. One value buffer
+/// holds every range; an empty range excludes all values of that variable.
+/// The caller charges the buffers and retains their canonical value owners.
+#[derive(Clone, Copy, Default)]
+pub(super) struct FiniteDomains<'value> {
+    pub(super) values: &'value [TermRef<'value>],
+    pub(super) variables: &'value [(usize, Range<usize>)],
+}
+
+impl FiniteDomains<'_> {
+    fn validate(
+        &self,
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
+        work: &mut GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        for (index, (variable, range)) in self.variables.iter().enumerate() {
+            work.counters.work(work.limits, work.location)?;
+            if *variable >= values.len() {
+                return Err(FormulaFailure::UnsafeVariable {
+                    variable: *variable,
+                    location: work.location,
+                });
+            }
+            if values.get(*variable).is_some() || self.values.get(range.clone()).is_none() {
+                return Err(allocation(Cause::Domains, work.location));
+            }
+            for (earlier, _) in &self.variables[..index] {
+                work.counters.work(work.limits, work.location)?;
+                if earlier == variable {
+                    return Err(allocation(Cause::Domains, work.location));
+                }
+            }
+            let terms = pattern.terms();
+            let mut present = false;
+            for column in 0..terms.len() {
+                work.counters.work(work.limits, work.location)?;
+                present |= terms.at(column) == Some(TemplateTerm::Variable(*variable));
+            }
+            if !present {
+                return Err(allocation(Cause::Domains, work.location));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'value> FiniteDomains<'value> {
+    fn domain(
+        &self,
+        variable: usize,
+        work: &mut GroundingWork<'_>,
+    ) -> Result<Option<Domain<'value>>, FormulaFailure> {
+        for (slot, range) in self.variables {
+            work.counters.work(work.limits, work.location)?;
+            if *slot == variable {
+                let values = self
+                    .values
+                    .get(range.clone())
+                    .expect("validated finite domain");
+                return Ok(Some(Domain::Finite(values.into())));
+            }
+        }
+        Ok(None)
+    }
+}
+
 struct BoundDomains<'value> {
     scope: Vec<usize>,
     domains: Vec<Domain<'value>>,
@@ -437,11 +536,17 @@ struct BoundDomains<'value> {
 fn bind_domains<'value>(
     pattern: PatternRef<'value>,
     values: BindingView<'value>,
+    finite: FiniteDomains<'value>,
     scratch: &mut Scratch<'_, '_>,
     counters: &mut Counters,
 ) -> Result<BoundDomains<'value>, FormulaFailure> {
     let limits = scratch.limits;
     let location = scratch.location;
+    finite.validate(
+        pattern,
+        values,
+        &mut GroundingWork::new(limits, counters, location),
+    )?;
     let mut scope = Vec::new();
     let mut domains = Vec::new();
     scratch.reserve(&mut scope, pattern.terms().len(), counters)?;
@@ -473,7 +578,17 @@ fn bind_domains<'value>(
                     values.get(variable)
                 }
             };
-            domains.push(value.map_or(Domain::Unrestricted, Domain::Singleton));
+            let finite = if let TemplateTerm::Variable(variable) = term {
+                finite.domain(
+                    variable,
+                    &mut GroundingWork::new(limits, counters, location),
+                )?
+            } else {
+                None
+            };
+            domains.push(
+                finite.unwrap_or_else(|| value.map_or(Domain::Unrestricted, Domain::Singleton)),
+            );
         }
     }
     Ok(BoundDomains { scope, domains })

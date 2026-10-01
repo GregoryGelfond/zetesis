@@ -4,6 +4,10 @@
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum JoinStrategy {
     /// Probe the shortest available equality posting and check complete rows.
+    /// A completed flat constraint with a finite arithmetic-totality certificate
+    /// may compose a computed equality domain with the shared table selector.
+    /// This special query keeps the original rows and residual checks; other
+    /// probes remain indexed even after that table has been prepared.
     #[default]
     Indexed,
     /// Reuse finite-table indices for flat positive patterns over completed

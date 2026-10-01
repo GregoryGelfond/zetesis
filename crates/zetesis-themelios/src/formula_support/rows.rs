@@ -42,6 +42,20 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
         Self { join }
     }
 
+    /// Prepare against the original completed columns, never the attached row
+    /// filter. No arithmetic-family evidence escapes this selected-row view.
+    pub(super) fn select_total_constraint(
+        &mut self,
+        rule: &'a crate::formula_ir::RuleIr,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        self.join
+            .select_total_constraint(rule, computation, limits, counters)?;
+        Ok(())
+    }
+
     pub(crate) fn next_row(
         &mut self,
         computation: &mut Computation<'_, '_>,
@@ -100,6 +114,6 @@ pub(super) struct Staged {
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod filtering;
+#[cfg(test)]
+mod tests;

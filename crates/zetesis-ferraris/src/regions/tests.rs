@@ -1,6 +1,10 @@
 use std::mem::size_of;
 
-use super::{Knowledge, Known};
+use super::{Counters, Knowledge, Known};
+
+mod chain_links;
+mod counters;
+mod copy_costs;
 
 fn shared_occurrences() -> crate::Theory {
     use crate::Node::{Atom, Implies, Or};
@@ -62,7 +66,11 @@ fn compact_narrower_keeps_shared_and_aliased_occurrences() {
             &[0, 2][..],
         ]
     );
-    assert_eq!(index.knowledge().known.unknown, [5, 1, 2, 0]);
+    let knowledge = index.knowledge();
+    let unknown: Vec<_> = (0..4)
+        .map(|atom| knowledge.known.unknown.get(atom))
+        .collect();
+    assert_eq!(unknown, [5, 1, 2, 0]);
     assert_eq!(index.work(), 9);
 }
 
@@ -170,18 +178,16 @@ fn compact_adjacency_uses_less_retained_storage() {
 fn retained_bytes_counts_the_seen_mask() {
     // 130 atoms give a three-word seen mask (ceil(130/64) = 3).
     let knowledge = Knowledge {
-        known: Known::empty(5, 2, vec![0; 130]),
+        known: Known::empty(5, 2, 2, Counters::zeros(130, 2)),
     };
     let k = &knowledge.known;
     let expected = size_of::<Knowledge>() as u128
         + (k.sure.len() + k.never.len() + k.atom_sure.len() + k.atom_never.len()) as u128
             * size_of::<u64>() as u128
-        + (k.sure_operands.capacity()
-            + k.never_operands.capacity()
-            + k.unknown.capacity()
-            + k.learned.capacity()
-            + k.heads.capacity()) as u128
-            * size_of::<usize>() as u128
+        + (k.learned.capacity() + k.heads.capacity()) as u128 * size_of::<usize>() as u128
+        + k.sure_operands.allocated_bytes()
+        + k.never_operands.allocated_bytes()
+        + k.unknown.allocated_bytes()
         + k.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
         + k.seen.len() as u128 * size_of::<u64>() as u128;
     assert_eq!(knowledge.retained_bytes(), expected);
@@ -191,7 +197,7 @@ fn retained_bytes_counts_the_seen_mask() {
 #[test]
 fn empty_worklists_retain_their_allocated_bytes() {
     let mut knowledge = Knowledge {
-        known: Known::empty(5, 2, vec![0; 3]),
+        known: Known::empty(5, 2, 2, Counters::zeros(3, 2)),
     };
     let original = knowledge.retained_bytes();
     knowledge.known.learned.reserve_exact(7);

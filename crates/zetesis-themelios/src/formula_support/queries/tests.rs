@@ -1,5 +1,7 @@
 //! Distinguishing workspace ownership, live masks and refused work prefixes.
 
+mod finite_domains;
+
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
 
@@ -75,7 +77,7 @@ fn a_selection_survives_new_cache_entries() {
         )
         .unwrap()
         .unwrap();
-    assert_eq!(support.tables.as_ref().unwrap().indices.borrow().len(), 2);
+    assert_eq!(support.tables.get().unwrap().indices.borrow().len(), 2);
     assert_eq!(
         first.selection.rows().collect::<Vec<_>>(),
         (1..70).step_by(7).collect::<Vec<_>>()

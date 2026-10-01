@@ -61,6 +61,11 @@ fn default_limits_admit_the_unique_einstein_assignment() {
 }
 
 #[test]
+fn default_limits_admit_the_complete_sudoku_grid() {
+    check(&scalability::sudoku(&root(), WorkloadLimits::default()).unwrap());
+}
+
+#[test]
 fn worker_scaling_override_reaches_the_explicit_solve_options() {
     use zetesis_cli::Invocation;
     let profile = scalability::profiles(Some(300_000_000))[0];

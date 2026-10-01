@@ -31,6 +31,12 @@ impl Join<'_, '_> {
         // Frame location and expression scratch are disjoint owners. Lending
         // the current slots never prevents the evaluator from using its scratch.
         let binding = frame.binding(&self.values);
+        if self.coverage == Coverage::Complete {
+            self.projections.prepare(
+                self.literals,
+                super::Context::new(&*computation, limits, counters, location),
+            )?;
+        }
         let mut passes = true;
         let mut excluded = false;
         let mut failure = match comparisons {
@@ -48,15 +54,32 @@ impl Join<'_, '_> {
             {
                 continue;
             }
-            let result = check(
-                literal,
-                &binding,
-                &mut self.evaluation,
-                computation,
-                limits,
-                counters,
-                location,
-            );
+            let result = if let Some((left, relation, right)) = comparison(literal) {
+                self.projections.compare(
+                    index,
+                    ([left, right], relation),
+                    &binding,
+                    &mut self.evaluation,
+                    super::Context::new(computation, limits, counters, location),
+                )
+            } else {
+                check(
+                    literal,
+                    &binding,
+                    &mut self.evaluation,
+                    computation,
+                    limits,
+                    counters,
+                    location,
+                )
+            };
+            // Head truth controls emission, not reachability of original body
+            // scopes. Evaluate first so source-family evidence retains errors.
+            let result = if self.source_evidence && matches!(literal, LiteralIr::HeadGuard(_)) {
+                result.map(|_| true)
+            } else {
+                result
+            };
             excluded |= matches!(result, Ok(false)) && self.plan.decisions.decides(index);
             retain(
                 result,
@@ -211,7 +234,7 @@ fn pending_check(
                 visit(expression)?;
             }
         }
-        LiteralIr::Guard(guard) => {
+        LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => {
             for expression in guard.expressions() {
                 visit(expression)?;
             }
@@ -304,22 +327,8 @@ fn check(
         failures.finish(evaluation)?;
         return Ok(true);
     }
-    if let LiteralIr::Guard(guard) = literal {
+    if let LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) = literal {
         return guard.evaluate_in(binding, evaluation, computation, limits, counters, location);
-    }
-    if let Some((left, relation, right)) = comparison(literal) {
-        let [left, right] = evaluation.source_values(
-            [left, right],
-            |variable| binding.key(variable, location),
-            computation,
-            limits,
-            counters,
-            location,
-        )?;
-        let read = computation.read();
-        let left = resolve(read, &left, limits, counters, location)?;
-        let right = resolve(read, &right, limits, counters, location)?;
-        return compare(left, relation, right, limits, counters, location);
     }
     if let LiteralIr::TupleCompare(left, relation, right) = literal {
         let equal = evaluation.source_tuple(

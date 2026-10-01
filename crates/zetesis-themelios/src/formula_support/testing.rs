@@ -194,6 +194,43 @@ pub(crate) fn prepare(text: &str) -> crate::formula::Preparation {
     }
 }
 
+/// Complete source support and lend its canonical query and computation owners.
+pub(crate) fn with_completed_source(
+    text: &str,
+    run: impl FnOnce(
+        &crate::formula_ir::Prepared,
+        &Support<'_>,
+        &mut Computation<'_, '_>,
+        &mut Counters,
+    ),
+) {
+    let preparation = prepare(text);
+    let program = preparation.program;
+    let limits = preparation.limits;
+    let location = preparation.location;
+    let mut budget = preparation.budget;
+    let mut counters = Counters::resume(
+        preparation.accounting,
+        crate::grounding_observer::Work::default(),
+    );
+    let mut catalog = super::build(
+        preparation.catalog,
+        &program,
+        None,
+        &limits,
+        &mut budget,
+        &mut counters,
+        location,
+    )
+    .unwrap();
+    let (completed, mut append) = catalog.split(&limits, &mut counters, location).unwrap();
+    let queries = completed
+        .queries(crate::JoinStrategy::Indexed, &limits, &counters, location)
+        .unwrap();
+    let mut computation = Computation::new(&mut append, queries.support());
+    run(&program, queries.support(), &mut computation, &mut counters);
+}
+
 fn prepare_into(
     text: &str,
     catalog: &mut SupportCatalog,

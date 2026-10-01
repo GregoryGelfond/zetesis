@@ -268,6 +268,10 @@ pub(crate) enum LiteralIr {
     },
     TupleCompare(Vec<Expression>, Relation, Vec<Expression>),
     Guard(crate::formula_guard::Guard),
+    /// The complement of an ordinary singleton comparison head. Its truth
+    /// selects emitted constraints, but cannot exclude original body scopes
+    /// from source-family validation. It never supplies a binding instruction.
+    HeadGuard(crate::formula_guard::Guard),
     Conditional(crate::formula_conditional_ir::ConditionalIr),
     Aggregate(AggregateIr),
     Bind {

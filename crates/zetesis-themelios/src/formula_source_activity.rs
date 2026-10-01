@@ -40,6 +40,7 @@ fn ordinary(literals: &[LiteralIr]) -> bool {
             LiteralIr::Atom(..)
                 | LiteralIr::Compare(..)
                 | LiteralIr::Guard(_)
+                | LiteralIr::HeadGuard(_)
                 | LiteralIr::Bind { .. }
                 | LiteralIr::Range { .. }
         )
@@ -216,7 +217,7 @@ impl Context<'_, '_, '_> {
                     self.location,
                 )
             }
-            LiteralIr::Guard(guard) => guard.evaluate(
+            LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => guard.evaluate(
                 binding,
                 self.computation,
                 self.limits,

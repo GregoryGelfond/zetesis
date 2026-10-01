@@ -33,7 +33,8 @@ use selection::{Selection, SourceRows};
 pub enum HybridFeature {
     /// Objective programs require separate acceptance/scoring composition.
     Objectives,
-    /// Hybrid checks currently reuse the completed indexed relation queries.
+    /// Ordinary hybrid probes require the indexed strategy. Certified computed
+    /// domains may still use the shared finite-table selector internally.
     TableJoins,
 }
 impl fmt::Display for HybridFeature {
@@ -757,7 +758,7 @@ impl ConstraintChecker<'_> {
                 .rows(
                     &queries,
                     filter,
-                    &computation,
+                    &mut computation,
                     &prepared.limits,
                     budget,
                     counters,
@@ -876,6 +877,7 @@ fn literal_atom(
         | LiteralIr::TupleCompare(..)
         | LiteralIr::ArgumentCheck { .. }
         | LiteralIr::Guard(_)
+        | LiteralIr::HeadGuard(_)
         | LiteralIr::Bind { .. }
         | LiteralIr::Range { .. } => None,
         LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {

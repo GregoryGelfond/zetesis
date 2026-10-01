@@ -1,9 +1,10 @@
 //! Maintained authored fixtures and a finite worker-scaling population.
 //!
-//! The scalability manifest supplies the shared typed display contracts. Its
-//! reviewed digest is checked before decoding; workload identities retain the
-//! actual contract and original/derived source hashes. This is authored evidence,
-//! not upstream corpus-cleaning provenance or a generated-family proof.
+//! Parametric fixtures use the reviewed scalability manifest; fixed fixtures
+//! carry their reviewed source digests and typed display contracts here. Workload
+//! identities retain the actual contract and original/derived source hashes.
+//! This is authored evidence, not upstream corpus-cleaning provenance or a
+//! generated-family proof.
 
 use std::{
     num::{NonZeroU64, NonZeroUsize},
@@ -24,6 +25,7 @@ use crate::{
 /// Reviewed metadata for the two default scalability fixtures.
 pub const MANIFEST_SHA256: &str =
     "eabb3ca0161beca0816f7438439818aa4920465b979c9618c764f3c3b3bb1870";
+const SUDOKU_SHA256: &str = "9ee5cb65a0ad7e563af9378a46e04b3a19762850ce7cb476ad7d9adbe27466ef";
 const EINSTEIN_SHA256: &str = "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b";
 
 #[derive(Deserialize)]
@@ -110,6 +112,36 @@ pub fn defaults(root: &Path, limits: WorkloadLimits) -> Result<Vec<Workload>, Er
         .collect()
 }
 
+/// Admit the authored Sudoku fixture with its unique complete grid display.
+/// Eight given digits per row make this a grounding and language workload,
+/// not a difficult Sudoku search instance. `root` is the examples directory.
+///
+/// # Errors
+/// Refuses changed source bytes, unsupported syntax or admission limits.
+pub fn sudoku(root: &Path, limits: WorkloadLimits) -> Result<Workload, Error> {
+    let grid = (1..=9)
+        .flat_map(|row| {
+            (1..=9).map(move |column| {
+                let digit = ((row - 1) * 3 + (row - 1) / 3 + column - 1) % 9 + 1;
+                format!("digit({row},{column},{digit})")
+            })
+        })
+        .collect();
+    let contract = examples::Contract::complete_family(NonZeroU64::MIN)
+        .with_witnesses(vec![grid])
+        .map_err(Error::Corpus)?;
+    Workload::authored(
+        AuthoredProgram {
+            root,
+            entry: "sudoku.lp",
+            sha256: SUDOKU_SHA256,
+            contract: &contract,
+        },
+        &[],
+        limits,
+    )
+}
+
 /// Admit the unchanged Einstein riddle with its unique five-house display.
 ///
 /// # Errors
@@ -140,8 +172,9 @@ pub fn einstein(root: &Path, limits: WorkloadLimits) -> Result<Workload, Error> 
 }
 
 /// Queens at n=8/9/10 and pigeonhole at h=5/6/7, followed by unchanged queens
-/// variant 02, SEND+MORE=MONEY and task allocation; Einstein is an optional tenth
-/// case. Amended sizes are qualified against a complete reference enumeration.
+/// variant 02, SEND+MORE=MONEY, task allocation and the authored Sudoku grid.
+/// Einstein is an optional eleventh case. Amended sizes are qualified against
+/// a complete reference enumeration.
 ///
 /// # Errors
 /// Refuses fixture/corpus identity changes and checked-amendment limits.
@@ -152,7 +185,7 @@ pub fn workloads(
     limits: WorkloadLimits,
 ) -> Result<Vec<Workload>, Error> {
     let fixtures = fixtures(root, limits)?;
-    let mut result = Vec::with_capacity(10);
+    let mut result = Vec::with_capacity(11);
     for (fixture, sizes) in fixtures.iter().zip([[8, 9, 10], [5, 6, 7]]) {
         for size in sizes {
             result.push(workload(root, fixture, size, limits)?);
@@ -165,6 +198,7 @@ pub fn workloads(
     ] {
         result.push(Workload::original(corpus, case.path(), limits)?);
     }
+    result.push(sudoku(root, limits)?);
     if include_einstein {
         result.push(einstein(root, limits)?);
     }

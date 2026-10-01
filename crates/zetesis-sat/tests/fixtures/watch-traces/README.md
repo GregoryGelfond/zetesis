@@ -16,8 +16,23 @@ counters after candidate construction, and the final exhaustion or stop. Exact
 semantic blocks are appended after each candidate. No clingo call, certificate
 check, objective work, timing or stable-model claim belongs to this trace.
 
-`refined.txt` uses `1 { p(1..4) } 2.` through the refined cursor, including root
-probing. Its complete traversal consumes 2,294 work units and nine decisions.
+`refined.txt` uses the fixed admitted theory in `choices.rs` through the refined
+cursor, including root probing. That input was captured by calling
+`zetesis_themelios::admit_formula` with default admission, expansion and formula
+limits on `1 { p(1..4) } 2.` at commit
+`54f1ed4afbb373048300d1934d58190a5e0118c5`, then copying `Theory::atom_count`,
+`Theory::nodes` and `Theory::roots` without reordering. This input capture is
+separate from the original trace provenance above. The test validates those
+four atoms, 45 nodes and nine roots through `Theory::new`, then runs the current
+encoder and cursor against the unchanged reference records.
+
+The fixed input keeps exact search-work tests independent of equivalent
+frontend DAG layouts. In particular, sharing a threshold table across choice
+guards changes intermediate node order and the historical first-true-literal
+rescan charges. Current source lowering is covered by the frontend aggregate
+and choice tests; the six queens traces above still admit their source inputs.
+
+The complete historical traversal consumes 2,294 work units and nine decisions.
 A run with precisely those ceilings must reproduce it, so the same record is that
 test's expectation; `work-short.txt` and `decision-short.txt` lower the
 corresponding ceiling by one. A stopped trace

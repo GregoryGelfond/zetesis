@@ -62,6 +62,10 @@ impl Adjacency {
         Ok(Self { offsets, entries })
     }
 
+    pub(super) fn entry_count(&self) -> usize {
+        self.entries.len()
+    }
+
     pub(super) fn len(&self) -> usize {
         self.offsets.len() - 1
     }

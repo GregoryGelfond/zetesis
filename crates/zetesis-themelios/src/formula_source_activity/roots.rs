@@ -165,6 +165,7 @@ fn literal_dependencies<'a>(
         | LiteralIr::ArgumentCheck { .. }
         | LiteralIr::TupleCompare(..)
         | LiteralIr::Guard(_)
+        | LiteralIr::HeadGuard(_)
         | LiteralIr::Bind { .. }
         | LiteralIr::Range { .. } => {}
     }

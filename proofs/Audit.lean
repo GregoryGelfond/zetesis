@@ -406,6 +406,10 @@ import Zetesis
 #print axioms Zetesis.EvaluationPrefix.reset_preservation
 #print axioms Zetesis.EvaluationPrefix.evaluate_append
 #print axioms Zetesis.EvaluationPrefix.root_preservation
+#print axioms Zetesis.EvaluationPrefix.remember_success_sound
+#print axioms Zetesis.EvaluationPrefix.reuse_success_exact
+#print axioms Zetesis.EvaluationPrefix.reuse_complete_filter
+#print axioms Zetesis.EvaluationPrefix.success_preimage_exact
 #print axioms Zetesis.insertAtom_grows
 #print axioms Zetesis.insertAtom_contains
 #print axioms Zetesis.insertAtom_duplicate
@@ -597,6 +601,7 @@ import Zetesis
 #print axioms Zetesis.GateRestrictions.suffix_region_rejected
 #print axioms Zetesis.GroundGuards.constant_original
 #print axioms Zetesis.GroundGuards.constant_frozen
+#print axioms Zetesis.GroundGuards.constant_head_constraint
 #print axioms Zetesis.GroundGuards.guard_original
 #print axioms Zetesis.GroundGuards.guard_frozen
 #print axioms Zetesis.GroundGuards.evaluated_guard_equivalent

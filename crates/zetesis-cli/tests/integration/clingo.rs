@@ -107,6 +107,13 @@ fn rule_excerpts_match_clingo() {
 }
 
 #[test]
+#[ignore = "requires clingo: the authored Sudoku has the same complete answer family"]
+fn authored_sudoku_matches_clingo() {
+    let source = include_str!("../../../../examples/sudoku.lp");
+    compare_native(source, "countermodel", &external(source));
+}
+
+#[test]
 #[ignore = "requires clingo: complete network repair example matches clingo"]
 fn complete_network_repair_example_matches_clingo() {
     let source = include_str!("../../../../examples/network-repair.lp");

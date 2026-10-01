@@ -47,6 +47,14 @@ impl AggregateFamilyBuild {
         &self.roots
     }
 
+    /// Bytes retained by the output-root vector: its inline vector header and
+    /// actual allocation capacity. Excludes the shared DAG, temporary compiler
+    /// state, and this build's profile and statistics fields.
+    #[must_use]
+    pub fn root_storage_bytes(&self) -> usize {
+        size_of::<Vec<usize>>() + self.roots.capacity() * size_of::<usize>()
+    }
+
     /// Exact shared translation profile.
     #[must_use]
     pub const fn profile(&self) -> AggregateProfile {

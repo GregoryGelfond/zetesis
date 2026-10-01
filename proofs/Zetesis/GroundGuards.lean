@@ -57,6 +57,29 @@ theorem constant_frozen (M J : Atoms α) (value : Bool) :
     Satisfies J (Reduct M (constant value)) ↔ value = true := by
   cases value <;> simp [constant, Reduct, Satisfies]
 
+/-- A rule with an evaluated Boolean head has the same original and frozen
+    truth as a constraint whose body also requires the complementary constant.
+
+    If the head is true, both rules impose no condition. If it is false, both
+    original rules forbid the body; `reduct_imp` additionally requires its
+    frozen reduct to be false at J. The body is arbitrary and J need not be a
+    subset of M. Evaluation definedness and source diagnostic order are separate
+    implementation obligations. -/
+theorem constant_head_constraint (body : Formula α) (value : Bool) :
+    Equivalent (.imp body (constant value))
+      (.imp (.conj body (constant (!value))) .bot) := by
+  constructor
+  · intro M
+    simp only [Satisfies, constant_original]
+    cases value <;> simp
+  · intro M J
+    have bottom_frozen : Satisfies J (Reduct M (.bot : Formula α)) ↔ False :=
+      Iff.rfl
+    rw [RuleFactorization.reduct_imp, RuleFactorization.reduct_imp,
+      RuleFactorization.reduct_conj]
+    simp only [Satisfies, constant_original, constant_frozen, bottom_frozen]
+    cases value <;> simp
+
 theorem guard_original (M : Atoms α) (guard : Guard) :
     Satisfies M (formula guard) ↔ evaluate guard = true := by
   induction guard with

@@ -250,6 +250,7 @@ fn needs_eligibility_query(
                 LiteralIr::Atom(..)
                     | LiteralIr::Compare(..)
                     | LiteralIr::Guard(_)
+                    | LiteralIr::HeadGuard(_)
                     | LiteralIr::Bind { .. }
                     | LiteralIr::Range { .. }
             )

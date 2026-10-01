@@ -1153,6 +1153,23 @@ initialization failure. The named indices and those operational properties
 remain implementation obligations, not consequences established by the Lean
 laws alone.
 
+An ordinary singleton data-comparison head is an interpretation-independent
+Boolean after its source operands have been evaluated.
+[`GroundGuards.constant_head_constraint`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroundGuards.lean)
+states that a rule with body `B` and constant head `c` is equivalent to the
+constraint with body `B` and the complementary constant. The equivalence covers
+original truth and every frozen `M/J` pair, for an arbitrary body. The existing
+`evaluated_guard_equivalent` and formula-context laws transport fully evaluated
+signed guards to these constants; a negated chain complements the whole
+conjunction of adjacent comparisons.
+
+This law applies after total evaluation. It does not justify treating an
+undefined comparison as false, binding a source variable from its head,
+suppressing an original body diagnostic, or changing finite-row coverage. Those
+remain separate Rust obligations. Comparison heads contribute no positive atom
+producer; the existing `BooleanHeads` producer laws account for Boolean head
+operands without adding atom support.
+
 [`OrderedHeadActivity`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean)
 relates selected signed tuple activity to an ordered value reduction. In Rust,
 [`contribution`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_head_aggregate.rs)
@@ -1394,6 +1411,76 @@ scoped term key and clears its prefix before the next borrow. Preserving express
 order, complete-filter error precedence, work admission and cleanup is a concrete
 caller obligation. The reset law neither establishes source-family exclusions
 nor permits an earlier final filter to hide an independently required check.
+
+`EvaluationPrefix.remember_success_sound` states the invariant for retaining
+successful whole-expression results. It requires a pure partial evaluator and
+keys whose equality implies equal evaluation results. `reuse_success_exact`
+preserves values and errors; `reuse_complete_filter` transports that equality
+through the same filter over the same complete ordered rows. These laws do not
+permit row pruning, cached failures, or changing error precedence. The Rust
+implementation must separately establish expression identity, exact input-key
+coverage, vocabulary and reader-prefix authentication, successful publication,
+zero-divisor state, and charged lookup/storage work. The laws are mathematical
+preservation results, not a Lean-to-Rust refinement.
+
+`EvaluationPrefix.success_preimage_exact` supplies the inverse-domain step:
+filtering a finite input carrier by a sound, completely populated success map
+selects exactly carrier inputs evaluating to a fixed wanted value. Cache coverage
+of that carrier is distinct from the source proof that it covers every complete
+binding. The Rust projection's covered prefix records the former only after the
+whole constraint passes totality preparation; its completed positive column
+supplies the latter. A missing known-side key declines the optional restriction.
+
+The derived input domains use `FiniteTables.indexed_survival_exact` through the
+shared table selector, meeting the ordinary constant and incoming-binding
+domains and retaining original row identities. Necessary selection preserves
+complete contributing bindings by `DomainBindings.guarded_continuations_exact`;
+the ordered raw positive-match family may shrink. Every residual comparison and
+ordinary tuple match remains in place. Canonical input/result alignment, exact
+reader ownership, prefix coverage publication and charged temporary domain
+storage remain Rust obligations, with no refinement claim.
+
+The optional Rust
+[finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)
+adds a separate justification for ordinary row selection. A completed positive
+column covers every full binding's value at that variable, even when it contains
+extra values excluded by another argument or relation. Every expression in the
+eligible flat constraint is a leaf or reads one such variable. Success on every
+value in the covering domain therefore establishes definedness on every full
+binding; an arithmetic failure declines this certificate, while owner and
+resource refusals remain failures. The argument does not establish definedness
+for every earlier join prefix.
+
+Eager emission, hybrid capture and hybrid model/region checks use the same Rust
+preparation and necessary-domain selector. Hybrid capture runs after original
+family admission, with an append-capable term owner over completed support.
+It must admit every successful speculative value from the covering columns,
+including values excluded by other source arguments and successful prefixes of
+a declined certificate attempt. A frozen runtime cursor repeats preparation for
+the same immutable rule and completed carrier. Preserving that input traversal
+and the admitted canonical identities is a Rust obligation; a missing identity
+remains a typed failure. No new Boolean completion authority or filtered support
+owner establishes this premise.
+
+Candidate row filters neither narrow the certificate's covering domains nor
+supply source-family evidence. Their necessary conditions compose with computed
+domains while preserving each complete violation witness, as required by
+`StreamedRegions.necessary_selection_preserves_witness`. Runtime preparation and
+scratch remain charged to the checker, independently of the original admission
+receipt. Existing laws do not verify this capture/frozen correspondence, typed
+failure propagation, or the concrete Rust storage accounting.
+
+After that obligation is established, `GroundGuards.guard_original` and
+`guard_frozen` identify each evaluated comparison with the same Boolean in both
+worlds. Together with `RuleFactorization.reduct_conj` and `reduct_imp`, a false
+body comparison makes that ground constraint true in both the original theory
+and every frozen reduct. Omitting such instances preserves the semantic theory.
+This is a direct application of existing guard and reduct laws; those laws do
+not establish the Rust column coverage, arithmetic totality or prefix schedule.
+Speculative prefix failures retain the ordinary fallback, typed owner/resource
+refusals remain failures, and arithmetic-family evidence still traverses complete
+rows, including defined false witnesses. The success-cache laws above justify
+reusing successful preparation results without changing their values.
 
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
