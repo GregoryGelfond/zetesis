@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 For everyday benchmarking and current results, start with
 [Benchmarks and comparisons](performance.md). This reference is for maintainers
 reproducing a particular measurement or deriving a workload through the library.
@@ -150,7 +153,7 @@ regression qualification does not supply new GPU timing measurements.
 
 The measurements below apply to their explicitly named revisions. No timing or
 peak-RSS measurements were collected for
-[`74c0627f`](https://github.com/GregoryGelfond/zetesis/tree/74c0627f3aab89ae466a1a33cc61e352264b8af1).
+[`74c0627f`](https://github.com/GregoryGelfond/zetesis/tree/047a797d522bc36862ceeecad58aa8c5cd4d224e).
 
 Storage contracts and elapsed time are separate results. Formula joins reuse
 one cleared expression workspace across prefix checks, generators and final
@@ -160,10 +163,10 @@ Neither change establishes a general latency improvement or lower process RSS.
 ### Ordinary CPU/eager solving
 
 These measurements compare the previous executable built from
-[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/d871e91b56406c20b312e63f9d3437e6352803e2),
+[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/efd837bd04b19d9b2dbcbe8c2f37a5c2f4dd5149),
 qualified at
-[`e69890b2`](https://github.com/GregoryGelfond/zetesis/tree/e69890b234c12f7565923b4a2f7bc312e92eae51),
-with [`55f5aa73`](https://github.com/GregoryGelfond/zetesis/tree/55f5aa739ec3fc941f27359dcb4d0c8608b82284).
+[`e69890b2`](https://github.com/GregoryGelfond/zetesis/tree/e75abce33d895cca113d944e7af90c79cdea8031),
+with [`55f5aa73`](https://github.com/GregoryGelfond/zetesis/tree/1649f41e0979aac55680d589fe1e4fcf80c4c18c).
 Both are Rust 1.97.1 release builds measured on Apple M4 Pro on 10 September
 2026, with clingo 5.8.2 as the reference.
 
@@ -270,10 +273,10 @@ The 4 MiB per-process capture ceiling, 128 MiB cumulative capture allowance and
 ### Four-case CPU comparison, 11 September 2026
 
 A separate comparison of four unchanged corpus cases used the builds from
-[`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/3afaf719949de0e8c2162e6ff2b107fb26675c24),
-qualified at [`dca674c0`](https://github.com/GregoryGelfond/zetesis/tree/dca674c067e08286d91cd8426bacb5932b42e1ac),
+[`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/7a655f148c08e9979a2fbf6ff391cd58590564d6),
+qualified at [`dca674c0`](https://github.com/GregoryGelfond/zetesis/tree/09bff25f6aa3049ac16b7b76112e8e1dfb47f7c2),
 and
-[`0d287734`](https://github.com/GregoryGelfond/zetesis/tree/0d2877346b4d5822b74c655a34e3daa3c1938913).
+[`0d287734`](https://github.com/GregoryGelfond/zetesis/tree/bde8e559097ba332f7b2a19f086c8b69bd929b68).
 These are Rust 1.97.1 release builds for macOS arm64, measured on Apple M4 Pro
 running macOS 26.6.2 (build 25G83). One fixed `zetesis-perf` executable served
 both revisions, and clingo 5.8.2 was invoked directly.

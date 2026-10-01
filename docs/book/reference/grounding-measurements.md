@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 These reports measure particular changes to grounding, atom storage and release
 optimization. They retain the original programs, settings and compiled sources.
 For a short introduction or a new measurement, start with
@@ -31,9 +34,9 @@ the binaries below, not a later build carrying version `0.1.1`.
 
 | Role | Source | Native executable SHA-256 |
 | --- | --- | --- |
-| Earlier atom catalog | [`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1) | `fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e` |
-| Intermediate workspaces | [`f56a5a24`](https://github.com/GregoryGelfond/zetesis/tree/f56a5a2496f519d7b71b7c4c8fdc166c355874ff) | `fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29` |
-| Latest prepared grounding | [`679ca856`](https://github.com/GregoryGelfond/zetesis/tree/679ca8568a6fd8577d9b944fbd99d7c54f666601) | `a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2` |
+| Earlier atom catalog | [`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/84e15f10f1a89f989d36d215755cb19c58d5f912) | `fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e` |
+| Intermediate workspaces | [`f56a5a24`](https://github.com/GregoryGelfond/zetesis/tree/d12674dd926406d2de519471bb974c6b5a13af61) | `fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29` |
+| Latest prepared grounding | [`679ca856`](https://github.com/GregoryGelfond/zetesis/tree/0e9682342edf66108d51087996335438f92e4e88) | `a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2` |
 
 All use Rust 1.97.1 and ordinary release optimization without a CPU/LTO override.
 The earlier and latest builds explicitly target `aarch64-apple-darwin` and select
@@ -263,9 +266,9 @@ interpretations. These limits and outcomes do not establish a general scaling la
 ## Earlier atom catalog CPU comparison
 
 This comparison is
-[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/1e5b78ce913ab3aeece6ed496f69ca8176f0644d)
+[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/e9fb09d51a719eb1f5ee23a8c5ba5152423f16d2)
 against
-[`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1),
+[`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/84e15f10f1a89f989d36d215755cb19c58d5f912),
 recorded on arm64 macOS 26.6.2 on 14 September 2026. The ordinary acquisition
 ran from 03:42:07 to 03:43:27 UTC. Both versions use the canonical package build
 recipe without an LTO override, and the same fixed performance runner and
@@ -440,10 +443,10 @@ results retain their original source scope.
 
 Measurements ran on an Apple M4 Pro with macOS 26.6.2 on 12 September 2026,
 using Rust 1.97.1 and clingo 5.8.2. The previous implementation is
-[`6bebb980`](https://github.com/GregoryGelfond/zetesis/tree/6bebb980f9c102dbb7f943076d7cde92374841ce);
+[`6bebb980`](https://github.com/GregoryGelfond/zetesis/tree/3d84ee86145677f6293992d08c03d287011fd3f5);
 the new implementation is
-[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/1e5b78ce913ab3aeece6ed496f69ca8176f0644d).
-The [preceding complete comparison](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md)
+[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/e9fb09d51a719eb1f5ee23a8c5ba5152423f16d2).
+The [preceding complete comparison](https://github.com/GregoryGelfond/zetesis/blob/7a9177a574b93df812627f514d87aab851d7726c/docs/book/reference/performance.md)
 retains the earlier CPU, Metal and primitive tables and their reproduction commands.
 
 The canonical release comparison uses the installer's package selection.
@@ -919,7 +922,7 @@ neither a general latency improvement nor lower process/device memory.
 
 ## Earlier Metal measurements
 
-The [complete previous comparison](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md#instrumented-cpu-and-metal-comparison)
+The [complete previous comparison](https://github.com/GregoryGelfond/zetesis/blob/7a9177a574b93df812627f514d87aab851d7726c/docs/book/reference/performance.md#instrumented-cpu-and-metal-comparison)
 compared sources `15e0f77b` and `6bebb980` on the same Apple M4 Pro.
 Its eager Metal SEND median decreased from 79.853 to 65.836 ms, and task
 allocation from 628.813 to 576.636 ms. Those measurements included host candidate

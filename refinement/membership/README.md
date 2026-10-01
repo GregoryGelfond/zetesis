@@ -65,8 +65,10 @@ the matching upstream release or a build of the same commits; this package does
 not qualify those tool binaries.
 
 Run from the repository root of a separate checkout at the
-[retained package revision `983e5ba9`](https://github.com/GregoryGelfond/zetesis/commit/983e5ba9c84adbcfe8dae77df7403c3687548cb9).
-Its selected Rust source bytes match `sourceRevision`
+[retained package revision `983e5ba9`](https://github.com/GregoryGelfond/zetesis/commit/2619c31f370ab23e97d4a8718be6245f50d3eb23).
+The [revision map](../../docs/book/reference/source-revisions.md) relates its
+recorded identifier to the published checkout. Its selected Rust source bytes
+match `sourceRevision`
 `0798e1a6e770d88610104dab4d7ed44cae1c86a8` in `provenance.json`; both inventories
 identify that historical extraction. Later source renames, lockfile changes and
 README clarifications can make checks against a current checkout fail. Preserve

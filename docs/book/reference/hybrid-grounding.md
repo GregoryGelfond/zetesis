@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 Hybrid formula execution retains an eager core and checks eligible source
 constraints while searching and before publishing each answer set. Complete
 support and arithmetic admission still precede solving. The measurements below
@@ -13,7 +16,7 @@ for eligibility and completion boundaries.
 ## Reusing completed-source join plans
 
 The implementation at
-[`469d4d87`](https://github.com/GregoryGelfond/zetesis/commit/469d4d871c9753f58e573a135ce89b53afdd9874)
+[`469d4d87`](https://github.com/GregoryGelfond/zetesis/commit/9007f29f751545eecfa681c26d2446c4aef613ee)
 retains immutable join ordering and comparison readiness for repeated hybrid
 constraint scans. Each scan has fresh bindings, probes, arithmetic state and
 traversal. Eager and hybrid execution share the planner; ordinary joins own
@@ -22,7 +25,7 @@ avoid a shared atomic write while preserving the cancellation and positive-charg
 checks. The comparison combines both changes.
 
 The compiled baseline is
-[`df99d4bb`](https://github.com/GregoryGelfond/zetesis/commit/df99d4bb7961886ad5c620788d3eca5ef6c68e96).
+[`df99d4bb`](https://github.com/GregoryGelfond/zetesis/commit/2d6fbc5b85ad398472c5b520f1ee881c6957470e).
 Measurements ran on September 21, 2026 in America/Chicago, on macOS 26.6.2 with
 Rust 1.97.1, using the same 20-workload population as the
 [original-region comparison](#original-region-checks). Each worker setting uses
@@ -80,12 +83,12 @@ limit described below; they make no cold-cache claim.
 ## Original-region checks
 
 The refinement at
-[`3108acfe`](https://github.com/GregoryGelfond/zetesis/commit/3108acfe40a1bf834ab44a6a991863ac4893829d)
+[`3108acfe`](https://github.com/GregoryGelfond/zetesis/commit/2685426214a16fa1431d3c21d64e1fc8d9798cdd)
 checks original constraints after ordinary region narrowing, before splitting
 or core membership. Necessary predicate tests and held positive-row selection
 avoid constructing join bindings that cannot witness a constraint violation.
 The final full-candidate check remains. The baseline is
-[`9bb73da9`](https://github.com/GregoryGelfond/zetesis/commit/9bb73da998f0b77cdc5e7db497783ac3fdd21aba),
+[`9bb73da9`](https://github.com/GregoryGelfond/zetesis/commit/f99221cb849653551ebfa4a925b105b10fe04f47),
 which checks these constraints after finding a core answer set.
 
 Both executables were measured on September 21, 2026 UTC, in
@@ -203,7 +206,7 @@ effects using the same zetesis executable. It does not establish a general
 speedup or qualify GPU execution of the hybrid profile.
 
 The measured source is
-[`4a281c96`](https://github.com/GregoryGelfond/zetesis/commit/4a281c9612dc4ff22557341354b1ad610cfd9672).
+[`4a281c96`](https://github.com/GregoryGelfond/zetesis/commit/2678bda826a428e34082a62277ce0628471558db).
 Explicit lazy formula execution retains producers and ineligible constraints,
 then checks eligible source constraints against each core answer set. Complete
 support and arithmetic admission still precede solving. See the
@@ -266,7 +269,7 @@ recorded constant substitutions and the library's generated workloads.
 ### Preservation of eager execution
 
 A separate comparison uses the prior eager executable
-[`3d7454d8`](https://github.com/GregoryGelfond/zetesis/commit/3d7454d810acec99121ee5b5615505b6ddc6eea7)
+[`3d7454d8`](https://github.com/GregoryGelfond/zetesis/commit/7161ec59b33a742f21bcc547d8139cbf7a1006fb)
 and the measured source above in old/new/new/old order. Each leg has seven timed
 runs and two separate RSS runs, at one and four workers. The four workloads are
 dense transitive closure at sizes 20 and 40, a 1,000-edge chain and its arithmetic

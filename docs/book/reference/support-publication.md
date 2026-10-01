@@ -2,15 +2,18 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 The 1,000-step arithmetic chain took **22.6% less grounding time and 12.6% less
 whole-process time** in this CPU comparison. Other workloads were mixed. The
 sums of case medians increased in the corpus and execution series and decreased
 slightly in scalability; these observations do not establish an overall speedup.
 
 This record compares baseline
-[`7c717c05`](https://github.com/GregoryGelfond/zetesis/commit/7c717c05df4f10830008d297b9611e89410d9813)
+[`7c717c05`](https://github.com/GregoryGelfond/zetesis/commit/461b332b56328466c8ef868b716d61a4b6602411)
 with its direct child
-[`d08a1bd1`](https://github.com/GregoryGelfond/zetesis/commit/d08a1bd1a380afc7b51c2269275174f1da877544).
+[`d08a1bd1`](https://github.com/GregoryGelfond/zetesis/commit/2ff666435f1e4b9452a84b02f432b7bf0fed12da).
 Both identify themselves as zetesis 0.1.6. The change reuses exclusively owned
 canonical publication directories; the later human solve-output changes are
 absent from both measured executables. Measurements include JSON and statistics
@@ -65,7 +68,7 @@ Support growth already shared immutable segment payload. Each publication still
 copied the directories of earlier segment references into a new snapshot.
 Repeated short publications could therefore spend growing work on the directory
 history. The changed
-[`Store` publication path](https://github.com/GregoryGelfond/zetesis/blob/d08a1bd1a380afc7b51c2269275174f1da877544/crates/zetesis-core/src/catalog/storage/publication/renewal.rs)
+[`Store` publication path](https://github.com/GregoryGelfond/zetesis/blob/2ff666435f1e4b9452a84b02f432b7bf0fed12da/crates/zetesis-core/src/catalog/storage/publication/renewal.rs)
 extends the current directories when the snapshot and its growing vocabulary
 are exclusively owned. Directory relocation then occurs at capacity-growth
 boundaries. An externally retained snapshot continues to require fresh

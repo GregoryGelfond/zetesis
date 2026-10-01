@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 This comparison retains the `994fbb79` to `eca5a1a7` measurements. The later
 [shared-plan execution comparison](plan-execution.md) measures `eca5a1a7` to
 `2e80d065`, including the changed Metal candidate and membership paths.
@@ -22,8 +25,8 @@ Metal ran from 12:42:40 to 12:44:11 UTC.
 
 | Role | Compiled source | Executable SHA-256 |
 | --- | --- | --- |
-| A, baseline | [`994fbb79`](https://github.com/GregoryGelfond/zetesis/tree/994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17) | `17f7ed2636fb715ccd887fad8ae0a5647cef88adb27ebcff5f217e6717fc9859` |
-| B, current | [`eca5a1a7`](https://github.com/GregoryGelfond/zetesis/tree/eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3) | `f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb` |
+| A, baseline | [`994fbb79`](https://github.com/GregoryGelfond/zetesis/tree/254890ff8279778520fcdb3c7b8ccbd373a92d1c) | `17f7ed2636fb715ccd887fad8ae0a5647cef88adb27ebcff5f217e6717fc9859` |
+| B, current | [`eca5a1a7`](https://github.com/GregoryGelfond/zetesis/tree/5385635e782eddc9b1b6b9c1509900f1e6ff67be) | `f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb` |
 
 The baseline's compiled source differs from `896a5f73` only in three Markdown
 files. Both binaries use Rust 1.97.1 and ordinary release optimization with GPU

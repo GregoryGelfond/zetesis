@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 This comparison measures all 94 corpus cases before and after two changes to
 native CPU worker coordination. Four workers give the best observed times for
 queens variant 2 and the larger task-allocation case. Fourteen workers show a
@@ -161,8 +164,8 @@ disjoint wall intervals. Kernel duration was not measured.
 
 | Role | Compiled source | Solver SHA-256 |
 | --- | --- | --- |
-| A, before | [`f8146e50`](https://github.com/GregoryGelfond/zetesis/tree/f8146e50304aaff3186d827b84f1e4f91ab068f7) | `9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965` |
-| B, after | [`687f0d0b`](https://github.com/GregoryGelfond/zetesis/tree/687f0d0b473d015125d4e70040735625b4c042a3) | `d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513` |
+| A, before | [`f8146e50`](https://github.com/GregoryGelfond/zetesis/tree/b6450e616b9f4c453edc2d0d89a7fa6d93288281) | `9a4b598b882730c79293b96d520f2269378504437bd80c6ce286227b47820965` |
+| B, after | [`687f0d0b`](https://github.com/GregoryGelfond/zetesis/tree/7ef15d8167d147ce0b75a931889b9f678d247ee6) | `d0e8a70d705aef6b09995724a5927536095454d9e02fff5b8b7b44b59bf47513` |
 
 The changes move a child's theory-sized knowledge copy outside the shared pool
 mutex and let a worker pop its own pending region without acquiring that mutex.

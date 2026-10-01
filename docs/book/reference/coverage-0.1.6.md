@@ -2,10 +2,13 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 The README badge reports this local coverage measurement at
-[`9589f965`](https://github.com/GregoryGelfond/zetesis/tree/9589f96559dc8188451baa0202d63f2f4db831ae).
-It is not a hosted-CI status. The `v0.1.7` source release changes version metadata
-and the README; it retains this solver implementation. These measurements remain
+[`9589f965`](https://github.com/GregoryGelfond/zetesis/tree/7d83581ebd23f8d38daf7138723343c8f8226728).
+It is not a hosted-CI status. The `v0.1.7` source release changes version metadata,
+documentation and deadline tests; it retains this solver implementation. These measurements remain
 attached to the qualified `0.1.6` source. The [earlier snapshot](observations/coverage-0f787751.json)
 is retained separately.
 

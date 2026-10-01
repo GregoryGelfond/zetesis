@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 This record retains the historical version 0.1.5 coverage snapshot:
 a recorded local measurement, not a live hosted-CI status. Its
 commands keep the spellings of the revisions they measured.
@@ -12,7 +15,7 @@ commands keep the spellings of the revisions they measured.
 | CPU-only solver library and CLI, separate instrumentation | 9,666 / 10,549 | 91.63% |
 
 This version `0.1.5` snapshot measures compiled source
-[`318c8238`](https://github.com/GregoryGelfond/zetesis/tree/318c8238ad72719deee63f9b5250d3e1bbce565b)
+[`318c8238`](https://github.com/GregoryGelfond/zetesis/tree/74287a1e656d1d60609a3fbc6f394af25e174b50)
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2.
 The [verification receipt](observations/coverage-318c8238.json) retains exact
 counts, source identities, report hashes and qualification scope. Documentation
@@ -25,7 +28,7 @@ Both populations passed their independent 91% floor. The workspace contains
 No physical profiles were imported into either population.
 
 Sixty tests in 16 groups passed separately on Apple M4 Pro Metal at
-[`3b06e479`](https://github.com/GregoryGelfond/zetesis/tree/3b06e4795b3a00cd0fbf11d3e0f4f2c32750cf2c).
+[`3b06e479`](https://github.com/GregoryGelfond/zetesis/tree/fa500e3d2c102444d46b11e9c6a59bafa90ef4f5).
 That revision changes only an ignored table-join test to request eager grounding
 explicitly; automatic grounding can instead reconstruct terminal definitions.
 All assertions remain, and production sources and the release executable are
@@ -38,7 +41,7 @@ The corrected test also passed formatting, its related CPU tests and strict
 Clippy before device qualification. The Lean 4.33.1 build, axiom audit and
 source-record checks cover 147 semantic modules and 1,348 audited theorems.
 Their source hashes are recorded in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/3b06e4795b3a00cd0fbf11d3e0f4f2c32750cf2c/proofs/verification.json).
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/fa500e3d2c102444d46b11e9c6a59bafa90ef4f5/proofs/verification.json).
 These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original

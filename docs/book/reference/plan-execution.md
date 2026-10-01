@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 On Apple M4 Pro, the execution changes in `2e80d065` reduce Metal wall medians
 by about 35% for queens variant 2 and 65% for task allocation, while SEND takes
 9–14% longer. Accounted device storage falls, but process RSS rises on all three
@@ -20,13 +23,13 @@ A1, B1, B2, A2 and fresh clingo 5.8.2 observations in each leg.
 
 | Role | Compiled source | Executable SHA-256 |
 | --- | --- | --- |
-| A, baseline | [`eca5a1a7`](https://github.com/GregoryGelfond/zetesis/tree/eca5a1a7b35cfe5219c2f7c1dcb98c37d13a89d3) | `f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb` |
-| B, candidate | [`2e80d065`](https://github.com/GregoryGelfond/zetesis/tree/2e80d065dfb286a4a457d788e6b55955f583fae0) | `14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00` |
+| A, baseline | [`eca5a1a7`](https://github.com/GregoryGelfond/zetesis/tree/5385635e782eddc9b1b6b9c1509900f1e6ff67be) | `f1b3adbdaa93d6a7f9adff130c1b68adee216d3eb986f16f617348b0ef4a4aeb` |
+| B, candidate | [`2e80d065`](https://github.com/GregoryGelfond/zetesis/tree/7d83909daa36602b0d6f5526d28d7e45ace8c3f3) | `14119b506867127da9b088d943ee5d56241c1af4bbb1338c727027fd7e813d00` |
 
 The baseline executable represents `935f2db7`: runtime crates, Cargo manifests,
 lockfile and pinned toolchain are unchanged between that revision and
 `eca5a1a7`. Relative to the compiled candidate, qualification source
-[`6754a4ff`](https://github.com/GregoryGelfond/zetesis/tree/6754a4ffb435e2614907630f62d91bed746cd462)
+[`6754a4ff`](https://github.com/GregoryGelfond/zetesis/tree/7c24c607841aea20dc254bfd8df56a3c93cf0831)
 changes one device-test fixture and two manual pages. The measured candidate
 bytes were retained unchanged. This distinguishes the compiled source from the
 later test/documentation source; it is not a claim that a binary was rebuilt at

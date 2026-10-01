@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 The arithmetic chain took about **15% less whole-process time** and independent
 negation about **7% less** in this comparison. Queens grounding also improved.
 The 2,000-step ordinary chain regressed by about **4%**, and several workloads
@@ -9,9 +12,9 @@ used more memory. The corpus's sum of process medians was nearly unchanged;
 the execution-series and scalability sums decreased.
 
 This record compares zetesis 0.1.6 at
-[`7c717c05`](https://github.com/GregoryGelfond/zetesis/commit/7c717c05df4f10830008d297b9611e89410d9813)
+[`7c717c05`](https://github.com/GregoryGelfond/zetesis/commit/461b332b56328466c8ef868b716d61a4b6602411)
 with
-[`159c4563`](https://github.com/GregoryGelfond/zetesis/commit/159c456328f0422b1391c794b630545d3db34abe).
+[`159c4563`](https://github.com/GregoryGelfond/zetesis/commit/c2a4abff748f6b244eb7826c6cf0d549e5fe6ecd).
 The candidate combines canonical grounding-leaf reuse, support-publication
 directory reuse, narrower dense delta scans and prepared ground-head coordinates.
 It also includes the intervening solve-output and timing-presentation changes.
@@ -154,7 +157,7 @@ than the version string, identify the measured builds:
 | Common clingo 5.8.2 | `31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015` |
 
 The common runner's source is
-[`ae389373`](https://github.com/GregoryGelfond/zetesis/commit/ae389373e4cda52d548eb83ec9c553621ab58c07).
+[`ae389373`](https://github.com/GregoryGelfond/zetesis/commit/59f686b3e288c04368fad380b56afc0bf062f6e0).
 The correctness manifest SHA-256 is
 `b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958`.
 The appendices are portable projections, not raw model captures or inputs to

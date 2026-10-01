@@ -104,7 +104,7 @@ See `zetesis help solve`, or add `--advanced` for resource controls.
 ## Performance at a glance
 
 CPU measurements on an Apple M4 Pro, using default execution settings:
-zetesis 0.1.6 ([9589f965](https://github.com/GregoryGelfond/zetesis/commit/9589f96559dc8188451baa0202d63f2f4db831ae))
+zetesis 0.1.6 ([measured source](https://github.com/GregoryGelfond/zetesis/commit/7d83581ebd23f8d38daf7138723343c8f8226728))
 with **14 threads** on this host, and clingo 5.8.2 with **one thread**.
 Both enumerate every answer or every tied optimum. Times are medians of five
 complete command-line runs, including startup, parsing, grounding, solving and

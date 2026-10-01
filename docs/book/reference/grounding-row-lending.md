@@ -2,15 +2,18 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 Lending a completed join binding to its immediate consumer reduced dense-rule
 instantiation time in this four-program CPU comparison. On the larger dense
 case, the improvement also reached whole-process time. The smaller case and
 controls do not support a general speedup or a memory-saving claim.
 
 The comparison is baseline
-[`71020b34`](https://github.com/GregoryGelfond/zetesis/commit/71020b34f93935e34fde95e85e4f7d77f750f027)
+[`71020b34`](https://github.com/GregoryGelfond/zetesis/commit/c9548766be37f15c29f1984654cb34b944504c7b)
 against
-[`3d7454d8`](https://github.com/GregoryGelfond/zetesis/commit/3d7454d810acec99121ee5b5615505b6ddc6eea7).
+[`3d7454d8`](https://github.com/GregoryGelfond/zetesis/commit/7161ec59b33a742f21bcc547d8139cbf7a1006fb).
 Both contain the same borrowed candidate-bound implementation. This comparison
 therefore measures the subsequent grounding change, not their combined benefit.
 
@@ -92,10 +95,10 @@ fingerprints, individual timed observations, work counters and separate RSS
 receipts with helper and solver process identities. Both blocks are retained.
 
 Inputs come from the maintained
-[`Workload::generated`](https://github.com/GregoryGelfond/zetesis/blob/3d7454d810acec99121ee5b5615505b6ddc6eea7/crates/zetesis-validation/src/performance/matrix/workload.rs)
+[`Workload::generated`](https://github.com/GregoryGelfond/zetesis/blob/7161ec59b33a742f21bcc547d8139cbf7a1006fb/crates/zetesis-validation/src/performance/matrix/workload.rs)
 API: `TransitiveDense` at sizes 20 and 40, `Chain` at 1,000 and `ChainArithmetic`
 at 1,000. The
-[`matrix` API](https://github.com/GregoryGelfond/zetesis/blob/3d7454d810acec99121ee5b5615505b6ddc6eea7/crates/zetesis-validation/src/performance/matrix.rs)
+[`matrix` API](https://github.com/GregoryGelfond/zetesis/blob/7161ec59b33a742f21bcc547d8139cbf7a1006fb/crates/zetesis-validation/src/performance/matrix.rs)
 provides the instrumented workload protocol; source and binary identities must
 be matched when repeating it. Wall time includes input, preparation, solving,
 statistics and output. This experiment does not measure statistics-free solving,

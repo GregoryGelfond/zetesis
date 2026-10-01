@@ -2,6 +2,9 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Source links use the [revision map](source-revisions.md); labels retain the
+recorded revision identifiers.
+
 The prepared-grounding changes reduce repeated work in independent CPU closure.
 The measurements here show no general Metal speedup. Eager timings include some
 regressions and substantial block variation. These results complement the
@@ -15,9 +18,9 @@ The three measured implementations all report **0.1.0**:
 
 | Role | Implementation | Source |
 | --- | --- | --- |
-| Q | Atom catalog | [`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1) |
-| A | Reusable query workspaces | [`f56a5a24`](https://github.com/GregoryGelfond/zetesis/tree/f56a5a2496f519d7b71b7c4c8fdc166c355874ff) |
-| B | Prepared queries and independent delta closure | [`679ca856`](https://github.com/GregoryGelfond/zetesis/tree/679ca8568a6fd8577d9b944fbd99d7c54f666601) |
+| Q | Atom catalog | [`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/84e15f10f1a89f989d36d215755cb19c58d5f912) |
+| A | Reusable query workspaces | [`f56a5a24`](https://github.com/GregoryGelfond/zetesis/tree/d12674dd926406d2de519471bb974c6b5a13af61) |
+| B | Prepared queries and independent delta closure | [`679ca856`](https://github.com/GregoryGelfond/zetesis/tree/0e9682342edf66108d51087996335438f92e4e88) |
 
 Each uses Rust 1.97.1 and ordinary release optimization. Q/B used the explicit
 Apple-target recipe; A used the native-target recipe. The retained records do
@@ -131,7 +134,7 @@ observations. Rebuilding the same revision need not reproduce its binary bytes.
 ## Version 0.1.1 qualification
 
 The later release build from
-[`9b8cf74c`](https://github.com/GregoryGelfond/zetesis/tree/9b8cf74c818b884b2a7510ec6d98b0ee0873d6cb)
+[`9b8cf74c`](https://github.com/GregoryGelfond/zetesis/tree/d6f7a74678eb98df558856d33a4feb9e4d8ff246)
 was checked independently. Version and statistics report 0.1.1; the baseline
 CPU/Metal/clingo matrix passed all 18 qualification and single-timed positions.
 Complete native families agree for SEND, queens 02 and task allocation, with
