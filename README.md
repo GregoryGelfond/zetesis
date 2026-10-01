@@ -6,6 +6,8 @@
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
 [![Line coverage: 92.15% (portable)](https://img.shields.io/badge/coverage-92.15%25%20%28portable%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
+**[Read the zetesis Book](https://gregorygelfond.github.io/zetesis/book/)**
+
 zetesis is an experimental answer-set solver written in Rust. It finds solutions
 to logic programs and checks them against the program's reduct. It supports
 lazy grounding, parallel CPU execution and optional GPU computation.
@@ -153,7 +155,7 @@ program and dependency setup for your own application.
 - [Solver architecture](docs/book/architecture/tour.md): grounding, candidate
   search and reduct checking.
 - [Performance results](docs/book/reference/performance.md): measurements and their limits.
-- [The zetesis Book](docs/book/index.md): the complete manual, including the
+- [The zetesis Book](https://gregorygelfond.github.io/zetesis/book/): the complete manual, including the
   Lean proof library.
 
 See [Contributing](CONTRIBUTING.md) for development and verification, and
