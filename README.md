@@ -1,5 +1,6 @@
 # zetesis
 
+[![Source release: v0.1.7](https://img.shields.io/badge/source-v0.1.7-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.1.7)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
 [![Line coverage: 92.15% (portable)](https://img.shields.io/badge/coverage-92.15%25%20%28portable%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
@@ -29,26 +30,45 @@ installing with Cargo and checking a build.
 
 ## First program
 
-Save this program as `choices.lp`:
+Find a cheapest path through a graph. This is a self-contained form of the
+[basic shortest-path example](examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp)
+from the correctness corpus, using its [shared encoding](examples/correctness/encodings/shortest-path/variant-01.lp).
+Save it as `shortest-path.lp`:
 
 ```clingo
-a :- not b.
-b :- not a.
-```
+vertex(a; b; c).
+edge(a,b,1; b,c,1; a,c,3).
+start(a). end(c).
 
-Find all its answer sets:
+{ included(Src,Dst,C) : edge(Src,Dst,C) }.
+:- vertex(V), #count{ Dst,C : included(V,Dst,C) } > 1.
+:- vertex(V), #count{ Src,C : included(Src,V,C) } > 1.
+:- included(_,V,_), start(V).
+:- included(V,_,_), end(V).
+
+reachable(Src) :- start(Src).
+reachable(Dst) :- reachable(Src), included(Src,Dst,_), vertex(Src), vertex(Dst).
+:- end(Src), not reachable(Src).
+:- included(Src,_,_), not reachable(Src).
+
+cost(X) :- X = #sum{ C,Src,Dst : included(Src,Dst,C) }.
+#minimize{ C@2 : cost(C) }.
+#minimize{ 1@1,Src,Dst,C : included(Src,Dst,C) }.
+
+#show included/3.
+#show start/1.
+#show end/1.
+```
 
 ```sh
-zetesis solve choices.lp --all
+zetesis solve shortest-path.lp --all
 ```
 
-The answers are `{a}` and `{b}`, in either order. Without `--all`, the default is
-one answer. For a larger example with recursive rules, try
-[restoring a route](examples/network-repair.lp):
-
-```sh
-zetesis solve examples/network-repair.lp --all
-```
+The only optimal displayed answer is
+`end(c) included(a,b,1) included(b,c,1) start(a)`; atom order may differ.
+The route costs 2 and uses two edges. The direct edge costs 3, so fewer edges
+do not outweigh the primary cost objective. With objectives, `--all` returns
+all tied optima; without it, the default displays one optimum.
 
 ## Common options
 
@@ -76,6 +96,33 @@ The time and memory options are not hard process-time or RSS caps.
 Human output shows the answers, result, model count and basic grounding/solving
 times. `--stats` adds detailed tables; diagnostics go to stderr.
 See `zetesis help solve`, or add `--advanced` for resource controls.
+
+## Performance at a glance
+
+CPU measurements on an Apple M4 Pro, using default execution settings:
+zetesis 0.1.6 ([9589f965](https://github.com/GregoryGelfond/zetesis/commit/9589f96559dc8188451baa0202d63f2f4db831ae))
+with **14 threads** on this host, and clingo 5.8.2 with **one thread**.
+Both enumerate every answer or every tied optimum. Times are medians of five
+complete command-line runs, including startup, parsing, grounding, solving and
+captured output; zetesis statistics are enabled.
+
+| Workload | zetesis | clingo | Comparison |
+| --- | ---: | ---: | --- |
+| [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 36.11 ms | 185.92 ms | zetesis 5.15× faster |
+| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 35.94 ms | 117.95 ms | zetesis 3.28× faster |
+| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 15.44 ms | 12.58 ms | zetesis 23% slower |
+| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 13.03 ms | 6.43 ms | clingo 2.03× faster |
+| **All 94 programs: sum of per-case medians** | **854.80 ms** | **826.97 ms** | **zetesis 3.4% slower** |
+
+zetesis is faster on **4 of 94 cases**; clingo is faster on 90. The substantial
+wins on a few cases bring the totals close. The total is a sum of individual
+medians, not one timed combined run. All cases completed within default solver
+budgets and agreed on shown answers and costs, including optimum ties.
+
+These observations depend on the workload
+and machine; they do not establish a general speedup. clingo's optional parallel
+modes are outside this comparison. See the [benchmark guide](docs/book/reference/performance.md#run-a-benchmark)
+for commands and measurement scope.
 
 ## Use from Rust
 
