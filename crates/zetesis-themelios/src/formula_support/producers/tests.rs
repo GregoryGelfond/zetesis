@@ -304,3 +304,44 @@ fn producer_storage_is_admitted_before_reservation() {
     );
     assert!(counters.accounting.work > 0);
 }
+
+#[test]
+fn objective_observations_keep_the_existing_schedule() {
+    for objective in [
+        "#minimize{X:p(X)}.",
+        ":~p(X).[X]",
+        "#minimize{}.",
+        "#maximize{}.",
+    ] {
+        let owner = prepare(&format!("p(1).r(X):-p(X).{objective}"));
+        let prepared = &owner.program;
+        let limits = FormulaLimits::default();
+        let mut counters = Counters::default();
+        let components = owner
+            .catalog
+            .component_view(&limits, &mut counters, location(prepared))
+            .unwrap();
+        let source = PositiveSource::check(
+            prepared,
+            components,
+            &limits,
+            &mut counters,
+            location(prepared),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(source.has_objectives(), "{objective}");
+        assert!(
+            ProducerPlan::prepare(
+                prepared,
+                &owner.catalog,
+                &limits,
+                &mut counters,
+                location(prepared),
+            )
+            .unwrap()
+            .is_none(),
+            "{objective}"
+        );
+    }
+}

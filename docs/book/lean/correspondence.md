@@ -596,6 +596,15 @@ constraints and frozen-seed agreement. The scalar and batch reuse controls
 compare those results, retained buffer addresses and failure recovery. They do
 not constitute a Lean proof of the Rust implementation.
 
+Optional candidate narrowing and mandatory independent CPU checking may share
+that immutable preparation. The Rust boundary checks the exact owner, compatible
+dense policy and completed work and construction-byte allowances before first
+adoption. It shares neither a candidate workspace nor an acceptance result.
+Changed preparation owners retire retained workspaces, even for the same program.
+These admission and lifetime checks remain implementation obligations; existing
+closure laws do not prove them. Regressions establish identity sharing, preserved
+refusals and retained-answer isolation.
+
 The batch oracle partitions ordered candidate occurrences into disjoint ranges,
 each with an exclusive workspace. Its coverage obligation is that splitting
 preserves every occurrence once and ordered concatenation restores the input
@@ -604,7 +613,9 @@ and active reservations without counting shared headers twice.
 [`StorageOwners.shared_idle_active_within_limit`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 sums explicit shared and idle bounds with an active bound of
 `max(retained, allowance)` per owner. The batch maps `allowance` to the scalar
-limit minus the shared preparation header, after checked subtraction; an empty
+limit minus the prepared queries' retained bytes, after checked subtraction. The
+separately allocated query-owner header enters the shared component once; its
+remaining immutable payload has a separate preparation ceiling. An empty
 batch reserves only retained storage. The consumer must account for every named
 region with disjoint owner entries and count the shared component once. The
 pointwise capacity bounds, Rust measurement, cache retirement, checked arithmetic
@@ -873,9 +884,13 @@ source variable necessary, and `kept_binding_survives` keeps it necessary once
 every value a comparison over that variable alone excludes is removed, for the
 bindings the exclusion rule keeps. Selecting every row that can finish then
 preserves the exact ordered completion list, including multiplicity. The
-optional eager consumer applies these guards to the exact normalized positive
-program, in every support-completion round and in final instantiation; the
-ordinary command requests it. Unknown,
+optional eager consumer applies these guards to the positive-flat rules of the
+exact normalized program, in every support-completion round and in final
+instantiation; the ordinary command requests it. Objective declarations may
+coexist with those rules because they introduce no argument values. Their local
+joins, checked arithmetic, tuple identity and costs retain ordinary evaluation.
+This applicability extension does not broaden the producer-scheduling certificate.
+Unknown,
 stopped and inapplicable analysis supply no narrowing. Concrete analyzer
 soundness, source/IR correspondence, dictionary identity, the agreement of the
 guard's comparison verdict with the join's, and recursive matching remain

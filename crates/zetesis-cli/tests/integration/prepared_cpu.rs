@@ -70,11 +70,17 @@ fn prepared_receipts_accompany_the_complete_family() {
     let observation = report.query_execution.unwrap();
     assert!(observation.fault.is_none());
     let statistics = observation.statistics.unwrap();
-    assert_eq!(statistics.preparation_builds, 1);
+    assert_eq!(statistics.preparation_builds, 0);
+    assert_eq!(statistics.preparation_adoptions, 1);
+    assert!(statistics.preparation.unwrap().work > 0);
     assert!(statistics.reused_workspaces > 0);
     assert!(statistics.retained_bytes > 0);
     assert_eq!(
         json["statistics"]["query_execution"]["snapshot"]["preparation_builds"],
+        0
+    );
+    assert_eq!(
+        json["statistics"]["query_execution"]["snapshot"]["preparation_adoptions"],
         1
     );
     assert_eq!(
@@ -84,7 +90,7 @@ fn prepared_receipts_accompany_the_complete_family() {
     assert!(json["statistics"]["query_execution"]["fault"].is_null());
     assert!(expected["statistics"]["query_execution"].is_null());
     assert!(reference.query_execution.is_none());
-    assert!(diagnostics.contains("prepared CPU queries: builds=1"));
+    assert!(diagnostics.contains("prepared CPU queries: builds=0; adoptions=1"));
     assert!(diagnostics.contains("separate from candidate work"));
 }
 
@@ -182,12 +188,17 @@ fn publication_failure_retains_query_ownership_evidence() {
     assert_eq!(partial.completion, Some(Completion::Exhausted));
     let observation = partial.query_execution.as_ref().unwrap();
     assert!(observation.fault.is_none());
-    assert_eq!(observation.statistics.unwrap().preparation_builds, 1);
+    assert_eq!(observation.statistics.unwrap().preparation_builds, 0);
+    assert_eq!(observation.statistics.unwrap().preparation_adoptions, 1);
     assert!(observation.statistics.unwrap().reused_workspaces > 0);
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(json["models"].as_array().unwrap().len(), 8);
     assert_eq!(
         json["statistics"]["query_execution"]["snapshot"]["preparation_builds"],
+        0
+    );
+    assert_eq!(
+        json["statistics"]["query_execution"]["snapshot"]["preparation_adoptions"],
         1
     );
 }

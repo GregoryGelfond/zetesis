@@ -42,6 +42,25 @@ pub(super) struct ProducerPlan<'source> {
     bytes: usize,
 }
 
+/// Certify the source profile used by possible-head scheduling. Domain guards
+/// also admit objective observations; this schedule retains its narrower scope.
+fn producer_source<'source>(
+    prepared: &'source Prepared,
+    components: Option<zetesis_core::TemplateComponentsRef<'_>>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<Option<PositiveSource<'source>>, FormulaFailure> {
+    // Keep the existing cheap refusal before inspecting objective-bearing
+    // sources. The certificate below also records empty declarations.
+    if !prepared.objectives.is_empty() {
+        counters.work(limits, location)?;
+        return Ok(None);
+    }
+    let source = PositiveSource::check(prepared, components, limits, counters, location)?;
+    Ok(source.filter(|source| !source.has_objectives()))
+}
+
 /// Count only producer body occurrences, before reserving their metadata lanes.
 fn input_capacity(
     prepared: &Prepared,
@@ -74,7 +93,7 @@ impl<'source> ProducerPlan<'source> {
         location: Location,
     ) -> Result<Option<Self>, FormulaFailure> {
         let components = catalog.component_view(limits, counters, location)?;
-        let Some(source) = PositiveSource::check(prepared, components, limits, counters, location)?
+        let Some(source) = producer_source(prepared, components, limits, counters, location)?
         else {
             return Ok(None);
         };

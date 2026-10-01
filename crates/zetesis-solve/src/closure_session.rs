@@ -158,7 +158,14 @@ impl<'a> ClosureSession<'a> {
             }
             drop(generation);
             let results = match &mut self.engine {
-                Ok(engine) => engine.check(config, self.program, &seeds, cancellation, phases),
+                Ok(engine) => engine.check(
+                    config,
+                    self.program,
+                    &seeds,
+                    self.candidates.prepared_queries(),
+                    cancellation,
+                    phases,
+                ),
                 Err(_) if seeds.is_empty() => Ok(Vec::new()),
                 Err(stop) => Ok(vec![Err(*stop)]),
             };

@@ -84,6 +84,16 @@ inside a range run sequentially, so uneven costs can balance differently from
 per-candidate work stealing. Static and shared-round checks retain their separate
 preparation and resource contracts.
 
+After its first pull, a bounded `Candidates` iterator may expose an immutable
+`Arc<PreparedQueries>` through `prepared_queries()`. Pass that borrowed owner to
+`BatchOracle::check_prepared_batch_views` to avoid preparing the same program
+again. The oracle checks its own work, construction-byte and dense-layout limits
+before adopting it; incompatible preparation leaves ordinary construction in
+place. Candidate narrowing and membership checking keep separate workspaces.
+Ordinary independent lazy CPU sessions compose these operations automatically.
+The statistics distinguish oracle-local builds from external-owner adoptions;
+neither is a count of checked candidates.
+
 `Candidates::next_selection` retains opaque gate atoms minted in canonical
 carrier order. The complete graph's gate-ID list has that same order, so a
 selected token resolves by one checked array lookup. Its Program, tuple

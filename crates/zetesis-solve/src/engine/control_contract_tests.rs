@@ -32,6 +32,7 @@ fn automatic_policy_retains_cpu_execution() {
                     &config,
                     admitted.program(),
                     &vec![seed.clone(); size],
+                    None,
                     &Cancellation::default(),
                     &crate::phase_timing::Recorder::new(false),
                 )
@@ -92,6 +93,7 @@ fn stopped_seeds_never_enter_oracle_execution() {
                     &config,
                     program,
                     &[seed.clone(), seed.clone()],
+                    None,
                     &cancellation,
                     &phases,
                 )
@@ -103,6 +105,7 @@ fn stopped_seeds_never_enter_oracle_execution() {
                 &config,
                 program,
                 &[seed.clone(), seed.clone()],
+                None,
                 &Cancellation::default(),
                 &phases,
             )

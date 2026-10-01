@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use zetesis_core::{
     GroundProgram, Model, ModelError, Program, SeedSelection, StaticLimits, WordError,
 };
-use zetesis_cpu::{BatchOracle, Cancellation, Limits, PreparationLimits, Stop};
+use zetesis_cpu::{BatchOracle, Cancellation, Limits, PreparationLimits, PreparedQueries, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
@@ -132,6 +132,7 @@ impl Engine {
         options: &SolveConfig,
         program: &Program,
         seeds: &[SeedSelection],
+        prepared: Option<&Arc<PreparedQueries>>,
         cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
@@ -147,7 +148,8 @@ impl Engine {
             SolvePhase::ClosureMembership
         };
         phases.measure(phase, || {
-            self.executor.check(options, program, seeds, cancellation)
+            self.executor
+                .check(options, program, seeds, prepared, cancellation)
         })
     }
 }
@@ -183,15 +185,20 @@ impl IndependentCpu {
         &mut self,
         program: &Program,
         seeds: &[SeedSelection],
+        prepared: Option<&Arc<PreparedQueries>>,
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
-        let result = self.oracle.check_batch_views(
-            program,
-            seeds.par_iter().map(SeedSelection::view),
-            limits,
-            cancellation,
-        );
+        let views = seeds.par_iter().map(SeedSelection::view);
+        let result = match prepared {
+            Some(prepared) => {
+                self.oracle
+                    .check_prepared_batch_views(prepared, views, limits, cancellation)
+            }
+            None => self
+                .oracle
+                .check_batch_views(program, views, limits, cancellation),
+        };
         self.observation.capture(self.oracle.query_statistics());
         // A snapshot fault is retained separately and delivered by the session
         // after these already-checked results. No membership is discarded here.
@@ -442,6 +449,7 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         seeds: &[SeedSelection],
+        prepared: Option<&Arc<PreparedQueries>>,
         cancellation: &Cancellation,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
         let limits = Limits {
@@ -475,7 +483,7 @@ impl Executor {
             }
             #[cfg(feature = "gpu")]
             Self::LazyGpu(executor) => executor.check(options, program, seeds, cancellation),
-            Self::Cpu(executor) => executor.check(program, seeds, limits, cancellation),
+            Self::Cpu(executor) => executor.check(program, seeds, prepared, limits, cancellation),
             Self::StaticCpu {
                 oracle,
                 ground,
