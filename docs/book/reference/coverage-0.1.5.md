@@ -2,8 +2,8 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
-This record retains the version 0.1.5 coverage snapshot that the README badge
-reports: a recorded local measurement, not a live hosted-CI status. Its
+This record retains the historical version 0.1.5 coverage snapshot:
+a recorded local measurement, not a live hosted-CI status. Its
 commands keep the spellings of the revisions they measured.
 
 | Population | Covered / instrumented lines | Coverage |
