@@ -4,7 +4,7 @@
 [![Source release: v0.1.7](https://img.shields.io/badge/source-v0.1.7-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.1.7)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 92.15% (portable)](https://img.shields.io/badge/coverage-92.15%25%20%28portable%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 92.15% (portable)](https://img.shields.io/badge/coverage-92.15%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
 
 **[Read the zetesis Book](https://gregorygelfond.github.io/zetesis/book/)**
 
@@ -94,7 +94,7 @@ Execution defaults to CPU and uses lazy grounding where supported. For formula
 programs, automatic grounding can defer eligible definitions until their answers
 are known; other rules are grounded eagerly. Explicit lazy CPU execution can stream
 eligible constraints while retaining their producer core. See the
-[grounding profiles](docs/book/architecture/grounding.md#eager-and-lazy-execution)
+[grounding profiles](https://gregorygelfond.github.io/zetesis/book/architecture/grounding.html#eager-and-lazy-execution)
 for the current limits. Use `zetesis devices` to list GPU devices and
 `--backend gpu` to run on the GPU: Metal on macOS, Vulkan on Linux.
 
@@ -128,7 +128,7 @@ budgets and agreed on shown answers and costs, including optimum ties.
 
 These observations depend on the workload
 and machine; they do not establish a general speedup. clingo's optional parallel
-modes are outside this comparison. See the [benchmark guide](docs/book/reference/performance.md#run-a-benchmark)
+modes are outside this comparison. See the [benchmark guide](https://gregorygelfond.github.io/zetesis/book/reference/performance.html#run-a-benchmark)
 for commands and measurement scope.
 
 ## Use from Rust
@@ -142,24 +142,24 @@ cargo run --locked -p zetesis-solve --example solve --no-default-features
 
 It prepares a bounded task-choice program, streams typed `AnswerSet` values,
 distinguishes full interpretations from `#show`, and checks complete search.
-The [library quickstart](docs/book/rust/getting-started.md) includes the full
+The [library quickstart](https://gregorygelfond.github.io/zetesis/book/rust/getting-started.html) includes the full
 program and dependency setup for your own application.
 
 ## Documentation
 
-- [Command guide](docs/book/reference/commands.md): inputs, objectives, output,
+- [Command guide](https://gregorygelfond.github.io/zetesis/book/reference/commands.html): inputs, objectives, output,
   limits, testing and benchmarking.
-- [Language reference](docs/book/reference/language.md): supported ASP constructs
+- [Language reference](https://gregorygelfond.github.io/zetesis/book/reference/language.html): supported ASP constructs
   and arithmetic rules.
-- [Rust quick start](docs/book/rust/getting-started.md): embed a solve in an application.
-- [Solver architecture](docs/book/architecture/tour.md): grounding, candidate
+- [Rust quick start](https://gregorygelfond.github.io/zetesis/book/rust/getting-started.html): embed a solve in an application.
+- [Solver architecture](https://gregorygelfond.github.io/zetesis/book/architecture/tour.html): grounding, candidate
   search and reduct checking.
-- [Performance results](docs/book/reference/performance.md): measurements and their limits.
+- [Performance results](https://gregorygelfond.github.io/zetesis/book/reference/performance.html): measurements and their limits.
 - [The zetesis Book](https://gregorygelfond.github.io/zetesis/book/): the complete manual, including the
   Lean proof library.
 
 See [Contributing](CONTRIBUTING.md) for development and verification, and
-[building the book](docs/book/building.md) for a local copy of the manual.
+[building the book](https://gregorygelfond.github.io/zetesis/book/building.html) for a local copy of the manual.
 
 ## Status and license
 
