@@ -147,7 +147,7 @@ include in an average.
 For before/after comparisons, run both executables on the same quiet machine
 and alternate their order. The retained reports identify the actual binaries;
 version labels alone are insufficient. The
-[comparison command](benchmarking.md#compare-reports) reads saved reports
+[comparison command](benchmarking.md#compare-saved-runs) reads saved reports
 without rerunning the solver.
 
 ## Detailed measurements

@@ -20,7 +20,7 @@ solve. The tables below keep those measurements separate.
 
 Retained provenance records preserve the paths used at measurement time. Their
 `examples/kr-domains` paths refer to the corpus now stored in
-[`examples/correctness`](../../../examples/correctness/README.md); moving the
+[`examples/correctness`](https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/README.md); moving the
 fixtures does not rewrite the original evidence or its hashes.
 
 ## Prepared-grounding CPU comparison

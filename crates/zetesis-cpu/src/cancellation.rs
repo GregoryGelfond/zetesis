@@ -214,6 +214,39 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    fn wait_for_expiry(cancellation: &Cancellation) {
+        let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
+        let timeout = Instant::now() + Duration::from_secs(5);
+        // Observe the flag directly: a boundary poll must not cause the expiry.
+        // The bound detects a stalled timer, not a promised scheduling latency.
+        while !deadline.expired.load(Ordering::Relaxed) {
+            assert!(Instant::now() < timeout, "deadline timer did not expire");
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn a_deadline_expires_without_polling() {
+        let cancellation =
+            Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+        wait_for_expiry(&cancellation);
+        assert_eq!(cancellation.poll(), Err(Stop::Deadline));
+    }
+
+    #[test]
+    fn clones_share_the_deadline() {
+        let cancellation =
+            Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+        let clone = cancellation.clone();
+        assert!(Arc::ptr_eq(
+            cancellation.deadline.as_ref().unwrap(),
+            clone.deadline.as_ref().unwrap(),
+        ));
+        wait_for_expiry(&cancellation);
+        assert_eq!(clone.poll(), Err(Stop::Deadline));
+        assert_eq!(cancellation.poll(), Err(Stop::Deadline));
+    }
+
     #[test]
     fn dropping_the_last_clone_retires_the_timer() {
         // A second waiter on the same deadline stands in for the timer thread,

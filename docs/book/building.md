@@ -30,6 +30,31 @@ Serve the `target` directory when browsing both outputs through HTTP, or open
 `mdbook serve` serves only its book output, so it does not by itself expose the
 sibling rustdoc tree. Source links lead to the maintained repository paths.
 
+## Publishing the documentation
+
+The documentation site contains the manual under `book/` and the Rust API
+reference under `doc/`. Keep them together: the manual's API links are relative
+to that layout. The site's root page redirects to `book/`; `doc/index.html`
+redirects to `zetesis_solve/index.html`, the library entry point.
+
+Before publishing, run the book check above and build the API reference with
+warnings treated as errors:
+
+```sh
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
+MDBOOK_OUTPUT__HTML__SITE_URL=/zetesis/book/ mdbook build
+```
+
+Publish only the generated `book/` and `doc/` directories, the root redirect
+and an empty `.nojekyll` file to the `gh-pages` branch. Do not publish the whole
+Cargo target directory. GitHub Pages serves the root of that branch. The source
+checks exclude this generated branch; they remain available on source pushes,
+pull requests and manual dispatch.
+
+The site follows the current source. A tagged source archive retains the manual
+for that release. Check the rendered examples, chapter navigation and API links
+before publishing an update.
+
 ## Check the Rust examples
 
 The quickstart is included from `crates/zetesis-solve/examples/solve.rs`.

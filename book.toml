@@ -13,5 +13,5 @@ edition = "2024"
 
 [output.html]
 git-repository-url = "https://github.com/GregoryGelfond/zetesis"
+edit-url-template = "https://github.com/GregoryGelfond/zetesis/edit/main/{path}"
 smart-punctuation = true
-
