@@ -2,14 +2,14 @@
 
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::sync::{Mutex, TryLockError};
+use std::sync::{Arc, Mutex, TryLockError};
 
 use rayon::prelude::*;
 use zetesis_core::{GroundProgram, Program, Seed, SeedView};
 
 use crate::{
-    Cancellation, Check, Limits, PreparationLimits, PreparationStatistics, StaticCheck, Stop,
-    check_static_view,
+    Cancellation, Check, Limits, PreparationLimits, PreparationStatistics, PreparedQueries,
+    StaticCheck, Stop, check_static_view,
 };
 
 mod prepared;
@@ -53,7 +53,8 @@ impl BatchOracle {
     ///
     /// Admission counts idle retained workspaces and the assigned active
     /// workspace allowances, each reduced by the shared preparation's retained
-    /// bytes; the cache's own header is bookkeeping outside this ceiling, so
+    /// bytes, plus its separately allocated owner header once. The cache's own
+    /// header and Arc bookkeeping are outside this ceiling, so
     /// `workers * max_closure_bytes` is what the ceiling must hold. Retained
     /// capacity under tighter candidate limits remains counted until a refused
     /// check discards it.
@@ -131,6 +132,55 @@ impl BatchOracle {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
+        self.check_views(program, None, seeds, limits, cancellation)
+    }
+
+    /// Check indexed views while reusing an explicitly supplied immutable
+    /// preparation when compatible with this oracle's preparation limits.
+    ///
+    /// A first adoption requires the same dense policy, enough preparation work
+    /// for the completed receipt, and at least the byte ceiling under which
+    /// construction completed, including its reservation overlap. This conservative
+    /// byte check can decline reuse even when a fresh construction would fit. Incompatible
+    /// preparation leaves the ordinary preparation path in place. Already
+    /// retained preparation needs no new work; its bytes remain admitted under
+    /// the current limits. A different adopted owner retires all workspaces,
+    /// even for the same Program. Only immutable queries are shared: each range
+    /// keeps its own candidate truth and scratch. Adoption counts separately
+    /// from builds in [`Self::query_statistics`].
+    ///
+    /// This has the ordering, admission and empty-submission behavior of
+    /// [`Self::check_batch_views`]. Seed ownership is checked per candidate
+    /// against `prepared.program()`; a foreign seed yields `Stop::WrongProgram`.
+    ///
+    /// # Errors
+    /// Returns the same batch errors and ordered candidate stops as
+    /// [`Self::check_batch_views`]. A supplied owner cannot bypass mandatory
+    /// preparation or closure bounds, cancellation or a deadline.
+    pub fn check_prepared_batch_views<'seed>(
+        &self,
+        prepared: &Arc<PreparedQueries>,
+        seeds: impl IndexedParallelIterator<Item = SeedView<'seed>>,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
+        self.check_views(
+            prepared.program(),
+            Some(prepared),
+            seeds,
+            limits,
+            cancellation,
+        )
+    }
+
+    fn check_views<'seed>(
+        &self,
+        program: &Program,
+        prepared: Option<&Arc<PreparedQueries>>,
+        seeds: impl IndexedParallelIterator<Item = SeedView<'seed>>,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
         if seeds.len() > self.max_candidates {
             return Err(BatchError::Capacity {
                 limit: self.max_candidates,
@@ -150,6 +200,7 @@ impl BatchOracle {
         }
         cache.prepare(
             program,
+            prepared,
             active,
             self.preparation_limits,
             self.max_closure_bytes,
@@ -277,8 +328,12 @@ pub struct QueryStatistics {
     /// Currently retained completed preparation, absent before preparation or
     /// after its cache is retired.
     pub preparation: Option<PreparationStatistics>,
-    /// Completed preparation builds over this oracle's lifetime.
+    /// Completed preparation builds performed by this oracle over its lifetime.
     pub preparation_builds: u128,
+    /// Compatible externally prepared owners adopted over this oracle's lifetime.
+    /// Reusing the same retained owner does not adopt it again. Its original
+    /// preparation work remains in `preparation`; adoption did not perform it.
+    pub preparation_adoptions: u128,
     /// Persistent slots, including idle slots from a previously larger batch.
     pub retained_workspaces: usize,
     /// Slots assigned by the latest independent submission acquiring admission.
@@ -287,9 +342,10 @@ pub struct QueryStatistics {
     /// Assigned slots retained from an earlier submission. Zero when no slots
     /// were assigned by the latest independent submission acquiring admission.
     pub reused_workspaces: usize,
-    /// Actual named cache envelope: retained workspaces and spare slot
-    /// capacity, excluding the cache's own header, returned results and
-    /// source payload.
+    /// Actual named cache envelope: retained workspaces, spare slot capacity
+    /// and the separately allocated preparation header once. Other immutable
+    /// preparation payload has its separate preparation byte ceiling. Excludes
+    /// the cache's own header, Arc bookkeeping, returned results and source payload.
     pub retained_bytes: u128,
     /// Collective active/idle/preparation envelope of the latest independent
     /// submission acquiring admission. Capacity and busy refusals cannot update

@@ -83,7 +83,14 @@ fn cpu_keeps_its_route(context: &GpuContext, grounder: Grounder) {
     );
     let first = candidates.next_selection().unwrap().unwrap();
     engine
-        .check(&config, owner.program(), &[first], &cancellation, &phases)
+        .check(
+            &config,
+            owner.program(),
+            &[first],
+            None,
+            &cancellation,
+            &phases,
+        )
         .unwrap();
     assert!(!engine.executor.is_gpu());
     let batch = std::iter::from_fn(|| candidates.next_selection())
@@ -92,7 +99,14 @@ fn cpu_keeps_its_route(context: &GpuContext, grounder: Grounder) {
         .unwrap();
     assert_eq!(batch.len(), 32);
     engine
-        .check(&config, owner.program(), &batch, &cancellation, &phases)
+        .check(
+            &config,
+            owner.program(),
+            &batch,
+            None,
+            &cancellation,
+            &phases,
+        )
         .unwrap();
     assert!(!engine.executor.is_gpu());
     assert!(engine.lazy_statistics(32).is_none());

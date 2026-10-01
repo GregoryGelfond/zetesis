@@ -81,6 +81,13 @@ fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
         right.objectives().templates().iter().collect::<Vec<_>>()
     );
     assert_eq!(left.objective_origins(), right.objective_origins());
+    assert_eq!(
+        left.objectives().priorities(),
+        right.objectives().priorities()
+    );
+    assert_eq!(left.metadata(), right.metadata());
+    assert_eq!(left.projection(), right.projection());
+    assert_eq!(left.warnings(), right.warnings());
 }
 
 fn selective() -> String {
@@ -277,6 +284,9 @@ fn richer_source_keeps_the_complete_join() {
         "p(f(1)).q(X):-p(X).",
         "p(1).q(X+1):-p(X).",
         "p(1).q(N):-N=#count{X:p(X)}.",
+        "d(1).{p(X):d(X)}.#minimize{X:p(X)}.",
+        "d(1).p(X):-d(X),not absent(X).#minimize{X:p(X)}.",
+        "d(1).p(X):-d(X).#minimize{1:p((1;2))}.",
     ] {
         let off = Observation::default();
         let on = Observation::default();
@@ -483,4 +493,169 @@ fn domain_analysis_is_charged_beyond_the_plain_admission_boundary() {
     }
     let failure = fact(upper, Some(DomainLimits::default())).unwrap_err();
     assert!(exceeds_work(&failure, upper), "{failure:?}");
+}
+
+#[test]
+fn objectives_keep_domain_guards_active() {
+    let source = format!("{}#minimize{{X+Y@1,X,Y:r(X,Y)}}.", selective());
+    for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+        let off = Observation::default();
+        let on = Observation::default();
+        let complete = ground(&source, strategy, None, &off).unwrap();
+        let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
+        equal(&complete, &narrowed);
+        assert_eq!(on.status.get(), Some(Status::FixedPoint));
+        assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+        assert!(on.support.get().join_rows < off.support.get().join_rows);
+        let before = *off.rules.borrow().last().unwrap();
+        let after = *on.rules.borrow().last().unwrap();
+        assert!(after.domain_rejected_rows.unwrap() > 0);
+        assert!(after.join_rows < before.join_rows);
+        assert!(after.join_probes < before.join_probes);
+        assert_eq!(after.roots, before.roots);
+    }
+}
+
+#[test]
+fn objective_observations_preserve_scored_answers() {
+    // The rules have one answer containing all six atoms. Objective-local Y
+    // and aggregate variables never enter that rule carrier or its domains.
+    for (objective, expected_costs) in [
+        ("#minimize{X@2,X:p(X);1@1,Y:Y=1..2}.", vec![1, 2]),
+        ("#maximize{X@2,X:p(X);1@1,Y:Y=1..2}.", vec![-1, -2]),
+        (
+            ":~p(X),1=#count{Y:p(Y),Y=X}.[X@2,X] :~p(X).[1@1,X]",
+            vec![1, 2],
+        ),
+    ] {
+        let source = format!(
+            "d(0..3).p(X):-d(X),X<2.{objective}#show p/1.#show f(X):p(X).#project p(X):p(X)."
+        );
+        for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+            let off = Observation::default();
+            let on = Observation::default();
+            let complete = ground(&source, strategy, None, &off).unwrap();
+            let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
+            equal(&complete, &narrowed);
+            assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
+            assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+            let expected = std::collections::BTreeSet::from([(
+                ["d(0)", "d(1)", "d(2)", "d(3)", "p(0)", "p(1)"]
+                    .map(str::to_owned)
+                    .into_iter()
+                    .collect(),
+                Some(expected_costs.clone()),
+            )]);
+            assert_eq!(zetesis_reference_support::exhaustive(&complete), expected);
+            assert_eq!(zetesis_reference_support::exhaustive(&narrowed), expected);
+            for input in [&complete, &narrowed] {
+                let model = zetesis_core::Model::from_positions(
+                    input.atom_catalog(),
+                    0..input.atoms().len(),
+                )
+                .unwrap();
+                let rendered = input
+                    .metadata()
+                    .observations()
+                    .render(
+                        &model,
+                        input.metadata().output(),
+                        zetesis_themelios::observation::Limits::default(),
+                        &zetesis_cpu::Cancellation::default(),
+                    )
+                    .unwrap();
+                let mut shown: Vec<_> = rendered.text().split_whitespace().collect();
+                shown.sort_unstable();
+                assert_eq!(shown, ["f(0)", "f(1)", "p(0)", "p(1)"]);
+                assert!(input.projection().is_explicit());
+                assert_eq!(input.projection().atoms().len(), 2);
+                assert!(
+                    input
+                        .projection()
+                        .atoms()
+                        .iter()
+                        .all(|atom| atom.predicate().name() == "p")
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn objective_warnings_survive_domain_guards() {
+    for objective in ["#minimize{1/X@0,X:p(X)}.", ":~p(X).[1/X@0,X]"] {
+        let source = format!("d(0..2).p(X):-d(X),X<2.{objective}");
+        for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+            let off = Observation::default();
+            let on = Observation::default();
+            let complete = ground(&source, strategy, None, &off).unwrap();
+            let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
+            equal(&complete, &narrowed);
+            assert_eq!(on.status.get(), Some(Status::FixedPoint));
+            assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+            assert_eq!(narrowed.warnings().len(), 1);
+            assert_eq!(
+                zetesis_reference_support::exhaustive(&complete),
+                zetesis_reference_support::exhaustive(&narrowed)
+            );
+        }
+    }
+}
+
+#[test]
+fn objective_sources_keep_reached_arithmetic_refusals() {
+    for source in [
+        "d(0).p(X):-d(X).#minimize{1/X:p(X)}.",
+        "d(0..1).p(X):-d(X).#minimize{1/X+((2147483647+(1-X))\\2):p(X)}.",
+        "d(1;foo).p(X):-d(X),X+1>0.#minimize{1:p(X)}.",
+        "d(1;foo).p(X):-d(X).#minimize{X+1:p(X)}.",
+    ] {
+        for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+            let off = ground(source, strategy, None, &Observation::default()).unwrap_err();
+            let on = Observation::default();
+            let narrowed =
+                ground(source, strategy, Some(DomainLimits::default()), &on).unwrap_err();
+            assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
+            let FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: expected,
+                location: expected_location,
+            }) = off
+            else {
+                panic!("unexpected complete-join refusal: {off}");
+            };
+            assert!(
+                matches!(narrowed,
+                    FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location })
+                    if error == expected && location == expected_location),
+                "{source}"
+            );
+        }
+    }
+}
+
+#[test]
+fn objective_domains_keep_complete_fallbacks() {
+    let source = "d(0..3).p(X):-d(X),X<2.#minimize{X:p(X)}.";
+    let complete = ground(source, JoinStrategy::Indexed, None, &Observation::default()).unwrap();
+    for limits in [
+        DomainLimits {
+            max_work: 7,
+            ..DomainLimits::default()
+        },
+        DomainLimits {
+            max_values_per_argument: 0,
+            ..DomainLimits::default()
+        },
+    ] {
+        let on = Observation::default();
+        let fallback = ground(source, JoinStrategy::Indexed, Some(limits), &on).unwrap();
+        equal(&complete, &fallback);
+        assert!(on.status.get().is_some());
+        assert_eq!(on.work.get().domain_guard_rows, Some(0));
+        assert_eq!(on.work.get().domain_rejected_rows, Some(0));
+        assert_eq!(
+            zetesis_reference_support::exhaustive(&complete),
+            zetesis_reference_support::exhaustive(&fallback)
+        );
+    }
 }

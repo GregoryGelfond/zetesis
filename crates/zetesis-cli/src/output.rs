@@ -1120,6 +1120,7 @@ fn query_statistics(
             out.text("null")?;
         }
         out.number_field("preparation_builds", stats.preparation_builds)?;
+        out.number_field("preparation_adoptions", stats.preparation_adoptions)?;
         out.number_field("retained_workspaces", stats.retained_workspaces)?;
         out.number_field("active_workspaces", stats.active_workspaces)?;
         out.number_field("reused_workspaces", stats.reused_workspaces)?;

@@ -242,10 +242,16 @@ The consumer checks the exact normalized whole program and its original rule
 occurrences. The initial profile permits ordinary positive flat rules and
 constraints, whole named variables, atomic numbers, strings, positive nullary
 symbols, infimum and supremum, and body comparisons. It excludes arithmetic in
-atoms, generators, negative body literals, structured terms, anonymous/local
-scopes and richer heads. `NormalizedProgram` is necessary; a dependency projection never supplies
+rule atoms, generators, negative rule-body literals, structured terms,
+anonymous/local scopes in rules and richer heads. `NormalizedProgram` is necessary; a dependency projection never supplies
 narrowing. Inapplicability keeps the existing complete path and does not create
 a new source refusal.
+
+Objectives may accompany eligible rules without disabling their domain guards.
+The analysis still receives the complete normalized Program, and objective
+declarations introduce no producer domains. Objective joins and scoring remain
+unchanged; this does not permit richer rule heads or local scopes in rules.
+Objective-local conditions keep their existing scopes and execution.
 
 Finite argument domains constrain each rule's variable occurrences, in every
 possible-support completion round and in final instantiation. Their intersection, less every value a

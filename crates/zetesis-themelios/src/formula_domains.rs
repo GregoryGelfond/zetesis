@@ -1,4 +1,4 @@
-//! Optional domains over exactly the normalized positive source and its flat IR.
+//! Optional domains over exactly the normalized source and its positive-flat rules.
 
 use crate::formula_support::{Context, GroundingWork};
 

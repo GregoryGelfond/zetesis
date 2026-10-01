@@ -580,8 +580,9 @@ fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) 
     if let Some(stats) = observation.statistics {
         writeln!(
             sink,
-            "  prepared CPU queries: builds={}; retained workspaces={}; active ranges={}; reused slots={}; retained bytes={}; reserved envelope bytes={}",
+            "  prepared CPU queries: builds={}; adoptions={}; retained workspaces={}; active ranges={}; reused slots={}; retained bytes={}; reserved envelope bytes={}",
             stats.preparation_builds,
+            stats.preparation_adoptions,
             stats.retained_workspaces,
             stats.active_workspaces,
             stats.reused_workspaces,

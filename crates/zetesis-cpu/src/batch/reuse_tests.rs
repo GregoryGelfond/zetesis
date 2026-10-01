@@ -90,6 +90,7 @@ fn collective_reservation_includes_idle_cache() {
     cache
         .prepare(
             graph.program(),
+            None,
             3,
             PreparationLimits::default(),
             usize::MAX,

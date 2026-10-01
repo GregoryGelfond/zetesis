@@ -1,6 +1,6 @@
 //! Fixed disjoint candidate ranges over persistent, exclusive workspaces.
 
-use std::mem::size_of;
+use std::{mem::size_of, sync::Arc};
 
 use rayon::iter::plumbing::{Producer, ProducerCallback};
 use zetesis_core::{Program, SeedView};
@@ -12,9 +12,10 @@ use crate::{
 
 #[derive(Default)]
 pub(super) struct Cache {
-    prepared: Option<PreparedQueries>,
+    prepared: Option<Arc<PreparedQueries>>,
     workspaces: Vec<ClosureWorkspace>,
     builds: u128,
+    adoptions: u128,
     active: usize,
     reused: usize,
     reserved: u128,
@@ -29,8 +30,9 @@ impl Cache {
 
     pub(super) fn statistics(&self) -> Result<QueryStatistics, BatchError> {
         Ok(QueryStatistics {
-            preparation: self.prepared.as_ref().map(PreparedQueries::statistics),
+            preparation: self.prepared.as_ref().map(|prepared| prepared.statistics()),
             preparation_builds: self.builds,
+            preparation_adoptions: self.adoptions,
             retained_workspaces: self.workspaces.len(),
             active_workspaces: self.active,
             reused_workspaces: self.reused,
@@ -40,21 +42,28 @@ impl Cache {
     }
 
     fn retire(&mut self) {
-        let builds = self.builds;
+        let (builds, adoptions) = (self.builds, self.adoptions);
         *self = Self {
             builds,
+            adoptions,
             ..Self::default()
         };
     }
 
-    /// Spare slot capacity, zero once every reserved slot holds a workspace.
-    /// The cache's own header, including the inline prepared-query owner, is
-    /// bookkeeping outside the collective ceiling, like allocator metadata:
-    /// the ceiling then holds exactly `workers * max_closure_bytes`, the
-    /// product a caller can validate before any batch.
+    /// Spare slot capacity plus the out-of-line preparation header, once.
+    /// Its remaining immutable payload has a separate preparation ceiling.
+    /// The cache header and Arc counters are bookkeeping outside this ceiling.
+    /// Since the preparation receipt already includes its header, subtracting
+    /// that receipt from each active allowance keeps `workers * max_closure_bytes`
+    /// a conservative setup reservation.
     fn overhead(&self) -> u128 {
-        (self.workspaces.capacity() - self.workspaces.len()) as u128
-            * size_of::<ClosureWorkspace>() as u128
+        let preparation = self
+            .prepared
+            .as_ref()
+            .map_or(0, |_| size_of::<PreparedQueries>());
+        preparation as u128
+            + (self.workspaces.capacity() - self.workspaces.len()) as u128
+                * size_of::<ClosureWorkspace>() as u128
     }
 
     fn retained(&self) -> Result<u128, BatchError> {
@@ -115,6 +124,7 @@ impl Cache {
     pub(super) fn prepare(
         &mut self,
         program: &Program,
+        supplied: Option<&Arc<PreparedQueries>>,
         count: usize,
         limits: PreparationLimits,
         collective: usize,
@@ -128,21 +138,38 @@ impl Cache {
         {
             self.retire();
         }
+        if let Some(prepared) = supplied
+            && prepared.program().same_instance(program)
+            && self
+                .prepared
+                .as_ref()
+                .is_none_or(|old| !Arc::ptr_eq(old, prepared))
+            && prepared.reusable_under(limits)
+        {
+            let adoptions = self
+                .adoptions
+                .checked_add(1)
+                .ok_or(BatchError::Preparation(Stop::WorkLimit))?;
+            // Workspaces belong to this exact preparation, not merely its Program.
+            self.retire();
+            self.prepared = Some(Arc::clone(prepared));
+            self.adoptions = adoptions;
+        }
         if let Some(prepared) = &self.prepared {
             if prepared.statistics().retained_bytes > limits.max_bytes {
                 return Err(BatchError::Preparation(Stop::StorageLimit));
             }
         } else {
-            // The cache header contains the prepared owner; no second payload
-            // or preparation header is added after this publication.
+            // The receipt includes the prepared payload header; the Arc's
+            // reference-count bookkeeping follows the existing exclusion.
             let builds = self
                 .builds
                 .checked_add(1)
                 .ok_or(BatchError::Preparation(Stop::WorkLimit))?;
-            self.prepared = Some(
+            self.prepared = Some(Arc::new(
                 PreparedQueries::new(program, limits, cancellation)
                     .map_err(BatchError::Preparation)?,
-            );
+            ));
             self.builds = builds;
         }
         let reused = count.min(self.workspaces.len());
@@ -291,3 +318,6 @@ impl Execution<'_> {
         left
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -362,13 +362,15 @@ allowance, are skipped rather than refused when the work or byte allowance
 cannot hold them, and are discarded with a failed or foreign workspace.
 Before executing a batch it admits idle retained workspaces and the allowance
 for each assigned workspace against its collective limit. If `S` is spare slot
-capacity (zero once every reserved slot holds a workspace), `P` the prepared
-queries' retained bytes, `R_i` a workspace's retained capacity, and `L` the
+capacity (zero once every reserved slot holds a workspace), `H` the separately
+allocated preparation header, `P` the prepared queries' retained bytes (including
+`H`), `R_i` a workspace's retained capacity, and `L` the
 per-candidate allowance, the required envelope is
-`S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
-requires `L >= P`. The cache's own header, including the inline prepared-query
-owner, is bookkeeping outside the ceiling, like allocator metadata, so the
-envelope never exceeds `workers * L`: CPU closure setup checks that product
+`H + S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
+requires `L >= P`. The other immutable preparation payload has its separate
+preparation ceiling. The cache's own header and Arc counters are bookkeeping
+outside this envelope, like allocator metadata. Since `H <= P`,
+`workers * L` remains the conservative setup allowance: CPU closure setup checks that product
 before allocating its pool, compiling static rules or initializing candidates.
 This conservative guard also covers eager and shared CPU closure execution;
 formula and device routes apply their own resource checks instead.
@@ -392,7 +394,10 @@ candidate and releases the admission slot.
 
 `SemanticOutcome::query_execution()` retains the CPU producer's typed
 `QueryStatistics` snapshot for independent relational execution. Preparation
-builds are cumulative; active and reused workspace counts describe the latest
+builds and adoptions are cumulative; an adoption shares a compatible immutable
+owner supplied by candidate narrowing without reconstructing it. The retained
+receipt still describes that owner's original construction work. Active and
+reused workspace counts describe the latest
 independent attempt that acquired admission. They count assigned owners, not
 completed candidates. Retained bytes describe the current cache. Reserved bytes
 are the latest attempt's admitted envelope, or zero if it admitted none.

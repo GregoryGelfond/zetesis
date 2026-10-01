@@ -90,6 +90,10 @@ pub struct PreparedQueries {
     /// Ground head positions in these exact layouts, independent of truth.
     heads: Heads,
     statistics: PreparationStatistics,
+    /// The successful construction ceiling includes reservation overlap;
+    /// retained bytes alone do not certify a tighter construction bound.
+    construction_bytes: usize,
+    max_dense_atoms: usize,
 }
 
 #[derive(Default)]
@@ -262,7 +266,19 @@ impl PreparedQueries {
             layouts: Arc::new(layouts),
             block_steps,
             heads,
+            construction_bytes: work.limits.max_closure_bytes,
+            max_dense_atoms,
         })
+    }
+
+    /// A new consumer can adopt this exact owner when its work fits, its
+    /// construction completed under no wider byte allowance, and its dense
+    /// policy agrees. Otherwise that consumer keeps its ordinary preparation
+    /// path, including its original refusal order.
+    pub(crate) fn reusable_under(&self, limits: PreparationLimits) -> bool {
+        self.statistics.work <= limits.max_work
+            && self.construction_bytes <= limits.max_bytes
+            && self.max_dense_atoms == limits.max_dense_atoms
     }
 
     /// Exact admitted source owner. Equal source text need not be this instance.

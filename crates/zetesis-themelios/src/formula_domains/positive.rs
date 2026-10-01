@@ -1,9 +1,12 @@
-//! Whole normalized positive-flat source and its original IR occurrence owner.
+//! Positive-flat rules of a normalized source and their original IR occurrence owner.
 //!
 //! Canonical source rules may coalesce duplicates. The IR occurrence array is
 //! therefore checked independently and remains the sole occurrence/provenance
-//! owner. This certificate permits support scheduling and optional domain guards;
-//! it establishes neither answer-set membership nor a unique answer set.
+//! owner. This certificate qualifies rules and dependencies for optional domain
+//! guards; producer scheduling separately excludes objective observations. It
+//! establishes neither objective semantics, answer-set membership nor uniqueness.
+//! Objective observations remain in the exact analyzed program but produce no
+//! argument values and receive no rule-domain guards.
 //!
 //! A body comparison belongs to the profile: it binds no variable and offers no
 //! row, so the argument domains stay upper bounds over it, and the guards narrow
@@ -25,6 +28,7 @@ const MAX_ATOMIC_BYTES: usize = 4096;
 
 pub(crate) struct PositiveSource<'source> {
     prepared: &'source Prepared,
+    objectives: bool,
 }
 
 impl<'source> PositiveSource<'source> {
@@ -35,14 +39,15 @@ impl<'source> PositiveSource<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Self>, FormulaFailure> {
-        Ok(
-            applicable(prepared, components, limits, counters, location)?
-                .then_some(Self { prepared }),
-        )
+        applicable(prepared, components, limits, counters, location)
     }
 
     pub(crate) fn prepared(&self) -> &'source Prepared {
         self.prepared
+    }
+
+    pub(crate) fn has_objectives(&self) -> bool {
+        self.objectives
     }
 
     pub(crate) fn contains(&self, index: usize, rule: &RuleIr) -> bool {
@@ -53,41 +58,46 @@ impl<'source> PositiveSource<'source> {
     }
 }
 
-fn applicable(
-    prepared: &Prepared,
+fn applicable<'source>(
+    prepared: &'source Prepared,
     components: Option<zetesis_core::TemplateComponentsRef<'_>>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
-) -> Result<bool, FormulaFailure> {
+) -> Result<Option<PositiveSource<'source>>, FormulaFailure> {
     counters.work(limits, location)?;
-    if prepared.analysis_basis != AnalysisBasis::NormalizedProgram
-        || !prepared.objectives.is_empty()
-    {
-        return Ok(false);
+    if prepared.analysis_basis != AnalysisBasis::NormalizedProgram {
+        return Ok(None);
     }
+    let mut objectives =
+        !prepared.objectives.is_empty() || !prepared.objective_declarations.is_empty();
     // Check every source carrier as well as every compiled rule. These lists
     // need not have equal lengths: source deduplication does not erase the IR's
     // original occurrence/provenance population.
     for part in prepared.analyzed.parts() {
         counters.work(limits, location)?;
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
-            return Ok(false);
+            return Ok(None);
         }
         for statement in part.statements() {
             counters.work(limits, location)?;
-            let Statement::Rule(rule) = statement.get() else {
-                return Ok(false);
+            let rule = match statement.get() {
+                Statement::Rule(rule) => rule,
+                Statement::Optimize(_) | Statement::WeakConstraint(_) => {
+                    objectives = true;
+                    continue;
+                }
+                _ => return Ok(None),
             };
             match rule.head().get() {
                 Head::Falsum => {}
                 Head::Literal(literal) if source_atom(literal, limits, counters, location)? => {}
-                _ => return Ok(false),
+                _ => return Ok(None),
             }
             for element in rule.body().get().elements() {
                 counters.work(limits, location)?;
                 let BodyElement::Literal(literal) = element.get() else {
-                    return Ok(false);
+                    return Ok(None);
                 };
                 if literal.negation == DefaultNegation::None
                     && matches!(literal.inner, LiteralInner::Comparison(_))
@@ -95,7 +105,7 @@ fn applicable(
                     continue;
                 }
                 if !source_atom(literal, limits, counters, location)? {
-                    return Ok(false);
+                    return Ok(None);
                 }
             }
         }
@@ -103,7 +113,7 @@ fn applicable(
     for rule in &prepared.rules {
         counters.work(limits, rule.location)?;
         if rule.bindings.is_some() || rule.body_variables != rule.variables {
-            return Ok(false);
+            return Ok(None);
         }
         match &rule.head {
             HeadIr::Normal(None) => {}
@@ -116,7 +126,7 @@ fn applicable(
                     counters,
                     rule.location,
                 )? => {}
-            _ => return Ok(false),
+            _ => return Ok(None),
         }
         for literal in &rule.body {
             counters.work(limits, rule.location)?;
@@ -124,7 +134,7 @@ fn applicable(
                 continue;
             }
             let LiteralIr::Atom(DefaultNegation::None, atom) = literal else {
-                return Ok(false);
+                return Ok(None);
             };
             if !flat(
                 *atom,
@@ -134,11 +144,14 @@ fn applicable(
                 counters,
                 rule.location,
             )? {
-                return Ok(false);
+                return Ok(None);
             }
         }
     }
-    Ok(true)
+    Ok(Some(PositiveSource {
+        prepared,
+        objectives,
+    }))
 }
 
 fn source_atom(

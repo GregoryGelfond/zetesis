@@ -75,6 +75,7 @@ fn a_stopped_preparation_is_the_narrowings_stop() {
         Some(Stop::WorkLimit)
     );
     assert!(matches!(candidates.narrowing, NarrowingState::Unavailable));
+    assert!(candidates.prepared_queries().is_none());
 }
 
 /// The fixture's default allowance is a checked finite upper bound, not a
@@ -221,4 +222,51 @@ fn narrowing_gives_each_phase_an_independent_work_allowance() {
     assert_eq!(result, Err(Stop::WorkLimit));
     assert!(refused.must.is_empty());
     assert!(refused.may.is_none());
+}
+
+#[test]
+fn preparation_is_borrowed_only_after_narrowing() {
+    let program = independent(2);
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
+    candidates.bounded(Limits::default());
+    assert!(candidates.prepared_queries().is_none());
+    let first = candidates.next_selection().unwrap().unwrap();
+    let prepared = Arc::clone(candidates.prepared_queries().unwrap());
+    let NarrowingState::Applied(closures) = &candidates.narrowing else {
+        panic!("completed narrowing retains its queries")
+    };
+    assert!(Arc::ptr_eq(&prepared, &closures.prepared));
+    assert_eq!(candidates.by_ref().map(Result::unwrap).count(), 3);
+    assert!(Arc::ptr_eq(
+        candidates.prepared_queries().unwrap(),
+        &prepared
+    ));
+    drop(candidates);
+    let check = prepared
+        .check_view(
+            first.view(),
+            &mut ClosureWorkspace::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert!(check.accepted());
+}
+
+#[test]
+fn an_empty_gate_carrier_retains_no_queries() {
+    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let mut candidates = Candidates::new(
+        &program,
+        CandidateLimits::default(),
+        Cancellation::default(),
+    );
+    candidates.bounded(Limits::default());
+    assert!(candidates.next_selection().unwrap().is_ok());
+    assert!(candidates.prepared_queries().is_none());
+    assert!(candidates.next_selection().is_none());
 }

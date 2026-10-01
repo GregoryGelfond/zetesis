@@ -173,7 +173,7 @@ enum NarrowingState {
 /// preparation, charged once under `limits.max_work`, and then each
 /// closure's, charged as one candidate check's is.
 struct Closures {
-    prepared: PreparedQueries,
+    prepared: Arc<PreparedQueries>,
     workspace: ClosureWorkspace,
     limits: Limits,
     cancellation: Cancellation,
@@ -198,7 +198,7 @@ impl Closures {
             &cancellation,
         )?;
         Ok(Self {
-            prepared,
+            prepared: Arc::new(prepared),
             workspace: ClosureWorkspace::default(),
             limits,
             cancellation,
@@ -629,6 +629,23 @@ impl<'a> Candidates<'a> {
     pub fn bounded(&mut self, limits: Limits) {
         debug_assert!(!self.started, "the bound precedes the first pull");
         self.narrowing = NarrowingState::Pending(limits);
+    }
+
+    /// The immutable queries retained by completed narrowing, if any.
+    ///
+    /// This read neither starts preparation nor expands the carrier. The owner
+    /// remains absent before the first pull, for an empty gate carrier, or when
+    /// root narrowing was unavailable. Cloning its `Arc` shares only immutable
+    /// query dimensions and layouts; narrowing retains its private workspace.
+    /// A consumer must admit this preparation under its own limits, as
+    /// [`crate::BatchOracle::check_prepared_batch_views`] does. Preparation work
+    /// was charged once by narrowing and is not a membership result.
+    #[must_use]
+    pub fn prepared_queries(&self) -> Option<&Arc<PreparedQueries>> {
+        match &self.narrowing {
+            NarrowingState::Applied(closures) => Some(&closures.prepared),
+            _ => None,
+        }
     }
 
     /// Accounted necessary-condition work and named storage through this pull.

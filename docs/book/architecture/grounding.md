@@ -617,11 +617,19 @@ original formula/reduct semantics. The source guide provides a
 
 The private applicability check covers the exact normalized whole source and
 its original positive flat rule occurrences, body comparisons included. It
-excludes computed or generated terms in atoms, negative body literals,
-structural/local scopes and richer producers; a favorable dependency
+excludes computed or generated terms in rule atoms, negative rule-body literals,
+structural/local scopes in rules and richer producers; a favorable dependency
 projection cannot qualify. The analyzer borrows that
 same immutable Program until final instantiation ends. Normalized statement
 deduplication does not merge the rule occurrences or their provenance.
+
+Objective declarations may accompany those rules. They rank answer sets and do
+not produce argument values, so the domain analysis ignores their restrictions
+while retaining the complete normalized source. Guards narrow only rule joins;
+objective grounding, arithmetic checks, tuple identity and scoring keep their
+existing paths. This permission does not extend the profile to choice or
+aggregate producers. Producer scheduling retains its separate applicability
+conditions.
 
 Every complete binding must belong to the upper domain of each mandatory
 positive argument. Intersecting those domains for one source variable remains
@@ -972,17 +980,31 @@ and the same nonblocking batch admission slot.
 
 Batch preparation uses `PreparationLimits`; a preparation stop is distinct from
 an individual candidate stop. `query_statistics` reports completed preparation
-builds, assigned slots retained from earlier submissions, actual cached capacity
-and the latest admitted collective envelope. The envelope counts shared cache
-and preparation headers once, all idle workspace capacity, and each assigned
+builds and adoptions, assigned slots retained from earlier submissions, actual
+cached capacity and the latest admitted collective envelope. The envelope counts
+the separately allocated preparation header once, all idle workspace capacity, and each assigned
 workspace's maximum of retained capacity and its remaining per-closure allowance.
-A workspace's per-closure allowance already counts the prepared header, so that
-header is subtracted before combining owners. Actual unused workspace-vector
+A workspace's per-closure allowance already counts the prepared queries' retained
+bytes, so those bytes are subtracted before combining owners. Actual unused workspace-vector
 capacity and conservative replacement overlap are included. Lowering a limit
 can refuse already-retained capacity; even an empty batch checks an existing
 cache, while an empty batch never creates preparation. Final result retention,
 source payload, allocator/tree overhead and worker stacks remain separate. These
 receipts describe bounded ownership and reuse, not timing or process RSS.
+
+In an independent lazy CPU session, optional candidate narrowing supplies its
+completed immutable `PreparedQueries` to the mandatory oracle. The oracle adopts
+that exact owner only when the dense-layout policy agrees, the recorded work fits
+its preparation limit, and construction completed under no wider byte allowance.
+Otherwise it prepares the program through its ordinary path. Narrowing and the
+oracle retain separate mutable workspaces; shared queries contain no candidate
+truth or membership verdict. An optional resource-limit refusal permits ordinary
+mandatory checking; cancellation and deadlines still stop the session. Empty
+batches adopt nothing. `preparation_adoptions` counts adoption events; reusing
+the currently retained owner adds none. `preparation_builds` counts construction
+by the oracle itself.
+The preparation receipt still reports the original construction work. This reuse
+does not change eager, shared-round or device execution.
 
 `zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's canonical
 authority, relation indexes/columns and prepared-order runs, dense words, pending

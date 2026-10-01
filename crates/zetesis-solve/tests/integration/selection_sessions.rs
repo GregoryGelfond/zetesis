@@ -199,7 +199,8 @@ fn sessions_preserve_the_complete_typed_family() {
                 .expect("independent prepared CPU route");
             assert!(observation.fault.is_none());
             let queries = observation.statistics.unwrap();
-            assert_eq!(queries.preparation_builds, 1);
+            assert_eq!(queries.preparation_builds, 0);
+            assert_eq!(queries.preparation_adoptions, 1);
             assert!(queries.preparation.unwrap().work > 0);
             assert!(queries.reused_workspaces > 0);
             assert!(queries.retained_workspaces <= config.workers.get());
@@ -350,4 +351,37 @@ fn query_preparation_uses_the_source_work_boundary() {
     assert_eq!(queries.preparation, None);
     assert_eq!(queries.preparation_builds, 0);
     assert_eq!(queries.active_workspaces, 0);
+}
+
+#[test]
+fn a_refuted_root_never_prepares_the_oracle() {
+    let gate = pattern("a", Sign::Positive, vec![]);
+    let program = Program::new(
+        vec![
+            Template::new(Some(gate.clone()), vec![], vec![gate], vec![], vec![]),
+            Template::new(None, vec![], vec![], vec![], vec![]),
+        ],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    assert!(!program.gate_predicates().is_empty());
+    let mut session = Session::builder(
+        PreparedInput::program(&program),
+        SolveConfig {
+            backend: Backend::Cpu,
+            grounder: Grounder::Lazy,
+            models: 0,
+            ..SolveConfig::default()
+        },
+        Cancellation::default(),
+    )
+    .start()
+    .unwrap();
+    assert!(session.next().is_none());
+    let outcome = session.outcome().unwrap();
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(outcome.candidate_progress(), 0);
+    assert!(outcome.candidate_statistics().unwrap().root_refuted);
+    assert!(outcome.query_execution().unwrap().statistics.is_none());
+    assert!(outcome.unsatisfiable());
 }
