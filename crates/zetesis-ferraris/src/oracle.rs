@@ -202,6 +202,49 @@ pub fn models_reduct(
     reduct.satisfied_by(tested, &mut values, &mut work)
 }
 
+/// Append the candidate's atom coordinates in increasing order. The caller has
+/// checked theory identity and reserved an empty destination for the universe.
+/// A stop retains the selected prefix and work charged before the refused tick.
+fn select_atoms(
+    theory: &Theory,
+    candidate: &Interpretation,
+    selected: &mut Vec<usize>,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    for atom in 0..theory.atom_count() {
+        work.tick()?;
+        if candidate.contains(atom) {
+            selected.push(atom);
+        }
+    }
+    Ok(())
+}
+
+/// Advance the selected coordinates as a binary counter. The caller supplies
+/// distinct in-universe coordinates, a subset supported on those coordinates,
+/// and its population. `check` calls this only for a proper subset. A stop retains
+/// preceding bit and population updates; the refused tick performs no update.
+fn advance_subset(
+    selected: &[usize],
+    subset: &mut Interpretation,
+    present: &mut usize,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    for atom in selected {
+        work.tick()?;
+        let packed = &mut subset.words[*atom / 64];
+        let bit = 1 << (*atom % 64);
+        if *packed & bit == 0 {
+            *packed |= bit;
+            *present += 1;
+            break;
+        }
+        *packed &= !bit;
+        *present -= 1;
+    }
+    Ok(())
+}
+
 /// Decide stable-model membership by classical satisfaction and exhaustive
 /// proper-subset checking of the Ferraris formula reduct. This reference kernel
 /// is exponential in the candidate size and does not assume a least reduct model.
@@ -232,12 +275,7 @@ pub fn check(
         });
     }
     let mut selected = reserve(theory.atom_count())?;
-    for atom in 0..theory.atom_count() {
-        work.tick()?;
-        if candidate.contains(atom) {
-            selected.push(atom);
-        }
-    }
+    select_atoms(theory, candidate, &mut selected, &mut work)?;
     let mut words = reserve(candidate.words.len())?;
     words.resize(candidate.words.len(), 0);
     let mut subset = Interpretation {
@@ -261,18 +299,7 @@ pub fn check(
                 statistics: work.statistics,
             });
         }
-        for atom in &selected {
-            work.tick()?;
-            let packed = &mut subset.words[*atom / 64];
-            let bit = 1 << (*atom % 64);
-            if *packed & bit == 0 {
-                *packed |= bit;
-                present += 1;
-                break;
-            }
-            *packed &= !bit;
-            present -= 1;
-        }
+        advance_subset(&selected, &mut subset, &mut present, &mut work)?;
     }
     Ok(Check {
         verdict: Verdict::Stable,
@@ -282,8 +309,123 @@ pub fn check(
 
 #[cfg(test)]
 mod tests {
-    use super::reserve;
-    use zetesis_cpu::Stop;
+    use super::{Limits, Statistics, Work, advance_subset, reserve, select_atoms};
+    use crate::{AdmissionLimits, Interpretation, Theory};
+    use zetesis_cpu::{Cancellation, Stop};
+
+    fn work(cancellation: &Cancellation, allowance: u64) -> Work<'_> {
+        Work {
+            limits: Limits {
+                max_work: 7 + allowance,
+                max_subsets: 5,
+            },
+            cancellation,
+            statistics: Statistics {
+                work: 7,
+                subsets: 3,
+            },
+        }
+    }
+
+    #[test]
+    fn selection_stops_retain_the_exact_scanned_prefix() {
+        let theory = Theory::new(130, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let atoms = [0, 63, 64, 129];
+        let candidate = Interpretation::new(&theory, atoms).unwrap();
+        let cancellation = Cancellation::default();
+        for allowance in [0, 1, 63, 64, 65, 129, 130, 131] {
+            let mut selected = reserve(theory.atom_count()).unwrap();
+            let mut work = work(&cancellation, u64::try_from(allowance).unwrap());
+            let result = select_atoms(&theory, &candidate, &mut selected, &mut work);
+            let expected = atoms
+                .into_iter()
+                .filter(|atom| *atom < allowance)
+                .collect::<Vec<_>>();
+            assert_eq!(selected, expected, "allowance {allowance}");
+            assert_eq!(
+                result,
+                if allowance < 130 {
+                    Err(Stop::WorkLimit)
+                } else {
+                    Ok(())
+                },
+                "allowance {allowance}"
+            );
+            assert_eq!(
+                work.statistics,
+                Statistics {
+                    work: 7 + u64::try_from(allowance.min(130)).unwrap(),
+                    subsets: 3,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn carry_stops_retain_completed_bit_updates() {
+        let theory = Theory::new(130, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let cancellation = Cancellation::default();
+        // The carry clears 0 and 63, sets 64, then stops before reaching 129.
+        let expected: [&[usize]; 5] = [&[0, 63], &[63], &[], &[64], &[64]];
+        for (allowance, expected) in expected.into_iter().enumerate() {
+            let mut subset = Interpretation::new(&theory, [0, 63]).unwrap();
+            let mut present = 2;
+            let mut work = work(&cancellation, u64::try_from(allowance).unwrap());
+            let result = advance_subset(&[0, 63, 64, 129], &mut subset, &mut present, &mut work);
+            assert_eq!(subset.atoms().collect::<Vec<_>>(), expected);
+            assert_eq!(present, expected.len());
+            assert_eq!(
+                result,
+                if allowance < 3 {
+                    Err(Stop::WorkLimit)
+                } else {
+                    Ok(())
+                }
+            );
+            assert_eq!(
+                work.statistics,
+                Statistics {
+                    work: 7 + u64::try_from(allowance.min(3)).unwrap(),
+                    subsets: 3,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn empty_atom_scan_performs_no_poll() {
+        let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let candidate = Interpretation::new(&theory, []).unwrap();
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        let mut selected = reserve(0).unwrap();
+        let mut work = work(&cancellation, 0);
+        let before = work.statistics;
+        assert_eq!(
+            select_atoms(&theory, &candidate, &mut selected, &mut work),
+            Ok(())
+        );
+        assert!(selected.is_empty());
+        assert_eq!(work.statistics, before);
+    }
+
+    #[test]
+    fn empty_carry_performs_no_poll() {
+        let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let mut subset = Interpretation::new(&theory, []).unwrap();
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        let mut present = 0;
+        let mut work = work(&cancellation, 0);
+        let before = work.statistics;
+        assert_eq!(
+            advance_subset(&[], &mut subset, &mut present, &mut work),
+            Ok(())
+        );
+        assert!(subset.atoms().next().is_none());
+        assert_eq!(present, 0);
+        assert_eq!(work.statistics, before);
+    }
 
     #[test]
     fn unrepresentable_workspace_returns_allocation_stop() {
