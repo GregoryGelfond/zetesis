@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "Finite traces of actual extracted evaluator-body calls preserve exact truth prefixes and work; two completed traces establish Ferraris reduct satisfaction. Runtime whole-loop and complete solver verification remain open.",
+  "scope": "The unchanged generated evaluator loop terminates with exact truth prefixes and work accounting under fixed observation tokens; two successful calls establish per-node Ferraris reduct satisfaction. Changing-observation runtime correspondence and complete solver verification remain open.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "f5882b51ba64466c43ae2116a671258931ac936df98774693a3596aaa6f5d51d",
+  "artifactInventorySha256": "7933f2d99fa9c2a539d9f0e93a38f951ede914d329735015fa127180542ef8eb",
   "declarations": [
     "Membership.mask_bit",
     "Membership.outside",
@@ -53,7 +53,18 @@
     "ReductTrace.completed_original_values",
     "ReductTrace.completed_reduct_values",
     "ReductTrace.completed_reduct_truth",
-    "ReductTrace.completed_reduct_satisfaction"
+    "ReductTrace.completed_reduct_satisfaction",
+    "FixedEvaluationLoop.calls_are_trace",
+    "FixedEvaluationLoop.loop_unfold",
+    "FixedEvaluationLoop.calls_execute",
+    "FixedEvaluationLoop.calls_exist",
+    "FixedEvaluationLoop.loop_refines",
+    "FixedEvaluationLoop.evaluate_refines",
+    "FixedEvaluationLoop.completed_values",
+    "FixedReductEvaluation.completed_values",
+    "FixedReductEvaluation.completed_satisfaction",
+    "ChangingObservations.refreshed_trace_differs_from_fixed_loop",
+    "ChangingObservations.not_every_refreshed_trace_executes"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -68,7 +79,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "1982d576be683608e5298fa62fa613bdcafbe54e592e3246611d4e0c2cda6585"
+      "logSha256": "4be2496004353fab8ebd49f9e81a54da4a5544195f0398b8158b94de6358e4ad"
     },
     {
       "argv": [
@@ -81,7 +92,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "de8a125acf57cdb4cc56911dd08c738123f94def1da38cfef157678925a94b14"
+      "logSha256": "9e37aef98dfcd735f1aa7332ecaea408d7efcf4c7e38b3cec329c83ff02ff683"
     },
     {
       "argv": [
@@ -97,7 +108,7 @@
       "logSha256": "1d48d977003ffa359de002c35d892f2f94d93c8c615de94e10955184bb84b963"
     }
   ],
-  "theoremAuditCount": 47,
+  "theoremAuditCount": 58,
   "rustOrShaderSourcesChanged": false,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
@@ -233,8 +244,8 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Trace execution to the generated whole loop with changing external observations.",
+    "Generated fixed-token evaluation to concurrent Rust histories with changing atomic observations.",
     "Rust pointer ownership, allocation, timers and concurrent memory.",
-    "Full frozen-reduct checking, subset search, grounding and solver enumeration."
+    "FrozenReduct construction and owner checks, root scans, subset search, grounding and solver enumeration."
   ]
 }

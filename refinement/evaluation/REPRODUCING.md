@@ -35,6 +35,10 @@ files compile with implicit variables disabled and warnings treated as errors. O
 `Classical.choice` and `Quot.sound` may appear in the audit. The retained
 `verification.json`, `axiom-audit.txt` and `shared-axiom-audit.txt` record the
 checked artifact hashes and commands, separately from the main semantic library's gate.
+The default build includes the generated-loop correspondence, two-call reduct
+satisfaction and the changing-observation counterexample. These use the documented
+fixed-token external model; the build does not establish its correspondence with
+concurrent Rust execution.
 
 ## Repeat extraction
 

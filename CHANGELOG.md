@@ -15,9 +15,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   reduct checking, including correctness of completed decisions under a query limit.
 - A composed packed streaming membership proof and finite theory-admission
   checks that establish the evaluator’s structural preconditions.
-- Optional Lean refinement of extracted formula-evaluator steps and their
-  traces, with exact work accounting and a proved connection to Ferraris reduct
-  satisfaction. Runtime whole-loop correspondence remains unproved.
+- Optional Lean refinement of the generated formula-evaluator loop under fixed
+  observation tokens, with exact work accounting and per-node Ferraris reduct
+  satisfaction from two successful calls. Changing runtime observations remain
+  outside the proof.
 
 ## 0.2.0 — 2026-10-01
 

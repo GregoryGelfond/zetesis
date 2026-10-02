@@ -61,10 +61,11 @@ The proof follows that definition:
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
 a separate obligation. The optional [evaluator refinement](evaluation.md)
-now derives explicit reduct satisfaction from two completed traces of generated
-steps, using the original trace to construct the mask. The traces import the
-same reduct theory, checked under the extraction toolchain. Their connection to
-the generated whole loop and Rust ownership remains open.
+proves the generated evaluator's loop under fixed observation tokens and derives
+per-node reduct satisfaction from two successful generated calls. The first call
+computes the mask; the proof imports the same reduct theory under the extraction
+toolchain. Changing runtime observations, Rust owner checks, the `FrozenReduct`
+wrappers, root scans and subset search remain unproved.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
@@ -137,9 +138,10 @@ system or device progress is not obtained from a set-theoretic coverage law.
 ## A practical sequence of verified milestones
 
 1. **Ground CPU membership.** Use one compatible extraction/proof toolchain.
-   First verify the actual `FrozenReduct` evaluation and its constructor and
-   owner invariants. Connect packed updates and streaming
-   frozen evaluation to the existing laws. Establish exact completed verdicts
+   Extend the generated evaluator result to changing runtime observations and
+   verify root scans, `FrozenReduct` construction and owner invariants. Connect
+   packed updates and streaming frozen evaluation to the existing laws. Establish
+   exact completed verdicts
    for the actual general checker, then the normal-closure checker.
 2. **Ground CPU enumeration.** Connect candidate generation, exact classification
    and completion accounting. Prove a complete retained family equals the

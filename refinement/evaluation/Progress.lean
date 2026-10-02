@@ -12,9 +12,10 @@ Its inputs are cursor/prefix alignment, storage and read bounds, the explicitly
 supplied observations for this one invocation, and a remaining work allowance.
 No iterator, tick, node-evaluation or output-agreement equation is assumed.
 
-The mask is supplied data here; its derivation by original evaluation is a later
-composition obligation. The imported atomic observation model is valid only for
-this invocation. These laws make no temporal, allocation or whole-loop claim.
+The mask is supplied data here; `FixedReduct` derives it from original evaluation.
+These are local transition laws. `FixedLoop` composes them with the generated
+loop under fixed observation tokens; changing runtime reads and allocation
+remain outside that result.
 -/
 namespace EvaluationProgress
 

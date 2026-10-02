@@ -1,9 +1,9 @@
 # Refining formula evaluation
 
 The optional [evaluator package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
-connects traces of actual generated evaluator steps to the definition of Ferraris
-reduct satisfaction. The original trace computes the frozen mask; its correctness
-is proved, rather than assumed of a supplied table.
+connects the actual generated evaluator to per-node Ferraris reduct satisfaction
+under fixed observation tokens. The original evaluation computes the frozen mask;
+its correctness is derived from that call.
 
 ## The two-pass argument
 
@@ -11,22 +11,22 @@ Let `M` be the original interpretation, `J` any tested interpretation, and `Fᵢ
 the formula denoted by node `i`. The central theorem establishes:
 
 ```text
-completed original trace at M
+successful generated evaluate call at M
     → originalValues
-completed trace at J masked by originalValues
+successful generated evaluate call at J masked by originalValues
     → reductValues
 
 reductValues[i] = true  iff  J satisfies the reduct of Fᵢ frozen at M
 ```
 
-Both traces start with empty output and address the same stored formula table.
-The theorem assumes enough packed words for each interpretation and child indices
-that refer to earlier nodes. It derives the original mask's truth and length.
-It does not require `J` to be a subset of `M`; that restriction belongs to the
-later minimality search. This result proves satisfaction, not answer-set
-membership by itself.
+Both calls clear their old output and address the same stored formula table.
+The theorem assumes successful call results, enough packed words for each
+interpretation and child indices that refer to earlier nodes. It derives the
+original mask's truth and length. It does not require `J` to be a subset of `M`;
+that restriction belongs to later minimality search. This is per-node
+satisfaction, not a proof of the Rust root scan or answer-set membership.
 
-The [formal statement](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/ReductTrace.lean)
+The [formal statement](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FixedReduct.lean)
 composes these checked boundaries:
 
 | Boundary | Argument |
@@ -35,14 +35,15 @@ composes these checked boundaries:
 | Packed membership | The extracted atom query returns the stored bit |
 | One node | Actual reads and Boolean branches append exactly the masked truth |
 | Work and stopping | Each continuation charges one unit; a stop preserves the prior prefix |
-| Trace | Induction preserves the complete truth prefix, source table and work counts |
-| Reduct | Existing general ASP theorems identify the second pass with explicit Ferraris reduct truth |
+| Loop | Actual returned-control threading gives a terminating, trace-correct outcome under fixed tokens |
+| Reduct | Two successful generated calls compose with the existing general Ferraris theorem |
 
 An exhausted iterator completes without polling or charging a node. With a node
 present, the iterator fetches it before polling; cancellation, deadline and work
 refusal precede its evaluation and append. A typed stop leaves a strictly shorter
-correct prefix. It does not supply a completed evaluation. The package also
-constructs a finite trace from admitted state, which may end with such a stop.
+correct prefix. `FixedLoop` proves that the generated function terminates under
+its input invariants and fixed-token model; termination may be such a refusal,
+not a successful evaluation.
 
 ## Reusing the ASP library
 
@@ -53,23 +54,24 @@ The bridge is checked in the latter toolchain with its own audit; it does not mi
 object files from different versions or duplicate the semantic definitions.
 
 A structural conversion maps extracted node constructors and machine indices to
-the library's formula DAG. Fold correspondence then connects generated-step
-traces to the existing reduct theorem. The result is a checked connection to the
+the library's formula DAG. Fold correspondence then connects completed generated
+calls to the existing reduct theorem. The result is a checked connection to the
 same mathematical theory used elsewhere in the library.
 
 ## Remaining implementation boundary
 
-A trace records calls to the unchanged generated loop body, each with a separately
-supplied control value. It is an authored execution relation. It has **not yet
-been proved equivalent to the generated whole loop or a Rust execution history**.
-The current extraction effect cannot express changing atomic read results.
-Reusing a fixed token would silently freeze those observations.
+`FixedLoop` follows the generated loop's control threading: repeated token reads
+return the same value. The broader authored `Trace` relation permits separately
+supplied controls between body calls. Fixed-loop calls form a trace, but the
+[checked cancellation example](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FixedLoopExample.lean)
+shows that a refreshed trace can stop after one node while the fixed-clear loop
+completes two. The pinned extraction effect cannot express changing atomic read
+results, so correspondence with concurrent Rust histories remains open.
 
-The theorem shares a stored table and numeric atom vocabulary between its passes.
-Rust pointer-owner checks remain unproved. Allocation, reference counting,
-timers, concurrent memory, machine code and GPU execution also remain outside
-the library models. Constructor admission and subset-search refinement are further
-steps toward full membership verification.
+Both passes share a stored table and numeric atom vocabulary. The `FrozenReduct`
+struct and wrappers, Rust root scan, owner checks and subset search remain
+unproved. Allocation, reference counting, timers, concurrent memory, machine code
+and GPU execution also remain outside these library models.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code

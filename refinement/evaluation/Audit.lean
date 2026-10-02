@@ -1,5 +1,6 @@
 import ProgressExample
-import ReductTrace
+import FixedReduct
+import FixedLoopExample
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
@@ -49,3 +50,14 @@ import ReductTrace
 #print axioms ReductTrace.completed_reduct_values
 #print axioms ReductTrace.completed_reduct_truth
 #print axioms ReductTrace.completed_reduct_satisfaction
+#print axioms FixedEvaluationLoop.calls_are_trace
+#print axioms FixedEvaluationLoop.loop_unfold
+#print axioms FixedEvaluationLoop.calls_execute
+#print axioms FixedEvaluationLoop.calls_exist
+#print axioms FixedEvaluationLoop.loop_refines
+#print axioms FixedEvaluationLoop.evaluate_refines
+#print axioms FixedEvaluationLoop.completed_values
+#print axioms FixedReductEvaluation.completed_values
+#print axioms FixedReductEvaluation.completed_satisfaction
+#print axioms ChangingObservations.refreshed_trace_differs_from_fixed_loop
+#print axioms ChangingObservations.not_every_refreshed_trace_executes

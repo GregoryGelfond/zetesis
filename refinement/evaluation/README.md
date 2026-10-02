@@ -1,9 +1,9 @@
 # Refining formula evaluation
 
-This optional Lean package connects traces of the evaluator extracted from
-`zetesis_ferraris::oracle::evaluate` to Ferraris reduct satisfaction. It checks
-the actual setup and node-step operations. It does not assume a correct node
-evaluator or a correct frozen mask.
+This optional Lean package connects the generated
+`zetesis_ferraris::oracle::evaluate` function to per-node Ferraris reduct
+satisfaction under fixed external observation tokens. It proves the generated
+loop's result and derives the frozen mask from original evaluation.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the existing reduct-evaluation sources directly and checks them unchanged
@@ -13,18 +13,19 @@ versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
 ## Central result
 
-`ReductTrace.completed_reduct_satisfaction` considers two completed traces over
-the same stored formula table:
+[`FixedReductEvaluation.completed_satisfaction`](FixedReduct.lean) composes two
+successful calls to the actual generated evaluator over the same stored table:
 
-1. The original trace begins with empty output and interpretation `M`.
-2. Its actual output becomes the immutable mask of a second trace at `J`.
+1. Original evaluation at `M` computes the mask.
+2. Evaluation at `J` uses that actual output as its immutable mask.
 3. Each returned truth is true exactly when `J` satisfies that formula's
    Ferraris reduct frozen at `M`.
 
-The theorem derives the initial prefix, mask truth and mask coverage. It assumes
-packed storage coverage, ordered child indices and the two actual step traces.
-It does not require `J` to be a subset of `M`; that restriction belongs to the
-subsequent minimality search. Satisfaction alone is not answer-set membership.
+The proof derives setup, mask truth and mask coverage from the calls. Its premises
+are packed storage coverage, ordered child indices and the two successful call
+results under the fixed-token model. It does not require `J` to be a subset of
+`M`; that restriction belongs to the subsequent minimality search. Per-node
+satisfaction does not establish the Rust root scan or answer-set membership.
 
 ## Argument
 
@@ -37,42 +38,41 @@ subsequent minimality search. Satisfaction alone is not answer-set membership.
 | `Setup` | Actual entry operations produce a zero cursor and empty output |
 | `Specification` | A finite truth fold and its prefix laws |
 | `Trace` | Actual step traces preserve exact prefixes and work counts |
+| `FixedLoop` | The generated loop and entry function return trace-correct outcomes under fixed tokens |
 | `Semantics` | Concrete folds equal the existing original/reduct folds |
-| `ReductTrace` | Two completed traces establish explicit reduct satisfaction |
+| `ReductTrace`, `FixedReduct` | Two completed traces, or two successful generated calls, establish per-node reduct satisfaction |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
 An exhausted iterator completes without polling or charging work.
 
-Trace induction preserves the source table, truth prefix, limits and subset
-counter. Each successful continuation adds one work unit. Successful exhaustion
-returns the full value sequence; a typed stop returns a strictly shorter correct
-prefix. `trace_exists` constructs a bounded trace from admitted state; it may
-finish with a typed stop and is not a sufficient-budget completion guarantee.
-A supplied constant control value is only a witness for that construction.
+`FixedLoop` constructs the calls made by the generated loop, passing each
+returned control value to the next call. It proves termination with the exact
+truth prefix and work count, preserving limits and the subset counter. Successful
+exhaustion returns the full value sequence; a typed stop returns a strictly
+shorter correct prefix. Termination may therefore be a refusal, not successful
+evaluation.
 
 ## Observation boundary
 
-The trace is an authored execution relation whose transitions call the unchanged
-generated body. Each call receives its own supplied control value. This allows
-fresh observations; it does not assert that all control values describe one
-runtime object or a valid shared-memory history.
+The atomic external model returns the Boolean stored in its supplied token.
+The body reads cancellation at most once and optionally expiry at most once.
+A single invocation can use fresh observations; `FixedLoop` follows the actual
+generated loop's control threading, so repeated reads return fixed values.
+Only the Relaxed loads used here are modeled; other model orderings do not
+assert which loads are valid in Rust.
 
-The atomic external model describes the Boolean observed at one read site in
-one invocation. The body polls at most once, reading cancellation at most once
-and optionally expiry at most once. It does not represent immutable shared Rust
-atomic storage. Only the Relaxed loads used here are modeled; unsupported model
-orderings say nothing about which loads are valid in Rust.
-
-**The trace is not yet proved equivalent to the generated whole loop.** That
-loop carries its control value forward; the pinned result effect has no changing
-external-read event. Repeatedly reusing the observation token would freeze its
-value. A temporal/effect correspondence is still needed before these results
-can establish runtime whole-loop correctness.
+`Trace` is broader: each body call may receive a separately supplied control
+value. Fixed-loop calls form such a trace; refreshed-control traces need not be
+executions of that loop. A checked [example](FixedLoopExample.lean) stops after
+one node and work unit when cancellation is refreshed, while the fixed-clear
+loop completes two nodes and charges two units. The pinned result effect has no
+changing external-read event. Correspondence with varying Rust atomic observations,
+shared-object identity and concurrent histories remains open.
 
 ## Representation and trust
 
-The two traces use the same stored table and numeric atom vocabulary. The Arc
+Both passes use the same stored table and numeric atom vocabulary. The Arc
 value model does not prove Rust pointer identity or owner checks. Aeneas's vector
 model records logical elements and checked indices, not allocation capacity or
 allocation failure. Unused clock and synchronization fields have tokens but no
@@ -82,8 +82,8 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-complete `FrozenReduct` refinement, subset-search correctness, source grounding
-or end-to-end solver verification.
+refinement of the `FrozenReduct` struct or wrappers, the Rust root scan or subset
+search, source grounding, or end-to-end solver verification.
 
 ## Extraction identity and reproduction
 

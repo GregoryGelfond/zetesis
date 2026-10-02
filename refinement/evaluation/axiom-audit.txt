@@ -45,3 +45,16 @@
 'ReductTrace.completed_reduct_values' depends on axioms: [propext, Classical.choice, Quot.sound]
 'ReductTrace.completed_reduct_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
 'ReductTrace.completed_reduct_satisfaction' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.calls_are_trace' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.loop_unfold' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.calls_execute' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.calls_exist' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.loop_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.evaluate_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedEvaluationLoop.completed_values' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedReductEvaluation.completed_values' depends on axioms: [propext, Classical.choice, Quot.sound]
+'FixedReductEvaluation.completed_satisfaction' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ChangingObservations.refreshed_trace_differs_from_fixed_loop' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'ChangingObservations.not_every_refreshed_trace_executes' depends on axioms: [propext, Classical.choice, Quot.sound]

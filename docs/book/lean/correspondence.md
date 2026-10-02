@@ -24,12 +24,13 @@ for original truth followed by frozen-reduct truth. It derives the mask from
 `roots_true_iff` handles arbitrary tested interpretations. The corresponding
 Rust loop is `zetesis_ferraris::oracle::evaluate`, used by `FrozenReduct`, but
 these proofs do not extract or verify that Rust loop. The separate
-[evaluator refinement](evaluation.md) checks generated setup and node steps,
-then derives prefix correctness and exact work accounting for their traces.
-Two completed traces establish original-mask provenance and explicit reduct
-satisfaction by importing these same semantic sources under Lean 4.31.0.
-Correspondence of the trace relation to the generated whole loop and runtime
-observations remains unproved.
+[evaluator refinement](evaluation.md) proves that the generated loop terminates
+with an exact truth prefix and work count under fixed observation tokens. Two
+successful generated evaluator calls establish original-mask provenance and
+per-node reduct satisfaction using these same semantic sources under Lean 4.31.0.
+The broader trace relation permits fresh control inputs; its traces need not be
+executions of the fixed-token loop. Changing runtime observations, `FrozenReduct`
+construction and owner checks, Rust root scans and subset search remain unproved.
 
 `FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
 Its coverage proof constructs a selection representing every semantic subset
