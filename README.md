@@ -3,7 +3,7 @@
 ζήτησις, *inquiry* — an answer-set solver in Rust.
 
 [![CI](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml)
-[![Source release: v0.1.7](https://img.shields.io/badge/source-v0.1.7-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.1.7)
+[![Source release: v0.2.0](https://img.shields.io/badge/source-v0.2.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.2.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
 [![Line coverage: 92.23% (portable)](https://img.shields.io/badge/coverage-92.23%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)

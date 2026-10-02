@@ -162,7 +162,7 @@ suite. The evidence records the policy the run used: `all_phases`,
 qualified each cell: clingo, the recorded contract, or nothing, because the
 cell needs clingo.
 
-In 0.1.7, the clingo report reader rejects lower-bound progress entries
+The clingo report reader rejects lower-bound progress entries
 (`Lower` without model `Value`) that can appear during parallel optimization.
 Such a capture is retained as an invalid report, even when clingo completed
 normally. It cannot qualify answers or supply an accepted timing comparison;
