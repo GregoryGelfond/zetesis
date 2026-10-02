@@ -2,6 +2,14 @@
 
 Notable changes by release. Versions follow Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- Lean proofs for executable finite reduct checking, normal-program closure
+  and packed interpretation construction and word export. These extend the
+  mathematical library; they do not yet verify the complete Rust/GPU solver.
+
 ## 0.2.0 — 2026-10-01
 
 ### Added

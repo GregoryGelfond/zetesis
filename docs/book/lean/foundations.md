@@ -19,6 +19,11 @@ Lean version. A small consumer file in that directory can be checked with
 `lake env lean Consumer.lean`. Lean declarations are maintained with the semantic
 changes they describe, not generated from the prose in this book.
 
+The library has two responsibilities. General ASP definitions and algorithms
+are reusable independently of zetesis. Representation and implementation
+correspondences apply those results to a particular solver. A proof at the
+first boundary does not silently establish the second.
+
 The [proof-library guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/README.md#build-and-audit)
 describes the strict axiom audit. After source changes, the maintained
 [capture command](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-maintenance/README.md#capture-current-proof-evidence)
@@ -57,6 +62,14 @@ is equivalent to equality with the least closure plus satisfaction of
 constraints. Least-closure checking is justified by the representation; it is
 not assumed in the general definition of an answer set.
 
+`FiniteClosure` supplies an executable sequential scan after ground filters
+have been discharged. Each inserted head is sound; an unchanged full scan is
+closed. A changing scan adds a new listed head, so the head-list length plus
+one bounds the required scans. `closure_exact` proves the computed result is
+`Gamma`, and `accepts_exact` includes constraints and agreement with the frozen
+seed. The [closure guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-closure.md)
+explains the argument and its separate Rust obligations.
+
 ## General formulas
 
 [`Zetesis.Ferraris`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Ferraris.lean)
@@ -81,6 +94,15 @@ correspondence.
 Lean uses `Stable` to connect with the stable-model literature. The solver-facing
 term **answer set** denotes that same semantic property. Naming an unchecked Rust
 value `AnswerSet` would not establish the property.
+
+`ReductEvaluation` computes original truth and then the truth of the frozen
+formula DAG. Its node and root correspondence theorems derive mask correctness
+from the first fold. `FiniteMembership.check_iff_answer_set` composes that result
+with an explicit enumeration of a finite candidate's subsets. It proves an
+executable reference membership algorithm against the Ferraris definition;
+neither evaluator agreement nor subset coverage is assumed. The
+[membership guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-membership.md)
+states the finite algorithm and its limits.
 
 The [next chapter](normal-rules.md) proves the connection between the independently
 defined normal-rule and Ferraris answer sets. This bridge is mathematical;

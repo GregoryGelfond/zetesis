@@ -8,7 +8,11 @@ The maintained full index is
 | Question | Module and central law | Required boundary |
 | --- | --- | --- |
 | What makes an interpretation an answer set? | `Ferraris.stable_iff_minimal_reduct` | Fixed original theory and candidate |
+| Does the computed frozen DAG evaluate that reduct? | `ReductEvaluation.values_correspond`, `roots_true_iff` | Finite indexed formula semantics; mask correctness is derived, not assumed |
+| Does finite subset search decide membership? | `FiniteMembership.check_iff_answer_set` | Supplied finite candidate, decidable atom equality; subset coverage is constructed |
 | When does least closure suffice? | `Semantics.stable_iff_gamma` | Normalized single-head rules and constraints |
+| Does the sequential rule scan compute that closure? | `FiniteClosure.closure_exact`, `accepts_exact`, `empty_completes` | Finite normalized rules with true filters retained and false filters omitted; explicit head-list scan bound |
+| Does packed construction preserve atom membership? | `Refinement.PackedInterpretations.pack_exact`, `export32_exact` | In-range inserted coordinates; mathematical word operations, with Rust effects and extraction separate |
 | Why do normal and formula checking agree on this fragment? | `NormalFerraris.answer_set_iff`, `ferraris_answer_set_iff_closure` | The specified filter-aware translation and one shared atom universe |
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |
 | Why may the closure route narrow the seeds' region by its two closures, and refute it by a constraint? | `Bounds.narrowed_contains_accepted`, `lower_constraint_refutes` | The two closures are the least fixed points of the must and may readings over the admitted program; each offered seed is still checked in full |

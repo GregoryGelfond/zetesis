@@ -13,6 +13,55 @@ silently stand for all of them.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
+## Executable finite algorithms
+
+`ReductEvaluation.values_correspond` proves the actual two-fold Lean algorithm
+for original truth followed by frozen-reduct truth. It derives the mask from
+`TightEvaluation.values`; the public theorem does not assume mask correctness.
+`roots_true_iff` handles arbitrary tested interpretations. The corresponding
+Rust loop is `zetesis_ferraris::oracle::evaluate`, used by `FrozenReduct`, but
+these new proofs do not extract or verify that Rust loop.
+
+`FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
+Its coverage proof constructs a selection representing every semantic subset
+of the supplied candidate. Original satisfaction and absence of a proper-subset
+reduct model therefore follow from executable definitions. The theorem does
+not assume a correct external oracle or complete external proposals. It is
+still distinct from refinement of Rust's subset counter, resource stops or
+optimized candidate search.
+
+`FiniteClosure.closure_exact` proves an in-place-order mathematical rule scan,
+rather than assuming it equals synchronous iteration. Soundness holds at every
+prefix. An unchanged full scan is closed; each changing scan adds a fresh head.
+The head-list length plus one gives a constructive scan bound without a finite
+ambient atom universe. `accepts_exact` adds the completed constraint and gate
+projection checks. This corresponds to the shape of `static_oracle::closure`,
+but the Rust storage operations and control effects remain unproved.
+The finite rule presentation has already discharged ground filters; no source
+filter evaluation or grounding claim follows from this theorem.
+
+`Refinement.PackedInterpretations` models zero-initialized 64-bit words, numeric
+mask insertion, membership and low/high 32-bit export. `pack_exact` derives
+storage length, exact input-set membership and zero padding from the operations.
+`export32_exact` then establishes membership and valid word reads at the second
+width. Predicate-set equalities connect these representations to the semantic
+library. The supplied in-range coordinates are a structural premise, not an
+assumption that membership is correct.
+
+This is newly authored Lean, not a fresh extraction of `Interpretation::new`,
+`contains` or `words32`. The historical membership extraction retains its own
+source identity and toolchain. A current implementation proof must establish
+admission, all internal interpretation producers, machine-index bounds,
+allocation/control behavior and owner identity. The historical immutable-value
+`Arc` model alone does not establish `Arc::ptr_eq`. The word-export result does
+not certify a WGSL kernel, device synchronization or readback.
+
+The [reduct](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/reduct-evaluation.md),
+[membership](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-membership.md),
+[closure](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-closure.md) and
+[packed representation](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-interpretations.md)
+guides explain these arguments independently of Rust details.
+
 ## Keyed constraints and checked source arithmetic
 
 `KeyedConstraints.one_value` and `asked_constraints_preserve` justify replacing

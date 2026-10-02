@@ -1,9 +1,10 @@
 # zetesis proof library
 
-This Lean library formalizes answer-set semantics and the mathematical contracts
-of zetesis's grounding, reduct checking and complete search. It is independently
-usable without the Rust solver. The package uses **Lean 4.33.1** and its standard
-library, with no external package dependencies.
+This Lean library formalizes ASP semantics and reusable algorithms over programs
+and interpretations. Separate representation results connect that mathematics
+to zetesis's grounding, reduct checking and complete search. The library is
+independently usable without the Rust solver. The package uses **Lean 4.33.1**
+and its standard library, with no external package dependencies.
 
 Start with [Part III of the manual](../docs/book/lean/foundations.md) for the
 semantic foundations and their relationship to the solver. The [reading guide](guide/README.md)
@@ -23,6 +24,10 @@ conceptual overview.
 |---|---|
 | When does a zero-divisor instance require a warning or refusal? | [ArithmeticFamilies](Zetesis/ArithmeticFamilies.lean) requires a defined witness in the same complete family, permits empty joins, preserves fatal refusals and makes outer-binding scope explicit. |
 | What is an answer set under the formula reduct? | [Ferraris](Zetesis/Ferraris.lean) defines truth, the frozen reduct and subset minimality. |
+| Does computed frozen-DAG truth equal reduct satisfaction? | [ReductEvaluation](Zetesis/ReductEvaluation.lean) derives the frozen mask from original evaluation and proves exact node and root truth for any tested interpretation. |
+| Can finite subset search decide answer-set membership? | [FiniteMembership](Zetesis/FiniteMembership.lean) constructs subset coverage and proves its executable checker agrees with the Ferraris definition. |
+| Can a sequential rule scan compute the least closure within a finite bound? | [FiniteClosure](Zetesis/FiniteClosure.lean) proves sound insertion, closedness at an unchanged scan, completion within the head-list bound and exact normalized seed acceptance. |
+| Does packed construction establish its own representation invariant? | [PackedInterpretations](Zetesis/PackedInterpretations.lean) proves exact membership, storage and padding for the Lean word operations, followed by exact 64-to-32-bit export. Current Rust extraction remains separate. |
 | When does one least consequence set determine the answer? | [PositiveTheory](Zetesis/PositiveTheory.lean) admits positive atomic-head producers and constraints, including cycles. Its least producer closure is the unique answer set exactly when it satisfies every constraint. |
 | May those constraints contain arbitrary formulas? | [ConstrainedPositive](Zetesis/ConstrainedPositive.lean) proves that a satisfied constraint has a tautological frozen reduct. Arbitrary constraints filter the original answer-set family; failure at positive least consequences establishes absence of an answer set, not necessarily absence of classical models. |
 | When can positive definitions be evaluated after a base answer set? | [TerminalDefinitions](Zetesis/TerminalDefinitions.lean) proves a unique extension when every definition reads only base atoms and the base cannot read derived atoms. Source recognition and executable reconstruction remain separate obligations. |

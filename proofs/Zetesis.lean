@@ -3,6 +3,7 @@ import Zetesis.AdjacencyRows
 import Zetesis.Transformers
 import Zetesis.Semantics
 import Zetesis.Iteration
+import Zetesis.FiniteClosure
 import Zetesis.Lifted
 import Zetesis.LiftedBridge
 import Zetesis.Search
@@ -79,6 +80,9 @@ import Zetesis.AggregateDependencies
 import Zetesis.BinaryWatch
 import Zetesis.TernaryWatch
 import Zetesis.TightEvaluation
+import Zetesis.ReductEvaluation
+import Zetesis.FiniteMembership
+import Zetesis.PackedInterpretations
 import Zetesis.ConditionalConsumers
 import Zetesis.HeadMeasures
 import Zetesis.AggregateReduct

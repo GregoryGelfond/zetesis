@@ -1,7 +1,7 @@
 import Std
 
 /-!
-# Predicate sets for zetesis
+# Predicate sets for answer-set semantics
 
 The semantic universe is symbolic. A set is a membership predicate; these
 definitions do not enumerate atoms or assume a physical representation.
