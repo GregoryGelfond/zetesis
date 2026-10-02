@@ -11,7 +11,12 @@ retains input report hashes, timing and memory observations, actual execution
 routes and qualification scope. Non-completed cells retain their reasons.
 These CPU observations do not establish Metal performance or qualification.
 
-The latest [coverage snapshot](../coverage-0.1.6.md) records portable coverage
+The latest [coverage snapshot](../coverage-120fadfb.md) records portable coverage
+at `120fadfb` and separate Metal qualification at its documentation successor
+`f9e1506c`. Its [receipt](coverage-120fadfb.json) preserves exact counts,
+source identities, report hashes and the 58 named physical tests.
+
+The [previous coverage snapshot](../coverage-0.1.6.md) records portable coverage
 and separate Metal qualification at `9589f965`. Its [receipt](coverage-9589f965.json)
 preserves exact counts, source identity and report hashes. The `v0.1.7` release
 changes version metadata and the README from that implementation.

@@ -6,7 +6,7 @@
 [![Source release: v0.1.7](https://img.shields.io/badge/source-v0.1.7-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.1.7)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 92.15% (portable)](https://img.shields.io/badge/coverage-92.15%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
+[![Line coverage: 92.23% (portable)](https://img.shields.io/badge/coverage-92.23%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
 
 **[Read the zetesis Book](https://gregorygelfond.github.io/zetesis/book/)**
 
