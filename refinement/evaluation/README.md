@@ -32,6 +32,35 @@ These premises describe the reference checker's semantic phases. They do not
 prove that the public wrapper allocates the initial buffers, establishes their
 owners or handles every setup failure correctly.
 
+## Storage and ownership
+
+[`PackedSetup`](PackedSetup.lean) proves that the backend's zero-resize operation
+produces the exact empty packed interpretation needed by subset search. Its
+`initialized_membership` theorem supplies that result to the membership proof.
+Exact candidate word length remains a constructor premise: having enough words
+for reads alone does not establish the required shape.
+
+[`MembershipVerdicts`](MembershipVerdicts.lean) treats the negative branches.
+An actual original-root failure excludes membership. A completed positive subset
+search returns its own proper-subset reduct model; that witness excludes
+membership independently of whether the original candidate was a model.
+
+[`OwnerChecks`](OwnerChecks.lean) proves the generated owner check and clone
+against explicit owner-token contracts. [`RuntimeOwnership`](RuntimeOwnership.lean)
+requires views of immutable data to agree with one heap. Under that invariant,
+a successful owner check supplies equality of the stored theory data. Equal
+values in different owners still fail the check. Reference counting and the
+correspondence of tokens to live allocations remain trusted library contracts.
+
+[`OwnedMembership.completed`](OwnedMembership.lean) combines the actual owner
+check and zero initialization with the membership phases. It derives agreement
+of the atom universes and the initial empty subset instead of assuming them
+separately. Admission and reservation remain outside this composition.
+
+These results do not yet compose the entire public wrapper or prove the actual
+admission constructors. They establish specific setup obligations without
+assuming successful allocation or equating owner identity with value equality.
+
 ## Stored reduct queries
 
 [`FrozenQuery.completed_satisfaction`](FrozenQuery.lean) proves that a completed
@@ -150,13 +179,22 @@ value. Fixed-loop calls form such a trace; refreshed-control traces need not be
 executions of that loop. A checked [example](FixedLoopExample.lean) stops after
 one node and work unit when cancellation is refreshed, while the fixed-clear
 loop completes two nodes and charges two units. The pinned result effect has no
-changing external-read event. Correspondence with varying Rust atomic observations,
-shared-object identity and concurrent histories remains open.
+changing external-read event. Correspondence with varying Rust atomic observations
+and concurrent histories remains open.
+
+[`RuntimeEffects`](RuntimeEffects.lean) provides a separately checked event model
+for that boundary. Reads can return different values for the same handle;
+reservation can return a capacity certificate or a typed refusal. Its embedding
+of existing backend computations preserves success, failure, divergence and
+sequential composition. The model is not installed as the generated checker's
+result type. Its examples therefore establish feasibility, not correspondence
+of the current extraction to concurrent execution.
 
 ## Representation and trust
 
 Both passes use the same stored table and numeric atom vocabulary. The Arc
-value model does not prove Rust pointer identity or owner checks. Aeneas's vector
+model carries explicit owner identity; its connection to Rust allocations and
+immutable-heap consistency are library contracts. Aeneas's vector
 model records logical elements and checked indices, not allocation capacity or
 allocation failure. Unused clock and synchronization fields have tokens but no
 modeled operations. Reference counting, destruction, timers, concurrent memory,

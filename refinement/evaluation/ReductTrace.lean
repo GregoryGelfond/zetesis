@@ -18,8 +18,8 @@ interpretation, as satisfaction of a reduct is defined for any interpretation.
 The trace relation supplies changing observations between generated calls. Its
 connection to the generated whole loop, Rust pointer ownership, allocation and
 concurrent memory remains outside these theorems. Both passes share numeric
-atom identities in this model; equality of their Rust owner pointers is not
-represented by the external Arc value model.
+atom identities in this model; these theorems do not derive owner-token
+agreement or relate those tokens to Rust allocations.
 -/
 namespace ReductTrace
 

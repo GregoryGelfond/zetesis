@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "MembershipSearch"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects"]
 
 [leanOptions]
 autoImplicit = false
@@ -151,3 +151,24 @@ name = "FixedSearch"
 
 [[lean_lib]]
 name = "MembershipSearch"
+
+[[lean_lib]]
+name = "OwnerExternals"
+
+[[lean_lib]]
+name = "RuntimeOwnership"
+
+[[lean_lib]]
+name = "OwnerChecks"
+
+[[lean_lib]]
+name = "PackedSetup"
+
+[[lean_lib]]
+name = "MembershipVerdicts"
+
+[[lean_lib]]
+name = "OwnedMembership"
+
+[[lean_lib]]
+name = "RuntimeEffects"

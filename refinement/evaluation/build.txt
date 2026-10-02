@@ -1,2 +1,3 @@
-✔ [1771/1772] Built MembershipSearch (1.3s)
-Build completed successfully (1772 jobs).
+✔ [1779/1781] Built OwnerChecks (1.2s)
+✔ [1780/1781] Built OwnedMembership (1.2s)
+Build completed successfully (1781 jobs).

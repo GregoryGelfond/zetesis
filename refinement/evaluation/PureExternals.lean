@@ -6,7 +6,9 @@ import Aeneas
 These definitions fill only the pure external signatures used by the current
 `Evaluator` extraction. Options preserve the extracted callback's result and do
 not invoke it when absent. Arc dereference exposes an already live cell's stored
-value. Vector clear erases logical elements in the backend's sequence model.
+value; cloning preserves its explicit owner identity, and pointer comparison
+tests that identity. Vector clear erases logical elements in the backend's
+sequence model.
 
 This file supplies no atomic type or load behavior. The extraction carries an
 Instant, Mutex and Condvar inside Deadline but never operates on those fields;
@@ -15,20 +17,24 @@ clock, lock or wake-up behavior. The relation from those tokens to runtime
 objects is outside this model.
 
 Rust library correspondence remains a trust boundary. In particular, these
-models establish no reference-count, allocation, pointer-identity, capacity,
-destruction, borrowing or concurrent-memory property. The vector operation is
+models establish no reference-count, allocation, capacity, destruction, borrowing
+or concurrent-memory property. Owner tokens correspond to live Rust allocations
+by contract; consistency with one immutable heap is required to transport data
+across an owner comparison. The vector operation is
 used at `Bool` in this extraction, where clearing elements runs no user-defined
 destructor. Its generic signature is not a model of arbitrary Rust drop effects.
 -/
 
 open Aeneas Aeneas.Std
 
-/-- A read-only Arc interface retains the value exposed by dereference.
-Interior mutation, if any, belongs to the model of that value; this wrapper
-supplies neither atomic observations nor reference-count behavior. -/
+/-- A live Arc view retains an owner token and the value exposed by dereference.
+The token is not a machine address. Equal tokens justify equal immutable data
+only under a common-heap consistency contract. Interior mutation belongs to the
+model of the value; this wrapper supplies no atomic or reference-count behavior. -/
 @[rust_type "alloc::sync::Arc"]
 structure alloc.sync.Arc (T : Type) where
   value : T
+  owner : Nat
 
 /-- An unobserved Instant is represented by a token, without time or ordering.
 The generated evaluator does not inspect the deadline's `at` field. -/
@@ -76,11 +82,19 @@ def core.option.Option.is_none_or {T Closure : Type}
 
 /-- Dereferencing an already live wrapper exposes its stored value.
 The unused allocator parameter matches the generated signature; no allocator
-operation or pointer-equality conclusion follows. -/
+operation follows. -/
 @[rust_fun "alloc::sync::{core::ops::deref::Deref<alloc::sync::Arc<@T>, @T>}::deref"]
 def alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref {T : Type}
     (_allocator : Type) (cell : alloc.sync.Arc T) : Result T :=
   .ok cell.value
+
+/-- Compare allocation identities, not stored values. This operation alone
+does not rule out forged views; the heap-consistency relation supplies that
+invariant for immutable theory data. -/
+@[rust_fun "alloc::sync::{alloc::sync::Arc<@T>}::ptr_eq"]
+def alloc.sync.Arc.ptr_eq {T : Type} (_allocator : Type)
+    (left right : alloc.sync.Arc T) : Result Bool :=
+  .ok (decide (left.owner = right.owner))
 
 /-- Clear the backend vector's logical contents. This model has no capacity
 field, so returning its empty sequence says nothing about Rust's retained

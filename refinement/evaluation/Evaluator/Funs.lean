@@ -19,6 +19,16 @@ set_option maxRecDepth 2048
 
 namespace ZetesisExtract
 
+/-- Trait implementation: [alloc::alloc::{impl core::alloc::AllocatorClone for alloc::alloc::Global}]
+    Source: '/rustc/library/alloc/src/alloc.rs', lines 62:0-62:50
+    Name pattern: [core::alloc::AllocatorClone<alloc::alloc::Global>] -/
+@[reducible, rust_trait_impl
+  "core::alloc::AllocatorClone<alloc::alloc::Global>"]
+def alloc.alloc.Global.Insts.CoreAllocAllocatorClone :
+  core.alloc.AllocatorClone Global := {
+  cloneCloneInst := core.core.clone.CloneGlobal
+}
+
 /-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{impl core::ops::function::FnOnce<(&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}}::call_once]:
     Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 51:25-51:32
     Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>}::call_once] -/
@@ -98,6 +108,32 @@ def oracle.Work.tick
       core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
         Unit (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
     ok (r1, self)
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-212:5
+    Visibility: public -/
+def theory.Interpretation.impl.theory
+  (self : theory.Interpretation) : Result theory.Theory := do
+  ok self.theory
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::same_instance]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 142:4-144:5
+    Visibility: public -/
+def theory.Theory.same_instance
+  (self : theory.Theory) (other : theory.Theory) : Result Bool := do
+  alloc.sync.Arc.ptr_eq Global self other
+
+/-- [zetesis_ferraris::oracle::identities]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 93:0-99:1 -/
+def oracle.identities
+  (program : theory.Theory) (interpretation : theory.Interpretation) :
+  Result (core.result.Result Unit zetesis_cpu.cancellation.Stop)
+  := do
+  let t ← theory.Interpretation.impl.theory interpretation
+  let b ← theory.Theory.same_instance program t
+  if b
+  then ok (core.result.Result.Ok ())
+  else ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.WrongProgram)
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::atom_count]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 124:4-126:5
@@ -574,13 +610,6 @@ def oracle.find_countermodel
       0#usize
   ok (countermodel, subset1, values1, work1)
 
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-212:5
-    Visibility: public -/
-def theory.Interpretation.impl.theory
-  (self : theory.Interpretation) : Result theory.Theory := do
-  ok self.theory
-
 /-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::theory]:
     Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 67:4-69:5
     Visibility: public -/
@@ -619,5 +648,15 @@ def reduct.FrozenReduct.satisfied_by
       core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
         Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
     ok (r1, values1, work1)
+
+/-- [zetesis_ferraris::theory::{impl core::clone::Clone for zetesis_ferraris::theory::Theory}::clone]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 75:9-75:14
+    Visibility: public -/
+def theory.Theory.Insts.CoreCloneClone.clone
+  (self : theory.Theory) : Result theory.Theory := do
+  let a ←
+    alloc.sync.Arc.Insts.CoreCloneClone.clone
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self
+  ok a
 
 end ZetesisExtract

@@ -18,6 +18,15 @@ set_option maxRecDepth 2048
 
 namespace ZetesisExtract
 
+/-- Trait declaration: [core::alloc::AllocatorClone]
+    Source: '/rustc/library/core/src/alloc/mod.rs', lines 531:0-531:50
+    Name pattern: [core::alloc::AllocatorClone]
+    Visibility: public -/
+@[rust_trait "core::alloc::AllocatorClone"
+  (parentClauses := ["cloneCloneInst"])]
+structure core.alloc.AllocatorClone (Self : Type) where
+  cloneCloneInst : core.clone.Clone Self
+
 /-- [core::sync::atomic::Ordering]
     Source: '/rustc/library/core/src/sync/atomic.rs', lines 466:0-466:17
     Name pattern: [core::sync::atomic::Ordering]

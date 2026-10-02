@@ -77,6 +77,19 @@ and device execution remain separate obligations. The
 [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
 records the public-wrapper boundary.
 
+`PackedSetup.initialized_membership` derives the zero-storage premise from the
+backend's actual resize operation and exact candidate word length.
+`MembershipVerdicts.returned_witness` identifies the proper-subset reduct model
+returned by the actual search. `OwnerChecks` connects generated identity and
+clone operations to owner tokens and immutable-heap consistency. These results
+close individual setup obligations; the public wrapper and actual admission
+constructors remain unproved.
+
+The separate `RuntimeEffects` specification permits changing read observations
+and typed reservation failure. Its embedding preserves existing backend
+successes, failures and divergence. Connecting it to the generated checker is
+still required; the active extraction retains fixed read tokens.
+
 `FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
 Its coverage proof constructs a selection representing every semantic subset
 of the supplied candidate. Original satisfaction and absence of a proper-subset

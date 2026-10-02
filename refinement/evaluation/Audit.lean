@@ -1,3 +1,6 @@
+import OwnedMembership
+import MembershipVerdicts
+import RuntimeEffects
 import MembershipSearch
 import SelectedAtoms
 import ScalarSubsetsExample
@@ -169,3 +172,36 @@ import FrozenQueryExample
 #print axioms MembershipSearch.completed_countermodel
 #print axioms MembershipSearch.selected_countermodel
 #print axioms MembershipSearch.completed_answer_set
+#print axioms RuntimeOwnership.clone_exact
+#print axioms RuntimeOwnership.clone_consistent
+#print axioms RuntimeOwnership.ptr_eq_exact
+#print axioms RuntimeOwnership.same_owner_value
+#print axioms RuntimeOwnership.accepted_owner_value
+#print axioms RuntimeOwnership.equal_values_distinct_owners
+#print axioms OwnerChecks.identities_accept_iff
+#print axioms OwnerChecks.identities_reject
+#print axioms OwnerChecks.accepted_data
+#print axioms OwnerChecks.accepted_fields
+#print axioms OwnerChecks.theory_clone_exact
+#print axioms OwnerChecks.theory_clone_consistent
+#print axioms PackedSetup.exact_storage_readable
+#print axioms PackedSetup.resize_zero
+#print axioms PackedSetup.resized_empty
+#print axioms PackedSetup.initialized_interpretation
+#print axioms PackedSetup.initialized_membership
+#print axioms MembershipVerdicts.original_failure
+#print axioms MembershipVerdicts.returned_witness
+#print axioms MembershipVerdicts.witness_excludes_membership
+#print axioms OwnedMembership.completed
+#print axioms RuntimeEffects.runs_bind
+#print axioms RuntimeEffects.loop_continues
+#print axioms RuntimeEffects.loop_finishes
+#print axioms RuntimeEffects.embed_ok
+#print axioms RuntimeEffects.embed_failure
+#print axioms RuntimeEffects.embed_divergence
+#print axioms RuntimeEffects.embed_bind
+#print axioms RuntimeEffects.pure_loop_compatible
+#print axioms RuntimeEffects.distinct_reads
+#print axioms RuntimeEffects.reservation_refusal
+#print axioms RuntimeEffects.reservation_success
+#print axioms RuntimeEffects.loop_observes_change

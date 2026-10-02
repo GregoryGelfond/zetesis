@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "The extracted scalar reference-checker selection, carry and proper-subset search are refined under the existing fixed-observation and scalar/sequence models. Actual original evaluation supplies the frozen reduct; actual selection supplies the distinct complete carrier. Completed original root checking and completed search, with work records threaded in source order, agree with the general answer-set definition under explicit represented and initially empty storage premises. Typed interruptions do not establish a Boolean verdict. Public allocation/owner setup, changing concurrent observations, grounding, complete solver enumeration and GPU execution remain outside this proof.",
+  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "c939a5c494d6f9b3fd03594ecd9b24a7debbaffb45e13a60f68bb709b9ef723c",
+  "artifactInventorySha256": "bd99aa771dc7a10cab8425d0b8a21d46f264c1701225b7e0081770d12c41126d",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -165,7 +165,40 @@
     "MembershipSearch.empty_search",
     "MembershipSearch.completed_countermodel",
     "MembershipSearch.selected_countermodel",
-    "MembershipSearch.completed_answer_set"
+    "MembershipSearch.completed_answer_set",
+    "RuntimeOwnership.clone_exact",
+    "RuntimeOwnership.clone_consistent",
+    "RuntimeOwnership.ptr_eq_exact",
+    "RuntimeOwnership.same_owner_value",
+    "RuntimeOwnership.accepted_owner_value",
+    "RuntimeOwnership.equal_values_distinct_owners",
+    "OwnerChecks.identities_accept_iff",
+    "OwnerChecks.identities_reject",
+    "OwnerChecks.accepted_data",
+    "OwnerChecks.accepted_fields",
+    "OwnerChecks.theory_clone_exact",
+    "OwnerChecks.theory_clone_consistent",
+    "PackedSetup.exact_storage_readable",
+    "PackedSetup.resize_zero",
+    "PackedSetup.resized_empty",
+    "PackedSetup.initialized_interpretation",
+    "PackedSetup.initialized_membership",
+    "MembershipVerdicts.original_failure",
+    "MembershipVerdicts.returned_witness",
+    "MembershipVerdicts.witness_excludes_membership",
+    "OwnedMembership.completed",
+    "RuntimeEffects.runs_bind",
+    "RuntimeEffects.loop_continues",
+    "RuntimeEffects.loop_finishes",
+    "RuntimeEffects.embed_ok",
+    "RuntimeEffects.embed_failure",
+    "RuntimeEffects.embed_divergence",
+    "RuntimeEffects.embed_bind",
+    "RuntimeEffects.pure_loop_compatible",
+    "RuntimeEffects.distinct_reads",
+    "RuntimeEffects.reservation_refusal",
+    "RuntimeEffects.reservation_success",
+    "RuntimeEffects.loop_observes_change"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -180,7 +213,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "10e56386d491f3f7734bb8ab5b903733410cb4422386faaf8d5b69c2dfe88f18"
+      "logSha256": "0351b5401783b42d86c59225867d9e9d3029ba54656833a466f3637c4fde7b01"
     },
     {
       "argv": [
@@ -193,7 +226,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "a93ed562154cc12d60d11f79b0672e180123a518540a9c4f8667c680b1a2409d"
+      "logSha256": "b73dea59b28386dbcef7903c8030274912d73e2144abc51dfa19238a337565a3"
     },
     {
       "argv": [
@@ -209,7 +242,7 @@
       "logSha256": "da83106f15652cb0bd205631286163998f0f2a6c4210b5e43dd1fc72cfdc82e8"
     }
   ],
-  "theoremAuditCount": 159,
+  "theoremAuditCount": 192,
   "rustOrShaderSourcesChanged": false,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
@@ -417,10 +450,10 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Generated fixed-token calls to concurrent Rust histories with changing atomic observations.",
-    "Faithful contracts and use of Rust pointer ownership, allocation, timers and concurrent memory.",
-    "Public oracle::check allocation and identity admission, and construction of its represented empty state.",
-    "FrozenReduct construction and public owner-checking wrappers.",
+    "The separate returning-event specification to generated public-checker execution and concurrent Rust histories.",
+    "Use of allocator capacity/failure and runtime ownership contracts in the public wrapper; timers and concurrent memory.",
+    "Actual admission constructors establishing represented inputs, including exact packed storage and valid formula indices.",
+    "FrozenReduct construction, public allocation/setup and complete owner-checking wrapper composition.",
     "Source grounding, specialized execution plans, complete solver enumeration and GPU execution."
   ]
 }

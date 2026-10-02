@@ -14,8 +14,8 @@ an oracle's correctness or an arbitrary mask's semantic meaning.
 -/
 namespace CountermodelSemantics
 
-/-- Evidence that the original evaluation completed. Owner identity and source
-    admission are not represented by these value-level fields. -/
+/-- Evidence that the original evaluation completed. This record retains no
+    successful owner check or source-admission evidence. -/
 structure FrozenEvaluation where
   program : theory.Theory
   candidate : theory.Interpretation

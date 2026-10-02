@@ -22,7 +22,7 @@ def truth (value : Bool) : alloc.vec.Vec Bool :=
 no deadline and a nonzero subset count make the retained fields explicit. -/
 def work (limit charged : U64) : oracle.Work := {
   limits := { max_work := limit, max_subsets := 7#u64 }
-  cancellation := { cancelled := { value := { nextRead := false } }, deadline := none }
+  cancellation := { cancelled := { owner := 1, value := { nextRead := false } }, deadline := none }
   statistics := { work := charged, subsets := 5#u64 } }
 
 /-- On a single admitted leaf, the actual evaluator performs one successful
@@ -126,7 +126,7 @@ theorem singleton_scan (program : theory.Theory) (value : Bool)
 
 /-- Falsum is the one asserted formula; there are no atoms to store. -/
 def falseCandidate : theory.Interpretation := {
-  theory := { value := {
+  theory := { owner := 0, value := {
     atoms := 0#usize
     nodes := alloc.vec.Vec.from [.False] (by scalar_tac)
     roots := alloc.vec.Vec.from [0#usize] (by scalar_tac) } }
@@ -195,7 +195,7 @@ theorem represented_candidate_need_not_be_a_model :
 /-- The asserted atom is zero in a two-atom universe. Atom one is unasserted;
 the packed word selects whether it additionally belongs to the interpretation. -/
 def atomCandidate (bits : U64) : theory.Interpretation := {
-  theory := { value := {
+  theory := { owner := 0, value := {
     atoms := 2#usize
     nodes := alloc.vec.Vec.from [.Atom 0#usize] (by scalar_tac)
     roots := alloc.vec.Vec.from [0#usize] (by scalar_tac) } }

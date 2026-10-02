@@ -20,7 +20,7 @@ def nodes : Slice theory.Node := Slice.from [.False, .False] (by scalar_tac)
 
 /-- The represented zero-atom interpretation needs no packed words. -/
 def candidate : theory.Interpretation := {
-  theory := { value := {
+  theory := { owner := 0, value := {
     atoms := 0#usize
     nodes := { slice := nodes }
     roots := alloc.vec.Vec.new Usize } }
@@ -29,7 +29,7 @@ def candidate : theory.Interpretation := {
 /-- Observation records differ only in the value returned by cancellation load;
 both configurations have no deadline. -/
 def control (cancelled : Bool) : zetesis_cpu.cancellation.Cancellation := {
-  cancelled := { value := { nextRead := cancelled } }
+  cancelled := { owner := 1, value := { nextRead := cancelled } }
   deadline := none }
 
 /-- Two units admit both nodes, starting from no charged work. -/

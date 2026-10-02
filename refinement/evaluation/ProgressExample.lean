@@ -11,7 +11,7 @@ def nodes : Slice theory.Node := Slice.from [.False] (by scalar_tac)
 /-- The empty interpretation of a zero-atom theory whose only formula is false.
 Its formula slice is nonempty, although its packed atom storage is empty. -/
 def candidate : theory.Interpretation := {
-  theory := { value := { atoms := 0#usize, nodes := { slice := nodes }, roots := alloc.vec.Vec.new Usize } }
+  theory := { owner := 0, value := { atoms := 0#usize, nodes := { slice := nodes }, roots := alloc.vec.Vec.new Usize } }
   words := alloc.vec.Vec.new U64
 }
 
@@ -20,7 +20,7 @@ def cursor : Evaluation.Cursor := { iter := { slice := nodes, i := 0 }, count :=
 
 /-- This invocation observes no cancellation and has no deadline. -/
 def control : zetesis_cpu.cancellation.Cancellation := {
-  cancelled := { value := { nextRead := false } }
+  cancelled := { owner := 1, value := { nextRead := false } }
   deadline := none
 }
 

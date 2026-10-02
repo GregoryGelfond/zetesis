@@ -32,6 +32,23 @@ The proof does not establish the public wrapper's allocation, owner checks or
 buffer construction, nor coverage of candidate generation or optimized search
 routes.
 
+## Initial storage and program ownership
+
+[`PackedSetup`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PackedSetup.lean)
+connects the backend's zero-resize operation to the empty-subset invariant.
+Exact candidate word length remains a constructor premise. The resulting
+membership theorem no longer needs an assumed meaning for the initialized words.
+[`MembershipVerdicts`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/MembershipVerdicts.lean)
+also establishes both negative branches: original-root failure and the actual
+proper-subset witness returned by search.
+
+[`OwnerChecks`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/OwnerChecks.lean)
+proves the generated identity check and clone under explicit library contracts.
+Owner identity is distinct from data equality. Consistency with one immutable
+heap permits a successful identity check to establish equal theory data;
+independently owned equal theories remain distinct. These laws do not verify
+reference counting or allocation.
+
 ## From evaluation to theory satisfaction
 
 The lower-level stored-reduct query accepts any tested interpretation `J`:
@@ -146,9 +163,14 @@ shows that a refreshed trace can stop after one node while the fixed-clear loop
 completes two. The pinned extraction effect cannot express changing atomic read
 results, so correspondence with concurrent Rust histories remains open.
 
+A separate checked `RuntimeEffects` model admits returning read and reservation
+events and preserves embedded backend computations. It is not yet connected to
+the generated checker. Supporting those effects through the extraction backend's
+function and loop interfaces remains necessary.
+
 The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
-construction, public allocation and owner-checking wrappers, and establishment
-of the initial storage premises remain unproved. Source grounding, candidate
+construction, public allocation, composition of owner checks with the public
+wrapper, and actual admission constructors remain unproved. Source grounding, candidate
 enumeration and optimized checking routes are separate obligations. Allocation,
 reference counting, timers, concurrent memory, machine code and GPU execution
 remain outside these models. The
@@ -157,7 +179,7 @@ distinguishes this loop from the public wrapper's allocation and ownership model
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code
-comes from production Rust. Three recorded local-name adjustments avoid generator
+comes from production Rust. Recorded local-name adjustments avoid generator
 namespace collisions; exported destination metadata uses a portable path. An
 unreferenced derived `Debug` implementation and its ordered registration are
 also removed after an explicit reference check. Two unused range-trait method

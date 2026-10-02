@@ -15,6 +15,7 @@ namespace RootScanExample
 
 /-- Empty node and root storage supplies no asserted formula to scan. -/
 def emptyProgram : theory.Theory := {
+  owner := 0
   value := {
     atoms := 0#usize
     nodes := alloc.vec.Vec.new theory.Node
@@ -23,7 +24,7 @@ def emptyProgram : theory.Theory := {
 /-- Both cancellation and an exhausted work allowance would refuse a tick. -/
 def refusedWork : oracle.Work := {
   limits := { max_work := 0#u64, max_subsets := 0#u64 }
-  cancellation := { cancelled := { value := { nextRead := true } }, deadline := none }
+  cancellation := { cancelled := { owner := 1, value := { nextRead := true } }, deadline := none }
   statistics := { work := 0#u64, subsets := 7#u64 } }
 
 /-- The actual entry function returns no failed root on empty roots, retaining
@@ -41,6 +42,7 @@ theorem empty_roots_do_not_poll :
 false→false. The roots repeat node two before visiting three, with false node zero
 last. No sorting or deduplication is part of this stored root sequence. -/
 def orderedProgram : theory.Theory := {
+  owner := 2
   value := {
     atoms := 0#usize
     nodes := alloc.vec.Vec.from [.False, .False, .Implies 0#usize 0#usize, .False] (by scalar_tac)
@@ -59,7 +61,7 @@ def cursor (position : Nat) : core.slice.iter.Iter Usize := {
 counter is unrelated to root visits and must remain seven. -/
 def clearWork (charged : U64) : oracle.Work := {
   limits := { max_work := 3#u64, max_subsets := 0#u64 }
-  cancellation := { cancelled := { value := { nextRead := false } }, deadline := none }
+  cancellation := { cancelled := { owner := 1, value := { nextRead := false } }, deadline := none }
   statistics := { work := charged, subsets := 7#u64 } }
 
 /-- Two occurrences of true root two consume two ticks; false root three consumes

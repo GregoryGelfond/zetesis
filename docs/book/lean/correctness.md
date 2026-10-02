@@ -152,17 +152,17 @@ system or device progress is not obtained from a set-theoretic coverage law.
 
 ## A practical sequence of verified milestones
 
-1. **Ground CPU membership.** Complete the public wrapper around the proved
-   reference-checker phases: allocation, owner identity and initial zero-storage
-   invariants. Extend the fixed-observation result to changing runtime
-   observations and verify `FrozenReduct` construction. Then connect the
-   normal-closure checker and each optimized membership route to the same
-   answer-set definition.
-2. **Ground CPU admission and enumeration.** Prove that admitted theory
-   construction establishes the representation premises. Connect candidate
+1. **Public scalar reference checker.** Establish admitted input and initial
+   storage invariants, preserve program ownership, and connect the public
+   wrapper to the proved reference-checker phases. Model fallible allocation
+   and changing cancellation observations. Include `FrozenReduct` construction
+   and its public checks. This milestone concerns one candidate of a finite
+   ground formula theory.
+2. **Optimized CPU checking and enumeration.** Connect normal closure and each
+   optimized membership route to the same answer-set definition. Prove candidate
    generation, plan selection, exact classification and completion accounting.
-   Prove a complete retained family equals the original finite theory's world
-   view. Add optimized routes through their recognizers and preservation laws.
+   A complete retained family must equal the original finite theory's world
+   view. Each specialization needs its recognizer and preservation argument.
 3. **Source compilation.** Start from an admitted program in a declared finite
    normal-language fragment. Prove concrete grounding and reconstruction, then extend the theorem
    construct by construct to the admitted language. Include arithmetic errors
