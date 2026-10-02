@@ -15,18 +15,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   reduct checking, including correctness of completed decisions under a query limit.
 - A composed packed streaming membership proof and finite theory-admission
   checks that establish the evaluator’s structural preconditions.
-- Lean refinement of generated formula evaluation, root scanning and private
-  queries of a stored reduct under fixed observation tokens, with work bounds
-  and typed stops. Completed queries decide reduct satisfaction given a mask
-  agreeing with original truth. Constructing that stored reduct, public owner
-  checks, allocation, changing runtime observations and subset search remain
-  outside the proof.
-- Lean proofs connecting atom-selection and packed subset-update primitives to
-  the shared mathematical definitions, plus exhaustion and refusal laws for
-  the generated helper bodies. The containing Rust search loop is extracted
-  but remains unverified.
-- Lean proofs that a completed reference-checker subset query decides reduct
-  satisfaction from a computed original mask and charges exactly one subset.
+- Lean refinement of extracted formula evaluation, root checking, atom selection
+  and proper-subset search. Completed membership checks agree with the
+  answer-set definition under explicit storage and runtime-model assumptions;
+  interrupted checks remain distinct. Public allocation and ownership checks,
+  grounding, full solver enumeration and GPU execution remain outside this proof.
 
 ### Changed
 

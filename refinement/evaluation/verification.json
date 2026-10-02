@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "Generated private stored-reduct and per-subset queries decide Ferraris reduct satisfaction on completion under fixed observation tokens. The per-subset result derives its mask from actual original evaluation, recovers its internal calls and charges exactly one subset. Selected-atom and packed-update bridges retain exhaustion/refusal laws. The concrete proper-subset search loop is extracted without new external models; its coverage and membership endpoint remain unproved. Allocation, public owner checks, changing concurrent observations and complete solver verification remain open.",
+  "scope": "The extracted scalar reference-checker selection, carry and proper-subset search are refined under the existing fixed-observation and scalar/sequence models. Actual original evaluation supplies the frozen reduct; actual selection supplies the distinct complete carrier. Completed original root checking and completed search, with work records threaded in source order, agree with the general answer-set definition under explicit represented and initially empty storage premises. Typed interruptions do not establish a Boolean verdict. Public allocation/owner setup, changing concurrent observations, grounding, complete solver enumeration and GPU execution remain outside this proof.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "c194e80e21170acd77bb807d571ce5088bb2b089bfcfb86cc87cceaf25e76fba",
+  "artifactInventorySha256": "c939a5c494d6f9b3fd03594ecd9b24a7debbaffb45e13a60f68bb709b9ef723c",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -124,7 +124,48 @@
     "SubsetSteps.selection_exhausted",
     "SubsetSteps.selection_refused",
     "SubsetSteps.carry_exhausted",
-    "SubsetSteps.carry_refused"
+    "SubsetSteps.carry_refused",
+    "FixedSelection.body_advances",
+    "FixedSelection.loop_unfold",
+    "FixedSelection.loop_refused",
+    "FixedSelection.loop_refines",
+    "FixedSelection.select_refines",
+    "FixedSelection.returned_report",
+    "FixedSelection.completed_selection",
+    "FixedSelection.returned_work_bound",
+    "FixedSelection.select_completes",
+    "FixedSelection.completed_carrier",
+    "SubsetCarry.body_set",
+    "SubsetCarry.body_clear",
+    "SubsetCarry.loop_unfold",
+    "SubsetCarry.loop_refused",
+    "SubsetCarry.loop_typed",
+    "SubsetCarry.advance_typed",
+    "SubsetCarry.loop_success",
+    "SubsetCarry.advance_success",
+    "SubsetQueryTotal.evaluation_control",
+    "SubsetQueryTotal.query_refines",
+    "SubsetQueryTotal.returned_receipt",
+    "CountermodelSteps.exhausted",
+    "CountermodelSteps.query_stopped",
+    "CountermodelSteps.witness",
+    "CountermodelSteps.carry_stopped",
+    "CountermodelSteps.continued",
+    "SearchRepresentation.stored",
+    "SearchRepresentation.denotes",
+    "SearchRepresentation.selected_values",
+    "SearchRepresentation.proper",
+    "CountermodelSemantics.frozen_covered",
+    "CountermodelSemantics.query_meaning",
+    "CountermodelSemantics.query_refutes",
+    "CountermodelTrace.loop_unfold",
+    "CountermodelTrace.calls_execute",
+    "CountermodelTrace.entry_executes",
+    "FixedCountermodelSearch.calls_refine",
+    "MembershipSearch.empty_search",
+    "MembershipSearch.completed_countermodel",
+    "MembershipSearch.selected_countermodel",
+    "MembershipSearch.completed_answer_set"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -139,7 +180,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "33d74fed4881118eaeedb0d7e16eaa3af2acdf821b1e86ff27a026360567471c"
+      "logSha256": "10e56386d491f3f7734bb8ab5b903733410cb4422386faaf8d5b69c2dfe88f18"
     },
     {
       "argv": [
@@ -152,7 +193,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "0a991484ac95febcf315e22ebd38566396f94f18021fc2d0465cfc3c0bfa2793"
+      "logSha256": "a93ed562154cc12d60d11f79b0672e180123a518540a9c4f8667c680b1a2409d"
     },
     {
       "argv": [
@@ -168,8 +209,8 @@
       "logSha256": "da83106f15652cb0bd205631286163998f0f2a6c4210b5e43dd1fc72cfdc82e8"
     }
   ],
-  "theoremAuditCount": 118,
-  "rustOrShaderSourcesChanged": true,
+  "theoremAuditCount": 159,
+  "rustOrShaderSourcesChanged": false,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
     "inventorySha256": "a9fee760e5103cfe4284f94179a6df49f4b0a223529176c773f9d1fef6420912",
@@ -376,10 +417,10 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Generated fixed-token evaluation, root scanning and private query to concurrent Rust histories with changing atomic observations.",
-    "Rust pointer ownership, allocation, timers and concurrent memory.",
-    "FrozenReduct construction, public allocation and owner-checking wrappers, grounding and solver enumeration.",
-    "Successful generated subset-helper transitions and complete helper-loop correspondence.",
-    "Coverage and final membership of the generated find_countermodel loop and the public oracle::check wrapper."
+    "Generated fixed-token calls to concurrent Rust histories with changing atomic observations.",
+    "Faithful contracts and use of Rust pointer ownership, allocation, timers and concurrent memory.",
+    "Public oracle::check allocation and identity admission, and construction of its represented empty state.",
+    "FrozenReduct construction and public owner-checking wrappers.",
+    "Source grounding, specialized execution plans, complete solver enumeration and GPU execution."
   ]
 }

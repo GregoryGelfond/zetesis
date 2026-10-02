@@ -61,21 +61,26 @@ The proof follows that definition:
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
 a separate obligation. The separately built [implementation-refinement package](evaluation.md)
-proves the generated evaluator, root scan and private stored-reduct query under
-fixed observation tokens. A completed actual query decides reduct satisfaction,
-given explicit agreement of its stored mask with original truth. Completed
-original evaluation establishes that agreement for the corresponding record,
-not the `freeze` constructor. For `N` nodes and `R` root occurrences, both query
-phases together charge at most `N + R`, even on typed stops. The proof imports
-the same ASP theory under the extraction toolchain. Changing runtime observations, `FrozenReduct`
-construction, public allocation/owner-checking wrappers and subset search remain
-unproved.
+connects the actual generated reference-checker phases to the same ASP theory
+under fixed observation tokens.
 
-The actual proper-subset search now translates into Lean as a named operation.
-`SubsetQuery.completed_reduct` proves that its completed per-subset query decides
-reduct satisfaction using a mask returned by original evaluation; a separate law
-proves the exact one-subset charge. Successful selection/carry iteration, search
-coverage and the final membership verdict are the next correspondence steps.
+`MembershipSearch.completed_answer_set` composes actual original evaluation,
+a successful original root check, completed atom selection and completed
+proper-subset search. With represented candidate storage, ordered nodes, bounded
+roots, matching atom counts, an empty selection vector and zero-filled packed
+subset storage, search
+returns no countermodel exactly when the candidate is an answer set of the
+asserted theory. Work passes from each phase to the next in source order. The
+proof derives mask meaning and selected-atom coverage, then constructs the actual
+search execution using query correctness and the packed counter's rank argument.
+Typed stops retain their actual state and work and do not establish exhaustion.
+
+This closes the reference search's semantic composition under the modeled
+primitives. Public allocation, owner checks and buffer construction remain
+outside it, as do changing runtime observations, source grounding, candidate
+enumeration and optimized checking routes. The separate stored-reduct query
+proof still requires explicit mask agreement; actual original evaluation can
+supply that agreement, but `FrozenReduct::freeze` remains unproved.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
@@ -147,18 +152,19 @@ system or device progress is not obtained from a set-theoretic coverage law.
 
 ## A practical sequence of verified milestones
 
-1. **Ground CPU membership.** Use one compatible extraction/proof toolchain.
-   Extend the generated evaluation/root-scan results to changing runtime
-   observations and verify `FrozenReduct` construction, public wrappers and owner
-   invariants. Connect packed updates and streaming frozen evaluation to the
-   existing laws. Establish exact completed verdicts for the actual general
-   checker, then the normal-closure checker.
-2. **Ground CPU enumeration.** Connect candidate generation, exact classification
-   and completion accounting. Prove a complete retained family equals the
-   original finite theory's world view. Add each optimized class route through
-   its recognizer and preservation theorem.
-3. **Source compilation.** Start with a declared finite normal-language fragment,
-   prove its concrete grounding and reconstruction, then extend the theorem
+1. **Ground CPU membership.** Complete the public wrapper around the proved
+   reference-checker phases: allocation, owner identity and initial zero-storage
+   invariants. Extend the fixed-observation result to changing runtime
+   observations and verify `FrozenReduct` construction. Then connect the
+   normal-closure checker and each optimized membership route to the same
+   answer-set definition.
+2. **Ground CPU admission and enumeration.** Prove that admitted theory
+   construction establishes the representation premises. Connect candidate
+   generation, plan selection, exact classification and completion accounting.
+   Prove a complete retained family equals the original finite theory's world
+   view. Add optimized routes through their recognizers and preservation laws.
+3. **Source compilation.** Start from an admitted program in a declared finite
+   normal-language fragment. Prove concrete grounding and reconstruction, then extend the theorem
    construct by construct to the admitted language. Include arithmetic errors
    and incomplete preparation, not only successful ground output.
 4. **Lazy execution and concurrency.** Refine the demand/saturation and task

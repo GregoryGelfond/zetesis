@@ -12,11 +12,9 @@ mutable vector indexing and returned updates implement the shared packed bit
 operations. Population updates use checked machine addition and subtraction;
 their bounds come from the positional count invariant.
 
-These are primitive refinement lemmas, not a translation of the Rust carry loop.
-The pinned extractor cannot currently translate the nested-return structure of
-`oracle::check`.
-No statement here supplies that missing control-flow correspondence, allocation,
-owner identity, cancellation history or exhaustive subset-search correctness.
+These are primitive refinement lemmas. `SubsetCarry` composes them with the
+actual extracted carry loop. Allocation, owner identity, concurrent observations
+and the public membership wrapper remain separate correspondence obligations.
 -/
 namespace ScalarSubsets
 

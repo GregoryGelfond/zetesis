@@ -25,7 +25,8 @@ for original truth followed by frozen-reduct truth. It derives the mask from
 Rust loop is `zetesis_ferraris::oracle::evaluate`, used by `FrozenReduct`, but
 these proofs do not extract or verify that Rust loop. The separate
 [implementation-refinement package](evaluation.md) proves the generated evaluator,
-root scan and private stored-reduct query under fixed observation tokens.
+root scan, private stored-reduct query and reference proper-subset search under
+fixed observation tokens.
 `FrozenQuery.completed_satisfaction` connects the actual query Boolean to Ferraris
 reduct satisfaction, with explicit `Represents` agreement between the stored mask
 and original truth. `represents_from_evaluation` establishes that agreement for
@@ -40,35 +41,50 @@ the actual root scan over the returned work record: limits and subset counts
 are preserved, and the query charges at most `N + R` for `N` nodes and `R` root
 occurrences. Typed stops remain errors. The broader trace relation permits fresh
 control inputs; its traces need not be executions of the fixed-token loop.
-Changing runtime observations, `FrozenReduct` construction, public allocation and
-owner-checking wrappers, and subset search remain unproved.
+Changing runtime observations, `FrozenReduct` construction and public allocation
+and owner-checking wrappers remain unproved.
 
-`SelectedAtoms` and `ScalarSubsets` connect imported range, vector and machine-word
-operations to the shared selected-prefix and packed-update laws. The former also
-uses the generated membership query. The Rust checker separates these
-operations, a single reduct query and proper-subset search into private helpers;
-all four are extracted.
-`SubsetSteps` proves exhaustion and typed refusal for their generated bodies.
-Successful selection/carry iteration and complete membership remain unproved.
-The actual proper-subset search now translates after moving result propagation
-outside the loop. The
-[reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
-records the remaining public allocation and ownership model boundary.
+`FixedSelection` proves the actual selected-atom loop and entry function. Each
+typed return retains the exact visited prefix and work; completion produces the
+candidate's atoms in order, with no duplicates. `SubsetCarry` proves actual
+packed advancement and population updates under the proper-subset guard. A
+completed carry corresponds to one positional increment; a stopped carry retains
+its partial state without claiming that increment completed.
 
 `SubsetQuery.completed_reduct` connects the actual per-subset query to Ferraris
-reduct satisfaction using a mask returned by actual original evaluation.
-`completed_subset_count` proves its completed result charges exactly one subset.
-Neither result assumes the internal evaluation or root-scan calls are correct;
-both recover those calls from the generated helper. Proper-subset coverage and
-the final answer-set verdict remain separate obligations.
+reduct satisfaction using the actual original evaluation. `SubsetQueryTotal`
+constructs every typed outcome and retains its admission and work accounting.
+An admitted query charges one subset even when later evaluation or root scanning
+stops; refusal before admission preserves the old output and work.
+
+`FixedSearch.calls_refine` constructs a finite execution of the actual search
+from its packed counter invariant. Successful carries increase positional rank;
+false queries refute the visited states. It derives proper-subset coverage,
+returns a proper-subset reduct model on a true result, and propagates typed stops
+without treating them as exhaustion.
+
+`MembershipSearch.completed_answer_set` composes actual original evaluation,
+a completed original root check, completed selection and completed search. It
+threads work through those phases in source order. Given represented candidate
+storage, ordered nodes, bounded roots, matching atom counts, an empty selection
+vector and zero-filled packed subset storage, search returns no countermodel exactly
+when the candidate satisfies `Ferraris.Stable` for the asserted theory.
+The mask's meaning, selected-coordinate coverage and query correctness are
+derived, not supplied as oracle equations. Public allocation, owner checks and
+construction of the initial buffers remain outside this theorem. It concerns
+the reference checker; candidate generation, optimized checking, source grounding
+and device execution remain separate obligations. The
+[reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
+records the public-wrapper boundary.
 
 `FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
 Its coverage proof constructs a selection representing every semantic subset
 of the supplied candidate. Original satisfaction and absence of a proper-subset
 reduct model therefore follow from executable definitions. The theorem does
 not assume a correct external oracle or complete external proposals. It is
-still distinct from refinement of Rust's subset counter, resource stops or
-optimized candidate search.
+a reusable ASP theorem. The reference-checker refinement above connects the same
+semantic definition and packed counter laws to actual operations; optimized
+candidate search remains separate.
 
 `FiniteClosure.closure_exact` proves an in-place-order mathematical rule scan,
 rather than assuming it equals synchronous iteration. Soundness holds at every
@@ -126,9 +142,10 @@ explicit without changing the answer-set definitions:
 
 These are proved authored algorithms, not extractions of the corresponding
 Rust loops. They remove assumed evaluator, counter and packed-scan agreement
-from the mathematical results. Actual Rust vector operations, selected-atom
-production, machine bounds, ownership and incomplete outcomes still need their
-own correspondences. In particular, the final carrier comparison cannot itself
+from the mathematical results. The optional reference-checker refinement above
+supplies the selected-atom and packed-counter correspondences under its stated
+models; it does not cover the normal-closure checker or public ownership and
+allocation. In particular, the final carrier comparison cannot itself
 establish seed admission; that condition belongs to the seed constructors and
 their mapping into the compiled program.
 
@@ -167,8 +184,10 @@ positional stream at every allowance; `completed_check_iff_answer_set` proves
 both positive and negative completed verdicts exact. Candidate construction
 derives storage and padding, while selected-coordinate production supplies
 uniqueness and coverage. No visit list or caller-supplied oracle agreement is
-needed. This closes the composition gap between the authored Lean algorithms;
-actual Rust reads, writes, ownership and control effects remain unproved.
+needed. This composes the authored Lean algorithms independently of Rust. The
+optional reference-checker refinement above separately proves actual reads,
+updates and control flow under fixed observations; public ownership, allocation
+and changing runtime observations remain open.
 
 `Refinement.TheoryAdmission` checks dimension limits and padded atom count,
 then every node, then asserted roots. `validate_exact` derives the DAG, atom

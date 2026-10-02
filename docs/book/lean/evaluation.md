@@ -1,14 +1,40 @@
 # Refining formula evaluation
 
 The separately built [implementation-refinement package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
-connects the actual generated private `FrozenReduct::satisfied_by` query to
-Ferraris reduct satisfaction under fixed observation tokens. It composes the
-proved evaluator and root scan, retaining an explicit stored-mask invariant.
+connects the CPU reference checker's actual generated evaluation, root scan,
+atom selection and proper-subset search to the Ferraris answer-set definition.
+The result concerns one candidate of a ground formula theory under fixed
+observation tokens; public allocation and owner checking remain outside it.
+
+## From original truth to answer-set membership
+
+Let `M` be the candidate and `T` the theory asserted by the stored roots.
+[`MembershipSearch.completed_answer_set`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/MembershipSearch.lean)
+composes the actual semantic phases:
+
+```text
+original evaluation completes; original root check finds no false root
+atom selection completes; proper-subset search completes with found
+
+found = false  iff  M is an answer set of T
+```
+
+The theorem requires represented candidate storage, ordered child indices,
+bounded roots, matching atom counts, an empty selection vector and packed
+subset storage representing the empty interpretation. Each phase receives the
+preceding phase's returned work. Original evaluation supplies the frozen mask;
+actual selection supplies the candidate's atoms without a separate coverage
+assumption. The search proof derives proper-subset coverage and query meaning
+from the generated operations and the existing ASP laws.
+
+Typed stops retain their state and work and establish no answer-set verdict.
+The proof does not establish the public wrapper's allocation, owner checks or
+buffer construction, nor coverage of candidate generation or optimized search
+routes.
 
 ## From evaluation to theory satisfaction
 
-Let `M` be the stored candidate, `J` any tested interpretation, and `T` the theory
-asserted by the stored roots. The central result is:
+The lower-level stored-reduct query accepts any tested interpretation `J`:
 
 ```text
 Represents frozen: its stored mask is original node truth at M
@@ -62,40 +88,40 @@ exercise empty and repeated-root scans. [Query examples](https://github.com/Greg
 cover cumulative work refusal, a nonmodel candidate with a valid mask, and a
 successful tested non-subset.
 
-## Preparing the subset-search correspondence
+## Actual proper-subset search
 
-The selected-atom and packed-counter mathematics already establish exact
-proper-subset coverage. Two primitive bridges prepare their connection to Rust:
+[`FixedSelection`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FixedSelection.lean)
+proves the actual atom-selection loop and entry function using `SelectedAtoms`'s
+range, membership and vector-append laws. Every typed return gives the exact
+visited prefix and work charge. A completed scan returns precisely the
+candidate's atoms, in increasing order and without duplicates.
 
-- [`SelectedAtoms`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SelectedAtoms.lean)
-  preserves the exact ordered selection through range advancement, the generated
-  membership query and vector append. A completed prefix agrees with the shared
-  finite selection, without a separate coverage assumption.
-- [`ScalarSubsets`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/ScalarSubsets.lean)
-  connects checked word addressing and mutation to the shared set/clear laws,
-  and proves population arithmetic under explicit bounds. Checked examples
-  exercise an update at the boundary between 64-bit words.
-
-These proofs compose imported primitive models. They do not yet establish that
-the actual containing loop maintains their premises or visits every required
-state. That distinction matters for interrupted carries and for the outer guard
-excluding the full candidate.
-
-The reference checker separates atom selection, subset advancement, one reduct
-query and proper-subset search into private operations. They retain operation
-order and leave allocation in the caller. All four operations are extracted.
-[`SubsetSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetSteps.lean)
-proves that their generated bodies finish an exhausted iterator without polling
-and retain state and work on a typed refusal. These boundaries do not yet prove
-successful helper iteration or complete subset search.
+[`SubsetCarry`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetCarry.lean)
+connects the actual packed updates to the shared positional counter. A completed
+proper carry preserves the exact selected subset and population, with one tick
+per visited coordinate. A typed stop retains partial words and count; no
+completed-successor claim is made for that state. The outer guard excludes the
+full candidate before querying or carrying it.
 
 [`SubsetQuery.completed_reduct`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetQuery.lean)
-proves the actual completed `check_subset` Boolean agrees with Ferraris reduct
-satisfaction. Its mask comes from a successful original evaluation, from which
-the proof derives the mask's meaning and bounds. The helper's internal calls
-are also derived from its completed return. A separate accounting law proves
-that each completed query charges exactly one subset. These results do not
-establish that the tested interpretation is proper or that enumeration is complete.
+proves each completed query's reduct-satisfaction result using the actual
+original evaluation. `SubsetQueryTotal` constructs every typed query outcome.
+Admission charges one subset, including when evaluation or root checking later
+stops; refusal before admission preserves the old output and work. Each query
+adds at most the node count plus the number of root occurrences to work.
+
+[`FixedSearch.calls_refine`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FixedSearch.lean)
+constructs the actual search execution by decreasing the number of remaining
+counter states. A true query gives a proper-subset model of the frozen reduct;
+a false query followed by a successful carry advances exactly one state.
+Exhaustion therefore refutes every proper subset. Stopped queries and carries
+retain their actual outcomes and cannot establish exhaustion.
+
+`MembershipSearch` composes this search from the empty packed interpretation
+with completed atom selection and original modelhood. The proof uses the shared
+counter coverage theorem rather than assuming a correct oracle or complete
+external proposals. It establishes the answer-set criterion for the reference
+checker's semantic phases, not the public wrapper or other checking routes.
 
 ## Reusing the ASP library
 
@@ -121,13 +147,11 @@ completes two. The pinned extraction effect cannot express changing atomic read
 results, so correspondence with concurrent Rust histories remains open.
 
 The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
-construction and its public allocation and owner-checking wrappers remain
-unproved, as does subset search. Allocation, reference counting, timers,
-concurrent memory, machine code and GPU execution remain outside these models.
-
-The actual proper-subset loop now translates: it retains its outcome and exits
-before the caller propagates a stop or constructs the verdict. Translation alone
-does not establish enumeration completeness or answer-set membership. The
+construction, public allocation and owner-checking wrappers, and establishment
+of the initial storage premises remain unproved. Source grounding, candidate
+enumeration and optimized checking routes are separate obligations. Allocation,
+reference counting, timers, concurrent memory, machine code and GPU execution
+remain outside these models. The
 [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
 distinguishes this loop from the public wrapper's allocation and ownership models.
 

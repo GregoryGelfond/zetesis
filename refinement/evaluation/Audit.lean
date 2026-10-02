@@ -1,3 +1,4 @@
+import MembershipSearch
 import SelectedAtoms
 import ScalarSubsetsExample
 import SubsetSteps
@@ -127,3 +128,44 @@ import FrozenQueryExample
 #print axioms SubsetSteps.selection_refused
 #print axioms SubsetSteps.carry_exhausted
 #print axioms SubsetSteps.carry_refused
+#print axioms FixedSelection.body_advances
+#print axioms FixedSelection.loop_unfold
+#print axioms FixedSelection.loop_refused
+#print axioms FixedSelection.loop_refines
+#print axioms FixedSelection.select_refines
+#print axioms FixedSelection.returned_report
+#print axioms FixedSelection.completed_selection
+#print axioms FixedSelection.returned_work_bound
+#print axioms FixedSelection.select_completes
+#print axioms FixedSelection.completed_carrier
+#print axioms SubsetCarry.body_set
+#print axioms SubsetCarry.body_clear
+#print axioms SubsetCarry.loop_unfold
+#print axioms SubsetCarry.loop_refused
+#print axioms SubsetCarry.loop_typed
+#print axioms SubsetCarry.advance_typed
+#print axioms SubsetCarry.loop_success
+#print axioms SubsetCarry.advance_success
+#print axioms SubsetQueryTotal.evaluation_control
+#print axioms SubsetQueryTotal.query_refines
+#print axioms SubsetQueryTotal.returned_receipt
+#print axioms CountermodelSteps.exhausted
+#print axioms CountermodelSteps.query_stopped
+#print axioms CountermodelSteps.witness
+#print axioms CountermodelSteps.carry_stopped
+#print axioms CountermodelSteps.continued
+#print axioms SearchRepresentation.stored
+#print axioms SearchRepresentation.denotes
+#print axioms SearchRepresentation.selected_values
+#print axioms SearchRepresentation.proper
+#print axioms CountermodelSemantics.frozen_covered
+#print axioms CountermodelSemantics.query_meaning
+#print axioms CountermodelSemantics.query_refutes
+#print axioms CountermodelTrace.loop_unfold
+#print axioms CountermodelTrace.calls_execute
+#print axioms CountermodelTrace.entry_executes
+#print axioms FixedCountermodelSearch.calls_refine
+#print axioms MembershipSearch.empty_search
+#print axioms MembershipSearch.completed_countermodel
+#print axioms MembershipSearch.selected_countermodel
+#print axioms MembershipSearch.completed_answer_set

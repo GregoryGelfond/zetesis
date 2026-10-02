@@ -1,9 +1,10 @@
 # Refining formula evaluation
 
-This separately built implementation-refinement package connects the generated
-private `FrozenReduct::satisfied_by` query to Ferraris reduct satisfaction under
-fixed observation tokens. It composes the generated evaluator and root scan,
-with explicit stored-mask agreement and shared work accounting.
+This separately built implementation-refinement package connects the CPU
+reference checker's generated evaluation, root scan, atom selection and
+proper-subset search to the Ferraris answer-set definition under fixed
+observation tokens. The public allocation and owner-checking wrapper remains
+outside the proved composition.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the reduct-evaluation and packed-subset sources directly and checks them
@@ -12,6 +13,26 @@ No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
 ## Central result
+
+[`MembershipSearch.completed_answer_set`](MembershipSearch.lean) proves that,
+after actual original evaluation and a successful original root check, completed
+actual atom selection and proper-subset search return no countermodel exactly
+when the candidate is an answer set of the stored formula theory.
+
+The premises require represented candidate storage, ordered child indices,
+bounded roots, matching atom counts, an initially empty selection vector and
+packed subset storage representing the empty interpretation. The theorem threads
+work through these actual calls in source order. It derives the frozen mask's
+meaning and the selected atoms' coverage; it does not assume a correct subset
+oracle or complete enumeration. `FixedSearch.calls_refine` constructs the actual
+search execution, including typed stops. A stopped search establishes no
+membership verdict.
+
+These premises describe the reference checker's semantic phases. They do not
+prove that the public wrapper allocates the initial buffers, establishes their
+owners or handles every setup failure correctly.
+
+## Stored reduct queries
 
 [`FrozenQuery.completed_satisfaction`](FrozenQuery.lean) proves that a completed
 actual private query returns `true` exactly when the tested interpretation `J`
@@ -48,7 +69,12 @@ root occurrences, including typed stops. Neither original modelhood of `M` nor
 | `RootScan` | The actual root scan returns the first false occurrence or complete success, with exact work and typed stops |
 | `RootSemantics`, `TheorySatisfaction` | Generated evaluation and root scanning decide original or reduct theory satisfaction on completion |
 | `FrozenQuery` | The actual private query decides the represented reduct and threads one work record through both phases |
-| `SubsetQuery` | One actual subset query decides reduct satisfaction from a computed original mask and charges exactly one subset on completion |
+| `SubsetQuery`, `SubsetQueryTotal` | Actual subset queries decide reduct satisfaction on completion; every typed return retains the admission charge and shared work bounds |
+| `FixedSelection` | The actual scan returns the exact ordered candidate atoms, or a stopped prefix with exact work |
+| `SubsetCarry` | Actual proper carries preserve packed selection and population on completion, retaining partial state on stops |
+| `SearchSteps`, `CountermodelTrace` | Exact generated search branches and their finite composition retain returned state and work |
+| `SearchRepresentation`, `SearchSemantics` | Packed counter states denote semantic subsets and queries use the actually computed original mask |
+| `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -70,50 +96,50 @@ repeated-root sequence whose first false identifier is not the smallest one.
 [Query examples](FrozenQueryExample.lean) cover cumulative work refusal, a valid
 mask for a nonmodel candidate, and a successful query at a non-subset.
 
-## Subset-search foundations
+## Proper-subset search
 
-[`SelectedAtoms`](SelectedAtoms.lean) composes the backend's range and vector
-operations with the generated packed membership query. An exact selected prefix
-stays exact after the next coordinate; it is ordered and has no duplicates.
-At the end of the universe, it agrees with the ASP library's `selectedAtoms`.
-The remaining coordinate supplies room for both the checked successor and push.
+[`SelectedAtoms`](SelectedAtoms.lean) and [`ScalarSubsets`](ScalarSubsets.lean)
+connect range advancement, vector append and checked word updates to the shared
+selected-prefix and packed-counter laws. [`FixedSelection`](FixedSelection.lean)
+uses those operations to prove the actual selection loop and entry function.
+Every typed return retains the exact visited prefix and its work charge; a
+completed scan gives the candidate's distinct atoms in increasing order.
 
-[`ScalarSubsets`](ScalarSubsets.lean) connects checked division, remainder,
-shift and mutable word indexing to the shared packed set/clear laws. Only the
-selected bit changes. Population increment requires a representable selection
-width; decrement requires a currently true positional bit. The
-[boundary examples](ScalarSubsetsExample.lean) set and clear atom 64 while
-preserving its neighbors in both words.
+[`SubsetCarry`](SubsetCarry.lean) proves the actual carry loop and entry function.
+A completed proper carry gives the next positional selection, its exact
+population and its work charge. A stopped carry retains the actual partial
+words and count, with unchanged theory field and word-array length; it is not
+claimed to represent a completed successor. The outer proper-subset guard is
+essential: carrying a full selection would clear it, whereas the mathematical
+counter reports overflow.
 
-The Rust reference checker names atom selection, subset advancement, one reduct
-query and proper-subset search as private operations. Allocation remains in
-`check`; `find_countermodel` owns the proper-subset guard and retains the first
-witness or typed stop. All four operations are extracted unchanged.
-[`SubsetSteps`](SubsetSteps.lean) proves that their generated bodies finish an
-exhausted iterator without polling and preserve the returned state and work on
-a typed refusal. A present coordinate is fetched before the tick; a refused
-step performs no membership read or bit update.
+[`SubsetQuery.completed_reduct`](SubsetQuery.lean) derives the completed query's
+meaning from actual original evaluation. [`SubsetQueryTotal`](SubsetQueryTotal.lean)
+constructs every typed outcome: admission charges one subset even when later
+evaluation or root checking stops, while refusal before admission leaves the
+work record and old output unchanged. Node and root work grows by at most
+`N + R` per query.
 
-[`SubsetQuery.completed_reduct`](SubsetQuery.lean) proves that an actual completed
-`check_subset` returns true exactly when the tested interpretation satisfies the
-Ferraris reduct. The mask comes from an actual successful original evaluation;
-its meaning is derived, not assumed. Separate laws recover the internal calls,
-establish admission and prove the completed query charges exactly one subset.
-They do not establish properness or coverage of the search.
+[`FixedSearch.calls_refine`](FixedSearch.lean) constructs the actual search calls
+by induction on the number of remaining positional states. Each false query is
+followed by the actual carry; a successful carry increases rank by one and
+preserves the packed invariant. A true query returns a proper-subset model of
+the frozen reduct. Exhaustion refutes every remaining proper subset. Query and
+carry stops return their actual state and work without claiming exhaustion.
 
-The primitive bridges do not yet prove successful helper iteration or complete
-membership. The search loop retains its result and exits before the caller
-propagates it. This removes the early-return translation obstacle without
-changing enumeration or resource checks. The
-[reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
-records the remaining allocation and ownership boundary. The carry correspondence must use the outer proper-subset
-guard: calling the Rust carry on a full selection would clear it, whereas the
-mathematical counter reports overflow.
+[`MembershipSearch`](MembershipSearch.lean) starts this argument at the empty
+packed interpretation, obtains the selected atoms from the actual scan, and
+composes search with the actual original root check. The resulting answer-set
+criterion concerns one candidate of the ground formula theory. It does not
+establish coverage of the solver's candidate generator or optimized checking
+routes. The [reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
+records the remaining public allocation and ownership boundary.
 
 ## Observation boundary
 
 The atomic external model returns the Boolean stored in its supplied token.
-The body reads cancellation at most once and optionally expiry at most once.
+An evaluator body reads cancellation at most once and optionally expiry at most
+once.
 A single invocation can use fresh observations; `FixedLoop` follows the actual
 generated loop's control threading, so repeated reads return fixed values.
 Only the Relaxed loads used here are modeled; other model orderings do not
@@ -139,8 +165,9 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-`FrozenReduct` construction, its public allocation and owner-checking wrappers,
-subset search, source grounding, or end-to-end solver verification.
+`FrozenReduct` construction, public allocation and owner-checking wrappers,
+source grounding, candidate enumeration, optimized checking routes or end-to-end
+solver verification.
 
 ## Extraction identity and reproduction
 

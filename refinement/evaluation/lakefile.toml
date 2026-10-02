@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "MembershipSearch"]
 
 [leanOptions]
 autoImplicit = false
@@ -124,3 +124,30 @@ name = "SubsetSteps"
 
 [[lean_lib]]
 name = "SubsetQuery"
+
+[[lean_lib]]
+name = "FixedSelection"
+
+[[lean_lib]]
+name = "SubsetCarry"
+
+[[lean_lib]]
+name = "SubsetQueryTotal"
+
+[[lean_lib]]
+name = "SearchSteps"
+
+[[lean_lib]]
+name = "SearchRepresentation"
+
+[[lean_lib]]
+name = "SearchSemantics"
+
+[[lean_lib]]
+name = "CountermodelTrace"
+
+[[lean_lib]]
+name = "FixedSearch"
+
+[[lean_lib]]
+name = "MembershipSearch"
