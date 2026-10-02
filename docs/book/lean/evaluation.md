@@ -81,12 +81,21 @@ the actual containing loop maintains their premises or visits every required
 state. That distinction matters for interrupted carries and for the outer guard
 excluding the full candidate.
 
-The reference checker separates atom selection and subset advancement into
-private helpers, retaining operation order and leaving allocation in the caller.
-Both helpers are extracted. [`SubsetSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetSteps.lean)
+The reference checker separates atom selection, subset advancement, one reduct
+query and proper-subset search into private operations. They retain operation
+order and leave allocation in the caller. All four operations are extracted.
+[`SubsetSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetSteps.lean)
 proves that their generated bodies finish an exhausted iterator without polling
 and retain state and work on a typed refusal. These boundaries do not yet prove
 successful helper iteration or complete subset search.
+
+[`SubsetQuery.completed_reduct`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetQuery.lean)
+proves the actual completed `check_subset` Boolean agrees with Ferraris reduct
+satisfaction. Its mask comes from a successful original evaluation, from which
+the proof derives the mask's meaning and bounds. The helper's internal calls
+are also derived from its completed return. A separate accounting law proves
+that each completed query charges exactly one subset. These results do not
+establish that the tested interpretation is proper or that enumeration is complete.
 
 ## Reusing the ASP library
 
@@ -116,10 +125,11 @@ construction and its public allocation and owner-checking wrappers remain
 unproved, as does subset search. Allocation, reference counting, timers,
 concurrent memory, machine code and GPU execution remain outside these models.
 
-The pinned translator still rejects an early return in the outer `oracle::check`
-loop. The helpers translate independently, but their translation does not verify
-the containing membership loop. The [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
-records this remaining tool boundary.
+The actual proper-subset loop now translates: it retains its outcome and exits
+before the caller propagates a stop or constructs the verdict. Translation alone
+does not establish enumeration completeness or answer-set membership. The
+[reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
+distinguishes this loop from the public wrapper's allocation and ownership models.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code

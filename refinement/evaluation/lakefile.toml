@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery"]
 
 [leanOptions]
 autoImplicit = false
@@ -121,3 +121,6 @@ name = "ScalarSubsetsExample"
 
 [[lean_lib]]
 name = "SubsetSteps"
+
+[[lean_lib]]
+name = "SubsetQuery"

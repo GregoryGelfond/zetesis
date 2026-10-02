@@ -48,6 +48,7 @@ root occurrences, including typed stops. Neither original modelhood of `M` nor
 | `RootScan` | The actual root scan returns the first false occurrence or complete success, with exact work and typed stops |
 | `RootSemantics`, `TheorySatisfaction` | Generated evaluation and root scanning decide original or reduct theory satisfaction on completion |
 | `FrozenQuery` | The actual private query decides the represented reduct and threads one work record through both phases |
+| `SubsetQuery` | One actual subset query decides reduct satisfaction from a computed original mask and charges exactly one subset on completion |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -84,19 +85,28 @@ width; decrement requires a currently true positional bit. The
 [boundary examples](ScalarSubsetsExample.lean) set and clear atom 64 while
 preserving its neighbors in both words.
 
-The Rust reference checker names atom selection and subset advancement as
-private helpers. Their operations retain the original order, with allocation
-and the proper-subset guard in `check`. Both helpers are extracted unchanged.
+The Rust reference checker names atom selection, subset advancement, one reduct
+query and proper-subset search as private operations. Allocation remains in
+`check`; `find_countermodel` owns the proper-subset guard and retains the first
+witness or typed stop. All four operations are extracted unchanged.
 [`SubsetSteps`](SubsetSteps.lean) proves that their generated bodies finish an
 exhausted iterator without polling and preserve the returned state and work on
 a typed refusal. A present coordinate is fetched before the tick; a refused
 step performs no membership read or bit update.
 
+[`SubsetQuery.completed_reduct`](SubsetQuery.lean) proves that an actual completed
+`check_subset` returns true exactly when the tested interpretation satisfies the
+Ferraris reduct. The mask comes from an actual successful original evaluation;
+its meaning is derived, not assumed. Separate laws recover the internal calls,
+establish admission and prove the completed query charges exactly one subset.
+They do not establish properness or coverage of the search.
+
 The primitive bridges do not yet prove successful helper iteration or complete
-membership. The pinned translator still rejects an early return in the outer
-`oracle::check` loop; the
+membership. The search loop retains its result and exits before the caller
+propagates it. This removes the early-return translation obstacle without
+changing enumeration or resource checks. The
 [reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
-records that boundary. The carry correspondence must use the outer proper-subset
+records the remaining allocation and ownership boundary. The carry correspondence must use the outer proper-subset
 guard: calling the Rust carry on a full selection would clear it, whereas the
 mathematical counter reports overflow.
 
@@ -135,8 +145,8 @@ subset search, source grounding, or end-to-end solver verification.
 ## Extraction identity and reproduction
 
 The generated types and functions come directly from production Rust, including
-the two private subset helpers. The LLBC destination becomes portable,
-and three local names change from `theory` to `program` to avoid namespace
+the four private subset-search operations. The LLBC destination becomes portable,
+and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
 ordered registration, after checking for surviving semantic references.

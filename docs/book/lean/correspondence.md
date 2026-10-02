@@ -45,13 +45,22 @@ owner-checking wrappers, and subset search remain unproved.
 
 `SelectedAtoms` and `ScalarSubsets` connect imported range, vector and machine-word
 operations to the shared selected-prefix and packed-update laws. The former also
-uses the generated membership query. The Rust checker now separates these
-operations into private helpers, and both helpers are extracted.
+uses the generated membership query. The Rust checker separates these
+operations, a single reduct query and proper-subset search into private helpers;
+all four are extracted.
 `SubsetSteps` proves exhaustion and typed refusal for their generated bodies.
-Successful iteration and complete membership remain unproved; the pinned
-translator still rejects an early return in the outer `oracle::check` loop. The
+Successful selection/carry iteration and complete membership remain unproved.
+The actual proper-subset search now translates after moving result propagation
+outside the loop. The
 [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
-records this separate tool boundary.
+records the remaining public allocation and ownership model boundary.
+
+`SubsetQuery.completed_reduct` connects the actual per-subset query to Ferraris
+reduct satisfaction using a mask returned by actual original evaluation.
+`completed_subset_count` proves its completed result charges exactly one subset.
+Neither result assumes the internal evaluation or root-scan calls are correct;
+both recover those calls from the generated helper. Proper-subset coverage and
+the final answer-set verdict remain separate obligations.
 
 `FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
 Its coverage proof constructs a selection representing every semantic subset

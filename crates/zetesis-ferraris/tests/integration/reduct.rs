@@ -179,6 +179,30 @@ fn disjunctive_reduct_has_incomparable_minimal_models() {
 }
 
 #[test]
+fn first_countermodel_needs_no_following_carry() {
+    let program = theory(&[Expr::Or(Box::new(Expr::Atom(0)), Box::new(Expr::Atom(1)))]);
+    // Original evaluation and roots cost four, the atom scan two, the empty
+    // subset four, its carry one, and the first countermodel four. No carry
+    // may follow the witness: the exact allowance is already consumed.
+    let result = check(
+        &program,
+        &interpretation(&program, 3),
+        Limits {
+            max_work: 15,
+            max_subsets: 2,
+        },
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let Verdict::NonMinimal { witness } = result.verdict() else {
+        panic!("expected first proper-subset countermodel")
+    };
+    assert_eq!(witness.atoms().collect::<Vec<_>>(), vec![0]);
+    assert_eq!(result.statistics().work, 15);
+    assert_eq!(result.statistics().subsets, 2);
+}
+
+#[test]
 fn empty_theory_and_empty_candidate_have_exact_boundary() {
     let program = theory(&[]);
     let cancellation = Cancellation::default();

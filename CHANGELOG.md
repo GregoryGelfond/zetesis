@@ -23,13 +23,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   outside the proof.
 - Lean proofs connecting atom-selection and packed subset-update primitives to
   the shared mathematical definitions, plus exhaustion and refusal laws for
-  the generated helper bodies. The containing Rust search loop remains
-  unverified; its translation limit is documented.
+  the generated helper bodies. The containing Rust search loop is extracted
+  but remains unverified.
+- Lean proofs that a completed reference-checker subset query decides reduct
+  satisfaction from a computed original mask and charges exactly one subset.
 
 ### Changed
 
-- Separate atom selection and subset advancement into private reference-checker
-  helpers for proof extraction, preserving their operations and resource checks.
+- Separate atom selection, subset advancement, reduct queries and proper-subset
+  search in the reference checker, preserving their operations and resource checks.
 
 ## 0.2.0 — 2026-10-01
 

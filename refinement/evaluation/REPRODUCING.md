@@ -45,8 +45,8 @@ concurrent Rust execution.
 
 Install Rust `nightly-2026-08-18`, including `rustc-dev` and `rust-src`. This is
 an extraction toolchain, not a change to the solver's ordinary Rust pin. The
-extractor selects the real private production evaluator, root scan and subset
-phase helpers directly.
+extractor selects the real private production evaluator, root scan, subset
+query and countermodel-search phases directly.
 It selects `FrozenReduct::satisfied_by` through the existing reduct module, then
 excludes the other methods. No new Rust wrapper is needed. The extraction runs offline; if dependencies are
 not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
@@ -62,6 +62,8 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
 .lake/aeneas/charon cargo --preset=aeneas --sysroot default \
   --start-from zetesis_ferraris::oracle::evaluate \
   --start-from zetesis_ferraris::oracle::failed_root \
+  --start-from zetesis_ferraris::oracle::find_countermodel \
+  --start-from zetesis_ferraris::oracle::check_subset \
   --start-from zetesis_ferraris::oracle::select_atoms \
   --start-from zetesis_ferraris::oracle::advance_subset \
   --start-from zetesis_ferraris::reduct \
@@ -85,7 +87,7 @@ check; old hashes cannot qualify changed code.
 ## Normalize the translation input and compare
 
 The public source LLBC changes only destination metadata. The translation input
-also renames three local debug names to avoid Lean namespace collisions, removes
+also renames five local debug names to avoid Lean namespace collisions, removes
 the unused derived `Debug` registration, and clears two unused `Step` method
 slots in the trait and its `usize` implementation. Pinned Charon registers
 `forward_overflowing` and `backward_overflowing`, but the pinned Lean `Step`
@@ -118,30 +120,30 @@ def checked_argument($id; $name; $count; $type):
   and $function.body.Structured.locals.locals[1].name == "theory";
 def debug_is_unused:
   .translated as $t |
-  $t.trait_impls[20] as $debug |
-  $debug.def_id == 20
+  $t.trait_impls[21] as $debug |
+  $debug.def_id == 21
   and $debug.item_meta.name == [
     {"Ident":["zetesis_ferraris",0]}, {"Ident":["reduct",0]},
-    {"Impl":{"Trait":20}}]
+    {"Impl":{"Trait":21}}]
   and $debug.item_meta.attr_info.attributes == [{"Builtin":"AutomaticallyDerived"}]
-  and $debug.impl_trait.id == 27
-  and $t.trait_decls[27].item_meta.name == [
+  and $debug.impl_trait.id == 29
+  and $t.trait_decls[29].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 171
-  and $t.fun_decls[171] == null
-  and $t.ordered_decls[108] == {"TraitImpl":{"NonRec":20}}
-  and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":20}})] | length) == 1
+  and $debug.methods[0].skip_binder.id == 178
+  and $t.fun_decls[178] == null
+  and $t.ordered_decls[111] == {"TraitImpl":{"NonRec":21}}
+  and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":21}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
-          ($t.trait_impls | to_entries | map(select(.key != 20) | .value))]
+          ($t.trait_impls | to_entries | map(select(.key != 21) | .value))]
         | .. | objects | select(
-            .TraitImpl? == 20 or .TraitImpl?.id? == 20
-            or .impl_ref?.id? == 20 or .trait_impl?.id? == 20
-            or .trait_impl_id? == 20)] | length) == 0;
+            .TraitImpl? == 21 or .TraitImpl?.id? == 21
+            or .impl_ref?.id? == 21 or .trait_impl?.id? == 21
+            or .trait_impl_id? == 21)] | length) == 0;
 def step_method($slot; $name; $function):
   .translated as $t |
   $t.trait_decls[8].methods[$slot] as $decl |
-  $t.trait_impls[18].methods[$slot] as $impl |
+  $t.trait_impls[19].methods[$slot] as $impl |
   $decl.kind == {"TraitMethod":[8,$slot]}
   and $decl.skip_binder.name == $name
   and $impl.kind == {"TraitMethod":[8,$slot]}
@@ -149,49 +151,53 @@ def step_method($slot; $name; $function):
   and $t.fun_decls[$function].body == "Opaque"
   and $t.fun_decls[$function].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["iter",0]}, {"Ident":["range",0]},
-    {"Impl":{"Trait":18}}, {"Ident":[$name,0]}];
+    {"Impl":{"Trait":19}}, {"Ident":[$name,0]}];
 def step_is_unused:
   .translated as $t |
   $t.trait_decls[8].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["iter",0]}, {"Ident":["range",0]},
     {"Ident":["Step",0]}]
-  and $t.trait_impls[18].impl_trait.id == 8
-  and $t.trait_impls[18].impl_trait.generics.types == [{"Deduplicated":0}]
+  and $t.trait_impls[19].impl_trait.id == 8
+  and $t.trait_impls[19].impl_trait.generics.types == [{"Deduplicated":0}]
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
-  and $t.trait_impls[18].vtable == null
-  and step_method(2; "forward_overflowing"; 164)
-  and step_method(6; "backward_overflowing"; 168)
+  and $t.trait_impls[19].vtable == null
+  and step_method(2; "forward_overflowing"; 171)
+  and step_method(6; "backward_overflowing"; 175)
   and ((.translated.trait_decls[8].methods[2] = null
     | .translated.trait_decls[8].methods[6] = null
-    | .translated.trait_impls[18].methods[2] = null
-    | .translated.trait_impls[18].methods[6] = null
-    | .translated.fun_decls[164] |= del(.src)
-    | .translated.fun_decls[168] |= del(.src)
+    | .translated.trait_impls[19].methods[2] = null
+    | .translated.trait_impls[19].methods[6] = null
+    | .translated.fun_decls[171] |= del(.src)
+    | .translated.fun_decls[175] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 164 or .Fun? == 168
+        .Fun? == 171 or .Fun? == 175
         or .TraitMethod? == [8,2] or .TraitMethod? == [8,6]
         or (.trait_ref?.id? == 8 and (.item_id? == 2 or .item_id? == 6))
-        or (.impl_ref?.id? == 18 and (.item_id? == 2 or .item_id? == 6)))])
+        or (.impl_ref?.id? == 19 and (.item_id? == 2 or .item_id? == 6)))])
       | length) == 0;
 if checked_argument(11; "evaluate"; 5;
      {"Value":[66,{"Ref":[{"Body":1},{"Deduplicated":4},"Shared"]}]})
    and checked_argument(12; "failed_root"; 3; {"Deduplicated":66})
-   and checked_argument(13; "select_atoms"; 4; {"Deduplicated":66})
+   and checked_argument(13; "find_countermodel"; 6; {"Deduplicated":66})
+   and checked_argument(14; "check_subset"; 5; {"Deduplicated":66})
+   and checked_argument(15; "select_atoms"; 4; {"Deduplicated":66})
    and debug_is_unused and step_is_unused
 then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[12].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[13].body.Structured.locals.locals[1].name = "program"
-   | .translated.trait_impls[20] = null
-   | del(.translated.ordered_decls[108])
+   | .translated.fun_decls[14].body.Structured.locals.locals[1].name = "program"
+   | .translated.fun_decls[15].body.Structured.locals.locals[1].name = "program"
+   | .translated.trait_impls[21] = null
+   | del(.translated.ordered_decls[111])
    | .translated.trait_decls[8].methods[2] = null
    | .translated.trait_decls[8].methods[6] = null
-   | .translated.trait_impls[18].methods[2] = null
-   | .translated.trait_impls[18].methods[6] = null
+   | .translated.trait_impls[19].methods[2] = null
+   | .translated.trait_impls[19].methods[6] = null
 else error("unexpected selected function, unused Debug declaration or Step method") end
 
 ' target/replay/evaluator.source.llbc > target/replay/evaluator.llbc
@@ -200,13 +206,15 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
 (.translated.fun_decls[11].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[12].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[13].body.Structured.locals.locals[1].name = "theory"
- | .translated.trait_impls[20] = $source[0].translated.trait_impls[20]
- | .translated.ordered_decls = (.translated.ordered_decls[:108]
-     + [$source[0].translated.ordered_decls[108]] + .translated.ordered_decls[108:])
+ | .translated.fun_decls[14].body.Structured.locals.locals[1].name = "theory"
+ | .translated.fun_decls[15].body.Structured.locals.locals[1].name = "theory"
+ | .translated.trait_impls[21] = $source[0].translated.trait_impls[21]
+ | .translated.ordered_decls = (.translated.ordered_decls[:111]
+     + [$source[0].translated.ordered_decls[111]] + .translated.ordered_decls[111:])
  | .translated.trait_decls[8].methods[2] = $source[0].translated.trait_decls[8].methods[2]
  | .translated.trait_decls[8].methods[6] = $source[0].translated.trait_decls[8].methods[6]
- | .translated.trait_impls[18].methods[2] = $source[0].translated.trait_impls[18].methods[2]
- | .translated.trait_impls[18].methods[6] = $source[0].translated.trait_impls[18].methods[6]) == $source[0]
+ | .translated.trait_impls[19].methods[2] = $source[0].translated.trait_impls[19].methods[2]
+ | .translated.trait_impls[19].methods[6] = $source[0].translated.trait_impls[19].methods[6]) == $source[0]
 ' target/replay/evaluator.llbc
 
 jq -e --slurpfile source target/replay/evaluator.source.llbc \
@@ -214,13 +222,15 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
 (.translated.fun_decls[11].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[12].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[13].body.Structured.locals.locals[1].name = "theory"
- | .translated.trait_impls[20] = $source[0].translated.trait_impls[20]
- | .translated.ordered_decls = (.translated.ordered_decls[:108]
-     + [$source[0].translated.ordered_decls[108]] + .translated.ordered_decls[108:])
+ | .translated.fun_decls[14].body.Structured.locals.locals[1].name = "theory"
+ | .translated.fun_decls[15].body.Structured.locals.locals[1].name = "theory"
+ | .translated.trait_impls[21] = $source[0].translated.trait_impls[21]
+ | .translated.ordered_decls = (.translated.ordered_decls[:111]
+     + [$source[0].translated.ordered_decls[111]] + .translated.ordered_decls[111:])
  | .translated.trait_decls[8].methods[2] = $source[0].translated.trait_decls[8].methods[2]
  | .translated.trait_decls[8].methods[6] = $source[0].translated.trait_decls[8].methods[6]
- | .translated.trait_impls[18].methods[2] = $source[0].translated.trait_impls[18].methods[2]
- | .translated.trait_impls[18].methods[6] = $source[0].translated.trait_impls[18].methods[6]) | (.translated.options.dest_file = $raw[0].translated.options.dest_file) == $raw[0]
+ | .translated.trait_impls[19].methods[2] = $source[0].translated.trait_impls[19].methods[2]
+ | .translated.trait_impls[19].methods[6] = $source[0].translated.trait_impls[19].methods[6]) | (.translated.options.dest_file = $raw[0].translated.options.dest_file) == $raw[0]
 ' target/replay/evaluator.llbc
 
 mkdir -p target/replay/Evaluator
@@ -231,7 +241,7 @@ cmp Evaluator/Types.lean target/replay/Evaluator/Types.lean
 cmp Evaluator/Funs.lean target/replay/Evaluator/Funs.lean
 ```
 
-Recheck the selected source hashes, all three precise function/local identities and
+Recheck the selected source hashes, all five precise function/local identities and
 the unused Debug and Step declarations in `provenance.json` before accepting a
 repeated extraction. These paths are specific
 to this recorded extraction. Never reuse them silently after a structural change.
@@ -247,25 +257,17 @@ after accepting any changed extraction.
 
 ## Current subset-search extraction limit
 
-The selected-atom and packed-carry helpers now translate. The same pinned tools
-extract the complete `oracle::check` to LLBC, but Aeneas still rejects its outer
-control flow with `Early returns inside of loops are not supported yet`
-(`PrePasses.ml:576`). This refusal occurs before Lean output. It is a translation
-limitation, not a proved defect in the Rust algorithm.
+The allocation-free `find_countermodel` phase and its subset-query and carry
+helpers now translate directly. Their exported bodies are the production
+operations, with no generated-code rewriting or success assumptions for missing
+externals. Translation alone does not prove the search invariant, termination,
+proper-subset coverage or final membership verdict.
 
-To reproduce without replacing the successful package inputs, repeat the
-extraction command above with the additional option
-`--start-from zetesis_ferraris::oracle::check` and change its destination to
-`target/subset-probe/evaluator.llbc` (create that directory first). Then run:
-
-```sh
-mkdir -p target/subset-probe/Evaluator
-.lake/aeneas/aeneas -backend lean -dest target/subset-probe/Evaluator \
-  -split-files -namespace ZetesisExtract -all-computable -no-progress-bar \
-  -sequential -warnings-as-errors -abort-on-error target/subset-probe/evaluator.llbc
-```
-
-This command is expected to fail before Lean output and needs no LLBC
-normalization. The helper extraction and its boundary laws do not establish the
-complete checker's subset coverage or membership verdict. Allocation, owner
-identity and changing concurrent observations remain separate boundaries.
+The public `oracle::check` wrapper is outside this package's selected roots. It
+also performs fallible reservation, theory-handle cloning and owner-identity
+checks. Its generated dependency closure needs `Vec.try_reserve_exact`,
+`TryReserveError`, `Arc.clone` and `Arc.ptr_eq`, which the current scoped models
+do not supply. Do not install the generated axiom templates or replace these
+operations with always-success or value-equality definitions. Allocation,
+capacity, identity and changing concurrent observations remain separate
+correspondence boundaries.

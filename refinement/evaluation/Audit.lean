@@ -1,6 +1,7 @@
 import SelectedAtoms
 import ScalarSubsetsExample
 import SubsetSteps
+import SubsetQuery
 import ProgressExample
 import TheorySatisfaction
 import RootScanExample
@@ -9,6 +10,10 @@ import FrozenQueryExample
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
+#print axioms SubsetQuery.completed_admission
+#print axioms SubsetQuery.completed_phases
+#print axioms SubsetQuery.completed_reduct
+#print axioms SubsetQuery.completed_subset_count
 #print axioms Membership.outside
 #print axioms Membership.contains_refines
 #print axioms EvaluatorIteration.slice_next_present

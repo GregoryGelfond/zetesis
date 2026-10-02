@@ -393,7 +393,7 @@ def oracle.select_atoms
     selected work
 
 /-- [zetesis_ferraris::oracle::advance_subset]: loop body 0:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 233:4-246:1 -/
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 234:4-247:1 -/
 @[rust_loop_body]
 def oracle.advance_subset_loop.body
   (iter : core.slice.iter.Iter Std.Usize) (subset : theory.Interpretation)
@@ -438,7 +438,7 @@ def oracle.advance_subset_loop.body
       ok (done (r1, subset, present, work1))
 
 /-- [zetesis_ferraris::oracle::advance_subset]: loop 0:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 233:4-246:1 -/
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 234:4-247:1 -/
 @[rust_loop]
 def oracle.advance_subset_loop
   (iter : core.slice.iter.Iter Std.Usize) (subset : theory.Interpretation)
@@ -452,7 +452,7 @@ def oracle.advance_subset_loop
     (iter, subset, present, work)
 
 /-- [zetesis_ferraris::oracle::advance_subset]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 227:0-246:1 -/
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 228:0-247:1 -/
 def oracle.advance_subset
   (selected : Slice Std.Usize) (subset : theory.Interpretation)
   (present : Std.Usize) (work : oracle.Work) :
@@ -463,6 +463,116 @@ def oracle.advance_subset
     SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter
       selected
   oracle.advance_subset_loop iter subset present work
+
+/-- [zetesis_ferraris::oracle::check_subset]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 253:0-267:1 -/
+def oracle.check_subset
+  (program : theory.Theory) (subset : theory.Interpretation)
+  (frozen : Slice Bool) (values : alloc.vec.Vec Bool) (work : oracle.Work) :
+  Result ((core.result.Result Bool zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Bool) × oracle.Work)
+  := do
+  let r ← zetesis_cpu.cancellation.Cancellation.poll work.cancellation
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    if work.statistics.subsets >= work.limits.max_subsets
+    then
+      ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.CandidateLimit,
+        values, work)
+    else
+      let i ← work.statistics.subsets + 1#u64
+      let (r1, values1, work1) ←
+        oracle.evaluate program subset (some frozen) values
+          { work with statistics := { work.statistics with subsets := i } }
+      let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+      match cf1 with
+      | core.ops.control_flow.ControlFlow.Continue _ =>
+        let s := alloc.vec.Vec.deref values1
+        let (r2, work2) ← oracle.failed_root program s work1
+        let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+        match cf2 with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let b := core.option.Option.is_none val
+          ok (core.result.Result.Ok b, values1, work2)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r3 ←
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop)
+              residual
+          ok (r3, values1, work2)
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        let r2 ←
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+        ok (r2, values1, work1)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+    ok (r1, values, work)
+
+/-- [zetesis_ferraris::oracle::find_countermodel]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 287:4-298:5 -/
+@[rust_loop_body]
+def oracle.find_countermodel_loop.body
+  (program : theory.Theory) (frozen : Slice Bool) (selected : Slice Std.Usize)
+  (subset : theory.Interpretation) (values : alloc.vec.Vec Bool)
+  (work : oracle.Work) (present : Std.Usize) :
+  Result (ControlFlow (theory.Interpretation × (alloc.vec.Vec Bool) ×
+    oracle.Work × Std.Usize) (theory.Interpretation × (alloc.vec.Vec Bool) ×
+    oracle.Work × (core.result.Result Bool zetesis_cpu.cancellation.Stop)))
+  := do
+  let i := Slice.len selected
+  if present < i
+  then
+    let (countermodel, values1, work1) ←
+      oracle.check_subset program subset frozen values work
+    match countermodel with
+    | core.result.Result.Ok b =>
+      if b
+      then ok (done (subset, values1, work1, countermodel))
+      else
+        let (r, subset1, present1, work2) ←
+          oracle.advance_subset selected subset present work1
+        match r with
+        | core.result.Result.Ok _ =>
+          ok (cont (subset1, values1, work2, present1))
+        | core.result.Result.Err stop =>
+          ok (done (subset1, values1, work2, core.result.Result.Err stop))
+    | core.result.Result.Err _ =>
+      ok (done (subset, values1, work1, countermodel))
+  else ok (done (subset, values, work, core.result.Result.Ok false))
+
+/-- [zetesis_ferraris::oracle::find_countermodel]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 287:4-298:5 -/
+@[rust_loop]
+def oracle.find_countermodel_loop
+  (program : theory.Theory) (frozen : Slice Bool) (selected : Slice Std.Usize)
+  (subset : theory.Interpretation) (values : alloc.vec.Vec Bool)
+  (work : oracle.Work) (present : Std.Usize) :
+  Result (theory.Interpretation × (alloc.vec.Vec Bool) × oracle.Work ×
+    (core.result.Result Bool zetesis_cpu.cancellation.Stop))
+  := do
+  loop
+    (fun (subset1, values1, work1, present1) =>
+      oracle.find_countermodel_loop.body program frozen selected subset1
+      values1 work1 present1)
+    (subset, values, work, present)
+
+/-- [zetesis_ferraris::oracle::find_countermodel]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 275:0-300:1 -/
+def oracle.find_countermodel
+  (program : theory.Theory) (frozen : Slice Bool) (selected : Slice Std.Usize)
+  (subset : theory.Interpretation) (values : alloc.vec.Vec Bool)
+  (work : oracle.Work) :
+  Result ((core.result.Result Bool zetesis_cpu.cancellation.Stop) ×
+    theory.Interpretation × (alloc.vec.Vec Bool) × oracle.Work)
+  := do
+  let (subset1, values1, work1, countermodel) ←
+    oracle.find_countermodel_loop program frozen selected subset values work
+      0#usize
+  ok (countermodel, subset1, values1, work1)
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-212:5

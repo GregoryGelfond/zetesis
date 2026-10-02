@@ -1,4 +1,8 @@
 'Membership.mask_bit' depends on axioms: [propext, Quot.sound]
+'SubsetQuery.completed_admission' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SubsetQuery.completed_phases' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SubsetQuery.completed_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SubsetQuery.completed_subset_count' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Membership.outside' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Membership.contains_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
 'EvaluatorIteration.slice_next_present' depends on axioms: [propext, Classical.choice, Quot.sound]

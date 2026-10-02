@@ -224,6 +224,7 @@ fn select_atoms(
 /// distinct in-universe coordinates, a subset supported on those coordinates,
 /// and its population. `check` calls this only for a proper subset. A stop retains
 /// preceding bit and population updates; the refused tick performs no update.
+#[inline]
 fn advance_subset(
     selected: &[usize],
     subset: &mut Interpretation,
@@ -243,6 +244,59 @@ fn advance_subset(
         *present -= 1;
     }
     Ok(())
+}
+
+/// Test one proper subset against the frozen reduct. Poll before charging the
+/// subset, then share the remaining work allowance between evaluation and roots.
+/// A true result is a countermodel; a false result permits the next carry.
+#[inline]
+fn check_subset(
+    theory: &Theory,
+    subset: &Interpretation,
+    frozen: &[bool],
+    values: &mut Vec<bool>,
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    work.cancellation.poll()?;
+    if work.statistics.subsets >= work.limits.max_subsets {
+        return Err(Stop::CandidateLimit);
+    }
+    work.statistics.subsets += 1;
+    evaluate(theory, subset, Some(frozen), values, work)?;
+    Ok(failed_root(theory, values, work)?.is_none())
+}
+
+/// Search the candidate's proper subsets in binary-counter order. The caller
+/// supplies its exact original truth mask, exact increasing selected coordinates
+/// and an empty, same-theory subset. On success, true leaves the first reduct
+/// countermodel in `subset`; false establishes that no proper subset satisfies
+/// the frozen reduct. A stop preserves the work and partial carry.
+#[inline]
+fn find_countermodel(
+    theory: &Theory,
+    frozen: &[bool],
+    selected: &[usize],
+    subset: &mut Interpretation,
+    values: &mut Vec<bool>,
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    // Empty is the first proper subset unless M itself is empty. Incrementing
+    // over selected atom indices avoids machine-word cardinality restrictions.
+    let mut present = 0;
+    let mut countermodel = Ok(false);
+    while present < selected.len() {
+        countermodel = check_subset(theory, subset, frozen, values, work);
+        match countermodel {
+            Ok(false) => {
+                if let Err(stop) = advance_subset(selected, subset, &mut present, work) {
+                    countermodel = Err(stop);
+                    break;
+                }
+            }
+            Ok(true) | Err(_) => break,
+        }
+    }
+    countermodel
 }
 
 /// Decide stable-model membership by classical satisfaction and exhaustive
@@ -283,26 +337,20 @@ pub fn check(
         words,
     };
     let mut values = reserve(theory.nodes().len())?;
-    // Empty is the first proper subset unless M itself is empty. Incrementing
-    // over selected atom indices avoids machine-word cardinality restrictions.
-    let mut present = 0;
-    while present < selected.len() {
-        cancellation.poll()?;
-        if work.statistics.subsets >= limits.max_subsets {
-            return Err(Stop::CandidateLimit);
-        }
-        work.statistics.subsets += 1;
-        evaluate(theory, &subset, Some(&frozen), &mut values, &mut work)?;
-        if failed_root(theory, &values, &mut work)?.is_none() {
-            return Ok(Check {
-                verdict: Verdict::NonMinimal { witness: subset },
-                statistics: work.statistics,
-            });
-        }
-        advance_subset(&selected, &mut subset, &mut present, &mut work)?;
-    }
+    let verdict = if find_countermodel(
+        theory,
+        &frozen,
+        &selected,
+        &mut subset,
+        &mut values,
+        &mut work,
+    )? {
+        Verdict::NonMinimal { witness: subset }
+    } else {
+        Verdict::Stable
+    };
     Ok(Check {
-        verdict: Verdict::Stable,
+        verdict,
         statistics: work.statistics,
     })
 }

@@ -2,28 +2,23 @@
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
     "inventory": "source-inputs.sha256",
-    "inventorySha256": "a7a3c0d98308afd0ff76d46bb643b793a89167e45d7416387b5c8d0feacf8beb",
+    "inventorySha256": "5d0da17a88d76ced478e866cf47c122925158e43356e89ed363abfb1393c5f6e",
     "inventoryFiles": 305,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded source inventory for the production evaluator, root scan, subset helpers and private FrozenReduct query; not every repository or toolchain file.",
+    "scope": "Recorded source inventory for the evaluator, root scan, private frozen query and countermodel-search phases; not every repository or toolchain file.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "ef19c1d7bfbfb15097fac25e43469a41171cda83",
+    "extractionBaseRevision": "e3701455a60a16eaa5b0bad616f5323c25a27a07",
     "extractionSourceState": "Working tree with the recorded source changes; the base commit alone does not identify these bytes.",
     "workingTreeSourceChanges": {
-      "crates/zetesis-ferraris/Cargo.toml": {
-        "previous": "5485dee513cb123c46cb4362a08842c9488e36eb57936eb59183929fec2fc06a",
-        "current": "b6d9b104cd7c755787f03ac61dd986088270e0a657df935075ec6ec819dc4e53"
-      },
-      "crates/zetesis-ferraris/benches/membership.rs": {
-        "previous": null,
-        "current": "7500e1cf4a88b5c75fec50807f778b8e30586f1dabd21078c249c6f72d073ee3"
-      },
       "crates/zetesis-ferraris/src/oracle.rs": {
-        "previous": "8494e815a4d804acada0ea9fb3ca47a622f1110a1d5170e0d880da847b7dc716",
-        "current": "2a09f160f47e19434c1d3fa477461d8db6d5cb864ae33474a653c3978070401b"
+        "previous": "2a09f160f47e19434c1d3fa477461d8db6d5cb864ae33474a653c3978070401b",
+        "current": "c56516ecf95ea3924f6f10b253102a0c82d73fde89c39e75e1dd6341173685f0"
+      },
+      "crates/zetesis-ferraris/tests/integration/reduct.rs": {
+        "previous": "3757d987c7483c637e1c0d7938505b1f0ccd5c18e7ce6f33962818461fd4031c",
+        "current": "042a4298a8de13b0484c9b90516cf93b6d4e8c50a72be6abcc49149bbe7166e4"
       }
-    },
-    "verifiedCurrentRevision": "2a3595ec3b7d389ea2ddfa44fe56e8b598d1d67d"
+    }
   },
   "tools": {
     "charon": {
@@ -53,6 +48,8 @@
     "startFrom": [
       "zetesis_ferraris::oracle::evaluate",
       "zetesis_ferraris::oracle::failed_root",
+      "zetesis_ferraris::oracle::find_countermodel",
+      "zetesis_ferraris::oracle::check_subset",
       "zetesis_ferraris::oracle::select_atoms",
       "zetesis_ferraris::oracle::advance_subset",
       "zetesis_ferraris::reduct"
@@ -72,7 +69,7 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "7b7bb0a0af0289eb027c241983e0fb4f5fced1e4ae825329a02fdadaf62721ba",
+    "originalLlbcSha256": "ca3c6a04697af54b5ee5eb9a248daf27ab8915024d275abb8f02a85635815646",
     "exclude": [
       "zetesis_ferraris::reduct::_::new",
       "zetesis_ferraris::reduct::_::freeze",
@@ -141,6 +138,38 @@
             1,
             "name"
           ],
+          "function": "zetesis_ferraris::oracle::find_countermodel",
+          "oldValue": "theory",
+          "newValue": "program"
+        },
+        {
+          "changedPath": [
+            "translated",
+            "fun_decls",
+            14,
+            "body",
+            "Structured",
+            "locals",
+            "locals",
+            1,
+            "name"
+          ],
+          "function": "zetesis_ferraris::oracle::check_subset",
+          "oldValue": "theory",
+          "newValue": "program"
+        },
+        {
+          "changedPath": [
+            "translated",
+            "fun_decls",
+            15,
+            "body",
+            "Structured",
+            "locals",
+            "locals",
+            1,
+            "name"
+          ],
           "function": "zetesis_ferraris::oracle::select_atoms",
           "oldValue": "theory",
           "newValue": "program"
@@ -148,12 +177,12 @@
       ],
       "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
       "declarationSelection": {
-        "removedTraitImplIndex": 20,
-        "removedOrderedRegistrationIndex": 108,
+        "removedTraitImplIndex": 21,
+        "removedOrderedRegistrationIndex": 111,
         "trait": "core::fmt::Debug",
         "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
         "derived": true,
-        "excludedMethodId": 171,
+        "excludedMethodId": 178,
         "excludedMethod": "fmt",
         "noSurvivingSemanticReferences": true,
         "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
@@ -164,18 +193,18 @@
         "trait": "core::iter::range::Step",
         "traitId": 8,
         "implementingType": "usize",
-        "implementationId": 18,
+        "implementationId": 19,
         "vtable": null,
         "methods": [
           {
             "name": "forward_overflowing",
             "slot": 2,
-            "opaqueFunctionId": 164
+            "opaqueFunctionId": 171
           },
           {
             "name": "backward_overflowing",
             "slot": 6,
-            "opaqueFunctionId": 168
+            "opaqueFunctionId": 175
           }
         ],
         "selection": "Replace the two unused trait and implementation method slots with null; retain indices and all function declarations.",
@@ -183,14 +212,16 @@
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
       }
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "Pinned translation refuses the unused Step fields; the official filter option does not remove declaration fields. After checked unused-declaration selection and local debug-name normalization, generation succeeds and inserts only the two subset helper body/loop/entry clusters.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded unused Debug/Step selection and local debug-name normalization permits generation. The output adds the concrete per-subset query and search body/loop/entry; prior executable declarations are unchanged.",
     "executableStatementTreesSha256": {
-      "evaluate": "0759cf126534d52b2c693da9a1dea73e6961e51a31fefd18fb13ffa65aef3e8c",
-      "failed_root": "87b2c55fcb1aba7ecadc8e7009c742cf3f970ece4c054a5cb096d3226bf2c692",
-      "select_atoms": "5a7448b79bb241d60086d0f7cd8c1d8f8469c9a2e5223e7c94aa566c3b7d3b5d",
-      "advance_subset": "5444d30f59dab0560d8f17d1b02fe59a7e731ac0e6acebbd7e40a05363a63a5b",
-      "FrozenReduct.theory": "075e268f0166e22a5dff371876bd155652ff8d7b806769a04d95e3baaeb92926",
-      "FrozenReduct.satisfied_by": "cbe271df86d76dcb29616c2a9d0ded819a00a6dd8b4d9255816a104862d592e9"
+      "evaluate": "96b3be02b57fb4ec4fc9325acaf6401fecfdb3e36f56c9f5b6a05a45db1fa385",
+      "failed_root": "e02bcbe71078b75df3b9f30cd764778f3276b7bb6a05b949c4b6057a462dddce",
+      "find_countermodel": "4075a9b93cfebaa7366ce80479e6fd6e3ebec1b858c817af1141d638fe1b9518",
+      "check_subset": "1c7cd815006e3b7b663a39eb6faea5b24aa348351d9ae16eea72b6fa1695f187",
+      "select_atoms": "db85f8b05ad8f7f331c0da86f2583f6e2ed1c76e1d62cb4c5f864464c8b1e912",
+      "advance_subset": "ea7e4d30e293f1338d6a3069a8c6bb531c822bf9c1077ff04b3f6946e55245fd",
+      "FrozenReduct.theory": "25e82845f0a18cc7ea3257d6a184d2cc05a4e78b31e96e2facb31e597f3bd43a",
+      "FrozenReduct.satisfied_by": "9efd2c9e40abb05987113a8313e76ecc68b8c5372d68442c9bdb6e94fb9b8665"
     },
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true
@@ -224,37 +255,36 @@
   },
   "trustBoundary": [
     "Published LLBC normalizes destination metadata/local debug names and omits checked unused Debug/Step declaration registrations; it is not byte-exact raw Charon output.",
-    "Production Rust factors the existing selection and carry phases into private helpers without changing operation order. Generated Lean was not edited.",
+    "Production Rust names subset checking and countermodel search as private phases, preserving operation order. Generated Lean was not edited.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Atomic loads return fixed supplied token values. Generated-loop proofs under those definitions do not establish correspondence with changing concurrent Rust observations.",
     "Source inventory and output hashes are provenance, not a proof of end-to-end solver correctness.",
     "Private FrozenReduct::satisfied_by is selected; construction, reservation, public owner checks and public query wrappers are not extracted or verified by this package.",
-    "The actual subset helpers are exported. The complete oracle::check still fails pinned translation on an early return inside a loop; its allocation, owner checks and complete membership verdict are not verified here. Standard-library models, including range iteration, remain external correspondence boundaries."
+    "The actual allocation-free countermodel search is exported. Public check setup, reservation, Arc owner identity/clone and a complete membership-verdict implementation theorem remain outside the checked package. Generation is not itself verification of search coverage or correctness."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "3369acd986787cd0f519ca7068fa0d1977890623d7dc470e23113f06cc4f1da1",
-    "evaluator.llbc": "bae2ee02270210078af92e1d3cb9f86c1ebb1f796a8f94c474aa715e97e94c11",
-    "Evaluator/Funs.lean": "6a71873de7bbbfb6e082cba489d2e44dac59bece7757a66e7c6b741b45c8a12c",
+    "evaluator.source.llbc": "01b6ef59f173850df1874c2088890ec93fd2e9f77685dd0f52a64fe7546abfff",
+    "evaluator.llbc": "be38de40ac2b3bcfd831e204ecc4284fc0d8e36b55cb56f29e5467e9d8859be8",
+    "Evaluator/Funs.lean": "b411fae18b774e07273e609af9e7dab94579bc49a486988a2ff05a0564be62e7",
     "Evaluator/FunsExternal_Template.lean": "1cd1207ee07b5f9aa78dd6979479dfc505223c51687dfab256e51319e7ee2a8a",
     "Evaluator/Types.lean": "e6306768a0145b6cf1a68bff9fe81cd9e06ad285471f72c193aa8d1563e795cc",
     "Evaluator/TypesExternal_Template.lean": "cdbc58fec3a135c6f90a0b2cb212e4d5a04c2d72605848bf78291c7ca071b454"
   },
   "compatibility": {
-    "previousPackageRevision": "ef19c1d7bfbfb15097fac25e43469a41171cda83",
-    "previousGeneratedFunsSha256": "b47365c7eb32a657ec7d352724f63b192dd6f3ffc2bf42fb7caa2b6169252e00",
+    "previousPackageRevision": "e3701455a60a16eaa5b0bad616f5323c25a27a07",
+    "previousGeneratedFunsSha256": "6a71873de7bbbfb6e082cba489d2e44dac59bece7757a66e7c6b741b45c8a12c",
     "previousGeneratedTypesSha256": "e6306768a0145b6cf1a68bff9fe81cd9e06ad285471f72c193aa8d1563e795cc",
-    "existingGeneratedFunctionsByteUnchanged": true,
+    "existingGeneratedExecutableDeclarationsUnchanged": true,
+    "existingGeneratedCommentChanges": "Three advance_subset source-location comments shift by one line.",
     "existingGeneratedTypesByteUnchanged": true,
     "externalTemplatesHashesUnchanged": true,
-    "addedGeneratedFunctionLines": 130,
+    "addedGeneratedFunctionLines": 110,
     "addedGeneratedTypeLines": 0,
     "addedDefinitions": [
-      "oracle.select_atoms_loop.body",
-      "oracle.select_atoms_loop",
-      "oracle.select_atoms",
-      "oracle.advance_subset_loop.body",
-      "oracle.advance_subset_loop",
-      "oracle.advance_subset"
+      "oracle.check_subset",
+      "oracle.find_countermodel_loop.body",
+      "oracle.find_countermodel_loop",
+      "oracle.find_countermodel"
     ],
     "existingAuthoredProofsChanged": false,
     "strictExistingPackageCheckExit": 0

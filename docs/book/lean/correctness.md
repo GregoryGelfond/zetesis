@@ -71,6 +71,12 @@ the same ASP theory under the extraction toolchain. Changing runtime observation
 construction, public allocation/owner-checking wrappers and subset search remain
 unproved.
 
+The actual proper-subset search now translates into Lean as a named operation.
+`SubsetQuery.completed_reduct` proves that its completed per-subset query decides
+reduct satisfaction using a mask returned by original evaluation; a separate law
+proves the exact one-subset charge. Successful selection/carry iteration, search
+coverage and the final membership verdict are the next correspondence steps.
+
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
 closure and acceptance results. Their link to general reduct semantics is
@@ -175,6 +181,13 @@ routes, admitted inputs and modeled effects. It must also identify its remaining
 trust: Lean's kernel and permitted logical axioms, extraction/translation tools
 and library models, upstream parsing where assumed, and the compiler/runtime,
 driver and hardware semantics beneath the chosen machine model.
+
+The verification target assumes Rust's allocator, `Arc`, the operating system
+and hardware implement their contracts correctly. Zetesis must still be proved
+to use those contracts correctly. Allocation may fail, and cloning an owner
+preserves its identity without making distinct, equal-valued owners identical.
+Models of these contracts must retain those distinctions; verifying the platform
+implementations themselves is outside this project.
 
 Clingo comparisons, property tests, coverage and physical-device qualification
 remain useful independent evidence. They do not replace a refinement proof.

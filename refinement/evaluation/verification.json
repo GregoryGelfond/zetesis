@@ -1,13 +1,17 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "The generated private FrozenReduct query decides Ferraris reduct satisfaction on completion under fixed observation tokens and explicit stored-mask agreement, with shared work and typed stops. Selected-atom and packed-update primitive bridges reuse the same semantic sources and checked backend operations. Both private subset helpers are extracted; their generated bodies preserve state and work on exhaustion and typed refusal. Successful helper iteration, the complete oracle::check loop, construction, public wrappers, changing observations and complete solver verification remain open.",
+  "scope": "Generated private stored-reduct and per-subset queries decide Ferraris reduct satisfaction on completion under fixed observation tokens. The per-subset result derives its mask from actual original evaluation, recovers its internal calls and charges exactly one subset. Selected-atom and packed-update bridges retain exhaustion/refusal laws. The concrete proper-subset search loop is extracted without new external models; its coverage and membership endpoint remain unproved. Allocation, public owner checks, changing concurrent observations and complete solver verification remain open.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "2310c0bf0836d2954f2a93ea22b4bf420ac96ff4f08d1f4f264633d588f7dcec",
+  "artifactInventorySha256": "c194e80e21170acd77bb807d571ce5088bb2b089bfcfb86cc87cceaf25e76fba",
   "declarations": [
     "Membership.mask_bit",
+    "SubsetQuery.completed_admission",
+    "SubsetQuery.completed_phases",
+    "SubsetQuery.completed_reduct",
+    "SubsetQuery.completed_subset_count",
     "Membership.outside",
     "Membership.contains_refines",
     "EvaluatorIteration.slice_next_present",
@@ -135,7 +139,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "8e31a478c8d73d7a1376bc82d818bc0f7cca46d0b602d39d62d33cd7f594859c"
+      "logSha256": "33d74fed4881118eaeedb0d7e16eaa3af2acdf821b1e86ff27a026360567471c"
     },
     {
       "argv": [
@@ -148,7 +152,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "567140ff3e8aeb1670bebca5a7bc1bdfa7509843310cdd5dd0174d21bd71b13b"
+      "logSha256": "0a991484ac95febcf315e22ebd38566396f94f18021fc2d0465cfc3c0bfa2793"
     },
     {
       "argv": [
@@ -164,7 +168,7 @@
       "logSha256": "da83106f15652cb0bd205631286163998f0f2a6c4210b5e43dd1fc72cfdc82e8"
     }
   ],
-  "theoremAuditCount": 114,
+  "theoremAuditCount": 118,
   "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
@@ -376,6 +380,6 @@
     "Rust pointer ownership, allocation, timers and concurrent memory.",
     "FrozenReduct construction, public allocation and owner-checking wrappers, grounding and solver enumeration.",
     "Successful generated subset-helper transitions and complete helper-loop correspondence.",
-    "The complete oracle::check loop: pinned Aeneas rejects an early return before Lean generation."
+    "Coverage and final membership of the generated find_countermodel loop and the public oracle::check wrapper."
   ]
 }
