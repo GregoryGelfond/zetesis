@@ -334,6 +334,136 @@ def oracle.failed_root
     SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
   oracle.failed_root_loop iter values work
 
+/-- [zetesis_ferraris::oracle::select_atoms]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 214:4-221:1 -/
+@[rust_loop_body]
+def oracle.select_atoms_loop.body
+  (candidate : theory.Interpretation) (iter : core.ops.range.Range Std.Usize)
+  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
+  Result (ControlFlow ((core.ops.range.Range Std.Usize) × (alloc.vec.Vec
+    Std.Usize) × oracle.Work) ((core.result.Result Unit
+    zetesis_cpu.cancellation.Stop) × (alloc.vec.Vec Std.Usize) ×
+    oracle.Work))
+  := do
+  let (o, iter1) ←
+    core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
+  match o with
+  | none => ok (done (core.result.Result.Ok (), selected, work))
+  | some atom =>
+    let (r, work1) ← oracle.Work.tick work
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let b ← theory.Interpretation.contains candidate atom
+      if b
+      then
+        let selected1 ← alloc.vec.Vec.push selected atom
+        ok (cont (iter1, selected1, work1))
+      else ok (cont (iter1, selected, work1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Unit (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+      ok (done (r1, selected, work1))
+
+/-- [zetesis_ferraris::oracle::select_atoms]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 214:4-221:1 -/
+@[rust_loop]
+def oracle.select_atoms_loop
+  (iter : core.ops.range.Range Std.Usize) (candidate : theory.Interpretation)
+  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
+  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Std.Usize) × oracle.Work)
+  := do
+  loop
+    (fun (iter1, selected1, work1) => oracle.select_atoms_loop.body candidate
+      iter1 selected1 work1)
+    (iter, selected, work)
+
+/-- [zetesis_ferraris::oracle::select_atoms]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 208:0-221:1 -/
+def oracle.select_atoms
+  (program : theory.Theory) (candidate : theory.Interpretation)
+  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
+  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Std.Usize) × oracle.Work)
+  := do
+  let i ← theory.Theory.atom_count program
+  oracle.select_atoms_loop { start := 0#usize, «end» := i } candidate
+    selected work
+
+/-- [zetesis_ferraris::oracle::advance_subset]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 233:4-246:1 -/
+@[rust_loop_body]
+def oracle.advance_subset_loop.body
+  (iter : core.slice.iter.Iter Std.Usize) (subset : theory.Interpretation)
+  (present : Std.Usize) (work : oracle.Work) :
+  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) ×
+    theory.Interpretation × Std.Usize × oracle.Work) ((core.result.Result
+    Unit zetesis_cpu.cancellation.Stop) × theory.Interpretation × Std.Usize
+    × oracle.Work))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done (core.result.Result.Ok (), subset, present, work))
+  | some atom =>
+    let (r, work1) ← oracle.Work.tick work
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let i ← atom / 64#usize
+      let (packed, index_mut_back) ←
+        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U64)
+          subset.words i
+      let i1 ← atom % 64#usize
+      let bit ← 1#u64 <<< i1
+      let i2 ← lift (packed &&& bit)
+      if i2 = 0#u64
+      then
+        let packed1 ← lift (packed ||| bit)
+        let present1 ← present + 1#usize
+        let v := index_mut_back packed1
+        ok (done (core.result.Result.Ok (), { subset with words := v },
+          present1, work1))
+      else
+        let i3 ← lift (~~~ bit)
+        let packed1 ← lift (packed &&& i3)
+        let present1 ← present - 1#usize
+        let v := index_mut_back packed1
+        ok (cont (iter1, { subset with words := v }, present1, work1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Unit (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+      ok (done (r1, subset, present, work1))
+
+/-- [zetesis_ferraris::oracle::advance_subset]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 233:4-246:1 -/
+@[rust_loop]
+def oracle.advance_subset_loop
+  (iter : core.slice.iter.Iter Std.Usize) (subset : theory.Interpretation)
+  (present : Std.Usize) (work : oracle.Work) :
+  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
+    theory.Interpretation × Std.Usize × oracle.Work)
+  := do
+  loop
+    (fun (iter1, subset1, present1, work1) => oracle.advance_subset_loop.body
+      iter1 subset1 present1 work1)
+    (iter, subset, present, work)
+
+/-- [zetesis_ferraris::oracle::advance_subset]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 227:0-246:1 -/
+def oracle.advance_subset
+  (selected : Slice Std.Usize) (subset : theory.Interpretation)
+  (present : Std.Usize) (work : oracle.Work) :
+  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
+    theory.Interpretation × Std.Usize × oracle.Work)
+  := do
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter
+      selected
+  oracle.advance_subset_loop iter subset present work
+
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-212:5
     Visibility: public -/

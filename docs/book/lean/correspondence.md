@@ -45,9 +45,11 @@ owner-checking wrappers, and subset search remain unproved.
 
 `SelectedAtoms` and `ScalarSubsets` connect imported range, vector and machine-word
 operations to the shared selected-prefix and packed-update laws. The former also
-uses the generated membership query. These establish primitive contracts, not
-execution of the containing `oracle::check` loops: the pinned translator rejects
-their nested-return structure before emitting Lean. The
+uses the generated membership query. The Rust checker now separates these
+operations into private helpers, and both helpers are extracted.
+`SubsetSteps` proves exhaustion and typed refusal for their generated bodies.
+Successful iteration and complete membership remain unproved; the pinned
+translator still rejects an early return in the outer `oracle::check` loop. The
 [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
 records this separate tool boundary.
 

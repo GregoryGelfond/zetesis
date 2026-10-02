@@ -22,8 +22,14 @@ Notable changes by release. Versions follow Semantic Versioning.
   checks, allocation, changing runtime observations and subset search remain
   outside the proof.
 - Lean proofs connecting atom-selection and packed subset-update primitives to
-  the shared mathematical definitions. The containing Rust search loop remains
-  unverified; its current translation limit is documented.
+  the shared mathematical definitions, plus exhaustion and refusal laws for
+  the generated helper bodies. The containing Rust search loop remains
+  unverified; its translation limit is documented.
+
+### Changed
+
+- Separate atom selection and subset advancement into private reference-checker
+  helpers for proof extraction, preserving their operations and resource checks.
 
 ## 0.2.0 — 2026-10-01
 

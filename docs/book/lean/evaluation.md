@@ -79,7 +79,14 @@ proper-subset coverage. Two primitive bridges prepare their connection to Rust:
 These proofs compose imported primitive models. They do not yet establish that
 the actual containing loop maintains their premises or visits every required
 state. That distinction matters for interrupted carries and for the outer guard
-excluding the full candidate. The extraction limitation below remains open.
+excluding the full candidate.
+
+The reference checker separates atom selection and subset advancement into
+private helpers, retaining operation order and leaving allocation in the caller.
+Both helpers are extracted. [`SubsetSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubsetSteps.lean)
+proves that their generated bodies finish an exhausted iterator without polling
+and retain state and work on a typed refusal. These boundaries do not yet prove
+successful helper iteration or complete subset search.
 
 ## Reusing the ASP library
 
@@ -109,20 +116,19 @@ construction and its public allocation and owner-checking wrappers remain
 unproved, as does subset search. Allocation, reference counting, timers,
 concurrent memory, machine code and GPU execution remain outside these models.
 
-The pinned translator currently rejects `oracle::check` before emitting its
-selected-atom scan and packed-counter helpers: its structured LLBC contains a
-return inside nested loops. Both supported loop translation modes have this
-limit. The [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
-records the check. Mathematical subset-coverage laws and backend range/word
-operations provide foundations for that correspondence; they do not verify the
-untranslated membership loop.
+The pinned translator still rejects an early return in the outer `oracle::check`
+loop. The helpers translate independently, but their translation does not verify
+the containing membership loop. The [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
+records this remaining tool boundary.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code
-comes from production Rust. Two recorded local-name adjustments avoid generator
+comes from production Rust. Three recorded local-name adjustments avoid generator
 namespace collisions; exported destination metadata uses a portable path. An
 unreferenced derived `Debug` implementation and its ordered registration are
-also removed after an explicit reference check. This reversible, audited
-selection leaves executable bodies unchanged. Translation tools, preprocessing
+also removed after an explicit reference check. Two unused range-trait method
+registrations are omitted from the trait and its implementation to match the
+pinned backend, without shifting indices. These reversible, audited selections
+leave executable bodies unchanged. Translation tools, preprocessing
 and model correspondence remain trusted. The [correctness plan](correctness.md) keeps these limits separate
 from whole-solver soundness and complete enumeration.

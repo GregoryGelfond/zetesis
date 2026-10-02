@@ -116,3 +116,7 @@
 'ScalarSubsetsExample.clearing_at_the_boundary_preserves_neighbors' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'SubsetSteps.selection_exhausted' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SubsetSteps.selection_refused' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SubsetSteps.carry_exhausted' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SubsetSteps.carry_refused' depends on axioms: [propext, Classical.choice, Quot.sound]

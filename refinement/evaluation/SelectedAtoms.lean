@@ -11,9 +11,9 @@ open ZetesisExtract
 
 The source selected-atom scan uses a `usize` range, packed membership and vector
 push. These laws compose those concrete imported operations around its prefix
-invariant. The extracted membership function is reused unchanged. Aeneas does
-not currently translate the containing nested subset-search loop, so this file
-proves neither an emitted scan helper nor the whole `oracle::check` function.
+invariant. The extracted membership function is reused unchanged. The selected-
+atom helper is also extracted, but this file proves its constituent operations,
+not execution of that helper or the whole `oracle::check` function.
 
 The range ends at the candidate's declared universe. Represented storage
 justifies membership reads; no padding premise is needed because the scan never

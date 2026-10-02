@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "The generated private FrozenReduct query decides Ferraris reduct satisfaction on completion under fixed observation tokens and explicit stored-mask agreement, with shared work and typed stops. Selected-atom and packed-update primitive bridges reuse the same semantic sources and checked backend operations. The containing oracle::check loops are not translated by the pinned tools. Construction, public wrappers, changing observations, actual subset-search correspondence and complete solver verification remain open.",
+  "scope": "The generated private FrozenReduct query decides Ferraris reduct satisfaction on completion under fixed observation tokens and explicit stored-mask agreement, with shared work and typed stops. Selected-atom and packed-update primitive bridges reuse the same semantic sources and checked backend operations. Both private subset helpers are extracted; their generated bodies preserve state and work on exhaustion and typed refusal. Successful helper iteration, the complete oracle::check loop, construction, public wrappers, changing observations and complete solver verification remain open.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "acba6865e7ff8d134835179e65a8ef5974d3eebc63aceb8a19250540dfd0531e",
+  "artifactInventorySha256": "2310c0bf0836d2954f2a93ea22b4bf420ac96ff4f08d1f4f264633d588f7dcec",
   "declarations": [
     "Membership.mask_bit",
     "Membership.outside",
@@ -116,7 +116,11 @@
     "ScalarSubsets.set_population",
     "ScalarSubsets.clear_population",
     "ScalarSubsetsExample.setting_at_the_boundary_preserves_neighbors",
-    "ScalarSubsetsExample.clearing_at_the_boundary_preserves_neighbors"
+    "ScalarSubsetsExample.clearing_at_the_boundary_preserves_neighbors",
+    "SubsetSteps.selection_exhausted",
+    "SubsetSteps.selection_refused",
+    "SubsetSteps.carry_exhausted",
+    "SubsetSteps.carry_refused"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -131,7 +135,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "58b5a89dfb77a5cd6dea901358274aa21556a28a9579b640f1c68465746fafee"
+      "logSha256": "8e31a478c8d73d7a1376bc82d818bc0f7cca46d0b602d39d62d33cd7f594859c"
     },
     {
       "argv": [
@@ -144,7 +148,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "9e789e8aa02bb90a39bc4e81148ee8ab81e0e24b4b147d2f90ccec98ed3493c9"
+      "logSha256": "567140ff3e8aeb1670bebca5a7bc1bdfa7509843310cdd5dd0174d21bd71b13b"
     },
     {
       "argv": [
@@ -160,8 +164,8 @@
       "logSha256": "da83106f15652cb0bd205631286163998f0f2a6c4210b5e43dd1fc72cfdc82e8"
     }
   ],
-  "theoremAuditCount": 110,
-  "rustOrShaderSourcesChanged": false,
+  "theoremAuditCount": 114,
+  "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
     "inventorySha256": "a9fee760e5103cfe4284f94179a6df49f4b0a223529176c773f9d1fef6420912",
@@ -371,6 +375,7 @@
     "Generated fixed-token evaluation, root scanning and private query to concurrent Rust histories with changing atomic observations.",
     "Rust pointer ownership, allocation, timers and concurrent memory.",
     "FrozenReduct construction, public allocation and owner-checking wrappers, grounding and solver enumeration.",
-    "Actual oracle::check scan, carry and subset-search loops: pinned Aeneas rejects nested returns before Lean generation."
+    "Successful generated subset-helper transitions and complete helper-loop correspondence.",
+    "The complete oracle::check loop: pinned Aeneas rejects an early return before Lean generation."
   ]
 }

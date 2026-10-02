@@ -1,5 +1,6 @@
 import SelectedAtoms
 import ScalarSubsetsExample
+import SubsetSteps
 import ProgressExample
 import TheorySatisfaction
 import RootScanExample
@@ -117,3 +118,7 @@ import FrozenQueryExample
 #print axioms ScalarSubsets.clear_population
 #print axioms ScalarSubsetsExample.setting_at_the_boundary_preserves_neighbors
 #print axioms ScalarSubsetsExample.clearing_at_the_boundary_preserves_neighbors
+#print axioms SubsetSteps.selection_exhausted
+#print axioms SubsetSteps.selection_refused
+#print axioms SubsetSteps.carry_exhausted
+#print axioms SubsetSteps.carry_refused

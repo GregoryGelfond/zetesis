@@ -84,15 +84,21 @@ width; decrement requires a currently true positional bit. The
 [boundary examples](ScalarSubsetsExample.lean) set and clear atom 64 while
 preserving its neighbors in both words.
 
-These are proofs about the imported primitive models, not an extracted execution
-of the selected-atom scan or subset-search loop. The pinned translator rejects
-the containing `oracle::check` control flow before generating those helpers;
-the [reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
-records that boundary. Loop coverage, work, interruption and completed membership
-still need to be connected to the implementation. In particular, the carry
-correspondence must use the outer proper-subset guard: calling the inline Rust
-carry on a full selection would clear it, whereas the mathematical counter
-reports overflow.
+The Rust reference checker names atom selection and subset advancement as
+private helpers. Their operations retain the original order, with allocation
+and the proper-subset guard in `check`. Both helpers are extracted unchanged.
+[`SubsetSteps`](SubsetSteps.lean) proves that their generated bodies finish an
+exhausted iterator without polling and preserve the returned state and work on
+a typed refusal. A present coordinate is fetched before the tick; a refused
+step performs no membership read or bit update.
+
+The primitive bridges do not yet prove successful helper iteration or complete
+membership. The pinned translator still rejects an early return in the outer
+`oracle::check` loop; the
+[reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
+records that boundary. The carry correspondence must use the outer proper-subset
+guard: calling the Rust carry on a full selection would clear it, whereas the
+mathematical counter reports overflow.
 
 ## Observation boundary
 
@@ -128,15 +134,17 @@ subset search, source grounding, or end-to-end solver verification.
 
 ## Extraction identity and reproduction
 
-The generated types and functions come from the production Rust functions
-without a new harness or source change. The LLBC destination becomes portable,
-and two local names change from `theory` to `program` to avoid namespace
+The generated types and functions come directly from production Rust, including
+the two private subset helpers. The LLBC destination becomes portable,
+and three local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
 ordered registration, after checking for surviving semantic references.
-Restoring that declaration selection and the three metadata/name fields recovers
-the parsed raw input. Executable bodies and Rust source are unchanged; regenerated
-Lean is retained unedited.
+Two unused range-trait method registrations are omitted from both the trait and
+its implementation to match the pinned backend model, with indices preserved.
+The selected operations do not refer to either method. Restoring these selections
+and metadata/name fields recovers the parsed raw input. No executable body is
+rewritten; regenerated Lean is retained unedited.
 
 These are audited preprocessing steps, not verified transformations or a claim
 of byte-identical raw extraction. `provenance.json` and the source/artifact
