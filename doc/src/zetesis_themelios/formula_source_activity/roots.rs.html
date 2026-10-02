@@ -165,41 +165,42 @@
 <a href=#165 id=165 data-nosnippet>165</a>        | LiteralIr::ArgumentCheck { .. }
 <a href=#166 id=166 data-nosnippet>166</a>        | LiteralIr::TupleCompare(..)
 <a href=#167 id=167 data-nosnippet>167</a>        | LiteralIr::Guard(<span class="kw">_</span>)
-<a href=#168 id=168 data-nosnippet>168</a>        | LiteralIr::Bind { .. }
-<a href=#169 id=169 data-nosnippet>169</a>        | LiteralIr::Range { .. } =&gt; {}
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="prelude-val">Ok</span>(())
-<a href=#172 id=172 data-nosnippet>172</a>}
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a><span class="kw">fn </span>push&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#175 id=175 data-nosnippet>175</a>    frames: <span class="kw-2">&amp;mut </span>Vec&lt;Frame&lt;<span class="lifetime">'a</span>&gt;&gt;,
-<a href=#176 id=176 data-nosnippet>176</a>    frame: Frame&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#177 id=177 data-nosnippet>177</a>    retained: usize,
-<a href=#178 id=178 data-nosnippet>178</a>    predicates: usize,
-<a href=#179 id=179 data-nosnippet>179</a>    context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
-<a href=#180 id=180 data-nosnippet>180</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>count = frames.capacity().max(frames.len().saturating_add(<span class="number">1</span>));
-<a href=#182 id=182 data-nosnippet>182</a>    context.entries(
-<a href=#183 id=183 data-nosnippet>183</a>        retained
-<a href=#184 id=184 data-nosnippet>184</a>            .saturating_add(predicates.saturating_mul(<span class="number">3</span>))
-<a href=#185 id=185 data-nosnippet>185</a>            .saturating_add(count),
-<a href=#186 id=186 data-nosnippet>186</a>    )<span class="question-mark">?</span>;
-<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">if </span>frames.len() == frames.capacity() {
-<a href=#188 id=188 data-nosnippet>188</a>        context.budget.charge(
-<a href=#189 id=189 data-nosnippet>189</a>            ExpansionResource::ScalarBytes,
-<a href=#190 id=190 data-nosnippet>190</a>            std::mem::size_of::&lt;Frame&lt;<span class="lifetime">'_</span>&gt;&gt;() <span class="kw">as </span>u128,
-<a href=#191 id=191 data-nosnippet>191</a>            context.location,
-<a href=#192 id=192 data-nosnippet>192</a>        )<span class="question-mark">?</span>;
-<a href=#193 id=193 data-nosnippet>193</a>        frames
-<a href=#194 id=194 data-nosnippet>194</a>            .try_reserve_exact(<span class="number">1</span>)
-<a href=#195 id=195 data-nosnippet>195</a>            .map_err(|<span class="kw">_</span>| context.allocation())<span class="question-mark">?</span>;
-<a href=#196 id=196 data-nosnippet>196</a>        context.entries(
-<a href=#197 id=197 data-nosnippet>197</a>            retained
-<a href=#198 id=198 data-nosnippet>198</a>                .saturating_add(predicates.saturating_mul(<span class="number">3</span>))
-<a href=#199 id=199 data-nosnippet>199</a>                .saturating_add(frames.capacity()),
-<a href=#200 id=200 data-nosnippet>200</a>        )<span class="question-mark">?</span>;
-<a href=#201 id=201 data-nosnippet>201</a>    }
-<a href=#202 id=202 data-nosnippet>202</a>    frames.push(frame);
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="prelude-val">Ok</span>(())
-<a href=#204 id=204 data-nosnippet>204</a>}
+<a href=#168 id=168 data-nosnippet>168</a>        | LiteralIr::HeadGuard(<span class="kw">_</span>)
+<a href=#169 id=169 data-nosnippet>169</a>        | LiteralIr::Bind { .. }
+<a href=#170 id=170 data-nosnippet>170</a>        | LiteralIr::Range { .. } =&gt; {}
+<a href=#171 id=171 data-nosnippet>171</a>    }
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="prelude-val">Ok</span>(())
+<a href=#173 id=173 data-nosnippet>173</a>}
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a><span class="kw">fn </span>push&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#176 id=176 data-nosnippet>176</a>    frames: <span class="kw-2">&amp;mut </span>Vec&lt;Frame&lt;<span class="lifetime">'a</span>&gt;&gt;,
+<a href=#177 id=177 data-nosnippet>177</a>    frame: Frame&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#178 id=178 data-nosnippet>178</a>    retained: usize,
+<a href=#179 id=179 data-nosnippet>179</a>    predicates: usize,
+<a href=#180 id=180 data-nosnippet>180</a>    context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#181 id=181 data-nosnippet>181</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span>count = frames.capacity().max(frames.len().saturating_add(<span class="number">1</span>));
+<a href=#183 id=183 data-nosnippet>183</a>    context.entries(
+<a href=#184 id=184 data-nosnippet>184</a>        retained
+<a href=#185 id=185 data-nosnippet>185</a>            .saturating_add(predicates.saturating_mul(<span class="number">3</span>))
+<a href=#186 id=186 data-nosnippet>186</a>            .saturating_add(count),
+<a href=#187 id=187 data-nosnippet>187</a>    )<span class="question-mark">?</span>;
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">if </span>frames.len() == frames.capacity() {
+<a href=#189 id=189 data-nosnippet>189</a>        context.budget.charge(
+<a href=#190 id=190 data-nosnippet>190</a>            ExpansionResource::ScalarBytes,
+<a href=#191 id=191 data-nosnippet>191</a>            std::mem::size_of::&lt;Frame&lt;<span class="lifetime">'_</span>&gt;&gt;() <span class="kw">as </span>u128,
+<a href=#192 id=192 data-nosnippet>192</a>            context.location,
+<a href=#193 id=193 data-nosnippet>193</a>        )<span class="question-mark">?</span>;
+<a href=#194 id=194 data-nosnippet>194</a>        frames
+<a href=#195 id=195 data-nosnippet>195</a>            .try_reserve_exact(<span class="number">1</span>)
+<a href=#196 id=196 data-nosnippet>196</a>            .map_err(|<span class="kw">_</span>| context.allocation())<span class="question-mark">?</span>;
+<a href=#197 id=197 data-nosnippet>197</a>        context.entries(
+<a href=#198 id=198 data-nosnippet>198</a>            retained
+<a href=#199 id=199 data-nosnippet>199</a>                .saturating_add(predicates.saturating_mul(<span class="number">3</span>))
+<a href=#200 id=200 data-nosnippet>200</a>                .saturating_add(frames.capacity()),
+<a href=#201 id=201 data-nosnippet>201</a>        )<span class="question-mark">?</span>;
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>    frames.push(frame);
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="prelude-val">Ok</span>(())
+<a href=#205 id=205 data-nosnippet>205</a>}
 </code></pre></div></section></main></body></html>

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -227,6 +227,15 @@ parse does not establish that every construct is admitted; unsupported programs
 receive an explicit diagnostic. Source diagnostics and arithmetic warnings go
 to stderr. See the <a href="language.html">language reference</a> for supported constructs
 and the policy for evaluated zero divisors.</p>
+<p>The self-contained <a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/sudoku.lp">Sudoku example</a>
+combines exact-one choices with arithmetic block constraints:</p>
+<pre><code class="language-sh">zetesis solve examples/sudoku.lp --all
+</code></pre>
+<p>It has one answer containing 81 <code>digit(Row,Column,Value)</code> atoms. Eight given
+digits per row make the example a grounding and language check rather than a
+difficult search benchmark. Its complete displayed grid is checked by the CLI tests
+under default resource limits and independently compared with clingo. The same
+authored source and exact display contract are included in the scalability suite.</p>
 <h2 id="select-answers"><a class="header" href="#select-answers">Select answers</a></h2>
 <p>The default displays one answer set. Use a positive <code>--answers N</code> to request a
 different display limit, or <code>--all</code> for exhaustive enumeration. The two options
@@ -411,8 +420,9 @@ check. This small installed check is distinct from the repository’s maintained
 <code>gpu</code>, <code>metal</code> or <code>vulkan</code>. GPU corpus checks request the eager general formula
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.</p>
-<p><code>test scalability</code> uses the same nine workloads as <code>zetesis-bench run --suite scalability</code>: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
-unchanged queens variant 02, SEND+MORE=MONEY and task allocation. It checks one
+<p><code>test scalability</code> uses the same ten workloads as <code>zetesis-bench run --suite scalability</code>: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
+unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
+Sudoku grid. It checks one
 complete clingo family and one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
 indexed formula joins, region search and one exact completion worker. Thread
@@ -420,7 +430,7 @@ counts default to <code>1,2,4,8,14</code>; one through eight profiles, each at m
 threads, are admitted. The positional corpus root defaults to
 <code>examples/correctness</code>, and <code>--examples</code> defaults to <code>examples</code>. Both must come
 from the maintained checkout. <code>--include-einstein</code> adds the unchanged Einstein
-riddle; <code>--max-expansion-work</code> supplies an explicit native grounding ceiling.
+riddle as an eleventh workload; <code>--max-expansion-work</code> supplies an explicit native grounding ceiling.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in <code>--report NEW.json</code>.
 Amended inputs use the complete reference family rather than the original

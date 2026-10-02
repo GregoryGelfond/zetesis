@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MANIFEST_SHA256"],"fn":["defaults","einstein","profiles","run_with_cancellation","workloads"]};
+window.SIDEBAR_ITEMS = {"constant":["MANIFEST_SHA256"],"fn":["defaults","einstein","profiles","run_with_cancellation","sudoku","workloads"]};

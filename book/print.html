@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a4b7822a.js"></script>
+        <script src="toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -273,6 +273,15 @@ parse does not establish that every construct is admitted; unsupported programs
 receive an explicit diagnostic. Source diagnostics and arithmetic warnings go
 to stderr. See the <a href="#admitted-language">language reference</a> for supported constructs
 and the policy for evaluated zero divisors.</p>
+<p>The self-contained <a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/sudoku.lp">Sudoku example</a>
+combines exact-one choices with arithmetic block constraints:</p>
+<pre><code class="language-sh">zetesis solve examples/sudoku.lp --all
+</code></pre>
+<p>It has one answer containing 81 <code>digit(Row,Column,Value)</code> atoms. Eight given
+digits per row make the example a grounding and language check rather than a
+difficult search benchmark. Its complete displayed grid is checked by the CLI tests
+under default resource limits and independently compared with clingo. The same
+authored source and exact display contract are included in the scalability suite.</p>
 <h2 id="select-answers"><a class="header" href="#select-answers">Select answers</a></h2>
 <p>The default displays one answer set. Use a positive <code>--answers N</code> to request a
 different display limit, or <code>--all</code> for exhaustive enumeration. The two options
@@ -457,8 +466,9 @@ check. This small installed check is distinct from the repository’s maintained
 <code>gpu</code>, <code>metal</code> or <code>vulkan</code>. GPU corpus checks request the eager general formula
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.</p>
-<p><code>test scalability</code> uses the same nine workloads as <code>zetesis-bench run --suite scalability</code>: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
-unchanged queens variant 02, SEND+MORE=MONEY and task allocation. It checks one
+<p><code>test scalability</code> uses the same ten workloads as <code>zetesis-bench run --suite scalability</code>: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
+unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
+Sudoku grid. It checks one
 complete clingo family and one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
 indexed formula joins, region search and one exact completion worker. Thread
@@ -466,7 +476,7 @@ counts default to <code>1,2,4,8,14</code>; one through eight profiles, each at m
 threads, are admitted. The positional corpus root defaults to
 <code>examples/correctness</code>, and <code>--examples</code> defaults to <code>examples</code>. Both must come
 from the maintained checkout. <code>--include-einstein</code> adds the unchanged Einstein
-riddle; <code>--max-expansion-work</code> supplies an explicit native grounding ceiling.
+riddle as an eleventh workload; <code>--max-expansion-work</code> supplies an explicit native grounding ceiling.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in <code>--report NEW.json</code>.
 Amended inputs use the complete reference family rather than the original
@@ -603,7 +613,7 @@ inputs.</p>
 <tr><td><code>baseline</code></td><td>SEND, queens variant 02 and task allocation</td></tr>
 <tr><td><code>queens</code></td><td>The six unchanged eight-queens encodings</td></tr>
 <tr><td><code>series</code></td><td>The maintained 22 generated, constant-amended and original workloads</td></tr>
-<tr><td><code>scalability</code></td><td>Nine authored and corpus workloads, with indexed formula joins and region search</td></tr>
+<tr><td><code>scalability</code></td><td>Ten authored and corpus workloads, with indexed formula joins and region search</td></tr>
 </tbody>
 </table>
 </div>
@@ -615,7 +625,9 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no <code>--case</code>; it alone accepts <code>--examples</code>, its
 authored root, which defaults to <code>examples</code>, and <code>--include-einstein</code>, which
-adds the unchanged Einstein riddle. The series suite raises the per-invocation,
+adds the unchanged Einstein riddle as an eleventh workload. The maintained
+Sudoku case has eight givens per row: it tests grounding and language handling,
+not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.</p>
 <h3 id="profiles"><a class="header" href="#profiles">Profiles</a></h3>
 <p>A run measures one native profile, set by <code>--backend</code>, <code>--grounder</code> and
@@ -709,7 +721,7 @@ suite. The evidence records the policy the run used: <code>all_phases</code>,
 <code>qualification_only</code> or <code>clingo_free</code>. The table and the JSON summary say what
 qualified each cell: clingo, the recorded contract, or nothing, because the
 cell needs clingo.</p>
-<p>In 0.1.7, the clingo report reader rejects lower-bound progress entries
+<p>The clingo report reader rejects lower-bound progress entries
 (<code>Lower</code> without model <code>Value</code>) that can appear during parallel optimization.
 Such a capture is retained as an invalid report, even when clingo completed
 normally. It cannot qualify answers or supply an accepted timing comparison;
@@ -738,7 +750,9 @@ duration. Validated memory rounds have their own median and may be unavailable.
 Non-pass summaries include the recorded reason and schedule phase. If a failed
 qualification prevented later samples, those slots identify the original
 blocker. A refusal, timeout or process failure never counts as an UNSAT result
-or a successful timing sample. A child stopped by the campaign’s own deadline
+or a successful timing sample. A baseline that refuses a workload therefore
+supplies no timing ratio for that workload; its refusal remains in the report.
+A child stopped by the campaign’s own deadline
 or retained-capture budget, before its per-child timeout or sample limit, is
 recorded as <code>campaign_deadline</code> or <code>campaign_capture_budget</code>, never as its own
 <code>timeout</code> or <code>capture_limit</code>: it says nothing of the workload.</p>
@@ -1523,6 +1537,52 @@ the context’s answers without supplying new atom support. Their
 Rust formula construction and execution refinement open. These are obligations
 of zetesis’s source bridge and solver; this architectural account is separate
 from teaching themelios’s parsing and logical-program APIs.</p>
+<h2 id="shared-aggregate-guards"><a class="header" href="#shared-aggregate-guards">Shared aggregate guards</a></h2>
+<p>Multiple written bounds on one completed nonnegative tuple contribution set use
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/aggregate/family.rs"><code>append_aggregate_family</code></a>.
+The source bridge evaluates every bound in order, retains its numeric or logical
+comparison meaning, then validates the existing DAG and tuple conditions once.
+One threshold table supplies the numeric roots; canonical remapping and the
+original conjunction retain both original and frozen-reduct truth. Logical
+constant guards still affect that conjunction and exclude optional numeric count
+capture. A false bound never suppresses evaluation of a later bound. The enclosing
+rule retains its source origins.</p>
+<p>The preservation obligation is pointwise: each grouped guard root must have the
+same original and frozen-reduct truth as its separately compiled counterpart
+over the same completed contributions. Conjunction then preserves the written
+bound group. <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Thresholds.lean"><code>Thresholds.threshold_query_exact</code></a>
+proves the classical nonnegative recurrence; it does not prove the shared Rust
+DAG or its Ferraris equivalence. The scalar-versus-family regressions check both
+truth relations, while that implementation refinement remains open.</p>
+<p>This grouping applies to written guard lists of at least two entries whose
+completed numeric contributions are all nonnegative, including counts and choice
+bounds. Extrema and single-guard lists retain their existing compilation routes.
+Any negative contribution retains scalar compilation because the scalar subset
+ceiling applies independently to each guard; the family API instead has a
+cumulative subset ceiling. Assignment proposal families already use the family
+primitive and share the same source-side call and receipt handling.</p>
+<p>Independent compilations share the ground builder’s <code>FormulaNodes</code> owner. It
+retains one node vector and the extent of its completed topology validation;
+subsequent compilers inspect only the unchecked suffix. Reading lends an
+immutable slice. Appending leaves new nodes unchecked, and truncating or
+extracting a suffix shortens the validation extent. Canonical remapping therefore
+cannot give replacement nodes the removed suffix’s validation. There is no
+second formula representation or cached aggregate result in this mechanism.
+Every call still checks its node ceiling, tuple conditions and control. The
+ordinary aggregate functions accepting a raw vector retain full validation.</p>
+<p>The configured aggregate work, node and state ceilings are unchanged. For a
+shared append they apply to the whole family, and its work is also bounded by
+remaining formula work. The source charges guard preparation, weight inspection,
+remapping and accepted compiler work, including a refused compiler prefix.
+Collecting bounds before compilation changes the operation order and numerical
+work cutoffs; a particularly tight former per-guard quota need not admit the
+family. A refusal remains a typed failure, never an inconsistency conclusion.
+Guard metadata and successfully returned root capacity remain charged together
+through remapping. <code>AggregateFamilyBuild::root_storage_bytes()</code> reports the root
+vector header and its actual capacity, excluding the DAG and compiler scratch.
+Failed compiler transactions expose work receipts but no returned-root allocation
+receipt; their internal transient allocations remain bounded by the aggregate
+API’s guard and state ceilings rather than source support-peak measurements.</p>
 <h2 id="canonical-values-and-independent-meanings"><a class="header" href="#canonical-values-and-independent-meanings">Canonical values and independent meanings</a></h2>
 <p>Source grounding computes with one canonical term and atom vocabulary. Bindings
 retain term identifiers, relation columns retain those same identifiers, and
@@ -1747,6 +1807,88 @@ join is silent. Each local element has a separate family for each fixed outer
 binding. Original objective-element identities keep their pooled fragments
 together without merging distinct elements. Successful owners retain one typed
 warning per source span within the finite warning ceiling.</p>
+<p>The separate family-evidence traversal is omitted for a restricted class of
+flat constraints: every normalized fragment of the original source occurrence
+contains division or remainder, and every divisor operation directly names a
+canonical nonzero numeric constant. Atoms and scalar comparisons or guards may
+appear in the body. Ordinary comparison heads lowered to constraints can also
+qualify; generated values, local scopes and other lowered heads retain the family
+pass. This classifier alone retains complete substitution checks; the separate
+finite totality certificate below can justify ordinary row selection. Constant
+divisors certify only the absence of zero divisors, not total arithmetic: nonnumeric operands, overflow and invalid exponents remain checked
+by ordinary eager instantiation or hybrid capture. A fatal error can therefore
+be reported in rule instantiation instead of support completion. Classification
+reads spend grounding work; omitted joins and binding copies spend none.
+Resource limits remain cumulative, so the numerical work needed for the same
+source can decrease without changing the completed arithmetic verdict.</p>
+<p>Complete-row scalar comparisons may reuse successful unary projections within
+one join. Descriptors borrow the exact source expressions and are prepared when
+a complete row is first reached or a finite totality attempt needs them. The existing canonical <code>TermTable</code> indexes
+each distinct input; a <code>Binding</code> retains its corresponding successful result.
+Value reuse alone copies no scalar payload and skips no row or comparison. Leaves,
+multivariable expressions and partial evaluations use the ordinary evaluator;
+failed computations are not retained, so later rows still supply their original
+arithmetic checks and family evidence. Hits authenticate the canonical owner and
+accessible term prefix, clear stale zero-divisor state, and spend work under the
+same cancellation and live-storage boundaries as misses.</p>
+<p>For one expression with D distinct successful inputs, the projection retains
+O(D) scoped IDs and positions. Lookup takes O(log D) identity comparisons;
+inserting all D values can require O(D²) position shifts in the shared sorted
+coordinate index. Descriptor preparation, misses, lookup and insertion remain
+cumulative grounding work, while retained metadata uses <code>SupportBytes</code>. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/tests.rs">projection regressions</a>
+check value reuse, owner boundaries, arithmetic failures and inclusive limits.</p>
+<p>After source-family validation, a flat constraint can establish finite totality
+from completed positive columns. Every expression must be a leaf or read one
+source variable, with no constructor, generator, structural capture or nested
+scope. A smallest covering column supplies all possible values of that variable
+in complete bindings. Each expression is checked on that whole domain, and an
+arithmetic error declines this optional certificate. Resource and owner failures
+remain located failures. Only success for every expression permits ordinary
+prefix pruning. A reached prefix may still contain a value absent from its later
+covering column; its arithmetic failures retain the ordinary deferred handling.
+Evidence cursors always traverse complete rows.</p>
+<p>Hybrid capture and later model/region checks use this same preparation and
+selector. Capture runs after original family admission, with the completed
+carrier and an append-capable canonical term owner. It admits successful values
+from the whole covering columns, including values belonging to rows that cannot
+complete the source pattern. On the first reached runtime use, the prepared rule
+checks that optional certificate against its frozen owner and full completed
+carrier, before any candidate row filter applies. Later cursors borrow the same
+successful map read-only. A missing frozen term remains a typed failure, not an
+optimization fallback. An arithmetic decline retains ordinary checked traversal;
+it supplies no certificate and needs no identical totality retry. Resource and
+owner failures stop preparation without publishing a partial map. Candidate
+filtering establishes no new source completion or arithmetic certificate.
+Preparation and retained map storage are charged once per prepared rule; each
+cursor still pays for its queries, bindings and temporary domains. Inputs outside
+the map use the ordinary evaluator without changing that retained map. These
+lifetimes keep mutable scratch local to each check.</p>
+<p>The same preparation seals each projection’s covered input prefix. At probe
+preparation, an equality between a covered unary expression and a known operand
+can select the inputs whose results equal that operand. A missing known input
+supplies no restriction. One restricting equality per unbound variable supplies
+a necessary finite domain; all comparisons remain with the residual checks.
+Multiple variables’ domains meet the ordinary constant and bound-variable
+restrictions through the existing <code>Table::select</code> operation. The selector keeps
+original relation positions and whole-tuple aliases, then the ordinary matcher
+checks every retained row. This also applies under <code>JoinStrategy::Indexed</code>;
+ordinary probes continue to use their requested strategy and both paths share
+one lazy table workspace. No table is prepared when every covered input remains
+allowed or the opposite operand is unavailable. An empty derived domain uses an
+empty probe directly.</p>
+<p>Domain derivation scans the existing input/result coordinates, without another
+value dictionary or reverse-result cache. Two transient leased buffers hold
+borrowed input references and their variable ranges. Preparation, domain scans,
+mask construction and all refused prefixes spend the same cumulative grounding
+work; tables, masks and lists share <code>SupportBytes</code>. Numerical work cutoffs can
+change, and optional preparation can itself refuse. These operations establish
+no runtime speedup or default-budget admission for an arbitrary program. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/domains/tests.rs">computed-domain regressions</a>
+check exact selected bindings, typed equality, evidence coverage and refusal
+boundaries. The <a href="#connecting-proofs-to-implementations">Lean correspondence</a> states the
+separate obligations connecting finite coverage, table selection and reduct
+preservation.</p>
 <p>Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not
 retain another workspace. Strict evaluation stops at its first fault. Source
@@ -1925,6 +2067,9 @@ several times or cardinality planning changes execution order:</p>
         currentRows   if occurrence &gt; pivot)
     proposals = Union(proposals, JoinAndEvaluate(rule, inputs))
 </code></pre>
+<p>Each variant supplies these populations to initial join preparation. Ordering
+and comparison readiness are built once from its old/new/current row counts;
+the cursor does not first prepare an unrestricted order and then replace it.</p>
 <p>An ordinary producer without positive inputs runs once, even if it has negative
 non-input atoms. Changing such atoms’ possible presence cannot enable another
 head proposal, because support generation ignores their truth. Aggregate,
@@ -2041,6 +2186,14 @@ objective grounding, arithmetic checks, tuple identity and scoring keep their
 existing paths. This permission does not extend the profile to choice or
 aggregate producers. Producer scheduling retains its separate applicability
 conditions.</p>
+<p>The source analyzer intersects the positive argument domains binding one head
+variable within each producer, then unions the results of alternative producers.
+For <code>p(X) :- a(X), b(X).</code>, the bound on <code>p/1</code> is therefore the intersection of
+the bounds on <code>a/1</code> and <code>b/1</code>. This information propagates to downstream rules.
+Unknown is unrestricted: another finite input can still bound the conjunction.
+Inflationary passes continue to a fixed point, including recursive dependencies;
+a stopped analysis publishes no partial finite bounds. Argument domains do not
+assert correlations between different columns of a relation.</p>
 <p>Every complete binding must belong to the upper domain of each mandatory
 positive argument. Intersecting those domains for one source variable remains
 necessary, including repeated occurrences. A comparison that reads one
@@ -2064,7 +2217,11 @@ rows to the same guard before binding and deeper probes. An Indexed posting can
 include rows that fail another bound column; Table intersects its equalities
 before offering rows. Thus offered-row and guard-rejection counts need not
 match across strategies, even when complete bindings do.</p>
-<p><code>DomainBindings.complete_binding_survives</code> states the necessary-meet law under
+<p><code>DomainProducers.transfer_monotone</code> and <code>derivation_covered</code> state the abstract
+producer contract: enlarging inputs cannot shrink proposals, and every finite
+producer derivation belongs to a closed upper-bound assignment. Concrete source
+extraction and completed Rust iteration remain correspondence obligations.
+<code>DomainBindings.complete_binding_survives</code> states the necessary-meet law under
 explicit argument coverage, and <code>kept_binding_survives</code> the narrowed-candidate
 law for the bindings the exclusion rule keeps. <code>guarded_continuations_exact</code> preserves the ordered
 complete result list, allowing a locally matching row with no complete
@@ -2167,6 +2324,19 @@ the selector offers all relation rows; a missing bound key selects none:</p>
 <pre><code class="language-text">rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
 bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
 </code></pre>
+<p>Each cursor resolves a positive occurrence to its borrowed snapshot relation on
+first entry and retains that reference across backtracking. Row access and later
+probes use the same immutable row owner, without searching the predicate directory
+again. References remain local to the cursor’s snapshot; a new support round
+resolves its own relations, including predicates newly inserted in the directory.</p>
+<p>The indexed selector folds known equalities directly into its shortest posting.
+It uses the core relation’s checked single-equality resolver, shared with owned
+<code>Query</code> construction, without allocating temporary key or equality vectors.
+Every later variable slot and column is still checked after a missing value;
+interruption returns no partial posting. Per-step work admission and completed
+failure prefixes remain observable. Owned public queries retain their existing
+frame and equality-vector capacity receipts. The cursor’s resolved-reference
+capacity is charged with its other retained join storage.</p>
 <p>This describes witness selection, not complete grounding. Scope, generators,
 scalar guards and candidate gates retain their separate contracts. The
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/README.md#inspect-posting-selectivity">bounded posting diagnostic</a>
@@ -3088,6 +3258,16 @@ frozen reduct are unchanged.</p>
 and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean">disjunctive support laws</a>
 state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.</p>
+<p>For a complete positive atomic-head theory, <code>PositivePlan</code> computes the least
+consequences once and checks every original constraint. CPU region modes then
+propose only that interpretation, or none when a constraint fails. Accumulated
+candidate restrictions and the region filter still apply to the singleton;
+the ordinary membership and publication checks retain the original theory owner.
+No worker needs to explore candidate regions or allocate a reduct query for this
+case. Larger classical models need not be individually refuted: the certificate
+already rules them out as answer sets. An unsupported or resource-refused plan
+keeps general solving available; an interrupted attempt never establishes
+exhaustion. This CPU policy does not change explicit device checking.</p>
 <p>Under the clauses method, exact projection exclusions have one owner across
 candidate restrictions: the outer cursor retains an index of previously
 proposed semantic interpretations, and strengthening the candidate query
@@ -3126,13 +3306,24 @@ stores support as one bit per semantic atom in each candidate’s row. By defaul
 the row, then each enabled original producer atomically sets its head bit.
 After the storage barrier, a bit is set exactly when that head has an enabled
 producer. Atomic OR preserves updates from different heads sharing a word and
-from repeated producers. The final atom scan retains the least unsupported
-atom as its witness. This representation reduces the support buffer to
+from repeated producers. The final scan compares candidate and support words:
+<code>candidate &amp; ~support</code> contains precisely that word’s unsupported candidate bits.
+Each nonzero word contributes its least set-bit position; the workgroup minimum
+retains the least unsupported atom across all words. Candidate tail bits are
+zero, and a failed original root still takes precedence over this witness. This representation reduces the support buffer to
 <code>4 * max(worlds * ceil(atoms / 32), 1)</code> bytes; it does not describe total device
 memory or establish a speedup. Shared-word contention remains a measurement
 question. Ordinary formula sessions with automatic membership policy select this
-primitive on an explicit device backend when complete tight preparation succeeds.
-Preparation shares the CPU certificate constructor and cumulative search budget,
+primitive on an explicit device backend when complete tight preparation succeeds.</p>
+<p>The complete device-work allowance is now
+<code>nodes + roots + producers + 2 * ceil(atoms / 32)</code>: one word scan constructs or
+initializes support and one checks missing support. This replaces the former
+<code>nodes + roots + producers + atoms + ceil(atoms / 32)</code> contract. Work receipts
+and pre-dispatch admission use the same new allowance; an exact allowance is
+admitted and one less is refused. Historical work counts therefore need their
+source identity when compared. This change describes logical operation counts,
+not measured latency or a new membership criterion.</p>
+<p>Preparation shares the CPU certificate constructor and cumulative search budget,
 but does not activate CPU certificate checking. The executor is selected before
 pipeline creation, so these batches do not first run the general propagator.
 Stable support results establish membership; failed original truth is rejected;
@@ -3708,10 +3899,10 @@ deploy with test. Each full interpretation also contains the three <code>task</c
 facts. <code>#show run/1</code> changes only the displayed channel, not those typed answers.</p>
 <h2 id="set-up-a-rust-application"><a class="header" href="#set-up-a-rust-application">Set up a Rust application</a></h2>
 <p>The packages are not published on crates.io. Use their paths in a pinned local
-checkout. These commands select the official <code>v0.1.7</code> source release and create
+checkout. These commands select the official <code>v0.2.0</code> source release and create
 sibling repository and application directories:</p>
 <pre><code class="language-sh">git clone https://github.com/GregoryGelfond/zetesis.git
-git -C zetesis switch --detach v0.1.7
+git -C zetesis switch --detach v0.2.0
 git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app
@@ -4728,6 +4919,42 @@ It uses one contribution-key and priority-ordering contract for all templates.
 Resolved contribution tuples contain borrowed term references. A distinct key
 retains that tuple buffer directly; a duplicate discards it. Neither operation
 copies the referenced logical payload.</p>
+<p>After source admission, formula sessions reuse the same immutable
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs"><code>ObjectivePlan</code></a>
+for score reads and optional incumbent constraints. Preparation combines every
+alternative for one normalized <code>(priority, weight, tuple)</code> key with OR. Each
+<code>ObjectivePlan::score</code> evaluates the retained eligibility DAG on an
+interpretation of that exact original theory, then calls the typed
+<code>zetesis_objective::reduce_costs</code> reduction. It retains inactive priority slots,
+objective presence and signed totals, without rebuilding joins or tuple keys.
+The caller must still establish complete catalog coverage and answer-set
+membership. Equal-looking theories are distinct owners.</p>
+<p>The ordinary <code>evaluate</code> API remains the contribution-evidence path. Prepared
+scoring also declines to it when possible-population binding, key or byte counts
+cannot establish the requested per-model ceilings. That decline spends no work;
+other typed failures retain their actual prefix instead of silently retrying.
+Optional pruning has separate mutable status: disabling it, or refusing an
+incumbent constraint, leaves scoring preparation available. Enumerating all
+answers also reuses preparation while leaving pruning disabled.</p>
+<p>For region search, each improved incumbent replaces the previous optimizer
+bound through <code>StableModels::tighten_candidate_bound</code>. Independent caller
+restrictions remain. The caller must establish that the new bound implies the
+previous one; the API does not check that implication. Active workers may finish
+under an older bound, so returned answers are still scored against the current
+incumbent. The original theory and reduct remain unchanged.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean"><code>ObjectiveBounds.replacement_preserves_candidates</code></a>
+states the preservation law; it does not verify worker synchronization.</p>
+<p><code>SolveConfig::max_objective_work</code> counts one preparation attempt plus every
+score read or detailed fallback, including refused prefixes. Preparation is
+capped by both the remaining objective allowance and the standalone plan’s
+10-million-unit default. The ordinary 100-million-unit objective default leaves
+at least 90 million units after that attempt. A smaller explicit work limit can
+be consumed by preparation; detailed fallback remains subject to the actual
+remainder and cannot report a score or complete optimum after exhaustion.
+Zero skips optional preparation and preserves the mandatory evaluator’s zero-work
+refusal. <code>max_objective_bound_work</code> counts optional constraint generation alone;
+zero disables pruning without disabling scoring preparation. These are logical
+operation accounts, so numerical cutoffs can differ from earlier scoring routes.</p>
 <p>Admission consumes the owned template descriptions. <code>ObjectiveTemplateRef</code>
 borrows weight and tuple terms, positive patterns and filters from the shared
 core <code>TemplateCatalog</code> representation. Priorities remain a fixed distinct
@@ -4943,6 +5170,15 @@ empty or zero vector can conceal a disagreement.</p>
 <code>scored_models()</code> can be positive while <code>incumbent()</code> is absent and
 <code>retained_models()</code> is zero. Those fields describe objective-search retention,
 not the number of answers in a <code>WorldView</code> or a consumer’s own collection.</p>
+<p><code>SemanticOutcome::objective_work()</code> records cumulative accepted objective
+preparation and scoring work, including refused attempts, even before any
+incumbent exists and after an observer failure. It is independent of answer
+selection and optional timing collection. An incumbent’s <code>Optimization::work</code>
+mirrors this account. Candidate-bound construction has a separate work budget.
+With statistics enabled, JSON reports this receipt as
+<code>statistics.objective_work</code>; it is <code>null</code> when no typed semantic outcome survives.
+A preparation attempt can consume a small objective-work allowance, so detailed
+scoring fallback receives only the remaining allowance.</p>
 <h2 id="check-selection-and-complete-capture"><a class="header" href="#check-selection-and-complete-capture">Check selection and complete capture</a></h2>
 <p>The next example uses <code>1{a;b}1.</code> with costs <code>1</code> for <code>{a}</code> and <code>2</code> for <code>{b}</code> at
 priority <code>2</code>. Its <code>#show.</code> declaration hides both atoms from display. Every
@@ -5883,9 +6119,12 @@ allowance as <code>--max-support-bytes</code> in <code>--help-all</code>. This i
 <code>SolveConfig</code> applies after the formula owner has already been constructed.</p>
 <p>Choose positive joins separately through the preparation’s
 <code>with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })</code> method.
-The default <code>Indexed</code> strategy probes existing value postings. <code>Table</code> reuses
-support masks only for flat positive patterns over completed eager support;
-structural patterns and support-growth rounds keep indexed joins. The bundle
+The default <code>Indexed</code> strategy probes existing value postings. After a flat
+constraint establishes finite arithmetic totality, a computed equality may
+supply a necessary input domain to the shared table selector under either
+strategy. Unrestricted probes still follow the requested strategy. <code>Table</code>
+reuses support masks for all applicable flat positive patterns over completed
+eager support; structural patterns and support-growth rounds keep indexed joins. The bundle
 preparation exposes the same method, and the CLI maps <code>--formula-joins table</code>
 to it. The choice retains the preparation’s source identity and remaining budgets.</p>
 <p>The private query workspace owns cached indices and accounts for simultaneous
@@ -6978,6 +7217,23 @@ comparisons; use the ordinary session for the composed native search.</p>
 <p>An <code>Interpretation</code> belongs to one immutable <code>Theory</code>. Cloning the theory shares
 identity. Independently constructing equal node lists produces another identity,
 and passing an interpretation from it returns <code>Stop::WrongProgram</code>.</p>
+<p><code>Interpretation::try_clone</code> copies the packed words while sharing that exact
+theory owner. It takes O(ceil(U/64)) time and owned words for a universe of U
+atoms, reports allocation failure, and neither evaluates formulas nor owns a
+cancellation token. An execution caller retains its own work and control checks.</p>
+<p><code>Interpretation::atoms</code> visits packed words and removes their set bits in
+ascending order. With U atoms and S selected positions, complete traversal costs
+O(ceil(U/64) + S), with constant auxiliary space. <code>words32</code> instead lends exactly
+ceil(U/32) low-bit-first membership words, including zero words. Its
+<code>InterpretationWords</code> iterator retains the exact theory, exposed through
+<code>theory()</code>, even after advancement or cloning. The empty universe exports no
+words; unused bits in the final word are zero. Numeric half-word extraction is
+independent of host byte order and allocates no storage. These views retain
+membership only; they do not establish satisfaction or answer-set status.</p>
+<p>The general and tight GPU packers consume this same export after checking its
+theory owner. They preserve candidate occurrence order and the device ABI’s
+single zero padding word for an empty transport. Their shared packing operation
+polls cancellation before every copied word and publishes no partial batch.</p>
 <p><code>check</code> returns completed verdict data: accepted, not an original model, or
 nonminimal with a witness. For an owned decision tied to the candidate actually
 checked, use <code>check_interpretation</code>. Its private construction prevents attaching
@@ -7458,6 +7714,19 @@ projected domains or copy row values.</p>
 before each inspected mask word, including zero words. A failed check publishes
 no row and leaves the selection and supplied starting position unchanged. The
 ordinary scanning methods use the same decoder without a fallible callback.</p>
+<p><code>Table::prepare_with</code> and <code>select_with</code> use the same algorithms with a caller’s
+fallible work-admission callback. A positive amount must be admitted before the
+charged operation; zero asks the caller to poll control without charging work,
+including operation entry and allocation boundaries. <code>MeteredFailure</code> preserves
+the caller’s original typed refusal separately from a table failure, together
+with the accepted work prefix and observed capacity peak. Callers must not charge
+that receipt a second time. The ordinary preparation and selection methods adapt
+<code>Cancellation</code> through the same accounting boundary.</p>
+<p>The source adapter uses these operations for both eager table joins and certified
+computed-domain selection. Independent hybrid checkers atomically admit each
+step against their shared <code>ConstraintAllowance</code>; a completed batch is never
+charged afterward. Failure preserves both local and combined accepted receipts,
+and table work and capacity observations remain available on refusal.</p>
 <p><code>Table::project</code> retains its finite-domain interface; <code>project_domains</code> accepts
 the same <code>Domain</code> variants as selection. Both reuse the row restriction operation
 and then compute the witnessed domains. A projection borrows the table; its
@@ -7527,9 +7796,11 @@ occurring values cannot create a new tuple.</p>
 <h2 id="positive-joins-in-eager-formula-grounding"><a class="header" href="#positive-joins-in-eager-formula-grounding">Positive joins in eager formula grounding</a></h2>
 <p>On a <code>PreparedFormula</code> or <code>PreparedFormulaBundle</code>,
 <code>with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })</code> selects
-the table strategy. <code>JoinStrategy::Indexed</code> is the default. This is an execution
-choice made before materialization; it changes neither source admission nor the
-formula/reduct solver.</p>
+the table strategy. <code>JoinStrategy::Indexed</code> is the default for ordinary probes.
+A separately certified computed equality can supply finite domains to the same
+selector under either strategy, as described below. These execution choices
+preserve complete source meaning and the formula/reduct solver; their different
+work and storage costs can change bounded admission.</p>
 <p>This example materializes a program using each join strategy and compares the
 complete admitted atoms, formulas and source locations. Repeated <code>X</code> requires
 equal route endpoints; the <code>rail</code> constant restricts the final column. A work
@@ -7626,14 +7897,31 @@ for their complete capture and comparison contracts.</p>
 <p>The table strategy applies to flat positive atom patterns over the immutable
 relation supplied by completed possible support. Its index distinguishes signed
 predicates and canonical column scopes. Constants and already-bound source slots
-supply singleton domains; unbound slots are unrestricted. Repeated variables
+supply singleton domains; ordinary probes leave unbound slots unrestricted. Repeated variables
 share a table label, while distinct anonymous slots remain distinct. Each probe
 derives fresh domains from the current binding.</p>
 <p>Selected row positions feed the existing whole-row matcher. Source-occurrence
 identity, binding extension and the original positive atom remain intact.
-Authored comparisons, negative conditions and aggregates retain their validation
-after positive binding; they do not provide extra table domains. A support row
-is a possible atom, not an assertion of its truth in an answer set.</p>
+Authored comparisons, negative conditions and aggregates retain their residual
+validation after positive binding. A support row is a possible atom, not an
+assertion of its truth in an answer set.</p>
+<p>For a completed flat constraint, a separate finite totality check can cover all
+scalar inputs using positive source columns. Covered unary equality results can
+then provide finite domains for unbound variables of the next occurrence. The
+selector intersects those domains with ordinary bound values, constants and
+repeated-variable coherence. It shares this same cached table owner under either
+join strategy; it introduces no second tuple store. Missing known-side inputs
+and all-allowed input groups retain the ordinary probe. Eager materialization,
+hybrid capture and frozen hybrid model/region checks share this selector; hybrid
+capture prepares speculative computed values before freezing the source owner.
+The explicit hybrid table-strategy restriction still applies to ordinary probes.
+Source-family evidence continues to traverse complete rows, and all residual
+comparisons remain in place. See <a href="#source-programs-and-grounding">grounding</a> for the
+exact coverage and failure obligations.</p>
+<p>This is a formula-grounding selector. The CLI’s <code>--grounder lazy</code> uses hybrid
+checking for formula input; successfully admitted relational input instead uses
+source-lazy reduct closure and its separate joins. That relational closure path
+does not acquire this computed-domain certificate or selector.</p>
 <p>Structural patterns and support-growth rounds retain indexed joins. This is a
 declared applicability boundary, not recovery from a failed table operation.
 Table allocation, capacity and work refusals remain grounding failures. The
@@ -7644,13 +7932,16 @@ each probe does not receive a fresh independent source budget.</p>
 <code>E * ceil(R / 32)</code> words. Many distinct values can make this representation
 larger than the original columns. Repeated queries may amortize preparation;
 that is a measurement question, not a guarantee of the API.</p>
-<p>Every probe first copies the coherent-row mask: <code>ceil(R / 32)</code> words even when
-all supplied domains are unrestricted. A singleton domain then intersects one
-support mask; a finite domain unions its matching support masks before that
-intersection. Finite domains reuse one union buffer within the probe. Thus a
-retained table removes repeated index construction but does not remove per-probe
-mask initialization and traversal. Result and union masks belong to that query;
-they cannot be shared as mutable truth across bindings or workers.</p>
+<p>The first restrictive domain initializes the result directly from its coherent
+supports: a singleton copies its support, while a finite domain unions matching
+supports into the result. Later restrictions intersect the result; later finite
+domains reuse one union buffer. An entirely unrestricted or nullary query copies
+the original coherent mask. Every supplied domain is still checked, even when
+an earlier restriction leaves no rows. This avoids a redundant base-mask copy
+and, for a first finite domain, one intersection and potentially a scratch mask.
+Retaining a table still leaves per-query mask initialization and traversal.
+Result and union masks belong to that query; they cannot be shared as mutable
+truth across bindings or workers.</p>
 <p><code>Limits</code> bounds support entries, live operation capacity and charged work.
 Cancellation, exhausted limits and allocation failures return no partial table,
 selection or projection. <code>Statistics</code> distinguishes retained capacity from the
@@ -7948,6 +8239,8 @@ The maintained full index is
 <tr><td>Why may a clause or a body be narrowed as one node over its operands, by counters?</td><td><code>FormulaBounds.disj_chain_unit</code>, <code>conj_chain_unit</code> and the sure and never chain laws, in <code>FormulaChains.lean</code></td><td>Each chain rule is a sequence of the binary <code>Known</code> rules; the Rust chains are trees of one connective</td></tr>
 <tr><td>Why may an atomic choice be read as a producer, and a producer be blocked by what propagation knows?</td><td><code>FormulaBounds.unsupported_cut_with_choices</code>, <code>sole_rule_forces_with_choices</code>, <code>sole_choice_forces</code>, <code>known_blocked_no_support</code></td><td>The covered fragment with its choices; a stable model is a classical model, where the knowledge is sound</td></tr>
 <tr><td>Why may a restriction, an objective bound or the support restriction, narrow a region without producers?</td><td><code>FormulaBounds.restriction_forces</code>, <code>restriction_cuts</code>, <code>restricted_stable_narrowing</code></td><td>Every model still sought satisfies the restriction; the theory’s and the restriction’s knowledge are each carried on their own</td></tr>
+<tr><td>When may a stronger bound replace an earlier one?</td><td><code>ObjectiveBounds.replacement_preserves_candidates</code>, <code>consequence_survives_tightening</code></td><td>The new bound logically implies the old bound; independent restrictions remain in force. Mutable knowledge and active worker generations are separate implementation obligations</td></tr>
+<tr><td>May propagation read ordered rows from contiguous storage?</td><td><code>AdjacencyRows.slice_exact</code>, <code>fold_exact</code></td><td>Row boundaries equal the lengths of preceding rows; order, duplicates and empty rows are preserved. Rust construction and resource accounting remain unproved</td></tr>
 <tr><td>Why does a walk by several workers emit every accepted leaf once, whatever the interleaving?</td><td><code>Pending.Step.perm</code>, <code>Pending.Walk.exhausted</code></td><td>The workers’ stacks and the shared pool are one frontier of the coverage tree; the order is the walk’s</td></tr>
 <tr><td>Why may the clauses proposer narrow by classical consequence?</td><td><code>FormulaRegions.classical_consequence_forces</code>, <code>no_model_refutes</code></td><td>Every stable model is a classical model; the reduct still decides each leaf</td></tr>
 <tr><td>Why does a covered query tree over a candidate’s subsets prove stability, and a leaf refute it?</td><td><code>ReductRegions.stable_iff_no_countermodel</code></td><td>The tree’s validity is proper-subset modelling of the frozen reduct</td></tr>
@@ -7971,6 +8264,7 @@ The maintained full index is
 <tr><td>When does table projection preserve complete rows?</td><td><code>FiniteTables.narrowing_preserves_rows</code></td><td>Original coherent row occurrences and complete domains; no ASP source-completeness claim</td></tr>
 <tr><td>Can table preselection preserve positive binding families?</td><td><code>TableBindings.indexed_matches_preserved</code>, <code>join_family_preserved</code></td><td>Exact row bits, successful flat-match domain necessity and the same finite join schedule; ordered source/row witnesses and bindings are retained</td></tr>
 <tr><td>Can necessary domains remove impossible join prefixes?</td><td><code>DomainBindings.complete_binding_survives</code>, <code>kept_binding_survives</code>, <code>guarded_continuations_exact</code></td><td>Domains cover complete argument values; a binding no comparison excludes belongs to the narrowed candidates; every row with a complete continuation survives; order and multiplicity are preserved</td></tr>
+<tr><td>How do alternative producers propagate argument bounds?</td><td><code>DomainProducers.transfer_monotone</code>, <code>derivation_covered</code></td><td>Mandatory inputs intersect, alternatives union, Unknown is unrestricted; finite recursive derivations belong to any closed upper-bound assignment</td></tr>
 <tr><td>Can relation storage grow without changing old queries?</td><td><code>RelationExtension.acceptance_preserved</code></td><td>Existing rows and dictionary meanings survive extension</td></tr>
 <tr><td>When does a worker reservation bound active owner storage?</td><td><code>StorageOwners.active_storage_within_limit</code></td><td>Each owner’s capacity and the active-owner count respect their declared bounds; concrete allocation and scheduling remain separate premises</td></tr>
 <tr><td>How does retained cache storage compose with active allowances?</td><td><code>StorageOwners.sum_within_component_bounds</code>, <code>shared_idle_active_within_limit</code></td><td>Pointwise shared/idle bounds and active maxima fit the admitted sum; complete disjoint owner accounting and concrete capacity bounds remain consumer obligations</td></tr>
@@ -8834,6 +9128,12 @@ select only the eligible positive producer grammar; posting slices must denote
 the specified old/new intervals. Rich producers and final authored-body
 validation retain separate complete scans. These laws establish the partition,
 not the source evaluator or termination of value generation.</p>
+<p>The join planner receives the partition before choosing its execution order.
+It need not first prepare an unrestricted order. Relation handles belong to the
+join’s immutable support snapshot; a prepared rule cannot retain a directory
+position across support publication. These choices preserve the same occurrence
+partition. Handle resolution, comparison readiness and admitted work remain
+Rust obligations.</p>
 <p>Parallel exact queries lease bounded work allowances from one shared owner.
 <code>WorkPermits</code> partitions the allowance into spent, available and outstanding
 permits. Granting preserves that total; settlement records consumed work and
@@ -8965,6 +9265,24 @@ subjects of the existing <code>FormulaBounds</code> and <code>ReductRegions</cod
 ownership, not the definition of a reduct. Index construction, identity checks,
 mutable-state separation and attribution of construction work remain Rust
 refinement obligations.</p>
+<p>The immutable region adjacency stores each ordered incidence row as a slice
+between two offsets in one contiguous entry vector.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AdjacencyRows.lean"><code>AdjacencyRows</code></a>
+proves exact slices from concatenated mathematical rows and unchanged ordered
+row folds. Decoding every Rust row must recover that original occurrence list
+exactly, including duplicate atom
+occurrences and original producer identity; equality of membership sets alone
+would not preserve chain counters, split ranking or bounded traversal prefixes.
+The same node used on both sides of an implication is still coalesced by the
+existing incidence construction, before storage compaction. Distinct atom nodes
+carrying the same atom remain distinct incidences. Exact row decoding leaves the
+<code>FormulaBounds</code>, <code>FormulaChains</code> and frozen <code>ReductRegions</code> rules unchanged.
+Those semantic laws do not establish the Rust count/prefix/scatter construction,
+machine offsets, reservation failures or event order. Ordered-row and existing
+propagation regressions provide executable evidence for those correspondences.
+The checked compact builder adds linear construction passes while retaining the
+existing logical node-index receipt; it does not change mutable <code>Knowledge</code> or
+its copy behavior, and does not claim that all index allocations are fallible.</p>
 <p>The batched parallel proposer separates classical candidate production from
 membership. Its workers use the original region readings and disjoint splits;
 they do not certify stable models. Read <code>Frontier</code> with a proposal family that
@@ -9016,6 +9334,11 @@ provides checked owner-bound views. Construction, catalog mapping, resource
 accounting, fallible matching and any device masks still need executable
 correspondence arguments. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md">proof guide</a>
 explains the hypotheses with a correlated-tuple example.</p>
+<p>A consumer needing only the shortest posting can resolve each equality and
+retain that posting without materializing an owned query. Every requested
+equality must still be validated, including later columns after an absent value.
+The dictionary and posting laws apply to completed resolution; they do not
+justify skipping errors or charging work only after it has occurred.</p>
 <p>The append dictionary’s canonical inverse implements the same encoder. Each
 published representative must have exactly one inverse entry naming its local
 equality ID, and every inverse entry must name that representative’s whole
@@ -9052,6 +9375,16 @@ the table cannot silently prune a required error. Source rows remain original
 atoms in the emitted formulas. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/table-bindings.md">binding guide</a>
 separates these obligations from the independent support-coverage and reduct
 arguments.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainProducers.lean"><code>DomainProducers</code></a>
+models possible argument values before binding enumeration. One producer
+intersects its mandatory inputs and local bound; alternative producers contribute
+their union. <code>transfer_monotone</code> preserves pointwise inclusion, while
+<code>derivation_covered</code> puts every finite abstract derivation inside any closed
+upper-bound assignment, including through recursive dependencies. Unknown is
+the universal predicate. Rust must establish that source extraction covers
+actual values, finite sets implement these operations, and a reported fixed point
+is closed after widening. The laws do not prove source admission, termination of
+the Rust attempt, arithmetic diagnostics or its resource behavior.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean"><code>DomainBindings</code></a>
 addresses a different filtering boundary: a local match may have no complete
 continuation. Conservative argument coverage makes the intersection for each
@@ -9093,6 +9426,17 @@ distinction. It does not verify <code>from_ground_program</code>, atom interning
 DAG construction. Likewise, <code>FrozenReduct</code> is a Rust representation of a fixed
 candidate’s reduct; its existence does not close the Rust-to-Lean mask
 correspondence.</p>
+<p><code>FormulaNodes</code> retains a completed topology-validation prefix across aggregate
+compilations. Its obligation is the inductive one in <code>DagSharing.WellFormed.snoc</code>:
+a previously admitted prefix remains unchanged, and each additional node names
+only earlier children. <code>DagSharing.stored_meaning</code> then explains why extending
+the table cannot change a prior formula’s meaning. The Rust owner must keep
+that prefix immutable, shorten the retained extent when removing nodes, and
+check every replacement suffix. Compiler append operations do not themselves
+advance the validated extent. Its scalar, family and extremum methods reuse the
+existing compilers, without a formula rewrite. These laws describe the invariant;
+they do not verify the concrete validation cursor, cancellation, allocation or
+rollback accounting. Raw-vector constructors retain their full-prefix checks.</p>
 <p><code>EvaluationWorkspace</code> computes original node truth before exposing a borrowed
 <code>FormulaEvaluation</code>. Rust’s ownership boundary ties that view to the exact
 interpretation and prevents reuse of its backing workspace while the view lives.
@@ -9149,6 +9493,15 @@ producer is an invariant refusal, not a constraint verdict. Exact evaluation
 consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.</p>
+<p>The CPU positive candidate cursor uses <code>positive_stable_iff</code> as a coverage law:
+only the completed least interpretation can belong to the answer-set family.
+It proposes that interpretation once if the original constraints and candidate
+conditions permit it, retaining ordinary membership checking. A failed original
+constraint instead completes the empty family. Rust must preserve the exact
+certificate owner, every additional restriction and region filter, and successful
+completion before reporting exhaustion. Cancellation or a work/allocation refusal
+cannot be substituted for the empty-family case. The mathematical law does not
+verify that cursor, its packed copy, batch publication or worker accounting.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean"><code>TerminalDefinitions</code></a>
 separates arbitrary base atoms from new derived atoms using a disjoint sum. Each
 definition has one derived head and a positive conjunction of base atoms; the
@@ -9258,6 +9611,21 @@ frozen satisfaction, and check the node/work limits and counter restoration on
 initialization failure. The named indices and those operational properties
 remain implementation obligations, not consequences established by the Lean
 laws alone.</p>
+<p>An ordinary singleton data-comparison head is an interpretation-independent
+Boolean after its source operands have been evaluated.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroundGuards.lean"><code>GroundGuards.constant_head_constraint</code></a>
+states that a rule with body <code>B</code> and constant head <code>c</code> is equivalent to the
+constraint with body <code>B</code> and the complementary constant. The equivalence covers
+original truth and every frozen <code>M/J</code> pair, for an arbitrary body. The existing
+<code>evaluated_guard_equivalent</code> and formula-context laws transport fully evaluated
+signed guards to these constants; a negated chain complements the whole
+conjunction of adjacent comparisons.</p>
+<p>This law applies after total evaluation. It does not justify treating an
+undefined comparison as false, binding a source variable from its head,
+suppressing an original body diagnostic, or changing finite-row coverage. Those
+remain separate Rust obligations. Comparison heads contribute no positive atom
+producer; the existing <code>BooleanHeads</code> producer laws account for Boolean head
+operands without adding atom support.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean"><code>OrderedHeadActivity</code></a>
 relates selected signed tuple activity to an ordered value reduction. In Rust,
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_head_aggregate.rs"><code>contribution</code></a>
@@ -9368,6 +9736,21 @@ the original truth of its unfolded query. One node preserves that invariant;
 induction over the remaining nodes gives the complete table. Backward admission
 separately proves that all lookups succeed. The result is the last node, or true
 when the table is empty.</p>
+<p>The Rust
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/score.rs"><code>ObjectivePlan::score</code></a>
+reuses the compiler’s already coalesced eligibility DAG to read a score without
+reconstructing contribution tuples. <code>ObjectiveDirections.normalization_preserves_vector</code>
+connects normalized complete-key groups with OR eligibility to the reference
+fixed-priority vector; <code>ObjectiveConditions.condition_vector</code> transports exact
+original-model condition truth into those scores. The table laws supply the
+mathematical backward-reference invariant. The retained Rust DAG also contains
+implication, whose original truth has the <code>formula_query_truth</code> interpretation;
+it is not the table datatype verbatim. Complete catalog joins, global key
+identity, translation of DAG operations, exact original-theory ownership,
+finite-width reduction and admitted work prefixes remain Rust obligations.
+This score reuse is distinct from source priority specialization and from
+constructing a nonnegative candidate bound. It neither substitutes a new
+original theory nor establishes search completion.</p>
 <p>For example, <code>atom a; neg 0; disj 0 1</code> shares the first node and computes the
 original truth of <code>a or not a</code>. This is a query-evaluation law, not permission to
 replace that formula inside the original program: a program transformation must
@@ -9461,6 +9844,73 @@ scoped term key and clears its prefix before the next borrow. Preserving express
 order, complete-filter error precedence, work admission and cleanup is a concrete
 caller obligation. The reset law neither establishes source-family exclusions
 nor permits an earlier final filter to hide an independently required check.</p>
+<p><code>EvaluationPrefix.remember_success_sound</code> states the invariant for retaining
+successful whole-expression results. It requires a pure partial evaluator and
+keys whose equality implies equal evaluation results. <code>reuse_success_exact</code>
+preserves values and errors; <code>reuse_complete_filter</code> transports that equality
+through the same filter over the same complete ordered rows. These laws do not
+permit row pruning, cached failures, or changing error precedence. The Rust
+implementation must separately establish expression identity, exact input-key
+coverage, vocabulary and reader-prefix authentication, successful publication,
+zero-divisor state, and charged lookup/storage work. The laws are mathematical
+preservation results, not a Lean-to-Rust refinement.</p>
+<p><code>EvaluationPrefix.success_preimage_exact</code> supplies the inverse-domain step:
+filtering a finite input carrier by a sound, completely populated success map
+selects exactly carrier inputs evaluating to a fixed wanted value. Cache coverage
+of that carrier is distinct from the source proof that it covers every complete
+binding. The Rust projection’s covered prefix records the former only after the
+whole constraint passes totality preparation; its completed positive column
+supplies the latter. A missing known-side key declines the optional restriction.</p>
+<p>The derived input domains use <code>FiniteTables.indexed_survival_exact</code> through the
+shared table selector, meeting the ordinary constant and incoming-binding
+domains and retaining original row identities. Necessary selection preserves
+complete contributing bindings by <code>DomainBindings.guarded_continuations_exact</code>;
+the ordered raw positive-match family may shrink. Every residual comparison and
+ordinary tuple match remains in place. Canonical input/result alignment, exact
+reader ownership, prefix coverage publication and charged temporary domain
+storage remain Rust obligations, with no refinement claim.</p>
+<p>The optional Rust
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs">finite totality certificate</a>
+adds a separate justification for ordinary row selection. A completed positive
+column covers every full binding’s value at that variable, even when it contains
+extra values excluded by another argument or relation. Every expression in the
+eligible flat constraint is a leaf or reads one such variable. Success on every
+value in the covering domain therefore establishes definedness on every full
+binding; an arithmetic failure declines this certificate, while owner and
+resource refusals remain failures. The argument does not establish definedness
+for every earlier join prefix.</p>
+<p>Eager emission, hybrid capture and hybrid model/region checks use the same Rust
+preparation and necessary-domain selector. Hybrid capture runs after original
+family admission, with an append-capable term owner over completed support.
+It must admit every successful speculative value from the covering columns,
+including values excluded by other source arguments and successful prefixes of
+a declined certificate attempt. The prepared runtime rule checks totality once
+against that immutable rule and completed carrier. Later cursors borrow the
+completed map read-only, retaining the same covered inputs and canonical results.
+Preserving capture’s input traversal and admitted canonical identities remains a
+Rust obligation; a missing identity is a typed failure. No new Boolean completion
+authority or filtered support owner establishes this premise. An input outside
+the covered map takes ordinary checked evaluation and cannot extend the retained
+map. A declined attempt retains the ordinary cursor behavior, with no certificate.</p>
+<p>Candidate row filters neither narrow the certificate’s covering domains nor
+supply source-family evidence. Their necessary conditions compose with computed
+domains while preserving each complete violation witness, as required by
+<code>StreamedRegions.necessary_selection_preserves_witness</code>. Runtime preparation and
+scratch remain charged to the checker, independently of the original admission
+receipt. Retained preparation is charged once; borrowed headers do not claim a
+second allocation. Existing laws do not verify this capture/frozen correspondence, typed
+failure propagation, or the concrete Rust storage accounting.</p>
+<p>After that obligation is established, <code>GroundGuards.guard_original</code> and
+<code>guard_frozen</code> identify each evaluated comparison with the same Boolean in both
+worlds. Together with <code>RuleFactorization.reduct_conj</code> and <code>reduct_imp</code>, a false
+body comparison makes that ground constraint true in both the original theory
+and every frozen reduct. Omitting such instances preserves the semantic theory.
+This is a direct application of existing guard and reduct laws; those laws do
+not establish the Rust column coverage, arithmetic totality or prefix schedule.
+Speculative prefix failures retain the ordinary fallback, typed owner/resource
+refusals remain failures, and arithmetic-family evidence still traverses complete
+rows, including defined false witnesses. The success-cache laws above justify
+reusing successful preparation results without changing their values.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean"><code>ProjectedConditionals</code></a>
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust
@@ -9494,6 +9944,17 @@ argument. Rust grouping, word addressing, atomic execution, barriers and
 readback remain unproved implementation correspondences. The packed membership
 refinement below concerns a different, 64-bit Rust representation and does not
 certify either shader schedule.</p>
+<p>Candidate export splits each stored 64-bit word into ordered low and high
+32-bit words. Only words covering the declared atom universe are exported;
+unused final bits remain zero. Atom enumeration visits set bits in increasing
+order. Both operations retain the original interpretation’s theory identity.
+The tight shader finds unsupported atoms from each candidate word intersected
+with the complement of its support word. Reducing the first set bit of every
+nonempty difference gives the least unsupported atom; an original-root failure
+still takes precedence. <code>support_true_iff</code> states the corresponding per-atom
+support obligation. The concrete word conversion, set-bit iterator, witness
+reduction and their resource bounds require separate executable refinement;
+the retained proof of <code>Interpretation::contains</code> does not cover these operations.</p>
 <p>CPU and device membership can consume the same immutable original-theory
 <code>TightPlan</code>; preparation does not itself classify a candidate. A completed
 original-root and ranked-support check uses
@@ -9805,6 +10266,13 @@ program. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/README
 summarizes the latest complete CPU corpus comparison. The studies below retain
 their own source revisions, workloads and measurement conditions.</p>
 <h2 id="recorded-comparisons"><a class="header" href="#recorded-comparisons">Recorded comparisons</a></h2>
+<p>The <a href="#reusing-grounding-and-formula-preparation">grounding and formula preparation comparison</a> measures
+all 94 corpus programs before and after shared preparation, domain and primitive
+changes. Summed grounding time falls about 11%; process time falls about 3%,
+with the same four wins against clingo. The final reuse changes alone are nearly
+neutral overall and include a measured hybrid Sudoku regression. Separate
+tables cover 1, 2, 4, 8 and 14 workers, eager/lazy execution, memory and every
+incomplete case. These are CPU results; they do not update Metal timings.</p>
 <p>The <a href="#grounding-and-prepared-cpu-closure">grounding and prepared-closure comparison</a> measures
 all three maintained CPU selections at four and fourteen workers. The arithmetic
 chain takes about 15% less process time and independent negation about 7% less;
@@ -9891,9 +10359,10 @@ zetesis-bench run --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 </code></pre>
-<p>Both use authored queens at n=8/9/10, pigeonhole at h=5/6/7 and three unchanged
-corpus cases: queens variant 02, SEND+MORE=MONEY and task allocation.
-<code>--include-einstein</code> adds the unchanged riddle. The test runs complete-family
+<p>Both use ten workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
+three unchanged corpus cases (queens variant 02, SEND+MORE=MONEY and task
+allocation), and the authored Sudoku grid. <code>--include-einstein</code> adds the
+unchanged riddle as an eleventh workload. The test runs complete-family
 qualifications only. The benchmark qualifies clingo once per case, then measures
 each native thread profile separately. Reports retain all refusals and limits;
 the workload’s inclusion is not a scaling claim. <code>--max-expansion-work</code> can set
@@ -9964,6 +10433,350 @@ ordinary uninstrumented campaign has no command; <code>zetesis bench compare</co
 <code>zetesis-series</code> and <code>zetesis-bench series</code> are now <code>zetesis-bench compare</code>,
 whose <code>--markdown</code> prints what <code>series</code> printed and whose reports, once given
 as <code>--report LABEL=PATH</code>, are operands.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="reusing-grounding-and-formula-preparation"><a class="header" href="#reusing-grounding-and-formula-preparation">Reusing grounding and formula preparation</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>This record compares all 94 unchanged curated programs on the CPU, with every answer set or tied optimum requested. It compares a combined set of preparation, domain and representation changes against the original source and an intermediate version. The three sources are:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Label</th><th>Source</th></tr>
+</thead>
+<tbody>
+<tr><td>Original</td><td><a href="https://github.com/GregoryGelfond/zetesis/commit/ec6adaddc250dae7ccc01e3efd3fb73220f9dbaf"><code>ec6adadd</code></a></td></tr>
+<tr><td>Prior</td><td><a href="https://github.com/GregoryGelfond/zetesis/commit/d6557d0af5f46978196aa40998d27630dd94d674"><code>d6557d0a</code></a></td></tr>
+<tr><td>Candidate</td><td><a href="https://github.com/GregoryGelfond/zetesis/commit/120fadfb3744c00760bcefd575ce3641075341dc"><code>120fadfb</code></a></td></tr>
+</tbody>
+</table>
+</div>
+<p>The corpus campaigns ran on 1 October 2026 local time, from 00:36:22 to 00:38:38 UTC on 2 October, on an Apple M4 Pro with macOS 26.6.2 and AC power. Rust 1.97.1 built the release executables. No other builds or measurements were run concurrently. Their order was original A, prior A, candidate A, candidate B, prior B, original B. All used the same maintained benchmark runner, CPU backend, automatic grounding and oracle selection, 14 search workers, one completion worker and batches of 64 candidates. Every corpus case actually used eager grounding; hybrid and relational lazy execution need their separate measurements. Adjacent clingo 5.8.2 used one worker and its stock search heuristics. Solver budgets remained at their defaults; the measurement harness allowed 30 seconds per child and 1,200 seconds per campaign.</p>
+<p>Each campaign had one qualification, one warmup, five timed runs and two separate RSS runs for each solver and case: <strong>1,692 planned positions per report</strong>, or <strong>10,152 across six reports</strong>. All positions passed and were accounted for, without changed inputs, campaign faults or unsettled children. The native qualification families matched across all six reports after resolving the incremental atom catalogs: full typed interpretations, shown atoms and terms, costs and model multiplicity. Selected-model counts and costs also agreed across every native sample. Clingo qualifies shown answers and costs; that comparison alone does not establish equality of hidden native atoms.</p>
+<h2 id="what-changed"><a class="header" href="#what-changed">What changed</a></h2>
+<p>The combined changes reuse completed joins, objective preparation and arithmetic
+results; derive conservative domains from positive bodies; and reduce propagation
+and candidate-transfer storage. Comparison heads and the curated Sudoku example
+extend the exercised language and workload set. The last step, between the prior
+and candidate sources, retains completed hybrid preparation, removes redundant
+finite-table mask initialization and reuses aggregate-prefix validation.</p>
+<p>These changes share checked operations and their resource accounting. They do
+not replace original satisfaction or reduct membership. The
+<a href="#source-programs-and-grounding">grounding architecture</a>,
+<a href="#selecting-and-projecting-finite-table-rows">finite-table API</a> and
+<a href="#connecting-proofs-to-implementations">Lean correspondence</a> describe the contracts and
+remaining implementation-proof boundaries. This comparison measures integrated
+revisions; it does not attribute each gain to one change.</p>
+<h2 id="timing-and-memory"><a class="header" href="#timing-and-memory">Timing and memory</a></h2>
+<p>For each program and revision, the value below is the arithmetic mean of its two campaign medians. Each timing median has five samples. Totals sum those per-program values; they are not a separately timed combined run. Whole-process wall time includes startup, input loading, parsing, grounding, solving and captured JSON/statistics output. Driver time omits source loading and the output envelope. Grounding is the recorded grounding stage; phases can overlap and must not be added to reconstruct wall time.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Revision</th><th style="text-align: right">Grounding sum ms</th><th style="text-align: right">Driver sum ms</th><th style="text-align: right">Wall sum ms</th><th style="text-align: right">Mean case RSS MiB</th><th style="text-align: right">Largest case RSS MiB</th></tr>
+</thead>
+<tbody>
+<tr><td>Original</td><td style="text-align: right">106.218</td><td style="text-align: right">291.896</td><td style="text-align: right">845.723</td><td style="text-align: right">15.524</td><td style="text-align: right">36.730</td></tr>
+<tr><td>Prior</td><td style="text-align: right">95.586</td><td style="text-align: right">272.782</td><td style="text-align: right">824.571</td><td style="text-align: right">15.244</td><td style="text-align: right">25.098</td></tr>
+<tr><td>Candidate</td><td style="text-align: right">94.160</td><td style="text-align: right">271.510</td><td style="text-align: right">823.370</td><td style="text-align: right">15.280</td><td style="text-align: right">26.223</td></tr>
+</tbody>
+</table>
+</div>
+<p>Against the original source, the candidate is <strong>1.128× faster in grounding</strong>, <strong>1.075× faster in driver time</strong> and <strong>1.027× faster in wall time</strong> on these totals. Against the prior candidate, the factors are 1.015×, 1.005× and 1.001×. The latter wall result is effectively flat at this repetition level: prior campaign totals were 814.503 and 834.639 ms, while candidate totals were 821.587 and 825.154 ms.</p>
+<p>The candidate’s adjacent clingo total is <strong>812.490 ms</strong>, against <strong>823.370 ms</strong> for zetesis: <strong>clingo 1.01× faster</strong>. Zetesis is faster on <strong>4 of 94 cases</strong>, clingo on 90, with the same four native wins in every report. Those wins are queens variant 02 and task-allocation variant 04’s basic, agent-serialization and larger-mix cases. For the candidate, respectively, zetesis is 3.65×, 2.56×, 2.75× and 5.88× faster. On SEND, clingo is 1.26× faster.</p>
+<p>RSS values are paired means of per-campaign medians from separate memory runs: four fresh-child observations per revision and program. They measure process peak resident memory, not live allocations, bytes copied, simultaneous aggregate memory or device storage. Candidate mean RSS is 15.280 MiB; adjacent clingo averages 5.774 MiB. Candidate mean RSS is 1.6% below original and 0.23% above prior.</p>
+<h2 id="where-the-changes-appear"><a class="header" href="#where-the-changes-appear">Where the changes appear</a></h2>
+<p>The family table separates driver time from process overhead. Triples are <strong>original / prior / candidate</strong>; memory values are means of the programs’ paired RSS medians.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Family</th><th style="text-align: right">Programs</th><th>Driver sum ms</th><th>Mean case RSS MiB</th></tr>
+</thead>
+<tbody>
+<tr><td>Equality generalized TSP</td><td style="text-align: right">3</td><td>5.903 / 5.275 / 5.284</td><td>14.793 / 14.648 / 14.712</td></tr>
+<tr><td>Eight queens</td><td style="text-align: right">6</td><td>54.787 / 52.190 / 51.730</td><td>19.587 / 17.149 / 17.417</td></tr>
+<tr><td>SEND + MORE = MONEY</td><td style="text-align: right">1</td><td>9.245 / 8.873 / 8.866</td><td>20.641 / 18.223 / 18.617</td></tr>
+<tr><td>Shortest path</td><td style="text-align: right">35</td><td>82.019 / 79.100 / 78.237</td><td>15.206 / 15.148 / 15.145</td></tr>
+<tr><td>Task allocation</td><td style="text-align: right">20</td><td>68.943 / 60.387 / 61.409</td><td>15.363 / 15.116 / 15.095</td></tr>
+<tr><td>Traveling salesman</td><td style="text-align: right">29</td><td>70.997 / 66.956 / 65.983</td><td>15.077 / 15.014 / 15.071</td></tr>
+</tbody>
+</table>
+</div>
+<p>The strongest repeatable prior-relative driver regression is task-allocation variant 04/larger-mix: <strong>24.531→26.135 ms</strong>, with both candidate campaign medians above both prior medians. Wall time rises <strong>30.460→32.097 ms</strong>, although zetesis still beats adjacent clingo by 5.88×. Queens variant 02’s RSS increases <strong>25.098→26.223 MiB</strong> versus prior, but remains below original’s <strong>36.730 MiB</strong>. SEND’s driver is nearly unchanged versus prior; wall increases <strong>14.801→15.396 ms</strong>, and RSS <strong>18.223→18.617 MiB</strong>.</p>
+<p>Across all programs, candidate wall medians improve on 61 cases versus original and 50 versus prior; driver medians improve on 90 and 69. Checked-candidate ranges differ across revisions on seven cases, and search-work ranges on 27. Optimized searches can visit different candidates while establishing the same optimal family, so these observations do not isolate the cost of one primitive. No correctness or resource-incompleteness regression appears in this corpus; the timing and memory regressions above remain part of the result. These CPU measurements do not qualify device execution or predict a general speedup.</p>
+<h2 id="all-94-programs"><a class="header" href="#all-94-programs">All 94 programs</a></h2>
+<p>All values are wall milliseconds under the paired-median method above. Clingo is the reference measured beside the candidate. Ratios and wins use unrounded values. Program links identify the unchanged source at the candidate revision; full driver, grounding, RSS, counters and failure receipts are retained in the <a href="reference/observations/foundation-reuse-120fadfb-corpus.json">portable evidence</a>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">Original</th><th style="text-align: right">Prior</th><th style="text-align: right">Candidate</th><th style="text-align: right">Clingo</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/equality-generalized-tsp/01-basic.lp">equality-generalized-tsp/01-basic</a></td><td style="text-align: right">7.91</td><td style="text-align: right">7.91</td><td style="text-align: right">7.83</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/equality-generalized-tsp/02-larger.lp">equality-generalized-tsp/02-larger</a></td><td style="text-align: right">7.87</td><td style="text-align: right">7.80</td><td style="text-align: right">7.82</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp">equality-generalized-tsp/03-unreachable-subset-unsat</a></td><td style="text-align: right">7.26</td><td style="text-align: right">7.15</td><td style="text-align: right">7.06</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp">shortest-path/v01/01-basic</a></td><td style="text-align: right">7.15</td><td style="text-align: right">7.58</td><td style="text-align: right">7.01</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/02-start-equals-end.lp">shortest-path/v01/02-start-equals-end</a></td><td style="text-align: right">7.21</td><td style="text-align: right">7.19</td><td style="text-align: right">7.04</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/03-zero-cost-detour.lp">shortest-path/v01/03-zero-cost-detour</a></td><td style="text-align: right">7.16</td><td style="text-align: right">6.46</td><td style="text-align: right">6.25</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/04-no-path.lp">shortest-path/v01/04-no-path</a></td><td style="text-align: right">7.77</td><td style="text-align: right">7.20</td><td style="text-align: right">7.07</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/05-multi-path.lp">shortest-path/v01/05-multi-path</a></td><td style="text-align: right">7.80</td><td style="text-align: right">7.81</td><td style="text-align: right">7.81</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp">shortest-path/v01/06-layered-dag</a></td><td style="text-align: right">9.28</td><td style="text-align: right">9.21</td><td style="text-align: right">9.35</td><td style="text-align: right">6.19</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/07-cycles.lp">shortest-path/v01/07-cycles</a></td><td style="text-align: right">7.85</td><td style="text-align: right">7.86</td><td style="text-align: right">7.79</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-01/08-negative-weights.lp">shortest-path/v01/08-negative-weights</a></td><td style="text-align: right">7.89</td><td style="text-align: right">7.82</td><td style="text-align: right">7.83</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/01-basic.lp">shortest-path/v02/01-basic</a></td><td style="text-align: right">7.68</td><td style="text-align: right">7.85</td><td style="text-align: right">7.83</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/02-start-equals-end.lp">shortest-path/v02/02-start-equals-end</a></td><td style="text-align: right">7.22</td><td style="text-align: right">7.84</td><td style="text-align: right">7.88</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/03-before-forces-detour.lp">shortest-path/v02/03-before-forces-detour</a></td><td style="text-align: right">7.84</td><td style="text-align: right">7.18</td><td style="text-align: right">7.78</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/04-after-forces-extension.lp">shortest-path/v02/04-after-forces-extension</a></td><td style="text-align: right">7.89</td><td style="text-align: right">7.83</td><td style="text-align: right">7.79</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/05-ordering-unsat.lp">shortest-path/v02/05-ordering-unsat</a></td><td style="text-align: right">7.16</td><td style="text-align: right">7.04</td><td style="text-align: right">7.82</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/06-layered-dag-before.lp">shortest-path/v02/06-layered-dag-before</a></td><td style="text-align: right">9.23</td><td style="text-align: right">9.20</td><td style="text-align: right">9.36</td><td style="text-align: right">6.20</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/07-layered-dag-before-after.lp">shortest-path/v02/07-layered-dag-before-after</a></td><td style="text-align: right">9.71</td><td style="text-align: right">9.21</td><td style="text-align: right">9.33</td><td style="text-align: right">6.20</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/08-tie-break-under-ordering.lp">shortest-path/v02/08-tie-break-under-ordering</a></td><td style="text-align: right">7.87</td><td style="text-align: right">7.89</td><td style="text-align: right">7.85</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-02/09-negative-weights.lp">shortest-path/v02/09-negative-weights</a></td><td style="text-align: right">7.79</td><td style="text-align: right">7.82</td><td style="text-align: right">7.81</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/01-basic.lp">shortest-path/v03/01-basic</a></td><td style="text-align: right">7.85</td><td style="text-align: right">7.88</td><td style="text-align: right">7.84</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/02-start-equals-end.lp">shortest-path/v03/02-start-equals-end</a></td><td style="text-align: right">7.15</td><td style="text-align: right">7.86</td><td style="text-align: right">7.02</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/03-budget-forces-detour.lp">shortest-path/v03/03-budget-forces-detour</a></td><td style="text-align: right">7.85</td><td style="text-align: right">7.84</td><td style="text-align: right">7.82</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/04-cost-at-cap-allowed.lp">shortest-path/v03/04-cost-at-cap-allowed</a></td><td style="text-align: right">7.14</td><td style="text-align: right">7.15</td><td style="text-align: right">7.77</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/05-budget-unsat.lp">shortest-path/v03/05-budget-unsat</a></td><td style="text-align: right">7.82</td><td style="text-align: right">7.86</td><td style="text-align: right">7.85</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/06-layered-dag-cap.lp">shortest-path/v03/06-layered-dag-cap</a></td><td style="text-align: right">11.10</td><td style="text-align: right">10.60</td><td style="text-align: right">10.81</td><td style="text-align: right">6.17</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/07-layered-dag-tight-cap.lp">shortest-path/v03/07-layered-dag-tight-cap</a></td><td style="text-align: right">10.62</td><td style="text-align: right">10.67</td><td style="text-align: right">10.89</td><td style="text-align: right">6.21</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/08-tie-break-under-cap.lp">shortest-path/v03/08-tie-break-under-cap</a></td><td style="text-align: right">7.88</td><td style="text-align: right">7.84</td><td style="text-align: right">7.77</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-03/09-negative-weights.lp">shortest-path/v03/09-negative-weights</a></td><td style="text-align: right">7.84</td><td style="text-align: right">7.86</td><td style="text-align: right">7.89</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/01-basic.lp">shortest-path/v04/01-basic</a></td><td style="text-align: right">7.16</td><td style="text-align: right">7.75</td><td style="text-align: right">7.78</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/02-start-equals-end.lp">shortest-path/v04/02-start-equals-end</a></td><td style="text-align: right">7.72</td><td style="text-align: right">7.83</td><td style="text-align: right">7.84</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/03-before-forces-detour-within-budget.lp">shortest-path/v04/03-before-forces-detour-within-budget</a></td><td style="text-align: right">7.79</td><td style="text-align: right">7.86</td><td style="text-align: right">7.80</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/04-ordering-violates-budget.lp">shortest-path/v04/04-ordering-violates-budget</a></td><td style="text-align: right">7.88</td><td style="text-align: right">7.86</td><td style="text-align: right">7.81</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/05-after-and-budget-interact.lp">shortest-path/v04/05-after-and-budget-interact</a></td><td style="text-align: right">7.81</td><td style="text-align: right">7.78</td><td style="text-align: right">7.83</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp">shortest-path/v04/06-layered-dag-ordering-cap</a></td><td style="text-align: right">11.98</td><td style="text-align: right">11.22</td><td style="text-align: right">10.81</td><td style="text-align: right">6.16</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/07-layered-dag-combined.lp">shortest-path/v04/07-layered-dag-combined</a></td><td style="text-align: right">11.88</td><td style="text-align: right">11.24</td><td style="text-align: right">10.80</td><td style="text-align: right">6.18</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/08-tie-break-under-ordering-and-cap.lp">shortest-path/v04/08-tie-break-under-ordering-and-cap</a></td><td style="text-align: right">8.68</td><td style="text-align: right">8.63</td><td style="text-align: right">7.87</td><td style="text-align: right">4.65</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/shortest-path/variant-04/09-negative-weights.lp">shortest-path/v04/09-negative-weights</a></td><td style="text-align: right">7.83</td><td style="text-align: right">7.82</td><td style="text-align: right">7.84</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-01/01-basic.lp">task-allocation/v01/01-basic</a></td><td style="text-align: right">6.43</td><td style="text-align: right">7.19</td><td style="text-align: right">6.31</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-01/02-agent-reuse.lp">task-allocation/v01/02-agent-reuse</a></td><td style="text-align: right">7.17</td><td style="text-align: right">7.15</td><td style="text-align: right">6.26</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-01/03-selective-compatibility.lp">task-allocation/v01/03-selective-compatibility</a></td><td style="text-align: right">7.15</td><td style="text-align: right">6.46</td><td style="text-align: right">6.28</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp">task-allocation/v01/04-no-compatible-agent-unsat</a></td><td style="text-align: right">6.42</td><td style="text-align: right">6.43</td><td style="text-align: right">6.29</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-01/05-larger-mix.lp">task-allocation/v01/05-larger-mix</a></td><td style="text-align: right">7.84</td><td style="text-align: right">7.24</td><td style="text-align: right">7.06</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-02/01-basic.lp">task-allocation/v02/01-basic</a></td><td style="text-align: right">7.69</td><td style="text-align: right">7.16</td><td style="text-align: right">7.77</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp">task-allocation/v02/02-makespan-tiebreak</a></td><td style="text-align: right">7.85</td><td style="text-align: right">7.88</td><td style="text-align: right">7.81</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-02/03-cost-dominates.lp">task-allocation/v02/03-cost-dominates</a></td><td style="text-align: right">7.79</td><td style="text-align: right">7.81</td><td style="text-align: right">7.79</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-02/04-no-compatible-agent-unsat.lp">task-allocation/v02/04-no-compatible-agent-unsat</a></td><td style="text-align: right">7.79</td><td style="text-align: right">7.20</td><td style="text-align: right">7.81</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-02/05-larger-mix.lp">task-allocation/v02/05-larger-mix</a></td><td style="text-align: right">9.21</td><td style="text-align: right">9.22</td><td style="text-align: right">9.30</td><td style="text-align: right">4.70</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-03/01-basic.lp">task-allocation/v03/01-basic</a></td><td style="text-align: right">7.15</td><td style="text-align: right">7.18</td><td style="text-align: right">7.08</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-03/02-multiple-groups.lp">task-allocation/v03/02-multiple-groups</a></td><td style="text-align: right">7.79</td><td style="text-align: right">7.79</td><td style="text-align: right">7.03</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-03/03-mixed-grouped-ungrouped.lp">task-allocation/v03/03-mixed-grouped-ungrouped</a></td><td style="text-align: right">7.21</td><td style="text-align: right">7.56</td><td style="text-align: right">7.10</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-03/04-incompatible-group-unsat.lp">task-allocation/v03/04-incompatible-group-unsat</a></td><td style="text-align: right">6.43</td><td style="text-align: right">6.41</td><td style="text-align: right">6.83</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-03/05-larger-mix.lp">task-allocation/v03/05-larger-mix</a></td><td style="text-align: right">7.82</td><td style="text-align: right">7.80</td><td style="text-align: right">7.85</td><td style="text-align: right">4.70</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-04/01-basic.lp">task-allocation/v04/01-basic</a></td><td style="text-align: right">10.71</td><td style="text-align: right">9.89</td><td style="text-align: right">9.46</td><td style="text-align: right">24.26</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-04/02-precedence.lp">task-allocation/v04/02-precedence</a></td><td style="text-align: right">9.33</td><td style="text-align: right">9.31</td><td style="text-align: right">9.40</td><td style="text-align: right">6.22</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-04/03-agent-serialization.lp">task-allocation/v04/03-agent-serialization</a></td><td style="text-align: right">9.23</td><td style="text-align: right">9.24</td><td style="text-align: right">9.36</td><td style="text-align: right">25.72</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-04/04-window-too-tight-unsat.lp">task-allocation/v04/04-window-too-tight-unsat</a></td><td style="text-align: right">7.86</td><td style="text-align: right">7.90</td><td style="text-align: right">7.90</td><td style="text-align: right">4.70</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp">task-allocation/v04/05-larger-mix</a></td><td style="text-align: right">37.11</td><td style="text-align: right">30.46</td><td style="text-align: right">32.10</td><td style="text-align: right">188.57</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-01/01-basic.lp">traveling-salesman/v01/01-basic</a></td><td style="text-align: right">7.96</td><td style="text-align: right">7.98</td><td style="text-align: right">7.91</td><td style="text-align: right">4.76</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-01/02-multiple-tours.lp">traveling-salesman/v01/02-multiple-tours</a></td><td style="text-align: right">7.81</td><td style="text-align: right">7.77</td><td style="text-align: right">7.75</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-01/03-asymmetric.lp">traveling-salesman/v01/03-asymmetric</a></td><td style="text-align: right">7.87</td><td style="text-align: right">7.85</td><td style="text-align: right">7.86</td><td style="text-align: right">5.19</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-01/04-subtour-unsat.lp">traveling-salesman/v01/04-subtour-unsat</a></td><td style="text-align: right">7.18</td><td style="text-align: right">7.07</td><td style="text-align: right">7.14</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-01/05-ring.lp">traveling-salesman/v01/05-ring</a></td><td style="text-align: right">8.17</td><td style="text-align: right">9.23</td><td style="text-align: right">8.57</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-02/01-basic.lp">traveling-salesman/v02/01-basic</a></td><td style="text-align: right">7.89</td><td style="text-align: right">7.87</td><td style="text-align: right">7.81</td><td style="text-align: right">4.70</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-02/02-single-salesman.lp">traveling-salesman/v02/02-single-salesman</a></td><td style="text-align: right">7.87</td><td style="text-align: right">7.19</td><td style="text-align: right">7.82</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-02/03-too-many-salesmen-unsat.lp">traveling-salesman/v02/03-too-many-salesmen-unsat</a></td><td style="text-align: right">7.76</td><td style="text-align: right">7.20</td><td style="text-align: right">7.81</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-02/04-equal-cost-split.lp">traveling-salesman/v02/04-equal-cost-split</a></td><td style="text-align: right">7.78</td><td style="text-align: right">7.80</td><td style="text-align: right">7.86</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-02/05-larger-asymmetric.lp">traveling-salesman/v02/05-larger-asymmetric</a></td><td style="text-align: right">7.86</td><td style="text-align: right">7.86</td><td style="text-align: right">7.77</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-02/06-unreachable-edge.lp">traveling-salesman/v02/06-unreachable-edge</a></td><td style="text-align: right">7.86</td><td style="text-align: right">7.82</td><td style="text-align: right">7.85</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-03/01-basic.lp">traveling-salesman/v03/01-basic</a></td><td style="text-align: right">7.77</td><td style="text-align: right">7.80</td><td style="text-align: right">7.83</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-03/02-single-salesman.lp">traveling-salesman/v03/02-single-salesman</a></td><td style="text-align: right">7.86</td><td style="text-align: right">7.85</td><td style="text-align: right">7.84</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-03/03-depot-crossing-unsat.lp">traveling-salesman/v03/03-depot-crossing-unsat</a></td><td style="text-align: right">7.78</td><td style="text-align: right">7.18</td><td style="text-align: right">7.78</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-03/04-equal-cost-split.lp">traveling-salesman/v03/04-equal-cost-split</a></td><td style="text-align: right">7.82</td><td style="text-align: right">7.82</td><td style="text-align: right">7.77</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp">traveling-salesman/v03/05-larger-three-depots</a></td><td style="text-align: right">9.18</td><td style="text-align: right">7.80</td><td style="text-align: right">7.83</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-03/06-unreachable-edge.lp">traveling-salesman/v03/06-unreachable-edge</a></td><td style="text-align: right">7.86</td><td style="text-align: right">7.85</td><td style="text-align: right">7.80</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-04/01-basic.lp">traveling-salesman/v04/01-basic</a></td><td style="text-align: right">7.79</td><td style="text-align: right">7.78</td><td style="text-align: right">8.50</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-04/02-single-salesman.lp">traveling-salesman/v04/02-single-salesman</a></td><td style="text-align: right">7.87</td><td style="text-align: right">7.81</td><td style="text-align: right">7.85</td><td style="text-align: right">4.65</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-04/03-window-too-tight-unsat.lp">traveling-salesman/v04/03-window-too-tight-unsat</a></td><td style="text-align: right">7.77</td><td style="text-align: right">7.81</td><td style="text-align: right">7.78</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-04/04-depot-window-too-tight-unsat.lp">traveling-salesman/v04/04-depot-window-too-tight-unsat</a></td><td style="text-align: right">7.86</td><td style="text-align: right">7.88</td><td style="text-align: right">7.82</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-04/05-three-depots-asymmetric-times.lp">traveling-salesman/v04/05-three-depots-asymmetric-times</a></td><td style="text-align: right">10.56</td><td style="text-align: right">10.57</td><td style="text-align: right">9.30</td><td style="text-align: right">5.41</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-04/06-unreachable-edge.lp">traveling-salesman/v04/06-unreachable-edge</a></td><td style="text-align: right">10.60</td><td style="text-align: right">9.24</td><td style="text-align: right">9.29</td><td style="text-align: right">4.66</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-05/01-basic.lp">traveling-salesman/v05/01-basic</a></td><td style="text-align: right">9.21</td><td style="text-align: right">8.45</td><td style="text-align: right">7.84</td><td style="text-align: right">4.69</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-05/02-tight-bound-exact.lp">traveling-salesman/v05/02-tight-bound-exact</a></td><td style="text-align: right">7.76</td><td style="text-align: right">7.84</td><td style="text-align: right">7.85</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-05/03-revisit-too-tight-unsat.lp">traveling-salesman/v05/03-revisit-too-tight-unsat</a></td><td style="text-align: right">7.84</td><td style="text-align: right">7.83</td><td style="text-align: right">7.78</td><td style="text-align: right">4.67</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-05/04-depot-and-vertex-revisits.lp">traveling-salesman/v05/04-depot-and-vertex-revisits</a></td><td style="text-align: right">7.82</td><td style="text-align: right">7.86</td><td style="text-align: right">7.85</td><td style="text-align: right">4.65</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp">traveling-salesman/v05/05-three-depots-mixed</a></td><td style="text-align: right">10.56</td><td style="text-align: right">10.60</td><td style="text-align: right">10.04</td><td style="text-align: right">5.43</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/scenarios/traveling-salesman/variant-05/06-unreachable-edge.lp">traveling-salesman/v05/06-unreachable-edge</a></td><td style="text-align: right">10.55</td><td style="text-align: right">9.25</td><td style="text-align: right">9.32</td><td style="text-align: right">4.68</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/n-queens/variant-01.lp">n-queens/v01</a></td><td style="text-align: right">13.25</td><td style="text-align: right">13.20</td><td style="text-align: right">12.59</td><td style="text-align: right">6.20</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/n-queens/variant-02.lp">n-queens/v02</a></td><td style="text-align: right">35.00</td><td style="text-align: right">33.82</td><td style="text-align: right">33.88</td><td style="text-align: right">123.64</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/n-queens/variant-03.lp">n-queens/v03</a></td><td style="text-align: right">14.12</td><td style="text-align: right">13.39</td><td style="text-align: right">13.98</td><td style="text-align: right">6.26</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/n-queens/variant-04.lp">n-queens/v04</a></td><td style="text-align: right">9.29</td><td style="text-align: right">9.29</td><td style="text-align: right">9.41</td><td style="text-align: right">6.22</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/n-queens/variant-05.lp">n-queens/v05</a></td><td style="text-align: right">9.89</td><td style="text-align: right">9.25</td><td style="text-align: right">9.38</td><td style="text-align: right">6.22</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/n-queens/variant-06.lp">n-queens/v06</a></td><td style="text-align: right">10.71</td><td style="text-align: right">9.29</td><td style="text-align: right">9.35</td><td style="text-align: right">6.21</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/120fadfb3744c00760bcefd575ce3641075341dc/examples/correctness/standalone/send-money/send-money.lp">send-money/send-money</a></td><td style="text-align: right">15.48</td><td style="text-align: right">14.80</td><td style="text-align: right">15.40</td><td style="text-align: right">12.22</td></tr>
+</tbody>
+</table>
+</div>
+<p>The portable evidence records executable and report hashes, source mappings, actual profiles, every per-report cell summary, qualified-family hashes and all timed candidate/work ranges. It is a projection of maintained benchmark reports, not another solver run or a report input. Machine-local paths and raw captures are omitted; the raw report hashes identify retained source evidence rather than public downloads. The <a href="#benchmarking-with-zetesis-bench">benchmark protocol</a> describes reproduction and the limits of each measurement.</p>
+<h2 id="worker-scaling"><a class="header" href="#worker-scaling">Worker scaling</a></h2>
+<p>The <code>d6557d0a</code> → <code>120fadfb</code> comparison completed all <strong>55 cells</strong>: eleven
+workloads at five worker counts. CPU execution used automatic oracle/grounding
+selection, indexed joins, region search, and default budgets. Admission was unchanged.</p>
+<p>Every cell passed clingo qualification. Complete native families, shown values,
+costs, and multiplicities matched across all 220 qualification documents, including
+1,176 task-allocation optimal ties at cost 5. Clingo checks displayed families;
+its hidden interpretations are unavailable.</p>
+<p>Baseline–candidate–candidate–baseline reports each used one warmup, five timed
+repetitions, and two memory runs per cell. Table entries average the two candidate
+report medians, in milliseconds, including startup and JSON/statistics output.
+<a href="reference/observations/foundation-reuse-120fadfb-workers.json">The observations</a> retain
+both versions’ cell measurements, work receipts, and qualification identities.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Workload</th><th style="text-align: right">1</th><th style="text-align: right">2</th><th style="text-align: right">4</th><th style="text-align: right">8</th><th style="text-align: right">14</th></tr>
+</thead>
+<tbody>
+<tr><td>Authored queens, n=8</td><td style="text-align: right">15.25</td><td style="text-align: right">13.85</td><td style="text-align: right">13.68</td><td style="text-align: right">13.66</td><td style="text-align: right">12.99</td></tr>
+<tr><td>Authored queens, n=9</td><td style="text-align: right">26.00</td><td style="text-align: right">22.83</td><td style="text-align: right">20.40</td><td style="text-align: right">19.66</td><td style="text-align: right">18.61</td></tr>
+<tr><td>Authored queens, n=10</td><td style="text-align: right">59.22</td><td style="text-align: right">44.67</td><td style="text-align: right">35.28</td><td style="text-align: right">30.07</td><td style="text-align: right">27.65</td></tr>
+<tr><td>Pigeonhole, h=5</td><td style="text-align: right">6.34</td><td style="text-align: right">6.27</td><td style="text-align: right">6.25</td><td style="text-align: right">6.26</td><td style="text-align: right">7.00</td></tr>
+<tr><td>Pigeonhole, h=6</td><td style="text-align: right">7.78</td><td style="text-align: right">7.77</td><td style="text-align: right">7.77</td><td style="text-align: right">7.82</td><td style="text-align: right">7.80</td></tr>
+<tr><td>Pigeonhole, h=7</td><td style="text-align: right">16.84</td><td style="text-align: right">15.36</td><td style="text-align: right">12.44</td><td style="text-align: right">10.92</td><td style="text-align: right">11.25</td></tr>
+<tr><td>Queens variant 02</td><td style="text-align: right">137.84</td><td style="text-align: right">88.77</td><td style="text-align: right">55.88</td><td style="text-align: right">38.82</td><td style="text-align: right">33.94</td></tr>
+<tr><td>SEND+MORE</td><td style="text-align: right">16.93</td><td style="text-align: right">15.36</td><td style="text-align: right">15.37</td><td style="text-align: right">15.40</td><td style="text-align: right">15.45</td></tr>
+<tr><td>Task allocation, larger mix</td><td style="text-align: right">50.56</td><td style="text-align: right">41.40</td><td style="text-align: right">35.89</td><td style="text-align: right">32.44</td><td style="text-align: right">31.62</td></tr>
+<tr><td>Curated Sudoku</td><td style="text-align: right">33.61</td><td style="text-align: right">33.54</td><td style="text-align: right">33.81</td><td style="text-align: right">34.15</td><td style="text-align: right">34.63</td></tr>
+<tr><td>Einstein</td><td style="text-align: right">18.45</td><td style="text-align: right">17.49</td><td style="text-align: right">18.07</td><td style="text-align: right">18.26</td><td style="text-align: right">18.04</td></tr>
+</tbody>
+</table>
+</div>
+<p>Across the same 55 cell means, summed wall time changed <strong>−0.14%</strong>, driver time
+−0.45%, and grounding −0.74%. Mean cell RSS changed +0.04%, from 17.312 to
+17.320 MiB. RSS uses each report’s median child peak, not simultaneous memory.
+The measurements are essentially flat; no broad speedup is established.
+Aggregate one-to-fourteen-worker wall speedup was 1.793× before and 1.775× after.</p>
+<p>Sudoku’s table-query work fell 516,456 → 449,388 (−12.99%), while wall time
+changed −0.05%. Einstein’s reconstruction work fell 1,230,166 → 885,850
+(−27.99%); wall time changed −1.89% and RSS +0.93%. Search work is unchanged. Sudoku uses eager tight checking; Einstein uses
+eager base checking with terminal reconstruction. Neither exercises hybrid
+grounding here. Curated Sudoku is an easy-search fixture.</p>
+<p>Pigeonhole h=5 at fourteen workers increased
+wall time 11.22% (+0.706 ms), driven by one report, while driver time rose 0.26%.
+Pigeonhole h=7 at two workers rose 6.27% (+0.906 ms), with driver +0.72%.
+Task allocation at fourteen workers had driver +2.09%; its parallel search work
+varied with scheduling despite identical optimal families. These descriptive observations establish neither statistical significance nor
+isolated causation.</p>
+<h2 id="eager-and-requested-lazy-grounders"><a class="header" href="#eager-and-requested-lazy-grounders">Eager and requested-lazy grounders</a></h2>
+<p>This comparison covers only <code>d6557d0a</code> → <code>120fadfb</code>, the shared-preparation and
+table-primitive follow-up. It does not include the earlier foundation gains.
+The <a href="reference/observations/foundation-reuse-120fadfb-grounders.json">grounder observations</a>
+retain populations, source identities, execution routes, and per-cell results.</p>
+<p>Each version ran twice, in baseline/candidate/candidate/baseline order, with four
+CPU workers, automatic oracle selection, one warmup, four timed repetitions, and
+two separate memory runs per report. Values are arithmetic means of the two
+per-report medians. The following totals sum only cells completed in all four
+reports; they are not campaign elapsed times. Small changes have no statistical
+significance claim.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Suite / requested grounder</th><th style="text-align: right">Completed cells</th><th style="text-align: right">Wall baseline → candidate, ms</th><th style="text-align: right">Change</th><th style="text-align: right">Driver baseline → candidate, ms</th><th style="text-align: right">Change</th></tr>
+</thead>
+<tbody>
+<tr><td>Scalability / eager</td><td style="text-align: right">10/11</td><td style="text-align: right">239.866 → 237.202</td><td style="text-align: right">−1.11%</td><td style="text-align: right">177.512 → 176.564</td><td style="text-align: right">−0.53%</td></tr>
+<tr><td>Scalability / lazy</td><td style="text-align: right">2/11</td><td style="text-align: right">109.120 → 110.139</td><td style="text-align: right">+0.93%</td><td style="text-align: right">96.041 → 96.990</td><td style="text-align: right">+0.99%</td></tr>
+<tr><td>Series / eager</td><td style="text-align: right">18/22</td><td style="text-align: right">553.049 → 552.581</td><td style="text-align: right">−0.08%</td><td style="text-align: right">440.456 → 439.609</td><td style="text-align: right">−0.19%</td></tr>
+<tr><td>Series / lazy</td><td style="text-align: right">15/22</td><td style="text-align: right">535.436 → 536.562</td><td style="text-align: right">+0.21%</td><td style="text-align: right">441.360 → 443.273</td><td style="text-align: right">+0.43%</td></tr>
+</tbody>
+</table>
+</div>
+<p>No cell gained or lost completion. Successful qualification records preserve
+the complete native families, including typed atoms, displayed values,
+multiplicities, costs, and optimal ties. Clingo qualification passed for every
+workload’s selected display; hidden reference interpretations were unavailable.
+Refused cells establish no complete family.</p>
+<p>The unchanged non-completions are:</p>
+<ul>
+<li><strong>Scalability:</strong> requested lazy exceeds the 10,000,000 constraint-check Work
+ceiling for authored queens 8/9/10, pigeonhole 6/7, queens variant 02, and
+SEND+MORE=MONEY. Lazy task allocation rejects objectives. Einstein exceeds
+10,000,000 formula-admission Work under both explicit eager and lazy.</li>
+<li><strong>Series:</strong> eager transitive paths 100/200 exceed 1,000,000 static rules; eager
+chains 1000/2000 exceed 1,000,000 static atoms. Lazy
+independent-negation-aggregate-16, Latin square 5, queens variant 01 at 10/11,
+and SEND+MORE=MONEY exceed 10,000,000 constraint-check Work. Lazy ties-50 and
+task allocation reject objectives. Their later timed slots were not attempted.</li>
+</ul>
+<p>Einstein’s successful automatic-grounder measurements use a different admitted
+plan: <code>auto</code> selects an eager base with terminal definitions and reconstructs
+the deferred definition before publishing the original answer. Explicit eager
+and lazy select complete or hybrid materialization without that adaptive
+partition. The recorded automatic route completes one reconstructed answer;
+its success does not establish completion of either explicit profile above.</p>
+<h3 id="sudoku-and-execution-routes"><a class="header" href="#sudoku-and-execution-routes">Sudoku and execution routes</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Requested grounder</th><th style="text-align: right">Wall baseline → candidate, ms</th><th style="text-align: right">Driver baseline → candidate, ms</th><th style="text-align: right">Peak RSS baseline → candidate, MiB</th></tr>
+</thead>
+<tbody>
+<tr><td>Eager</td><td style="text-align: right">35.114 → 33.592 (−4.33%)</td><td style="text-align: right">28.151 → 27.345 (−2.86%)</td><td style="text-align: right">23.863 → 23.965</td></tr>
+<tr><td>Lazy, effective hybrid</td><td style="text-align: right">50.842 → 52.680 (+3.62%)</td><td style="text-align: right">44.058 → 45.643 (+3.60%)</td><td style="text-align: right">19.492 → 19.672</td></tr>
+</tbody>
+</table>
+</div>
+<p>Sudoku table-query work falls 516,456 → 449,388 (−12.99%). Hybrid constraint
+work falls 3,097,823 → 3,023,303 (−2.41%), preserving 8,748 substitutions and
+one answer. However, hybrid original validation rises 17.593 → 20.629 ms while
+admission improves 24.062 → 22.620 ms. Both candidate reports have slower hybrid
+driver medians. These combined measurements do not isolate the cost of retained
+maps, table selection, or per-operation shared resource admission.</p>
+<p>Requested lazy does not always mean hybrid. Independent-choice 12/16 and
+independent-negation 8/10 use lazy-interleaved CPU closure, with unchanged work.
+Ten completed lazy series cells use closure; five use hybrid. Only planning-14
+among those five has nonzero streamed constraint work, unchanged at 3,099,523.
+Thus the series provides mostly controls, not evidence of retained-map speedups.</p>
+<p>Larger queens cases change little. Adverse driver changes include eager
+pigeonhole 7 (+3.50%) and lazy producer-chain-700 (+2.66%). Separate-process peak
+RSS changes remain small and do not demonstrate reduced retained-map memory.
+The measured result is modest eager Sudoku improvement, a hybrid Sudoku
+regression, and largely unchanged broader series timing.</p>
+<h2 id="reproducing-the-measurements"><a class="header" href="#reproducing-the-measurements">Reproducing the measurements</a></h2>
+<p>Build the three named revisions with <code>scripts/install.sh</code>, using a separate
+checkout and Cargo target for each. Retain the installed executables outside the
+build caches. Use the benchmark runner built from <code>120fadfb</code> for every revision,
+and clingo 5.8.2. Set <code>NATIVE</code> and <code>CLINGO</code> below to the absolute executable paths;
+choose a fresh report name for each invocation.</p>
+<p>The corpus order is original A, prior A, candidate A, candidate B, prior B,
+original B. All other selections use prior A, candidate A, candidate B, prior B.
+Run each selection sequentially on an otherwise idle host. This is the corpus
+invocation for one revision/repeat:</p>
+<pre><code class="language-sh">zetesis-bench run --suite corpus --threads 14 --repetitions 5 \
+  --zetesis "$NATIVE" --clingo "$CLINGO" --backend cpu \
+  --warmups 1 --memory-runs 2 --timeout-seconds 30 --campaign-seconds 1200 \
+  --report corpus-candidate-a.json
+</code></pre>
+<p>For the other selections, replace <code>--suite corpus --threads 14 --repetitions 5</code>
+and the report name with the corresponding arguments:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Selection</th><th>Arguments</th></tr>
+</thead>
+<tbody>
+<tr><td>Worker scaling</td><td><code>--suite scalability --include-einstein --compare-threads 1,2,4,8,14 --repetitions 5</code></td></tr>
+<tr><td>Eager/lazy scalability</td><td><code>--suite scalability --include-einstein --threads 4 --compare-grounders --repetitions 4</code></td></tr>
+<tr><td>Eager/lazy series</td><td><code>--suite series --threads 4 --compare-grounders --repetitions 4</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The corpus has adjacent clingo timing and RSS observations. In the matrices,
+clingo supplies qualification only. Their populations overlap: do not add them
+together as a count of distinct programs. Exit status 1 retains explicit
+non-completions; inspect their typed reasons rather than treating missing samples
+as elapsed times. Preserve every report and compare compatible selections with
+the maintained reader:</p>
+<pre><code class="language-sh">zetesis-bench compare original-a=corpus-original-a.json \
+  baseline-a=corpus-baseline-a.json candidate-a=corpus-candidate-a.json \
+  candidate-b=corpus-candidate-b.json baseline-b=corpus-baseline-b.json \
+  original-b=corpus-original-b.json --output corpus-comparison.json --markdown
+</code></pre>
+<p>Each displayed value is the mean of two report medians. It is not the median of
+pooled samples. Paired report values, executable and workload identities, report
+hashes and qualified-family hashes are retained in the linked evidence. The
+<a href="#measurement-protocols-and-early-results">measurement protocol</a> defines the capture and
+resource boundaries. These measurements are descriptive; small changes need
+not persist on another host or run. They measure CPU execution, not Metal.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="grounding-and-prepared-cpu-closure"><a class="header" href="#grounding-and-prepared-cpu-closure">Grounding and prepared CPU closure</a></h1>
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
@@ -10902,7 +11715,7 @@ process interval; these durations must not be added. The single RSS observations
 cannot establish a repeatable memory reduction. The five wall samples ranged
 from 20.252–21.637 ms before and 17.855–19.365 ms after; ranges are descriptive,
 not confidence intervals.</p>
-<h2 id="what-changed"><a class="header" href="#what-changed">What changed</a></h2>
+<h2 id="what-changed-1"><a class="header" href="#what-changed-1">What changed</a></h2>
 <p>The support catalog records atoms discovered during grounding. A snapshot gives
 its consumers an immutable view of those atoms.</p>
 <p>Support growth already shared immutable segment payload. Each publication still
@@ -13421,7 +14234,7 @@ credited to row lending or described as established neutrality. Arithmetic
 timings are also mixed. Nested phase medians overlap and must not be added to
 reconstruct total time. The requested thread count does not make eager source
 preparation parallel.</p>
-<h2 id="what-changed-1"><a class="header" href="#what-changed-1">What changed</a></h2>
+<h2 id="what-changed-2"><a class="header" href="#what-changed-2">What changed</a></h2>
 <p>An eligible completed row now borrows the join’s existing <code>Binding</code>; its final
 undo waits until the next advance. Generators and consumers that retain a row
 still request ownership. The matcher, source arithmetic policy, emitted
@@ -15920,7 +16733,7 @@ construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs">static shader tests</a>.
-The <a href="#version-016-coverage">coverage snapshot</a> describes the tests qualified on its
+The <a href="#coverage-and-metal-qualification">coverage snapshot</a> describes the tests qualified on its
 stated source; today’s required selection does not update it.</p>
 <p>Coverage always has two separately instrumented populations:</p>
 <div class="table-wrapper">
@@ -15963,7 +16776,7 @@ development records should not be needed to understand a public claim.</p>
 qualified source identified by the snapshot below. It is a recorded local
 measurement, not a live hosted-CI status. A release version does not change the
 source identity or test population of that measurement.
-The <a href="#version-016-coverage">version 0.1.6 coverage record</a> holds that snapshot:
+The <a href="#coverage-and-metal-qualification">coverage and Metal qualification record</a> holds that snapshot:
 its exact counts, source identities, qualification scope and the commands
 that reproduce it at the revisions it measured.</p>
 <p>Update the badge and the snapshot record together only after qualification
@@ -16514,6 +17327,52 @@ provides separate source and artifact inventories. Both inventories still match
 the mapped package revision identified by its replay instructions. Verify them
 before replaying the extraction; a later source change requires new evidence.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="coverage-and-metal-qualification"><a class="header" href="#coverage-and-metal-qualification">Coverage and Metal qualification</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>The README badge reports portable line coverage for implementation
+<a href="https://github.com/GregoryGelfond/zetesis/commit/120fadfb3744c00760bcefd575ce3641075341dc"><code>120fadfb</code></a>.
+Separate Metal tests qualified
+<a href="https://github.com/GregoryGelfond/zetesis/commit/f9e1506cf31e77cf7d58a40aa7d048d6d1b45747"><code>f9e1506c</code></a>,
+which adds measurement documentation without changing the implementation or
+tests. These are recorded local checks, not a hosted-CI status.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Population</th><th style="text-align: right">Covered / instrumented lines</th><th style="text-align: right">Coverage</th></tr>
+</thead>
+<tbody>
+<tr><td>Workspace, all features, portable tests</td><td style="text-align: right">107,496 / 116,546</td><td style="text-align: right">92.23%</td></tr>
+<tr><td>CPU-only solver library and CLI, independent instrumentation</td><td style="text-align: right">9,307 / 10,020</td><td style="text-align: right">92.88%</td></tr>
+</tbody>
+</table>
+</div>
+<p>Both populations passed their separate 91% floors with Rust 1.97.1,
+cargo-llvm-cov 0.8.7 and LLVM 22.1.6. The maintained test-support exclusions
+apply. Neither population includes physical-device tests.</p>
+<p>All <strong>58 selected Metal tests passed in 14 groups</strong> on Apple M4 Pro. They check
+CPU/device answer agreement, actual device work, shared execution resources and
+failure boundaries. The maintained reader rechecked each group’s exact named
+test results. These uninstrumented checks do not increase portable coverage or
+qualify Vulkan and other devices.</p>
+<p>The portable, external-clingo, Lean and book gates also passed. The oracle gate
+checked all 15 maintained campaigns. The <a href="reference/observations/coverage-120fadfb.json">verification receipt</a>
+retains report hashes, commands, exact coverage counts and the complete physical
+test selection. Line coverage, regression tests and semantic Lean laws do not
+establish end-to-end correctness of Rust or shaders.</p>
+<p>To reproduce at the named source, prepare the
+<a href="#prepare-verification-tools">verification tools</a>, then run:</p>
+<pre><code class="language-sh">sh scripts/check.sh portable
+sh scripts/check.sh oracle
+sh scripts/check.sh coverage
+sh scripts/check.sh proofs
+sh scripts/check.sh book
+sh scripts/check.sh hardware --metal
+</code></pre>
+<p>The last command requires an accessible Metal adapter. Adding <code>--metal</code> to the
+coverage command produces a different population from the portable reports
+above. The <a href="#version-016-coverage">previous coverage snapshot</a> and
+<a href="#reusing-grounding-and-formula-preparation">performance comparison</a> keep their own source identities.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="version-016-coverage"><a class="header" href="#version-016-coverage">Version 0.1.6 coverage</a></h1>
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 <p>Source links use the <a href="#source-revision-identities">revision map</a>; labels retain the
@@ -16758,6 +17617,13 @@ and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-
 <p>For example, <code>q(X) :- d(X), p(X+1).</code> checks the complete supporting <code>p</code> atom
 after <code>d(X)</code> binds <code>X</code>. By contrast, <code>q(X) :- p(X+1).</code> requires arithmetic
 inversion and receives the typed <code>UnboundArgumentInput</code> refusal.</p>
+<p>Ordinary singleton comparison heads, such as <code>X=Y :- selected(X), selected(Y).</code>,
+require the comparison at every completed body binding. Equality in a head never
+binds a variable. These heads use the existing nonbinding comparison profile,
+including default/double negation and complete chain evaluation, and retain
+source arithmetic diagnostics, including failures and warnings in nested body
+conditions even when the head is true. Comparison heads in conditional/disjunctive,
+choice and function-head elements remain unsupported.</p>
 <p>Comparisons use ASP term order across admitted value types: <code>5 &lt; a</code> and
 <code>"foo" &gt; a</code> are true, while <code>5 &gt; a</code> is false. Thus <code>X &gt; Y</code> does not imply
 numeric operands. Arithmetic is evaluated before comparison; defined <code>X + Y</code>

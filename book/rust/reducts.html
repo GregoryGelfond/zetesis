@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -247,6 +247,23 @@ comparisons; use the ordinary session for the composed native search.</p>
 <p>An <code>Interpretation</code> belongs to one immutable <code>Theory</code>. Cloning the theory shares
 identity. Independently constructing equal node lists produces another identity,
 and passing an interpretation from it returns <code>Stop::WrongProgram</code>.</p>
+<p><code>Interpretation::try_clone</code> copies the packed words while sharing that exact
+theory owner. It takes O(ceil(U/64)) time and owned words for a universe of U
+atoms, reports allocation failure, and neither evaluates formulas nor owns a
+cancellation token. An execution caller retains its own work and control checks.</p>
+<p><code>Interpretation::atoms</code> visits packed words and removes their set bits in
+ascending order. With U atoms and S selected positions, complete traversal costs
+O(ceil(U/64) + S), with constant auxiliary space. <code>words32</code> instead lends exactly
+ceil(U/32) low-bit-first membership words, including zero words. Its
+<code>InterpretationWords</code> iterator retains the exact theory, exposed through
+<code>theory()</code>, even after advancement or cloning. The empty universe exports no
+words; unused bits in the final word are zero. Numeric half-word extraction is
+independent of host byte order and allocates no storage. These views retain
+membership only; they do not establish satisfaction or answer-set status.</p>
+<p>The general and tight GPU packers consume this same export after checking its
+theory owner. They preserve candidate occurrence order and the device ABI’s
+single zero padding word for an empty transport. Their shared packing operation
+polls cancellation before every copied word and publishes no partial batch.</p>
 <p><code>check</code> returns completed verdict data: accepted, not an original model, or
 nonminimal with a witness. For an owned decision tied to the candidate actually
 checked, use <code>check_interpretation</code>. Its private construction prevents attaching

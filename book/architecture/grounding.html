@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -230,6 +230,52 @@ the context’s answers without supplying new atom support. Their
 Rust formula construction and execution refinement open. These are obligations
 of zetesis’s source bridge and solver; this architectural account is separate
 from teaching themelios’s parsing and logical-program APIs.</p>
+<h2 id="shared-aggregate-guards"><a class="header" href="#shared-aggregate-guards">Shared aggregate guards</a></h2>
+<p>Multiple written bounds on one completed nonnegative tuple contribution set use
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/aggregate/family.rs"><code>append_aggregate_family</code></a>.
+The source bridge evaluates every bound in order, retains its numeric or logical
+comparison meaning, then validates the existing DAG and tuple conditions once.
+One threshold table supplies the numeric roots; canonical remapping and the
+original conjunction retain both original and frozen-reduct truth. Logical
+constant guards still affect that conjunction and exclude optional numeric count
+capture. A false bound never suppresses evaluation of a later bound. The enclosing
+rule retains its source origins.</p>
+<p>The preservation obligation is pointwise: each grouped guard root must have the
+same original and frozen-reduct truth as its separately compiled counterpart
+over the same completed contributions. Conjunction then preserves the written
+bound group. <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Thresholds.lean"><code>Thresholds.threshold_query_exact</code></a>
+proves the classical nonnegative recurrence; it does not prove the shared Rust
+DAG or its Ferraris equivalence. The scalar-versus-family regressions check both
+truth relations, while that implementation refinement remains open.</p>
+<p>This grouping applies to written guard lists of at least two entries whose
+completed numeric contributions are all nonnegative, including counts and choice
+bounds. Extrema and single-guard lists retain their existing compilation routes.
+Any negative contribution retains scalar compilation because the scalar subset
+ceiling applies independently to each guard; the family API instead has a
+cumulative subset ceiling. Assignment proposal families already use the family
+primitive and share the same source-side call and receipt handling.</p>
+<p>Independent compilations share the ground builder’s <code>FormulaNodes</code> owner. It
+retains one node vector and the extent of its completed topology validation;
+subsequent compilers inspect only the unchecked suffix. Reading lends an
+immutable slice. Appending leaves new nodes unchecked, and truncating or
+extracting a suffix shortens the validation extent. Canonical remapping therefore
+cannot give replacement nodes the removed suffix’s validation. There is no
+second formula representation or cached aggregate result in this mechanism.
+Every call still checks its node ceiling, tuple conditions and control. The
+ordinary aggregate functions accepting a raw vector retain full validation.</p>
+<p>The configured aggregate work, node and state ceilings are unchanged. For a
+shared append they apply to the whole family, and its work is also bounded by
+remaining formula work. The source charges guard preparation, weight inspection,
+remapping and accepted compiler work, including a refused compiler prefix.
+Collecting bounds before compilation changes the operation order and numerical
+work cutoffs; a particularly tight former per-guard quota need not admit the
+family. A refusal remains a typed failure, never an inconsistency conclusion.
+Guard metadata and successfully returned root capacity remain charged together
+through remapping. <code>AggregateFamilyBuild::root_storage_bytes()</code> reports the root
+vector header and its actual capacity, excluding the DAG and compiler scratch.
+Failed compiler transactions expose work receipts but no returned-root allocation
+receipt; their internal transient allocations remain bounded by the aggregate
+API’s guard and state ceilings rather than source support-peak measurements.</p>
 <h2 id="canonical-values-and-independent-meanings"><a class="header" href="#canonical-values-and-independent-meanings">Canonical values and independent meanings</a></h2>
 <p>Source grounding computes with one canonical term and atom vocabulary. Bindings
 retain term identifiers, relation columns retain those same identifiers, and
@@ -454,6 +500,88 @@ join is silent. Each local element has a separate family for each fixed outer
 binding. Original objective-element identities keep their pooled fragments
 together without merging distinct elements. Successful owners retain one typed
 warning per source span within the finite warning ceiling.</p>
+<p>The separate family-evidence traversal is omitted for a restricted class of
+flat constraints: every normalized fragment of the original source occurrence
+contains division or remainder, and every divisor operation directly names a
+canonical nonzero numeric constant. Atoms and scalar comparisons or guards may
+appear in the body. Ordinary comparison heads lowered to constraints can also
+qualify; generated values, local scopes and other lowered heads retain the family
+pass. This classifier alone retains complete substitution checks; the separate
+finite totality certificate below can justify ordinary row selection. Constant
+divisors certify only the absence of zero divisors, not total arithmetic: nonnumeric operands, overflow and invalid exponents remain checked
+by ordinary eager instantiation or hybrid capture. A fatal error can therefore
+be reported in rule instantiation instead of support completion. Classification
+reads spend grounding work; omitted joins and binding copies spend none.
+Resource limits remain cumulative, so the numerical work needed for the same
+source can decrease without changing the completed arithmetic verdict.</p>
+<p>Complete-row scalar comparisons may reuse successful unary projections within
+one join. Descriptors borrow the exact source expressions and are prepared when
+a complete row is first reached or a finite totality attempt needs them. The existing canonical <code>TermTable</code> indexes
+each distinct input; a <code>Binding</code> retains its corresponding successful result.
+Value reuse alone copies no scalar payload and skips no row or comparison. Leaves,
+multivariable expressions and partial evaluations use the ordinary evaluator;
+failed computations are not retained, so later rows still supply their original
+arithmetic checks and family evidence. Hits authenticate the canonical owner and
+accessible term prefix, clear stale zero-divisor state, and spend work under the
+same cancellation and live-storage boundaries as misses.</p>
+<p>For one expression with D distinct successful inputs, the projection retains
+O(D) scoped IDs and positions. Lookup takes O(log D) identity comparisons;
+inserting all D values can require O(D²) position shifts in the shared sorted
+coordinate index. Descriptor preparation, misses, lookup and insertion remain
+cumulative grounding work, while retained metadata uses <code>SupportBytes</code>. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/tests.rs">projection regressions</a>
+check value reuse, owner boundaries, arithmetic failures and inclusive limits.</p>
+<p>After source-family validation, a flat constraint can establish finite totality
+from completed positive columns. Every expression must be a leaf or read one
+source variable, with no constructor, generator, structural capture or nested
+scope. A smallest covering column supplies all possible values of that variable
+in complete bindings. Each expression is checked on that whole domain, and an
+arithmetic error declines this optional certificate. Resource and owner failures
+remain located failures. Only success for every expression permits ordinary
+prefix pruning. A reached prefix may still contain a value absent from its later
+covering column; its arithmetic failures retain the ordinary deferred handling.
+Evidence cursors always traverse complete rows.</p>
+<p>Hybrid capture and later model/region checks use this same preparation and
+selector. Capture runs after original family admission, with the completed
+carrier and an append-capable canonical term owner. It admits successful values
+from the whole covering columns, including values belonging to rows that cannot
+complete the source pattern. On the first reached runtime use, the prepared rule
+checks that optional certificate against its frozen owner and full completed
+carrier, before any candidate row filter applies. Later cursors borrow the same
+successful map read-only. A missing frozen term remains a typed failure, not an
+optimization fallback. An arithmetic decline retains ordinary checked traversal;
+it supplies no certificate and needs no identical totality retry. Resource and
+owner failures stop preparation without publishing a partial map. Candidate
+filtering establishes no new source completion or arithmetic certificate.
+Preparation and retained map storage are charged once per prepared rule; each
+cursor still pays for its queries, bindings and temporary domains. Inputs outside
+the map use the ordinary evaluator without changing that retained map. These
+lifetimes keep mutable scratch local to each check.</p>
+<p>The same preparation seals each projection’s covered input prefix. At probe
+preparation, an equality between a covered unary expression and a known operand
+can select the inputs whose results equal that operand. A missing known input
+supplies no restriction. One restricting equality per unbound variable supplies
+a necessary finite domain; all comparisons remain with the residual checks.
+Multiple variables’ domains meet the ordinary constant and bound-variable
+restrictions through the existing <code>Table::select</code> operation. The selector keeps
+original relation positions and whole-tuple aliases, then the ordinary matcher
+checks every retained row. This also applies under <code>JoinStrategy::Indexed</code>;
+ordinary probes continue to use their requested strategy and both paths share
+one lazy table workspace. No table is prepared when every covered input remains
+allowed or the opposite operand is unavailable. An empty derived domain uses an
+empty probe directly.</p>
+<p>Domain derivation scans the existing input/result coordinates, without another
+value dictionary or reverse-result cache. Two transient leased buffers hold
+borrowed input references and their variable ranges. Preparation, domain scans,
+mask construction and all refused prefixes spend the same cumulative grounding
+work; tables, masks and lists share <code>SupportBytes</code>. Numerical work cutoffs can
+change, and optional preparation can itself refuse. These operations establish
+no runtime speedup or default-budget admission for an arbitrary program. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/domains/tests.rs">computed-domain regressions</a>
+check exact selected bindings, typed equality, evidence coverage and refusal
+boundaries. The <a href="../lean/correspondence.html">Lean correspondence</a> states the
+separate obligations connecting finite coverage, table selection and reduct
+preservation.</p>
 <p>Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not
 retain another workspace. Strict evaluation stops at its first fault. Source
@@ -632,6 +760,9 @@ several times or cardinality planning changes execution order:</p>
         currentRows   if occurrence &gt; pivot)
     proposals = Union(proposals, JoinAndEvaluate(rule, inputs))
 </code></pre>
+<p>Each variant supplies these populations to initial join preparation. Ordering
+and comparison readiness are built once from its old/new/current row counts;
+the cursor does not first prepare an unrestricted order and then replace it.</p>
 <p>An ordinary producer without positive inputs runs once, even if it has negative
 non-input atoms. Changing such atoms’ possible presence cannot enable another
 head proposal, because support generation ignores their truth. Aggregate,
@@ -748,6 +879,14 @@ objective grounding, arithmetic checks, tuple identity and scoring keep their
 existing paths. This permission does not extend the profile to choice or
 aggregate producers. Producer scheduling retains its separate applicability
 conditions.</p>
+<p>The source analyzer intersects the positive argument domains binding one head
+variable within each producer, then unions the results of alternative producers.
+For <code>p(X) :- a(X), b(X).</code>, the bound on <code>p/1</code> is therefore the intersection of
+the bounds on <code>a/1</code> and <code>b/1</code>. This information propagates to downstream rules.
+Unknown is unrestricted: another finite input can still bound the conjunction.
+Inflationary passes continue to a fixed point, including recursive dependencies;
+a stopped analysis publishes no partial finite bounds. Argument domains do not
+assert correlations between different columns of a relation.</p>
 <p>Every complete binding must belong to the upper domain of each mandatory
 positive argument. Intersecting those domains for one source variable remains
 necessary, including repeated occurrences. A comparison that reads one
@@ -771,7 +910,11 @@ rows to the same guard before binding and deeper probes. An Indexed posting can
 include rows that fail another bound column; Table intersects its equalities
 before offering rows. Thus offered-row and guard-rejection counts need not
 match across strategies, even when complete bindings do.</p>
-<p><code>DomainBindings.complete_binding_survives</code> states the necessary-meet law under
+<p><code>DomainProducers.transfer_monotone</code> and <code>derivation_covered</code> state the abstract
+producer contract: enlarging inputs cannot shrink proposals, and every finite
+producer derivation belongs to a closed upper-bound assignment. Concrete source
+extraction and completed Rust iteration remain correspondence obligations.
+<code>DomainBindings.complete_binding_survives</code> states the necessary-meet law under
 explicit argument coverage, and <code>kept_binding_survives</code> the narrowed-candidate
 law for the bindings the exclusion rule keeps. <code>guarded_continuations_exact</code> preserves the ordered
 complete result list, allowing a locally matching row with no complete
@@ -874,6 +1017,19 @@ the selector offers all relation rows; a missing bound key selects none:</p>
 <pre><code class="language-text">rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
 bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
 </code></pre>
+<p>Each cursor resolves a positive occurrence to its borrowed snapshot relation on
+first entry and retains that reference across backtracking. Row access and later
+probes use the same immutable row owner, without searching the predicate directory
+again. References remain local to the cursor’s snapshot; a new support round
+resolves its own relations, including predicates newly inserted in the directory.</p>
+<p>The indexed selector folds known equalities directly into its shortest posting.
+It uses the core relation’s checked single-equality resolver, shared with owned
+<code>Query</code> construction, without allocating temporary key or equality vectors.
+Every later variable slot and column is still checked after a missing value;
+interruption returns no partial posting. Per-step work admission and completed
+failure prefixes remain observable. Owned public queries retain their existing
+frame and equality-vector capacity receipts. The cursor’s resolved-reference
+capacity is charged with its other retained join storage.</p>
 <p>This describes witness selection, not complete grounding. Scope, generators,
 scalar guards and candidate gates retain their separate contracts. The
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/README.md#inspect-posting-selectivity">bounded posting diagnostic</a>

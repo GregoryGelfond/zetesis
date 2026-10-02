@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,10 +192,10 @@ deploy with test. Each full interpretation also contains the three <code>task</c
 facts. <code>#show run/1</code> changes only the displayed channel, not those typed answers.</p>
 <h2 id="set-up-a-rust-application"><a class="header" href="#set-up-a-rust-application">Set up a Rust application</a></h2>
 <p>The packages are not published on crates.io. Use their paths in a pinned local
-checkout. These commands select the official <code>v0.1.7</code> source release and create
+checkout. These commands select the official <code>v0.2.0</code> source release and create
 sibling repository and application directories:</p>
 <pre><code class="language-sh">git clone https://github.com/GregoryGelfond/zetesis.git
-git -C zetesis switch --detach v0.1.7
+git -C zetesis switch --detach v0.2.0
 git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app

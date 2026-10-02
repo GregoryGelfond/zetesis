@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -409,6 +409,16 @@ frozen reduct are unchanged.</p>
 and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean">disjunctive support laws</a>
 state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.</p>
+<p>For a complete positive atomic-head theory, <code>PositivePlan</code> computes the least
+consequences once and checks every original constraint. CPU region modes then
+propose only that interpretation, or none when a constraint fails. Accumulated
+candidate restrictions and the region filter still apply to the singleton;
+the ordinary membership and publication checks retain the original theory owner.
+No worker needs to explore candidate regions or allocate a reduct query for this
+case. Larger classical models need not be individually refuted: the certificate
+already rules them out as answer sets. An unsupported or resource-refused plan
+keeps general solving available; an interrupted attempt never establishes
+exhaustion. This CPU policy does not change explicit device checking.</p>
 <p>Under the clauses method, exact projection exclusions have one owner across
 candidate restrictions: the outer cursor retains an index of previously
 proposed semantic interpretations, and strengthening the candidate query
@@ -447,13 +457,24 @@ stores support as one bit per semantic atom in each candidate’s row. By defaul
 the row, then each enabled original producer atomically sets its head bit.
 After the storage barrier, a bit is set exactly when that head has an enabled
 producer. Atomic OR preserves updates from different heads sharing a word and
-from repeated producers. The final atom scan retains the least unsupported
-atom as its witness. This representation reduces the support buffer to
+from repeated producers. The final scan compares candidate and support words:
+<code>candidate &amp; ~support</code> contains precisely that word’s unsupported candidate bits.
+Each nonzero word contributes its least set-bit position; the workgroup minimum
+retains the least unsupported atom across all words. Candidate tail bits are
+zero, and a failed original root still takes precedence over this witness. This representation reduces the support buffer to
 <code>4 * max(worlds * ceil(atoms / 32), 1)</code> bytes; it does not describe total device
 memory or establish a speedup. Shared-word contention remains a measurement
 question. Ordinary formula sessions with automatic membership policy select this
-primitive on an explicit device backend when complete tight preparation succeeds.
-Preparation shares the CPU certificate constructor and cumulative search budget,
+primitive on an explicit device backend when complete tight preparation succeeds.</p>
+<p>The complete device-work allowance is now
+<code>nodes + roots + producers + 2 * ceil(atoms / 32)</code>: one word scan constructs or
+initializes support and one checks missing support. This replaces the former
+<code>nodes + roots + producers + atoms + ceil(atoms / 32)</code> contract. Work receipts
+and pre-dispatch admission use the same new allowance; an exact allowance is
+admitted and one less is refused. Historical work counts therefore need their
+source identity when compared. This change describes logical operation counts,
+not measured latency or a new membership criterion.</p>
+<p>Preparation shares the CPU certificate constructor and cumulative search budget,
 but does not activate CPU certificate checking. The executor is selected before
 pipeline creation, so these batches do not first run the general propagator.
 Stable support results establish membership; failed original truth is rejected;

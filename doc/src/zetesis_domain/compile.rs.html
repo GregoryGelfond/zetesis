@@ -138,7 +138,7 @@
 <a href=#138 id=138 data-nosnippet>138</a>                            <span class="kw">if </span>inputs.is_empty() {
 <a href=#139 id=139 data-nosnippet>139</a>                                Transfer::Unknown(Widening::UnboundVariable)
 <a href=#140 id=140 data-nosnippet>140</a>                            } <span class="kw">else </span>{
-<a href=#141 id=141 data-nosnippet>141</a>                                Transfer::Union(inputs)
+<a href=#141 id=141 data-nosnippet>141</a>                                Transfer::Intersection(inputs)
 <a href=#142 id=142 data-nosnippet>142</a>                            }
 <a href=#143 id=143 data-nosnippet>143</a>                        }
 <a href=#144 id=144 data-nosnippet>144</a>                        <span class="kw">_ </span>=&gt; Transfer::Unknown(Widening::HeadTerm),

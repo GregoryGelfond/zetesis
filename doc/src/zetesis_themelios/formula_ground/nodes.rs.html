@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span><span class="kw">crate</span>::word_hash::WordHasher;
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>themelios_base::span::Location;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>zetesis_ferraris::Node;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>zetesis_ferraris::{FormulaNodes, Node};
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::formula::ceiling;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use crate</span>::{FormulaFailure, FormulaResource};
@@ -24,7 +24,7 @@
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>intern&lt;S: BuildHasher&gt;(
 <a href=#26 id=26 data-nosnippet>26</a>    index: <span class="kw-2">&amp;mut </span>HashMap&lt;Key, usize, S&gt;,
-<a href=#27 id=27 data-nosnippet>27</a>    nodes: <span class="kw-2">&amp;mut </span>Vec&lt;Node&gt;,
+<a href=#27 id=27 data-nosnippet>27</a>    nodes: <span class="kw-2">&amp;mut </span>FormulaNodes,
 <a href=#28 id=28 data-nosnippet>28</a>    node: Node,
 <a href=#29 id=29 data-nosnippet>29</a>    bound: (FormulaResource, usize),
 <a href=#30 id=30 data-nosnippet>30</a>    location: Location,
@@ -88,7 +88,7 @@
 <a href=#88 id=88 data-nosnippet>88</a>    <span class="attr">#[test]
 <a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">fn </span>collisions_preserve_first_node_identity() {
 <a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let </span><span class="kw-2">mut </span>index = HashMap::&lt;<span class="kw">_</span>, <span class="kw">_</span>, BuildHasherDefault&lt;Collision&gt;&gt;::default();
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = Vec::new();
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = FormulaNodes::default();
 <a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">for </span>(id, node) <span class="kw">in </span>sequence().into_iter().enumerate() {
 <a href=#93 id=93 data-nosnippet>93</a>            <span class="macro">assert_eq!</span>(
 <a href=#94 id=94 data-nosnippet>94</a>                intern(
@@ -115,13 +115,13 @@
 <a href=#115 id=115 data-nosnippet>115</a>                (id, <span class="bool-val">false</span>)
 <a href=#116 id=116 data-nosnippet>116</a>            );
 <a href=#117 id=117 data-nosnippet>117</a>        }
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="macro">assert_eq!</span>(nodes, sequence());
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;*</span>nodes, sequence());
 <a href=#119 id=119 data-nosnippet>119</a>        <span class="macro">assert_eq!</span>(index.len(), sequence().len());
 <a href=#120 id=120 data-nosnippet>120</a>    }
 <a href=#121 id=121 data-nosnippet>121</a>    <span class="attr">#[test]
 <a href=#122 id=122 data-nosnippet>122</a>    </span><span class="kw">fn </span>a_node_ceiling_preserves_both_owners() {
 <a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span><span class="kw-2">mut </span>index = Index::default();
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = Vec::new();
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = FormulaNodes::default();
 <a href=#125 id=125 data-nosnippet>125</a>        intern(
 <a href=#126 id=126 data-nosnippet>126</a>            <span class="kw-2">&amp;mut </span>index,
 <a href=#127 id=127 data-nosnippet>127</a>            <span class="kw-2">&amp;mut </span>nodes,
@@ -133,7 +133,7 @@
 <a href=#133 id=133 data-nosnippet>133</a>        <span class="macro">assert!</span>(
 <a href=#134 id=134 data-nosnippet>134</a>            <span class="macro">matches!</span>(intern(<span class="kw-2">&amp;mut </span>index, <span class="kw-2">&amp;mut </span>nodes, Node::Atom(<span class="number">0</span>), (FormulaResource::Nodes, <span class="number">1</span>), location()), <span class="prelude-val">Err</span>(FormulaFailure::Limit { resource: FormulaResource::Nodes, observed: <span class="number">2</span>, limit: <span class="number">1</span>, location: found }) <span class="kw">if </span>found == location())
 <a href=#135 id=135 data-nosnippet>135</a>        );
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">assert_eq!</span>(nodes, [Node::False]);
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;*</span>nodes, [Node::False]);
 <a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">assert_eq!</span>(index.len(), <span class="number">1</span>);
 <a href=#138 id=138 data-nosnippet>138</a>        <span class="macro">assert_eq!</span>(
 <a href=#139 id=139 data-nosnippet>139</a>            intern(
@@ -150,7 +150,7 @@
 <a href=#150 id=150 data-nosnippet>150</a>    <span class="attr">#[test]
 <a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">fn </span>zero_node_admission_allocates_no_index() {
 <a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span><span class="kw-2">mut </span>index = Index::default();
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = Vec::new();
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = FormulaNodes::default();
 <a href=#154 id=154 data-nosnippet>154</a>        <span class="macro">assert!</span>(
 <a href=#155 id=155 data-nosnippet>155</a>            intern(
 <a href=#156 id=156 data-nosnippet>156</a>                <span class="kw-2">&amp;mut </span>index,
@@ -168,7 +168,7 @@
 <a href=#168 id=168 data-nosnippet>168</a>    <span class="attr">#[test]
 <a href=#169 id=169 data-nosnippet>169</a>    </span><span class="kw">fn </span>refused_growth_preserves_index_capacity() {
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span><span class="kw-2">mut </span>index = Index::default();
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = Vec::new();
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span><span class="kw-2">mut </span>nodes = FormulaNodes::default();
 <a href=#172 id=172 data-nosnippet>172</a>        intern(
 <a href=#173 id=173 data-nosnippet>173</a>            <span class="kw-2">&amp;mut </span>index,
 <a href=#174 id=174 data-nosnippet>174</a>            <span class="kw-2">&amp;mut </span>nodes,
@@ -190,10 +190,10 @@
 <a href=#190 id=190 data-nosnippet>190</a>        }
 <a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>capacity = index.capacity();
 <a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>node_capacity = nodes.capacity();
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>before = nodes.clone();
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>before = nodes.to_vec();
 <a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>proposed = Node::Atom(nodes.len());
 <a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let </span><span class="kw-2">mut </span>control_index = index.clone();
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span><span class="kw-2">mut </span>control_nodes = nodes.clone();
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span><span class="kw-2">mut </span>control_nodes = FormulaNodes::new(nodes.to_vec());
 <a href=#197 id=197 data-nosnippet>197</a>        intern(
 <a href=#198 id=198 data-nosnippet>198</a>            <span class="kw-2">&amp;mut </span>control_index,
 <a href=#199 id=199 data-nosnippet>199</a>            <span class="kw-2">&amp;mut </span>control_nodes,
@@ -219,7 +219,7 @@
 <a href=#219 id=219 data-nosnippet>219</a>        );
 <a href=#220 id=220 data-nosnippet>220</a>        <span class="macro">assert_eq!</span>(index.capacity(), capacity);
 <a href=#221 id=221 data-nosnippet>221</a>        <span class="macro">assert_eq!</span>(nodes.capacity(), node_capacity);
-<a href=#222 id=222 data-nosnippet>222</a>        <span class="macro">assert_eq!</span>(nodes, before);
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;*</span>nodes, before);
 <a href=#223 id=223 data-nosnippet>223</a>        <span class="macro">assert_eq!</span>(index.len(), limit);
 <a href=#224 id=224 data-nosnippet>224</a>    }
 <a href=#225 id=225 data-nosnippet>225</a>}

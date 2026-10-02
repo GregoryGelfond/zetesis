@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Failure","QueryFailure","Resource"],"struct":["Canonical","Catalog","CatalogFailure","Equality","Insertion","Limits","Lookup","Mask","Preparation","Query","QueryAttempt","Relation","Row","Runs","Selection","Storage"]};
+window.SIDEBAR_ITEMS = {"enum":["Failure","QueryFailure","Resource"],"struct":["Canonical","Catalog","CatalogFailure","Equality","EqualityAttempt","Insertion","Limits","Lookup","Mask","Preparation","Query","QueryAttempt","Relation","Row","Runs","Selection","Storage"]};

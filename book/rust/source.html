@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -433,9 +433,12 @@ allowance as <code>--max-support-bytes</code> in <code>--help-all</code>. This i
 <code>SolveConfig</code> applies after the formula owner has already been constructed.</p>
 <p>Choose positive joins separately through the preparation’s
 <code>with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })</code> method.
-The default <code>Indexed</code> strategy probes existing value postings. <code>Table</code> reuses
-support masks only for flat positive patterns over completed eager support;
-structural patterns and support-growth rounds keep indexed joins. The bundle
+The default <code>Indexed</code> strategy probes existing value postings. After a flat
+constraint establishes finite arithmetic totality, a computed equality may
+supply a necessary input domain to the shared table selector under either
+strategy. Unrestricted probes still follow the requested strategy. <code>Table</code>
+reuses support masks for all applicable flat positive patterns over completed
+eager support; structural patterns and support-growth rounds keep indexed joins. The bundle
 preparation exposes the same method, and the CLI maps <code>--formula-joins table</code>
 to it. The choice retains the preparation’s source identity and remaining budgets.</p>
 <p>The private query workspace owns cached indices and accounts for simultaneous

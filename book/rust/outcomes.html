@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -264,6 +264,15 @@ empty or zero vector can conceal a disagreement.</p>
 <code>scored_models()</code> can be positive while <code>incumbent()</code> is absent and
 <code>retained_models()</code> is zero. Those fields describe objective-search retention,
 not the number of answers in a <code>WorldView</code> or a consumer’s own collection.</p>
+<p><code>SemanticOutcome::objective_work()</code> records cumulative accepted objective
+preparation and scoring work, including refused attempts, even before any
+incumbent exists and after an observer failure. It is independent of answer
+selection and optional timing collection. An incumbent’s <code>Optimization::work</code>
+mirrors this account. Candidate-bound construction has a separate work budget.
+With statistics enabled, JSON reports this receipt as
+<code>statistics.objective_work</code>; it is <code>null</code> when no typed semantic outcome survives.
+A preparation attempt can consume a small objective-work allowance, so detailed
+scoring fallback receives only the remaining allowance.</p>
 <h2 id="check-selection-and-complete-capture"><a class="header" href="#check-selection-and-complete-capture">Check selection and complete capture</a></h2>
 <p>The next example uses <code>1{a;b}1.</code> with costs <code>1</code> for <code>{a}</code> and <code>2</code> for <code>{b}</code> at
 priority <code>2</code>. Its <code>#show.</code> declaration hides both atoms from display. Every

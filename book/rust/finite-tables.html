@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,6 +212,19 @@ projected domains or copy row values.</p>
 before each inspected mask word, including zero words. A failed check publishes
 no row and leaves the selection and supplied starting position unchanged. The
 ordinary scanning methods use the same decoder without a fallible callback.</p>
+<p><code>Table::prepare_with</code> and <code>select_with</code> use the same algorithms with a caller’s
+fallible work-admission callback. A positive amount must be admitted before the
+charged operation; zero asks the caller to poll control without charging work,
+including operation entry and allocation boundaries. <code>MeteredFailure</code> preserves
+the caller’s original typed refusal separately from a table failure, together
+with the accepted work prefix and observed capacity peak. Callers must not charge
+that receipt a second time. The ordinary preparation and selection methods adapt
+<code>Cancellation</code> through the same accounting boundary.</p>
+<p>The source adapter uses these operations for both eager table joins and certified
+computed-domain selection. Independent hybrid checkers atomically admit each
+step against their shared <code>ConstraintAllowance</code>; a completed batch is never
+charged afterward. Failure preserves both local and combined accepted receipts,
+and table work and capacity observations remain available on refusal.</p>
 <p><code>Table::project</code> retains its finite-domain interface; <code>project_domains</code> accepts
 the same <code>Domain</code> variants as selection. Both reuse the row restriction operation
 and then compute the witnessed domains. A projection borrows the table; its
@@ -281,9 +294,11 @@ occurring values cannot create a new tuple.</p>
 <h2 id="positive-joins-in-eager-formula-grounding"><a class="header" href="#positive-joins-in-eager-formula-grounding">Positive joins in eager formula grounding</a></h2>
 <p>On a <code>PreparedFormula</code> or <code>PreparedFormulaBundle</code>,
 <code>with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })</code> selects
-the table strategy. <code>JoinStrategy::Indexed</code> is the default. This is an execution
-choice made before materialization; it changes neither source admission nor the
-formula/reduct solver.</p>
+the table strategy. <code>JoinStrategy::Indexed</code> is the default for ordinary probes.
+A separately certified computed equality can supply finite domains to the same
+selector under either strategy, as described below. These execution choices
+preserve complete source meaning and the formula/reduct solver; their different
+work and storage costs can change bounded admission.</p>
 <p>This example materializes a program using each join strategy and compares the
 complete admitted atoms, formulas and source locations. Repeated <code>X</code> requires
 equal route endpoints; the <code>rail</code> constant restricts the final column. A work
@@ -380,14 +395,31 @@ for their complete capture and comparison contracts.</p>
 <p>The table strategy applies to flat positive atom patterns over the immutable
 relation supplied by completed possible support. Its index distinguishes signed
 predicates and canonical column scopes. Constants and already-bound source slots
-supply singleton domains; unbound slots are unrestricted. Repeated variables
+supply singleton domains; ordinary probes leave unbound slots unrestricted. Repeated variables
 share a table label, while distinct anonymous slots remain distinct. Each probe
 derives fresh domains from the current binding.</p>
 <p>Selected row positions feed the existing whole-row matcher. Source-occurrence
 identity, binding extension and the original positive atom remain intact.
-Authored comparisons, negative conditions and aggregates retain their validation
-after positive binding; they do not provide extra table domains. A support row
-is a possible atom, not an assertion of its truth in an answer set.</p>
+Authored comparisons, negative conditions and aggregates retain their residual
+validation after positive binding. A support row is a possible atom, not an
+assertion of its truth in an answer set.</p>
+<p>For a completed flat constraint, a separate finite totality check can cover all
+scalar inputs using positive source columns. Covered unary equality results can
+then provide finite domains for unbound variables of the next occurrence. The
+selector intersects those domains with ordinary bound values, constants and
+repeated-variable coherence. It shares this same cached table owner under either
+join strategy; it introduces no second tuple store. Missing known-side inputs
+and all-allowed input groups retain the ordinary probe. Eager materialization,
+hybrid capture and frozen hybrid model/region checks share this selector; hybrid
+capture prepares speculative computed values before freezing the source owner.
+The explicit hybrid table-strategy restriction still applies to ordinary probes.
+Source-family evidence continues to traverse complete rows, and all residual
+comparisons remain in place. See <a href="../architecture/grounding.html">grounding</a> for the
+exact coverage and failure obligations.</p>
+<p>This is a formula-grounding selector. The CLI’s <code>--grounder lazy</code> uses hybrid
+checking for formula input; successfully admitted relational input instead uses
+source-lazy reduct closure and its separate joins. That relational closure path
+does not acquire this computed-domain certificate or selector.</p>
 <p>Structural patterns and support-growth rounds retain indexed joins. This is a
 declared applicability boundary, not recovery from a failed table operation.
 Table allocation, capacity and work refusals remain grounding failures. The
@@ -398,13 +430,16 @@ each probe does not receive a fresh independent source budget.</p>
 <code>E * ceil(R / 32)</code> words. Many distinct values can make this representation
 larger than the original columns. Repeated queries may amortize preparation;
 that is a measurement question, not a guarantee of the API.</p>
-<p>Every probe first copies the coherent-row mask: <code>ceil(R / 32)</code> words even when
-all supplied domains are unrestricted. A singleton domain then intersects one
-support mask; a finite domain unions its matching support masks before that
-intersection. Finite domains reuse one union buffer within the probe. Thus a
-retained table removes repeated index construction but does not remove per-probe
-mask initialization and traversal. Result and union masks belong to that query;
-they cannot be shared as mutable truth across bindings or workers.</p>
+<p>The first restrictive domain initializes the result directly from its coherent
+supports: a singleton copies its support, while a finite domain unions matching
+supports into the result. Later restrictions intersect the result; later finite
+domains reuse one union buffer. An entirely unrestricted or nullary query copies
+the original coherent mask. Every supplied domain is still checked, even when
+an earlier restriction leaves no rows. This avoids a redundant base-mask copy
+and, for a first finite domain, one intersection and potentially a scratch mask.
+Retaining a table still leaves per-query mask initialization and traversal.
+Result and union masks belong to that query; they cannot be shared as mutable
+truth across bindings or workers.</p>
 <p><code>Limits</code> bounds support entries, live operation capacity and charged work.
 Cancellation, exhausted limits and allocation failures return no partial table,
 selection or projection. <code>Statistics</code> distinguishes retained capacity from the

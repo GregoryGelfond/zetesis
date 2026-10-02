@@ -212,8 +212,8 @@
 <a href=#212 id=212 data-nosnippet>212</a>    /// canonical text rather than as capacity.
 <a href=#213 id=213 data-nosnippet>213</a>    </span><span class="attr">#[arg(long, default_value_t = <span class="number">8_388_608</span>, hide_short_help = <span class="bool-val">true</span>)]
 <a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">pub </span>max_observation_bytes: usize,
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// Cumulative work for optional incumbent candidate bounds. Zero disables
-<a href=#216 id=216 data-nosnippet>216</a>    /// pruning; a refused bound preserves ordinary exact answer-set search.
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// Cumulative work for optional incumbent bounds, excluding shared objective
+<a href=#216 id=216 data-nosnippet>216</a>    /// preparation. Zero disables pruning; prepared scoring remains available.
 <a href=#217 id=217 data-nosnippet>217</a>    </span><span class="attr">#[arg(long, default_value_t = <span class="kw">crate</span>::SolveConfig::DEFAULT.max_objective_bound_work, hide_short_help = <span class="bool-val">true</span>)]
 <a href=#218 id=218 data-nosnippet>218</a>    </span><span class="kw">pub </span>max_objective_bound_work: u64,
 <a href=#219 id=219 data-nosnippet>219</a>    <span class="doccomment">/// Maximum complete objective bindings evaluated per stable model.

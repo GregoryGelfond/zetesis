@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -282,6 +282,13 @@ and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-
 <p>For example, <code>q(X) :- d(X), p(X+1).</code> checks the complete supporting <code>p</code> atom
 after <code>d(X)</code> binds <code>X</code>. By contrast, <code>q(X) :- p(X+1).</code> requires arithmetic
 inversion and receives the typed <code>UnboundArgumentInput</code> refusal.</p>
+<p>Ordinary singleton comparison heads, such as <code>X=Y :- selected(X), selected(Y).</code>,
+require the comparison at every completed body binding. Equality in a head never
+binds a variable. These heads use the existing nonbinding comparison profile,
+including default/double negation and complete chain evaluation, and retain
+source arithmetic diagnostics, including failures and warnings in nested body
+conditions even when the head is true. Comparison heads in conditional/disjunctive,
+choice and function-head elements remain unsupported.</p>
 <p>Comparisons use ASP term order across admitted value types: <code>5 &lt; a</code> and
 <code>"foo" &gt; a</code> are true, while <code>5 &gt; a</code> is false. Thus <code>X &gt; Y</code> does not imply
 numeric operands. Arithmetic is evaluated before comparison; defined <code>X + Y</code>

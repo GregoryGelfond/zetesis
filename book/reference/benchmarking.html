@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -240,7 +240,7 @@ inputs.</p>
 <tr><td><code>baseline</code></td><td>SEND, queens variant 02 and task allocation</td></tr>
 <tr><td><code>queens</code></td><td>The six unchanged eight-queens encodings</td></tr>
 <tr><td><code>series</code></td><td>The maintained 22 generated, constant-amended and original workloads</td></tr>
-<tr><td><code>scalability</code></td><td>Nine authored and corpus workloads, with indexed formula joins and region search</td></tr>
+<tr><td><code>scalability</code></td><td>Ten authored and corpus workloads, with indexed formula joins and region search</td></tr>
 </tbody>
 </table>
 </div>
@@ -252,7 +252,9 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no <code>--case</code>; it alone accepts <code>--examples</code>, its
 authored root, which defaults to <code>examples</code>, and <code>--include-einstein</code>, which
-adds the unchanged Einstein riddle. The series suite raises the per-invocation,
+adds the unchanged Einstein riddle as an eleventh workload. The maintained
+Sudoku case has eight givens per row: it tests grounding and language handling,
+not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.</p>
 <h3 id="profiles"><a class="header" href="#profiles">Profiles</a></h3>
 <p>A run measures one native profile, set by <code>--backend</code>, <code>--grounder</code> and
@@ -346,7 +348,7 @@ suite. The evidence records the policy the run used: <code>all_phases</code>,
 <code>qualification_only</code> or <code>clingo_free</code>. The table and the JSON summary say what
 qualified each cell: clingo, the recorded contract, or nothing, because the
 cell needs clingo.</p>
-<p>In 0.1.7, the clingo report reader rejects lower-bound progress entries
+<p>The clingo report reader rejects lower-bound progress entries
 (<code>Lower</code> without model <code>Value</code>) that can appear during parallel optimization.
 Such a capture is retained as an invalid report, even when clingo completed
 normally. It cannot qualify answers or supply an accepted timing comparison;
@@ -375,7 +377,9 @@ duration. Validated memory rounds have their own median and may be unavailable.
 Non-pass summaries include the recorded reason and schedule phase. If a failed
 qualification prevented later samples, those slots identify the original
 blocker. A refusal, timeout or process failure never counts as an UNSAT result
-or a successful timing sample. A child stopped by the campaign’s own deadline
+or a successful timing sample. A baseline that refuses a workload therefore
+supplies no timing ratio for that workload; its refusal remains in the report.
+A child stopped by the campaign’s own deadline
 or retained-capture budget, before its per-child timeout or sample limit, is
 recorded as <code>campaign_deadline</code> or <code>campaign_capture_budget</code>, never as its own
 <code>timeout</code> or <code>capture_limit</code>: it says nothing of the workload.</p>

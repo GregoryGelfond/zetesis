@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9cbb405d.js";
+            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-a4b7822a.js"></script>
+        <script src="../toc-08e3f451.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,6 +201,8 @@ The maintained full index is
 <tr><td>Why may a clause or a body be narrowed as one node over its operands, by counters?</td><td><code>FormulaBounds.disj_chain_unit</code>, <code>conj_chain_unit</code> and the sure and never chain laws, in <code>FormulaChains.lean</code></td><td>Each chain rule is a sequence of the binary <code>Known</code> rules; the Rust chains are trees of one connective</td></tr>
 <tr><td>Why may an atomic choice be read as a producer, and a producer be blocked by what propagation knows?</td><td><code>FormulaBounds.unsupported_cut_with_choices</code>, <code>sole_rule_forces_with_choices</code>, <code>sole_choice_forces</code>, <code>known_blocked_no_support</code></td><td>The covered fragment with its choices; a stable model is a classical model, where the knowledge is sound</td></tr>
 <tr><td>Why may a restriction, an objective bound or the support restriction, narrow a region without producers?</td><td><code>FormulaBounds.restriction_forces</code>, <code>restriction_cuts</code>, <code>restricted_stable_narrowing</code></td><td>Every model still sought satisfies the restriction; the theory’s and the restriction’s knowledge are each carried on their own</td></tr>
+<tr><td>When may a stronger bound replace an earlier one?</td><td><code>ObjectiveBounds.replacement_preserves_candidates</code>, <code>consequence_survives_tightening</code></td><td>The new bound logically implies the old bound; independent restrictions remain in force. Mutable knowledge and active worker generations are separate implementation obligations</td></tr>
+<tr><td>May propagation read ordered rows from contiguous storage?</td><td><code>AdjacencyRows.slice_exact</code>, <code>fold_exact</code></td><td>Row boundaries equal the lengths of preceding rows; order, duplicates and empty rows are preserved. Rust construction and resource accounting remain unproved</td></tr>
 <tr><td>Why does a walk by several workers emit every accepted leaf once, whatever the interleaving?</td><td><code>Pending.Step.perm</code>, <code>Pending.Walk.exhausted</code></td><td>The workers’ stacks and the shared pool are one frontier of the coverage tree; the order is the walk’s</td></tr>
 <tr><td>Why may the clauses proposer narrow by classical consequence?</td><td><code>FormulaRegions.classical_consequence_forces</code>, <code>no_model_refutes</code></td><td>Every stable model is a classical model; the reduct still decides each leaf</td></tr>
 <tr><td>Why does a covered query tree over a candidate’s subsets prove stability, and a leaf refute it?</td><td><code>ReductRegions.stable_iff_no_countermodel</code></td><td>The tree’s validity is proper-subset modelling of the frozen reduct</td></tr>
@@ -224,6 +226,7 @@ The maintained full index is
 <tr><td>When does table projection preserve complete rows?</td><td><code>FiniteTables.narrowing_preserves_rows</code></td><td>Original coherent row occurrences and complete domains; no ASP source-completeness claim</td></tr>
 <tr><td>Can table preselection preserve positive binding families?</td><td><code>TableBindings.indexed_matches_preserved</code>, <code>join_family_preserved</code></td><td>Exact row bits, successful flat-match domain necessity and the same finite join schedule; ordered source/row witnesses and bindings are retained</td></tr>
 <tr><td>Can necessary domains remove impossible join prefixes?</td><td><code>DomainBindings.complete_binding_survives</code>, <code>kept_binding_survives</code>, <code>guarded_continuations_exact</code></td><td>Domains cover complete argument values; a binding no comparison excludes belongs to the narrowed candidates; every row with a complete continuation survives; order and multiplicity are preserved</td></tr>
+<tr><td>How do alternative producers propagate argument bounds?</td><td><code>DomainProducers.transfer_monotone</code>, <code>derivation_covered</code></td><td>Mandatory inputs intersect, alternatives union, Unknown is unrestricted; finite recursive derivations belong to any closed upper-bound assignment</td></tr>
 <tr><td>Can relation storage grow without changing old queries?</td><td><code>RelationExtension.acceptance_preserved</code></td><td>Existing rows and dictionary meanings survive extension</td></tr>
 <tr><td>When does a worker reservation bound active owner storage?</td><td><code>StorageOwners.active_storage_within_limit</code></td><td>Each owner’s capacity and the active-owner count respect their declared bounds; concrete allocation and scheduling remain separate premises</td></tr>
 <tr><td>How does retained cache storage compose with active allowances?</td><td><code>StorageOwners.sum_within_component_bounds</code>, <code>shared_idle_active_within_limit</code></td><td>Pointwise shared/idle bounds and active maxima fit the admitted sum; complete disjoint owner accounting and concrete capacity bounds remain consumer obligations</td></tr>

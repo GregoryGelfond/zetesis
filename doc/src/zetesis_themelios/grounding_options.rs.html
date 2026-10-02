@@ -4,38 +4,42 @@
 <a href=#4 id=4 data-nosnippet>4</a></span><span class="attr">#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">pub enum </span>JoinStrategy {
 <a href=#6 id=6 data-nosnippet>6</a>    <span class="doccomment">/// Probe the shortest available equality posting and check complete rows.
-<a href=#7 id=7 data-nosnippet>7</a>    </span><span class="attr">#[default]
-<a href=#8 id=8 data-nosnippet>8</a>    </span>Indexed,
-<a href=#9 id=9 data-nosnippet>9</a>    <span class="doccomment">/// Reuse finite-table indices for flat positive patterns over completed
-<a href=#10 id=10 data-nosnippet>10</a>    /// possible support. Structural patterns and support-growth rounds retain
-<a href=#11 id=11 data-nosnippet>11</a>    /// indexed matching. An exhausted table operation is an error, not fallback.
-<a href=#12 id=12 data-nosnippet>12</a>    ///
-<a href=#13 id=13 data-nosnippet>13</a>    /// This explicit strategy has no automatic size or speed threshold. Index
-<a href=#14 id=14 data-nosnippet>14</a>    /// construction may cost more work or storage than the rows it avoids.
-<a href=#15 id=15 data-nosnippet>15</a>    </span>Table,
-<a href=#16 id=16 data-nosnippet>16</a>}
-<a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// Execution policy for materializing a prepared formula source.
-<a href=#19 id=19 data-nosnippet>19</a>///
-<a href=#20 id=20 data-nosnippet>20</a>/// These choices change neither source meaning nor the retained admission
-<a href=#21 id=21 data-nosnippet>21</a>/// ceilings. They introduce no cancellation or timing contract. Grounding work
-<a href=#22 id=22 data-nosnippet>22</a>/// observation reports actual operations, including inapplicable table probes.
-<a href=#23 id=23 data-nosnippet>23</a></span><span class="attr">#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub struct </span>GroundingOptions {
-<a href=#25 id=25 data-nosnippet>25</a>    <span class="doccomment">/// Positive-join execution strategy; independent of formula/reduct solving.
-<a href=#26 id=26 data-nosnippet>26</a>    </span><span class="kw">pub </span>joins: JoinStrategy,
-<a href=#27 id=27 data-nosnippet>27</a>}
-<a href=#28 id=28 data-nosnippet>28</a>
-<a href=#29 id=29 data-nosnippet>29</a><span class="doccomment">/// Logical bounds on an optional conservative domain-analysis attempt.
-<a href=#30 id=30 data-nosnippet>30</a>///
-<a href=#31 id=31 data-nosnippet>31</a>/// These are distinct from the named support/query byte ceiling. Analysis uses
-<a href=#32 id=32 data-nosnippet>32</a>/// bounded standard collections and has no allocation-failure or caller-control
-<a href=#33 id=33 data-nosnippet>33</a>/// API; it is an uninterruptible operation inside existing eager materialization.
-<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub use </span>zetesis_domain::{Limits <span class="kw">as </span>DomainLimits, Stop <span class="kw">as </span>DomainStop};
-<a href=#35 id=35 data-nosnippet>35</a>
-<a href=#36 id=36 data-nosnippet>36</a><span class="attr">#[derive(Clone, Copy, Debug, Default)]
-<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Execution {
-<a href=#38 id=38 data-nosnippet>38</a>    <span class="kw">pub </span>joins: JoinStrategy,
-<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw">pub </span>domains: <span class="prelude-ty">Option</span>&lt;DomainLimits&gt;,
-<a href=#40 id=40 data-nosnippet>40</a>}
+<a href=#7 id=7 data-nosnippet>7</a>    /// A completed flat constraint with a finite arithmetic-totality certificate
+<a href=#8 id=8 data-nosnippet>8</a>    /// may compose a computed equality domain with the shared table selector.
+<a href=#9 id=9 data-nosnippet>9</a>    /// This special query keeps the original rows and residual checks; other
+<a href=#10 id=10 data-nosnippet>10</a>    /// probes remain indexed even after that table has been prepared.
+<a href=#11 id=11 data-nosnippet>11</a>    </span><span class="attr">#[default]
+<a href=#12 id=12 data-nosnippet>12</a>    </span>Indexed,
+<a href=#13 id=13 data-nosnippet>13</a>    <span class="doccomment">/// Reuse finite-table indices for flat positive patterns over completed
+<a href=#14 id=14 data-nosnippet>14</a>    /// possible support. Structural patterns and support-growth rounds retain
+<a href=#15 id=15 data-nosnippet>15</a>    /// indexed matching. An exhausted table operation is an error, not fallback.
+<a href=#16 id=16 data-nosnippet>16</a>    ///
+<a href=#17 id=17 data-nosnippet>17</a>    /// This explicit strategy has no automatic size or speed threshold. Index
+<a href=#18 id=18 data-nosnippet>18</a>    /// construction may cost more work or storage than the rows it avoids.
+<a href=#19 id=19 data-nosnippet>19</a>    </span>Table,
+<a href=#20 id=20 data-nosnippet>20</a>}
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// Execution policy for materializing a prepared formula source.
+<a href=#23 id=23 data-nosnippet>23</a>///
+<a href=#24 id=24 data-nosnippet>24</a>/// These choices change neither source meaning nor the retained admission
+<a href=#25 id=25 data-nosnippet>25</a>/// ceilings. They introduce no cancellation or timing contract. Grounding work
+<a href=#26 id=26 data-nosnippet>26</a>/// observation reports actual operations, including inapplicable table probes.
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="attr">#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub struct </span>GroundingOptions {
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="doccomment">/// Positive-join execution strategy; independent of formula/reduct solving.
+<a href=#30 id=30 data-nosnippet>30</a>    </span><span class="kw">pub </span>joins: JoinStrategy,
+<a href=#31 id=31 data-nosnippet>31</a>}
+<a href=#32 id=32 data-nosnippet>32</a>
+<a href=#33 id=33 data-nosnippet>33</a><span class="doccomment">/// Logical bounds on an optional conservative domain-analysis attempt.
+<a href=#34 id=34 data-nosnippet>34</a>///
+<a href=#35 id=35 data-nosnippet>35</a>/// These are distinct from the named support/query byte ceiling. Analysis uses
+<a href=#36 id=36 data-nosnippet>36</a>/// bounded standard collections and has no allocation-failure or caller-control
+<a href=#37 id=37 data-nosnippet>37</a>/// API; it is an uninterruptible operation inside existing eager materialization.
+<a href=#38 id=38 data-nosnippet>38</a></span><span class="kw">pub use </span>zetesis_domain::{Limits <span class="kw">as </span>DomainLimits, Stop <span class="kw">as </span>DomainStop};
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a><span class="attr">#[derive(Clone, Copy, Debug, Default)]
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Execution {
+<a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">pub </span>joins: JoinStrategy,
+<a href=#43 id=43 data-nosnippet>43</a>    <span class="kw">pub </span>domains: <span class="prelude-ty">Option</span>&lt;DomainLimits&gt;,
+<a href=#44 id=44 data-nosnippet>44</a>}
 </code></pre></div></section></main></body></html>
