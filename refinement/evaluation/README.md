@@ -6,7 +6,7 @@ fixed observation tokens. It composes the generated evaluator and root scan,
 with explicit stored-mask agreement and shared work accounting.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
-imports the existing reduct-evaluation sources directly and checks them unchanged
+imports the reduct-evaluation and packed-subset sources directly and checks them
 with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
@@ -68,6 +68,31 @@ Empty roots complete without polling or work. The checked
 repeated-root sequence whose first false identifier is not the smallest one.
 [Query examples](FrozenQueryExample.lean) cover cumulative work refusal, a valid
 mask for a nonmodel candidate, and a successful query at a non-subset.
+
+## Subset-search foundations
+
+[`SelectedAtoms`](SelectedAtoms.lean) composes the backend's range and vector
+operations with the generated packed membership query. An exact selected prefix
+stays exact after the next coordinate; it is ordered and has no duplicates.
+At the end of the universe, it agrees with the ASP library's `selectedAtoms`.
+The remaining coordinate supplies room for both the checked successor and push.
+
+[`ScalarSubsets`](ScalarSubsets.lean) connects checked division, remainder,
+shift and mutable word indexing to the shared packed set/clear laws. Only the
+selected bit changes. Population increment requires a representable selection
+width; decrement requires a currently true positional bit. The
+[boundary examples](ScalarSubsetsExample.lean) set and clear atom 64 while
+preserving its neighbors in both words.
+
+These are proofs about the imported primitive models, not an extracted execution
+of the selected-atom scan or subset-search loop. The pinned translator rejects
+the containing `oracle::check` control flow before generating those helpers;
+the [reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
+records that boundary. Loop coverage, work, interruption and completed membership
+still need to be connected to the implementation. In particular, the carry
+correspondence must use the outer proper-subset guard: calling the inline Rust
+carry on a full selection would clear it, whereas the mathematical counter
+reports overflow.
 
 ## Observation boundary
 

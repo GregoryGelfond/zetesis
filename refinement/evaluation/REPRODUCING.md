@@ -189,3 +189,32 @@ Regeneration does not establish external-model correspondence to Rust. The
 private query does not cover frozen-mask construction, fallible reservation,
 public owner checks or public query wrappers. Repeat the strict build and complete authored-theorem audit
 after accepting any changed extraction.
+
+## Current subset-search extraction limit
+
+The same pinned tools extract `oracle::check` to LLBC, but Aeneas rejects its
+structured control flow with `Returns inside of nested loops are not supported
+yet` (`PrePasses.ml:648`). Charon places the later subset-search continuation
+inside the selected-atom scan's exhaustion branch; its final `Stable` return is
+therefore inside nested loops in this LLBC. Neither `-loops-to-rec` nor
+`-loops-no-rec` bypasses the rejection. No Lean scan or carry helper is generated.
+This is a translation limitation, not a proved defect in the Rust algorithm.
+
+To reproduce without replacing the successful package inputs, repeat the
+extraction command above with the additional option
+`--start-from zetesis_ferraris::oracle::check` and change its destination to
+`target/subset-probe/evaluator.llbc` (create that directory first). Then run:
+
+```sh
+mkdir -p target/subset-probe/Evaluator
+.lake/aeneas/aeneas -backend lean -dest target/subset-probe/Evaluator \
+  -split-files -namespace ZetesisExtract -all-computable -no-progress-bar \
+  -sequential -warnings-as-errors -abort-on-error target/subset-probe/evaluator.llbc
+```
+
+This command is expected to fail before Lean output. It needs no LLBC
+normalization. Repeating it with either loop option gives the same refusal.
+Removing a return or extracting a new function from an inline loop would alter
+executable control flow and requires a separate preservation argument. The
+existing packed-counter laws and backend primitive models do not establish
+correspondence for the ungenerated `check` loops.

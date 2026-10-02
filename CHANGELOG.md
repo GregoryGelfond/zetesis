@@ -21,6 +21,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   agreeing with original truth. Constructing that stored reduct, public owner
   checks, allocation, changing runtime observations and subset search remain
   outside the proof.
+- Lean proofs connecting atom-selection and packed subset-update primitives to
+  the shared mathematical definitions. The containing Rust search loop remains
+  unverified; its current translation limit is documented.
 
 ## 0.2.0 — 2026-10-01
 

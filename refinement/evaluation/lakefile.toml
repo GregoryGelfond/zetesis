@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -59,6 +59,10 @@ globs = [
   "Zetesis.CertifiedExecution",
   "Zetesis.TightEvaluation",
   "Zetesis.ReductEvaluation",
+  "Zetesis.FiniteMembership",
+  "Zetesis.SubsetCounter",
+  "Zetesis.PackedInterpretations",
+  "Zetesis.PackedSubsets",
 ]
 
 [[lean_lib]]
@@ -105,3 +109,12 @@ name = "FrozenQuery"
 
 [[lean_lib]]
 name = "FrozenQueryExample"
+
+[[lean_lib]]
+name = "SelectedAtoms"
+
+[[lean_lib]]
+name = "ScalarSubsets"
+
+[[lean_lib]]
+name = "ScalarSubsetsExample"

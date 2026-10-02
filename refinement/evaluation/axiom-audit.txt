@@ -98,3 +98,21 @@
  Classical.choice,
  Quot.sound]
 'FrozenQueryExample.successful_query_need_not_test_a_subset' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SelectedAtoms.selected_length' depends on axioms: [propext]
+'SelectedAtoms.selected_ordered' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SelectedAtoms.selected_nodup' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SelectedAtoms.advance' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SelectedAtoms.packed_denotation' depends on axioms: [propext, Quot.sound]
+'SelectedAtoms.completed_selection' depends on axioms: [propext, Quot.sound]
+'SelectedAtoms.exhausted' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ScalarSubsets.interpretation_storage' depends on axioms: [propext]
+'ScalarSubsets.word_operations' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ScalarSubsets.updates_preserve_other_bits' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ScalarSubsets.set_population' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ScalarSubsets.clear_population' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ScalarSubsetsExample.setting_at_the_boundary_preserves_neighbors' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'ScalarSubsetsExample.clearing_at_the_boundary_preserves_neighbors' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]

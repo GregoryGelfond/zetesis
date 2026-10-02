@@ -43,6 +43,14 @@ control inputs; its traces need not be executions of the fixed-token loop.
 Changing runtime observations, `FrozenReduct` construction, public allocation and
 owner-checking wrappers, and subset search remain unproved.
 
+`SelectedAtoms` and `ScalarSubsets` connect imported range, vector and machine-word
+operations to the shared selected-prefix and packed-update laws. The former also
+uses the generated membership query. These establish primitive contracts, not
+execution of the containing `oracle::check` loops: the pinned translator rejects
+their nested-return structure before emitting Lean. The
+[reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
+records this separate tool boundary.
+
 `FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
 Its coverage proof constructs a selection representing every semantic subset
 of the supplied candidate. Original satisfaction and absence of a proper-subset

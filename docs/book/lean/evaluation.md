@@ -62,11 +62,30 @@ exercise empty and repeated-root scans. [Query examples](https://github.com/Greg
 cover cumulative work refusal, a nonmodel candidate with a valid mask, and a
 successful tested non-subset.
 
+## Preparing the subset-search correspondence
+
+The selected-atom and packed-counter mathematics already establish exact
+proper-subset coverage. Two primitive bridges prepare their connection to Rust:
+
+- [`SelectedAtoms`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SelectedAtoms.lean)
+  preserves the exact ordered selection through range advancement, the generated
+  membership query and vector append. A completed prefix agrees with the shared
+  finite selection, without a separate coverage assumption.
+- [`ScalarSubsets`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/ScalarSubsets.lean)
+  connects checked word addressing and mutation to the shared set/clear laws,
+  and proves population arithmetic under explicit bounds. Checked examples
+  exercise an update at the boundary between 64-bit words.
+
+These proofs compose imported primitive models. They do not yet establish that
+the actual containing loop maintains their premises or visits every required
+state. That distinction matters for interrupted carries and for the outer guard
+excluding the full candidate. The extraction limitation below remains open.
+
 ## Reusing the ASP library
 
-The package imports the existing `ReductEvaluation` sources and their dependency
-closure directly from the general library. Those eleven modules compile unchanged
-under both the library's Lean 4.33.1 and the extraction package's Lean 4.31.0.
+The package imports `ReductEvaluation`, `PackedSubsets` and their dependency
+closures directly from the general library. The same source files compile under
+both the library's Lean 4.33.1 and the extraction package's Lean 4.31.0.
 The bridge is checked in the latter toolchain with its own audit; it does not mix
 object files from different versions or duplicate the semantic definitions.
 
@@ -89,6 +108,14 @@ The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
 construction and its public allocation and owner-checking wrappers remain
 unproved, as does subset search. Allocation, reference counting, timers,
 concurrent memory, machine code and GPU execution remain outside these models.
+
+The pinned translator currently rejects `oracle::check` before emitting its
+selected-atom scan and packed-counter helpers: its structured LLBC contains a
+return inside nested loops. Both supported loop translation modes have this
+limit. The [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
+records the check. Mathematical subset-coverage laws and backend range/word
+operations provide foundations for that correspondence; they do not verify the
+untranslated membership loop.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code

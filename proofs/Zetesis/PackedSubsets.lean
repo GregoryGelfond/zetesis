@@ -452,13 +452,22 @@ def selectedAtoms (size : Nat) (words : List (BitVec 64)) : List (Fin size) :=
 /-- The universe scan constructs distinct coordinates; no caller-supplied
     uniqueness witness is needed by the packed entry point. -/
 theorem selected_atoms_nodup (size : Nat) (words : List (BitVec 64)) :
-    (selectedAtoms size words).Nodup :=
-  (List.nodup_finRange size).filter _
+    (selectedAtoms size words).Nodup := by
+  have distinct : (List.finRange size).Nodup := by
+    apply List.pairwise_iff_getElem.mpr
+    intro first second firstBound secondBound before
+    have different : first ≠ second := Nat.ne_of_lt before
+    simpa only [List.getElem_finRange, ne_eq, Fin.ext_iff, Fin.val_cast] using different
+  exact distinct.filter _
 
 /-- Filtering retains the concrete universe scan's increasing atom order. -/
 theorem selected_atoms_ordered (size : Nat) (words : List (BitVec 64)) :
-    (selectedAtoms size words).Pairwise (· < ·) :=
-  (List.pairwise_lt_finRange size).filter _
+    (selectedAtoms size words).Pairwise (· < ·) := by
+  have increasing : (List.finRange size).Pairwise (· < ·) := by
+    apply List.pairwise_iff_getElem.mpr
+    intro first second firstBound secondBound before
+    simpa only [List.getElem_finRange, Fin.lt_def, Fin.val_cast] using before
+  exact increasing.filter _
 
 /-- The produced selection's Boolean membership is exactly the original packed
     membership at every bounded coordinate. Coverage follows from finRange;

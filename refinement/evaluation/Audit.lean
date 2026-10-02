@@ -1,3 +1,5 @@
+import SelectedAtoms
+import ScalarSubsetsExample
 import ProgressExample
 import TheorySatisfaction
 import RootScanExample
@@ -101,3 +103,17 @@ import FrozenQueryExample
 #print axioms FrozenQueryExample.root_scan_retains_prior_work
 #print axioms FrozenQueryExample.represented_candidate_need_not_be_a_model
 #print axioms FrozenQueryExample.successful_query_need_not_test_a_subset
+#print axioms SelectedAtoms.selected_length
+#print axioms SelectedAtoms.selected_ordered
+#print axioms SelectedAtoms.selected_nodup
+#print axioms SelectedAtoms.advance
+#print axioms SelectedAtoms.packed_denotation
+#print axioms SelectedAtoms.completed_selection
+#print axioms SelectedAtoms.exhausted
+#print axioms ScalarSubsets.interpretation_storage
+#print axioms ScalarSubsets.word_operations
+#print axioms ScalarSubsets.updates_preserve_other_bits
+#print axioms ScalarSubsets.set_population
+#print axioms ScalarSubsets.clear_population
+#print axioms ScalarSubsetsExample.setting_at_the_boundary_preserves_neighbors
+#print axioms ScalarSubsetsExample.clearing_at_the_boundary_preserves_neighbors

@@ -1,3 +1,4 @@
-✔ [1747/1749] Built FrozenQuery (1.5s)
-✔ [1748/1749] Built FrozenQueryExample (1.5s)
-Build completed successfully (1749 jobs).
+✔ [1754/1758] Built SelectedAtoms (1.5s)
+✔ [1756/1758] Built ScalarSubsets (1.5s)
+✔ [1757/1758] Built ScalarSubsetsExample (1.3s)
+Build completed successfully (1758 jobs).
