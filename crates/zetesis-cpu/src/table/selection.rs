@@ -6,7 +6,10 @@ use zetesis_core::{Value, catalog::TermRef, relation::Relation};
 
 use crate::Cancellation;
 
-use super::{Cause, Failure, Limits, Statistics, Table, WORD_BITS, Work};
+use super::{
+    Failure, Limits, MeteredCause, MeteredFailure, Statistics, Table, WORD_BITS, Work, control,
+    unmetered,
+};
 
 /// A permitted set of whole typed values, borrowed for one operation.
 ///
@@ -144,15 +147,17 @@ pub struct Selection<'owner, 'source> {
 impl<'owner, 'source> Table<'owner, 'source> {
     /// Select exact coherent rows without computing projected value domains.
     ///
-    /// Starts from the immutable coherent mask on every call. Singleton domains
-    /// intersect one borrowed support directly; unrestricted domains leave the
-    /// mask unchanged. Finite domains use one reusable union scratch mask.
+    /// The first restriction initializes the result from coherent supports;
+    /// an entirely unrestricted query copies the immutable coherent mask.
+    /// Later singleton domains intersect one borrowed support directly; later
+    /// finite domains use one reusable union scratch mask. Every domain is
+    /// checked even when an earlier restriction leaves no surviving rows.
     /// No value, source row or selected-position vector is copied.
     ///
     /// For W row words, K variables, V indexed entries and D finite values,
     /// work is O(W + K + D*(1+log(V+1)+W) + K*W), plus typed comparison payload
     /// costs. An unrestricted variable costs one descriptor inspection; a
-    /// singleton costs a lookup and W intersections. Retained result capacity
+    /// singleton costs a lookup and W word operations. Retained result capacity
     /// includes only its header and mask. Operation peak additionally includes
     /// the borrowed relation/index and any temporary union mask. Other caller
     /// results are excluded; their simultaneous retention belongs to the caller.
@@ -167,11 +172,31 @@ impl<'owner, 'source> Table<'owner, 'source> {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Selection<'owner, 'source>, Failure> {
+        self.select_with(domains, limits, control(cancellation))
+            .map_err(unmetered)
+    }
+
+    /// Select through the admission/control callback of [`Self::prepare_with`].
+    /// Zero amounts poll control at entry/allocation/work boundaries; positive
+    /// amounts request the next complete charged group before its effect. The
+    /// same exact row selection and local limits implement [`Self::select`].
+    /// Caller permits already accepted are retained on refusal, and the returned
+    /// work receipt must not be charged to that caller a second time.
+    ///
+    /// # Errors
+    /// Preserves local table failures and typed caller refusals with their
+    /// admitted work and capacity prefixes. No partial selection escapes.
+    pub fn select_with<E>(
+        &self,
+        domains: &[Domain<'_>],
+        limits: Limits,
+        before: impl FnMut(usize) -> Result<(), E>,
+    ) -> Result<Selection<'owner, 'source>, MeteredFailure<E>> {
         let external = self.retained_inputs()?;
         let scratch_header = size_of::<Vec<u32>>();
         let mut work = Work::new(
             limits,
-            cancellation,
+            before,
             external,
             size_of::<Selection<'_, '_>>() + scratch_header,
         )?;
@@ -192,17 +217,14 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// support entries the domains permit while resolving those same lookups.
     /// This avoids both repeated lookup and testing every disallowed support.
     /// The caller has validated the domain count and owns the optional bitmap.
-    pub(super) fn restrict_rows<'domain>(
+    pub(super) fn restrict_rows<'domain, E>(
         &self,
         domains: impl ExactSizeIterator<Item = Domain<'domain>>,
         mut permitted: Option<&mut [bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Vec<u32>, Cause> {
+        work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+    ) -> Result<Vec<u32>, MeteredCause<E>> {
         let mut rows = work.reserve(self.coherent.len())?;
-        for &word in &self.coherent {
-            work.tick(1)?;
-            rows.push(word);
-        }
+        let mut initialized = false;
         let mut union = Vec::new();
         for (variable, domain) in domains.enumerate() {
             work.tick(1)?;
@@ -219,35 +241,69 @@ impl<'owner, 'source> Table<'owner, 'source> {
                         if let Some(permitted) = &mut permitted {
                             permit(permitted, entry, work)?;
                         }
-                        intersect(&mut rows, self.support(entry), work)?;
-                    } else {
+                        if initialized {
+                            intersect(&mut rows, self.support(entry), work)?;
+                        } else {
+                            initialize(&mut rows, self.support(entry).iter().copied(), work)?;
+                        }
+                    } else if initialized {
                         clear(&mut rows, work)?;
+                    } else {
+                        initialize(&mut rows, std::iter::repeat_n(0, self.coherent.len()), work)?;
                     }
+                    initialized = true;
                 }
                 Domain::Finite(values) => {
-                    if union.len() == rows.len() {
-                        clear(&mut union, work)?;
-                    } else {
-                        union = work.zeros(rows.len())?;
-                    }
-                    for value in values.iter() {
-                        work.tick(1)?;
-                        if let Some(entry) = self.lookup(variable, value, work)? {
-                            if let Some(permitted) = &mut permitted {
-                                permit(permitted, entry, work)?;
-                            }
-                            for (target, &word) in union.iter_mut().zip(self.support(entry)) {
-                                work.tick(1)?;
-                                *target |= word;
-                            }
+                    let target = if initialized {
+                        if union.len() == rows.len() {
+                            clear(&mut union, work)?;
+                        } else {
+                            union = work.zeros(rows.len())?;
                         }
+                        &mut union
+                    } else {
+                        initialize(&mut rows, std::iter::repeat_n(0, self.coherent.len()), work)?;
+                        &mut rows
+                    };
+                    self.union_supports(variable, values, target, &mut permitted, work)?;
+                    if initialized {
+                        intersect(&mut rows, &union, work)?;
                     }
-                    intersect(&mut rows, &union, work)?;
+                    initialized = true;
                 }
             }
         }
+        // Prepared supports contain only coherent original occurrences, so the
+        // first restriction supplies its own base. No restriction (including a
+        // nullary scope) still requires the explicit original coherent mask.
+        if !initialized {
+            initialize(&mut rows, self.coherent.iter().copied(), work)?;
+        }
         work.release(union);
         Ok(rows)
+    }
+
+    fn union_supports<E>(
+        &self,
+        variable: usize,
+        values: Values<'_>,
+        target: &mut [u32],
+        permitted: &mut Option<&mut [bool]>,
+        work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+    ) -> Result<(), MeteredCause<E>> {
+        for value in values.iter() {
+            work.tick(1)?;
+            if let Some(entry) = self.lookup(variable, value, work)? {
+                if let Some(permitted) = permitted {
+                    permit(permitted, entry, work)?;
+                }
+                for (target, &word) in target.iter_mut().zip(self.support(entry)) {
+                    work.tick(1)?;
+                    *target |= word;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -363,13 +419,32 @@ fn next_row_with<E>(
     Ok(None)
 }
 
-fn permit(permitted: &mut [bool], entry: usize, work: &mut Work<'_>) -> Result<(), Cause> {
+fn permit<E>(
+    permitted: &mut [bool],
+    entry: usize,
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<(), MeteredCause<E>> {
     work.tick(1)?;
     permitted[entry] = true;
     Ok(())
 }
 
-fn clear(words: &mut [u32], work: &mut Work<'_>) -> Result<(), Cause> {
+fn initialize<E>(
+    rows: &mut Vec<u32>,
+    words: impl Iterator<Item = u32>,
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<(), MeteredCause<E>> {
+    for word in words {
+        work.tick(1)?;
+        rows.push(word);
+    }
+    Ok(())
+}
+
+fn clear<E>(
+    words: &mut [u32],
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<(), MeteredCause<E>> {
     for word in words {
         work.tick(1)?;
         *word = 0;
@@ -377,7 +452,11 @@ fn clear(words: &mut [u32], work: &mut Work<'_>) -> Result<(), Cause> {
     Ok(())
 }
 
-fn intersect(rows: &mut [u32], support: &[u32], work: &mut Work<'_>) -> Result<(), Cause> {
+fn intersect<E>(
+    rows: &mut [u32],
+    support: &[u32],
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<(), MeteredCause<E>> {
     for (row, &word) in rows.iter_mut().zip(support) {
         work.tick(1)?;
         *row &= word;

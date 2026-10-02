@@ -4,34 +4,34 @@ use std::{cmp::Ordering, mem::size_of};
 
 use zetesis_core::catalog::TermRef;
 
-use crate::Cancellation;
+use crate::{Cancellation, Stop};
 
-use super::{Cause, Failure, Limits, Resource, Statistics};
+use super::{Cause, Failure, Limits, MeteredCause, MeteredFailure, Resource, Statistics};
 
-pub(super) struct Work<'a> {
+pub(super) struct Work<F> {
     limits: Limits,
-    cancellation: &'a Cancellation,
+    before: F,
     used: u64,
     live: usize,
     peak: usize,
 }
 
-impl<'a> Work<'a> {
+impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
     pub(super) fn new(
         limits: Limits,
-        cancellation: &'a Cancellation,
+        before: F,
         external: usize,
         frame: usize,
-    ) -> Result<Self, Failure> {
+    ) -> Result<Self, MeteredFailure<E>> {
         let mut work = Self {
             limits,
-            cancellation,
+            before,
             used: 0,
             live: 0,
             peak: 0,
         };
         let result = (|| {
-            cancellation.poll().map_err(Cause::Interrupted)?;
+            work.poll()?;
             let bytes = external.checked_add(frame).ok_or(Cause::Overflow)?;
             work.admit(bytes)?;
             work.live = bytes;
@@ -41,8 +41,8 @@ impl<'a> Work<'a> {
         Ok(work)
     }
 
-    pub(super) fn failure(&self, cause: Cause) -> Failure {
-        Failure {
+    pub(super) fn failure(&self, cause: MeteredCause<E>) -> MeteredFailure<E> {
+        MeteredFailure {
             cause,
             work: self.used,
             peak_bytes: self.peak,
@@ -57,34 +57,41 @@ impl<'a> Work<'a> {
         }
     }
 
-    pub(super) fn entries(&self, observed: usize) -> Result<(), Cause> {
+    pub(super) fn entries(&self, observed: usize) -> Result<(), MeteredCause<E>> {
         ceiling(
             Resource::Entries,
             observed as u128,
             self.limits.max_entries as u128,
         )
+        .map_err(MeteredCause::Table)
     }
 
-    pub(super) fn tick(&mut self, amount: usize) -> Result<(), Cause> {
+    pub(super) fn tick(&mut self, amount: usize) -> Result<(), MeteredCause<E>> {
         if amount == 0 {
             return Ok(());
         }
-        self.cancellation.poll().map_err(Cause::Interrupted)?;
+        self.poll()?;
         let next = u128::from(self.used) + amount as u128;
         ceiling(Resource::Work, next, u128::from(self.limits.max_work))?;
-        self.used = u64::try_from(next).map_err(|_| Cause::Overflow)?;
+        let next = u64::try_from(next).map_err(|_| Cause::Overflow)?;
+        (self.before)(amount).map_err(MeteredCause::Stopped)?;
+        self.used = next;
         Ok(())
+    }
+
+    fn poll(&mut self) -> Result<(), MeteredCause<E>> {
+        (self.before)(0).map_err(MeteredCause::Stopped)
     }
 
     pub(super) fn compare(
         &mut self,
         left: TermRef<'_>,
         right: TermRef<'_>,
-    ) -> Result<Ordering, Cause> {
+    ) -> Result<Ordering, MeteredCause<E>> {
         left.compare_ref_with(right, || self.tick(1))
     }
 
-    fn admit(&mut self, bytes: usize) -> Result<(), Cause> {
+    fn admit(&mut self, bytes: usize) -> Result<(), MeteredCause<E>> {
         ceiling(
             Resource::Bytes,
             bytes as u128,
@@ -94,8 +101,8 @@ impl<'a> Work<'a> {
         Ok(())
     }
 
-    pub(super) fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, Cause> {
-        self.cancellation.poll().map_err(Cause::Interrupted)?;
+    pub(super) fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, MeteredCause<E>> {
+        self.poll()?;
         let proposed = bytes::<T>(count)?
             .checked_add(self.live)
             .ok_or(Cause::Overflow)?;
@@ -113,7 +120,7 @@ impl<'a> Work<'a> {
         Ok(values)
     }
 
-    pub(super) fn zeros(&mut self, count: usize) -> Result<Vec<u32>, Cause> {
+    pub(super) fn zeros(&mut self, count: usize) -> Result<Vec<u32>, MeteredCause<E>> {
         let mut words = self.reserve(count)?;
         for _ in 0..count {
             self.tick(1)?;
@@ -122,8 +129,12 @@ impl<'a> Work<'a> {
         Ok(words)
     }
 
-    pub(super) fn grow<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), Cause> {
-        self.cancellation.poll().map_err(Cause::Interrupted)?;
+    pub(super) fn grow<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+    ) -> Result<(), MeteredCause<E>> {
+        self.poll()?;
         let needed = values
             .len()
             .checked_add(additional)
@@ -160,6 +171,29 @@ impl<'a> Work<'a> {
     }
 }
 
+/// Legacy entry points poll at the existing control boundaries only. Positive
+/// work requests need no additional policy beyond the operation's local ceiling.
+pub(super) fn control(cancellation: &Cancellation) -> impl FnMut(usize) -> Result<(), Stop> + '_ {
+    move |amount| {
+        if amount == 0 {
+            cancellation.poll()
+        } else {
+            Ok(())
+        }
+    }
+}
+
+pub(super) fn unmetered(error: MeteredFailure<Stop>) -> Failure {
+    Failure {
+        cause: match error.cause {
+            MeteredCause::Table(cause) => cause,
+            MeteredCause::Stopped(stop) => Cause::Interrupted(stop),
+        },
+        work: error.work,
+        peak_bytes: error.peak_bytes,
+    }
+}
+
 fn bytes<T>(count: usize) -> Result<usize, Cause> {
     count.checked_mul(size_of::<T>()).ok_or(Cause::Overflow)
 }
@@ -184,13 +218,16 @@ mod tests {
     #[test]
     fn interrupted_charge_preserves_the_completed_prefix() {
         let cancellation = Cancellation::default();
-        let mut work = Work::new(Limits::default(), &cancellation, 0, 0).unwrap();
+        let mut work = Work::new(Limits::default(), control(&cancellation), 0, 0).unwrap();
         work.tick(3).unwrap();
         cancellation.cancel();
         work.tick(0).unwrap();
         let cause = work.tick(1).unwrap_err();
-        assert_eq!(cause, Cause::Interrupted(Stop::Cancelled));
-        assert_eq!(work.failure(cause).work, 3);
+        assert_eq!(
+            unmetered(work.failure(cause)).cause,
+            Cause::Interrupted(Stop::Cancelled)
+        );
+        assert_eq!(work.statistics(0).work, 3);
     }
 
     #[test]
@@ -201,7 +238,7 @@ mod tests {
                 max_work: 3,
                 ..Limits::default()
             },
-            &cancellation,
+            control(&cancellation),
             0,
             0,
         )
@@ -209,20 +246,20 @@ mod tests {
         work.tick(3).unwrap();
         let cause = work.tick(1).unwrap_err();
         assert_eq!(
-            cause,
+            unmetered(work.failure(cause)).cause,
             Cause::Limit {
                 resource: Resource::Work,
                 observed: 4,
                 limit: 3
             }
         );
-        assert_eq!(work.failure(cause).work, 3);
+        assert_eq!(work.statistics(0).work, 3);
     }
 
     #[test]
     fn refused_growth_preserves_the_original_buffer() {
         let cancellation = Cancellation::default();
-        let mut work = Work::new(Limits::default(), &cancellation, 0, 0).unwrap();
+        let mut work = Work::new(Limits::default(), control(&cancellation), 0, 0).unwrap();
         let mut values = work.reserve::<u32>(2).unwrap();
         let capacity = values.capacity();
         values.resize(capacity, 7);
@@ -231,7 +268,7 @@ mod tests {
         work.limits.max_bytes = required - 1;
         let cause = work.grow(&mut values, 1).unwrap_err();
         assert_eq!(
-            cause,
+            unmetered(work.failure(cause)).cause,
             Cause::Limit {
                 resource: Resource::Bytes,
                 observed: required as u128,
@@ -246,7 +283,7 @@ mod tests {
     #[test]
     fn growth_accounts_for_coexisting_buffers() {
         let cancellation = Cancellation::default();
-        let mut work = Work::new(Limits::default(), &cancellation, 0, 0).unwrap();
+        let mut work = Work::new(Limits::default(), control(&cancellation), 0, 0).unwrap();
         let mut values = work.reserve::<u32>(2).unwrap();
         let initial = values.capacity();
         values.resize(initial, 7);
@@ -261,5 +298,83 @@ mod tests {
             work.statistics(0).retained_bytes,
             final_capacity * size_of::<u32>()
         );
+    }
+
+    #[test]
+    fn reserve_zero_polls_caller_control() {
+        let stopped = std::cell::Cell::new(false);
+        let mut work = Work::new(
+            Limits::default(),
+            |amount| {
+                assert_eq!(amount, 0);
+                if stopped.get() {
+                    Err("reservation stopped")
+                } else {
+                    Ok(())
+                }
+            },
+            0,
+            0,
+        )
+        .unwrap();
+        stopped.set(true);
+        let cause = work.reserve::<u32>(0).unwrap_err();
+        assert_eq!(cause, MeteredCause::Stopped("reservation stopped"));
+        assert_eq!(work.failure(cause).work, 0);
+        assert_eq!(work.statistics(0).peak_bytes, 0);
+    }
+
+    #[test]
+    fn growth_polls_even_without_reallocation() {
+        let stopped = std::cell::Cell::new(false);
+        let mut work = Work::new(
+            Limits::default(),
+            |amount| {
+                assert_eq!(amount, 0);
+                if stopped.get() {
+                    Err("growth stopped")
+                } else {
+                    Ok(())
+                }
+            },
+            0,
+            0,
+        )
+        .unwrap();
+        let mut values = work.reserve::<u32>(1).unwrap();
+        values.push(7);
+        let capacity = values.capacity();
+        let peak = work.statistics(0).peak_bytes;
+        stopped.set(true);
+        let cause = work.grow(&mut values, 0).unwrap_err();
+        assert_eq!(cause, MeteredCause::Stopped("growth stopped"));
+        assert_eq!(values, [7]);
+        assert_eq!(values.capacity(), capacity);
+        assert_eq!(work.statistics(0).peak_bytes, peak);
+        assert_eq!(work.failure(cause).work, 0);
+    }
+
+    #[test]
+    fn refused_group_adds_no_local_work() {
+        let mut requested = Vec::new();
+        {
+            let mut work = Work::new(
+                Limits::default(),
+                |amount| {
+                    if amount != 0 {
+                        requested.push(amount);
+                    }
+                    if amount == 4 { Err(amount) } else { Ok(()) }
+                },
+                0,
+                0,
+            )
+            .unwrap();
+            work.tick(3).unwrap();
+            let cause = work.tick(4).unwrap_err();
+            assert_eq!(cause, MeteredCause::Stopped(4));
+            assert_eq!(work.failure(cause).work, 3);
+        }
+        assert_eq!(requested, [3, 4]);
     }
 }

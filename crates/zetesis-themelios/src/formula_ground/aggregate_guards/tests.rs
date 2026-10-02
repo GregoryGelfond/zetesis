@@ -140,7 +140,7 @@ fn grouped_guards_preserve_scalar_frozen_truth() {
             [1, 2],
             &guards,
             |builder, elements, source, binding| {
-                let mut scalar_nodes = builder.nodes.clone();
+                let mut scalar_nodes = builder.nodes.to_vec();
                 let GroundAggregate::Numeric(entries) = &elements else {
                     unreachable!()
                 };
@@ -162,7 +162,7 @@ fn grouped_guards_preserve_scalar_frozen_truth() {
                     .aggregate_guards(elements, &source, binding, None, location())
                     .unwrap();
                 let grouped =
-                    Theory::new(2, builder.nodes.clone(), vec![root], builder.limits.theory)
+                    Theory::new(2, builder.nodes.to_vec(), vec![root], builder.limits.theory)
                         .unwrap();
                 let scalar =
                     Theory::new(2, scalar_nodes, vec![scalar_root], builder.limits.theory).unwrap();
@@ -222,7 +222,7 @@ fn family_receipt_avoids_repeated_prefix_validation() {
                 unreachable!()
             };
             let guards = numeric(&sample());
-            let mut nodes = builder.nodes.clone();
+            let mut nodes = builder.nodes.to_vec();
             let scalar_work: u64 = guards
                 .iter()
                 .map(|guard| {
@@ -247,6 +247,52 @@ fn family_receipt_avoids_repeated_prefix_validation() {
             assert_eq!(
                 builder.counters.accounting.work - before,
                 family.build.statistics().work
+            );
+        },
+    );
+}
+
+#[test]
+fn canonical_remapping_retains_only_checked_prefix() {
+    with_guards(
+        &FormulaLimits::default(),
+        [1, 2],
+        &sample(),
+        |builder, elements, _, _| {
+            let GroundAggregate::Numeric(elements) = elements else {
+                unreachable!()
+            };
+            let guards = numeric(&sample());
+            let prefix = builder.nodes.len();
+            let first = builder
+                .append_guard_family(elements.slice(), &guards, guards.len(), location())
+                .unwrap();
+            assert!(first.build.appended_nodes() > 0);
+            builder.intern_appended(prefix, location()).unwrap();
+
+            // Reindexing removed the compiler suffix. A subsequent family must
+            // inspect the replacement nodes, but need not reinspect the prefix.
+            let mut reference = builder.nodes.to_vec();
+            assert!(reference.len() > prefix);
+            let scalar = zetesis_ferraris::append_aggregate_family(
+                &mut reference,
+                elements.slice(),
+                &guards,
+                AggregateFamilyLimits {
+                    aggregate: builder.aggregate_limits(),
+                    max_guards: guards.len(),
+                },
+                &Cancellation::default(),
+            )
+            .unwrap();
+            let reused = builder
+                .append_guard_family(elements.slice(), &guards, guards.len(), location())
+                .unwrap();
+            assert_eq!(&*builder.nodes, reference);
+            assert_eq!(reused.build.roots(), scalar.roots());
+            assert_eq!(
+                scalar.statistics().work - reused.build.statistics().work,
+                prefix as u64
             );
         },
     );
@@ -282,7 +328,7 @@ fn failed_family_work_survives_rollback() {
                 unreachable!()
             };
             let before = builder.counters.accounting.work;
-            let nodes = builder.nodes.clone();
+            let nodes = builder.nodes.to_vec();
             let guards = numeric(&sample());
             let result =
                 builder.append_guard_family(elements.slice(), &guards, guards.len(), location());
@@ -300,9 +346,36 @@ fn failed_family_work_survives_rollback() {
                 assert!(error.statistics().nodes > 0);
             }
             assert_eq!(builder.counters.accounting.work - before, cap);
-            assert_eq!(builder.nodes, nodes);
+            assert_eq!(&*builder.nodes, nodes);
         });
     }
+}
+
+#[test]
+fn refused_scalar_compilation_retains_spent_work() {
+    // Both attempts do the same source work; only the compiler allowance differs.
+    let work = [0, 5].map(|allowance| {
+        let mut limits = FormulaLimits::default();
+        limits.aggregate.max_work = allowance;
+        with_guards(
+            &limits,
+            [1, 2],
+            &[(Relation::Ge, Value::Number(1))],
+            |builder, elements, guards, binding| {
+                let before = builder.counters.accounting.work;
+                let nodes = builder.nodes.to_vec();
+                let result = builder.aggregate_guards(elements, &guards, binding, None, location());
+                let Err(FormulaFailure::Aggregate { error, .. }) = result else {
+                    panic!("compiler must exhaust its smaller allowance")
+                };
+                assert_eq!(error.kind(), AggregateErrorKind::WorkLimit);
+                assert_eq!(error.statistics().work, allowance);
+                assert_eq!(&*builder.nodes, nodes);
+                builder.counters.accounting.work - before
+            },
+        )
+    });
+    assert_eq!(work[1] - work[0], 5);
 }
 
 #[test]
@@ -369,7 +442,7 @@ fn root_refusal_reports_the_configured_storage_limit() {
         let GroundAggregate::Numeric(elements) = elements else {
             unreachable!()
         };
-        let nodes = builder.nodes.clone();
+        let nodes = builder.nodes.to_vec();
         let guards = numeric(&sample());
         let result =
             builder.append_guard_family(elements.slice(), &guards, guards.len(), location());
@@ -385,7 +458,7 @@ fn root_refusal_reports_the_configured_storage_limit() {
         assert_eq!(resource, FormulaResource::SupportBytes);
         assert_eq!(limit, limits.max_support_bytes as u128);
         assert_eq!(observed, (used + requested) as u128);
-        assert_eq!(builder.nodes, nodes);
+        assert_eq!(&*builder.nodes, nodes);
     });
 }
 

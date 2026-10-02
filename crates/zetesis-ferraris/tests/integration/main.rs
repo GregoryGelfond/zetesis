@@ -9,6 +9,7 @@ mod evaluation;
 mod extrema;
 mod extrema_clingo;
 mod formula_dag;
+mod formula_nodes;
 mod interpretation;
 mod frozen_reduct;
 mod native_aggregate_canonical;

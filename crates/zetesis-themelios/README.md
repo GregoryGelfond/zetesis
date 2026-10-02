@@ -196,10 +196,14 @@ generated scopes, nested scopes and constructors remain outside this gate.
 Successful preparation permits ordinary comparison selection. An arithmetic
 failure in that possibly larger domain declines the optimization without
 creating a source diagnostic; resource and owner failures remain typed refusals.
-Source-family evidence always retains complete traversal. Hybrid runtime
-cursors repeat the shared preparation over the same immutable carrier before
-candidate filtering; capture has already admitted its speculative successful
-computed values, so frozen checking needs no new term admission.
+Source-family evidence always retains complete traversal. Each reached hybrid
+rule attempts this preparation once over the full frozen carrier, before
+candidate filtering. Later cursors borrow a successful map read-only; an
+arithmetic decline retains ordinary checked traversal without repeating the
+optional attempt. Errors publish no prepared rule. Capture has already admitted
+the speculative successful values, so frozen checking needs no new term
+admission. Retained maps authenticate their completed carrier and accounting
+workspace; they establish no candidate truth.
 
 Descending or nonnumeric interval endpoints yield no rows in facts and generated
 bindings.

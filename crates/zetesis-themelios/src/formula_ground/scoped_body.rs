@@ -72,7 +72,7 @@ pub(super) fn validate_with_purpose(
     let root = result?;
     Ok(ValidatedBody {
         atoms: builder.catalog,
-        nodes: builder.nodes,
+        nodes: builder.nodes.into_vec(),
         root,
     })
 }

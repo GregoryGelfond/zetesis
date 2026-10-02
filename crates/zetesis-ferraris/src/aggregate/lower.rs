@@ -8,11 +8,33 @@ use crate::Node;
 
 type Result<T> = std::result::Result<T, AggregateErrorKind>;
 
+/// The exclusive node borrow and, for an owned buffer, its retained scan frontier.
+pub(super) struct Destination<'a> {
+    nodes: &'a mut Vec<Node>,
+    validated: Option<&'a mut usize>,
+}
+impl<'a> Destination<'a> {
+    pub(super) fn unchecked(nodes: &'a mut Vec<Node>) -> Self {
+        Self {
+            nodes,
+            validated: None,
+        }
+    }
+
+    pub(super) fn retained(nodes: &'a mut Vec<Node>, validated: &'a mut usize) -> Self {
+        Self {
+            nodes,
+            validated: Some(validated),
+        }
+    }
+}
+
 pub(super) struct Builder<'a> {
     nodes: &'a mut Vec<Node>,
     limits: AggregateLimits,
     cancellation: &'a Cancellation,
     statistics: AggregateStatistics,
+    validated: usize,
 }
 impl Builder<'_> {
     pub(super) fn tick(&mut self) -> Result<()> {
@@ -99,40 +121,59 @@ pub fn append_aggregate(
     limits: AggregateLimits,
     cancellation: &Cancellation,
 ) -> std::result::Result<AggregateBuild, AggregateError> {
-    transaction(nodes, limits, cancellation, |builder| {
+    append(
+        Destination::unchecked(nodes),
+        elements,
+        comparison,
+        bound,
+        limits,
+        cancellation,
+    )
+}
+
+pub(super) fn append(
+    destination: Destination<'_>,
+    elements: &[AggregateElement],
+    comparison: AggregateComparison,
+    bound: i64,
+    limits: AggregateLimits,
+    cancellation: &Cancellation,
+) -> std::result::Result<AggregateBuild, AggregateError> {
+    transaction(destination, limits, cancellation, |builder| {
         compile(builder, elements, comparison, i128::from(bound))
     })
 }
 
 pub(super) fn transaction(
-    nodes: &mut Vec<Node>,
+    destination: Destination<'_>,
     limits: AggregateLimits,
     cancellation: &Cancellation,
     compile: impl FnOnce(&mut Builder<'_>) -> Result<(usize, AggregateProfile)>,
 ) -> std::result::Result<AggregateBuild, AggregateError> {
-    transaction_value(nodes, limits, cancellation, compile).map(|((root, profile), statistics)| {
-        AggregateBuild {
+    transaction_value(destination, limits, cancellation, compile).map(
+        |((root, profile), statistics)| AggregateBuild {
             root,
             profile,
             statistics,
-        }
-    })
+        },
+    )
 }
 
 pub(super) fn transaction_value<T>(
-    nodes: &mut Vec<Node>,
+    destination: Destination<'_>,
     limits: AggregateLimits,
     cancellation: &Cancellation,
     compile: impl FnOnce(&mut Builder<'_>) -> Result<T>,
 ) -> std::result::Result<(T, AggregateStatistics), AggregateError> {
-    let original = nodes.len();
+    let original = destination.nodes.len();
     let mut builder = Builder {
-        nodes,
+        nodes: destination.nodes,
+        validated: destination.validated.as_deref().copied().unwrap_or(0),
         limits,
         cancellation,
         statistics: AggregateStatistics::default(),
     };
-    match compile(&mut builder) {
+    let result = match compile(&mut builder) {
         Ok(result) => Ok((result, builder.statistics)),
         Err(kind) => {
             builder.nodes.truncate(original);
@@ -141,7 +182,11 @@ pub(super) fn transaction_value<T>(
                 statistics: builder.statistics,
             })
         }
+    };
+    if let Some(validated) = destination.validated {
+        *validated = builder.validated.min(builder.nodes.len());
     }
+    result
 }
 
 pub(super) fn validate(
@@ -186,7 +231,7 @@ pub(super) fn validate_prefix(builder: &mut Builder<'_>) -> Result<usize> {
         return Err(AggregateErrorKind::NodeLimit);
     }
     let prefix = builder.nodes.len();
-    for index in 0..prefix {
+    for index in builder.validated..prefix {
         builder.tick()?;
         if let Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) = builder.nodes[index]
             && (a >= index || b >= index)
@@ -194,6 +239,8 @@ pub(super) fn validate_prefix(builder: &mut Builder<'_>) -> Result<usize> {
             return Err(AggregateErrorKind::InvalidPrefix { node: index });
         }
     }
+    // Publish only a complete scan. Failed scans retain their earlier frontier.
+    builder.validated = prefix;
     Ok(prefix)
 }
 

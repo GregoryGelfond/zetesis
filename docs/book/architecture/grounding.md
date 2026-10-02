@@ -85,6 +85,16 @@ ceiling applies independently to each guard; the family API instead has a
 cumulative subset ceiling. Assignment proposal families already use the family
 primitive and share the same source-side call and receipt handling.
 
+Independent compilations share the ground builder's `FormulaNodes` owner. It
+retains one node vector and the extent of its completed topology validation;
+subsequent compilers inspect only the unchecked suffix. Reading lends an
+immutable slice. Appending leaves new nodes unchecked, and truncating or
+extracting a suffix shortens the validation extent. Canonical remapping therefore
+cannot give replacement nodes the removed suffix's validation. There is no
+second formula representation or cached aggregate result in this mechanism.
+Every call still checks its node ceiling, tuple conditions and control. The
+ordinary aggregate functions accepting a raw vector retain full validation.
+
 The configured aggregate work, node and state ceilings are unchanged. For a
 shared append they apply to the whole family, and its work is also bounded by
 remaining formula work. The source charges guard preparation, weight inspection,
@@ -391,15 +401,18 @@ Hybrid capture and later model/region checks use this same preparation and
 selector. Capture runs after original family admission, with the completed
 carrier and an append-capable canonical term owner. It admits successful values
 from the whole covering columns, including values belonging to rows that cannot
-complete the source pattern. Each runtime cursor repeats the same optional
-preparation against the immutable rule and full completed carrier before any
-candidate row filter applies. Its frozen owner can therefore resolve those
-speculative values; a missing term remains a typed failure, not an optimization
-fallback. Arithmetic failures still decline totality, while resource and owner
-failures stop the operation. Candidate filtering establishes no new source
-completion or arithmetic certificate. Preparation and temporary projection/table
-storage are charged per cursor; only the existing immutable join order is
-retained across checks.
+complete the source pattern. On the first reached runtime use, the prepared rule
+checks that optional certificate against its frozen owner and full completed
+carrier, before any candidate row filter applies. Later cursors borrow the same
+successful map read-only. A missing frozen term remains a typed failure, not an
+optimization fallback. An arithmetic decline retains ordinary checked traversal;
+it supplies no certificate and needs no identical totality retry. Resource and
+owner failures stop preparation without publishing a partial map. Candidate
+filtering establishes no new source completion or arithmetic certificate.
+Preparation and retained map storage are charged once per prepared rule; each
+cursor still pays for its queries, bindings and temporary domains. Inputs outside
+the map use the ordinary evaluator without changing that retained map. These
+lifetimes keep mutable scratch local to each check.
 
 The same preparation seals each projection's covered input prefix. At probe
 preparation, an equality between a covered unary expression and a known operand

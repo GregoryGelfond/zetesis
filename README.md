@@ -118,9 +118,9 @@ captured output; zetesis statistics are enabled.
 | --- | ---: | ---: | --- |
 | [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 36.11 ms | 185.92 ms | zetesis 5.15× faster |
 | [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 35.94 ms | 117.95 ms | zetesis 3.28× faster |
-| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 15.44 ms | 12.58 ms | zetesis 23% slower |
+| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 15.44 ms | 12.58 ms | clingo 1.23× faster |
 | [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 13.03 ms | 6.43 ms | clingo 2.03× faster |
-| **All 94 programs: sum of per-case medians** | **854.80 ms** | **826.97 ms** | **zetesis 3.4% slower** |
+| **All 94 programs: sum of per-case medians** | **854.80 ms** | **826.97 ms** | **clingo 1.03× faster** |
 
 zetesis is faster on **4 of 94 cases**; clingo is faster on 90. The substantial
 wins on a few cases bring the totals close. The total is a sum of individual

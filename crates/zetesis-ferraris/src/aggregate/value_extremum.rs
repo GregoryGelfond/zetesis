@@ -2,7 +2,7 @@ use zetesis_core::{Value, catalog::TermRef};
 use zetesis_cpu::Cancellation;
 
 use super::extremum::comparison_root;
-use super::lower::{transaction, validate_prefix};
+use super::lower::{Destination, transaction, validate_prefix};
 use super::{
     AggregateBuild, AggregateComparison, AggregateError, AggregateErrorKind, AggregateExtremum,
     AggregateLimits, AggregateProfile,
@@ -74,7 +74,27 @@ pub fn append_value_extremum_refs<'a>(
     limits: AggregateLimits,
     cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
-    transaction(nodes, limits, cancellation, |builder| {
+    append(
+        Destination::unchecked(nodes),
+        elements,
+        extremum,
+        comparison,
+        bound,
+        limits,
+        cancellation,
+    )
+}
+
+pub(super) fn append<'a>(
+    destination: Destination<'_>,
+    elements: impl Iterator<Item = ValueExtremumElement<TermRef<'a>>>,
+    extremum: AggregateExtremum,
+    comparison: AggregateComparison,
+    bound: TermRef<'_>,
+    limits: AggregateLimits,
+    cancellation: &Cancellation,
+) -> Result<AggregateBuild, AggregateError> {
+    transaction(destination, limits, cancellation, |builder| {
         let prefix = validate_prefix(builder)?;
         let falsum = builder.push(Node::False)?;
         let truth = builder.push(Node::Implies(falsum, falsum))?;

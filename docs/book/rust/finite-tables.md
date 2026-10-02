@@ -38,6 +38,21 @@ before each inspected mask word, including zero words. A failed check publishes
 no row and leaves the selection and supplied starting position unchanged. The
 ordinary scanning methods use the same decoder without a fallible callback.
 
+`Table::prepare_with` and `select_with` use the same algorithms with a caller's
+fallible work-admission callback. A positive amount must be admitted before the
+charged operation; zero asks the caller to poll control without charging work,
+including operation entry and allocation boundaries. `MeteredFailure` preserves
+the caller's original typed refusal separately from a table failure, together
+with the accepted work prefix and observed capacity peak. Callers must not charge
+that receipt a second time. The ordinary preparation and selection methods adapt
+`Cancellation` through the same accounting boundary.
+
+The source adapter uses these operations for both eager table joins and certified
+computed-domain selection. Independent hybrid checkers atomically admit each
+step against their shared `ConstraintAllowance`; a completed batch is never
+charged afterward. Failure preserves both local and combined accepted receipts,
+and table work and capacity observations remain available on refusal.
+
 `Table::project` retains its finite-domain interface; `project_domains` accepts
 the same `Domain` variants as selection. Both reuse the row restriction operation
 and then compute the witnessed domains. A projection borrows the table; its
@@ -153,13 +168,16 @@ For R rows and E indexed variable/value entries, support storage uses
 larger than the original columns. Repeated queries may amortize preparation;
 that is a measurement question, not a guarantee of the API.
 
-Every probe first copies the coherent-row mask: `ceil(R / 32)` words even when
-all supplied domains are unrestricted. A singleton domain then intersects one
-support mask; a finite domain unions its matching support masks before that
-intersection. Finite domains reuse one union buffer within the probe. Thus a
-retained table removes repeated index construction but does not remove per-probe
-mask initialization and traversal. Result and union masks belong to that query;
-they cannot be shared as mutable truth across bindings or workers.
+The first restrictive domain initializes the result directly from its coherent
+supports: a singleton copies its support, while a finite domain unions matching
+supports into the result. Later restrictions intersect the result; later finite
+domains reuse one union buffer. An entirely unrestricted or nullary query copies
+the original coherent mask. Every supplied domain is still checked, even when
+an earlier restriction leaves no rows. This avoids a redundant base-mask copy
+and, for a first finite domain, one intersection and potentially a scratch mask.
+Retaining a table still leaves per-query mask initialization and traversal.
+Result and union masks belong to that query; they cannot be shared as mutable
+truth across bindings or workers.
 
 `Limits` bounds support entries, live operation capacity and charged work.
 Cancellation, exhausted limits and allocation failures return no partial table,

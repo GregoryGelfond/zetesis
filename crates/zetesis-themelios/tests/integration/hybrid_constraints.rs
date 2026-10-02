@@ -5,10 +5,10 @@ use std::fmt::Write;
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
-    AdmissionOptions, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
-    ConstraintVerdict, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, GroundingOptions, HybridFeature, HybridFormula, JoinStrategy,
-    prepare_formula,
+    AdmissionOptions, ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits,
+    ConstraintCheckStatistics, ConstraintVerdict, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, GroundingOptions,
+    HybridFeature, HybridFormula, JoinStrategy, prepare_formula,
 };
 
 fn prepare(source: &str) -> zetesis_themelios::PreparedFormula {
@@ -577,4 +577,74 @@ fn computed_selection_keeps_inclusive_work_limits() {
             );
         }
     }
+}
+
+#[test]
+fn retained_computed_domains_move_with_the_checker() {
+    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let candidate = model(&owner, &[]);
+    assert_eq!(
+        checker.check(&candidate, &Cancellation::default()).unwrap(),
+        ConstraintVerdict::Satisfied
+    );
+    let before = checker.statistics();
+    let (checker, verdict) = std::thread::scope(|scope| {
+        scope
+            .spawn(move || {
+                let verdict = checker.check(&candidate, &Cancellation::default()).unwrap();
+                (checker, verdict)
+            })
+            .join()
+            .unwrap()
+    });
+    assert_eq!(verdict, ConstraintVerdict::Satisfied);
+    assert_eq!(checker.statistics().substitutions - before.substitutions, 2);
+    assert!(checker.statistics().work - before.work < before.work);
+}
+
+#[test]
+fn computed_domains_share_work_between_checkers() {
+    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
+    let candidate = model(&owner, &[]);
+    let cancellation = Cancellation::default();
+    let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    assert_eq!(
+        baseline.check(&candidate, &cancellation).unwrap(),
+        ConstraintVerdict::Satisfied
+    );
+    let complete = baseline.statistics();
+    assert_eq!(
+        complete.substitutions, 2,
+        "computed domains select X=4 and X=5"
+    );
+    let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
+        max_work: 2 * complete.work,
+        ..Default::default()
+    });
+    for _ in 0..2 {
+        let mut checker = owner
+            .checker_with_allowance(&allowance, &cancellation)
+            .unwrap();
+        assert_eq!(
+            checker.check(&candidate, &cancellation).unwrap(),
+            ConstraintVerdict::Satisfied
+        );
+        assert_eq!(checker.statistics(), complete);
+    }
+    assert_eq!(allowance.statistics().work, 2 * complete.work);
+    assert_eq!(allowance.statistics().substitutions, 4);
+    let before = allowance.statistics();
+    let failure = owner
+        .checker_with_allowance(&allowance, &cancellation)
+        .err()
+        .unwrap();
+    assert!(
+        matches!(failure.cause, ConstraintCheckCause::Source(ref error)
+        if matches!(error.as_ref(), FormulaFailure::Limit {
+            resource: FormulaResource::Work, observed, limit, ..
+        } if *observed == *limit + 1 && *limit == u128::from(before.work)))
+    );
+    assert_eq!(failure.statistics, ConstraintCheckStatistics::default());
+    assert_eq!(allowance.statistics(), before);
 }

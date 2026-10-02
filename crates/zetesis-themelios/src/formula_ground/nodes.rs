@@ -14,7 +14,7 @@ use std::hash::{BuildHasher, BuildHasherDefault};
 use crate::word_hash::WordHasher;
 
 use themelios_base::span::Location;
-use zetesis_ferraris::Node;
+use zetesis_ferraris::{FormulaNodes, Node};
 
 use crate::formula::ceiling;
 use crate::{FormulaFailure, FormulaResource};
@@ -24,7 +24,7 @@ pub(super) type Index = HashMap<Key, usize, BuildHasherDefault<WordHasher>>;
 
 pub(super) fn intern<S: BuildHasher>(
     index: &mut HashMap<Key, usize, S>,
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     node: Node,
     bound: (FormulaResource, usize),
     location: Location,
@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn collisions_preserve_first_node_identity() {
         let mut index = HashMap::<_, _, BuildHasherDefault<Collision>>::default();
-        let mut nodes = Vec::new();
+        let mut nodes = FormulaNodes::default();
         for (id, node) in sequence().into_iter().enumerate() {
             assert_eq!(
                 intern(
@@ -115,13 +115,13 @@ mod tests {
                 (id, false)
             );
         }
-        assert_eq!(nodes, sequence());
+        assert_eq!(&*nodes, sequence());
         assert_eq!(index.len(), sequence().len());
     }
     #[test]
     fn a_node_ceiling_preserves_both_owners() {
         let mut index = Index::default();
-        let mut nodes = Vec::new();
+        let mut nodes = FormulaNodes::default();
         intern(
             &mut index,
             &mut nodes,
@@ -133,7 +133,7 @@ mod tests {
         assert!(
             matches!(intern(&mut index, &mut nodes, Node::Atom(0), (FormulaResource::Nodes, 1), location()), Err(FormulaFailure::Limit { resource: FormulaResource::Nodes, observed: 2, limit: 1, location: found }) if found == location())
         );
-        assert_eq!(nodes, [Node::False]);
+        assert_eq!(&*nodes, [Node::False]);
         assert_eq!(index.len(), 1);
         assert_eq!(
             intern(
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn zero_node_admission_allocates_no_index() {
         let mut index = Index::default();
-        let mut nodes = Vec::new();
+        let mut nodes = FormulaNodes::default();
         assert!(
             intern(
                 &mut index,
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn refused_growth_preserves_index_capacity() {
         let mut index = Index::default();
-        let mut nodes = Vec::new();
+        let mut nodes = FormulaNodes::default();
         intern(
             &mut index,
             &mut nodes,
@@ -190,10 +190,10 @@ mod tests {
         }
         let capacity = index.capacity();
         let node_capacity = nodes.capacity();
-        let before = nodes.clone();
+        let before = nodes.to_vec();
         let proposed = Node::Atom(nodes.len());
         let mut control_index = index.clone();
-        let mut control_nodes = nodes.clone();
+        let mut control_nodes = FormulaNodes::new(nodes.to_vec());
         intern(
             &mut control_index,
             &mut control_nodes,
@@ -219,7 +219,7 @@ mod tests {
         );
         assert_eq!(index.capacity(), capacity);
         assert_eq!(nodes.capacity(), node_capacity);
-        assert_eq!(nodes, before);
+        assert_eq!(&*nodes, before);
         assert_eq!(index.len(), limit);
     }
 }

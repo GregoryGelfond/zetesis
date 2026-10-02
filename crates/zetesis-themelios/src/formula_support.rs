@@ -970,7 +970,7 @@ impl<'a, 'source> Join<'a, 'source> {
         rule: &'a crate::formula_ir::RuleIr,
         support: &'a Support<'source>,
         filter: Option<&'a dyn RowFilter>,
-        plan: Option<&'a order::Plan<'a>>,
+        prepared: Option<&'a PreparedRule<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<FilteredRows<'a, 'source>, FormulaFailure> {
@@ -983,16 +983,27 @@ impl<'a, 'source> Join<'a, 'source> {
                     location: _,
                 },
         } = context;
-        let mut join = if let Some(plan) = plan {
+        let mut join = if let Some(prepared) = prepared {
+            if !std::ptr::eq(rule, prepared.rule) {
+                return Err(FormulaFailure::SupportRelation {
+                    error: zetesis_core::relation::Failure::Owner,
+                    location: rule.location,
+                });
+            }
             let mut join = Self::with_plan(
                 &rule.body,
                 &Binding::new(computation, limits, counters, rule.location)?,
                 rule.variables,
                 support,
-                Cow::Borrowed(plan),
+                Cow::Borrowed(&prepared.plan),
+                prepared.total.as_ref(),
                 Context::new(computation, limits, counters, rule.location),
             )?;
             join.configure_rule(rule, limits, counters)?;
+            if prepared.total.is_some() {
+                join.certified_total = true;
+                join.coverage = Coverage::Selected;
+            }
             join
         } else {
             Self::rule(rule, support, computation, limits, budget, counters)?
@@ -1061,7 +1072,7 @@ impl<'a, 'source> Join<'a, 'source> {
     /// After support completion and source-family validation, cover the full
     /// positive column domains before ordinary comparisons may select rows.
     /// Hybrid capture performs this same attempt with append-capable terms
-    /// before frozen checkers repeat it over the immutable rule and carrier.
+    /// before a frozen checker prepares its retained immutable rule and carrier.
     /// This includes successful speculative values before a declined attempt;
     /// a missing frozen term remains an error. Evidence cursors stay complete.
     pub(super) fn select_total_constraint(
@@ -1300,6 +1311,7 @@ impl<'a, 'source> Join<'a, 'source> {
             variables,
             support,
             Cow::Owned(plan),
+            None,
             Context::new(computation, limits, counters, location),
         )
     }
@@ -1310,6 +1322,7 @@ impl<'a, 'source> Join<'a, 'source> {
         variables: usize,
         support: &'a Support<'source>,
         plan: Cow<'a, order::Plan<'a>>,
+        total: Option<&'a projections::ProjectionValues<'a>>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
         let Context {
@@ -1331,7 +1344,7 @@ impl<'a, 'source> Join<'a, 'source> {
         let header = size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
-            - size_of::<projections::Projections<'_>>();
+            - usize::from(total.is_none()) * size_of::<projections::ProjectionValues<'_>>();
         let initial = usize::try_from(plan_bytes + header as u128).map_err(|_| {
             crate::formula_binding::assignment(
                 zetesis_core::catalog::AssignmentError::Storage(
@@ -1369,12 +1382,18 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            projections: projections::Projections::new(&Context::new(
-                computation,
-                limits,
-                counters,
-                location,
-            ))?,
+            projections: match total {
+                Some(values) => projections::Projections::borrowed(
+                    values,
+                    &Context::new(computation, limits, counters, location),
+                )?,
+                None => projections::Projections::new(&Context::new(
+                    computation,
+                    limits,
+                    counters,
+                    location,
+                ))?,
+            },
             delta,
             domains: None,
             row_filter: None,
@@ -1431,7 +1450,7 @@ impl<'a, 'source> Join<'a, 'source> {
         size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
-            - size_of::<projections::Projections<'_>>()
+            - self.projections.leased_header()
             - usize::from(self.pending.is_some())
                 * size_of::<crate::formula_binding_cursor::Cursor<'_, '_>>()
             - usize::from(self.pending_head.is_some())

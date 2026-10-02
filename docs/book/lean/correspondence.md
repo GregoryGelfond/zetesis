@@ -965,6 +965,18 @@ DAG construction. Likewise, `FrozenReduct` is a Rust representation of a fixed
 candidate's reduct; its existence does not close the Rust-to-Lean mask
 correspondence.
 
+`FormulaNodes` retains a completed topology-validation prefix across aggregate
+compilations. Its obligation is the inductive one in `DagSharing.WellFormed.snoc`:
+a previously admitted prefix remains unchanged, and each additional node names
+only earlier children. `DagSharing.stored_meaning` then explains why extending
+the table cannot change a prior formula's meaning. The Rust owner must keep
+that prefix immutable, shorten the retained extent when removing nodes, and
+check every replacement suffix. Compiler append operations do not themselves
+advance the validated extent. Its scalar, family and extremum methods reuse the
+existing compilers, without a formula rewrite. These laws describe the invariant;
+they do not verify the concrete validation cursor, cancellation, allocation or
+rollback accounting. Raw-vector constructors retain their full-prefix checks.
+
 `EvaluationWorkspace` computes original node truth before exposing a borrowed
 `FormulaEvaluation`. Rust's ownership boundary ties that view to the exact
 interpretation and prevents reuse of its backing workspace while the view lives.
@@ -1456,18 +1468,22 @@ preparation and necessary-domain selector. Hybrid capture runs after original
 family admission, with an append-capable term owner over completed support.
 It must admit every successful speculative value from the covering columns,
 including values excluded by other source arguments and successful prefixes of
-a declined certificate attempt. A frozen runtime cursor repeats preparation for
-the same immutable rule and completed carrier. Preserving that input traversal
-and the admitted canonical identities is a Rust obligation; a missing identity
-remains a typed failure. No new Boolean completion authority or filtered support
-owner establishes this premise.
+a declined certificate attempt. The prepared runtime rule checks totality once
+against that immutable rule and completed carrier. Later cursors borrow the
+completed map read-only, retaining the same covered inputs and canonical results.
+Preserving capture's input traversal and admitted canonical identities remains a
+Rust obligation; a missing identity is a typed failure. No new Boolean completion
+authority or filtered support owner establishes this premise. An input outside
+the covered map takes ordinary checked evaluation and cannot extend the retained
+map. A declined attempt retains the ordinary cursor behavior, with no certificate.
 
 Candidate row filters neither narrow the certificate's covering domains nor
 supply source-family evidence. Their necessary conditions compose with computed
 domains while preserving each complete violation witness, as required by
 `StreamedRegions.necessary_selection_preserves_witness`. Runtime preparation and
 scratch remain charged to the checker, independently of the original admission
-receipt. Existing laws do not verify this capture/frozen correspondence, typed
+receipt. Retained preparation is charged once; borrowed headers do not claim a
+second allocation. Existing laws do not verify this capture/frozen correspondence, typed
 failure propagation, or the concrete Rust storage accounting.
 
 After that obligation is established, `GroundGuards.guard_original` and

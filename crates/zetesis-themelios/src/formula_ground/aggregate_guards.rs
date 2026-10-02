@@ -14,7 +14,6 @@ use crate::{FormulaFailure, FormulaResource};
 use themelios_base::span::Location;
 use zetesis_ferraris::{
     AggregateElement, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard as NumericGuard,
-    append_aggregate_family,
 };
 
 /// Keep returned roots charged while canonical remapping and consumers overlap.
@@ -167,8 +166,7 @@ impl Builder<'_, '_, '_> {
             aggregate: self.aggregate_limits(),
             max_guards,
         };
-        let result = append_aggregate_family(
-            &mut self.nodes,
+        let result = self.nodes.append_aggregate_family(
             elements,
             guards,
             limits,

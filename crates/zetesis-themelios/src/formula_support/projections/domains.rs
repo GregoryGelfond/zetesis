@@ -11,7 +11,7 @@ use std::ops::Range;
 use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_core::{PatternRef, TemplateTerm};
 
-use super::{Projection, Projections, tick};
+use super::{Projection, ProjectionValues, tick};
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
@@ -87,7 +87,7 @@ impl<'a, 'source> Join<'a, 'source> {
     }
 }
 
-impl Projections<'_> {
+impl ProjectionValues<'_> {
     /// Called only under the complete constraint's totality witness. At most
     /// one restricting equality per unbound variable is selected; all remaining
     /// comparisons stay with the ordinary residual prefix/full-row checks.

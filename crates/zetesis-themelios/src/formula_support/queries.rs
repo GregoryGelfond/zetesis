@@ -26,8 +26,9 @@ mod domains;
 pub(crate) use domains::{Candidates, Guards};
 
 /// Query state is separate from both the catalog and its immutable row views.
-/// The single-threaded source builder owns this workspace; table indices are
-/// immutable after publication, while every query owns its independent mask.
+/// A source builder or independent hybrid checker owns this workspace. Table
+/// indices are immutable after publication; every query owns its independent
+/// mask and admits work through its caller's accounting and control.
 pub(crate) struct Support<'source> {
     relations: &'source Relations<'source>,
     tables: OnceCell<TableWorkspace<'source>>,
@@ -39,8 +40,6 @@ pub(crate) struct Support<'source> {
 
 struct TableWorkspace<'source> {
     indices: RefCell<Vec<Table<'source, 'source>>>,
-    // No source cancellation door exists; this private control has no deadline.
-    cancellation: zetesis_cpu::Cancellation,
 }
 
 impl<'source> Deref for Support<'source> {
@@ -276,9 +275,7 @@ impl<'source> Support<'source> {
         let bound = bind_domains(pattern, values, finite, &mut scratch, counters)?;
         let workspace = self.tables.get_or_init(|| TableWorkspace {
             indices: RefCell::new(Vec::new()),
-            cancellation: zetesis_cpu::Cancellation::default(),
         });
-        let cancellation = &workspace.cancellation;
         let mut tables = workspace.indices.borrow_mut();
         let found = find_table(&tables, pattern, &bound.scope, limits, counters, location)?;
         let index = if let Some(index) = found {
@@ -288,8 +285,17 @@ impl<'source> Support<'source> {
             self.reserve_tables(&mut tables, limits, counters, location)?;
             let outer = self.live_bytes() - relation.storage().retained_bytes;
             let table_limits = self.table_limits(limits, counters, outer, location)?;
-            let prepared = Table::prepare(relation, &bound.scope, table_limits, cancellation);
-            let table = self.result(prepared, true, outer, limits, counters, location)?;
+            let base_work = counters.accounting.work;
+            let prepared = Table::prepare_with(relation, &bound.scope, table_limits, |amount| {
+                counters.charge_work(amount as u128, limits, location)
+            });
+            let table = self.result(
+                prepared,
+                true,
+                outer,
+                base_work,
+                GroundingWork::new(limits, counters, location),
+            )?;
             let retained = table.statistics().retained_bytes - size_of::<Table<'_, '_>>();
             self.live.set(self.live.get() + retained);
             self.entries
@@ -311,8 +317,17 @@ impl<'source> Support<'source> {
         table_limits.max_entries = table.support_entries();
         counters.record(Event::JoinProbe);
         counters.record(Event::TableProbe);
-        let selected = table.select(&bound.domains, table_limits, cancellation);
-        let selection = self.result(selected, false, outer, limits, counters, location)?;
+        let base_work = counters.accounting.work;
+        let selected = table.select_with(&bound.domains, table_limits, |amount| {
+            counters.charge_work(amount as u128, limits, location)
+        });
+        let selection = self.result(
+            selected,
+            false,
+            outer,
+            base_work,
+            GroundingWork::new(limits, counters, location),
+        )?;
         let bytes = selection.statistics().retained_bytes + ROW_LEASE_BYTES;
         self.live.set(self.live.get() + bytes);
         Ok(Some(Rows {
@@ -341,19 +356,24 @@ impl<'source> Support<'source> {
 
     fn result<T: Receipt>(
         &self,
-        result: Result<T, table::Failure>,
+        result: Result<T, table::MeteredFailure<FormulaFailure>>,
         preparing: bool,
         outer: usize,
-        limits: &FormulaLimits,
-        counters: &mut Counters,
-        location: Location,
+        base_work: u64,
+        work: GroundingWork<'_>,
     ) -> Result<T, FormulaFailure> {
-        let base_work = counters.accounting.work;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
         let (work, peak) = match &result {
             Ok(value) => (value.receipt().work, value.receipt().peak_bytes),
             Err(error) => (error.work, error.peak_bytes),
         };
-        counters.charge_work(u128::from(work), limits, location)?;
+        // The primitive admitted each operation through these counters before
+        // execution. Preserve its completed receipt even when caller admission
+        // refused; neither charge twice nor poll again over the original error.
         counters.record(if preparing {
             Event::TablePrepareWork(work)
         } else {
@@ -361,6 +381,15 @@ impl<'source> Support<'source> {
         });
         counters.record(Event::SupportPeakBytes(outer as u128 + peak as u128));
         result.map_err(|error| {
+            let cause = match error.cause {
+                table::MeteredCause::Stopped(error) => return error,
+                table::MeteredCause::Table(cause) => cause,
+            };
+            let error = table::Failure {
+                cause,
+                work: error.work,
+                peak_bytes: error.peak_bytes,
+            };
             let mapped = match &error.cause {
                 Cause::Limit {
                     resource: Resource::Work,

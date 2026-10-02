@@ -1,6 +1,7 @@
 //! Distinguishing workspace ownership, live masks and refused work prefixes.
 
 mod finite_domains;
+mod shared_work;
 
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
@@ -252,11 +253,11 @@ fn failed_selection_retains_its_charged_work_prefix() {
         )
     });
     assert!(
-        matches!(failed, Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. }) if observed > limit)
+        matches!(failed, Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. }) if observed == limit + 1 && limit == u128::from(bounded.max_work))
     );
     assert!(observer.0.get().table_query_work.unwrap() > 0);
     assert!(checked.accounting.work > counters.accounting.work);
-    assert!(checked.accounting.work <= bounded.max_work);
+    assert_eq!(checked.accounting.work, bounded.max_work);
     assert_eq!(support.live.get(), live);
 }
 

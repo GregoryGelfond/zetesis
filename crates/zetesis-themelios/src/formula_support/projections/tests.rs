@@ -542,3 +542,79 @@ fn descriptor_growth_releases_nested_leases() {
         assert_eq!(counters.accounting.workspace.bytes(), before);
     });
 }
+
+#[test]
+fn borrowed_maps_do_not_retain_uncovered_inputs() {
+    with_expression(
+        quotient,
+        |literals, projections, evaluation, computation, counters| {
+            let limits = FormulaLimits::default();
+            let covered = binding(
+                &[Some(Value::Number(14)), Some(Value::Number(7))],
+                computation,
+                counters,
+                location(),
+            );
+            assert!(
+                evaluate(
+                    projections,
+                    literals,
+                    &covered,
+                    evaluation,
+                    Context::new(computation, &limits, counters, location())
+                )
+                .unwrap()
+            );
+            let retained = projections.values[0].results.len();
+            let mut borrowed = Projections::Prepared(projections);
+            for input in [16, 16] {
+                let values = binding(
+                    &[Some(Value::Number(input)), Some(Value::Number(7))],
+                    computation,
+                    counters,
+                    location(),
+                );
+                assert!(
+                    !evaluate(
+                        &mut borrowed,
+                        literals,
+                        &values,
+                        evaluation,
+                        Context::new(computation, &limits, counters, location())
+                    )
+                    .unwrap()
+                );
+            }
+            assert_eq!(borrowed.values[0].results.len(), retained);
+        },
+    );
+}
+
+#[test]
+fn borrowed_map_misses_preserve_arithmetic_errors() {
+    with_expression(
+        quotient,
+        |literals, projections, evaluation, computation, counters| {
+            let values = binding(
+                &[Some(Value::Symbol("symbol".into())), Some(Value::Number(7))],
+                computation,
+                counters,
+                location(),
+            );
+            let mut borrowed = Projections::Prepared(projections);
+            assert!(matches!(
+                evaluate(
+                    &mut borrowed,
+                    literals,
+                    &values,
+                    evaluation,
+                    Context::new(computation, &FormulaLimits::default(), counters, location())
+                ),
+                Err(FormulaFailure::Expansion(
+                    ExpansionFailure::Evaluation { .. }
+                ))
+            ));
+            assert_eq!(borrowed.values[0].results.len(), 0);
+        },
+    );
+}

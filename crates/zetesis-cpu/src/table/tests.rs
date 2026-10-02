@@ -5,6 +5,7 @@ use zetesis_core::{Atom, Predicate, Sign, relation::Limits as RelationLimits};
 use super::*;
 
 mod selection;
+mod metered;
 mod canonical;
 
 fn atoms(predicate: &Predicate, rows: &[Vec<Value>]) -> Vec<Atom> {

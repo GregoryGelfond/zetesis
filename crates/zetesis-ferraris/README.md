@@ -115,7 +115,7 @@ Construction retains the existing finite formula/work limits and charged
 failure prefix. No partial restriction escapes opaque-root, resource or control
 refusal. The separate restriction still copies original DAG descriptors before
 adding support nodes; repeated encoding of that copy remains a preparation cost.
-See [support API](src/support.rs) and [complete small-family controls](tests/integration/support.rs).
+See [support API](src/support.rs) and [complete small-family controls](tests/integration/candidate_support.rs).
 
 ## Narrowing regions by the theory's readings
 
@@ -479,6 +479,17 @@ constructor is source-backed executable code; its aggregate translation has not
 been refined into Lean.
 
 ## Shared comparison families
+
+`FormulaNodes` owns a growing node vector when several compilations share it.
+Its scalar, family and extremum append methods use the same compilers as the
+free functions, while retaining the extent of completed prefix validation.
+Read access is immutable; appends leave an unchecked suffix, and truncation or
+suffix extraction clamps the retained extent. Reusing that extent changes
+validation work, not formula nodes, roots or aggregate semantics. Every call
+still checks limits, elements and cancellation. A failed transaction removes
+its appended nodes and reports its spent work. Consuming `into_vec()` releases
+the owner; constructing another owner from those nodes requires validation again.
+Raw-vector free functions continue to validate the whole prefix each time.
 
 `append_aggregate_family(nodes, elements, guards, limits, control)` compiles an
 ordered list of `AggregateGuard { comparison, bound }` against one identical

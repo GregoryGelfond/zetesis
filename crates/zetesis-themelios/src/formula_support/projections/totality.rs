@@ -8,8 +8,9 @@
 //! equality later excludes. An arithmetic failure declines the optimization;
 //! the original complete traversal remains responsible for its diagnostics.
 //! Hybrid capture first performs this preparation with append-capable terms;
-//! frozen checks repeat it against the immutable rule and full source columns,
-//! independently of candidate selection. Missing frozen values remain errors.
+//! the first frozen check repeats it against the immutable rule and full source
+//! columns. Successful maps remain immutable across later cursors, independently
+//! of candidate selection. Missing frozen values remain errors.
 
 use themelios_program::program::DefaultNegation;
 use zetesis_core::TemplateTerm;
@@ -114,7 +115,10 @@ impl<'a> Projections<'a> {
                 _ => unreachable!("eligible flat constraint checked above"),
             }
         }
-        for projection in &mut self.values {
+        let Self::Local(values) = self else {
+            unreachable!("totality preparation owns its projection values");
+        };
+        for projection in &mut values.values {
             tick(&mut context)?;
             projection.covered = Some(projection.results.len());
         }

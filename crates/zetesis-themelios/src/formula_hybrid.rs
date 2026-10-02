@@ -758,7 +758,7 @@ impl ConstraintChecker<'_> {
                 .rows(
                     &queries,
                     filter,
-                    &mut computation,
+                    &computation,
                     &prepared.limits,
                     budget,
                     counters,
