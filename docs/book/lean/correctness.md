@@ -56,9 +56,11 @@ The proof follows that definition:
 5. Compose those results with the independent answer-set definition.
 
 `ReductEvaluation`, `IndexedEvaluation`, `SubsetCounter`, `PackedSubsets` and
-`CounterSearch` now establish substantial parts of this chain for authored
-executable Lean algorithms. The packed and streaming results still need one
-combined refinement of the current Rust checker.
+`CounterSearch` establish this chain for authored executable Lean algorithms.
+`PackedCounterSearch` composes packed updates and streaming control: every
+completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
+from ordered finite checks. Refinement of the actual Rust operations remains
+a separate obligation.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive

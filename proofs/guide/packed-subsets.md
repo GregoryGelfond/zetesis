@@ -117,8 +117,9 @@ claim: Lean's list indexing and updates are not constant-time vector operations.
 
 The separate [streaming search](counter-search.md) proves early termination,
 reuse of a computed frozen mask and exact completed verdicts at arbitrary query
-allowances. It uses the shared positional counter; composition of its control
-with these packed writes and actual Rust extraction remains an explicit next
+allowances. It uses the shared positional counter. The
+[packed streaming proof](packed-counter-search.md) composes that control with
+these writes without materializing visits; actual Rust refinement remains an
 implementation obligation.
 
 The empty candidate has no proper-subset visit. The executable boundary law

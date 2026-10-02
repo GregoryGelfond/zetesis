@@ -13,6 +13,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   subset counting and normal-reduct acceptance over packed words.
 - Lean proofs for packed-word iteration, packed subset generation and streaming
   reduct checking, including correctness of completed decisions under a query limit.
+- A composed packed streaming membership proof and finite theory-admission
+  checks that establish the evaluator’s structural preconditions.
 
 ## 0.2.0 — 2026-10-01
 

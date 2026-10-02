@@ -110,8 +110,9 @@ padding without an output-agreement premise. Rust's byte conversions, borrowing
 and machine indices remain separate implementation obligations.
 
 `Refinement.PackedSubsets` derives distinct selected coordinates by scanning
-finite packed truth. Its actual set/clear operations preserve the selected set,
-population, storage shape and padding. Their proved sequence covers every proper
+finite packed truth. Its set/clear operations preserve correspondence with the
+selected set and its population, along with storage shape and padding. Their
+proved sequence covers every proper
 subset and no other interpretation. The final mathematical checker therefore
 decides answer-set membership directly from packed candidate truth.
 
@@ -122,14 +123,30 @@ allowance smaller than the complete enumeration bound. An unfinished result
 establishes neither acceptance nor rejection. This allowance is not Rust's work
 budget, and the theorem does not model cancellation or allocation failure.
 
-These modules share the proved counter and semantic definitions. The packed
-coverage model materializes visits, while the streaming model uses positional
-bits. Their separate results do not yet constitute a single refinement of the
-streaming packed Rust checker. The
-[iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
-[packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md)
-and [streaming-search](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/counter-search.md)
-guides state that composition boundary and their remaining obligations.
+`Refinement.PackedCounterSearch` composes these results. It retains one packed
+subset and population, queries the original computed mask, and carries only
+after a completed false query. `search_refines` proves equality with the
+positional stream at every allowance; `completed_check_iff_answer_set` proves
+both positive and negative completed verdicts exact. Candidate construction
+derives storage and padding, while selected-coordinate production supplies
+uniqueness and coverage. No visit list or caller-supplied oracle agreement is
+needed. This closes the composition gap between the authored Lean algorithms;
+actual Rust reads, writes, ownership and control effects remain unproved.
+
+`Refinement.TheoryAdmission` checks dimension limits and padded atom count,
+then every node, then asserted roots. `validate_exact` derives the DAG, atom
+and root premises from successful checks. `validated_reduct_exact` supplies
+those premises to checked evaluation. The supplied host maximum also bounds
+word counts and live export-cursor increments. This is an authored validator
+over represented natural-number lengths, not extraction of `Theory::new`;
+allocation, machine operations and owner identity remain separate obligations.
+
+The [iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
+[packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md),
+[streaming-search](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/counter-search.md),
+[packed-streaming](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-counter-search.md)
+and [admission](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/theory-admission.md)
+guides explain the arguments and remaining boundaries.
 
 ## Keyed constraints and checked source arithmetic
 

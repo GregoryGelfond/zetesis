@@ -158,3 +158,5 @@ import Zetesis.PackedAcceptance
 import Zetesis.PackedWordIterator
 import Zetesis.PackedSubsets
 import Zetesis.CounterSearch
+import Zetesis.PackedCounterSearch
+import Zetesis.TheoryAdmission

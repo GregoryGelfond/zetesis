@@ -996,6 +996,26 @@
 'Zetesis.Refinement.PackedClosure.close_completes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Refinement.PackedClosure.represents_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedClosure.close_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.represented_truth' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.query_refines' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.search_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.Candidate.of_atoms_denotes' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.Candidate.coordinate_stored' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.check_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.check_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.check_completes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.completed_check_exact' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.completed_check_iff_answer_set' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.check_iff_answer_set' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.cross_word_stream_accepts_facts' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.mask_bit' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.contains_eq_bit' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.insert_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1448,6 +1468,20 @@
 'Zetesis.TerminalDefinitions.unique_stable_extension' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TernaryWatch.remaining_unique' depends on axioms: [propext, Quot.sound]
 'Zetesis.TernaryWatch.replacement_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.node_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.checks_succeed' depends on axioms: [propext]
+'Zetesis.Refinement.TheoryAdmission.scan_append' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_extends' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_atoms' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.validate_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.word_counts_fit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.export_successor_fits' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.validated_reduct_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes' does not depend on any axioms
+'Zetesis.Refinement.TheoryAdmission.self_reference_is_refused' does not depend on any axioms
+'Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked' does not depend on any axioms
 'Zetesis.Thresholds.threshold_query_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_bound_antitone' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_sum_monotone' depends on axioms: [propext, Classical.choice, Quot.sound]

@@ -52,8 +52,10 @@ visit sequence from 64-bit set/clear operations, and derives distinct selected
 coordinates from a finite scan. This module instead isolates streaming,
 short-circuiting, frozen-mask reuse and checked formula reads, using the shared
 positional counter. Both connect to `SubsetCounter` and the same ASP semantics.
-There is not yet one checked theorem composing the packed writes, streaming
-control and extracted Rust operations into a complete implementation result.
+The [packed streaming proof](packed-counter-search.md) composes those writes
+with this control and derives exact completed membership. Connecting the
+composed algorithm to extracted Rust operations remains an implementation
+obligation.
 
 The corresponding Rust behavior is the exhaustive checker in
 `crates/zetesis-ferraris/src/oracle.rs::check`, not every optimized solving route.

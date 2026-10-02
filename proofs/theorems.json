@@ -4800,6 +4800,66 @@
     "line": 430
   },
   {
+    "name": "Zetesis.Refinement.PackedCounterSearch.represented_truth",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 24
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.query_refines",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.search_refines",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 74
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.Candidate.of_atoms_denotes",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 137
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.Candidate.coordinate_stored",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 144
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.check_refines",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 169
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.check_exact",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 197
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.check_completes",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 208
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.completed_check_exact",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 217
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.completed_check_iff_answer_set",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 230
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.check_iff_answer_set",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 243
+  },
+  {
+    "name": "Zetesis.Refinement.PackedCounterSearch.cross_word_stream_accepts_facts",
+    "file": "Zetesis/PackedCounterSearch.lean",
+    "line": 256
+  },
+  {
     "name": "Zetesis.Refinement.PackedInterpretations.mask_bit",
     "file": "Zetesis/PackedInterpretations.lean",
     "line": 68
@@ -6968,6 +7028,76 @@
     "name": "Zetesis.TernaryWatch.replacement_exact",
     "file": "Zetesis/TernaryWatch.lean",
     "line": 77
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.node_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.checks_succeed",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_append",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_extends",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 78
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_atoms",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_complete",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 121
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.validate_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 145
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.word_counts_fit",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 177
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.export_successor_fits",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.validated_reduct_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 198
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 208
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.self_reference_is_refused",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 212
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 216
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",
