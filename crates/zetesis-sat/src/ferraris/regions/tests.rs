@@ -84,7 +84,7 @@ fn a_shared_index_rejects_an_independent_equal_theory() {
     let theory = cycle();
     let equal = cycle();
     let candidate = Interpretation::new(&equal, []).unwrap();
-    let mut state = State::with_index(Arc::new(IndexedTheory::new(&theory)));
+    let mut state = State::with_index(Arc::new(IndexedTheory::new(&theory).unwrap()));
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, 100);
     let mut statistics = Statistics::default();
@@ -194,7 +194,7 @@ fn standalone_membership_charges_its_one_index() {
 fn cancelled_shared_membership_performs_no_query_work() {
     let theory = cycle();
     let candidate = Interpretation::new(&theory, []).unwrap();
-    let mut state = State::with_index(Arc::new(IndexedTheory::new(&theory)));
+    let mut state = State::with_index(Arc::new(IndexedTheory::new(&theory).unwrap()));
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, 100);
     let mut statistics = Statistics::default();

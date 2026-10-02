@@ -7,6 +7,14 @@ their own source revisions, workloads and measurement conditions.
 
 ## Recorded comparisons
 
+The [grounding and formula preparation comparison](foundation-reuse.md) measures
+all 94 corpus programs before and after shared preparation, domain and primitive
+changes. Summed grounding time falls about 11%; process time falls about 3%,
+with the same four wins against clingo. The final reuse changes alone are nearly
+neutral overall and include a measured hybrid Sudoku regression. Separate
+tables cover 1, 2, 4, 8 and 14 workers, eager/lazy execution, memory and every
+incomplete case. These are CPU results; they do not update Metal timings.
+
 The [grounding and prepared-closure comparison](instantiation-lazy.md) measures
 all three maintained CPU selections at four and fourteen workers. The arithmetic
 chain takes about 15% less process time and independent negation about 7% less;
@@ -109,9 +117,10 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-Both use authored queens at n=8/9/10, pigeonhole at h=5/6/7 and three unchanged
-corpus cases: queens variant 02, SEND+MORE=MONEY and task allocation.
-`--include-einstein` adds the unchanged riddle. The test runs complete-family
+Both use ten workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
+three unchanged corpus cases (queens variant 02, SEND+MORE=MONEY and task
+allocation), and the authored Sudoku grid. `--include-einstein` adds the
+unchanged riddle as an eleventh workload. The test runs complete-family
 qualifications only. The benchmark qualifies clingo once per case, then measures
 each native thread profile separately. Reports retain all refusals and limits;
 the workload's inclusion is not a scaling claim. `--max-expansion-work` can set

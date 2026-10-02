@@ -58,15 +58,14 @@ fn selected(
 ) -> Vec<Vec<Value>> {
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::rule(rule, support, computation, &limits, &mut budget, counters).unwrap();
     let variant = pivot.map_or(super::Variant::Full, super::Variant::Delta);
-    join.partition(
+    let mut join = Join::variant_rule(
+        rule,
         variant,
-        computation,
-        &limits,
+        support,
+        None,
         &mut budget,
-        counters,
-        location(),
+        crate::formula_support::Context::new(computation, &limits, counters, location()),
     )
     .unwrap();
     let mut bindings = Vec::new();
@@ -120,6 +119,116 @@ fn noninputs_preserve_disjoint_source_occurrences() {
         expected.retain(|row| row != &[Value::Number(7), Value::Number(7)]);
         expected.sort();
         assert_eq!(actual, expected);
+    });
+}
+
+#[test]
+fn a_delta_variant_constructs_only_its_final_plan() {
+    let mut fixture = catalog();
+    let body = vec![
+        literal(&mut fixture, DefaultNegation::None, "p", &[0]),
+        literal(&mut fixture, DefaultNegation::None, "p", &[1]),
+    ];
+    let rule = rule(&mut fixture, body, 2);
+    let limits = FormulaLimits::default();
+    fixture.with(location(), |support, computation, counters| {
+        let empty =
+            crate::formula_binding::Binding::new(computation, &limits, counters, location())
+                .unwrap();
+        let mut preparation = Budget::new(ExpansionLimits::default(), usize::MAX);
+        let expected = crate::formula_support::order::Plan::new(
+            &rule.body,
+            &empty,
+            rule.variables,
+            crate::formula_support::order::SourceRows {
+                relations: support,
+                pivot: Some(1),
+            },
+            &mut preparation,
+            location(),
+            None,
+        )
+        .unwrap();
+        let expected_order: Vec<_> = expected
+            .patterns
+            .iter()
+            .map(|pattern| pattern.source)
+            .collect();
+        let mut exact = Budget::new(
+            ExpansionLimits {
+                max_term_work: preparation.usage().term_work,
+                ..ExpansionLimits::default()
+            },
+            usize::MAX,
+        );
+        let join = Join::variant_rule(
+            &rule,
+            Variant::Delta(1),
+            support,
+            None,
+            &mut exact,
+            crate::formula_support::Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
+        assert_eq!(join.delta, Some(1));
+        assert_eq!(
+            join.plan
+                .patterns
+                .iter()
+                .map(|pattern| pattern.source)
+                .collect::<Vec<_>>(),
+            expected_order
+        );
+        assert_eq!(exact.usage().term_work, preparation.usage().term_work);
+    });
+}
+
+#[test]
+fn backtracking_reuses_the_resolved_snapshot_relation() {
+    let mut fixture = catalog();
+    let body = vec![literal(&mut fixture, DefaultNegation::None, "p", &[0])];
+    let rule = rule(&mut fixture, body, 1);
+    let limits = FormulaLimits::default();
+    fixture.with(location(), |support, computation, counters| {
+        let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+        let mut join =
+            Join::rule(&rule, support, computation, &limits, &mut budget, counters).unwrap();
+        let pattern = join.plan.patterns[0];
+        let start = counters.accounting.work;
+        join.prepare_probe(
+            pattern,
+            crate::formula_support::Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
+        let first = counters.accounting.work - start;
+        let relation = join.resolutions[0].rows().unwrap();
+        assert_eq!(relation.row_count(), 2);
+        // Exhausting a depth releases its selection, while its immutable row
+        // owner remains valid when another parent binding enters that depth.
+        join.probes[0] = None;
+        let start = counters.accounting.work;
+        join.prepare_probe(
+            pattern,
+            crate::formula_support::Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap();
+        let repeated = counters.accounting.work - start;
+        assert!(
+            repeated < first,
+            "re-entering a depth must not repeat directory resolution"
+        );
+        assert!(std::ptr::eq(relation, join.resolutions[0].rows().unwrap()));
+        join.probes[0] = None;
+        let exact = FormulaLimits {
+            max_work: counters.accounting.work + repeated,
+            ..limits
+        };
+        join.prepare_probe(
+            pattern,
+            crate::formula_support::Context::new(computation, &exact, counters, location()),
+        )
+        .unwrap();
+        assert_eq!(counters.accounting.work, exact.max_work);
     });
 }
 

@@ -300,7 +300,11 @@ zetesis-bench run --suite scalability --grounder eager \
 
 `performance::scalability::workloads` returns authored queens at n=8/9/10,
 pigeonhole at h=5/6/7, and unchanged queens variant 02, SEND+MORE=MONEY and task
-allocation. `--include-einstein` adds the unchanged riddle. The examples root is
+allocation, followed by the authored Sudoku grid. `--include-einstein` adds the
+unchanged riddle as an eleventh workload. Sudoku's reviewed source digest and
+exact 81-digit display contract live in `scalability::sudoku`, also used by the
+ordinary CLI correctness test. Its eight givens per row make it a grounding and
+language workload, not a difficult search instance. The examples root is
 separate from the clean corpus root: both default to the repository's respective
 `examples` and `examples/correctness` directories. Authored source/manifest
 digests are checked; default contracts travel with the source, while amended

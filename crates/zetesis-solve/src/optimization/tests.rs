@@ -62,7 +62,8 @@ fn refused_improvement_preserves_the_old_incumbent() {
                 owner.objectives(),
                 first.clone(),
                 &options,
-                &Cancellation::default()
+                &Cancellation::default(),
+                None,
             )
             .unwrap()
     );
@@ -72,7 +73,8 @@ fn refused_improvement_preserves_the_old_incumbent() {
             owner.objectives(),
             second,
             &options,
-            &Cancellation::default()
+            &Cancellation::default(),
+            None,
         ),
         Err(Interruption::Incumbent(OptimizationStop::Bytes)),
     ));
@@ -99,6 +101,7 @@ fn improvement_replaces_the_complete_charge() {
             first,
             &options,
             &Cancellation::default(),
+            None,
         )
         .unwrap();
     assert!(
@@ -107,7 +110,8 @@ fn improvement_replaces_the_complete_charge() {
                 owner.objectives(),
                 second.clone(),
                 &options,
-                &Cancellation::default()
+                &Cancellation::default(),
+                None,
             )
             .unwrap()
     );
@@ -120,3 +124,5 @@ fn improvement_replaces_the_complete_charge() {
     assert_eq!(best.tied_models, 1);
     assert_eq!(best.scored_models, 2);
 }
+
+mod prepared;

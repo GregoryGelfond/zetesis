@@ -106,7 +106,9 @@ pub(crate) fn partial(literals: &[LiteralIr]) -> bool {
             value: right,
         } => expression(left) || expression(right),
         LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(expression),
-        LiteralIr::Guard(guard) => guard.expressions().any(expression),
+        LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => {
+            guard.expressions().any(expression)
+        }
         LiteralIr::Bind { value, .. } => expression(value),
         LiteralIr::Aggregate(aggregate) => aggregate
             .guards

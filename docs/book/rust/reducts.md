@@ -34,6 +34,26 @@ An `Interpretation` belongs to one immutable `Theory`. Cloning the theory shares
 identity. Independently constructing equal node lists produces another identity,
 and passing an interpretation from it returns `Stop::WrongProgram`.
 
+`Interpretation::try_clone` copies the packed words while sharing that exact
+theory owner. It takes O(ceil(U/64)) time and owned words for a universe of U
+atoms, reports allocation failure, and neither evaluates formulas nor owns a
+cancellation token. An execution caller retains its own work and control checks.
+
+`Interpretation::atoms` visits packed words and removes their set bits in
+ascending order. With U atoms and S selected positions, complete traversal costs
+O(ceil(U/64) + S), with constant auxiliary space. `words32` instead lends exactly
+ceil(U/32) low-bit-first membership words, including zero words. Its
+`InterpretationWords` iterator retains the exact theory, exposed through
+`theory()`, even after advancement or cloning. The empty universe exports no
+words; unused bits in the final word are zero. Numeric half-word extraction is
+independent of host byte order and allocates no storage. These views retain
+membership only; they do not establish satisfaction or answer-set status.
+
+The general and tight GPU packers consume this same export after checking its
+theory owner. They preserve candidate occurrence order and the device ABI's
+single zero padding word for an empty transport. Their shared packing operation
+polls cancellation before every copied word and publishes no partial batch.
+
 `check` returns completed verdict data: accepted, not an original model, or
 nonminimal with a witness. For an owned decision tied to the candidate actually
 checked, use `check_interpretation`. Its private construction prevents attaching

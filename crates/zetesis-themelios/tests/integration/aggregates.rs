@@ -213,3 +213,51 @@ fn all_queens_encodings_exhaust_the_same_ninety_two_boards() {
         }
     }
 }
+
+#[test]
+fn shared_choice_guards_preserve_prefix_origins() {
+    let source = "p(1..12). q(X) :- p(X). 1{a;b;c}1.";
+    let input = formula(source);
+    assert_eq!(
+        models(&input),
+        expected(&[
+            "p(1..12).q(1..12).a.",
+            "p(1..12).q(1..12).b.",
+            "p(1..12).q(1..12).c.",
+        ])
+    );
+    // Identify each original prefix rule by its logical head, independently of
+    // node IDs introduced by the aggregate. Support guards have falsum heads
+    // and are not these original p/q rule roots.
+    let prefix_origins = |program: &AdmittedFormula| {
+        use zetesis_ferraris::Node;
+
+        let mut by_head = std::collections::BTreeMap::new();
+        let theory = program.theory();
+        let atoms = program.atoms();
+        assert_eq!(program.formula_origins().len(), theory.roots().len());
+        for (&root, origins) in theory.roots().iter().zip(program.formula_origins()) {
+            let Node::Implies(_, head) = theory.nodes()[root] else {
+                continue;
+            };
+            let Node::Atom(head) = theory.nodes()[head] else {
+                continue;
+            };
+            let atom = atoms.at(head).unwrap();
+            if matches!(atom.predicate().name(), "p" | "q") {
+                let atom = atom.to_atom(zetesis_core::ValueLimits::default()).unwrap();
+                assert!(by_head.insert(atom, origins.clone()).is_none());
+            }
+        }
+        by_head
+    };
+    let prefix = formula("p(1..12). q(X) :- p(X).");
+    let expected_origins = prefix_origins(&prefix);
+    assert_eq!(expected_origins.len(), 24);
+    assert_eq!(prefix_origins(&input), expected_origins);
+    assert!(input.formula_origins().iter().flatten().any(|origin| {
+        let start = usize::try_from(origin.span.start().get()).unwrap();
+        let end = usize::try_from(origin.span.end().get()).unwrap();
+        source.get(start..end) == Some("1{a;b;c}1.")
+    }));
+}

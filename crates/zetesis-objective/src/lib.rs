@@ -8,6 +8,7 @@
 
 mod program;
 mod score;
+mod reduction;
 mod error;
 mod evaluate;
 mod condition;
@@ -24,3 +25,5 @@ pub use program::{
     WeightPolarity,
 };
 pub use score::{Contribution, Evaluation, Score};
+
+pub use reduction::{CostReduction, reduce_costs};

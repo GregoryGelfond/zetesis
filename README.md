@@ -1,10 +1,12 @@
 # zetesis
 
+ζήτησις, *inquiry* — an answer-set solver in Rust.
+
 [![CI](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml)
-[![Source release: v0.1.7](https://img.shields.io/badge/source-v0.1.7-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.1.7)
+[![Source release: v0.2.0](https://img.shields.io/badge/source-v0.2.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.2.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 92.15% (portable)](https://img.shields.io/badge/coverage-92.15%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
+[![Line coverage: 92.23% (portable)](https://img.shields.io/badge/coverage-92.23%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
 
 **[Read the zetesis Book](https://gregorygelfond.github.io/zetesis/book/)**
 
@@ -106,19 +108,19 @@ See `zetesis help solve`, or add `--advanced` for resource controls.
 ## Performance at a glance
 
 CPU measurements on an Apple M4 Pro, using default execution settings:
-zetesis 0.1.6 ([measured source](https://github.com/GregoryGelfond/zetesis/commit/7d83581ebd23f8d38daf7138723343c8f8226728))
+zetesis ([measured source](https://github.com/GregoryGelfond/zetesis/commit/120fadfb3744c00760bcefd575ce3641075341dc))
 with **14 threads** on this host, and clingo 5.8.2 with **one thread**.
-Both enumerate every answer or every tied optimum. Times are medians of five
-complete command-line runs, including startup, parsing, grounding, solving and
-captured output; zetesis statistics are enabled.
+Both enumerate every answer or every tied optimum. Each time averages two
+five-run medians of complete command-line runs, including startup, parsing,
+grounding, solving and captured output; zetesis statistics are enabled.
 
 | Workload | zetesis | clingo | Comparison |
 | --- | ---: | ---: | --- |
-| [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 36.11 ms | 185.92 ms | zetesis 5.15× faster |
-| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 35.94 ms | 117.95 ms | zetesis 3.28× faster |
-| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 15.44 ms | 12.58 ms | zetesis 23% slower |
-| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 13.03 ms | 6.43 ms | clingo 2.03× faster |
-| **All 94 programs: sum of per-case medians** | **854.80 ms** | **826.97 ms** | **zetesis 3.4% slower** |
+| [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 32.10 ms | 188.57 ms | zetesis 5.88× faster |
+| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 33.88 ms | 123.64 ms | zetesis 3.65× faster |
+| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 15.40 ms | 12.22 ms | clingo 1.26× faster |
+| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 12.59 ms | 6.20 ms | clingo 2.03× faster |
+| **All 94 programs: sum of paired per-case medians** | **823.37 ms** | **812.49 ms** | **clingo 1.01× faster** |
 
 zetesis is faster on **4 of 94 cases**; clingo is faster on 90. The substantial
 wins on a few cases bring the totals close. The total is a sum of individual
@@ -127,8 +129,8 @@ budgets and agreed on shown answers and costs, including optimum ties.
 
 These observations depend on the workload
 and machine; they do not establish a general speedup. clingo's optional parallel
-modes are outside this comparison. See the [benchmark guide](https://gregorygelfond.github.io/zetesis/book/reference/performance.html#run-a-benchmark)
-for commands and measurement scope.
+modes are outside this comparison. See the [complete results](https://gregorygelfond.github.io/zetesis/book/reference/foundation-reuse.html)
+for all cases, memory, source identities and reproduction commands.
 
 ## Use from Rust
 

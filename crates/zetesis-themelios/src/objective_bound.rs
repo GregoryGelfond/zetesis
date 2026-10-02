@@ -1,12 +1,16 @@
-//! Optional exact objective constraints for the outer candidate search only.
+//! Reusable objective eligibility, score reads and exact candidate bounds.
 //!
 //! A plan compiles complete positive objective joins over the supplied completed
-//! possible relation. Its atom order must match the original theory. The caller
-//! establishes coverage of every stable model and verifies the incumbent; this
-//! module neither solves a source nor changes its original frozen reduct.
+//! possible relation. Its atom order must match the original theory, and the
+//! caller establishes coverage of every stable model. Score reads reuse that
+//! eligibility independently of candidate pruning. Constructing an incumbent
+//! bound additionally requires a verified incumbent. Neither operation solves
+//! a source, establishes answer-set membership or changes its frozen reduct.
 
 mod bound;
 mod join;
+mod score;
+pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -175,6 +179,7 @@ impl std::error::Error for ObjectiveBoundError {}
 #[derive(Debug)]
 pub struct ObjectivePlan {
     original: Theory,
+    objectives: ObjectiveProgram,
     nodes: Vec<Node>,
     levels: BTreeMap<i32, Vec<AggregateElement>>,
     statistics: ObjectiveBoundStatistics,

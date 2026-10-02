@@ -1,9 +1,9 @@
 use std::mem::size_of;
 
-use super::{Frontier, PendingRegion};
-use zetesis_ferraris::{AdmissionLimits, Knowledge, Narrower, Node, Region, Theory};
+use super::{CandidateKnowledge, Frontier, PendingRegion};
+use zetesis_ferraris::{AdmissionLimits, Narrower, Node, Region, Theory};
 
-fn entry() -> PendingRegion {
+fn index() -> Narrower {
     let theory = Theory::new(
         2,
         vec![Node::Atom(0), Node::Atom(1)],
@@ -11,19 +11,22 @@ fn entry() -> PendingRegion {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let mut knowledge = Vec::with_capacity(4);
-    knowledge.push(Narrower::new(&theory).knowledge());
-    (Region::all_open(2), knowledge)
+    Narrower::new(&theory)
+}
+
+fn entry() -> PendingRegion {
+    (
+        Region::all_open(2),
+        CandidateKnowledge::new(index().knowledge()),
+    )
 }
 
 #[test]
-fn frontier_counts_unused_entry_and_knowledge_slots() {
+fn frontier_counts_unused_entry_slots() {
     let entry = entry();
     let entry_bytes = entry.0.retained_bytes()
-        + size_of::<Vec<zetesis_ferraris::Knowledge>>() as u128
-        + entry.1.iter().map(Knowledge::retained_bytes).sum::<u128>()
-        + (entry.1.capacity() - entry.1.len()) as u128
-            * size_of::<zetesis_ferraris::Knowledge>() as u128;
+        + size_of::<CandidateKnowledge>() as u128
+        + entry.1.allocated_bytes();
     let mut frontier = Frontier::new(entry).unwrap();
     frontier.try_reserve(7).unwrap();
     let observed = frontier.statistics;
@@ -67,7 +70,7 @@ fn returning_active_knowledge_counts_its_new_capacity() {
     assert!(active.0.hold(1));
     // Restrictions added while a region was pending acquire fresh knowledge
     // only when it is narrowed, outside the frontier's ownership.
-    active.1.push(active.1[0].clone());
+    active.1.permanent(1, &index()).unwrap();
     frontier.push(active);
     assert!(frontier.statistics.retained_bytes > initial.retained_bytes);
     assert_eq!(frontier.statistics.regions, 1);

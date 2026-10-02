@@ -375,3 +375,10 @@ qualified scope. Historical archive tags are not releases. Link badges and the
 repository homepage only to resources that exist and are accessible to their
 intended audience; update version, license and toolchain claims together with
 their source declarations.
+
+Every release includes [CHANGELOG.md](CHANGELOG.md). Record notable user and
+library changes under Unreleased as they land. Before release, review API,
+language, CLI and output compatibility, choose the appropriate Semantic
+Versioning increment, and move those entries under the version and release
+date. Keep implementation progress and private measurement notes out of the
+changelog; link maintained documentation when more detail is needed.

@@ -699,6 +699,7 @@ impl<'a> Session<'a> {
                     retained: 0,
                     search_state: Some(crate::SearchState::Interrupted(interruption)),
                     optimization: None,
+                    objective_work: 0,
                     checked: 0,
                     gate_atoms: 0,
                     candidate_statistics: None,

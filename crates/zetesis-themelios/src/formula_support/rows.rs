@@ -100,6 +100,6 @@ pub(super) struct Staged {
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod filtering;
+#[cfg(test)]
+mod tests;

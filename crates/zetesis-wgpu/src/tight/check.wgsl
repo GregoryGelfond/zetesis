@@ -108,10 +108,14 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
     }
     storageBarrier();
     workgroupBarrier();
-    for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-        if (contains(world, atom) &&
-            (atomicLoad(&support[supported + atom / 32u]) & (1u << (atom % 32u))) == 0u) {
-            atomicMin(&first_atom, atom);
+    for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+        // Candidate padding is zero. The least bit missing from complete
+        // support is the least unsupported atom in this word. Reducing those
+        // witnesses retains the least atom across all words and invocations.
+        let missing = candidates[world * params.words + word] &
+            ~atomicLoad(&support[supported + word]);
+        if (missing != 0u) {
+            atomicMin(&first_atom, word * 32u + firstTrailingBit(missing));
         }
     }
     workgroupBarrier();

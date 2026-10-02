@@ -343,7 +343,7 @@ impl GpuFormulaOracle {
             .map(|prepared| &prepared.graph)
             .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
-        let seeds = plan.pack(graph, candidates)?;
+        let seeds = plan.pack(graph, candidates, cancellation)?;
         Ok(PreparedCall {
             fresh,
             plan,

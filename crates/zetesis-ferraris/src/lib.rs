@@ -29,9 +29,9 @@ pub use aggregate::native as native_aggregate;
 pub use aggregate::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateExtremum, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard,
-    AggregateLimits, AggregateProfile, AggregateStatistics, ExtremumBound, ValueExtremumElement,
-    append_aggregate, append_aggregate_family, append_extremum, append_value_extremum,
-    append_value_extremum_refs,
+    AggregateLimits, AggregateProfile, AggregateStatistics, ExtremumBound, FormulaNodes,
+    ValueExtremumElement, append_aggregate, append_aggregate_family, append_extremum,
+    append_value_extremum, append_value_extremum_refs,
 };
 
 pub use evaluation::{
@@ -44,7 +44,9 @@ pub use regions::{
     Extraction, Knowledge, Narrower, NarrowingAttempt, NarrowingStatistics, Producers,
     RegionLimits, producers,
 };
-pub use theory::{AdmissionError, AdmissionLimits, Interpretation, Node, Theory};
+pub use theory::{
+    AdmissionError, AdmissionLimits, Interpretation, InterpretationWords, Node, Theory,
+};
 pub use zetesis_cpu::regions::{Narrowing, Region};
 
 pub use tight::{

@@ -40,11 +40,17 @@
 
 use std::collections::BTreeSet;
 use std::mem::size_of;
+use std::num::NonZeroUsize;
 
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{Node, Theory};
+
+mod adjacency;
+mod counters;
+use adjacency::Adjacency;
+use counters::Counters;
 
 /// The work ceiling of one narrowing, and of producer extraction. Every
 /// propagation event reads at least one node, so the work bounds the
@@ -87,9 +93,9 @@ struct Subject<'a> {
 #[derive(Clone, Debug)]
 pub struct Producers {
     rules: Vec<Producer>,
-    by_head: Vec<Vec<usize>>,
+    by_head: Adjacency,
     /// The producers whose body is this node.
-    by_body: Vec<Vec<usize>>,
+    by_body: Adjacency,
 }
 
 /// The outcome of extracting a theory's producers.
@@ -108,7 +114,9 @@ pub struct Extraction {
 /// case the support rule does not apply.
 ///
 /// # Errors
-/// Returns the stop when extraction exceeds `limits.max_work` or control stops.
+/// Returns the stop when extraction exceeds `limits.max_work`, control stops,
+/// or compact-adjacency storage cannot be represented or reserved. Other
+/// extraction storage retains its existing infallible allocation behavior.
 pub fn producers(
     theory: &Theory,
     limits: RegionLimits,
@@ -135,8 +143,6 @@ fn extract(theory: &Theory, work: &mut Work) -> Result<Option<Producers>, Stop> 
         });
     }
     let mut rules = Vec::new();
-    let mut by_head = vec![Vec::new(); theory.atom_count()];
-    let mut by_body = vec![Vec::new(); nodes.len()];
     for &root in theory.roots() {
         work.tick()?;
         let (body, head) = match nodes[root] {
@@ -165,19 +171,26 @@ fn extract(theory: &Theory, work: &mut Work) -> Result<Option<Producers>, Stop> 
         } else {
             return Ok(None);
         };
-        let index = rules.len();
-        for &atom in &heads {
-            by_head[atom].push(index);
-        }
-        if let Some(body) = body {
-            by_body[body].push(index);
-        }
         rules.push(Producer {
             body,
             heads,
             choice,
         });
     }
+    let by_head = Adjacency::build(
+        theory.atom_count(),
+        rules
+            .iter()
+            .enumerate()
+            .flat_map(|(index, producer)| producer.heads.iter().map(move |&atom| (atom, index))),
+    )?;
+    let by_body = Adjacency::build(
+        nodes.len(),
+        rules
+            .iter()
+            .enumerate()
+            .filter_map(|(index, producer)| producer.body.map(|body| (body, index))),
+    )?;
     Ok(Some(Producers {
         rules,
         by_head,
@@ -246,8 +259,10 @@ impl<E: From<Stop>, F: FnMut() -> Result<(), E>> Work<F> {
 /// connective read as one node, a *chain*, with its operands; the parents
 /// of each node that is not inside a chain, an implication or a chain root
 /// reading it as an operand; the nodes carrying each atom; and the atoms
-/// among each node's operands. Built once per theory in one pass over its
-/// nodes.
+/// among each node's operands. Built once per theory from its nodes. The three
+/// immutable incidence maps store ordered rows as offsets
+/// into contiguous entry vectors, retaining every occurrence already chosen by
+/// chain formation. Compaction adds only linear construction passes.
 ///
 /// A node is absorbed into its parent's chain when it has that one parent,
 /// the same connective, and is not a root of the theory; every other
@@ -259,15 +274,15 @@ impl<E: From<Stop>, F: FnMut() -> Result<(), E>> Work<F> {
 /// fails (conjunction), so the operands' masks already read it.
 #[derive(Clone, Debug)]
 pub struct Narrower {
-    parents: Vec<Vec<usize>>,
-    atom_nodes: Vec<Vec<usize>>,
+    parents: Adjacency,
+    atom_nodes: Adjacency,
     chains: Vec<Chain>,
-    /// The chain a node is the root of.
-    chain_of: Vec<Option<usize>>,
+    /// The chain a node roots, stored one-based so absence needs no extra word.
+    chain_of: Vec<Option<NonZeroUsize>>,
     /// Whether a node is inside a chain, with no knowledge of its own.
     absorbed: Vec<bool>,
     /// The atoms among a node's operands, for the split ranking.
-    atom_operands: Vec<Vec<usize>>,
+    atom_operands: Adjacency,
 }
 
 /// A maximal tree of one connective, read as one node over its operands.
@@ -279,13 +294,26 @@ struct Chain {
     operands: Vec<usize>,
 }
 
+/// A one-based chain link. Both construction maps point into allocated chain
+/// vectors, whose positions cannot reach `usize::MAX`; checked encoding retains
+/// that invariant without imposing a smaller theory-size admission limit.
+fn encoded_chain(position: usize) -> NonZeroUsize {
+    NonZeroUsize::new(position.checked_add(1).expect("allocated chain position"))
+        .expect("positive chain link")
+}
+
+/// Recover the zero-based position used by chain operands and counters.
+fn chain_position(link: NonZeroUsize) -> usize {
+    link.get() - 1
+}
+
 /// The chains of a theory: each conjunction or disjunction not absorbed
 /// into its parent is a root, with the chain it roots and, per node,
 /// whether the node is absorbed. Operands precede their parents, so a
 /// node's chain is complete when its parent is reached: a same-connective
 /// operand that is not a root of the theory and has this one parent joins
 /// the parent's chain, its own dissolving into it.
-fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
+fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>) {
     let nodes = theory.nodes();
     let mut roots = vec![false; nodes.len()];
     for &root in theory.roots() {
@@ -304,7 +332,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
         }
     }
     let mut built: Vec<Chain> = Vec::new();
-    let mut chain_of: Vec<Option<usize>> = vec![None; nodes.len()];
+    let mut chain_of = vec![None; nodes.len()];
     let mut absorbed = vec![false; nodes.len()];
     for (index, node) in nodes.iter().enumerate() {
         let (disjunction, a, b) = match *node {
@@ -322,7 +350,9 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
             let inner = if roots[operand] || parent_count[operand] != 1 {
                 None
             } else {
-                chain_of[operand].filter(|&k| built[k].disjunction == disjunction)
+                chain_of[operand]
+                    .map(chain_position)
+                    .filter(|&k| built[k].disjunction == disjunction)
             };
             // The operands stay distinct: a node reached twice, through
             // both sides, is one operand, as it is one node of the DAG.
@@ -338,7 +368,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
                 operands.push(operand);
             }
         }
-        chain_of[index] = Some(built.len());
+        chain_of[index] = Some(encoded_chain(built.len()));
         built.push(Chain {
             disjunction,
             root: index,
@@ -350,12 +380,12 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<usize>>, Vec<bool>) {
     let mut renumbered = vec![None; built.len()];
     for (old, chain) in built.into_iter().enumerate() {
         if !absorbed[chain.root] {
-            renumbered[old] = Some(live.len());
+            renumbered[old] = Some(encoded_chain(live.len()));
             live.push(chain);
         }
     }
     for entry in &mut chain_of {
-        *entry = entry.and_then(|old| renumbered[old]);
+        *entry = entry.and_then(|old| renumbered[chain_position(old)]);
     }
     (live, chain_of, absorbed)
 }
@@ -381,8 +411,8 @@ pub struct Knowledge {
 }
 
 impl Knowledge {
-    /// Header, owned flag and seen masks, and vector capacities in bytes,
-    /// including empty worklists' retained capacity. The shared theory, narrower
+    /// Header, owned flag, seen and counter arrays, and worklist capacities in
+    /// bytes, including empty worklists' retained capacity. The shared theory, narrower
     /// and producer index are excluded, as are allocator bookkeeping and
     /// temporary clones.
     #[must_use]
@@ -394,16 +424,15 @@ impl Knowledge {
             known.atom_sure.len(),
             known.atom_never.len(),
         ];
-        let indices = [
-            known.sure_operands.capacity(),
-            known.never_operands.capacity(),
-            known.unknown.capacity(),
-            known.learned.capacity(),
-            known.heads.capacity(),
-        ];
+        let indices = [known.learned.capacity(), known.heads.capacity()];
+        let counters = [&known.sure_operands, &known.never_operands, &known.unknown];
         size_of::<Self>() as u128
             + flag_words.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<u64>() as u128
             + indices.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<usize>() as u128
+            + counters
+                .into_iter()
+                .map(Counters::allocated_bytes)
+                .sum::<u128>()
             + known.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
             + known.seen.len() as u128 * size_of::<u64>() as u128
     }
@@ -412,53 +441,86 @@ impl Knowledge {
 #[cfg(test)]
 mod tests;
 
+/// The ordered operand-to-parent incidences already chosen by chain formation.
+/// Chains precede implications as in the original index; a repeated implication
+/// operand is one incidence. Distinct atom nodes carrying the same atom remain
+/// distinct occurrences when this stream is projected to atom operands.
+fn dependencies<'a>(
+    nodes: &'a [Node],
+    chains: &'a [Chain],
+) -> impl Iterator<Item = (usize, usize)> + Clone + 'a {
+    chains
+        .iter()
+        .flat_map(|chain| {
+            chain
+                .operands
+                .iter()
+                .map(move |&operand| (operand, chain.root))
+        })
+        .chain(nodes.iter().enumerate().flat_map(|(index, node)| {
+            let operands = match *node {
+                Node::Implies(a, b) => [Some(a), (b != a).then_some(b)],
+                _ => [None, None],
+            };
+            operands
+                .into_iter()
+                .flatten()
+                .map(move |operand| (operand, index))
+        }))
+}
+
 impl Narrower {
-    /// Index the theory's DAG for narrowing.
+    /// Index the theory's DAG for narrowing. Use [`Self::try_new`] to receive
+    /// compact-adjacency capacity and allocation refusals as [`Stop`].
+    ///
+    /// # Panics
+    /// Panics if compact adjacency cannot be represented or reserved. Other
+    /// index construction retains its existing infallible allocation behavior.
     #[must_use]
     pub fn new(theory: &Theory) -> Self {
+        Self::try_new(theory).expect("region adjacency storage could not be reserved")
+    }
+
+    /// Index the same DAG using checked compact adjacency construction.
+    /// Each incidence map reads its immutable edge stream twice and uses linear
+    /// row scans, preserving row order and duplicates. The existing logical
+    /// index receipt remains one visit per theory node; construction passes and
+    /// storage initialization are not additional charged propagation reads.
+    ///
+    /// # Errors
+    /// Returns [`Stop::Allocation`] for compact-adjacency offset overflow or
+    /// reservation failure. Chain construction and later knowledge allocation
+    /// retain their existing infallible behavior; this is not universal OOM
+    /// recovery. This constructor has no independent cancellation contract.
+    pub fn try_new(theory: &Theory) -> Result<Self, Stop> {
         let nodes = theory.nodes();
         let (chains, chain_of, absorbed) = chains(theory);
-        let mut parents = vec![Vec::new(); nodes.len()];
-        let mut atom_operands = vec![Vec::new(); nodes.len()];
-        let atom_of = |node: usize| match nodes[node] {
-            Node::Atom(atom) => Some(atom),
-            _ => None,
-        };
-        for chain in &chains {
-            for &operand in &chain.operands {
-                parents[operand].push(chain.root);
-                if let Some(atom) = atom_of(operand) {
-                    atom_operands[chain.root].push(atom);
-                }
-            }
-        }
-        for (index, node) in nodes.iter().enumerate() {
-            if let Node::Implies(a, b) = *node {
-                // An implication from a node to itself is one parent of it,
-                // counted once here and once among the atom operands.
-                let operands: &[usize] = if b == a { &[a] } else { &[a, b] };
-                for &operand in operands {
-                    parents[operand].push(index);
-                    if let Some(atom) = atom_of(operand) {
-                        atom_operands[index].push(atom);
-                    }
-                }
-            }
-        }
-        let mut atom_nodes = vec![Vec::new(); theory.atom_count()];
-        for (index, node) in nodes.iter().enumerate() {
-            if let Node::Atom(atom) = *node {
-                atom_nodes[atom].push(index);
-            }
-        }
-        Self {
+        let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
+        let atom_operands = Adjacency::build(
+            nodes.len(),
+            dependencies(nodes, &chains).filter_map(|(operand, parent)| match nodes[operand] {
+                Node::Atom(atom) => Some((parent, atom)),
+                _ => None,
+            }),
+        )?;
+        let atom_nodes = Adjacency::build(
+            theory.atom_count(),
+            nodes
+                .iter()
+                .enumerate()
+                .filter_map(|(index, node)| match *node {
+                    Node::Atom(atom) => Some((atom, index)),
+                    _ => None,
+                }),
+        )?;
+        Ok(Self {
             parents,
             atom_nodes,
             chains,
             chain_of,
             absorbed,
             atom_operands,
-        }
+        })
     }
 
     /// The work indexing charged: one visit per node.
@@ -470,14 +532,18 @@ impl Narrower {
     /// Knowledge of nothing, for the root of a tree over this theory.
     #[must_use]
     pub fn knowledge(&self) -> Knowledge {
-        let mut unknown = vec![0usize; self.atom_nodes.len()];
+        // Every chain operand and every parent counted for an atom is an
+        // occurrence in this same incidence stream. Its total bounds all
+        // three counter arrays; no theory-size or language cap is imposed.
+        let incidences = self.parents.entry_count();
+        let mut unknown = Counters::zeros(self.atom_nodes.len(), incidences);
         for (atom, nodes) in self.atom_nodes.iter().enumerate() {
             for &node in nodes {
-                unknown[atom] += self.parents[node].len();
+                unknown.add(atom, self.parents[node].len());
             }
         }
         Knowledge {
-            known: Known::empty(self.parents.len(), self.chains.len(), unknown),
+            known: Known::empty(self.parents.len(), self.chains.len(), incidences, unknown),
         }
     }
 
@@ -678,7 +744,7 @@ fn most_constrained<E: From<Stop>>(
     let mut best: Option<(usize, usize)> = None;
     for atom in region.open() {
         work.tick()?;
-        let unknown = known.unknown[atom];
+        let unknown = known.unknown.get(atom);
         if best.is_none_or(|(_, count)| unknown > count) {
             best = Some((atom, unknown));
         }
@@ -705,13 +771,13 @@ struct Known {
     atom_sure: Box<[u64]>,
     atom_never: Box<[u64]>,
     /// Per chain, the operands known to hold.
-    sure_operands: Vec<usize>,
+    sure_operands: Counters,
     /// Per chain, the operands known to fail.
-    never_operands: Vec<usize>,
+    never_operands: Counters,
     /// Per atom, the parents of its nodes not yet known: the split ranking.
     /// A parent is counted once here and taken off once when it is
     /// revisited, so the count never goes below zero.
-    unknown: Vec<usize>,
+    unknown: Counters,
     /// The atoms this closure decided, not yet told to the region.
     learned: Vec<usize>,
     /// Nodes that learned something, with what, and have not been revisited.
@@ -770,15 +836,15 @@ fn learn(known: &mut [u64], opposite: &[u64], index: usize) -> Step {
 }
 
 impl Known {
-    fn empty(nodes: usize, chains: usize, unknown: Vec<usize>) -> Self {
+    fn empty(nodes: usize, chains: usize, incidences: usize, unknown: Counters) -> Self {
         let seen = vec![0u64; unknown.len().div_ceil(64)].into_boxed_slice();
         Self {
             sure: vec![0; flag_words(nodes)].into_boxed_slice(),
             never: vec![0; flag_words(nodes)].into_boxed_slice(),
             atom_sure: vec![0; flag_words(unknown.len())].into_boxed_slice(),
             atom_never: vec![0; flag_words(unknown.len())].into_boxed_slice(),
-            sure_operands: vec![0; chains],
-            never_operands: vec![0; chains],
+            sure_operands: Counters::zeros(chains, incidences),
+            never_operands: Counters::zeros(chains, incidences),
             unknown,
             learned: Vec::new(),
             nodes: Vec::new(),
@@ -930,9 +996,7 @@ impl Known {
         let nodes = theory.nodes();
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         for &atom in &index.atom_operands[node] {
-            self.unknown[atom] = self.unknown[atom]
-                .checked_sub(1)
-                .expect("a parent is counted before it is revisited");
+            self.unknown.decrement(atom);
         }
         let mut step = Step::Unchanged;
         if !masked(node) {
@@ -944,7 +1008,7 @@ impl Known {
                 continue;
             }
             step = step.join(if let Some(chain) = index.chain_of[parent] {
-                self.operand_changed(index, chain, value)
+                self.operand_changed(index, chain_position(chain), value)
             } else {
                 let up = self.learn_from_operands(nodes, parent);
                 if bit(&self.sure, parent) || bit(&self.never, parent) {
@@ -970,11 +1034,14 @@ impl Known {
         } = index.chains[chain];
         let total = operands.len();
         if value {
-            self.sure_operands[chain] += 1;
+            self.sure_operands.add(chain, 1);
         } else {
-            self.never_operands[chain] += 1;
+            self.never_operands.add(chain, 1);
         }
-        let (sure, never) = (self.sure_operands[chain], self.never_operands[chain]);
+        let (sure, never) = (
+            self.sure_operands.get(chain),
+            self.never_operands.get(chain),
+        );
         match (disjunction, value) {
             (true, true) => self.sure(root),
             (true, false) if never == total => self.never(root),
@@ -1028,7 +1095,7 @@ impl Known {
     ) -> Step {
         let mut step = Step::Unchanged;
         if let Some(chain) = index.chain_of[node] {
-            step = step.join(self.teach_chain(index, chain));
+            step = step.join(self.teach_chain(index, chain_position(chain)));
         }
         if bit(&self.sure, node) {
             step = step.join(match nodes[node] {
@@ -1087,7 +1154,7 @@ impl Known {
         let mut step = Step::Unchanged;
         if bit(&self.sure, root) {
             if disjunction {
-                if self.never_operands[chain] + 1 == total {
+                if self.never_operands.get(chain) + 1 == total {
                     step = step.join(self.unit(index, chain));
                 }
             } else {
@@ -1101,7 +1168,7 @@ impl Known {
                 for &operand in operands {
                     step = step.join(self.never(operand));
                 }
-            } else if self.sure_operands[chain] + 1 == total {
+            } else if self.sure_operands.get(chain) + 1 == total {
                 step = step.join(self.unit(index, chain));
             }
         }

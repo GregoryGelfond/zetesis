@@ -188,6 +188,23 @@ family refuses admission. Independent faults in a reached phase remain fatal.
 Closed-term preparation and post-solve observations retain strict checks. See
 [source-family evaluation](../../docs/book/architecture/grounding.md#source-instances-as-a-composition)
 for the binding and phase boundaries.
+
+Final formula materialization and hybrid capture can certify total arithmetic
+for a flat constraint from completed positive argument columns. Every checked expression
+must be a leaf or depend on one variable covered by a whole column domain;
+generated scopes, nested scopes and constructors remain outside this gate.
+Successful preparation permits ordinary comparison selection. An arithmetic
+failure in that possibly larger domain declines the optimization without
+creating a source diagnostic; resource and owner failures remain typed refusals.
+Source-family evidence always retains complete traversal. Each reached hybrid
+rule attempts this preparation once over the full frozen carrier, before
+candidate filtering. Later cursors borrow a successful map read-only; an
+arithmetic decline retains ordinary checked traversal without repeating the
+optional attempt. Errors publish no prepared rule. Capture has already admitted
+the speculative successful values, so frozen checking needs no new term
+admission. Retained maps authenticate their completed carrier and accounting
+workspace; they establish no candidate truth.
+
 Descending or nonnumeric interval endpoints yield no rows in facts and generated
 bindings.
 For example, `p(a..b).` contributes no fact; `p(a..(1/0)).` remains an
@@ -203,6 +220,16 @@ disjunction shifting is used. Singleton and disjunctive heads admit positive,
 default-negated and double-negated atoms and Boolean constants. Boolean constants
 create no atoms or support. Complete sibling and body validation precedes
 simplification, so a true head cannot hide unsafe source or exhausted limits.
+
+An ordinary singleton comparison head is a nonbinding truth requirement over
+its completed body row. It uses the existing scalar/tuple comparison and chain
+profile, including default and double negation: `X=Y :- body.` lowers to a
+constraint over `body` and the complemented comparison guard. The guard checks
+all arithmetic intermediates and participates in ordinary family diagnostics.
+Its head role remains explicit: a true head cannot suppress arithmetic evidence
+or warnings from nested original body scopes. Head equality cannot bind an
+otherwise unsafe variable. Comparison operands in
+conditional/disjunctive, choice and function-head elements remain unsupported.
 
 Conditional disjuncts admit finite local conditions and independent local
 bindings. Each completed `H:C` contributes `(C → H) ∧ not not C` to the head
@@ -626,6 +653,25 @@ A planning stop does not invalidate the already admitted theory or prove UNSAT.
 constraints over the original carrier. Callers must establish catalog coverage
 and verify the incumbent. Bounds preserve ties; the original theory and reduct
 remain the acceptance subject. These plans have independent work/storage limits.
+
+The same immutable plan provides `ObjectivePlan::score` over an interpretation
+of its exact original theory. Preparation globally coalesces each normalized
+priority/weight/tuple key, combining alternative eligibility with OR. A score
+read evaluates that retained eligibility DAG once, then reduces active weights
+at the objective's fixed descending priorities. No tuple-key cache or source
+join is rebuilt for that read. For `N` retained DAG nodes, `K` keys and `P`
+priorities, it visits `O(N + K + P log(P + 1))` data with `O(N + P)` temporary
+storage; priority map probes remain part of the one logical priority charge.
+The interpretation supplies truth only: scoring proves neither stable-model
+membership nor the caller's completed-catalog coverage.
+
+`None` declines prepared scoring when the plan's complete possible population
+cannot establish a requested binding, key or key-byte ceiling. This zero-work
+decline lets the detailed evaluator enforce that ceiling on the selected model.
+Cancellation and exact owner identity are checked before decline. A typed
+`ObjectiveScoreError` instead preserves its actual accepted work prefix and no
+score. Consumers needing borrowed contribution tuples continue to call
+`zetesis_objective::evaluate`; the plan deliberately does not retain those tuples.
 See [count planning](src/formula_count_plan.rs) and
 [objective bounds](src/objective_bound.rs).
 

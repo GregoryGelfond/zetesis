@@ -115,6 +115,7 @@ impl Compiler<'_> {
                         | LiteralIr::ArgumentCheck { .. }
                         | LiteralIr::TupleCompare(..)
                         | LiteralIr::Guard(_)
+                        | LiteralIr::HeadGuard(_)
                         | LiteralIr::Bind { .. }
                         | LiteralIr::Range { .. }
                         | LiteralIr::Conditional(_)
@@ -279,7 +280,7 @@ impl Compiler<'_> {
                 }
                 false
             }
-            LiteralIr::Guard(guard) => {
+            LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => {
                 for expression in guard.expressions() {
                     if self.expression_uses(expression, variable)? {
                         return Ok(true);

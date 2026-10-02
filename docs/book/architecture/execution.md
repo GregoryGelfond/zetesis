@@ -255,6 +255,17 @@ and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/ma
 state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.
 
+For a complete positive atomic-head theory, `PositivePlan` computes the least
+consequences once and checks every original constraint. CPU region modes then
+propose only that interpretation, or none when a constraint fails. Accumulated
+candidate restrictions and the region filter still apply to the singleton;
+the ordinary membership and publication checks retain the original theory owner.
+No worker needs to explore candidate regions or allocate a reduct query for this
+case. Larger classical models need not be individually refuted: the certificate
+already rules them out as answer sets. An unsupported or resource-refused plan
+keeps general solving available; an interrupted attempt never establishes
+exhaustion. This CPU policy does not change explicit device checking.
+
 Under the clauses method, exact projection exclusions have one owner across
 candidate restrictions: the outer cursor retains an index of previously
 proposed semantic interpretations, and strengthening the candidate query
@@ -297,12 +308,25 @@ stores support as one bit per semantic atom in each candidate's row. By default 
 the row, then each enabled original producer atomically sets its head bit.
 After the storage barrier, a bit is set exactly when that head has an enabled
 producer. Atomic OR preserves updates from different heads sharing a word and
-from repeated producers. The final atom scan retains the least unsupported
-atom as its witness. This representation reduces the support buffer to
+from repeated producers. The final scan compares candidate and support words:
+`candidate & ~support` contains precisely that word's unsupported candidate bits.
+Each nonzero word contributes its least set-bit position; the workgroup minimum
+retains the least unsupported atom across all words. Candidate tail bits are
+zero, and a failed original root still takes precedence over this witness. This representation reduces the support buffer to
 `4 * max(worlds * ceil(atoms / 32), 1)` bytes; it does not describe total device
 memory or establish a speedup. Shared-word contention remains a measurement
 question. Ordinary formula sessions with automatic membership policy select this
 primitive on an explicit device backend when complete tight preparation succeeds.
+
+The complete device-work allowance is now
+`nodes + roots + producers + 2 * ceil(atoms / 32)`: one word scan constructs or
+initializes support and one checks missing support. This replaces the former
+`nodes + roots + producers + atoms + ceil(atoms / 32)` contract. Work receipts
+and pre-dispatch admission use the same new allowance; an exact allowance is
+admitted and one less is refused. Historical work counts therefore need their
+source identity when compared. This change describes logical operation counts,
+not measured latency or a new membership criterion.
+
 Preparation shares the CPU certificate constructor and cumulative search budget,
 but does not activate CPU certificate checking. The executor is selected before
 pipeline creation, so these batches do not first run the general propagator.

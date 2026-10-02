@@ -295,7 +295,7 @@ fn snapshot_bytes_include_the_borrowed_owner() {
 }
 
 #[test]
-fn probe_bytes_include_keys_beside_the_query() {
+fn indexed_probes_need_no_key_or_equality_buffers() {
     let mut catalog = SupportCatalog::default();
     insert(&mut catalog, &atom(&[1, 2]));
     let support = catalog
@@ -311,22 +311,8 @@ fn probe_bytes_include_keys_beside_the_query() {
     )
     .unwrap();
     let binding = [Some(Value::Number(2))];
-    let keys = [
-        (0, TermRef::from(&Value::Number(1))),
-        (1, TermRef::from(&Value::Number(2))),
-    ];
-    let query = support
-        .rows
-        .first()
-        .unwrap()
-        .relation
-        .query(&keys, Limits::default())
-        .unwrap();
-    let bytes = support.bytes
-        + size_of::<Vec<(usize, TermRef<'_>)>>()
-        + 2 * size_of::<(usize, TermRef<'_>)>()
-        + query.retained_bytes();
-    drop(query);
+    // The owner alone fits; any temporary key or equality buffer would refuse.
+    let bytes = support.bytes;
     let exact = FormulaLimits {
         max_support_bytes: bytes,
         ..FormulaLimits::default()
@@ -353,6 +339,30 @@ fn probe_bytes_include_keys_beside_the_query() {
             resource: FormulaResource::SupportBytes, observed, limit, location: found,
         }) if observed == bytes as u128 && limit == (bytes - 1) as u128 && found == location()
     ));
+}
+
+#[test]
+fn a_missing_dictionary_key_does_not_hide_a_later_invalid_slot() {
+    let mut catalog = SupportCatalog::default();
+    insert(&mut catalog, &atom(&[1, 2]));
+    let limits = FormulaLimits::default();
+    let support = catalog
+        .snapshot(&limits, &mut Counters::default(), location())
+        .unwrap();
+    let pattern = AtomPattern::new(
+        atom(&[1, 2]).predicate().clone(),
+        vec![Term::Constant(Value::Number(99)), Term::Variable(1)],
+    )
+    .unwrap();
+    let mut counters = Counters::default();
+    let result = support.probe(&pattern, &[None], &limits, &mut counters, location());
+    assert!(
+        matches!(result, Err(FormulaFailure::UnsafeVariable { variable: 1, location: found }) if found == location())
+    );
+    assert!(
+        counters.accounting.work > 2,
+        "the missing lookup prefix remains charged"
+    );
 }
 
 #[test]

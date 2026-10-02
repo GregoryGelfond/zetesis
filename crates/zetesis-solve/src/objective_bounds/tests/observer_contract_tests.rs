@@ -10,7 +10,7 @@ use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula as admitted;
 use zetesis_sat::{Limits, StableModels};
 
-use super::Bounds;
+use super::{Bounds, Preparation};
 use crate::countermodel::Input;
 use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig, SolveError};
@@ -42,7 +42,7 @@ fn attempt(
         &Cancellation::default(),
     )
     .unwrap();
-    let mut bounds = Bounds::new(
+    let preparation = Preparation::new(
         Input {
             theory: planned.theory(),
             atoms: planned.atom_catalog(),
@@ -53,17 +53,20 @@ fn attempt(
             certificate_order: zetesis_sat::CertificateOrder::TightFirst,
         },
         &options,
-        &mut crate::execution_observation::Ignore,
         &Cancellation::default(),
-    )
-    .unwrap();
-    assert!(bounds.plan.is_some());
+    );
+    preparation
+        .observe(&mut crate::execution_observation::Ignore)
+        .unwrap();
+    let mut bounds = Bounds::new(&options);
+    assert!(preparation.plan().is_some());
     let mut limits = Limits::default();
     if !foreign {
         limits.admission.max_variables = original.atoms().len();
     }
     let mut models = by_clauses(original.theory(), limits, Cancellation::default()).unwrap();
     let result = bounds.improve(
+        preparation.plan(),
         score.score(),
         &mut models,
         &options,

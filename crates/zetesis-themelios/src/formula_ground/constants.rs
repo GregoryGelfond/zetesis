@@ -44,7 +44,7 @@ fn constants(root: usize) -> Theory {
         builder.initialize(location()).unwrap();
         Theory::new(
             1,
-            std::mem::take(&mut builder.nodes),
+            std::mem::take(&mut builder.nodes).into_vec(),
             vec![root],
             limits.theory,
         )
@@ -162,7 +162,7 @@ fn initialization_obeys_work_ceiling() {
             resource: FormulaResource::Work, limit, observed, ..
         }) if limit == u128::from(before + 1) && observed == u128::from(before + 2)));
         assert_eq!(builder.counters.accounting.work - before, 1);
-        assert_eq!(builder.nodes, [Node::False]);
+        assert_eq!(&*builder.nodes, [Node::False]);
     });
 }
 

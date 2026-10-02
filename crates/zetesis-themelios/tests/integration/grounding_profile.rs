@@ -1,5 +1,6 @@
 //! Public phase observation describes work without changing admitted formulas.
 
+mod constant_divisors;
 mod lending_rows;
 
 use std::cell::{Cell, RefCell};
@@ -72,6 +73,33 @@ fn compile(
         *limits,
         observer,
     )
+}
+
+#[test]
+fn sudoku_fits_default_grounding_allowance() {
+    let observer = Observer::default();
+    let admitted = compile(
+        include_str!("../../../../examples/sudoku.lp"),
+        &FormulaLimits::default(),
+        Some(&observer),
+    );
+    for record in observer.records.borrow().iter() {
+        if record.work.join_rows.is_none_or(|rows| rows == 0) {
+            continue;
+        }
+        println!(
+            "phase={:?} outcome={:?} location={:?} rows={:?} expressions={:?} nodes={:?} bindings={:?} construction={:?}",
+            record.phase,
+            record.outcome,
+            record.location,
+            record.work.join_rows,
+            record.work.expression_evaluations,
+            record.work.expression_nodes,
+            record.work.binding_snapshots,
+            record.work.support_construction_work,
+        );
+    }
+    admitted.expect("the finite Sudoku carrier fits the ordinary grounding allowance");
 }
 
 #[test]

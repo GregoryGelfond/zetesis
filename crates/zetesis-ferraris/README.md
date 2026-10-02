@@ -115,7 +115,7 @@ Construction retains the existing finite formula/work limits and charged
 failure prefix. No partial restriction escapes opaque-root, resource or control
 refusal. The separate restriction still copies original DAG descriptors before
 adding support nodes; repeated encoding of that copy remains a preparation cost.
-See [support API](src/support.rs) and [complete small-family controls](tests/integration/support.rs).
+See [support API](src/support.rs) and [complete small-family controls](tests/integration/candidate_support.rs).
 
 ## Narrowing regions by the theory's readings
 
@@ -199,7 +199,133 @@ The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
 
-`proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
+The three mutable occurrence-count arrays use fixed-length storage: two counts
+per chain and one unresolved-parent count per atom. They use `u32` only when it
+is narrower than `usize` and the total number of parent incidences fits `u32`;
+otherwise they keep `usize`. Every chain operand and every parent counted for
+an atom is an occurrence in that same incidence stream, so its length bounds
+every counter. Checked additions and decrements preserve the exact count;
+width never changes while propagating. This adds no theory-size admission cap
+and does not narrow cumulative work statistics. Knowledge clones retain
+independent arrays, with unchanged original/frozen ownership requirements.
+
+For A atoms and C chains, the counter payload on a 64-bit host decreases from
+8(A + 2C) to 4(A + 2C) bytes when the bound fits. Header layout is counted by
+`Knowledge::retained_bytes`; masks, worklists, immutable indexes, scheduler
+state and allocator overhead are separate. Each copied Knowledge carries the
+same payload reduction. This is a storage model, not an RSS or timing result.
+Construction directly allocates the selected width, with no temporary native
+counter array; the incidence bound is read from the existing compact index.
+The three nonempty arrays still require three allocations per copied Knowledge.
+All count reads and updates retain the same charged propagation operations;
+storage initialization and copying remain outside that work receipt. Existing
+knowledge allocation behavior remains infallible.
+
+The private `compact_counters_reduce_clone_payload` test reports counter and
+complete Knowledge storage for 4,096 atoms with four-operand chains. Reproduce
+its storage receipt through the normal test harness:
+
+```sh
+cargo test -p zetesis-ferraris --lib \
+  regions::tests::counters::compact_counters_reduce_clone_payload -- --exact --nocapture
+```
+
+The `traversal_copies_only_live_knowledge_arrays` test wraps actual
+`Traversal` state clones at 64, 512 and 4,096 atoms. Each fixture leaves eight
+atoms free, visits all 256 complete candidates and compares native and selected
+counter widths. The receipt counts completed `Knowledge::clone` calls,
+initialized array representation bytes and the returned clones' nonempty
+backing allocations. It separately records source worklist spare capacity:
+`Vec::clone` copies initialized elements, so retained source capacity is not
+copy payload. The test verifies the expected counter-width reduction across
+every measured split.
+
+```sh
+cargo test -p zetesis-ferraris --lib \
+  regions::tests::copy_costs::traversal_copies_only_live_knowledge_arrays -- --exact --nocapture
+```
+
+This structural receipt excludes inline headers, region masks, shared indexes,
+measurement storage and allocator bookkeeping. It is neither an allocator-call
+trace nor a timing, RSS or memory-bus measurement. It covers the sequential
+`Traversal` fixture, not application-wide clone traffic or parallel workers'
+active and queued frontier. Those require separate observations; the retained
+bytes reported by a queued frontier do not include active worker state.
+
+Counter tests cover the representable boundary and native fallback, compare
+both widths' complete original/frozen closures and split preferences, and
+check clone independence. The existing packed-knowledge and metered-prefix
+regressions exercise inherited knowledge and refusal receipts. The integer
+representation must continue to realize the counts used by `FormulaChains`
+and the `Known` relation in `FormulaBounds`; those semantic laws do not by
+themselves prove the Rust width conversion. Mutable snapshots remain fully
+copied; partial sharing and narrower incidence entries remain separate work.
+
+The immutable node-to-chain map stores `Option<NonZeroUsize>`: a present link
+encodes the zero-based chain position plus one, while absence remains `None`.
+Both chain construction and its temporary live-chain renumbering map use this
+layout. Encoding checks addition; positions in the allocated chain vectors
+cannot reach `usize::MAX`, so the representation adds no admission limit.
+Consumers decode to the original zero-based positions before reading chains or
+counters. Absorption, live-chain order, operand order and charged work stay the
+same. On a 64-bit host each map slot occupies 8 bytes instead of the previous
+16-byte `Option<usize>`; the retained map has one slot per theory node. Its
+vector header and allocation count are unchanged. This index belongs to the
+shared `Narrower`, outside the owned `Knowledge::retained_bytes` receipt.
+
+The private chain-link tests cover absence, checked encoding, live-chain
+renumbering and original/frozen propagation under equivalent reordered chain
+storage. Its storage fixture reports actual map capacities and element widths;
+it excludes other index fields, temporary renumbering, knowledge, allocator
+overhead and RSS. Reproduce that receipt with:
+
+```sh
+cargo test -p zetesis-ferraris --lib \
+  regions::tests::chain_links::compact_chain_links_reduce_retained_storage -- --exact --nocapture
+```
+
+The immutable index stores five incidence maps in compact row form: parents,
+atom nodes and atom operands in `Narrower`, and producers by head and by body
+in `Producers`. Each map has one offset vector and one contiguous entry vector.
+A row is a borrowed slice, in its original order and with its original duplicate
+occurrences. Compaction does not change chain formation, producer identity,
+propagation order, split ranking or mutable `Knowledge`. In particular, two
+distinct atom nodes for one atom remain two atom-operand occurrences, while the
+existing rule for an implication with the same node on both sides still counts
+that node once.
+
+For N theory nodes and A atoms, the five maps contain R = 3N + 2A rows in total.
+Their logical payload is R + 5 offset words and E incidence words. On a 64-bit
+host, replacing each row's 24-byte vector header by its 8-byte offset saves
+approximately 16R bytes plus unused incidence capacity, less the small fixed
+map-header/sentinel difference. This is a retained-storage model, not a measured
+RSS or timing result. Each builder makes two traversals of its unchanged edge
+stream plus linear row scans and storage initialization: O(rows + incidences)
+placement work, with one temporary cursor word per row. Enumerating the source
+streams also scans the nodes or producer records twice per map, so total added
+construction remains linear in nodes, atoms, producer records and incidences.
+There is no per-row allocation. The existing chain-building algorithm and its temporary operands are unchanged.
+The logical indexing receipt remains one visit per theory node; these storage
+construction passes are outside that receipt, just as allocation and the
+existing chain-building passes were. Propagation's charged reads are unchanged.
+
+`Narrower::try_new` returns `Stop::Allocation` if compact incidence sizes overflow
+or their storage cannot be reserved. Operational SAT callers propagate that
+refusal. `Narrower::new` remains the infallible convenience constructor and
+panics on those refusals. Neither constructor makes the existing chain and
+knowledge allocations fallible, and neither adds a cancellation API. Producer
+extraction retains its existing control/work contract and also propagates
+compact-index allocation refusals. The row tests compare complete ordered
+subsequences, including empty rows, shared nodes and duplicates; the existing
+original/frozen propagation and quota-prefix tests cover the consumers. The
+private `compact_adjacency_uses_less_retained_storage` test reports actual
+before/after capacities on an implication ring; its receipt excludes all other
+index fields, knowledge, scratch and allocator overhead.
+
+`proofs/Zetesis/AdjacencyRows.lean` proves exact ordered row decoding from
+concatenated rows and identical folds over the decoded row. Connecting the Rust
+count/prefix/scatter construction to those mathematical lists remains a
+representation obligation. `proofs/Zetesis/FormulaBounds.lean` proves the readings sound, the knowledge
 sound (`Known`, `known_sound`), and the support cut and the sole-support
 rule sound for stable models on the fragment `DisjunctiveSupport` names
 (`unsupported_cut`, `sole_support_forces`); the
@@ -353,6 +479,17 @@ constructor is source-backed executable code; its aggregate translation has not
 been refined into Lean.
 
 ## Shared comparison families
+
+`FormulaNodes` owns a growing node vector when several compilations share it.
+Its scalar, family and extremum append methods use the same compilers as the
+free functions, while retaining the extent of completed prefix validation.
+Read access is immutable; appends leave an unchecked suffix, and truncation or
+suffix extraction clamps the retained extent. Reusing that extent changes
+validation work, not formula nodes, roots or aggregate semantics. Every call
+still checks limits, elements and cancellation. A failed transaction removes
+its appended nodes and reports its spent work. Consuming `into_vec()` releases
+the owner; constructing another owner from those nodes requires validation again.
+Raw-vector free functions continue to validate the whole prefix each time.
 
 `append_aggregate_family(nodes, elements, guards, limits, control)` compiles an
 ordered list of `AggregateGuard { comparison, bound }` against one identical

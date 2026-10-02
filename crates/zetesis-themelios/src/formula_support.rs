@@ -1,16 +1,16 @@
 //! A finite support upper bound and complete iterative relational joins.
 
-#[cfg(test)]
-pub(crate) mod testing;
-mod evaluation;
 mod computation;
 mod context;
+mod evaluation;
+#[cfg(test)]
+pub(crate) mod testing;
 pub(crate) use context::{Context, GroundingWork};
-pub(crate) mod sort;
 pub(crate) mod components;
-mod storage;
-mod selection;
 mod publication;
+mod selection;
+pub(crate) mod sort;
+mod storage;
 pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
 pub(crate) use selection::SourceSelection;
@@ -18,29 +18,30 @@ pub(crate) use storage::{
     StorageLease, growth_capacity, reserve, reserve_exact, reserve_exact_scoped,
 };
 mod accounting;
-mod observation;
 mod generated;
+mod observation;
 mod term_selection;
 mod term_table;
 pub(crate) use term_table::TermTable;
 mod buffer;
 pub(crate) use buffer::Buffer;
 pub(crate) use term_selection::TermSelection;
-mod filters;
-mod rows;
-pub(crate) mod family;
-mod delta;
-mod order;
-mod prepared;
-mod producers;
-mod relations;
-mod queries;
 #[cfg(test)]
 mod columnar;
+mod delta;
+pub(crate) mod family;
+mod filters;
 #[cfg(test)]
 mod membership;
+mod order;
 #[cfg(test)]
 mod postings;
+mod prepared;
+mod producers;
+mod projections;
+mod queries;
+mod relations;
+mod rows;
 
 use std::borrow::Cow;
 
@@ -570,15 +571,13 @@ fn derive_variants<'source>(
             },
     } = context;
     while let Some(variant) = variants.next(limits, counters)? {
-        let mut outer =
-            Join::domain_rule(rule, support, guards, computation, limits, budget, counters)?;
-        outer.partition(
+        let mut outer = Join::variant_rule(
+            rule,
             variant,
-            computation,
-            limits,
+            support,
+            guards,
             budget,
-            counters,
-            rule.location,
+            Context::new(computation, limits, counters, rule.location),
         )?;
         derive_rule(
             rule,
@@ -822,6 +821,11 @@ pub(crate) struct Join<'a, 'source> {
     /// The certificate of the last completed row, taken by its consumer.
     comparisons: Comparisons,
     coverage: Coverage,
+    /// Source-family traversal follows original body selection independently
+    /// of a complemented comparison head, while still checking its arithmetic.
+    source_evidence: bool,
+    /// All flat constraint expressions succeeded over completed source domains.
+    certified_total: bool,
     family: family::Evidence,
     head_bounds: &'a [crate::formula_ir::AggregateGuard],
     checked_guard: Option<&'a crate::formula_guard::Guard>,
@@ -833,6 +837,7 @@ pub(crate) struct Join<'a, 'source> {
     /// met it; released when that depth is undone.
     failure: Option<(usize, EvalError)>,
     evaluation: Evaluation,
+    projections: projections::Projections<'a>,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     head_slots: std::ops::Range<usize>,
@@ -846,6 +851,8 @@ pub(crate) struct Join<'a, 'source> {
     slots: Vec<Slot>,
     positions: Vec<usize>,
     probes: Vec<Option<Probe<'a, 'source>>>,
+    /// Borrowed relations are resolved once per occurrence in this snapshot.
+    resolutions: Vec<Resolution<'source>>,
     changes: Vec<Vec<usize>>,
     depth: usize,
     traversal: Traversal,
@@ -863,6 +870,21 @@ pub(crate) struct Row<'a> {
 enum Probe<'a, 'source> {
     Indexed(delta::Rows<'a>),
     Table(queries::Rows<'a, 'source>),
+}
+
+#[derive(Clone, Copy)]
+enum Resolution<'source> {
+    Unresolved,
+    Resolved(Option<&'source relations::RelationRows<'source>>),
+}
+
+impl<'source> Resolution<'source> {
+    fn rows(self) -> Option<&'source relations::RelationRows<'source>> {
+        match self {
+            Self::Unresolved => unreachable!("a prepared probe has resolved its relation"),
+            Self::Resolved(rows) => rows,
+        }
+    }
 }
 impl Probe<'_, '_> {
     fn next(
@@ -948,7 +970,7 @@ impl<'a, 'source> Join<'a, 'source> {
         rule: &'a crate::formula_ir::RuleIr,
         support: &'a Support<'source>,
         filter: Option<&'a dyn RowFilter>,
-        plan: Option<&'a order::Plan<'a>>,
+        prepared: Option<&'a PreparedRule<'a>>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<FilteredRows<'a, 'source>, FormulaFailure> {
@@ -961,16 +983,27 @@ impl<'a, 'source> Join<'a, 'source> {
                     location: _,
                 },
         } = context;
-        let mut join = if let Some(plan) = plan {
+        let mut join = if let Some(prepared) = prepared {
+            if !std::ptr::eq(rule, prepared.rule) {
+                return Err(FormulaFailure::SupportRelation {
+                    error: zetesis_core::relation::Failure::Owner,
+                    location: rule.location,
+                });
+            }
             let mut join = Self::with_plan(
                 &rule.body,
                 &Binding::new(computation, limits, counters, rule.location)?,
                 rule.variables,
                 support,
-                Cow::Borrowed(plan),
+                Cow::Borrowed(&prepared.plan),
+                prepared.total.as_ref(),
                 Context::new(computation, limits, counters, rule.location),
             )?;
             join.configure_rule(rule, limits, counters)?;
+            if prepared.total.is_some() {
+                join.certified_total = true;
+                join.coverage = Coverage::Selected;
+            }
             join
         } else {
             Self::rule(rule, support, computation, limits, budget, counters)?
@@ -989,15 +1022,87 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Self, FormulaFailure> {
+        Self::variant_rule(
+            rule,
+            delta::Variant::Full,
+            support,
+            domains,
+            budget,
+            Context::new(computation, limits, counters, rule.location),
+        )
+    }
+
+    fn variant_rule(
+        rule: &'a crate::formula_ir::RuleIr,
+        variant: delta::Variant,
+        support: &'a Support<'source>,
+        domains: Option<&'a queries::Guards<'a, 'source>>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location: _,
+                },
+        } = context;
         if domains.is_some_and(|guards| !guards.belongs_to(rule, support)) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location: rule.location,
             });
         }
-        let mut join = Self::rule(rule, support, computation, limits, budget, counters)?;
+        let mut join = Self::new_with_rows(
+            &rule.body,
+            &Binding::new(computation, limits, counters, rule.location)?,
+            rule.variables,
+            support,
+            budget,
+            Context::new(computation, limits, counters, rule.location),
+            variant,
+        )?;
+        join.configure_rule(rule, limits, counters)?;
         join.domains = domains;
         Ok(join)
+    }
+
+    /// After support completion and source-family validation, cover the full
+    /// positive column domains before ordinary comparisons may select rows.
+    /// Hybrid capture performs this same attempt with append-capable terms
+    /// before a frozen checker prepares its retained immutable rule and carrier.
+    /// This includes successful speculative values before a declined attempt;
+    /// a missing frozen term remains an error. Evidence cursors stay complete.
+    pub(super) fn select_total_constraint(
+        &mut self,
+        rule: &'a crate::formula_ir::RuleIr,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<bool, FormulaFailure> {
+        if self.coverage != Coverage::Complete || self.source_evidence || self.delta.is_some() {
+            return Ok(false);
+        }
+        if !std::ptr::eq(self.literals, rule.body.as_slice()) {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
+            });
+        }
+        let total = self.projections.total_constraint(
+            rule,
+            self.support,
+            &mut self.evaluation,
+            Context::new(computation, limits, counters, rule.location),
+        )?;
+        self.evaluation.clear_zero_divisor();
+        if total {
+            self.certified_total = true;
+            self.coverage = Coverage::Selected;
+        }
+        Ok(total)
     }
 
     pub(super) fn element(
@@ -1154,6 +1259,26 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::new_with_rows(
+            literals,
+            prefix,
+            variables,
+            support,
+            budget,
+            context,
+            delta::Variant::Full,
+        )
+    }
+
+    fn new_with_rows(
+        literals: &'a [LiteralIr],
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+        variant: delta::Variant,
+    ) -> Result<Self, FormulaFailure> {
         let Context {
             computation,
             work:
@@ -1169,7 +1294,13 @@ impl<'a, 'source> Join<'a, 'source> {
             literals,
             prefix,
             variables,
-            support,
+            order::SourceRows {
+                relations: support,
+                pivot: match variant {
+                    delta::Variant::Full => None,
+                    delta::Variant::Delta(pivot) => Some(pivot),
+                },
+            },
             budget,
             location,
             Some(&mut admit),
@@ -1180,6 +1311,7 @@ impl<'a, 'source> Join<'a, 'source> {
             variables,
             support,
             Cow::Owned(plan),
+            None,
             Context::new(computation, limits, counters, location),
         )
     }
@@ -1190,6 +1322,7 @@ impl<'a, 'source> Join<'a, 'source> {
         variables: usize,
         support: &'a Support<'source>,
         plan: Cow<'a, order::Plan<'a>>,
+        total: Option<&'a projections::ProjectionValues<'a>>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
         let Context {
@@ -1202,12 +1335,16 @@ impl<'a, 'source> Join<'a, 'source> {
                 },
         } = context;
         let count = plan.patterns.len();
+        let delta = plan.pivot;
         let mut lease = computation.lease();
         let plan_bytes = match &plan {
             Cow::Owned(plan) => plan.retained_bytes(),
             Cow::Borrowed(_) => 0,
         };
-        let header = size_of::<Self>() - size_of::<Binding>() - size_of::<Evaluation>();
+        let header = size_of::<Self>()
+            - size_of::<Binding>()
+            - size_of::<Evaluation>()
+            - usize::from(total.is_none()) * size_of::<projections::ProjectionValues<'_>>();
         let initial = usize::try_from(plan_bytes + header as u128).map_err(|_| {
             crate::formula_binding::assignment(
                 zetesis_core::catalog::AssignmentError::Storage(
@@ -1220,6 +1357,11 @@ impl<'a, 'source> Join<'a, 'source> {
         computation.storage_observed(&lease, 0, initial, limits, counters, location)?;
         let mut values = prefix.copied(computation, limits, counters, location)?;
         values.extend_scope(variables, computation, limits, counters, location)?;
+        let coverage = if family::partial(literals) {
+            Coverage::Complete
+        } else {
+            Coverage::Selected
+        };
         let mut join = Self {
             bindings: None,
             literals,
@@ -1230,11 +1372,9 @@ impl<'a, 'source> Join<'a, 'source> {
             pending_head: None,
             head_slots: variables..variables,
             comparisons: Comparisons::Deferred,
-            coverage: if family::partial(literals) {
-                Coverage::Complete
-            } else {
-                Coverage::Selected
-            },
+            coverage,
+            source_evidence: false,
+            certified_total: false,
             family: family::Evidence::default(),
             head_bounds: &[],
             checked_guard: None,
@@ -1242,7 +1382,19 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            delta: None,
+            projections: match total {
+                Some(values) => projections::Projections::borrowed(
+                    values,
+                    &Context::new(computation, limits, counters, location),
+                )?,
+                None => projections::Projections::new(&Context::new(
+                    computation,
+                    limits,
+                    counters,
+                    location,
+                ))?,
+            },
+            delta,
             domains: None,
             row_filter: None,
             support,
@@ -1252,6 +1404,7 @@ impl<'a, 'source> Join<'a, 'source> {
             slots: Vec::new(),
             positions: Vec::new(),
             probes: Vec::new(),
+            resolutions: Vec::new(),
             changes: Vec::new(),
             depth: 0,
             traversal: Traversal::Searching,
@@ -1266,25 +1419,38 @@ impl<'a, 'source> Join<'a, 'source> {
             location,
         )?;
         join.initialize_storage(variables, count, computation, limits, counters, location)?;
-        for target in literals
+        join.classify_slots(prefix, limits, counters, location)?;
+        Ok(join)
+    }
+
+    fn classify_slots(
+        &mut self,
+        prefix: &Binding,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        for target in self
+            .literals
             .iter()
             .filter_map(crate::formula_binding_cursor::target)
         {
-            join.slots[target] = Slot::Generated;
+            self.slots[target] = Slot::Generated;
         }
-        for (index, slot) in join.slots.iter_mut().enumerate().take(prefix.len()) {
+        for (index, slot) in self.slots.iter_mut().enumerate().take(prefix.len()) {
             counters.work(limits, location)?;
             if !prefix.is_bound(index, location)? {
                 *slot = Slot::Excluded;
             }
         }
-        Ok(join)
+        Ok(())
     }
 
     fn storage_header(&self) -> usize {
         size_of::<Self>()
             - size_of::<Binding>()
             - size_of::<Evaluation>()
+            - self.projections.leased_header()
             - usize::from(self.pending.is_some())
                 * size_of::<crate::formula_binding_cursor::Cursor<'_, '_>>()
             - usize::from(self.pending_head.is_some())
@@ -1302,6 +1468,7 @@ impl<'a, 'source> Join<'a, 'source> {
             + self.verdicts.capacity() * size_of::<bool>()
             + self.positions.capacity() * size_of::<usize>()
             + self.probes.capacity() * size_of::<Option<Probe<'_, '_>>>()
+            + self.resolutions.capacity() * size_of::<Resolution<'_>>()
             + self.changes.capacity() * size_of::<Vec<usize>>()
     }
     fn initialize_storage(
@@ -1363,6 +1530,18 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         let other = self.storage_bytes();
         reserve(
+            &mut self.resolutions,
+            count,
+            &mut self.lease,
+            other,
+            Context::new(computation, limits, counters, location),
+        )?;
+        for _ in 0..count {
+            counters.work(limits, location)?;
+            self.resolutions.push(Resolution::Unresolved);
+        }
+        let other = self.storage_bytes();
+        reserve(
             &mut self.changes,
             count,
             &mut self.lease,
@@ -1405,7 +1584,11 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         self.checked_guard = Some(guard);
     }
+    /// Traverse source families before head truth selects emitted constraints.
+    /// The head still contributes arithmetic definedness and failure evidence.
     pub(crate) fn evidence(&mut self) {
+        self.source_evidence = true;
+        self.certified_total = false;
         self.coverage = Coverage::Complete;
         self.domains = None;
     }
@@ -1467,48 +1650,6 @@ impl<'a, 'source> Join<'a, 'source> {
             counters,
             location,
         )
-    }
-    /// Restrict this round's join to the rows `variant` offers each source
-    /// occurrence and order the join by those counts: the pivot occurrence
-    /// offers only the round's new rows, so it is joined first when they are
-    /// the fewest.
-    fn partition(
-        &mut self,
-        variant: delta::Variant,
-        computation: &Computation<'_, '_>,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<(), FormulaFailure> {
-        self.delta = match variant {
-            delta::Variant::Full => None,
-            delta::Variant::Delta(pivot) => Some(pivot),
-        };
-        let mut bound = self.bound_slots(computation, limits, counters, location)?;
-        let mut admit =
-            |capacity| computation.preparation_capacity(capacity, limits, counters, location);
-        let (support, delta) = (self.support, self.delta);
-        let literals = self.literals;
-        order::arrange_checked(
-            &mut self.owned_plan().patterns,
-            literals,
-            bound.slice_mut(),
-            |pattern, budget| {
-                let predicate = pattern.atom().predicate();
-                let (old, total) = support.row_counts_with(predicate, || {
-                    budget
-                        .charge(crate::ExpansionResource::TermWork, 1, location)
-                        .map_err(FormulaFailure::from)
-                })?;
-                Ok(delta::interval(delta, pattern.source, old, total).len())
-            },
-            budget,
-            location,
-            &mut admit,
-        )?;
-        self.decide(computation, limits, budget, counters, location)?;
-        Ok(())
     }
     pub fn next(
         &mut self,
@@ -1902,7 +2043,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 .as_ref()
                 .expect("prepared probe")
                 .next(&mut self.positions[self.depth], limits, counters, location)?;
-            let atom = row.and_then(|row| self.support.row(pattern.atom().predicate(), row));
+            let atom = row.and_then(|row| self.resolutions[self.depth].rows()?.row(row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
                 self.probes[self.depth] = None;
@@ -1946,23 +2087,51 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 },
         } = context;
+        // Relation ownership is independent of how the row source was prepared.
+        // A preselected probe still needs this snapshot's owner before row access.
+        if matches!(self.resolutions[self.depth], Resolution::Unresolved) {
+            self.resolutions[self.depth] = Resolution::Resolved(self.support.resolve(
+                pattern.atom(),
+                limits,
+                counters,
+                location,
+            )?);
+        }
         if self.probes[self.depth].is_none() {
+            let source = self.resolutions[self.depth].rows();
+            if let Some(probe) = self.computed_probe(
+                pattern.pattern,
+                source,
+                Context::new(computation, limits, counters, location),
+            )? {
+                self.probes[self.depth] = Some(probe);
+                return Ok(());
+            }
             let binding = self
                 .values
                 .view(computation.read(), limits, counters, location)?;
             self.probes[self.depth] = Some(
-                if let Some(rows) =
-                    self.support
-                        .select(pattern.pattern, binding, limits, counters, location)?
-                {
+                if let Some(rows) = self.support.select_at(
+                    source,
+                    pattern.pattern,
+                    binding,
+                    limits,
+                    counters,
+                    location,
+                )? {
                     Probe::Table(rows)
                 } else {
-                    let posting =
-                        self.support
-                            .probe(pattern.atom(), binding, limits, counters, location)?;
-                    let total = self.support.row_count(pattern.atom().predicate());
+                    let posting = self.support.probe_at(
+                        source,
+                        pattern.atom(),
+                        binding,
+                        limits,
+                        counters,
+                        location,
+                    )?;
+                    let total = source.map_or(0, relations::RelationRows::row_count);
                     Probe::Indexed(if self.delta.is_some() {
-                        let old = self.support.old_rows(pattern.atom().predicate());
+                        let old = source.map_or(0, relations::RelationRows::old_rows);
                         let range = delta::interval(self.delta, pattern.source, old, total);
                         delta::Rows::within(posting, range, limits, counters, location)?
                     } else {
@@ -2094,31 +2263,50 @@ impl<'a, 'source> Join<'a, 'source> {
         for index in self.plan.decisions.decided_at(depth) {
             let (left, relation, right) =
                 comparison(&self.literals[index]).expect("a decided literal is a comparison");
-            let values = self.evaluation.source_values(
-                [left, right],
-                |variable| self.values.key(variable, location),
-                computation,
-                limits,
-                counters,
-                location,
-            );
-            match values {
-                Ok([left, right]) => {
-                    let read = computation.read();
-                    let left = read.term(&left).map_err(|error| {
-                        crate::formula_binding::assignment(
-                            zetesis_core::catalog::AssignmentError::Read(error),
-                            location,
-                        )
-                    })?;
-                    let right = read.term(&right).map_err(|error| {
-                        crate::formula_binding::assignment(
-                            zetesis_core::catalog::AssignmentError::Read(error),
-                            location,
-                        )
-                    })?;
-                    passes &= compare(left, relation, right, limits, counters, location)?;
+            let compared = if self.certified_total {
+                self.projections.compare(
+                    index,
+                    ([left, right], relation),
+                    &self.values,
+                    &mut self.evaluation,
+                    Context::new(computation, limits, counters, location),
+                )
+            } else {
+                self.evaluation
+                    .source_values(
+                        [left, right],
+                        |variable| self.values.key(variable, location),
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    )
+                    .and_then(|[left, right]| {
+                        let read = computation.read();
+                        let left = read.term(&left).map_err(|error| {
+                            crate::formula_binding::assignment(
+                                zetesis_core::catalog::AssignmentError::Read(error),
+                                location,
+                            )
+                        })?;
+                        let right = read.term(&right).map_err(|error| {
+                            crate::formula_binding::assignment(
+                                zetesis_core::catalog::AssignmentError::Read(error),
+                                location,
+                            )
+                        })?;
+                        compare(left, relation, right, limits, counters, location)
+                    })
+            };
+            match compared {
+                Ok(false) if self.certified_total => {
+                    // Complete source domains establish that later arithmetic
+                    // cannot fail. False now excludes every extension without
+                    // concealing a source diagnostic.
+                    self.verdicts[depth] = false;
+                    return Ok(false);
                 }
+                Ok(value) => passes &= value,
                 Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, .. })) => {
                     // Retained, not raised: a comparison decided here or
                     // deeper may still exclude the substitution.

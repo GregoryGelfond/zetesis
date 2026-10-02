@@ -10,6 +10,14 @@ to zero therefore removes every previous evaluation from the logical input.
 The final operation may return its value directly: no later operation needs it
 in the live prefix. The root law preserves both that value and the first error.
 
+Whole-expression reuse has a separate invariant: every cached result came from
+successful evaluation of the same pure expression at an equivalent input key.
+Inserting a successful result preserves that invariant. Lookup then preserves
+both values and errors, and the same complete-row filter receives the same
+ordered results. This does not justify skipping a source row. A separately
+covered finite input carrier permits exact inverse selection by a wanted result;
+coverage of actual source bindings by that carrier remains a caller obligation.
+
 The finite list of operations is the decreasing measure. Operations are pure
 partial functions supplied by the caller: source-plan validity, operand indices,
 checked arithmetic, error precedence and logical charging remain separate
@@ -123,5 +131,119 @@ theorem root_preservation (properPrefix : List (List Value → Except Fault Valu
     cases rootResult : root values with
     | error fault => rfl
     | ok value => simp [Except.map]
+
+section SuccessfulReuse
+
+universe w x y
+variable {Input : Type w} {Key : Type x} {Result : Type y}
+
+/-- Every cache hit names a successful result of the same pure expression.
+    The key may omit input details only when those details cannot affect that
+    expression's result. Failure results have no cache representation. -/
+def SuccessCacheSound (operation : Input → Except Fault Value) (key : Input → Key)
+    (cache : Key → Option Value) : Prop :=
+  ∀ input value, cache (key input) = some value → operation input = .ok value
+
+/-- Publish one successful result under its exact input key. -/
+def rememberSuccess [DecidableEq Key] (cache : Key → Option Value)
+    (inputKey : Key) (value : Value) : Key → Option Value :=
+  fun queried => if queried = inputKey then some value else cache queried
+
+/-- Consult successful results, evaluating the original expression on a miss. -/
+def reuseSuccess (operation : Input → Except Fault Value) (key : Input → Key)
+    (cache : Key → Option Value) (input : Input) : Except Fault Value :=
+  match cache (key input) with
+  | none => operation input
+  | some value => .ok value
+
+/-- Inserting a successful evaluation preserves cache soundness. Equal keys
+    must identify equal results of the fixed pure expression; equal raw numbers
+    from unrelated input owners do not establish this premise.
+
+    A query for the new key agrees with the successful evaluation by the key
+    premise. Every other query retains its previous sound entry. -/
+theorem remember_success_sound [DecidableEq Key]
+    (operation : Input → Except Fault Value) (key : Input → Key)
+    (cache : Key → Option Value)
+    (identifies : ∀ left right, key left = key right → operation left = operation right)
+    (sound : SuccessCacheSound operation key cache)
+    (input : Input) (value : Value) (computed : operation input = .ok value) :
+    SuccessCacheSound operation key (rememberSuccess cache (key input) value) := by
+  intro queried output stored
+  by_cases same : key queried = key input
+  · have same_value : value = output := by
+      simpa [rememberSuccess, same] using stored
+    rw [← same_value]
+    exact (identifies queried input same).trans computed
+  · apply sound queried output
+    simpa [rememberSuccess, same] using stored
+
+/-- A sound hit returns exactly the original successful result. A miss calls
+    the original evaluator, so errors are preserved as well as values. -/
+theorem reuse_success_exact (operation : Input → Except Fault Value)
+    (key : Input → Key) (cache : Key → Option Value)
+    (sound : SuccessCacheSound operation key cache) (input : Input) :
+    reuseSuccess operation key cache input = operation input := by
+  unfold reuseSuccess
+  cases stored : cache (key input) with
+  | none => rfl
+  | some value => exact (sound input value stored).symm
+
+/-- Reuse preserves any fixed filter or evidence reduction over the complete
+    ordered list of source-row results, including false results and errors.
+    The source rows, their order and the consuming function remain unchanged;
+    this theorem does not justify pruning rows or changing error precedence.
+
+    Pointwise evaluation equality gives equality of the complete result list,
+    and the same consumer therefore returns the same result. -/
+theorem reuse_complete_filter (operation : Input → Except Fault Value)
+    (key : Input → Key) (cache : Key → Option Value)
+    (sound : SuccessCacheSound operation key cache) (rows : List Input)
+    (finish : List (Except Fault Value) → Result) :
+    finish (rows.map (reuseSuccess operation key cache)) =
+      finish (rows.map operation) := by
+  have same_evaluation : reuseSuccess operation key cache = operation := by
+    funext input
+    exact reuse_success_exact operation key cache sound input
+  rw [same_evaluation]
+
+
+/-- The inputs in a supplied finite carrier whose retained successful result
+    equals the wanted value. Input order and duplicate occurrences are unchanged. -/
+def successPreimage [DecidableEq Value] (key : Input → Key)
+    (cache : Key → Option Value) (inputs : List Input) (wanted : Value) : List Input :=
+  inputs.filter fun input => decide (cache (key input) = some wanted)
+
+/-- Inverting a sound cache that covers a finite input carrier selects exactly
+    the inputs in that carrier evaluating successfully to the wanted value.
+
+    Soundness turns a retained hit into a successful evaluation. Conversely,
+    cache coverage supplies a stored result; determinism of the fixed evaluator
+    makes it equal to the wanted result. Thus the input survives the filter.
+
+    Cache coverage of the listed inputs is explicit and establishes totality
+    only there. Applying this law to source bindings separately requires that
+    their inputs belong to the carrier. Arbitrary successful memo entries do not
+    establish that source coverage, nor does this law justify skipping diagnostics. -/
+theorem success_preimage_exact [DecidableEq Value]
+    (operation : Input → Except Fault Value) (key : Input → Key)
+    (cache : Key → Option Value) (inputs : List Input)
+    (sound : SuccessCacheSound operation key cache)
+    (covered : ∀ input ∈ inputs, ∃ value, cache (key input) = some value)
+    (wanted : Value) (input : Input) :
+    input ∈ successPreimage key cache inputs wanted ↔
+      input ∈ inputs ∧ operation input = .ok wanted := by
+  simp only [successPreimage, List.mem_filter, decide_eq_true_eq]
+  constructor
+  · intro retained
+    exact ⟨retained.1, sound input wanted retained.2⟩
+  · intro computed
+    obtain ⟨value, stored⟩ := covered input computed.1
+    have same : value = wanted := by
+      have successful : operation input = .ok value := sound input value stored
+      exact Except.ok.inj (successful.symm.trans computed.2)
+    exact ⟨computed.1, same ▸ stored⟩
+
+end SuccessfulReuse
 
 end Zetesis.EvaluationPrefix

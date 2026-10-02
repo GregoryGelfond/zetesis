@@ -14,14 +14,14 @@ use zetesis_core::{
     AtomKey, BindingView, PatternRef, TemplateComponents, TemplateComponentsRef, TemplateTerm,
 };
 
-use super::Counters;
+use super::{Counters, GroundingWork};
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 mod append;
-mod publication;
 mod close;
+mod publication;
 pub(super) use append::SupportAppend;
 pub(crate) use append::{SourceAtom, SourceScope};
 pub(crate) use close::ClosedSource;
@@ -564,6 +564,20 @@ pub(super) struct RelationRows<'source> {
     pub(super) atoms: Atoms<'source>,
 }
 
+impl<'source> RelationRows<'source> {
+    pub(super) fn row(&self, position: usize) -> Option<Row<'_, 'source>> {
+        self.relation.row(position)
+    }
+
+    pub(super) fn row_count(&self) -> usize {
+        self.relation.row_count()
+    }
+
+    pub(super) fn old_rows(&self) -> usize {
+        self.old_rows
+    }
+}
+
 impl<'source> Relations<'source> {
     pub(super) fn components(&self) -> Option<TemplateComponentsRef<'source>> {
         self.components
@@ -582,7 +596,7 @@ impl<'source> Relations<'source> {
             .map(|index| &self.rows[index])
     }
 
-    fn find_with(
+    pub(super) fn find_with(
         &self,
         predicate: PredicateRef<'_>,
         limits: &FormulaLimits,
@@ -670,6 +684,7 @@ impl<'source> Relations<'source> {
             (0..rows.relation.row_count()).map(|row| rows.relation.row(row).expect("bounded row"))
         })
     }
+    #[cfg(test)]
     pub(super) fn row<'predicate>(
         &self,
         predicate: impl Into<PredicateRef<'predicate>>,
@@ -716,20 +731,34 @@ impl<'source> Relations<'source> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
-        self.probe_with_bytes(pattern.into(), values.into(), limits, counters, location, 0)
+        let rows = self.find_with(pattern.predicate().into(), limits, counters, location)?;
+        self.probe_at(
+            rows,
+            pattern.into(),
+            values.into(),
+            0,
+            GroundingWork::new(limits, counters, location),
+        )
     }
 
-    pub(super) fn probe_with_bytes(
+    /// The caller resolves this immutable snapshot's relation once, before its
+    /// cursor visits rows. Equalities are folded immediately; no key or query
+    /// vector outlives an individual dictionary lookup.
+    pub(super) fn probe_at<'rows>(
         &self,
+        rows: Option<&'rows RelationRows<'source>>,
         pattern: PatternRef<'_>,
         values: BindingView<'_>,
-        limits: &FormulaLimits,
-        counters: &mut Counters,
-        location: Location,
         outer_bytes: usize,
-    ) -> Result<Option<&[usize]>, FormulaFailure> {
+        work: GroundingWork<'_>,
+    ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
         counters.record(Event::JoinProbe);
-        let Some(rows) = self.find_with(pattern.predicate(), limits, counters, location)? else {
+        let Some(rows) = rows else {
             return Ok(Some(&[]));
         };
         let mut memory = Memory::new(
@@ -739,8 +768,9 @@ impl<'source> Relations<'source> {
             counters,
             location,
         );
-        memory.add(size_of::<Vec<(usize, TermRef<'_>)>>())?;
-        let mut keys = Vec::new();
+        memory.add(0)?;
+        let mut selected: Option<&[usize]> = None;
+        let mut possible = true;
         let terms = pattern.terms();
         for column in 0..terms.len() {
             counters.work(limits, location)?;
@@ -755,85 +785,47 @@ impl<'source> Relations<'source> {
                 }
             };
             if let Some(value) = value {
-                memory.reserve(&mut keys, 1)?;
-                keys.push((column, value));
-            }
-        }
-        if keys.is_empty() {
-            #[cfg(test)]
-            super::postings::observe(rows, pattern, values, None);
-            return Ok(None);
-        }
-        let outer = memory.outside(rows.relation.storage().retained_bytes)?;
-        let query = resolve_equalities(
-            &rows.relation,
-            &keys,
-            limits,
-            counters,
-            rows.relation.storage().retained_bytes + memory.remaining()?,
-            outer,
-            location,
-        )?;
-        memory.add(query.retained_bytes())?;
-        let mut selected: Option<&[usize]> = None;
-        if query.is_possible() {
-            for equality in query.equalities() {
-                let posting = rows.columns[equality.column()]
-                    .get(&equality.value_id())
-                    .map_or(&[][..], Vec::as_slice);
-                if selected.is_none_or(|previous| posting.len() < previous.len()) {
-                    selected = Some(posting);
+                let outside = memory.outside(rows.relation.storage().retained_bytes)?;
+                let base_work = counters.accounting.work;
+                let checked = relation_limits(
+                    limits,
+                    counters,
+                    pattern.predicate().arity(),
+                    rows.relation.storage().retained_bytes + memory.remaining()?,
+                );
+                let attempt = rows
+                    .relation
+                    .equality_attempt_with(column, value, checked, || {
+                        counters.work(limits, location)
+                    });
+                counters.record(Event::SupportPeakBytes(
+                    outside as u128 + attempt.peak_bytes as u128,
+                ));
+                let equality = attempt.result.map_err(|error| match error {
+                    zetesis_core::relation::QueryFailure::Relation(error) => {
+                        relation_failure(error, limits, base_work, outside, location)
+                    }
+                    zetesis_core::relation::QueryFailure::Stopped(error) => error,
+                })?;
+                if let Some(equality) = equality {
+                    let posting = rows.columns[equality.column()]
+                        .get(&equality.value_id())
+                        .map_or(&[][..], Vec::as_slice);
+                    if selected.is_none_or(|previous| posting.len() < previous.len()) {
+                        selected = Some(posting);
+                    }
+                } else {
+                    possible = false;
                 }
             }
-        } else {
+        }
+        if !possible {
             selected = Some(&[]);
         }
         #[cfg(test)]
         super::postings::observe(rows, pattern, values, selected);
         Ok(selected)
     }
-}
-
-/// The local eager path keeps its accounted query; shared checkers instead
-/// admit each dictionary step before executing it. A remaining-quota snapshot
-/// would race other checkers, and postcharging would omit refused executed work.
-fn resolve_equalities<'owner, 'source>(
-    relation: &'owner Relation<'source>,
-    keys: &[(usize, TermRef<'_>)],
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    scoped_bytes: usize,
-    outer_bytes: usize,
-    location: Location,
-) -> Result<zetesis_core::relation::Query<'owner, 'source>, FormulaFailure> {
-    let base_work = counters.accounting.work;
-    let checked = relation_limits(limits, counters, relation.predicate().arity(), scoped_bytes);
-    let (result, peak_bytes) = if counters.accounting.allowance.is_some() {
-        let attempt =
-            relation.query_attempt_with(keys, checked, || counters.work(limits, location));
-        (
-            attempt.result.map_err(|error| match error {
-                zetesis_core::relation::QueryFailure::Relation(error) => {
-                    relation_failure(error, limits, base_work, outer_bytes, location)
-                }
-                zetesis_core::relation::QueryFailure::Stopped(error) => error,
-            }),
-            attempt.peak_bytes,
-        )
-    } else {
-        let attempt = relation.query_attempt(keys, checked);
-        counters.charge_work(attempt.work, limits, location)?;
-        (
-            attempt
-                .result
-                .map_err(|error| relation_failure(error, limits, base_work, outer_bytes, location)),
-            attempt.peak_bytes,
-        )
-    };
-    counters.record(Event::SupportPeakBytes(
-        outer_bytes as u128 + peak_bytes as u128,
-    ));
-    result
 }
 
 fn relation_limits(

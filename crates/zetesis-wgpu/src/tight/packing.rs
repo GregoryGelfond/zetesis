@@ -115,8 +115,8 @@ impl Graph {
             return Err(capacity("tight strided loop increment exceeds u32"));
         }
         let words = atoms.div_ceil(32);
-        let work = atoms
-            .checked_add(words)
+        let work = words
+            .checked_mul(2)
             .and_then(|n| n.checked_add(nodes))
             .and_then(|n| n.checked_add(roots))
             .and_then(|n| n.checked_add(producers))
@@ -344,19 +344,7 @@ impl Plan {
             usize::try_from(self.seeds / 4).map_err(|_| capacity("tight seeds exceed host"))?,
             0,
         );
-        for (world, candidate) in candidates.iter().enumerate() {
-            poll(cancellation)?;
-            if !graph.theory.same_instance(candidate.theory()) {
-                return Err(GpuError::new(
-                    GpuErrorKind::Seed,
-                    "candidate belongs to another Theory",
-                ));
-            }
-            for atom in candidate.atoms() {
-                poll(cancellation)?;
-                output[world * graph.words as usize + atom / 32] |= 1 << (atom % 32);
-            }
-        }
+        crate::candidates::pack(&graph.theory, candidates, &mut output, cancellation)?;
         Ok(output)
     }
 }

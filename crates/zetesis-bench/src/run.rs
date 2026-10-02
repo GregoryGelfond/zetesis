@@ -30,7 +30,7 @@ pub enum Suite {
     Queens,
     /// The maintained 22-cell generated/constant workload series.
     Series,
-    /// Nine maintained authored/corpus workloads for thread comparisons.
+    /// Ten maintained authored/corpus workloads for thread comparisons.
     Scalability,
 }
 impl Suite {

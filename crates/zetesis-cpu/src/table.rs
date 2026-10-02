@@ -21,7 +21,7 @@ mod selection;
 
 pub use selection::{Domain, Selection, Values};
 
-use accounting::Work;
+use accounting::{Work, control, unmetered};
 
 const WORD_BITS: usize = u32::BITS as usize;
 
@@ -104,6 +104,62 @@ impl std::fmt::Display for Failure {
 }
 impl std::error::Error for Failure {}
 
+/// A table refusal or an enclosing caller's admission/control refusal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MeteredCause<E> {
+    /// This operation's shape, storage, allocation or local work refusal.
+    Table(Cause),
+    /// The caller refused a control poll or a work permit before its effect.
+    /// This includes finite shared allowances, not just cancellation.
+    Stopped(E),
+}
+
+impl<E> From<Cause> for MeteredCause<E> {
+    fn from(cause: Cause) -> Self {
+        Self::Table(cause)
+    }
+}
+
+/// A metered refusal with the actual admitted work and capacity prefix.
+/// No partial table or selection is published. Accepted caller permits are not
+/// refunded; `work` counts this operation only, not the caller's earlier history.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MeteredFailure<E> {
+    /// Original local or caller refusal, retaining the caller's typed value.
+    pub cause: MeteredCause<E>,
+    /// Work admitted before the refused operation; a refused permit adds zero.
+    pub work: u64,
+    /// The same conservative operation-scoped capacity peak as [`Failure`].
+    pub peak_bytes: usize,
+}
+
+impl<E> From<Failure> for MeteredFailure<E> {
+    fn from(error: Failure) -> Self {
+        Self {
+            cause: MeteredCause::Table(error.cause),
+            work: error.work,
+            peak_bytes: error.peak_bytes,
+        }
+    }
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for MeteredFailure<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.cause {
+            MeteredCause::Table(cause) => write!(f, "finite-table operation failed: {cause:?}"),
+            MeteredCause::Stopped(error) => write!(f, "finite-table caller refused: {error}"),
+        }
+    }
+}
+impl<E: std::error::Error + 'static> std::error::Error for MeteredFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match &self.cause {
+            MeteredCause::Table(_) => None,
+            MeteredCause::Stopped(error) => Some(error),
+        }
+    }
+}
+
 /// Complete operation costs; these are logical counters and capacities, not RSS.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Statistics {
@@ -184,24 +240,50 @@ impl<'owner, 'source> Table<'owner, 'source> {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Self, Failure> {
+        Self::prepare_with(relation, scope, limits, control(cancellation)).map_err(unmetered)
+    }
+
+    /// Prepare through a caller-owned admission and control callback.
+    ///
+    /// The same algorithm and local limits implement [`Self::prepare`]. The
+    /// callback receives zero at entry, allocation boundaries, and before each
+    /// local work-ceiling check: zero polls control and consumes no work. A
+    /// positive amount requests the entire next charged group after its local
+    /// ceiling check and before its effect or receipt increment. The callback
+    /// must admit that group atomically or return its original typed refusal.
+    /// Already accepted groups are never refunded. No callback is retained.
+    ///
+    /// This lets independent operations share a cumulative quota. Reading a
+    /// remaining allowance before the call alone cannot establish that guarantee.
+    /// Callers record the returned work receipt without charging it again.
+    ///
+    /// # Errors
+    /// Returns local shape/resource/allocation failures or the unchanged caller
+    /// admission/control error, with work and capacity retained on every outcome.
+    pub fn prepare_with<E>(
+        relation: &'owner Relation<'source>,
+        scope: &[usize],
+        limits: Limits,
+        before: impl FnMut(usize) -> Result<(), E>,
+    ) -> Result<Self, MeteredFailure<E>> {
         let scratch_headers = 2 * size_of::<Vec<RowValue<'_>>>() + size_of::<Vec<usize>>();
         let external = relation.storage().retained_bytes;
         let mut work = Work::new(
             limits,
-            cancellation,
+            before,
             external,
             size_of::<Self>() + scratch_headers,
         )?;
         let result = (|| {
             if scope.len() != relation.predicate().arity() {
-                return Err(Cause::Scope);
+                return Err(Cause::Scope.into());
             }
             let mut copied_scope = work.reserve(scope.len())?;
             let mut first_columns = work.reserve(scope.len())?;
             for (column, &variable) in scope.iter().enumerate() {
                 work.tick(1)?;
                 if variable > first_columns.len() {
-                    return Err(Cause::Scope);
+                    return Err(Cause::Scope.into());
                 }
                 if variable == first_columns.len() {
                     work.tick(1)?;
@@ -281,9 +363,9 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// immutable base, including after domain widening. For K variables, D
     /// supplied domain values, V indexed entries, A allowed entries and W row
     /// words, work is O(K + (K+1)*W + V + D*(1+log(V+1)+W) + A*W), plus typed
-    /// comparison payload costs. The base-mask copy remains even for a nullary
-    /// relation; each variable clears and intersects W words even if its domain
-    /// is empty.
+    /// comparison payload costs. The first finite domain initializes the result
+    /// directly from its supports; later finite domains clear and intersect W
+    /// words even if empty. A nullary query still copies the base mask.
     ///
     /// # Errors
     /// Refuses a wrong domain count, finite limits, allocation failure or
@@ -332,10 +414,11 @@ impl<'owner, 'source> Table<'owner, 'source> {
         let scratch_header = size_of::<Vec<u32>>();
         let mut work = Work::new(
             limits,
-            cancellation,
+            control(cancellation),
             external,
             size_of::<Projection<'_, '_, '_>>() + scratch_header,
-        )?;
+        )
+        .map_err(unmetered)?;
         let result = (|| {
             self.check_domains(domains.len(), &work)?;
             let mut supported = work.reserve(self.values.len())?;
@@ -356,7 +439,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
                 statistics: work.statistics(external),
             })
         })();
-        result.map_err(|cause| work.failure(cause))
+        result.map_err(|cause| unmetered(work.failure(cause)))
     }
 
     fn retained_inputs(&self) -> Result<usize, Failure> {
@@ -371,16 +454,24 @@ impl<'owner, 'source> Table<'owner, 'source> {
             })
     }
 
-    fn check_domains(&self, count: usize, work: &Work<'_>) -> Result<(), Cause> {
+    fn check_domains<E>(
+        &self,
+        count: usize,
+        work: &Work<impl FnMut(usize) -> Result<(), E>>,
+    ) -> Result<(), MeteredCause<E>> {
         work.entries(self.values.len())?;
         if count == self.variable_count() {
             Ok(())
         } else {
-            Err(Cause::Domains)
+            Err(Cause::Domains.into())
         }
     }
 
-    fn prepare_variable(&mut self, column: usize, work: &mut Work<'_>) -> Result<(), Cause> {
+    fn prepare_variable<E>(
+        &mut self,
+        column: usize,
+        work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+    ) -> Result<(), MeteredCause<E>> {
         let mut rows = work.reserve(self.relation.row_count())?;
         for row in 0..self.relation.row_count() {
             work.tick(1)?;
@@ -430,12 +521,12 @@ impl<'owner, 'source> Table<'owner, 'source> {
         &self.supports[start..start + self.coherent.len()]
     }
 
-    fn lookup(
+    fn lookup<E>(
         &self,
         variable: usize,
         value: TermRef<'_>,
-        work: &mut Work<'_>,
-    ) -> Result<Option<usize>, Cause> {
+        work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+    ) -> Result<Option<usize>, MeteredCause<E>> {
         let mut range = self.variables[variable].clone();
         while range.start < range.end {
             let middle = range.start + (range.end - range.start) / 2;
@@ -488,13 +579,13 @@ impl<'table, 'owner, 'source> Projection<'table, 'owner, 'source> {
     }
 }
 
-fn coherent_row(
+fn coherent_row<E>(
     relation: &Relation<'_>,
     scope: &[usize],
     first_columns: &[usize],
     row: usize,
-    work: &mut Work<'_>,
-) -> Result<bool, Cause> {
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<bool, MeteredCause<E>> {
     for (column, &variable) in scope.iter().enumerate() {
         work.tick(1)?;
         let previous = first_columns[variable];
@@ -510,7 +601,11 @@ fn coherent_row(
     Ok(true)
 }
 
-fn intersects(left: &[u32], right: &[u32], work: &mut Work<'_>) -> Result<bool, Cause> {
+fn intersects<E>(
+    left: &[u32],
+    right: &[u32],
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<bool, MeteredCause<E>> {
     for (&left, &right) in left.iter().zip(right) {
         work.tick(1)?;
         if left & right != 0 {
@@ -520,7 +615,10 @@ fn intersects(left: &[u32], right: &[u32], work: &mut Work<'_>) -> Result<bool, 
     Ok(false)
 }
 
-fn sort(rows: &mut Vec<RowValue<'_>>, work: &mut Work<'_>) -> Result<(), Cause> {
+fn sort<E>(
+    rows: &mut Vec<RowValue<'_>>,
+    work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
+) -> Result<(), MeteredCause<E>> {
     let mut scratch = work.reserve(rows.len())?;
     for &row in rows.iter() {
         work.tick(1)?;

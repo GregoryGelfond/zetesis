@@ -1,6 +1,6 @@
 use zetesis_cpu::Cancellation;
 
-use super::lower::{Builder, reserve, subsets, transaction_value, validate};
+use super::lower::{Builder, Destination, reserve, subsets, transaction_value, validate};
 use super::{
     AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind, AggregateLimits,
     AggregateProfile, AggregateStatistics,
@@ -45,6 +45,14 @@ impl AggregateFamilyBuild {
     #[must_use]
     pub fn roots(&self) -> &[usize] {
         &self.roots
+    }
+
+    /// Bytes retained by the output-root vector: its inline vector header and
+    /// actual allocation capacity. Excludes the shared DAG, temporary compiler
+    /// state, and this build's profile and statistics fields.
+    #[must_use]
+    pub fn root_storage_bytes(&self) -> usize {
+        size_of::<Vec<usize>>() + self.roots.capacity() * size_of::<usize>()
     }
 
     /// Exact shared translation profile.
@@ -97,7 +105,23 @@ pub fn append_aggregate_family(
     limits: AggregateFamilyLimits,
     cancellation: &Cancellation,
 ) -> Result<AggregateFamilyBuild, AggregateError> {
-    transaction_value(nodes, limits.aggregate, cancellation, |builder| {
+    append(
+        Destination::unchecked(nodes),
+        elements,
+        guards,
+        limits,
+        cancellation,
+    )
+}
+
+pub(super) fn append(
+    destination: Destination<'_>,
+    elements: &[AggregateElement],
+    guards: &[AggregateGuard],
+    limits: AggregateFamilyLimits,
+    cancellation: &Cancellation,
+) -> Result<AggregateFamilyBuild, AggregateError> {
+    transaction_value(destination, limits.aggregate, cancellation, |builder| {
         compile(builder, elements, guards, limits.max_guards)
     })
     .map(|((roots, profile), statistics)| AggregateFamilyBuild {

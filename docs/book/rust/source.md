@@ -214,9 +214,12 @@ allowance as `--max-support-bytes` in `--help-all`. This is an admission limit;
 
 Choose positive joins separately through the preparation's
 `with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
-The default `Indexed` strategy probes existing value postings. `Table` reuses
-support masks only for flat positive patterns over completed eager support;
-structural patterns and support-growth rounds keep indexed joins. The bundle
+The default `Indexed` strategy probes existing value postings. After a flat
+constraint establishes finite arithmetic totality, a computed equality may
+supply a necessary input domain to the shared table selector under either
+strategy. Unrestricted probes still follow the requested strategy. `Table`
+reuses support masks for all applicable flat positive patterns over completed
+eager support; structural patterns and support-growth rounds keep indexed joins. The bundle
 preparation exposes the same method, and the CLI maps `--formula-joins table`
 to it. The choice retains the preparation's source identity and remaining budgets.
 

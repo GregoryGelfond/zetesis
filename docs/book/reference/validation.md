@@ -192,7 +192,7 @@ construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
 [static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs).
-The [coverage snapshot](coverage-0.1.6.md) describes the tests qualified on its
+The [coverage snapshot](coverage-120fadfb.md) describes the tests qualified on its
 stated source; today's required selection does not update it.
 
 Coverage always has two separately instrumented populations:
@@ -238,7 +238,7 @@ The README badge reports workspace line coverage from the most recently
 qualified source identified by the snapshot below. It is a recorded local
 measurement, not a live hosted-CI status. A release version does not change the
 source identity or test population of that measurement.
-The [version 0.1.6 coverage record](coverage-0.1.6.md) holds that snapshot:
+The [coverage and Metal qualification record](coverage-120fadfb.md) holds that snapshot:
 its exact counts, source identities, qualification scope and the commands
 that reproduce it at the revisions it measured.
 

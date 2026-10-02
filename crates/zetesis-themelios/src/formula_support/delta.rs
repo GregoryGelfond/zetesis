@@ -51,6 +51,7 @@ pub(super) fn variants<'a, 'source>(
             | LiteralIr::ArgumentCheck { .. }
             | LiteralIr::TupleCompare(..)
             | LiteralIr::Guard(_)
+            | LiteralIr::HeadGuard(_)
             | LiteralIr::Bind { .. }
             | LiteralIr::Range { .. } => {}
             LiteralIr::PatternAtom(_)

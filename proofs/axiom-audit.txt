@@ -1,3 +1,5 @@
+'Zetesis.AdjacencyRows.slice_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.AdjacencyRows.fold_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.mem_unique' depends on axioms: [propext]
 'Zetesis.AggregateAssignment.unique_nodup' depends on axioms: [propext]
 'Zetesis.AggregateAssignment.unique_length_le' depends on axioms: [propext, Quot.sound]
@@ -402,6 +404,8 @@
  Classical.choice,
  Quot.sound]
 'Zetesis.DomainContraction.empty_domain_excludes_completions' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DomainProducers.transfer_monotone' does not depend on any axioms
+'Zetesis.DomainProducers.derivation_covered' does not depend on any axioms
 'Zetesis.EvaluatedWitnesses.successful_selection' depends on axioms: [propext]
 'Zetesis.EvaluatedWitnesses.completed_condition_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluatedWitnesses.undefined_selection' depends on axioms: [propext]
@@ -418,6 +422,10 @@
 'Zetesis.EvaluationPrefix.reset_preservation' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluationPrefix.evaluate_append' does not depend on any axioms
 'Zetesis.EvaluationPrefix.root_preservation' depends on axioms: [propext]
+'Zetesis.EvaluationPrefix.remember_success_sound' depends on axioms: [propext]
+'Zetesis.EvaluationPrefix.reuse_success_exact' does not depend on any axioms
+'Zetesis.EvaluationPrefix.reuse_complete_filter' depends on axioms: [Quot.sound]
+'Zetesis.EvaluationPrefix.success_preimage_exact' depends on axioms: [propext]
 'Zetesis.insertAtom_grows' does not depend on any axioms
 'Zetesis.insertAtom_contains' does not depend on any axioms
 'Zetesis.insertAtom_duplicate' depends on axioms: [propext, Quot.sound]
@@ -609,6 +617,7 @@
 'Zetesis.GateRestrictions.suffix_region_rejected' depends on axioms: [propext]
 'Zetesis.GroundGuards.constant_original' depends on axioms: [propext]
 'Zetesis.GroundGuards.constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.GroundGuards.constant_head_constraint' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.GroundGuards.guard_original' depends on axioms: [propext]
 'Zetesis.GroundGuards.guard_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.GroundGuards.evaluated_guard_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -769,6 +778,8 @@
 'Zetesis.ObjectiveBounds.mem_prune' depends on axioms: [propext]
 'Zetesis.ObjectiveBounds.incumbent_survives' depends on axioms: [propext]
 'Zetesis.ObjectiveBounds.tighten' depends on axioms: [propext]
+'Zetesis.ObjectiveBounds.replacement_preserves_candidates' does not depend on any axioms
+'Zetesis.ObjectiveBounds.consequence_survives_tightening' does not depend on any axioms
 'Zetesis.ObjectiveBounds.optimum_survives' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ObjectiveBounds.excluded_is_worse' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveBounds.bounded_best_is_global' depends on axioms: [propext, Classical.choice, Quot.sound]

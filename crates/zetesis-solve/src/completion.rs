@@ -90,6 +90,8 @@ pub enum Interruption {
     ModelConstruction(crate::ModelConstructionStop),
     /// An objective could not be completely evaluated for a verified model.
     Objective(zetesis_objective::Error),
+    /// A prepared objective eligibility read or numeric reduction stopped.
+    PreparedObjective(zetesis_themelios::objective_bound::ObjectiveScoreError),
     /// Retaining complete incumbent models exceeded an explicit bound.
     Incumbent(crate::OptimizationStop),
 }
@@ -102,6 +104,7 @@ impl fmt::Display for Interruption {
             | Self::Reconstruction(error) => error.fmt(f),
             Self::Countermodel(error) => error.fmt(f),
             Self::Objective(error) => error.fmt(f),
+            Self::PreparedObjective(error) => error.fmt(f),
             Self::Incumbent(error) => error.fmt(f),
             Self::ModelConstruction(error) => error.fmt(f),
         }

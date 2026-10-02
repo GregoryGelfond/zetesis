@@ -50,16 +50,12 @@ fn numbers(analysis: &Analysis<'_>, name: &str, index: usize, arity: u32) -> BTr
 }
 
 #[test]
-fn finite_flow_joins_union_producers_and_share_exact_source_symbols() {
+fn intersected_flows_share_exact_source_symbols() {
     let program = source("p(1).p(2).r(3).q(X):-p(X),r(X).out(X):-q(X).out(4).cycle(X):-cycle(X).");
     let result = analyze(&program, Limits::default());
     assert_eq!(result.status(), Status::FixedPoint);
-    assert_eq!(
-        numbers(&result, "q", 0, 1),
-        BTreeSet::from([1, 2, 3]),
-        "union intentionally forgets join correlations"
-    );
-    assert_eq!(numbers(&result, "out", 0, 1), BTreeSet::from([1, 2, 3, 4]));
+    assert!(numbers(&result, "q", 0, 1).is_empty());
+    assert_eq!(numbers(&result, "out", 0, 1), BTreeSet::from([4]));
     assert!(numbers(&result, "cycle", 0, 1).is_empty());
     assert!(result.belongs_to(&program));
     assert!(!result.belongs_to(&program.clone()));
@@ -340,45 +336,83 @@ fn positive(name: &str) -> BodyElement {
     })
 }
 
+const PREDICATES: [&str; 4] = ["a", "b", "c", "d"];
+
+fn positive_fixture(facts: u16, rules: &[(usize, usize, usize)]) -> (Program, [[bool; 4]; 4]) {
+    let mut statements = Vec::new();
+    let mut concrete = [[false; 4]; 4];
+    for (predicate, name) in PREDICATES.iter().enumerate() {
+        for (value, present) in concrete[predicate].iter_mut().enumerate() {
+            if facts & (1 << (predicate * 4 + value)) != 0 {
+                *present = true;
+                statements.push(fact(name, Symbol::Number(i32::try_from(value).unwrap())));
+            }
+        }
+    }
+    // Register even an otherwise absent predicate without adding values.
+    for name in PREDICATES {
+        statements.push(WithProvenance::constructed(Statement::Rule(Rule::new(
+            atom(name, variable()),
+            Body::new([positive(name)]),
+        ))));
+    }
+    for &(head, left, right) in rules {
+        statements.push(WithProvenance::constructed(Statement::Rule(Rule::new(
+            atom(PREDICATES[head], variable()),
+            Body::new([positive(PREDICATES[left]), positive(PREDICATES[right])]),
+        ))));
+    }
+    // Independent synchronous concrete closure over Boolean memberships.
+    loop {
+        let previous = concrete;
+        for &(head, left, right) in rules {
+            for value in 0..4 {
+                concrete[head][value] |= previous[left][value] && previous[right][value];
+            }
+        }
+        if concrete == previous {
+            break;
+        }
+    }
+    (Program::of_nodes(statements), concrete)
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
     #[test]
-    fn abstract_arguments_cover_independent_concrete_positive_fixed_points(
-        facts in any::<u16>(), rules in prop::collection::vec((0_usize..4,0_usize..4,0_usize..4),0..16),
+    fn argument_intersections_match_unary_positive_closure(
+        facts in any::<u16>(),
+        rules in prop::collection::vec((0_usize..4,0_usize..4,0_usize..4),0..16),
+    ) {
+        let (program, concrete) = positive_fixture(facts, &rules);
+        let result = analyze(&program, Limits::default());
+        prop_assert_eq!(result.status(), Status::FixedPoint);
+        for (predicate, row) in concrete.iter().enumerate() {
+            let expected: BTreeSet<_> = row.iter().enumerate()
+                .filter(|(_, present)| **present)
+                .map(|(value, _)| i32::try_from(value).unwrap())
+                .collect();
+            prop_assert_eq!(numbers(&result, PREDICATES[predicate], 0, 1), expected);
+        }
+    }
+
+    #[test]
+    fn width_widening_preserves_positive_closure_cover(
+        facts in any::<u16>(),
+        rules in prop::collection::vec((0_usize..4,0_usize..4,0_usize..4),0..16),
         width in 0_usize..5,
     ) {
-        let names = ["a", "b", "c", "d"];
-        let mut statements = Vec::new();
-        let mut concrete = [[false; 4]; 4];
-        for (predicate, name) in names.iter().enumerate() {
-            for (value, present) in concrete[predicate].iter_mut().enumerate() {
-                if facts & (1 << (predicate * 4 + value)) != 0 {
-                    *present = true;
-                    statements.push(fact(name, Symbol::Number(i32::try_from(value).unwrap())));
-                }
-            }
-        }
-        for &(head, left, right) in &rules {
-            statements.push(WithProvenance::constructed(Statement::Rule(Rule::new(
-                atom(names[head], variable()), Body::new([positive(names[left]), positive(names[right])]),
-            ))));
-        }
-        loop {
-            let previous = concrete;
-            for &(head, left, right) in &rules {
-                for value in 0..4 { concrete[head][value] |= previous[left][value] && previous[right][value]; }
-            }
-            if concrete == previous { break; }
-        }
-        let program = Program::of_nodes(statements);
+        let (program, concrete) = positive_fixture(facts, &rules);
         let result = analyze(&program, Limits { max_values_per_argument: width, ..Limits::default() });
         prop_assert_eq!(result.status(), Status::FixedPoint);
         for (predicate, row) in concrete.iter().enumerate() {
             for (value, present) in row.iter().enumerate() {
                 if *present {
-                    prop_assert!(result.domain(&signature(names[predicate],1),0).permits(&Symbol::Number(i32::try_from(value).unwrap())));
+                    prop_assert!(result.domain(&signature(PREDICATES[predicate],1),0).permits(&Symbol::Number(i32::try_from(value).unwrap())));
                 }
             }
         }
     }
 }
+
+mod intersections;

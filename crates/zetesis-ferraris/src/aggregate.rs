@@ -1,6 +1,7 @@
 //! Finite aggregate compilation with reduct-preserving connectives.
 
 mod lower;
+mod nodes;
 mod extremum;
 mod family;
 mod value_extremum;
@@ -13,6 +14,7 @@ pub use family::{
     AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard, append_aggregate_family,
 };
 pub use lower::append_aggregate;
+pub use nodes::FormulaNodes;
 pub use value_extremum::{ValueExtremumElement, append_value_extremum, append_value_extremum_refs};
 
 /// One distinct, already coalesced tuple's weight and eligibility formula.
@@ -65,6 +67,8 @@ pub struct AggregateLimits {
     /// Maximum total DAG nodes, including the existing prefix.
     pub max_nodes: usize,
     /// Charged prefix checks, element/state/subset visits and node appends.
+    /// [`FormulaNodes`] reuses completed prefix checks while retaining the
+    /// per-call control poll and total-node ceiling check.
     pub max_work: u64,
     /// Maximum simultaneously retained algorithm cells, excluding DAG nodes.
     /// Threshold compilation uses two rows; general compilation uses subset bits.

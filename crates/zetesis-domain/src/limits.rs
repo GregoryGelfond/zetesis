@@ -3,7 +3,7 @@
 /// Limits on retained abstract data and inspected source structure.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Source, transfer, and value-merge steps.
+    /// Source, transfer-input, intersection-probe, snapshot-copy and value-merge steps.
     pub max_work: u64,
     /// Distinct signed predicate signatures, including zero-arity predicates.
     pub max_predicates: usize,
@@ -47,7 +47,7 @@ impl Default for Limits {
 /// A global ceiling whose exhaustion prevents publishing any finite domains.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
-    /// Source/transfer/merge steps.
+    /// Source/transfer/intersection/copy/merge steps.
     Work,
     /// Signed predicate signatures.
     Predicates,
@@ -88,7 +88,7 @@ impl std::error::Error for Stop {}
 /// Reservations precede allocation; a later failure can leave a reservation unused.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct Statistics {
-    /// Source/transfer/value steps.
+    /// Source/transfer/intersection/copy/value steps.
     pub work: u64,
     /// Registered signed predicate signatures.
     pub predicates: usize,

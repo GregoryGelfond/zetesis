@@ -1,19 +1,22 @@
 //! Reusable ordering for an exact rule over completed immutable support.
 
 use super::{
-    CompletedQueries, CompletedSupport, Completion, Computation, Counters, FilteredRows, Join,
-    RowFilter, order,
+    CompletedQueries, CompletedSupport, Completion, Computation, Context, Counters, Evaluation,
+    FilteredRows, Join, RowFilter, family, order,
+    projections::{ProjectionValues, Projections},
 };
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::RuleIr;
 use crate::{FormulaFailure, FormulaLimits};
 
-/// No candidate, binding, arithmetic result or traversal position is retained.
+/// One immutable rule and completed carrier own the ordering and any successful
+/// finite totality preparation. No candidate, filter or traversal is retained.
 pub(crate) struct PreparedRule<'source> {
-    rule: &'source RuleIr,
+    pub(super) rule: &'source RuleIr,
     completion: &'source Completion,
-    plan: order::Plan<'source>,
+    pub(super) plan: order::Plan<'source>,
+    pub(super) total: Option<ProjectionValues<'source>>,
 }
 
 impl<'source> PreparedRule<'source> {
@@ -66,13 +69,16 @@ impl<'source> PreparedRule<'source> {
             counters,
             rule.location,
         )?;
-        let computation = queries.computation(rule.location)?;
+        let mut computation = queries.computation(rule.location)?;
         let empty = Binding::new(&computation, limits, counters, rule.location)?;
         let plan = order::Plan::new(
             &rule.body,
             &empty,
             rule.variables,
-            &completed.relations,
+            order::SourceRows {
+                relations: &completed.relations,
+                pivot: None,
+            },
             budget,
             rule.location,
             Some(&mut |capacity| match capacity {
@@ -99,6 +105,37 @@ impl<'source> PreparedRule<'source> {
                 }
             }),
         )?;
+        // The plan remains live while totality allocates its own workspace.
+        // Its final receipt moves to the completed support only on success.
+        let mut plan_storage = computation.lease();
+        let plan_bytes =
+            usize::try_from(plan.retained_bytes()).expect("admitted plan bytes fit usize");
+        plan_storage.observe(plan_bytes, rule.location)?;
+        computation.storage_observed(&plan_storage, 0, 0, limits, counters, rule.location)?;
+        // Capture already admitted speculative values with an appender. Check
+        // totality once against these frozen terms and the full source carrier,
+        // before any candidate filter is attached. An arithmetic decline is a
+        // stable absence of this optional optimization, not a cached failure.
+        let total = if family::partial(&rule.body) {
+            let mut projections =
+                Projections::new(&Context::new(&computation, limits, counters, rule.location))?;
+            if projections.total_constraint(
+                rule,
+                queries.support(),
+                &mut Evaluation::default(),
+                Context::new(&mut computation, limits, counters, rule.location),
+            )? {
+                let Projections::Local(values) = projections else {
+                    unreachable!("fresh preparation owns its projections");
+                };
+                Some(values.retain_in_rule(rule.location)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        drop(plan_storage);
         completed.admit_workspace(plan.retained_bytes(), limits, counters, rule.location)?;
         completed.retain_workspace(
             usize::try_from(plan.retained_bytes()).expect("admitted support bytes fit usize"),
@@ -107,11 +144,15 @@ impl<'source> PreparedRule<'source> {
             rule,
             completion: completed.completion,
             plan,
+            total,
         })
     }
 
     /// The exact rule is retained here; the query must authenticate the same
     /// completed catalog before the shared join borrows its immutable plan.
+    /// Successful totality preparation is borrowed unchanged. A missing map
+    /// selects the ordinary checked path; only a complete preparation can
+    /// authorize computed-domain selection on this immutable carrier.
     pub(crate) fn rows<'a, 'queries>(
         &'a self,
         queries: &'a CompletedQueries<'queries>,
@@ -131,7 +172,7 @@ impl<'source> PreparedRule<'source> {
             self.rule,
             queries.support(),
             filter,
-            Some(&self.plan),
+            Some(self),
             budget,
             crate::formula_support::Context::new(computation, limits, counters, self.rule.location),
         )

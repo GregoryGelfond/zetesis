@@ -646,6 +646,13 @@ the specified old/new intervals. Rich producers and final authored-body
 validation retain separate complete scans. These laws establish the partition,
 not the source evaluator or termination of value generation.
 
+The join planner receives the partition before choosing its execution order.
+It need not first prepare an unrestricted order. Relation handles belong to the
+join's immutable support snapshot; a prepared rule cannot retain a directory
+position across support publication. These choices preserve the same occurrence
+partition. Handle resolution, comparison readiness and admitted work remain
+Rust obligations.
+
 Parallel exact queries lease bounded work allowances from one shared owner.
 `WorkPermits` partitions the allowance into spent, available and outstanding
 permits. Granting preserves that total; settlement records consumed work and
@@ -781,6 +788,25 @@ ownership, not the definition of a reduct. Index construction, identity checks,
 mutable-state separation and attribution of construction work remain Rust
 refinement obligations.
 
+The immutable region adjacency stores each ordered incidence row as a slice
+between two offsets in one contiguous entry vector.
+[`AdjacencyRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AdjacencyRows.lean)
+proves exact slices from concatenated mathematical rows and unchanged ordered
+row folds. Decoding every Rust row must recover that original occurrence list
+exactly, including duplicate atom
+occurrences and original producer identity; equality of membership sets alone
+would not preserve chain counters, split ranking or bounded traversal prefixes.
+The same node used on both sides of an implication is still coalesced by the
+existing incidence construction, before storage compaction. Distinct atom nodes
+carrying the same atom remain distinct incidences. Exact row decoding leaves the
+`FormulaBounds`, `FormulaChains` and frozen `ReductRegions` rules unchanged.
+Those semantic laws do not establish the Rust count/prefix/scatter construction,
+machine offsets, reservation failures or event order. Ordered-row and existing
+propagation regressions provide executable evidence for those correspondences.
+The checked compact builder adds linear construction passes while retaining the
+existing logical node-index receipt; it does not change mutable `Knowledge` or
+its copy behavior, and does not claim that all index allocations are fallible.
+
 The batched parallel proposer separates classical candidate production from
 membership. Its workers use the original region readings and disjoint splits;
 they do not certify stable models. Read `Frontier` with a proposal family that
@@ -838,6 +864,12 @@ accounting, fallible matching and any device masks still need executable
 correspondence arguments. The [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
 explains the hypotheses with a correlated-tuple example.
 
+A consumer needing only the shortest posting can resolve each equality and
+retain that posting without materializing an owned query. Every requested
+equality must still be validated, including later columns after an absent value.
+The dictionary and posting laws apply to completed resolution; they do not
+justify skipping errors or charging work only after it has occurred.
+
 The append dictionary's canonical inverse implements the same encoder. Each
 published representative must have exactly one inverse entry naming its local
 equality ID, and every inverse entry must name that representative's whole
@@ -877,6 +909,17 @@ the table cannot silently prune a required error. Source rows remain original
 atoms in the emitted formulas. The [binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/table-bindings.md)
 separates these obligations from the independent support-coverage and reduct
 arguments.
+
+[`DomainProducers`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainProducers.lean)
+models possible argument values before binding enumeration. One producer
+intersects its mandatory inputs and local bound; alternative producers contribute
+their union. `transfer_monotone` preserves pointwise inclusion, while
+`derivation_covered` puts every finite abstract derivation inside any closed
+upper-bound assignment, including through recursive dependencies. Unknown is
+the universal predicate. Rust must establish that source extraction covers
+actual values, finite sets implement these operations, and a reported fixed point
+is closed after widening. The laws do not prove source admission, termination of
+the Rust attempt, arithmetic diagnostics or its resource behavior.
 
 [`DomainBindings`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean)
 addresses a different filtering boundary: a local match may have no complete
@@ -921,6 +964,18 @@ distinction. It does not verify `from_ground_program`, atom interning or formula
 DAG construction. Likewise, `FrozenReduct` is a Rust representation of a fixed
 candidate's reduct; its existence does not close the Rust-to-Lean mask
 correspondence.
+
+`FormulaNodes` retains a completed topology-validation prefix across aggregate
+compilations. Its obligation is the inductive one in `DagSharing.WellFormed.snoc`:
+a previously admitted prefix remains unchanged, and each additional node names
+only earlier children. `DagSharing.stored_meaning` then explains why extending
+the table cannot change a prior formula's meaning. The Rust owner must keep
+that prefix immutable, shorten the retained extent when removing nodes, and
+check every replacement suffix. Compiler append operations do not themselves
+advance the validated extent. Its scalar, family and extremum methods reuse the
+existing compilers, without a formula rewrite. These laws describe the invariant;
+they do not verify the concrete validation cursor, cancellation, allocation or
+rollback accounting. Raw-vector constructors retain their full-prefix checks.
 
 `EvaluationWorkspace` computes original node truth before exposing a borrowed
 `FormulaEvaluation`. Rust's ownership boundary ties that view to the exact
@@ -981,6 +1036,16 @@ producer is an invariant refusal, not a constraint verdict. Exact evaluation
 consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.
+
+The CPU positive candidate cursor uses `positive_stable_iff` as a coverage law:
+only the completed least interpretation can belong to the answer-set family.
+It proposes that interpretation once if the original constraints and candidate
+conditions permit it, retaining ordinary membership checking. A failed original
+constraint instead completes the empty family. Rust must preserve the exact
+certificate owner, every additional restriction and region filter, and successful
+completion before reporting exhaustion. Cancellation or a work/allocation refusal
+cannot be substituted for the empty-family case. The mathematical law does not
+verify that cursor, its packed copy, batch publication or worker accounting.
 
 [`TerminalDefinitions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean)
 separates arbitrary base atoms from new derived atoms using a disjoint sum. Each
@@ -1099,6 +1164,23 @@ frozen satisfaction, and check the node/work limits and counter restoration on
 initialization failure. The named indices and those operational properties
 remain implementation obligations, not consequences established by the Lean
 laws alone.
+
+An ordinary singleton data-comparison head is an interpretation-independent
+Boolean after its source operands have been evaluated.
+[`GroundGuards.constant_head_constraint`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroundGuards.lean)
+states that a rule with body `B` and constant head `c` is equivalent to the
+constraint with body `B` and the complementary constant. The equivalence covers
+original truth and every frozen `M/J` pair, for an arbitrary body. The existing
+`evaluated_guard_equivalent` and formula-context laws transport fully evaluated
+signed guards to these constants; a negated chain complements the whole
+conjunction of adjacent comparisons.
+
+This law applies after total evaluation. It does not justify treating an
+undefined comparison as false, binding a source variable from its head,
+suppressing an original body diagnostic, or changing finite-row coverage. Those
+remain separate Rust obligations. Comparison heads contribute no positive atom
+producer; the existing `BooleanHeads` producer laws account for Boolean head
+operands without adding atom support.
 
 [`OrderedHeadActivity`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean)
 relates selected signed tuple activity to an ordered value reduction. In Rust,
@@ -1221,6 +1303,22 @@ induction over the remaining nodes gives the complete table. Backward admission
 separately proves that all lookups succeed. The result is the last node, or true
 when the table is empty.
 
+The Rust
+[`ObjectivePlan::score`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/score.rs)
+reuses the compiler's already coalesced eligibility DAG to read a score without
+reconstructing contribution tuples. `ObjectiveDirections.normalization_preserves_vector`
+connects normalized complete-key groups with OR eligibility to the reference
+fixed-priority vector; `ObjectiveConditions.condition_vector` transports exact
+original-model condition truth into those scores. The table laws supply the
+mathematical backward-reference invariant. The retained Rust DAG also contains
+implication, whose original truth has the `formula_query_truth` interpretation;
+it is not the table datatype verbatim. Complete catalog joins, global key
+identity, translation of DAG operations, exact original-theory ownership,
+finite-width reduction and admitted work prefixes remain Rust obligations.
+This score reuse is distinct from source priority specialization and from
+constructing a nonnegative candidate bound. It neither substitutes a new
+original theory nor establishes search completion.
+
 For example, `atom a; neg 0; disj 0 1` shares the first node and computes the
 original truth of `a or not a`. This is a query-evaluation law, not permission to
 replace that formula inside the original program: a program transformation must
@@ -1326,6 +1424,80 @@ order, complete-filter error precedence, work admission and cleanup is a concret
 caller obligation. The reset law neither establishes source-family exclusions
 nor permits an earlier final filter to hide an independently required check.
 
+`EvaluationPrefix.remember_success_sound` states the invariant for retaining
+successful whole-expression results. It requires a pure partial evaluator and
+keys whose equality implies equal evaluation results. `reuse_success_exact`
+preserves values and errors; `reuse_complete_filter` transports that equality
+through the same filter over the same complete ordered rows. These laws do not
+permit row pruning, cached failures, or changing error precedence. The Rust
+implementation must separately establish expression identity, exact input-key
+coverage, vocabulary and reader-prefix authentication, successful publication,
+zero-divisor state, and charged lookup/storage work. The laws are mathematical
+preservation results, not a Lean-to-Rust refinement.
+
+`EvaluationPrefix.success_preimage_exact` supplies the inverse-domain step:
+filtering a finite input carrier by a sound, completely populated success map
+selects exactly carrier inputs evaluating to a fixed wanted value. Cache coverage
+of that carrier is distinct from the source proof that it covers every complete
+binding. The Rust projection's covered prefix records the former only after the
+whole constraint passes totality preparation; its completed positive column
+supplies the latter. A missing known-side key declines the optional restriction.
+
+The derived input domains use `FiniteTables.indexed_survival_exact` through the
+shared table selector, meeting the ordinary constant and incoming-binding
+domains and retaining original row identities. Necessary selection preserves
+complete contributing bindings by `DomainBindings.guarded_continuations_exact`;
+the ordered raw positive-match family may shrink. Every residual comparison and
+ordinary tuple match remains in place. Canonical input/result alignment, exact
+reader ownership, prefix coverage publication and charged temporary domain
+storage remain Rust obligations, with no refinement claim.
+
+The optional Rust
+[finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)
+adds a separate justification for ordinary row selection. A completed positive
+column covers every full binding's value at that variable, even when it contains
+extra values excluded by another argument or relation. Every expression in the
+eligible flat constraint is a leaf or reads one such variable. Success on every
+value in the covering domain therefore establishes definedness on every full
+binding; an arithmetic failure declines this certificate, while owner and
+resource refusals remain failures. The argument does not establish definedness
+for every earlier join prefix.
+
+Eager emission, hybrid capture and hybrid model/region checks use the same Rust
+preparation and necessary-domain selector. Hybrid capture runs after original
+family admission, with an append-capable term owner over completed support.
+It must admit every successful speculative value from the covering columns,
+including values excluded by other source arguments and successful prefixes of
+a declined certificate attempt. The prepared runtime rule checks totality once
+against that immutable rule and completed carrier. Later cursors borrow the
+completed map read-only, retaining the same covered inputs and canonical results.
+Preserving capture's input traversal and admitted canonical identities remains a
+Rust obligation; a missing identity is a typed failure. No new Boolean completion
+authority or filtered support owner establishes this premise. An input outside
+the covered map takes ordinary checked evaluation and cannot extend the retained
+map. A declined attempt retains the ordinary cursor behavior, with no certificate.
+
+Candidate row filters neither narrow the certificate's covering domains nor
+supply source-family evidence. Their necessary conditions compose with computed
+domains while preserving each complete violation witness, as required by
+`StreamedRegions.necessary_selection_preserves_witness`. Runtime preparation and
+scratch remain charged to the checker, independently of the original admission
+receipt. Retained preparation is charged once; borrowed headers do not claim a
+second allocation. Existing laws do not verify this capture/frozen correspondence, typed
+failure propagation, or the concrete Rust storage accounting.
+
+After that obligation is established, `GroundGuards.guard_original` and
+`guard_frozen` identify each evaluated comparison with the same Boolean in both
+worlds. Together with `RuleFactorization.reduct_conj` and `reduct_imp`, a false
+body comparison makes that ground constraint true in both the original theory
+and every frozen reduct. Omitting such instances preserves the semantic theory.
+This is a direct application of existing guard and reduct laws; those laws do
+not establish the Rust column coverage, arithmetic totality or prefix schedule.
+Speculative prefix failures retain the ordinary fallback, typed owner/resource
+refusals remain failures, and arithmetic-family evidence still traverses complete
+rows, including defined false witnesses. The success-cache laws above justify
+reusing successful preparation results without changing their values.
+
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust
@@ -1362,6 +1534,18 @@ argument. Rust grouping, word addressing, atomic execution, barriers and
 readback remain unproved implementation correspondences. The packed membership
 refinement below concerns a different, 64-bit Rust representation and does not
 certify either shader schedule.
+
+Candidate export splits each stored 64-bit word into ordered low and high
+32-bit words. Only words covering the declared atom universe are exported;
+unused final bits remain zero. Atom enumeration visits set bits in increasing
+order. Both operations retain the original interpretation's theory identity.
+The tight shader finds unsupported atoms from each candidate word intersected
+with the complement of its support word. Reducing the first set bit of every
+nonempty difference gives the least unsupported atom; an original-root failure
+still takes precedence. `support_true_iff` states the corresponding per-atom
+support obligation. The concrete word conversion, set-bit iterator, witness
+reduction and their resource bounds require separate executable refinement;
+the retained proof of `Interpretation::contains` does not cover these operations.
 
 CPU and device membership can consume the same immutable original-theory
 `TightPlan`; preparation does not itself classify a candidate. A completed

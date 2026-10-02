@@ -19,8 +19,9 @@ use std::time::Duration;
 
 use rayon::prelude::*;
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Knowledge, Narrower, Producers, Theory};
+use zetesis_ferraris::{Interpretation, Narrower, Producers, Theory};
 
+use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::regions::{
     self, IndexedTheory, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
 };
@@ -30,7 +31,7 @@ use crate::{Cancellation, Incomplete, SearchStatistics};
 /// Idle producers poll control while another producer owns the last region.
 const CONTROL_WAIT: Duration = Duration::from_millis(1);
 
-type PendingRegion = (Region, Vec<Knowledge>);
+type PendingRegion = (Region, CandidateKnowledge);
 
 /// The same LIFO frontier, with incremental ownership observations. A region's
 /// payload changes only while a worker owns it outside this frontier. Count it
@@ -95,12 +96,7 @@ impl Frontier {
     /// Entry headers already occupy slots in the outer vector. Count only
     /// their owned allocations here, including unused knowledge slots.
     fn payload((region, knowledge): &PendingRegion) -> u128 {
-        region.retained_bytes() - size_of::<Region>() as u128
-            + knowledge.capacity() as u128 * size_of::<Knowledge>() as u128
-            + knowledge
-                .iter()
-                .map(|known| known.retained_bytes() - size_of::<Knowledge>() as u128)
-                .sum::<u128>()
+        region.retained_bytes() - size_of::<Region>() as u128 + knowledge.allocated_bytes()
     }
 
     fn record(&mut self) {
@@ -123,7 +119,7 @@ impl Frontier {
 pub(crate) struct RegionProposals {
     producers: Option<Producers>,
     index: Arc<IndexedTheory>,
-    restrictions: Vec<(Theory, Narrower)>,
+    restrictions: Conditions<(Theory, Narrower)>,
     pending: Frontier,
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
@@ -165,12 +161,12 @@ impl RegionProposals {
             .map_err(|_| Incomplete::Allocation)?;
         let pending = Frontier::new((
             Region::all_open(theory.atom_count()),
-            vec![index.narrower().knowledge()],
+            CandidateKnowledge::new(index.narrower().knowledge()),
         ))?;
         Ok(Self {
             producers,
             index,
-            restrictions: Vec::new(),
+            restrictions: Conditions::default(),
             pending,
             pool,
             statistics,
@@ -195,9 +191,10 @@ impl RegionProposals {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         self.restrictions
+            .permanent
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        let narrower = Narrower::new(restriction);
+        let narrower = Narrower::try_new(restriction).map_err(super::regions::stopped)?;
         budget.charge(narrower.work())?;
         self.statistics.counts.work = self
             .statistics
@@ -205,8 +202,48 @@ impl RegionProposals {
             .work
             .checked_add(narrower.work())
             .ok_or(Incomplete::CounterOverflow)?;
-        self.restrictions.push((restriction.clone(), narrower));
+        self.restrictions
+            .permanent
+            .push((restriction.clone(), narrower));
         Ok(())
+    }
+
+    /// Commit only after preparation and every charge succeeds.
+    pub(crate) fn tighten(
+        &mut self,
+        restriction: &Theory,
+        generation: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        budget.cancellation.poll()?;
+        let bound = Bound::prepare(restriction, generation)?;
+        budget.charge(bound.work())?;
+        let work = self
+            .statistics
+            .counts
+            .work
+            .checked_add(bound.work())
+            .ok_or(Incomplete::CounterOverflow)?;
+        self.statistics.counts.work = work;
+        budget.cancellation.poll()?;
+        self.restrictions.bound = Some(bound);
+        Ok(())
+    }
+
+    pub(super) fn permits_positive(
+        &mut self,
+        candidate: &Interpretation,
+        budget: &mut Budget<'_>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
+    ) -> Result<bool, Incomplete> {
+        regions::permits(
+            &self.restrictions,
+            self.filter.as_ref(),
+            candidate,
+            budget,
+            &mut self.statistics.counts,
+            timings,
+        )
     }
 
     /// Fill pre-admitted output slots without evaluating a reduct. The output
@@ -305,7 +342,7 @@ struct Round<'a> {
     timed: bool,
     producers: Option<&'a Producers>,
     narrower: &'a Narrower,
-    restrictions: &'a [(Theory, Narrower)],
+    restrictions: &'a Conditions<(Theory, Narrower)>,
     allowance: &'a SharedBudget,
     limits: crate::SearchLimits,
     cancellation: &'a Cancellation,

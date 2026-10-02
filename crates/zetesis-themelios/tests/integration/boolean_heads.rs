@@ -3,6 +3,7 @@
 use crate::support::objective_dependency_records as objective_dependencies;
 
 mod cases;
+mod comparisons;
 mod elements;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected;

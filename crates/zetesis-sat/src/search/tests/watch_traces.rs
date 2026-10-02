@@ -1,9 +1,15 @@
 //! Frozen candidate traces from the unpacked watch implementation at 78a069b.
 //! These fixtures compare ordered semantic candidates, every cumulative search
 //! counter, and terminal outcomes under the explicit reference cost map below.
-//! They do not assert stable-model membership.
+//! They do not assert stable-model membership. The four-atom input preserves
+//! its admitted DAG so equivalent frontend layouts cannot change this trace.
 
 use std::fmt::Write as _;
+
+#[path = "../../../tests/fixtures/watch-traces/choices.rs"]
+mod choices;
+
+use zetesis_ferraris::Theory;
 
 use super::{Budget, Cursor, LocalQuota};
 use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics, Solve, encoding};
@@ -18,14 +24,22 @@ const QUEENS: [&str; 6] = [
     include_str!("../../../../../examples/correctness/standalone/n-queens/variant-06.lp"),
 ];
 
-const CHOICES: &str = "1 { p(1..4) } 2.";
+fn choice_theory() -> Theory {
+    Theory::new(
+        choices::ATOMS,
+        choices::NODES.to_vec(),
+        choices::ROOTS.to_vec(),
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
 
 fn choice_work() -> u64 {
     // The frozen generic trace takes 2294 operations. Compare that entire
     // trace before subtracting elided watch positions, the witness rescans
     // and the exact exclusion cost reduction for its ten distinct four-atom
     // projections.
-    let traced = trace(CHOICES, true, SearchLimits::default());
+    let traced = trace(&choice_theory(), true, SearchLimits::default());
     assert_eq!(
         traced.record,
         include_str!("../../../tests/fixtures/watch-traces/refined.txt")
@@ -91,8 +105,7 @@ fn reference_statistics(
     actual
 }
 
-fn trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
-    super::propagation_profile::reset();
+fn source_trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
     let admitted = admit_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -100,7 +113,11 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
         FormulaLimits::default(),
     )
     .unwrap();
-    let theory = admitted.theory();
+    trace(admitted.theory(), refined, limits)
+}
+
+fn trace(theory: &Theory, refined: bool, limits: SearchLimits) -> Trace {
+    super::propagation_profile::reset();
     let cancellation = Cancellation::default();
     let mut charged = Budget {
         quota: LocalQuota,
@@ -194,7 +211,7 @@ fn replacement_elision_preserves_queens_reference_traces() {
     ];
     for (source, expected) in QUEENS.into_iter().zip(expected) {
         assert_eq!(
-            trace(source, false, SearchLimits::default()).record,
+            source_trace(source, false, SearchLimits::default()).record,
             expected
         );
     }
@@ -203,7 +220,7 @@ fn replacement_elision_preserves_queens_reference_traces() {
 #[test]
 fn replacement_elision_preserves_the_refined_reference_trace() {
     assert_eq!(
-        trace(CHOICES, true, SearchLimits::default()).record,
+        trace(&choice_theory(), true, SearchLimits::default()).record,
         include_str!("../../../tests/fixtures/watch-traces/refined.txt")
     );
 }
@@ -215,7 +232,7 @@ fn reduced_work_ceiling_permits_the_complete_trace() {
         max_decisions: 9,
     };
     assert_eq!(
-        trace(CHOICES, true, limits).record,
+        trace(&choice_theory(), true, limits).record,
         include_str!("../../../tests/fixtures/watch-traces/refined.txt")
     );
 }
@@ -227,7 +244,7 @@ fn reduced_work_ceiling_stops_one_tick_short() {
         max_decisions: 9,
     };
     assert_eq!(
-        trace(CHOICES, true, limits).record,
+        trace(&choice_theory(), true, limits).record,
         include_str!("../../../tests/fixtures/watch-traces/work-short.txt")
     );
 }
@@ -239,7 +256,7 @@ fn replacement_elision_preserves_the_decision_stop() {
         max_decisions: 8,
     };
     assert_eq!(
-        trace(CHOICES, true, limits).record,
+        trace(&choice_theory(), true, limits).record,
         include_str!("../../../tests/fixtures/watch-traces/decision-short.txt")
     );
 }

@@ -191,7 +191,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             Event::PositiveMembership if self.core == Some(Core::Constraints) => writeln!(self, "Core membership: positive atomic-head theory; original streamed constraints still pending"),
             Event::PositiveMembership => writeln!(self, "Membership: positive atomic-head theory; least consequences with original constraints"),
             Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; optional class certificate refused: {error}"),
-            Event::ObjectiveUnavailable(error) => writeln!(self, "Objective pruning unavailable: {error}; exact search continues"),
+            Event::ObjectiveUnavailable(error) => writeln!(self, "Objective preparation unavailable: {error}; detailed scoring is subject to the remaining objective allowance"),
             Event::ObjectiveBoundStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
             Event::ObjectiveTheoryMismatch => writeln!(self, "Objective pruning stopped: original theory mismatch; exact search continues"),
             Event::ObjectiveRestrictionStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),

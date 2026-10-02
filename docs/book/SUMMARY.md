@@ -46,6 +46,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Reusing grounding and formula preparation](reference/foundation-reuse.md)
   - [Grounding and prepared CPU closure](reference/instantiation-lazy.md)
   - [Reusing support-publication directories](reference/support-publication.md)
   - [Canonical storage and CPU worker scaling](reference/canonical-storage.md)
@@ -61,6 +62,7 @@
 - [Validating an implementation change](reference/validation.md)
   - [Measurement protocols](reference/measurement-protocols.md)
   - [Source revision identities](reference/source-revisions.md)
+  - [Coverage and Metal qualification](reference/coverage-120fadfb.md)
   - [Version 0.1.6 coverage](reference/coverage-0.1.6.md)
   - [Version 0.1.5 coverage](reference/coverage-0.1.5.md)
 

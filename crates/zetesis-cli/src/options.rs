@@ -212,8 +212,8 @@ pub struct Options {
     /// canonical text rather than as capacity.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_observation_bytes: usize,
-    /// Cumulative work for optional incumbent candidate bounds. Zero disables
-    /// pruning; a refused bound preserves ordinary exact answer-set search.
+    /// Cumulative work for optional incumbent bounds, excluding shared objective
+    /// preparation. Zero disables pruning; prepared scoring remains available.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_bound_work, hide_short_help = true)]
     pub max_objective_bound_work: u64,
     /// Maximum complete objective bindings evaluated per stable model.

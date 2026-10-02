@@ -28,6 +28,11 @@ pub(crate) struct Evaluation {
 }
 
 impl Evaluation {
+    /// A reused successful source value has no unavailable arithmetic output.
+    pub(super) fn clear_zero_divisor(&mut self) {
+        self.zero_divisor = false;
+    }
+
     pub(crate) const fn zero_divisor(&self) -> bool {
         self.zero_divisor
     }

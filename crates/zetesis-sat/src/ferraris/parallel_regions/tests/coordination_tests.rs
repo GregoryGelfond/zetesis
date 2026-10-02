@@ -99,11 +99,31 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     // the pushes so no peer can observe a transient zero.
     assert_eq!(outstanding(&search.shared), 2);
     // Cut is pushed last (on top of the LIFO deque), held beneath it.
-    let (cut, cut_knowledge) = search.shared.take_local(0).unwrap();
-    let (held, held_knowledge) = search.shared.take_local(0).unwrap();
+    let (mut cut, mut cut_knowledge) = search.shared.take_local(0).unwrap();
+    let (mut held, mut held_knowledge) = search.shared.take_local(0).unwrap();
     assert!(cut.is_cut(0) && held.is_held(0));
-    assert_eq!(cut_knowledge.len(), 1);
-    assert_eq!(held_knowledge.len(), 1);
+    let conditions = search.shared.restrictions.read().unwrap();
+    // Narrowing the cut child learns that atom 0 is false. Its sibling must
+    // retain independent knowledge and still admit the opposite decision.
+    for (region, knowledge) in [
+        (&mut cut, &mut cut_knowledge),
+        (&mut held, &mut held_knowledge),
+    ] {
+        assert_ne!(
+            super::super::super::regions::narrow(
+                (search.shared.index.theory(), search.shared.index.narrower()),
+                search.shared.producers.as_ref(),
+                &conditions,
+                region,
+                knowledge,
+                &mut budget,
+                &mut report.regions,
+            )
+            .unwrap(),
+            Narrowing::Refuted,
+        );
+    }
+    assert!(cut.is_cut(0) && held.is_held(0));
     assert!(search.shared.take_local(0).is_none());
 }
 
@@ -484,4 +504,19 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
         .budget
         .charge(search.shared.limits.search.max_work - settled.work)
         .unwrap();
+}
+
+#[test]
+fn coordinator_observations_saturate_with_worker_receipts() {
+    let mut search = search(2);
+    search.statistics.counts.propagations = u64::MAX;
+    search.statistics.counts.held = u64::MAX;
+    search.statistics.counts.cut = u64::MAX;
+    Live::add(&search.shared.live.propagations, 1);
+    Live::add(&search.shared.live.held, 1);
+    Live::add(&search.shared.live.cut, 1);
+    let counts = search.statistics().counts;
+    assert_eq!(counts.propagations, u64::MAX);
+    assert_eq!(counts.held, u64::MAX);
+    assert_eq!(counts.cut, u64::MAX);
 }

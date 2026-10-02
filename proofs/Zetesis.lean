@@ -1,4 +1,5 @@
 import Zetesis.Core
+import Zetesis.AdjacencyRows
 import Zetesis.Transformers
 import Zetesis.Semantics
 import Zetesis.Iteration
@@ -127,6 +128,7 @@ import Zetesis.SourceContributions
 import Zetesis.FiniteTables
 import Zetesis.TableBindings
 import Zetesis.DomainBindings
+import Zetesis.DomainProducers
 import Zetesis.FormulaRegions
 import Zetesis.FormulaBounds
 import Zetesis.FormulaChains

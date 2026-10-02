@@ -67,6 +67,18 @@ separately establishes whether each priority has a possible numeric binding. Eva
 that the supplied model belongs to the intended source program is the caller's
 responsibility.
 
+`reduce_costs` is the numeric-only reduction for a caller that has already
+established normalized, globally distinct keys and their eligibility. Each
+iterator item is one key: `Some(weight)` contributes and `None` does not. Equal
+weights from different keys still contribute separately. The operation retains
+the program's presence and fixed priority slots, uses the same checked wide
+accumulation and final cost conversion as `evaluate`, and returns only `Score`
+and accepted work. It does not reconstruct or attest contribution evidence.
+One unit admits initialization, each priority, each iterator probe including
+exhaustion, and each final conversion. Work is acquired before advancing the
+iterator; cancellation and refusals publish no partial score. Temporary retained
+storage is one cost per priority, apart from the caller's iterator storage.
+
 ## Tuple and score semantics
 
 Equal keys `(priority, normalized weight, tuple)` contribute exactly once across every

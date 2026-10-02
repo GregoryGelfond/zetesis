@@ -145,3 +145,4 @@ mod value_extrema;
 mod view_resources;
 mod weak_objectives;
 mod weighted_heads;
+mod objective_scoring;

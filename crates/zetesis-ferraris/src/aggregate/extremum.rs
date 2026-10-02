@@ -1,6 +1,6 @@
 use zetesis_cpu::Cancellation;
 
-use super::lower::{Builder, transaction, validate};
+use super::lower::{Builder, Destination, transaction, validate};
 use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateLimits, AggregateProfile,
@@ -68,8 +68,27 @@ pub fn append_extremum(
     limits: AggregateLimits,
     cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
-    let bound = bound.into();
-    transaction(nodes, limits, cancellation, |builder| {
+    append(
+        Destination::unchecked(nodes),
+        elements,
+        extremum,
+        comparison,
+        bound.into(),
+        limits,
+        cancellation,
+    )
+}
+
+pub(super) fn append(
+    destination: Destination<'_>,
+    elements: &[AggregateElement],
+    extremum: AggregateExtremum,
+    comparison: AggregateComparison,
+    bound: ExtremumBound,
+    limits: AggregateLimits,
+    cancellation: &Cancellation,
+) -> Result<AggregateBuild, AggregateError> {
+    transaction(destination, limits, cancellation, |builder| {
         compile(builder, elements, extremum, comparison, bound)
             .map(|root| (root, AggregateProfile::Extremum))
     })

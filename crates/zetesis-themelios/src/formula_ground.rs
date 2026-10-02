@@ -1,15 +1,16 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
-mod objectives;
 mod arithmetic;
+mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
-pub(crate) mod atoms;
-mod nodes;
-mod metadata;
-mod projection;
-mod cache;
+mod aggregate_guards;
 mod aggregate_order;
+pub(crate) mod atoms;
+mod cache;
+mod metadata;
+mod nodes;
+mod projection;
 mod retained;
 use retained::RetainedState;
 pub(crate) use retained::{RetainedGrounding, ground_retained};
@@ -29,9 +30,8 @@ use themelios_program::program::{AggregateFunction, DefaultNegation};
 use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_core::{AtomCatalog, ValueNodeRef};
 use zetesis_ferraris::{
-    AggregateComparison, AggregateElement, AggregateExtremum, AggregateFamilyLimits,
-    AggregateGuard as NumericGuard, Node, Theory, ValueExtremumElement, append_aggregate,
-    append_aggregate_family, append_value_extremum_refs,
+    AggregateComparison, AggregateElement, AggregateExtremum, AggregateGuard as NumericGuard,
+    FormulaNodes, Node, Theory, ValueExtremumElement,
 };
 
 use crate::expansion::Budget;
@@ -537,7 +537,7 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     terms: TermTable,
     aggregate_atoms: formula_support::SourceSelection,
     metadata: metadata::Metadata,
-    nodes: Vec<Node>,
+    nodes: FormulaNodes,
     node_indices: nodes::Index,
     roots: Vec<usize>,
     origins: Vec<Vec<Location>>,
@@ -619,6 +619,10 @@ impl Builder<'_, '_, '_> {
             self.budget,
             &mut self.counters,
         )?;
+        // The same complete-column attempt precedes frozen checker scans.
+        // Admit even speculative successful values here: a covering column can
+        // include rows excluded by another argument of this source pattern.
+        join.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
         while let Some(row) = join.next_row(
             self.computation,
             self.limits,
@@ -693,6 +697,7 @@ impl Builder<'_, '_, '_> {
             self.budget,
             &mut self.counters,
         )?;
+        outer.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
         while let Some(row) = outer.next_row(
             self.computation,
             self.limits,
@@ -731,7 +736,7 @@ impl Builder<'_, '_, '_> {
             terms,
             aggregate_atoms,
             metadata: metadata::Metadata::default(),
-            nodes: Vec::new(),
+            nodes: FormulaNodes::default(),
             node_indices: nodes::Index::default(),
             roots: Vec::new(),
             origins: Vec::new(),
@@ -790,7 +795,7 @@ impl Builder<'_, '_, '_> {
         Ok((
             Emission {
                 atoms: self.catalog.into_selection(),
-                nodes: self.nodes,
+                nodes: self.nodes.into_vec(),
                 roots: self.roots,
                 origins: self.origins,
                 count_plan: self.count_plan,
@@ -2026,22 +2031,15 @@ impl Builder<'_, '_, '_> {
                 unreachable!("handled extrema");
             };
             let guards = self.assignment_guards(&values, location)?;
-            let limits = AggregateFamilyLimits {
-                aggregate: self.aggregate_limits(),
-                max_guards: self.limits.max_assignment_values,
-            };
             let first = self.nodes.len();
-            let build = append_aggregate_family(
-                &mut self.nodes,
+            let family = self.append_guard_family(
                 elements.slice(),
                 guards.slice(),
-                limits,
-                &zetesis_cpu::Cancellation::default(),
-            )
-            .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-            self.counters.accounting.work += build.statistics().work;
+                self.limits.max_assignment_values,
+                location,
+            )?;
             let canonical = self.intern_appended(first, location)?;
-            for (slot, root) in build.roots().iter().enumerate() {
+            for (slot, root) in family.build.roots().iter().enumerate() {
                 self.work(location)?;
                 let key = values.key(slot, location)?;
                 let value = self.term(&key, location)?;
@@ -2431,6 +2429,20 @@ impl Builder<'_, '_, '_> {
         location: Location,
         mut capture: Option<&mut crate::formula_count_plan::Bounds>,
     ) -> Result<usize, FormulaFailure> {
+        if guards.len() > 1 && kind.is_none() {
+            let GroundAggregate::Numeric(elements) = elements else {
+                unreachable!("numeric contribution")
+            };
+            if self.nonnegative_elements(elements.slice(), location)? {
+                return self.numeric_guard_family(
+                    elements.slice(),
+                    guards,
+                    assignment,
+                    location,
+                    capture,
+                );
+            }
+        }
         let mut result = VERUM;
         for guard in guards {
             let bound = formula_support::expression(
@@ -2485,16 +2497,14 @@ impl Builder<'_, '_, '_> {
             }
             let limits = self.aggregate_limits();
             let first = self.nodes.len();
-            let build = append_aggregate(
-                &mut self.nodes,
+            let compiled = self.nodes.append_aggregate(
                 elements.slice(),
                 aggregate_comparison(guard.relation),
                 i64::from(bound),
                 limits,
                 &zetesis_cpu::Cancellation::default(),
-            )
-            .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-            self.counters.accounting.work += build.statistics().work;
+            );
+            let build = self.record_aggregate(compiled, location)?;
             let canonical = self.intern_appended(first, location)?;
             let root = remap(build.root(), first, &canonical);
             result = self.and(result, root, location)?;
@@ -2555,6 +2565,20 @@ fn extremum(function: AggregateFunction) -> Option<AggregateExtremum> {
     }
 }
 impl Builder<'_, '_, '_> {
+    /// Keep completed compiler work even when its node transaction rolls back.
+    /// Each call's ceiling is bounded by the remaining formula-work allowance.
+    fn record_aggregate(
+        &mut self,
+        result: Result<zetesis_ferraris::AggregateBuild, zetesis_ferraris::AggregateError>,
+        location: Location,
+    ) -> Result<zetesis_ferraris::AggregateBuild, FormulaFailure> {
+        self.counters.accounting.work += match &result {
+            Ok(build) => build.statistics().work,
+            Err(error) => error.statistics().work,
+        };
+        result.map_err(|error| FormulaFailure::Aggregate { error, location })
+    }
+
     fn extremum_root(
         &mut self,
         elements: &[ExtremumElement],
@@ -2580,17 +2604,15 @@ impl Builder<'_, '_, '_> {
                 .expect("retained extrema name admitted source terms"),
             condition: element.condition,
         });
-        let build = append_value_extremum_refs(
-            &mut self.nodes,
+        let result = self.nodes.append_value_extremum_refs(
             values,
             kind,
             comparison,
             bound,
             limits,
             &zetesis_cpu::Cancellation::default(),
-        )
-        .map_err(|error| FormulaFailure::Aggregate { error, location })?;
-        self.counters.accounting.work += build.statistics().work;
+        );
+        let build = self.record_aggregate(result, location)?;
         let canonical = self.intern_appended(first, location)?;
         Ok(remap(build.root(), first, &canonical))
     }

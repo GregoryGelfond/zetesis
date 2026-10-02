@@ -66,7 +66,7 @@ impl State {
                     Err(Incomplete::WrongTheory)
                 };
             }
-            let index = IndexedTheory::new(theory);
+            let index = IndexedTheory::new(theory)?;
             let work = index.narrower().work();
             budget.charge(work)?;
             statistics.reduct.regions.work = statistics

@@ -44,10 +44,12 @@ the unchanged source hash, edit and resulting source hash.
 ## Check and measure thread scaling
 
 The maintained `zetesis test scalability` and `zetesis-bench run --suite
-scalability` commands use one library-owned population: queens at n=8/9/10,
-pigeonhole at h=5/6/7, and the established correctness queens variant 02,
-SEND+MORE=MONEY and task-allocation cases. Test qualifications request CPU eager/indexed region
-search at 1, 2, 4, 8 and 14 threads with one completion worker by default.
+scalability` commands use one library-owned population of ten workloads: queens
+at n=8/9/10, pigeonhole at h=5/6/7, the established correctness queens variant
+02, SEND+MORE=MONEY and task-allocation cases, and the authored
+[Sudoku grid](../sudoku.lp). Sudoku has eight givens per row and exercises
+grounding and language handling. Test qualifications request CPU eager/indexed
+region search at 1, 2, 4, 8 and 14 threads with one completion worker by default.
 
 From the repository root, with zetesis and clingo installed:
 
@@ -58,8 +60,8 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-`--include-einstein` adds the unchanged Einstein riddle. An explicit
-`--max-expansion-work 300000000` can be supplied when studying that input; the
+`--include-einstein` adds the unchanged Einstein riddle as an eleventh workload.
+An explicit `--max-expansion-work 300000000` can be supplied when studying that input; the
 override is retained in every native profile. No limit is raised silently.
 
 The test runs one complete-family qualification per producer and workload, with
@@ -90,10 +92,10 @@ source roots, compact JSON views and preserved refusal diagnostics.
 [manifest.json](manifest.json) records, for each program, its scaling knob, the
 default `#const` value, the contract at that default (satisfiability and, for
 enumeration, the answer-set count), and the source SHA-256. The contracts are the
-expected complete results. `cargo test -p zetesis-validation --test
-authored_examples` checks source integrity and contract registration without
+expected complete results. `cargo test --locked -p zetesis-validation --test
+integration authored_examples::` checks source integrity and contract registration without
 solving large instances. `scripts/check.sh oracle` also runs the complete clingo
-contracts for both defaults and Einstein. Native default checks live in
-`zetesis-cli/tests/integration/authored_examples.rs`, including Einstein with automatic
-grounding and unchanged resource defaults. These checks run in the portable
-test suite.
+contracts for both defaults, Sudoku and Einstein. Native default checks live
+in `zetesis-cli/tests/integration/authored_examples.rs`, including Sudoku and
+Einstein with automatic grounding and unchanged resource defaults. These
+checks run in the portable test suite.

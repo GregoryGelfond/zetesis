@@ -88,6 +88,16 @@ Unrestricted enumeration evaluates scores without retaining incumbents. Its
 `retained_models()` is zero. Those fields describe objective-search retention,
 not the number of answers in a `WorldView` or a consumer's own collection.
 
+`SemanticOutcome::objective_work()` records cumulative accepted objective
+preparation and scoring work, including refused attempts, even before any
+incumbent exists and after an observer failure. It is independent of answer
+selection and optional timing collection. An incumbent's `Optimization::work`
+mirrors this account. Candidate-bound construction has a separate work budget.
+With statistics enabled, JSON reports this receipt as
+`statistics.objective_work`; it is `null` when no typed semantic outcome survives.
+A preparation attempt can consume a small objective-work allowance, so detailed
+scoring fallback receives only the remaining allowance.
+
 ## Check selection and complete capture
 
 The next example uses `1{a;b}1.` with costs `1` for `{a}` and `2` for `{b}` at

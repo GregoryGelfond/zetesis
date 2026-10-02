@@ -1,5 +1,7 @@
 import Zetesis
 
+#print axioms Zetesis.AdjacencyRows.slice_exact
+#print axioms Zetesis.AdjacencyRows.fold_exact
 #print axioms Zetesis.AggregateAssignment.mem_unique
 #print axioms Zetesis.AggregateAssignment.unique_nodup
 #print axioms Zetesis.AggregateAssignment.unique_length_le
@@ -388,6 +390,8 @@ import Zetesis
 #print axioms Zetesis.DomainContraction.compatible_contraction
 #print axioms Zetesis.DomainContraction.bounded_filters_preserve_completions
 #print axioms Zetesis.DomainContraction.empty_domain_excludes_completions
+#print axioms Zetesis.DomainProducers.transfer_monotone
+#print axioms Zetesis.DomainProducers.derivation_covered
 #print axioms Zetesis.EvaluatedWitnesses.successful_selection
 #print axioms Zetesis.EvaluatedWitnesses.completed_condition_preserved
 #print axioms Zetesis.EvaluatedWitnesses.undefined_selection
@@ -402,6 +406,10 @@ import Zetesis
 #print axioms Zetesis.EvaluationPrefix.reset_preservation
 #print axioms Zetesis.EvaluationPrefix.evaluate_append
 #print axioms Zetesis.EvaluationPrefix.root_preservation
+#print axioms Zetesis.EvaluationPrefix.remember_success_sound
+#print axioms Zetesis.EvaluationPrefix.reuse_success_exact
+#print axioms Zetesis.EvaluationPrefix.reuse_complete_filter
+#print axioms Zetesis.EvaluationPrefix.success_preimage_exact
 #print axioms Zetesis.insertAtom_grows
 #print axioms Zetesis.insertAtom_contains
 #print axioms Zetesis.insertAtom_duplicate
@@ -593,6 +601,7 @@ import Zetesis
 #print axioms Zetesis.GateRestrictions.suffix_region_rejected
 #print axioms Zetesis.GroundGuards.constant_original
 #print axioms Zetesis.GroundGuards.constant_frozen
+#print axioms Zetesis.GroundGuards.constant_head_constraint
 #print axioms Zetesis.GroundGuards.guard_original
 #print axioms Zetesis.GroundGuards.guard_frozen
 #print axioms Zetesis.GroundGuards.evaluated_guard_equivalent
@@ -747,6 +756,8 @@ import Zetesis
 #print axioms Zetesis.ObjectiveBounds.mem_prune
 #print axioms Zetesis.ObjectiveBounds.incumbent_survives
 #print axioms Zetesis.ObjectiveBounds.tighten
+#print axioms Zetesis.ObjectiveBounds.replacement_preserves_candidates
+#print axioms Zetesis.ObjectiveBounds.consequence_survives_tightening
 #print axioms Zetesis.ObjectiveBounds.optimum_survives
 #print axioms Zetesis.ObjectiveBounds.excluded_is_worse
 #print axioms Zetesis.ObjectiveBounds.bounded_best_is_global

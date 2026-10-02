@@ -1,3 +1,5 @@
+use std::mem::size_of_val;
+
 use super::*;
 
 fn expected_rows(
@@ -386,49 +388,280 @@ fn row_selection_omits_projected_domain_storage() {
     assert!(selected.statistics().retained_bytes < projected.statistics().retained_bytes);
 }
 
+fn comparison_work(left: TermRef<'_>, right: TermRef<'_>) -> u64 {
+    let mut steps = 0;
+    left.compare_ref_with(right, || {
+        steps += 1;
+        Ok::<_, std::convert::Infallible>(())
+    })
+    .unwrap();
+    steps
+}
+
 #[test]
-fn singleton_selection_needs_no_union_capacity() {
-    let predicate = Predicate::new("table", 1).unwrap();
-    let source = atoms(&predicate, &vec![numbers(&[1]); 65]);
+fn first_restriction_preserves_coherent_occurrences() {
+    let predicate = Predicate::new("table", 3).unwrap();
+    let source = atoms(
+        &predicate,
+        &(0..97)
+            .map(|row| numbers(&[row % 3, 0, (row + i32::from(row % 5 == 0)) % 3]))
+            .collect::<Vec<_>>(),
+    );
+    let indices: Vec<_> = (0..source.len()).rev().chain([0, 1]).collect();
+    let relation =
+        Relation::from_catalog(&predicate, &source, &indices, RelationLimits::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1, 0],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let values = numbers(&[0, 1, 2]);
+    for domains in [
+        [Domain::Singleton((&values[1]).into()), Domain::Unrestricted],
+        [
+            Domain::Finite(values.as_slice().into()),
+            Domain::Unrestricted,
+        ],
+        [Domain::Unrestricted, Domain::Finite((&values[..1]).into())],
+    ] {
+        assert_domains(&table, &source, &indices, &domains);
+    }
+}
+
+#[test]
+fn first_restriction_avoids_redundant_mask_storage() {
+    let predicate = Predicate::new("table", 2).unwrap();
+    for count in [65, 1025] {
+        let source = atoms(&predicate, &vec![numbers(&[1, 1]); count]);
+        let relation =
+            Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
+        let table = Table::prepare(
+            &relation,
+            &[0, 1],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        let value = Value::Number(1);
+        let singleton = Domain::Singleton(TermRef::from(&value));
+        let finite = Domain::Finite(std::slice::from_ref(&value).into());
+        let select = |domains: &[Domain<'_>]| {
+            table
+                .select(domains, Limits::default(), &Cancellation::default())
+                .unwrap()
+        };
+        let unrestricted = select(&[Domain::Unrestricted, Domain::Unrestricted]);
+        let single = select(&[singleton, Domain::Unrestricted]);
+        let first = select(&[finite, Domain::Unrestricted]);
+        let delayed = select(&[Domain::Unrestricted, finite]);
+        let later = select(&[singleton, finite]);
+        let words = u64::try_from(first.words().len()).unwrap();
+        let comparison =
+            comparison_work(relation.row(0).unwrap().value(0).unwrap(), (&value).into());
+        // The first singleton copies one support instead of copying the base
+        // and intersecting it. A first finite domain initializes/merges directly
+        // into that result: no coherent copy, final intersection or union owner.
+        assert_eq!(unrestricted.statistics().work, words + 2);
+        assert_eq!(single.statistics().work, words + 2 + comparison);
+        assert_eq!(first.statistics().work, 2 * words + 3 + comparison);
+        assert_eq!(delayed.statistics(), first.statistics());
+        assert_eq!(
+            first.statistics().peak_bytes,
+            single.statistics().peak_bytes
+        );
+        assert_eq!(
+            first.statistics().retained_bytes,
+            later.statistics().retained_bytes
+        );
+        assert!(
+            later.statistics().peak_bytes
+                >= first.statistics().peak_bytes + size_of_val(first.words())
+        );
+        for result in [&single, &first, &delayed, &later] {
+            assert_eq!(result.words(), unrestricted.words());
+            assert_eq!(result.rows().count(), count);
+        }
+        let exact = Limits {
+            max_work: first.statistics().work,
+            max_bytes: first.statistics().peak_bytes,
+            ..Limits::default()
+        };
+        assert!(
+            table
+                .select(
+                    &[finite, Domain::Unrestricted],
+                    exact,
+                    &Cancellation::default()
+                )
+                .is_ok()
+        );
+        let failure = table
+            .select(
+                &[finite, Domain::Unrestricted],
+                Limits {
+                    max_work: exact.max_work - 1,
+                    ..exact
+                },
+                &Cancellation::default(),
+            )
+            .err()
+            .unwrap();
+        assert_eq!(failure.work, exact.max_work - 1);
+        assert!(
+            matches!(failure.cause, Cause::Limit { resource: Resource::Work, observed, .. } if observed == u128::from(exact.max_work))
+        );
+    }
+}
+
+#[test]
+fn empty_first_mask_still_refuses_later_union_capacity() {
+    let predicate = Predicate::new("table", 2).unwrap();
+    let source = atoms(&predicate, &vec![numbers(&[1, 1]); 65]);
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
-    let table =
-        Table::prepare(&relation, &[0], Limits::default(), &Cancellation::default()).unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let empty = Domain::Finite((&[] as &[Value]).into());
     let value = Value::Number(1);
-    let selected = table
+    let finite = Domain::Finite(std::slice::from_ref(&value).into());
+    let first = table
         .select(
-            &[Domain::Singleton(TermRef::from(&value))],
+            &[empty, Domain::Unrestricted],
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    let limit = first.statistics().peak_bytes;
+    let failure = table
+        .select(
+            &[empty, finite],
+            Limits {
+                max_bytes: limit,
+                ..Limits::default()
+            },
+            &Cancellation::default(),
+        )
+        .err()
+        .unwrap();
+    // The second descriptor is inspected before its scratch allocation. No
+    // scratch initialization or typed value comparison has happened on refusal.
+    assert_eq!(failure.work, first.statistics().work);
+    assert_eq!(failure.peak_bytes, limit);
+    assert_eq!(
+        failure.cause,
+        Cause::Limit {
+            resource: Resource::Bytes,
+            observed: (limit + size_of_val(first.words())) as u128,
+            limit: limit as u128
+        }
+    );
+    assert_eq!(first.words(), &[0, 0, 0]);
+    let later = table
+        .select(
+            &[empty, finite],
             Limits::default(),
             &Cancellation::default(),
         )
         .unwrap();
     let exact = Limits {
-        max_bytes: selected.statistics().peak_bytes,
+        max_work: later.statistics().work,
+        max_bytes: later.statistics().peak_bytes,
         ..Limits::default()
     };
-    assert!(
+    assert_eq!(
         table
-            .select(
-                &[Domain::Singleton(TermRef::from(&value))],
-                exact,
-                &Cancellation::default()
-            )
-            .is_ok()
+            .select(&[empty, finite], exact, &Cancellation::default())
+            .unwrap()
+            .words(),
+        first.words()
     );
-    let failure = table
-        .select(
-            &[Domain::Finite(std::slice::from_ref(&value).into())],
-            exact,
-            &Cancellation::default(),
-        )
-        .err()
-        .unwrap();
-    assert!(matches!(
-        failure.cause,
-        Cause::Limit {
-            resource: Resource::Bytes,
-            ..
+}
+
+#[test]
+fn empty_first_mask_preserves_late_typed_comparisons() {
+    use zetesis_core::{AtomCatalog, ValueLimits, ValueNode};
+
+    let predicate = Predicate::new("table", 2).unwrap();
+    let value = Value::from_nodes(
+        vec![
+            ValueNode::Tuple { arity: 1 },
+            ValueNode::String("common prefix".repeat(8)),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    let source = atoms(&predicate, &[vec![Value::Number(1), value]]);
+    let foreign = AtomCatalog::new(source.clone()).unwrap();
+    let catalog = AtomCatalog::new(source).unwrap();
+    let relation = Relation::from_refs(
+        (&predicate).into(),
+        catalog.atoms(),
+        RelationLimits::default(),
+    )
+    .unwrap();
+    let table = Table::prepare(
+        &relation,
+        &[0, 1],
+        Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let supplied = foreign.atoms().at(0).unwrap().values().at(1).unwrap();
+    let values = [supplied];
+    let second = Domain::Finite(values.as_slice().into());
+    let comparison = comparison_work(relation.row(0).unwrap().value(1).unwrap(), supplied);
+    assert!(comparison > 8);
+    let absent = Value::Number(2);
+    for first in [
+        Domain::Finite((&[] as &[Value]).into()),
+        Domain::Singleton((&absent).into()),
+    ] {
+        let prefix = table
+            .select(
+                &[first, Domain::Unrestricted],
+                Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        let complete = table
+            .select(
+                &[first, second],
+                Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(complete.words(), &[0]);
+        // Even an empty result resolves the foreign structured value, with all
+        // typed comparison callbacks, and charges the later union/intersection.
+        assert_eq!(
+            complete.statistics().work,
+            prefix.statistics().work + 3 + 1 + comparison
+        );
+        for limit in prefix.statistics().work..complete.statistics().work {
+            let failure = table
+                .select(
+                    &[first, second],
+                    Limits {
+                        max_work: limit,
+                        ..Limits::default()
+                    },
+                    &Cancellation::default(),
+                )
+                .err()
+                .unwrap();
+            assert_eq!(failure.work, limit);
+            assert!(
+                matches!(failure.cause, Cause::Limit { resource: Resource::Work, observed, .. } if observed == u128::from(limit) + 1)
+            );
         }
-    ));
+        assert_eq!(prefix.words(), &[0]);
+    }
 }
 
 #[test]

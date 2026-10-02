@@ -109,14 +109,18 @@ as an implicit observation query belongs to separate task-relative demand
 analysis. Hidden predicates remain accounted for. `#defined` retains its clingo
 diagnostic semantics and creates no open-input domain here.
 
-## Initial transfers
+## Transfers
 
 - Ordinary positive literal heads contribute direct bounded symbolic terms.
   Numeric arithmetic is not evaluated; it widens its affected head argument.
-- A named variable occupying a whole head argument receives the **union** of
-  domains at its whole-variable ordinary positive body positions in that rule.
-  Union deliberately forgets join equalities; intersection may improve a later
-  transfer. Every producer contributes, including recursive producers.
+- A named variable occupying a whole head argument receives the **intersection**
+  of domains at its whole-variable ordinary positive body positions within that
+  producer. A binding must satisfy every such occurrence. `Unknown` is the
+  unrestricted domain: intersecting it with a finite domain retains the finite
+  bound, including an empty one. Only all-Unknown inputs widen this transfer.
+  Different producers still contribute by **union**, including recursive ones.
+  This does not recover tuple correlations: `p(1,2). p(2,3). q(X):-p(X,X).`
+  gives `q/1` the upper domain `{2}` although no complete `p` row matches.
 - Negative literals, comparisons, aggregate/conditional bodies and other
   unsupported conditions do not narrow a domain or bind its variables. A
   missing ordinary positive binding widens the output to Unknown. Anonymous
@@ -136,11 +140,22 @@ diagnostic semantics and creates no open-input domain here.
   argument values. Ignoring their restrictions is conservative for this upper
   cover; their validity and observable solver behavior are separate concerns.
 
-In-place monotone union passes continue until unchanged. Unsupported producers
-and width widening propagate Unknown through the same dependencies. For the
-stated ordinary positive profile, every value in its concrete least-model
-closure is covered. For broader forms the result deliberately sacrifices
-precision rather than inventing a closed finite carrier.
+In-place monotone passes union every producer's result into its target until
+unchanged. Every concrete binding value belongs to each positive body position's
+upper domain, and hence to their intersection; union covers every producer.
+Growing an input can only grow the intersection, so starting from empty domains
+and repeating these inflationary passes preserves recursive coverage. Local
+widening only moves a domain upward to `Unknown`; another finite binding can
+still bound a conjunction. The bounded source symbols and width widening bound
+strict changes, while the global round/work ceilings bound the attempt. No
+partial fixed point survives a global stop.
+
+For the stated ordinary positive profile, every value in its concrete
+least-model closure is covered. For broader forms the result deliberately
+sacrifices precision rather than inventing a closed finite carrier. The tighter
+bounds do not authorize a consumer to suppress source arithmetic or admission
+diagnostics: analysis does not evaluate those expressions, and consumers retain
+their original diagnostic boundaries.
 
 ## Bounds and verification
 
@@ -152,10 +167,22 @@ enters an ordered set; oversized symbols widen locally without deep comparison.
 The bounded traversal checks child counts before extending its explicit stack.
 Stored symbol comparisons therefore have bounded structure and payload.
 
-Temporary transfer snapshots copy only references from one bounded finite
-argument, charging copy work before allocation. Borrowed symbol payload is not
-copied. Statistics count charged logical operations/reservations, including
-work before fallback; they do not measure allocator overhead or peak RSS.
+Each variable transfer scans its inputs to select the smallest finite argument,
+then snapshots only its borrowed symbol references before changing the target
+(which may itself be an input). Every retained value must pass all the input
+bounds. Iteration establishes membership in the selected source occurrence, so
+that occurrence needs no additional visit. Other occurrences are charged before
+inspection; duplicate source occurrences need no additional set lookup. With k
+input positions, smallest finite width m and maximum finite width
+V, a pass uses O(k + m k log(V + 1)) ordered-set operations and O(m) temporary
+references; admitted symbol size bounds each comparison. All-Unknown inputs
+need only the input scan. Input scans, snapshot copies, membership probes and
+value merges charge work before their operations, including copy work before
+scratch allocation. No intersection set or symbol payload is copied. Distinct
+producer outputs retain the existing global value-entry and local width limits.
+Statistics count charged logical operations/reservations, including work before
+fallback; they do not measure allocator overhead or peak RSS. Changed work
+cutoffs describe the new traversal, not an unchanged numeric performance claim.
 Caller-supplied query symbols and the already constructed input Program are
 outside the analysis allocation contract.
 
@@ -165,14 +192,16 @@ cargo clippy -p zetesis-domain --all-targets --offline -- -D warnings
 cargo doc -p zetesis-domain --no-deps --offline
 ```
 
-The portable suite checks exact input/symbol/provenance identity, recursive union,
-signed positions, local/anonymous scopes, unresolved context, every global
-resource category and inclusive work boundaries, local width widening and deep
-symbols. A 128-case Proptest campaign compares upper coverage with an independent
-concrete positive fixed point over random facts and conjunction rules, including
-cycles and deliberate precision widening. Test parsing is confined to development
-fixtures; the production API receives Program directly. No Lean refinement or
-external-oracle coverage is claimed for this crate.
+The portable suite checks exact input/symbol/provenance identity, producer-local
+intersection and producer union, signed and repeated positions, mixed symbols,
+recursive source order, local/anonymous scopes, unresolved context, every global
+resource category and all intersection work cutoffs, local width widening and
+deep symbols. Two 128-case Proptest campaigns share an independent concrete
+unary positive fixed point over random facts and conjunction rules including
+cycles. One requires equality when no widening is needed; the other requires
+upper coverage under deliberate width widening. Test parsing is confined to
+development fixtures; the production API receives Program directly. No Lean
+refinement or external-oracle coverage is claimed for this crate.
 
 Different immutable Programs can be analyzed independently. A future synchronous
 transfer/reduction implementation could parallelize independent components after

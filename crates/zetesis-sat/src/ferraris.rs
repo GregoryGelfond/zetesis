@@ -15,6 +15,7 @@ mod completion;
 pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics};
 
 mod certified;
+mod conditions;
 pub use certified::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
     CertifiedStatistics,
@@ -103,10 +104,11 @@ pub struct Statistics {
     /// Exact history retained across candidate queries and restrictions.
     /// Its work is included in `search.work`, never added to it.
     pub projections: ProjectionStatistics,
-    /// Outer classical SAT queries started, including a final UNSAT query.
+    /// Outer clause queries started, including a final UNSAT query. Direct
+    /// positive proposals and region traversal do not increment this counter.
     pub candidate_queries: u64,
-    /// Successfully appended candidate-only restrictions. Exhaustion then
-    /// covers their intersection with the original classical candidate region.
+    /// Successful permanent restrictions and bound updates, cumulatively.
+    /// This is an installation count, not the population of retained indexes.
     pub candidate_restrictions: u64,
     /// Classical candidates admitted for membership checking, including retained
     /// pending proposals in the batched protocol.
@@ -314,7 +316,9 @@ pub(crate) fn checked_countermodel(
     Ok(Check::NonMinimal(subset))
 }
 
-/// Native all-model search over classical candidates with exact semantic blocking.
+/// Native answer-set enumeration over classical candidates with exact semantic blocking.
+/// A complete positive certificate can restrict proposals to the unique possible
+/// answer; larger classical models need not be enumerated or refuted individually.
 /// SAT assignments include Tseitin variables, but returned interpretations and
 /// exact exclusions contain only the original theory's atom universe.
 ///
@@ -334,6 +338,8 @@ pub struct StableModels {
     pending_error: Option<Incomplete>,
     batch: batch::State,
     certificate: Option<certified::Certificate>,
+    positive_candidates: Option<certified::PositiveCandidates>,
+    bound_generation: u64,
     reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
@@ -400,6 +406,8 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
+            positive_candidates: None,
+            bound_generation: 0,
             reduct,
         })
     }
@@ -450,6 +458,8 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
+            positive_candidates: None,
+            bound_generation: 0,
             reduct,
         })
     }
@@ -510,6 +520,8 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
+            positive_candidates: None,
+            bound_generation: 0,
             reduct,
         })
     }
@@ -531,7 +543,8 @@ impl StableModels {
     /// earlier restrictions stay in the CNF, and the separate exact projection
     /// index retains every earlier exclusion without turning it into watched
     /// CNF storage. The regions proposer narrows the regions still to visit by
-    /// it and continues. Original theory and reduct acceptance stay unchanged.
+    /// it and continues. A positive cursor tests the least interpretation
+    /// against these same restrictions. Original theory and reduct acceptance stay unchanged.
     ///
     /// The restriction must use the original semantic atom count and index
     /// meanings. Its separate immutable instance is expected. Restrictions
@@ -570,6 +583,68 @@ impl StableModels {
         let result = self.proposer.restrict(restriction, &mut budget);
         self.statistics.search = budget.statistics;
         if result.is_ok() {
+            self.statistics.candidate_restrictions = count;
+        }
+        result
+    }
+
+    /// Install a successively stronger candidate-only bound.
+    ///
+    /// # Caller obligation
+    /// Each bound must use the original atom count and semantic index meanings.
+    /// Every classical model of this bound must satisfy the previous bound,
+    /// if any. This logical implication is **not checked**. Violating it can
+    /// omit models because regions pruned earlier are not reopened. The first
+    /// bound has no implication obligation. Bounds never support original atoms
+    /// and never change the original theory or its reduct.
+    ///
+    /// Region search retains only the latest bound separately from permanent
+    /// [`Self::restrict_candidates`] constraints. Active worker snapshots may
+    /// finish under an older bound, and already pending candidates are retained;
+    /// their original membership checks still apply. An optimizer must compare
+    /// every returned model with its current incumbent. Exhaustion covers the
+    /// remaining constrained family, not the original unrestricted world view.
+    /// The optional clauses method appends each bound instead of retiring it;
+    /// the implication obligation makes that conjunction equivalent.
+    ///
+    /// # Errors
+    /// Refuses a different atom count, a closed iterator, pending blocking error,
+    /// generation overflow, resource exhaustion or cancellation. Failed setup
+    /// leaves the active bound and generation unchanged; admitted work stays
+    /// charged. Region knowledge retains its existing infallible allocation
+    /// contract; this operation does not make all search allocation fallible.
+    pub fn tighten_candidate_bound(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
+        if self.terminal {
+            return Err(Incomplete::ClosedEnumerator);
+        }
+        if let Some(error) = self.pending_error {
+            return Err(error);
+        }
+        if restriction.atom_count() != self.theory.atom_count() {
+            return Err(Incomplete::RestrictionUniverse {
+                expected: self.theory.atom_count(),
+                actual: restriction.atom_count(),
+            });
+        }
+        let generation = self
+            .bound_generation
+            .checked_add(1)
+            .ok_or(Incomplete::CounterOverflow)?;
+        let count = self
+            .statistics
+            .candidate_restrictions
+            .checked_add(1)
+            .ok_or(Incomplete::CounterOverflow)?;
+        let mut budget = Budget {
+            quota: crate::search::LocalQuota,
+            limits: self.limits.search,
+            cancellation: &self.cancellation,
+            statistics: self.statistics.search,
+        };
+        let result = self.proposer.tighten(restriction, generation, &mut budget);
+        self.statistics.search = budget.statistics;
+        if result.is_ok() {
+            self.bound_generation = generation;
             self.statistics.candidate_restrictions = count;
         }
         result
@@ -639,9 +714,10 @@ impl StableModels {
         Ok(())
     }
 
-    /// True only after a completed outer query refutes every unblocked model
+    /// True only after successful coverage of every unreturned answer set
     /// satisfying all successful candidate restrictions and the original-region
-    /// filter, if either was configured.
+    /// filter, if either was configured. A complete positive certificate can
+    /// establish this without refuting larger classical models individually.
     #[must_use]
     pub const fn exhausted(&self) -> bool {
         self.exhausted
@@ -662,7 +738,7 @@ impl StableModels {
                 regions: Some(proposals.statistics()),
                 ..self.statistics
             },
-            Proposer::Parallel(parallel) => {
+            Proposer::Parallel(parallel) if self.positive_candidates.is_none() => {
                 let merged = parallel.merged();
                 let merged = &merged;
                 let mut certified = self.statistics.certified;
@@ -689,6 +765,10 @@ impl StableModels {
                     ..self.statistics
                 }
             }
+            Proposer::Parallel(parallel) => Statistics {
+                regions: Some(parallel.statistics()),
+                ..self.statistics
+            },
         };
         statistics.region_filter = self
             .proposer
@@ -713,6 +793,7 @@ impl StableModels {
                     .as_ref()
                     .and_then(certified::Certificate::cpu),
                 reduct: &mut self.reduct,
+                positive_candidates: self.positive_candidates.as_mut(),
             },
             &mut self.proposer,
             &mut budget,
@@ -782,6 +863,7 @@ struct Membership<'a> {
     /// share it; the coordinator reads through it.
     certificate: Option<&'a std::sync::Arc<certified::Certification>>,
     reduct: &'a mut crate::prepared_reduct::State,
+    positive_candidates: Option<&'a mut certified::PositiveCandidates>,
 }
 
 /// The component that proposes classical candidates: it realizes the
@@ -832,9 +914,15 @@ impl Proposer {
         theory: &Theory,
         limits: Limits,
         certificate: Option<&std::sync::Arc<certified::Certification>>,
+        positive_candidates: Option<&mut certified::PositiveCandidates>,
         budget: &mut Budget<'_>,
         statistics: &mut Statistics,
     ) -> Result<Option<Proposal>, Incomplete> {
+        if let Some(candidates) = positive_candidates {
+            return candidates
+                .propose(self, theory, limits, budget, statistics)
+                .map(|candidate| candidate.map(Proposal::Candidate));
+        }
         let proposal = match self {
             Self::Clauses(clauses) => {
                 increment(&mut statistics.candidate_queries)?;
@@ -901,6 +989,20 @@ impl Proposer {
         }
     }
 
+    fn tighten(
+        &mut self,
+        restriction: &Theory,
+        generation: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        match self {
+            Self::Clauses(_) => self.restrict(restriction, budget),
+            Self::Regions(regions) => regions.tighten(restriction, generation, budget),
+            Self::Parallel(parallel) => parallel.tighten(restriction, generation, budget),
+            Self::Proposals(proposals) => proposals.tighten(restriction, generation, budget),
+        }
+    }
+
     /// Restrict every later proposal to the classical models of `restriction`.
     fn restrict(
         &mut self,
@@ -932,15 +1034,23 @@ fn advance(
         limits,
         certificate,
         reduct,
+        mut positive_candidates,
     } = membership_input;
     loop {
         // The parallel walk's workers time their own phases; the wait for
         // their models is not a phase.
         let started = match proposer {
-            Proposer::Parallel(_) => None,
+            Proposer::Parallel(_) if positive_candidates.is_none() => None,
             _ => timing::start(statistics.phase_timings.as_ref()),
         };
-        let proposal = proposer.propose(theory, limits, certificate, budget, statistics);
+        let proposal = proposer.propose(
+            theory,
+            limits,
+            certificate,
+            positive_candidates.as_deref_mut(),
+            budget,
+            statistics,
+        );
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         let candidate = match proposal? {
             None => return Ok(None),

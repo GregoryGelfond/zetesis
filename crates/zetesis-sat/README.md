@@ -90,6 +90,36 @@ the previous CNF and cursor, and charged work remains. The original theory
 returned by `theory()` and every reduct check remain unchanged. After any
 successful restriction, exhaustion covers only their intersection.
 
+`StableModels::tighten_candidate_bound(&Theory)` keeps one replaceable bound
+separately from these permanent restrictions. The caller must ensure that each
+new bound classically implies its predecessor over the same atom meanings;
+this implication is **not checked**. Otherwise an earlier pruning may have
+removed a model the new bound permits. The first bound has no predecessor.
+Under the implication contract, conjoining all old bounds is equivalent to
+retaining the latest one, also in conjunction with every independent restriction.
+Original theory and reduct membership are unchanged. Exhaustion covers the
+constrained candidate family, not the unrestricted world view.
+
+Region modes replace the bound's immutable index after successful preparation
+and charging. Per-region bound knowledge has a checked, non-wrapping generation
+and is reset before using a different bound DAG. Permanent restrictions added
+later receive their own knowledge without reassigning the bound's knowledge.
+Queued regions retain no bound DAG owner; active worker snapshots may keep the
+old index until their step finishes. Already active or pending candidates remain
+eligible for original membership checking, so an optimizer must score every
+returned model against its current incumbent. Failed preparation leaves the
+active bound and generation unchanged, while admitted work remains charged.
+The optional clauses method continues appending bounds, whose conjunction is
+equivalent under the same implication contract. No clause database is rebuilt.
+
+The cumulative `candidate_restrictions` counter includes permanent additions and
+bound updates; it is not a count of live indexes. With `r` permanent restrictions,
+region propagation visits those `r` conditions and one current bound, rather than
+all historical bounds. Each inactive region retains knowledge for at most one
+bound; a worker can temporarily retain its prior generation's immutable index.
+Existing infallible knowledge cloning and shared-owner allocation contracts
+remain; this replacement operation does not make all search allocation fallible.
+
 ## Proposing candidates by regions
 
 Under `SearchMethod::Regions`, reachable in the solve session as

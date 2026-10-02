@@ -419,7 +419,9 @@ fn submitted_interruption(
         2,
     )
     .unwrap();
-    let seeds = plan.pack(&resident.graph, candidates).unwrap();
+    let seeds = plan
+        .pack(&resident.graph, candidates, &Cancellation::default())
+        .unwrap();
     let scopes = ErrorScopes::new(runtime.device());
     let outcome = resident.dispatch(
         runtime,

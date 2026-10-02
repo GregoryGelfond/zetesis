@@ -40,7 +40,7 @@ pub enum Widening {
     SymbolSize,
     /// The finite set exceeds its per-argument width.
     ValueWidth,
-    /// A contributing body argument is Unknown.
+    /// Every positive body position binding this producer's variable is Unknown.
     Dependency,
 }
 

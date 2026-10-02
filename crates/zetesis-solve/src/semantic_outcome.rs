@@ -29,6 +29,7 @@ pub struct SemanticOutcome {
     pub(crate) retained: usize,
     pub(crate) search_state: Option<SearchState>,
     pub(crate) optimization: Option<Optimization>,
+    pub(crate) objective_work: u64,
     pub(crate) checked: u64,
     pub(crate) gate_atoms: usize,
     pub(crate) candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
@@ -59,6 +60,7 @@ impl SemanticOutcome {
             retained: 0,
             search_state: Some(SearchState::Interrupted(interruption)),
             optimization: None,
+            objective_work: 0,
             checked: 0,
             gate_atoms: 0,
             candidate_statistics: None,
@@ -191,6 +193,15 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn scored_models(&self) -> u64 {
         self.scored
+    }
+
+    /// Cumulative accepted objective preparation and scoring work, including
+    /// refused prefixes. Available before any incumbent and in unrestricted
+    /// enumeration; zero when no objective work has been accepted. Optional
+    /// candidate-bound construction uses a separate account.
+    #[must_use]
+    pub const fn objective_work(&self) -> u64 {
+        self.objective_work
     }
 
     /// Incumbent models retained when search stopped, before any delivery.

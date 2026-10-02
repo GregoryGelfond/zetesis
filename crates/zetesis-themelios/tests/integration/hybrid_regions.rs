@@ -53,6 +53,8 @@ fn region_refutation_excludes_every_completion() {
         "{p(1)}. :-p(1),not -p(1).",
         "d(0;1). {p(X)}:-d(X). :-p(X),1/X=1.",
         "d(1..2). {p(2..3)}. :-d(X),Y=X+1,p(Y),Y>2.",
+        "{p(4,4);p(4,5);p(5,5)}.q(2). :-p(X,X),q(Y),X/2=Y.",
+        "{p(1..3)}. X=2 :-p(X),X/2=1.",
         ":-.",
     ] {
         let owner = admit(source);
