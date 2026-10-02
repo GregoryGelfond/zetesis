@@ -1,0 +1,44 @@
+name = "zetesis_evaluation_refinement"
+version = "0.0.0"
+defaultTargets = ["ProgressExample"]
+
+[leanOptions]
+autoImplicit = false
+warningAsError = true
+
+[[require]]
+name = "aeneas"
+path = ".lake/aeneas/backends/lean"
+
+[[lean_lib]]
+name = "PureExternals"
+
+[[lean_lib]]
+name = "AtomicTypes"
+
+[[lean_lib]]
+name = "AtomicLoad"
+
+[[lean_lib]]
+name = "Evaluator"
+
+[[lean_lib]]
+name = "Mask"
+
+[[lean_lib]]
+name = "Membership"
+
+[[lean_lib]]
+name = "Iteration"
+
+[[lean_lib]]
+name = "Control"
+
+[[lean_lib]]
+name = "Step"
+
+[[lean_lib]]
+name = "Progress"
+
+[[lean_lib]]
+name = "ProgressExample"

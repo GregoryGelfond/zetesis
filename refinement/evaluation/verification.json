@@ -1,0 +1,66 @@
+{
+  "schema": "zetesis.refinement.evaluation.check.v1",
+  "checkedOn": "2026-10-02",
+  "scope": "One extracted evaluator transition under explicit single-invocation observations; not whole-loop or complete solver verification.",
+  "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
+  "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
+  "artifactInventory": "artifacts.sha256",
+  "artifactInventorySha256": "8ee3d660b4da3e19b7aa9ea9ba066335be0959e5f51bf10df1ef1ca96b5c9574",
+  "declarations": [
+    "Membership.mask_bit",
+    "Membership.outside",
+    "Membership.contains_refines",
+    "EvaluatorIteration.slice_next_present",
+    "EvaluatorIteration.slice_next_exhausted",
+    "EvaluatorIteration.enumerate_next_present",
+    "EvaluatorIteration.enumerate_next_exhausted",
+    "EvaluatorIteration.vector_read",
+    "EvaluatorIteration.vector_append",
+    "EvaluatorControl.poll_exact",
+    "EvaluatorControl.tick_stopped",
+    "EvaluatorControl.tick_at_limit",
+    "EvaluatorControl.tick_advances",
+    "Evaluation.read_exact",
+    "Evaluation.mask_exact",
+    "Evaluation.masked_append",
+    "Evaluation.step_after_tick",
+    "Evaluation.step_stops",
+    "Evaluation.exhausted_step",
+    "EvaluationProgress.present_step",
+    "EvaluationProgress.control_stops",
+    "EvaluationProgress.work_limit_stops",
+    "EvaluationProgressExample.false_node_advances"
+  ],
+  "allowedLogicalAxioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
+  "checks": [
+    {
+      "argv": [
+        "lake",
+        "build"
+      ],
+      "exitCode": 0,
+      "log": "build.txt",
+      "logSha256": "b2589687b0d6576f7ee6fcdb03a9ba1c7b08bb2aa2a1593e04d8171676fe018c"
+    },
+    {
+      "argv": [
+        "lake",
+        "env",
+        "lean",
+        "-DautoImplicit=false",
+        "-DwarningAsError=true",
+        "Audit.lean"
+      ],
+      "exitCode": 0,
+      "log": "axiom-audit.txt",
+      "logSha256": "22ba87cc01ef076b635b28e9d01cfb673ee50a96ab37576d2bd5615b784843fa"
+    }
+  ],
+  "theoremAuditCount": 23,
+  "mainSemanticLibraryIncluded": false,
+  "rustOrShaderSourcesChanged": false
+}

@@ -1,0 +1,130 @@
+{
+  "schema": "zetesis.refinement.evaluation.v1",
+  "source": {
+    "extractionRevision": "8e01b2695907466f48c0537d051532d2d7195cf2",
+    "verifiedCurrentRevision": "ff0a441e2cb9ccffcd2f2467dfedbb9a6a7289d3",
+    "inventory": "source-inputs.sha256",
+    "inventorySha256": "7b2015a9addf1b96bc22cf35d9976796f3cc0e108223a87e027842f4a9e5c623",
+    "inventoryFiles": 304,
+    "allInventoryBytesStillMatch": true,
+    "scope": "Recorded source inventory for the production evaluator extraction; not a claim to inventory every file in the repository or toolchain.",
+    "sha256CheckExit": 0
+  },
+  "tools": {
+    "charon": {
+      "version": "0.1.254 (b104e24fea7d721b71e6c39fd70f26ff20bc0980)",
+      "sha256": "0ffca3f346ea1572afc21f16b98e3b3953e301180c5e1e9898ce9ddef79d32ec",
+      "driverSha256": "dd9683888200014b93c9dd8cbd4b3641a1c093c8e05d7aa5a8a1b9698751643c"
+    },
+    "aeneas": {
+      "version": "nightly-2026.09.09-505b6ca",
+      "sha256": "e8690e9b5c2798b11c0d9baece6f610794353cb189d84b3f560e93b3589a41a4"
+    },
+    "rust": {
+      "toolchain": "nightly-2026-08-18-aarch64-apple-darwin",
+      "version": "rustc 1.100.0-nightly",
+      "commit": "8fa1c96cfd489e4c27654c144ae871ce2c4db6c6",
+      "binarySha256": "067254444273fb1a92203b004d33584e064d130ee146090f22dc98de82408da0",
+      "targetPointerWidth": 64
+    },
+    "lean": {
+      "version": "4.31.0",
+      "commit": "68218e876d2a38b1985b8590fff244a83c321783",
+      "backendRelease": "nightly-2026.09.09-505b6ca"
+    }
+  },
+  "extraction": {
+    "root": "crates/zetesis-ferraris/Cargo.toml",
+    "startFrom": "zetesis_ferraris::oracle::evaluate",
+    "include": [
+      "zetesis_ferraris",
+      "zetesis_cpu::cancellation"
+    ],
+    "preset": "aeneas",
+    "sysroot": "default",
+    "cargoArguments": [
+      "--lib",
+      "--locked",
+      "--offline"
+    ],
+    "borrowAndTypeCheckingSkipped": false,
+    "originalLlbcSha256": "64ea2fd98909d3eeb6abf51a8f8f3c9a074274410200e0a214c243b08fc37e89"
+  },
+  "normalization": {
+    "serialization": "jq -ca (compact ASCII JSON with final newline)",
+    "publicSource": {
+      "file": "evaluator.source.llbc",
+      "changedPath": [
+        "translated",
+        "options",
+        "dest_file"
+      ],
+      "newValue": "evaluator.llbc",
+      "reason": "Remove the extraction-machine destination path; this is command metadata, not executable IR.",
+      "restoringDestinationRestoresEntireParsedOriginal": true
+    },
+    "translationInput": {
+      "file": "evaluator.llbc",
+      "changedPath": [
+        "translated",
+        "fun_decls",
+        11,
+        "body",
+        "Structured",
+        "locals",
+        "locals",
+        1,
+        "name"
+      ],
+      "oldValue": "theory",
+      "newValue": "program",
+      "reason": "Avoid a generated Lean parameter shadowing the theory namespace. Variable uses remain numeric Local indices.",
+      "restoringBothFieldsRestoresEntireParsedOriginal": true
+    },
+    "executableStatementTreeSha256": "f3d5900300bdcaac7983d8df2825db3876ccacfcf1599afffc1aa94f03e4b855",
+    "executableStatementTreeUnchanged": true,
+    "generatedChangeFromUnnormalizedDirectTranslation": "Only the evaluate parameter spelling and its one Theory.nodes argument use."
+  },
+  "replay": {
+    "jqVersion": "jq-1.8.2",
+    "sourceMetadataRestoreComparison": true,
+    "localNameRestoreComparison": true,
+    "combinedRestoreComparison": true,
+    "aeneasExit": 0,
+    "aeneasArguments": [
+      "-backend",
+      "lean",
+      "-dest",
+      "Evaluator",
+      "-split-files",
+      "-namespace",
+      "ZetesisExtract",
+      "-all-computable",
+      "-no-progress-bar",
+      "-sequential",
+      "-warnings-as-errors",
+      "-abort-on-error",
+      "evaluator.llbc"
+    ],
+    "generatedFilesByteIdenticalToNameNormalizedTranslation": true,
+    "hostPathScanClean": true,
+    "newCargoExtractionPerformed": false,
+    "externalTemplatesInstalled": false,
+    "documentedRetainedInputCommandsExit": 0
+  },
+  "trustBoundary": [
+    "Published LLBC is explicitly metadata/name-normalized, not byte-exact raw Charon output.",
+    "Production Rust is unchanged; generated Lean was not edited.",
+    "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
+    "Atomic observations cover a single invocation, not concurrent shared-cell behavior over the generated whole loop.",
+    "Source inventory and output hashes are provenance, not a proof of end-to-end solver correctness."
+  ],
+  "generatedArtifactsSha256": {
+    "evaluator.source.llbc": "c4d95eaeae42a9ca5975411cefb2e7ecac6770b71ec03a2be5193634ade02dec",
+    "evaluator.llbc": "a0a607dc39ff9024822b7311e3afa630ecbcbb43da4ad4ea82c18b633bc31cb2",
+    "Evaluator/Funs.lean": "d0f99043fecd5360b709d37087f9a44a864270c4604b0e6252f5dafa4da611e3",
+    "Evaluator/FunsExternal_Template.lean": "1cd1207ee07b5f9aa78dd6979479dfc505223c51687dfab256e51319e7ee2a8a",
+    "Evaluator/Types.lean": "55bd6876376523789c6869aad00b03c604b30014d3b1d0acfbabcdfbe24be64a",
+    "Evaluator/TypesExternal_Template.lean": "cdbc58fec3a135c6f90a0b2cb212e4d5a04c2d72605848bf78291c7ca071b454"
+  }
+}

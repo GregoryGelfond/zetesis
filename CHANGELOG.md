@@ -15,6 +15,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   reduct checking, including correctness of completed decisions under a query limit.
 - A composed packed streaming membership proof and finite theory-admission
   checks that establish the evaluator’s structural preconditions.
+- An optional Lean refinement of one extracted Rust formula-evaluator step,
+  with checked indexing, node truth and bounded work handling. Its scope
+  includes explicit control observations, not concurrent whole-loop verification.
 
 ## 0.2.0 — 2026-10-01
 

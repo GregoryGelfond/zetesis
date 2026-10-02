@@ -23,7 +23,10 @@ for original truth followed by frozen-reduct truth. It derives the mask from
 `TightEvaluation.values`; the public theorem does not assume mask correctness.
 `roots_true_iff` handles arbitrary tested interpretations. The corresponding
 Rust loop is `zetesis_ferraris::oracle::evaluate`, used by `FrozenReduct`, but
-these new proofs do not extract or verify that Rust loop.
+these proofs do not extract or verify that Rust loop. The separate
+[evaluator-step refinement](evaluation.md) checks one generated iteration,
+including actual indexing, work charging and short-circuit node evaluation.
+It does not yet establish whole-loop or original-mask correspondence.
 
 `FiniteMembership.check_iff_answer_set` adds a finite reference subset search.
 Its coverage proof constructs a selection representing every semantic subset

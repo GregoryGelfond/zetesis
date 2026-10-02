@@ -1,0 +1,12 @@
+✔ [1708/1719] Built AtomicTypes (1.3s)
+✔ [1709/1719] Built Evaluator.TypesExternal (1.2s)
+✔ [1710/1719] Built Evaluator.Types (1.4s)
+✔ [1711/1719] Built AtomicLoad (1.2s)
+✔ [1712/1719] Built Evaluator.FunsExternal (1.2s)
+✔ [1713/1719] Built Evaluator.Funs (1.4s)
+✔ [1714/1719] Built Membership (1.5s)
+✔ [1715/1719] Built Control (1.5s)
+✔ [1716/1719] Built Step (1.4s)
+✔ [1717/1719] Built Progress (1.3s)
+✔ [1718/1719] Built ProgressExample (1.4s)
+Build completed successfully (1719 jobs).
