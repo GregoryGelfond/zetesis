@@ -2,6 +2,15 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+The [grounding and formula preparation comparison](../foundation-reuse.md)
+records source `120fadfb` against `ec6adadd` and `d6557d0a`. Its portable evidence
+covers the [94-case corpus](foundation-reuse-120fadfb-corpus.json),
+[worker scaling](foundation-reuse-120fadfb-workers.json) and
+[eager/lazy selections](foundation-reuse-120fadfb-grounders.json). Each projection
+retains input report hashes, timing and memory observations, actual execution
+routes and qualification scope. Non-completed cells retain their reasons.
+These CPU observations do not establish Metal performance or qualification.
+
 The latest [coverage snapshot](../coverage-0.1.6.md) records portable coverage
 and separate Metal qualification at `9589f965`. Its [receipt](coverage-9589f965.json)
 preserves exact counts, source identity and report hashes. The `v0.1.7` release

@@ -46,6 +46,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Reusing grounding and formula preparation](reference/foundation-reuse.md)
   - [Grounding and prepared CPU closure](reference/instantiation-lazy.md)
   - [Reusing support-publication directories](reference/support-publication.md)
   - [Canonical storage and CPU worker scaling](reference/canonical-storage.md)
