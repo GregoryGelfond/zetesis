@@ -2,6 +2,7 @@ import ProgressExample
 import TheorySatisfaction
 import RootScanExample
 import FixedLoopExample
+import FrozenQueryExample
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
@@ -83,3 +84,20 @@ import FixedLoopExample
 #print axioms TheorySatisfaction.completed_reduct
 #print axioms RootScanExample.empty_roots_do_not_poll
 #print axioms RootScanExample.first_failure_follows_root_order
+#print axioms EvaluationAccounting.returned_receipt
+#print axioms EvaluationAccounting.completed_work
+#print axioms EvaluationAccounting.returned_work_bound
+#print axioms FrozenQuery.represents_from_evaluation
+#print axioms FrozenQuery.mask_coverage
+#print axioms FrozenQuery.execution_returns
+#print axioms FrozenQuery.execution_exists
+#print axioms FrozenQuery.returned_execution
+#print axioms FrozenQuery.execution_satisfaction
+#print axioms FrozenQuery.completed_satisfaction
+#print axioms FrozenQuery.execution_work_bound
+#print axioms FrozenQuery.returned_work_bound
+#print axioms FrozenQueryExample.singleton_evaluation
+#print axioms FrozenQueryExample.singleton_scan
+#print axioms FrozenQueryExample.root_scan_retains_prior_work
+#print axioms FrozenQueryExample.represented_candidate_need_not_be_a_model
+#print axioms FrozenQueryExample.successful_query_need_not_test_a_subset

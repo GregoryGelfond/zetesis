@@ -140,4 +140,11 @@ structure theory.Interpretation where
 @[reducible]
 def oracle.evaluate.closure := Std.Usize
 
+/-- [zetesis_ferraris::reduct::FrozenReduct]
+    Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 28:0-31:1
+    Visibility: public -/
+structure reduct.FrozenReduct where
+  candidate : theory.Interpretation
+  truth : alloc.vec.Vec Bool
+
 end ZetesisExtract

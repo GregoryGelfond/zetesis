@@ -1,13 +1,13 @@
 {
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
-    "extractionRevision": "55bebe478df51729f9f4c9d471b26d7fdb194c96",
-    "verifiedCurrentRevision": "55bebe478df51729f9f4c9d471b26d7fdb194c96",
+    "extractionRevision": "524bb291e6191a0ace637411c8d3842736374e16",
+    "verifiedCurrentRevision": "524bb291e6191a0ace637411c8d3842736374e16",
     "inventory": "source-inputs.sha256",
     "inventorySha256": "7b2015a9addf1b96bc22cf35d9976796f3cc0e108223a87e027842f4a9e5c623",
     "inventoryFiles": 304,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded source inventory for the production evaluator and root-scan extraction; not a claim to inventory every file in the repository or toolchain.",
+    "scope": "Recorded source inventory for the production evaluator, root scan and private FrozenReduct query; not a claim to inventory every file in the repository or toolchain.",
     "sha256CheckExit": 0
   },
   "tools": {
@@ -37,11 +37,15 @@
     "root": "crates/zetesis-ferraris/Cargo.toml",
     "startFrom": [
       "zetesis_ferraris::oracle::evaluate",
-      "zetesis_ferraris::oracle::failed_root"
+      "zetesis_ferraris::oracle::failed_root",
+      "zetesis_ferraris::reduct"
     ],
     "include": [
       "zetesis_ferraris",
-      "zetesis_cpu::cancellation"
+      "zetesis_cpu::cancellation",
+      "zetesis_ferraris::reduct::FrozenReduct",
+      "zetesis_ferraris::reduct::_::satisfied_by",
+      "zetesis_ferraris::reduct::_::theory"
     ],
     "preset": "aeneas",
     "sysroot": "default",
@@ -51,7 +55,14 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "5489afd657413f0e84a956297209c273c2c765cc12f4228134110fa759157f46"
+    "originalLlbcSha256": "5dc3165d78ae8d438c5628990b9d6336e628fd847dba42281f3c92253ec860a1",
+    "exclude": [
+      "zetesis_ferraris::reduct::_::new",
+      "zetesis_ferraris::reduct::_::freeze",
+      "zetesis_ferraris::reduct::_::is_satisfied_by",
+      "zetesis_ferraris::reduct::_::candidate",
+      "zetesis_ferraris::reduct::_::fmt"
+    ]
   },
   "normalization": {
     "serialization": "jq -ca (compact ASCII JSON with final newline)",
@@ -103,20 +114,34 @@
         }
       ],
       "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
-      "restoringNamesRestoresEntireParsedSource": true,
-      "restoringAllThreeFieldsRestoresEntireParsedOriginal": true
+      "declarationSelection": {
+        "removedTraitImplIndex": 17,
+        "removedOrderedRegistrationIndex": 85,
+        "trait": "core::fmt::Debug",
+        "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
+        "derived": true,
+        "excludedMethodId": 145,
+        "excludedMethod": "fmt",
+        "noSurvivingSemanticReferences": true,
+        "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
+      },
+      "restoringNamesAndDeclarationSelectionRestoresEntireParsedSource": true,
+      "restoringAllChangesRestoresEntireParsedOriginal": true
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "With matching input/module basenames, only each evaluate/failed_root parameter spelling and its one Theory.nodes/roots argument use changes.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "Raw query selection cannot finish Aeneas export because the unused derived Debug implementation refers to its excluded fmt method. After the checked declaration selection, generated output extends the previous package only with FrozenReduct and three methods; previous generated declarations are byte-identical.",
     "executableStatementTreesSha256": {
-      "evaluate": "8d6580c1c5cd9a5bd476681fda555ed203943979fb398f02a61556a1a997cb94",
-      "failed_root": "7bb47e01d2c4c87e3ce573df4ced62e62d1c6799f6667cfda6009a36914c47f7"
+      "evaluate": "afa768537a1371385e746914fad090116e35975e1b1aefb58782fa4715339498",
+      "failed_root": "b986b7678c27d7b61a83e3b9a0fa32db9628479b529b8f3660d848b6ea4a2324",
+      "FrozenReduct.theory": "ef587932d11ee98a3c8713abbe4a5f447960923b65bdb597cc17602ce17b61de",
+      "FrozenReduct.satisfied_by": "8877689ad2ed2e5d4ed3d7c5333f938ff04ed3338c8bc3ae6b772af7868ec8b5",
+      "Interpretation.theory": "0b0420cfdbed14d70895de49d5d6e5e11f978b74e60302cc924f356623eadc2b"
     },
-    "executableStatementTreesUnchanged": true
+    "executableStatementTreesUnchanged": true,
+    "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true
   },
   "replay": {
     "jqVersion": "jq-1.8.2",
     "sourceMetadataRestoreComparison": true,
-    "localNameRestoreComparison": true,
     "combinedRestoreComparison": true,
     "aeneasExit": 0,
     "aeneasArguments": [
@@ -134,39 +159,43 @@
       "-abort-on-error",
       "evaluator.llbc"
     ],
-    "generatedFilesByteIdenticalToNameNormalizedTranslation": true,
     "hostPathScanClean": true,
     "newCargoExtractionPerformed": true,
     "externalTemplatesInstalled": false,
-    "documentedRetainedInputCommandsExit": 0
+    "documentedRetainedInputCommandsExit": 0,
+    "declarationAndNameRestoreComparison": true,
+    "generatedFilesByteIdenticalToNormalizedTranslation": true
   },
   "trustBoundary": [
-    "Published LLBC is explicitly metadata/name-normalized, not byte-exact raw Charon output.",
+    "Published LLBC is explicitly metadata/name-normalized and omits one checked unused derived Debug implementation and its registration; it is not byte-exact raw Charon output.",
     "Production Rust is unchanged; generated Lean was not edited.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Atomic loads return fixed supplied token values. Generated-loop proofs under those definitions do not establish correspondence with changing concurrent Rust observations.",
-    "Source inventory and output hashes are provenance, not a proof of end-to-end solver correctness."
+    "Source inventory and output hashes are provenance, not a proof of end-to-end solver correctness.",
+    "Private FrozenReduct::satisfied_by is selected; construction, reservation, public owner checks and public query wrappers are not extracted or verified by this package."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "d7e6dd73ca6e4ab82b64ead16ff0d3dea88e8f02b341423480985b47e675af4d",
-    "evaluator.llbc": "fdfd9e745801a2e69656f2631a59c25dae69b595790cfac48a95e8ac5108b049",
-    "Evaluator/Funs.lean": "e0d1b0c982b29f9e13e09ad94c5951f74935cd687a1aaefdb87a0aed611bb4be",
+    "evaluator.source.llbc": "dab785d07ac36bd3799db6fff097baf0940f943a24158c4e3aaf6298e36cea46",
+    "evaluator.llbc": "f8376701f4cea46a97a8dcf10dafe1dd560e88e914b4f7084a8bdec1465f7d67",
+    "Evaluator/Funs.lean": "b47365c7eb32a657ec7d352724f63b192dd6f3ffc2bf42fb7caa2b6169252e00",
     "Evaluator/FunsExternal_Template.lean": "1cd1207ee07b5f9aa78dd6979479dfc505223c51687dfab256e51319e7ee2a8a",
-    "Evaluator/Types.lean": "55bd6876376523789c6869aad00b03c604b30014d3b1d0acfbabcdfbe24be64a",
+    "Evaluator/Types.lean": "e6306768a0145b6cf1a68bff9fe81cd9e06ad285471f72c193aa8d1563e795cc",
     "Evaluator/TypesExternal_Template.lean": "cdbc58fec3a135c6f90a0b2cb212e4d5a04c2d72605848bf78291c7ca071b454"
   },
   "compatibility": {
-    "previousGeneratedFunsSha256": "d0f99043fecd5360b709d37087f9a44a864270c4604b0e6252f5dafa4da611e3",
+    "previousPackageRevision": "524bb291e6191a0ace637411c8d3842736374e16",
+    "previousGeneratedFunsSha256": "e0d1b0c982b29f9e13e09ad94c5951f74935cd687a1aaefdb87a0aed611bb4be",
+    "previousGeneratedTypesSha256": "55bd6876376523789c6869aad00b03c604b30014d3b1d0acfbabcdfbe24be64a",
     "existingGeneratedFunctionsByteUnchanged": true,
-    "generatedTypesByteUnchanged": true,
+    "existingGeneratedTypesByteUnchanged": true,
     "externalTemplatesHashesUnchanged": true,
-    "addedGeneratedLines": 61,
+    "addedGeneratedFunctionLines": 46,
+    "addedGeneratedTypeLines": 7,
     "addedDefinitions": [
-      "theory.Theory.roots",
-      "oracle.failed_root_loop.body",
-      "oracle.failed_root_loop",
-      "oracle.failed_root"
-    ],
-    "previousPackageRevision": "55bebe478df51729f9f4c9d471b26d7fdb194c96"
+      "reduct.FrozenReduct",
+      "theory.Interpretation.impl.theory",
+      "reduct.FrozenReduct.theory",
+      "reduct.FrozenReduct.satisfied_by"
+    ]
   }
 }

@@ -61,11 +61,14 @@ The proof follows that definition:
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
 a separate obligation. The separately built [implementation-refinement package](evaluation.md)
-proves the generated evaluator and root scan under fixed observation tokens.
-Completed generated calls establish original and Ferraris reduct theory
-satisfaction; original evaluation computes the mask. The proof imports the same
-ASP theory under the extraction toolchain. Changing runtime observations, Rust
-owner checks, `FrozenReduct` construction and wrappers, and subset search remain
+proves the generated evaluator, root scan and private stored-reduct query under
+fixed observation tokens. A completed actual query decides reduct satisfaction,
+given explicit agreement of its stored mask with original truth. Completed
+original evaluation establishes that agreement for the corresponding record,
+not the `freeze` constructor. For `N` nodes and `R` root occurrences, both query
+phases together charge at most `N + R`, even on typed stops. The proof imports
+the same ASP theory under the extraction toolchain. Changing runtime observations, `FrozenReduct`
+construction, public allocation/owner-checking wrappers and subset search remain
 unproved.
 
 For normal rules, the positive reduct has a unique least consequence set.
@@ -140,7 +143,7 @@ system or device progress is not obtained from a set-theoretic coverage law.
 
 1. **Ground CPU membership.** Use one compatible extraction/proof toolchain.
    Extend the generated evaluation/root-scan results to changing runtime
-   observations and verify `FrozenReduct` construction, wrappers and owner
+   observations and verify `FrozenReduct` construction, public wrappers and owner
    invariants. Connect packed updates and streaming frozen evaluation to the
    existing laws. Establish exact completed verdicts for the actual general
    checker, then the normal-closure checker.

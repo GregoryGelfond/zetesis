@@ -334,4 +334,50 @@ def oracle.failed_root
     SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
   oracle.failed_root_loop iter values work
 
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-212:5
+    Visibility: public -/
+def theory.Interpretation.impl.theory
+  (self : theory.Interpretation) : Result theory.Theory := do
+  ok self.theory
+
+/-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::theory]:
+    Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 67:4-69:5
+    Visibility: public -/
+def reduct.FrozenReduct.theory
+  (self : reduct.FrozenReduct) : Result theory.Theory := do
+  theory.Interpretation.impl.theory self.candidate
+
+/-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::satisfied_by]:
+    Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 114:4-122:5 -/
+def reduct.FrozenReduct.satisfied_by
+  (self : reduct.FrozenReduct) (tested : theory.Interpretation)
+  (values : alloc.vec.Vec Bool) (work : oracle.Work) :
+  Result ((core.result.Result Bool zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Bool) × oracle.Work)
+  := do
+  let t ← reduct.FrozenReduct.theory self
+  let s := alloc.vec.Vec.deref self.truth
+  let (r, values1, work1) ← oracle.evaluate t tested (some s) values work
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    let s1 := alloc.vec.Vec.deref values1
+    let (r1, work2) ← oracle.failed_root t s1 work1
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue val =>
+      let b := core.option.Option.is_none val
+      ok (core.result.Result.Ok b, values1, work2)
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r2 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+      ok (r2, values1, work2)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+    ok (r1, values1, work1)
+
 end ZetesisExtract

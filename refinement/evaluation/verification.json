@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "Generated evaluation and root scanning preserve exact truth, work and typed stops under fixed observation tokens. Completed generated calls establish original and Ferraris reduct theory satisfaction using the computed original mask. Changing-observation runtime correspondence, subset search and complete solver verification remain open.",
+  "scope": "The generated private FrozenReduct query decides Ferraris reduct satisfaction on completion under fixed observation tokens and explicit stored-mask agreement. Actual original evaluation establishes that agreement for the corresponding record, not the freeze constructor. Evaluation and root checking share one work budget, preserve typed stops and charge at most the node count plus root occurrences. Construction, public wrappers, changing runtime observations, subset search and complete solver verification remain open.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "17a4a5080815f4a70d93a000b1b8bfd1a434e6511ba911602363b2db0e1c4334",
+  "artifactInventorySha256": "434d336cc61e556886988bbea4a8f16d25ed17a6fa203c988eaccc8ae2088098",
   "declarations": [
     "Membership.mask_bit",
     "Membership.outside",
@@ -85,7 +85,24 @@
     "TheorySatisfaction.completed_original",
     "TheorySatisfaction.completed_reduct",
     "RootScanExample.empty_roots_do_not_poll",
-    "RootScanExample.first_failure_follows_root_order"
+    "RootScanExample.first_failure_follows_root_order",
+    "EvaluationAccounting.returned_receipt",
+    "EvaluationAccounting.completed_work",
+    "EvaluationAccounting.returned_work_bound",
+    "FrozenQuery.represents_from_evaluation",
+    "FrozenQuery.mask_coverage",
+    "FrozenQuery.execution_returns",
+    "FrozenQuery.execution_exists",
+    "FrozenQuery.returned_execution",
+    "FrozenQuery.execution_satisfaction",
+    "FrozenQuery.completed_satisfaction",
+    "FrozenQuery.execution_work_bound",
+    "FrozenQuery.returned_work_bound",
+    "FrozenQueryExample.singleton_evaluation",
+    "FrozenQueryExample.singleton_scan",
+    "FrozenQueryExample.root_scan_retains_prior_work",
+    "FrozenQueryExample.represented_candidate_need_not_be_a_model",
+    "FrozenQueryExample.successful_query_need_not_test_a_subset"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -100,7 +117,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "1017c70cfbbb24454ebb149b69f9863a40276c7421a64cf0d290c9e60bfe1a23"
+      "logSha256": "5a9dee649bff88706d4dded8379ce1ea94bd9a170cb8a6cf3a88796ae6b4b1e4"
     },
     {
       "argv": [
@@ -113,7 +130,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "cb9b748621b6977ea555e9a0de1cbdff7120205f8f25506567a42173f123bad7"
+      "logSha256": "88a5df4dcadb08f2145ea71c2239ef50c8ae7e12f724f18dff791df678e9e8dd"
     },
     {
       "argv": [
@@ -129,7 +146,7 @@
       "logSha256": "1d48d977003ffa359de002c35d892f2f94d93c8c615de94e10955184bb84b963"
     }
   ],
-  "theoremAuditCount": 79,
+  "theoremAuditCount": 96,
   "rustOrShaderSourcesChanged": false,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
@@ -265,8 +282,8 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Generated fixed-token evaluation and root scanning to concurrent Rust histories with changing atomic observations.",
+    "Generated fixed-token evaluation, root scanning and private query to concurrent Rust histories with changing atomic observations.",
     "Rust pointer ownership, allocation, timers and concurrent memory.",
-    "FrozenReduct construction and wrappers, owner checks, subset search, grounding and solver enumeration."
+    "FrozenReduct construction, public allocation and owner-checking wrappers, subset search, grounding and solver enumeration."
   ]
 }

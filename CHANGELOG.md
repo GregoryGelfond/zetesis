@@ -15,9 +15,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   reduct checking, including correctness of completed decisions under a query limit.
 - A composed packed streaming membership proof and finite theory-admission
   checks that establish the evaluator’s structural preconditions.
-- Lean refinement of generated formula evaluation and root scanning under fixed
-  observation tokens, with exact work, typed stops and completed original/reduct
-  theory satisfaction. Changing runtime observations and subset search remain
+- Lean refinement of generated formula evaluation, root scanning and private
+  queries of a stored reduct under fixed observation tokens, with work bounds
+  and typed stops. Completed queries decide reduct satisfaction given a mask
+  agreeing with original truth. Constructing that stored reduct, public owner
+  checks, allocation, changing runtime observations and subset search remain
   outside the proof.
 
 ## 0.2.0 — 2026-10-01

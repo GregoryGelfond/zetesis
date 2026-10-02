@@ -1,35 +1,37 @@
 # Refining formula evaluation
 
 The separately built [implementation-refinement package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
-connects actual generated evaluation and root scanning to original and Ferraris
-reduct theory satisfaction under fixed observation tokens. The original evaluation
-computes the frozen mask; its correctness is derived from that call.
+connects the actual generated private `FrozenReduct::satisfied_by` query to
+Ferraris reduct satisfaction under fixed observation tokens. It composes the
+proved evaluator and root scan, retaining an explicit stored-mask invariant.
 
 ## From evaluation to theory satisfaction
 
-Let `M` be the original interpretation, `J` any tested interpretation, and `T`
-the theory asserted by the stored root list. The central theorem establishes:
+Let `M` be the stored candidate, `J` any tested interpretation, and `T` the theory
+asserted by the stored roots. The central result is:
 
 ```text
-successful generated evaluate call at M
-    → originalValues
-successful generated evaluate call at J masked by originalValues
-    → reductValues
-completed generated failed_root call over reductValues
-    → answer
+Represents frozen: its stored mask is original node truth at M
+completed actual private satisfied_by query at J → Boolean answer
 
-answer = None  iff  J models the Ferraris reduct of T frozen at M
+answer = true  iff  J models the Ferraris reduct of T frozen at M
 ```
 
-The calls address the same stored nodes and roots; both evaluations clear their
-old output. Premises require successful call results, enough packed words,
-children referring to earlier nodes, and roots within the stored node count.
-The proof derives mask truth, truth-table length and every root-read bound.
-A corresponding theorem covers original-theory satisfaction. Neither result
-requires `J` to be a subset of `M` or establishes answer-set membership.
+[`FrozenQuery.completed_satisfaction`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FrozenQuery.lean)
+requires this mask agreement, represented packed input, ordered children and
+bounded roots. It derives the two internal calls from the actual query result,
+then establishes their meaning and read bounds. `represents_from_evaluation`
+derives the mask agreement for the corresponding record from completed original
+evaluation; it does not verify `FrozenReduct::freeze` or its allocation.
+The existing `TheorySatisfaction` results cover separate original and reduct
+calls. No candidate modelhood or tested-subset premise is required; satisfaction
+does not establish answer-set membership.
 
-The [formal statement, `TheorySatisfaction.completed_reduct`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/TheorySatisfaction.lean)
-composes these checked boundaries:
+The query retains one work record across evaluation and root checking. For `N`
+nodes and `R` root occurrences, every typed return charges at most `N + R`,
+without resetting prior work. Limits and subset statistics are preserved.
+An evaluation stop skips the root scan; a root-scan stop remains the same error.
+The argument composes these boundaries:
 
 | Boundary | Argument |
 | --- | --- |
@@ -41,6 +43,7 @@ composes these checked boundaries:
 | Reduct | Two successful generated evaluations compute explicit Ferraris reduct truth |
 | Roots | The actual scan preserves root order, duplicates, first-failure identity and exact work |
 | Theory | A completed scan returns no failed root exactly when the tested interpretation models the asserted theory |
+| Stored query | The actual method uses the represented mask and shares evaluation's returned work with the root scan |
 
 An exhausted iterator completes without polling or charging a node. With a node
 present, the iterator fetches it before polling; cancellation, deadline and work
@@ -55,7 +58,9 @@ or the smallest false identifier. Empty roots complete without polling or work.
 A typed stop certifies only the preceding true occurrences, not satisfaction
 or rejection of the whole theory. Checked
 [examples](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/RootScanExample.lean)
-exercise empty and repeated-root scans.
+exercise empty and repeated-root scans. [Query examples](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FrozenQueryExample.lean)
+cover cumulative work refusal, a nonmodel candidate with a valid mask, and a
+successful tested non-subset.
 
 ## Reusing the ASP library
 
@@ -80,15 +85,17 @@ shows that a refreshed trace can stop after one node while the fixed-clear loop
 completes two. The pinned extraction effect cannot express changing atomic read
 results, so correspondence with concurrent Rust histories remains open.
 
-The calls share stored nodes, roots and numeric atom vocabulary. The `FrozenReduct`
-struct and wrappers, owner checks and subset search remain unproved. Allocation,
-reference counting, timers, concurrent memory, machine code and GPU execution also
-remain outside these library models.
+The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
+construction and its public allocation and owner-checking wrappers remain
+unproved, as does subset search. Allocation, reference counting, timers,
+concurrent memory, machine code and GPU execution remain outside these models.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code
 comes from production Rust. Two recorded local-name adjustments avoid generator
-namespace collisions; exported destination metadata uses a portable path. These
-changes preserve executable operations. Translation tools and model correspondence
-remain trusted. The [correctness plan](correctness.md) keeps these limits separate
+namespace collisions; exported destination metadata uses a portable path. An
+unreferenced derived `Debug` implementation and its ordered registration are
+also removed after an explicit reference check. This reversible, audited
+selection leaves executable bodies unchanged. Translation tools, preprocessing
+and model correspondence remain trusted. The [correctness plan](correctness.md) keeps these limits separate
 from whole-solver soundness and complete enumeration.

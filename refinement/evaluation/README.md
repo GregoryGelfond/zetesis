@@ -1,9 +1,9 @@
 # Refining formula evaluation
 
 This separately built implementation-refinement package connects the generated
-`zetesis_ferraris::oracle::evaluate` and `failed_root` functions to satisfaction
-of original and Ferraris reduct theories under fixed observation tokens. It
-proves the generated scans and derives the frozen mask from original evaluation.
+private `FrozenReduct::satisfied_by` query to Ferraris reduct satisfaction under
+fixed observation tokens. It composes the generated evaluator and root scan,
+with explicit stored-mask agreement and shared work accounting.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the existing reduct-evaluation sources directly and checks them unchanged
@@ -13,21 +13,22 @@ versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
 ## Central result
 
-[`TheorySatisfaction.completed_reduct`](TheorySatisfaction.lean) composes three
-successful calls to the actual generated functions over the same stored theory:
+[`FrozenQuery.completed_satisfaction`](FrozenQuery.lean) proves that a completed
+actual private query returns `true` exactly when the tested interpretation `J`
+models the asserted theory's Ferraris reduct frozen at `M`.
 
-1. Original evaluation at `M` computes the mask.
-2. Evaluation at `J` uses that actual output as its immutable mask.
-3. The root scan returns no failed root exactly when `J` models the asserted
-   theory's Ferraris reduct frozen at `M`.
+Its explicit `Represents` premise says the stored mask is original truth for the
+stored candidate and theory. `represents_from_evaluation` derives that agreement
+for the corresponding record from an actual completed original evaluation;
+it does not prove the `freeze` constructor. Other premises require represented
+packed input, ordered child indices and bounded roots. The single query result
+determines its evaluation and root-scan calls; neither is assumed correct.
 
-The proof derives setup, mask truth, truth-table length and root-read coverage.
-Its premises are packed storage coverage, ordered child indices, roots bounded
-by the stored node count, and successful call results under the fixed-token
-model. `completed_original` gives the corresponding original-theory result.
-Neither theorem assumes semantic correctness of the returned values. `J` need
-not be a subset of `M`; satisfaction alone does not establish minimality or
-answer-set membership.
+The query passes evaluation's returned work into the root scan. It preserves
+limits and subset statistics and charges at most `N + R` for `N` nodes and `R`
+root occurrences, including typed stops. Neither original modelhood of `M` nor
+`J ⊆ M` is required; this is satisfaction, not answer-set membership.
+`TheorySatisfaction` retains the separate-call original and reduct results.
 
 ## Argument
 
@@ -41,10 +42,12 @@ answer-set membership.
 | `Specification` | A finite truth fold and its prefix laws |
 | `Trace` | Actual step traces preserve exact prefixes and work counts |
 | `FixedLoop` | The generated loop and entry function return trace-correct outcomes under fixed tokens |
+| `EvaluationAccounting` | Every actual typed return preserves limits and subset statistics and charges its returned prefix length |
 | `Semantics` | Concrete folds equal the existing original/reduct folds |
 | `ReductTrace`, `FixedReduct` | Two completed traces, or two successful generated calls, establish per-node reduct satisfaction |
 | `RootScan` | The actual root scan returns the first false occurrence or complete success, with exact work and typed stops |
 | `RootSemantics`, `TheorySatisfaction` | Generated evaluation and root scanning decide original or reduct theory satisfaction on completion |
+| `FrozenQuery` | The actual private query decides the represented reduct and threads one work record through both phases |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -63,6 +66,8 @@ false one. A refused tick charges no next-root test and remains a typed stop.
 Empty roots complete without polling or work. The checked
 [examples](RootScanExample.lean) cover empty roots despite cancellation and a
 repeated-root sequence whose first false identifier is not the smallest one.
+[Query examples](FrozenQueryExample.lean) cover cumulative work refusal, a valid
+mask for a nonmodel candidate, and a successful query at a non-subset.
 
 ## Observation boundary
 
@@ -93,17 +98,19 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-refinement of the `FrozenReduct` struct or wrappers, subset search, source
-grounding, or end-to-end solver verification.
+`FrozenReduct` construction, its public allocation and owner-checking wrappers,
+subset search, source grounding, or end-to-end solver verification.
 
 ## Extraction identity and reproduction
 
 The generated types and functions come from the production Rust functions
-without a new harness or source change. Three fields are explicitly normalized:
-the LLBC extraction destination becomes portable, and local 1 in `evaluate` and
-`failed_root` changes from `theory` to `program` to avoid namespace collisions.
-Operands retain their local IDs. Restoring these fields restores the parsed
-original; operations, types, spans and Rust source are unchanged. Regenerated
+without a new harness or source change. The LLBC destination becomes portable,
+and two local names change from `theory` to `program` to avoid namespace
+collisions; operands retain their local IDs. An unused derived `Debug`
+implementation whose formatting method was excluded is removed with its
+ordered registration, after checking for surviving semantic references.
+Restoring that declaration selection and the three metadata/name fields recovers
+the parsed raw input. Executable bodies and Rust source are unchanged; regenerated
 Lean is retained unedited.
 
 These are audited preprocessing steps, not verified transformations or a claim
