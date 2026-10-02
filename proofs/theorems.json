@@ -3400,6 +3400,41 @@
     "line": 134
   },
   {
+    "name": "Zetesis.Refinement.IndexedEvaluation.node_exact",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.Refinement.IndexedEvaluation.evaluate_exact",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.Refinement.IndexedEvaluation.original_exact",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 139
+  },
+  {
+    "name": "Zetesis.Refinement.IndexedEvaluation.reduct_exact",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 147
+  },
+  {
+    "name": "Zetesis.Refinement.IndexedEvaluation.roots_exact",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 167
+  },
+  {
+    "name": "Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_exact",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 194
+  },
+  {
+    "name": "Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_iff",
+    "file": "Zetesis/IndexedEvaluation.lean",
+    "line": 212
+  },
+  {
     "name": "Zetesis.IntegerEnvelopes.path_bound",
     "file": "Zetesis/IntegerEnvelopes.lean",
     "line": 45
@@ -4578,6 +4613,136 @@
     "name": "Zetesis.OuterRanges.frozen_rows",
     "file": "Zetesis/OuterRanges.lean",
     "line": 78
+  },
+  {
+    "name": "Zetesis.Refinement.PackedAcceptance.body_exact",
+    "file": "Zetesis/PackedAcceptance.lean",
+    "line": 28
+  },
+  {
+    "name": "Zetesis.Refinement.PackedAcceptance.constraints_exact",
+    "file": "Zetesis/PackedAcceptance.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.Refinement.PackedAcceptance.agrees_exact",
+    "file": "Zetesis/PackedAcceptance.lean",
+    "line": 74
+  },
+  {
+    "name": "Zetesis.Refinement.PackedAcceptance.check_exact",
+    "file": "Zetesis/PackedAcceptance.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.Refinement.PackedAcceptance.check_sound",
+    "file": "Zetesis/PackedAcceptance.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.read_bit",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.insert_exact",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.zero_represents",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 77
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.read_member",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 88
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.coordinate_stored",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 102
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.insert_represents",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.insert_all_represents",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 125
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.Packing.encode_represents",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 139
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.all_present_refines",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 152
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.enabled_refines",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 163
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.selected_enabled",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 177
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.unselected_step",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.selection_refines",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 202
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.step_refines",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 232
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.scan_refines",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 270
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.iterate_refines",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 315
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.iterate_completes",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 347
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.selection_iteration",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 378
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.close_completes",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 399
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.represents_denotes",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 419
+  },
+  {
+    "name": "Zetesis.Refinement.PackedClosure.close_exact",
+    "file": "Zetesis/PackedClosure.lean",
+    "line": 430
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.mask_bit",
@@ -6323,6 +6488,161 @@
     "name": "Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability",
     "file": "Zetesis/StructuredWitnesses.lean",
     "line": 113
+  },
+  {
+    "name": "Zetesis.SubsetCounter.rank_bound",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 46
+  },
+  {
+    "name": "Zetesis.SubsetCounter.full_iff",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 54
+  },
+  {
+    "name": "Zetesis.SubsetCounter.increment_none_iff",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.SubsetCounter.increment_length",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.SubsetCounter.increment_rank",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 99
+  },
+  {
+    "name": "Zetesis.SubsetCounter.rank_injective",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 122
+  },
+  {
+    "name": "Zetesis.SubsetCounter.population_bound",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 147
+  },
+  {
+    "name": "Zetesis.SubsetCounter.full_iff_population",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 155
+  },
+  {
+    "name": "Zetesis.SubsetCounter.guard_exact",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 175
+  },
+  {
+    "name": "Zetesis.SubsetCounter.tracked_increment_exact",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 198
+  },
+  {
+    "name": "Zetesis.SubsetCounter.tracked_increment_preserves",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 215
+  },
+  {
+    "name": "Zetesis.SubsetCounter.walk_complete",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 249
+  },
+  {
+    "name": "Zetesis.SubsetCounter.zero_rank",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 289
+  },
+  {
+    "name": "Zetesis.SubsetCounter.states_completed",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 305
+  },
+  {
+    "name": "Zetesis.SubsetCounter.states_ranks",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 311
+  },
+  {
+    "name": "Zetesis.SubsetCounter.states_width",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 322
+  },
+  {
+    "name": "Zetesis.SubsetCounter.states_exact",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 336
+  },
+  {
+    "name": "Zetesis.SubsetCounter.states_length",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 366
+  },
+  {
+    "name": "Zetesis.SubsetCounter.states_nodup",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 372
+  },
+  {
+    "name": "Zetesis.SubsetCounter.selected_is_selection",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 395
+  },
+  {
+    "name": "Zetesis.SubsetCounter.selection_has_bits",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 418
+  },
+  {
+    "name": "Zetesis.SubsetCounter.selected_full",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 434
+  },
+  {
+    "name": "Zetesis.SubsetCounter.selected_missing",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 456
+  },
+  {
+    "name": "Zetesis.SubsetCounter.selected_proper",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 494
+  },
+  {
+    "name": "Zetesis.SubsetCounter.proper_has_state",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 519
+  },
+  {
+    "name": "Zetesis.SubsetCounter.proper_iff_visited",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 545
+  },
+  {
+    "name": "Zetesis.SubsetCounter.countermodel_search_iff",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 564
+  },
+  {
+    "name": "Zetesis.SubsetCounter.empty_counter_has_no_visits",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 590
+  },
+  {
+    "name": "Zetesis.SubsetCounter.three_atom_visit_order",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 593
+  },
+  {
+    "name": "Zetesis.SubsetCounter.short_walk_is_unfinished",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 598
+  },
+  {
+    "name": "Zetesis.SubsetCounter.carried_population_is_updated",
+    "file": "Zetesis/SubsetCounter.lean",
+    "line": 601
   },
   {
     "name": "Zetesis.TableBindings.flat_match_survives",

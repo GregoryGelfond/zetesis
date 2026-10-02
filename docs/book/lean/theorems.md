@@ -10,8 +10,12 @@ The maintained full index is
 | What makes an interpretation an answer set? | `Ferraris.stable_iff_minimal_reduct` | Fixed original theory and candidate |
 | Does the computed frozen DAG evaluate that reduct? | `ReductEvaluation.values_correspond`, `roots_true_iff` | Finite indexed formula semantics; mask correctness is derived, not assumed |
 | Does finite subset search decide membership? | `FiniteMembership.check_iff_answer_set` | Supplied finite candidate, decidable atom equality; subset coverage is constructed |
+| Are the evaluator's child, mask and root reads present? | `Refinement.IndexedEvaluation.satisfies_reduct_exact`, `satisfies_reduct_iff` | Admitted DAG and root positions; the computed mask supplies its own coverage |
+| Does low-bit-first counting cover all proper subsets? | `SubsetCounter.proper_iff_visited`, `countermodel_search_iff` | Distinct supplied atoms; tracked count and finite counter coverage are proved |
 | When does least closure suffice? | `Semantics.stable_iff_gamma` | Normalized single-head rules and constraints |
 | Does the sequential rule scan compute that closure? | `FiniteClosure.closure_exact`, `accepts_exact`, `empty_completes` | Finite normalized rules with true filters retained and false filters omitted; explicit head-list scan bound |
+| Do packed scans preserve the computed least closure? | `Refinement.PackedClosure.close_completes`, `close_exact` | Bounded atom coordinates, direct 32-bit construction and proved scan/flag correspondence |
+| Do final packed checks establish seed acceptance? | `Refinement.PackedAcceptance.check_exact`, `check_sound` | Seed belongs to the supplied carrier; complete gate coverage separately establishes answer-set soundness |
 | Does packed construction preserve atom membership? | `Refinement.PackedInterpretations.pack_exact`, `export32_exact` | In-range inserted coordinates; mathematical word operations, with Rust effects and extraction separate |
 | Why do normal and formula checking agree on this fragment? | `NormalFerraris.answer_set_iff`, `ferraris_answer_set_iff_closure` | The specified filter-aware translation and one shared atom universe |
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |

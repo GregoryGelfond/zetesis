@@ -65,10 +65,10 @@ def ZeroPadding (size : Nat) (words : List (BitVec 64)) : Prop :=
 
 /-- The one-bit mask tests the stored bit. This is the bit-vector part of the
     historical extracted membership proof, independent of its library models. -/
-theorem mask_bit (value : BitVec 64) (offset : Nat) (inside : offset < 64) :
-    (value &&& (1#64 <<< offset) != 0#64) = value.getLsbD offset := by
+theorem mask_bit {width : Nat} (value : BitVec width) (offset : Nat) (inside : offset < width) :
+    (value &&& (1#width <<< offset) != 0#width) = value.getLsbD offset := by
   rw [← BitVec.twoPow_eq, BitVec.and_twoPow]
-  have nonzero : BitVec.twoPow 64 offset ≠ 0#64 := by
+  have nonzero : BitVec.twoPow width offset ≠ 0#width := by
     intro zero
     have selected := congrArg (fun bits => bits.getLsbD offset) zero
     simp [inside] at selected

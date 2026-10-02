@@ -151,3 +151,7 @@ import Zetesis.ObservationBindings
 import Zetesis.ProjectedAnswers
 import Zetesis.KeyedConstraints
 import Zetesis.RowSteps
+import Zetesis.IndexedEvaluation
+import Zetesis.SubsetCounter
+import Zetesis.PackedClosure
+import Zetesis.PackedAcceptance

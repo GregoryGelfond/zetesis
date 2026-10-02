@@ -62,6 +62,42 @@ The [reduct](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/re
 [packed representation](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-interpretations.md)
 guides explain these arguments independently of Rust details.
 
+## Indexed reads, counters and packed scans
+
+Four representation algorithms make additional implementation obligations
+explicit without changing the answer-set definitions:
+
+- `Refinement.IndexedEvaluation` uses checked reads rather than assigning a
+  value to an absent entry. Its prefix invariant proves child availability,
+  computed-mask coverage and transport of admitted root bounds. Two checked
+  passes followed by root checking preserve Ferraris reduct satisfaction.
+- `SubsetCounter` constructs the low-bit-first carry and proves exact proper
+  subset coverage. It also proves the maintained population updates and the
+  `present < width` guard. Distinct atom positions must denote distinct atoms;
+  the theorem states that premise explicitly.
+- `Refinement.PackedClosure` initializes 32-bit words directly, selects frozen
+  consequence rules, and performs immediate mask updates. Its changed flag is
+  false exactly when the whole reference scan is unchanged. Completed iteration
+  yields the least reduct closure with exact storage and zero padding.
+- `Refinement.PackedAcceptance` checks selected constraints and agreement on the
+  supplied gate carrier. Seed admission into that carrier is explicit. Together
+  with computed closure, these checks decide the semantic acceptance predicate;
+  complete gate coverage then establishes answer-set soundness.
+
+These are proved authored algorithms, not extractions of the corresponding
+Rust loops. They remove assumed evaluator, counter and packed-scan agreement
+from the mathematical results. Actual Rust vector operations, selected-atom
+production, machine bounds, ownership and incomplete outcomes still need their
+own correspondences. In particular, the final carrier comparison cannot itself
+establish seed admission; that condition belongs to the seed constructors and
+their mapping into the compiled program.
+
+The [indexed-evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/indexed-evaluation.md),
+[subset-counter](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/subset-counter.md),
+[packed-closure](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-closure.md)
+and [packed-acceptance](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-acceptance.md)
+guides describe the invariants, completion arguments and remaining boundaries.
+
 ## Keyed constraints and checked source arithmetic
 
 `KeyedConstraints.one_value` and `asked_constraints_preserve` justify replacing

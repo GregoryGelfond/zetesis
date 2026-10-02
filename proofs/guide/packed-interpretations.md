@@ -33,7 +33,8 @@ representation contract:
   padding.
 
 The bounds assumption describes successful construction. The Lean function does
-not model a rejecting constructor. `mask_bit` proves the mask-test identity, and
+not model a rejecting constructor. `mask_bit` proves the mask-test identity for
+any word width, and
 `contains_eq_bit` exposes the relation between the guarded mask test and raw bit
 reading without assuming valid storage or zero padding.
 
