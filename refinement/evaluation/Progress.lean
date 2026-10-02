@@ -79,7 +79,7 @@ theorem present_step (candidate : theory.Interpretation)
     exactPrefix, prefixAdvanced, synchronized⟩
 
 /-- With a present node, a supplied control-stop observation exits the actual
-body before reading that node or appending. Output and the entire work record
+body before evaluating that node or appending. Output and the entire work record
 are unchanged. No packed-storage, child-read, mask or output-prefix premise is
 needed for this stopped branch. Cancellation/expiry priority is determined by
 `EvaluatorControl.observation`, not by an assumed tick result. -/

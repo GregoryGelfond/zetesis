@@ -60,9 +60,11 @@ The proof follows that definition:
 `PackedCounterSearch` composes packed updates and streaming control: every
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
-a separate obligation. The optional [evaluator-step refinement](evaluation.md)
-now checks one generated Rust step under explicit structural and control
-observations. Whole-loop, mask-provenance and ownership proofs remain open.
+a separate obligation. The optional [evaluator refinement](evaluation.md)
+now derives explicit reduct satisfaction from two completed traces of generated
+steps, using the original trace to construct the mask. The traces import the
+same reduct theory, checked under the extraction toolchain. Their connection to
+the generated whole loop and Rust ownership remains open.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive

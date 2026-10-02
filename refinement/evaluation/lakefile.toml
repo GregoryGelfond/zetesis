@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample"]
+defaultTargets = ["ProgressExample", "ReductTrace"]
 
 [leanOptions]
 autoImplicit = false
@@ -42,3 +42,36 @@ name = "Progress"
 
 [[lean_lib]]
 name = "ProgressExample"
+
+[[lean_lib]]
+name = "Zetesis"
+srcDir = "../../proofs"
+# Explicit dependency closure: build these shared sources on the extraction toolchain.
+globs = [
+  "Zetesis.Core",
+  "Zetesis.Ferraris",
+  "Zetesis.FerrarisMask",
+  "Zetesis.DagSharing",
+  "Zetesis.FerrarisGuards",
+  "Zetesis.RuleFactorization",
+  "Zetesis.TightPlans",
+  "Zetesis.BatchAccounting",
+  "Zetesis.CertifiedExecution",
+  "Zetesis.TightEvaluation",
+  "Zetesis.ReductEvaluation",
+]
+
+[[lean_lib]]
+name = "Specification"
+
+[[lean_lib]]
+name = "Setup"
+
+[[lean_lib]]
+name = "Trace"
+
+[[lean_lib]]
+name = "Semantics"
+
+[[lean_lib]]
+name = "ReductTrace"

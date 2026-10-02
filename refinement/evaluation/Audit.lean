@@ -1,4 +1,5 @@
 import ProgressExample
+import ReductTrace
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
@@ -24,3 +25,27 @@ import ProgressExample
 #print axioms EvaluationProgress.control_stops
 #print axioms EvaluationProgress.work_limit_stops
 #print axioms EvaluationProgressExample.false_node_advances
+#print axioms EvaluationSpecification.masked_exact
+#print axioms EvaluationSpecification.children_present
+#print axioms EvaluationSpecification.values_length
+#print axioms EvaluationSpecification.prefix_length
+#print axioms EvaluationSpecification.values_append
+#print axioms EvaluationSpecification.prefix_succ
+#print axioms EvaluationSpecification.prefix_complete
+#print axioms EvaluatorSetup.evaluate_from_empty
+#print axioms EvaluatorSetup.initial_alignment
+#print axioms EvaluationTrace.invocation_refines
+#print axioms EvaluationTrace.trace_refines
+#print axioms EvaluationTrace.completed_values
+#print axioms EvaluationTrace.stopped_prefix_shorter
+#print axioms EvaluationTrace.trace_exists
+#print axioms EvaluationSemantics.node_value_exact
+#print axioms EvaluationSemantics.original_values
+#print axioms EvaluationSemantics.frozen_values
+#print axioms EvaluationSemantics.frozen_values_correspond
+#print axioms EvaluationSemantics.frozen_value_at
+#print axioms ReductTrace.initial_invariant
+#print axioms ReductTrace.completed_original_values
+#print axioms ReductTrace.completed_reduct_values
+#print axioms ReductTrace.completed_reduct_truth
+#print axioms ReductTrace.completed_reduct_satisfaction

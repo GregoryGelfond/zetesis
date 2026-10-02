@@ -1,66 +1,80 @@
-# Refining an evaluator step
+# Refining formula evaluation
 
-The [evaluator package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
-extends concrete refinement from packed membership to one step of the Rust
-formula evaluator. Its generated body contains the actual iterator, control
-checks, node cases and output append. The proof supplies no assumption that
-those operations return the right result.
+The optional [evaluator package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
+connects traces of actual generated evaluator steps to the definition of Ferraris
+reduct satisfaction. The original trace computes the frozen mask; its correctness
+is proved, rather than assumed of a supplied table.
 
-## What one step establishes
+## The two-pass argument
 
-Assume that the packed interpretation has enough storage, the output prefix and
-node iterator agree on their position, and every child read refers to the
-existing prefix. A supplied mask must contain the current position. If another
-node remains, the current control observations allow progress and work remains,
-the step appends exactly:
+Let `M` be the original interpretation, `J` any tested interpretation, and `Fᵢ`
+the formula denoted by node `i`. The central theorem establishes:
 
 ```text
-nodeTruth(candidate, previousValues, currentNode)
-    AND suppliedMask[currentPosition]    // if a mask is present
+completed original trace at M
+    → originalValues
+completed trace at J masked by originalValues
+    → reductValues
+
+reductValues[i] = true  iff  J satisfies the reduct of Fᵢ frozen at M
 ```
 
-The previous prefix is unchanged. The node position and work counter each
-advance by one; their machine-integer bounds follow from the represented slice
-and work limit. The proof follows the five node cases: atom, false, conjunction,
-disjunction and implication. It preserves their short circuits.
+Both traces start with empty output and address the same stored formula table.
+The theorem assumes enough packed words for each interpretation and child indices
+that refer to earlier nodes. It derives the original mask's truth and length.
+It does not require `J` to be a subset of `M`; that restriction belongs to the
+later minimality search. This result proves satisfaction, not answer-set
+membership by itself.
 
-A cancellation or deadline observation stops before node evaluation. Either
-precedes the work-limit check. These stopped steps preserve the output and work
-record. Exhausting the iterator completes without polling or charging work.
+The [formal statement](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/ReductTrace.lean)
+composes these checked boundaries:
 
-The proof is organized into independently checked arguments:
-
-| Module | Argument |
+| Boundary | Argument |
 | --- | --- |
-| `Membership` | An actual packed query returns the declared atom's bit |
-| `Iteration` | Actual slice/vector operations respect their finite bounds |
-| `Control` | The actual poll and tick preserve precedence and work accounting |
-| `Step` | The generated node branches append exactly the supplied masked truth |
-| `Progress` | Structural and control premises establish the complete single step |
+| Setup | The generated entry operations produce a zero cursor and empty output |
+| Packed membership | The extracted atom query returns the stored bit |
+| One node | Actual reads and Boolean branches append exactly the masked truth |
+| Work and stopping | Each continuation charges one unit; a stop preserves the prior prefix |
+| Trace | Induction preserves the complete truth prefix, source table and work counts |
+| Reduct | Existing general ASP theorems identify the second pass with explicit Ferraris reduct truth |
 
-The [package README](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
-links the checked source, trust boundary and reproduction commands. A recorded
-local-name adjustment avoids a generator namespace collision; it changes no
-operation or Rust source. Exported extraction metadata uses a portable destination
-path. Both transformations are recorded separately.
+An exhausted iterator completes without polling or charging a node. With a node
+present, the iterator fetches it before polling; cancellation, deadline and work
+refusal precede its evaluation and append. A typed stop leaves a strictly shorter
+correct prefix. It does not supply a completed evaluation. The package also
+constructs a finite trace from admitted state, which may end with such a stop.
 
-## What remains
+## Reusing the ASP library
 
-The mask above is supplied data. Proving that it contains the original
-candidate's truth, that the prior prefix is semantically correct and that all
-objects belong to the same theory remains part of whole-evaluation refinement.
-The mathematical library already proves the corresponding frozen-reduct laws;
-connecting the concrete representation to them is a further obligation.
+The package imports the existing `ReductEvaluation` sources and their dependency
+closure directly from the general library. Those eleven modules compile unchanged
+under both the library's Lean 4.33.1 and the extraction package's Lean 4.31.0.
+The bridge is checked in the latter toolchain with its own audit; it does not mix
+object files from different versions or duplicate the semantic definitions.
 
-Cancellation is also a precise boundary. Each atomic token here supplies the
-value observed at one read site in one invocation. It does not represent shared
-mutable storage or constrain a later observation. The generated whole loop must
-not be treated as a verified concurrent loop by repeatedly reusing those tokens.
-A suitable observation-history model and its runtime correspondence remain open.
+A structural conversion maps extracted node constructors and machine indices to
+the library's formula DAG. Fold correspondence then connects generated-step
+traces to the existing reduct theorem. The result is a checked connection to the
+same mathematical theory used elsewhere in the library.
 
-The result uses Aeneas's vector and scalar models and explicit external library
-models. It does not verify allocation, reference counting, timers, machine code
-or GPU execution. The pinned extraction package uses Lean 4.31.0; the general
-ASP library uses Lean 4.33.1. There is no checked cross-version composition yet.
-The [correctness plan](correctness.md) keeps these obligations distinct from
-answer-set soundness and complete enumeration.
+## Remaining implementation boundary
+
+A trace records calls to the unchanged generated loop body, each with a separately
+supplied control value. It is an authored execution relation. It has **not yet
+been proved equivalent to the generated whole loop or a Rust execution history**.
+The current extraction effect cannot express changing atomic read results.
+Reusing a fixed token would silently freeze those observations.
+
+The theorem shares a stored table and numeric atom vocabulary between its passes.
+Rust pointer-owner checks remain unproved. Allocation, reference counting,
+timers, concurrent memory, machine code and GPU execution also remain outside
+the library models. Constructor admission and subset-search refinement are further
+steps toward full membership verification.
+
+The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
+records the exact scope, source hashes and reproduction commands. Generated code
+comes from production Rust. A recorded local-name adjustment avoids a generator
+namespace collision; exported destination metadata uses a portable path. Neither
+changes executable operations. Translation tools and model correspondence remain
+trusted. The [correctness plan](correctness.md) keeps these limits separate from
+whole-solver soundness and complete enumeration.

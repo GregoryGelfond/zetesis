@@ -1,4 +1,4 @@
-# Reproduce the evaluator-step proof
+# Reproduce the evaluator refinement
 
 Run these commands from `refinement/evaluation` in a checkout whose selected
 Rust files match `source-inputs.sha256`. The package uses Lean 4.31.0, Charon
@@ -14,6 +14,7 @@ Use `sha256sum` in place of `shasum -a 256` where appropriate.
 
 ```sh
 (cd ../.. && shasum -a 256 -c refinement/evaluation/source-inputs.sha256)
+(cd ../.. && shasum -a 256 -c refinement/evaluation/semantic-inputs.sha256)
 shasum -a 256 -c artifacts.sha256
 mkdir -p .lake/aeneas
 curl -fL https://github.com/AeneasVerif/aeneas/releases/download/nightly-2026.09.09-505b6ca/aeneas-macos-aarch64.tar.gz -o .lake/aeneas.tar.gz
@@ -24,13 +25,16 @@ MATHLIB_CACHE_DIR="$PWD/.lake/mathlib-cache" \
   xargs lake exe cache get < mathlib-modules.txt
 lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
+lake env lean -DautoImplicit=false -DwarningAsError=true SharedAudit.lean
 ```
 
-The Lake manifest pins dependency revisions. All authored files compile with
-implicit variables disabled and warnings treated as errors. Only `propext`,
+The Lake manifest pins dependency revisions. The `Zetesis` library target reads
+only the required semantic modules directly from `../../proofs`; it does not
+change the main library's toolchain or import its compiled artifacts. All authored
+files compile with implicit variables disabled and warnings treated as errors. Only `propext`,
 `Classical.choice` and `Quot.sound` may appear in the audit. The retained
-`verification.json` and `axiom-audit.txt` record the checked artifact hashes and
-commands, separately from the main semantic library's gate.
+`verification.json`, `axiom-audit.txt` and `shared-axiom-audit.txt` record the
+checked artifact hashes and commands, separately from the main semantic library's gate.
 
 ## Repeat extraction
 
@@ -67,6 +71,11 @@ unchanged. These commands require `jq`:
 ```sh
 jq -cae '.translated.options.dest_file = "evaluator.llbc"' \
   target/replay/evaluator.raw.llbc > target/replay/evaluator.source.llbc
+jq -e --slurpfile raw target/replay/evaluator.raw.llbc '
+  .translated.options.dest_file == "evaluator.llbc"
+  and ((.translated.options.dest_file = $raw[0].translated.options.dest_file)
+       == $raw[0])
+' target/replay/evaluator.source.llbc
 jq -cae '
   .translated.fun_decls[11] as $function |
   if $function.def_id == 11
