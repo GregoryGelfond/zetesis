@@ -36,6 +36,7 @@
 - [Normal rules as Ferraris formulas](lean/normal-rules.md)
 - [A map of the central theorems](lean/theorems.md)
 - [Reading a structured proof](lean/reading.md)
+- [Proving the solver correct](lean/correctness.md)
 - [Connecting proofs to implementations](lean/correspondence.md)
 - [Refining packed membership](lean/membership.md)
 

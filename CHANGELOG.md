@@ -11,6 +11,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   mathematical library; they do not yet verify the complete Rust/GPU solver.
 - Lean correspondence proofs for checked formula indices, complete binary
   subset counting and normal-reduct acceptance over packed words.
+- Lean proofs for packed-word iteration, packed subset generation and streaming
+  reduct checking, including correctness of completed decisions under a query limit.
 
 ## 0.2.0 — 2026-10-01
 

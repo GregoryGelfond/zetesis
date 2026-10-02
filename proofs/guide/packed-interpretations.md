@@ -69,8 +69,10 @@ requires separate proofs or validation for:
 - The actual export's little-endian byte conversion. The Lean export uses
   numeric shifts and narrowing; it does not model `to_le_bytes` followed by
   `u32::from_le_bytes`.
-- Iterator cursor advancement, exhaustion, exact size hints and fused behavior;
-  the Lean export constructs a list directly.
+- Actual Rust iterator correspondence. The separate
+  [packed-word iterator](packed-word-iterator.md) now proves authored cursor
+  advancement, exhaustion, exact remaining size and fused behavior against this
+  whole-list export; it does not extract the Rust iterator.
 - Device upload, shader layout and device execution.
 
 The historical Aeneas package proves extracted membership under its storage

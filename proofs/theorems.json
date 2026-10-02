@@ -1690,6 +1690,61 @@
     "line": 189
   },
   {
+    "name": "Zetesis.Refinement.CounterSearch.search_exact",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 39
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.search_completed_extension",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.query_exact",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 108
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.check_completed_extension",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 136
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.check_exact",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 161
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.check_iff_answer_set",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 197
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.completed_check_exact",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 211
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.accepted_is_answer_set",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 227
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.witness_stops_search",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 238
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.insufficient_fuel_is_unfinished",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 243
+  },
+  {
+    "name": "Zetesis.Refinement.CounterSearch.empty_candidate_skips_queries",
+    "file": "Zetesis/CounterSearch.lean",
+    "line": 247
+  },
+  {
     "name": "Zetesis.DagSharing.getD_append_left",
     "file": "Zetesis/DagSharing.lean",
     "line": 57
@@ -4803,6 +4858,191 @@
     "name": "Zetesis.PackedQueryLiterals.packed_truth",
     "file": "Zetesis/PackedQueryLiterals.lean",
     "line": 52
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.clear_exact",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 31
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.pack_represents",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.coordinate_stored",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.bit_member",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 85
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.insert_represents",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 99
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.clear_represents",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 111
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.represented_shape",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 129
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.absent_selected",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 162
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.carry_refines",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 177
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.carry_counted",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 224
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.walk_refines",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 261
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.selected_false",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 317
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.population_zero",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 324
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.empty_walk_refines",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 333
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.states_semantics",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 355
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.states_shape",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 366
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.proper_iff_visited",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 378
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.countermodel_search_iff",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 402
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.check_iff_answer_set",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 433
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_nodup",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 454
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_ordered",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 459
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_truth",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 466
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_representation",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 474
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.check_packed_iff_answer_set",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 492
+  },
+  {
+    "name": "Zetesis.Refinement.PackedSubsets.carry_crosses_word_boundary",
+    "file": "Zetesis/PackedSubsets.lean",
+    "line": 502
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.start_invariant",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.exhausted_iff",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.step_active",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.advance_invariant",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 97
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.suffix_cons",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 109
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.step_refines",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 122
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.remaining_exact",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 141
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.run_prefix",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 162
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.run_complete",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.run_exhausted",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 211
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.initialized_exact",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 222
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.packed_exact",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 242
   },
   {
     "name": "Zetesis.ParametricReduct.satisfies_original",

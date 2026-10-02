@@ -155,3 +155,6 @@ import Zetesis.IndexedEvaluation
 import Zetesis.SubsetCounter
 import Zetesis.PackedClosure
 import Zetesis.PackedAcceptance
+import Zetesis.PackedWordIterator
+import Zetesis.PackedSubsets
+import Zetesis.CounterSearch

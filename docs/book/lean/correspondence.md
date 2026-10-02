@@ -4,6 +4,9 @@ The reduct is the common semantic foundation. Connecting it to an executable
 solver requires several separate arguments; a theorem at one level cannot
 silently stand for all of them.
 
+The [solver correctness plan](correctness.md) orders these obligations into
+verified milestones. This chapter records the more detailed correspondences.
+
 | Layer | Existing mathematical or executable object | Additional correspondence required |
 | --- | --- | --- |
 | Semantic definition | Predicate interpretations, rules, formula trees, reduct and minimality | Relate the intended source language to these definitions |
@@ -97,6 +100,36 @@ The [indexed-evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/pro
 [packed-closure](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-closure.md)
 and [packed-acceptance](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-acceptance.md)
 guides describe the invariants, completion arguments and remaining boundaries.
+
+## Iteration and completed search decisions
+
+`Refinement.PackedWordIterator` connects individual checked half-word reads to
+the packed export. It proves cursor progress, exact remaining output and fused
+exhaustion. Composing construction and iteration derives membership and zero
+padding without an output-agreement premise. Rust's byte conversions, borrowing
+and machine indices remain separate implementation obligations.
+
+`Refinement.PackedSubsets` derives distinct selected coordinates by scanning
+finite packed truth. Its actual set/clear operations preserve the selected set,
+population, storage shape and padding. Their proved sequence covers every proper
+subset and no other interpretation. The final mathematical checker therefore
+decides answer-set membership directly from packed candidate truth.
+
+`Refinement.CounterSearch` proves a complementary control property: compute the
+original truth mask once, stream the counter states, and stop on a countermodel.
+Every completed verdict agrees with answer-set membership, even under a query
+allowance smaller than the complete enumeration bound. An unfinished result
+establishes neither acceptance nor rejection. This allowance is not Rust's work
+budget, and the theorem does not model cancellation or allocation failure.
+
+These modules share the proved counter and semantic definitions. The packed
+coverage model materializes visits, while the streaming model uses positional
+bits. Their separate results do not yet constitute a single refinement of the
+streaming packed Rust checker. The
+[iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
+[packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md)
+and [streaming-search](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/counter-search.md)
+guides state that composition boundary and their remaining obligations.
 
 ## Keyed constraints and checked source arithmetic
 

@@ -16,7 +16,7 @@ they do not assume that construction or export denotes the intended set.
 This is authored Lean, not a new extraction of Rust. The corresponding Rust
 operations are `Interpretation::new`, `contains` and `words32` in
 `zetesis-ferraris/src/theory.rs`. Allocation, machine-sized index arithmetic,
-ownership, byte conversion, the iterator state machine and device execution
+ownership, byte conversion, actual Rust iterator correspondence and device execution
 remain separate implementation obligations. The historical Aeneas extraction
 and its toolchain are unchanged.
 -/
