@@ -159,6 +159,19 @@ fn interpretation(theory: &Theory, world: u8) -> Interpretation {
 
 proptest! {
     #[test]
+    fn admission_preserves_supplied_dag(case in cases()) {
+        let admitted = Theory::new(
+            case.atoms,
+            case.nodes.clone(),
+            case.roots.clone(),
+            AdmissionLimits::default(),
+        ).unwrap();
+        prop_assert_eq!(admitted.atom_count(), case.atoms);
+        prop_assert_eq!(admitted.nodes(), case.nodes);
+        prop_assert_eq!(admitted.roots(), case.roots);
+    }
+
+    #[test]
     fn generated_shared_and_deep_dags_match_explicit_tree_reduct(case in cases()) {
         let roots: Vec<_> = case.roots.iter().map(|root| Tree::expand(&case.nodes, *root)).collect();
         let reduct: Vec<_> = roots.iter().map(|root| root.reduct(case.candidate)).collect();

@@ -138,7 +138,7 @@ structure theory.Data where
 def theory.Theory := alloc.sync.Arc theory.Data
 
 /-- [zetesis_ferraris::theory::Interpretation]
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 151:0-154:1
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 176:0-179:1
     Visibility: public -/
 structure theory.Interpretation where
   theory : theory.Theory

@@ -315,3 +315,20 @@ report contains non-passes, and `2` means setup, operation or publication
 failed. `compare` exits `0` when the comparison view was produced, even if its
 input reports contain failed measurements. Published performance claims remain
 bound to the protocols and identities in the [performance records](performance.md).
+
+## Measuring formula admission
+
+The library's Criterion benchmark isolates validation of an already constructed
+formula graph:
+
+```sh
+cargo bench --locked -p zetesis-ferraris --bench admission
+```
+
+It checks small and large graphs, repeated roots and malformed references before
+measuring them. Input construction and copying are outside the timer. The timed
+operation includes successful shared-owner allocation and cleanup of rejected
+inputs; destruction of a returned theory is outside it. Per-iteration batching
+bounds retained storage, and the input copies make this a warm-input measurement.
+These results describe admission cost, not grounding or answer-set search.
+The portable gate checks every fixture without collecting timings.

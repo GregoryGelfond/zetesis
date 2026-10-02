@@ -2,14 +2,39 @@
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
     "inventory": "source-inputs.sha256",
-    "inventorySha256": "5d0da17a88d76ced478e866cf47c122925158e43356e89ed363abfb1393c5f6e",
-    "inventoryFiles": 305,
+    "inventorySha256": "187429a59689dd6d1ebbbbf741467467178e0e5748a2eb987ef53d301087004d",
+    "inventoryFiles": 307,
     "allInventoryBytesStillMatch": true,
     "scope": "Recorded source inventory for evaluator, root scan, private frozen query, actual countermodel-search phases and ownership/clone helpers; not every repository or toolchain file.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "25955fe1f791ed51b8aa1aca37a4e59213638ec5",
+    "extractionBaseRevision": "49fdc16aecd05c76795be1e64299276e6b2cc3ee",
     "extractionSourceState": "Working tree captured at this revision; the source inventory identifies the exact selected bytes.",
-    "workingTreeSourceChanges": {}
+    "workingTreeSourceChanges": {
+      "crates/zetesis-ferraris/Cargo.toml": {
+        "previous": "b6d9b104cd7c755787f03ac61dd986088270e0a657df935075ec6ec819dc4e53",
+        "current": "aa79679df438fd490915c4ab938abdd38089a2602387ab16b75419fe2eac24e3"
+      },
+      "crates/zetesis-ferraris/benches/admission.rs": {
+        "previous": null,
+        "current": "e0b18a1ead841d1bec66df36d03730d97b497e328ee6d804721aa4b150485b7b"
+      },
+      "crates/zetesis-ferraris/src/theory.rs": {
+        "previous": "cbb7b761e1ddf502b207289f8069e5978b983c77d31e557e2d4b3d7309423717",
+        "current": "164756f1d554cc4e45604fac5b0620c65d7b39c234e4f69259ace3bd0e54af45"
+      },
+      "crates/zetesis-ferraris/tests/integration/admission.rs": {
+        "previous": null,
+        "current": "e10b23e3e649e369addb748135a63d4ef7a7dfcb5d0633b796f364732ec394e0"
+      },
+      "crates/zetesis-ferraris/tests/integration/formula_dag.rs": {
+        "previous": "5e913cc7758d456bf6cd6fe569ef0211301d57ea045dc2af16cfd98fd248a629",
+        "current": "80aef4dfee2554c689d4821d818608862e2162d0777c06e06f8518fc3e2eb0bf"
+      },
+      "crates/zetesis-ferraris/tests/integration/main.rs": {
+        "previous": "a4c73dc50bacaafee1680dc1a1d6bacf40a754afab189c68ae581e1b28c39647",
+        "current": "86c6cfc0aee56363db6eb654598e6d5a3c9dd1a865a8976374cc5ce5d2e9c7a5"
+      }
+    }
   },
   "tools": {
     "charon": {
@@ -62,7 +87,7 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "f9918e22cea2d1d96cb6985d708aef3393d127f9e0665984b358a26e90ca1f3a",
+    "originalLlbcSha256": "7fc2bdada8c8a23e6ece5324eb0d7151c2373a8a5a6d20b7f3a8fe660e86126c",
     "exclude": [
       "zetesis_ferraris::oracle::check",
       "zetesis_ferraris::oracle::reserve",
@@ -223,7 +248,7 @@
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
       }
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "Guarded unused Debug/Step registration selection and six local debug-name changes permit translation. Every previously generated declaration remains byte-identical independent of relocation; actual identity and clone helpers are added.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded unused Debug/Step registration selection and six local debug-name changes permit translation. Against the previous ownership package, generated differences are seven source-coordinate comment lines only; no declarations, operations or external templates change.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true
   },
@@ -256,7 +281,7 @@
   },
   "trustBoundary": [
     "Published LLBC normalizes destination metadata/local debug names and omits checked unused Debug/Step registrations; it is not byte-exact raw Charon output.",
-    "Production Rust and generated Lean operations were not edited. All prior generated declaration blocks are byte-identical apart from relocation.",
+    "Generated Lean operations were not edited. The selected executable/type declarations match the prior ownership package exactly apart from seven generated source-coordinate comment lines; the separate Rust admission refactor is outside these selected roots.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Existing generated-loop proofs use fixed supplied atomic observations, not changing concurrent Rust observations.",
     "Actual identities/same_instance and Theory clone bodies require external Arc pointer-identity and clone contracts. Generating these calls alone does not establish their runtime meaning.",
@@ -264,35 +289,25 @@
     "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "d850443c1f9855509a66f421a4d4016a268223a789bd231441139e20b384732c",
-    "evaluator.llbc": "887b3a653c08a197eb853f9bfe2637a6a4751e823c4e90b0730ed7fd7c8ece34",
-    "Evaluator/Funs.lean": "139950a07ed685799095f930052a17034e80ec531a1d73343ca5a9d66c184ae9",
+    "evaluator.source.llbc": "858092bd6e0efe107f00bca2fae79504387b8da4c2e6d76e4ffe006882ff8929",
+    "evaluator.llbc": "1a356f1ad6d999b21225e39847b6f01572672cbb63e0e7356cb16c861a219701",
+    "Evaluator/Funs.lean": "48719f80cd93fb6212f8c44745db5d76a2795bdd837f4b0efedc5eec75c50cc0",
     "Evaluator/FunsExternal_Template.lean": "2721d13844662b5f7fdb2df021eaadf1a0b8e0f6a04aac72e1ae249585a76e21",
-    "Evaluator/Types.lean": "3d154415bda00d7b0e6ee0fbc91f0a6273831d02d9300a0dc7e514ddc1f83b23",
+    "Evaluator/Types.lean": "e1c2038db8d9a269f18afed489d3873794ab6f530d001607fd6569d0b86170ac",
     "Evaluator/TypesExternal_Template.lean": "cdbc58fec3a135c6f90a0b2cb212e4d5a04c2d72605848bf78291c7ca071b454"
   },
   "compatibility": {
-    "previousPackageRevision": "25955fe1f791ed51b8aa1aca37a4e59213638ec5",
-    "previousGeneratedFunsSha256": "b411fae18b774e07273e609af9e7dab94579bc49a486988a2ff05a0564be62e7",
-    "previousGeneratedTypesSha256": "e6306768a0145b6cf1a68bff9fe81cd9e06ad285471f72c193aa8d1563e795cc",
-    "comparison": "Byte equality of all prior documented declaration blocks after removing only the enclosing namespace closer; declaration relocation is allowed.",
-    "priorFunctionDeclarationBlocks": 29,
-    "priorTypeDeclarationBlocks": 15,
+    "previousPackageRevision": "49fdc16aecd05c76795be1e64299276e6b2cc3ee",
+    "previousGeneratedFunsSha256": "139950a07ed685799095f930052a17034e80ec531a1d73343ca5a9d66c184ae9",
+    "previousGeneratedTypesSha256": "3d154415bda00d7b0e6ee0fbc91f0a6273831d02d9300a0dc7e514ddc1f83b23",
+    "comparison": "Whole files after removing only exact generated source-coordinate comment lines; no executable syntax or other prose is removed.",
     "existingGeneratedExecutableDeclarationsUnchanged": true,
     "existingGeneratedTypeDeclarationsUnchanged": true,
-    "existingGeneratedTypesByteUnchanged": false,
+    "sourceCoordinateCommentLinesChanged": 7,
+    "externalFunctionsTemplateHashUnchanged": true,
     "externalTypesTemplateHashUnchanged": true,
-    "addedDefinitions": [
-      "core.alloc.AllocatorClone",
-      "alloc.alloc.Global.Insts.CoreAllocAllocatorClone",
-      "theory.Theory.same_instance",
-      "oracle.identities",
-      "theory.Theory.Insts.CoreCloneClone.clone"
-    ],
-    "addedExternalFunctions": [
-      "alloc.sync.Arc.ptr_eq",
-      "alloc.sync.Arc.Insts.CoreCloneClone.clone"
-    ],
+    "addedDefinitions": [],
+    "addedExternalFunctions": [],
     "strictExistingPackageCheckExit": 0,
     "proofReplayScope": "The integrated optional package builds and its authored/shared audits pass with explicit owner identities and immutable-heap contracts. The returning-event model remains a separate specification; actual public allocation/setup and changing-observation correspondence remain unproved. See verification.json for checked scope and logs."
   }

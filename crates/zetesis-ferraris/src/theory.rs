@@ -98,20 +98,8 @@ impl Theory {
         {
             return Err(AdmissionError::Limit);
         }
-        for (index, node) in nodes.iter().enumerate() {
-            match *node {
-                Node::Atom(atom) if atom >= atoms => return Err(AdmissionError::Atom),
-                Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b)
-                    if a >= index || b >= index =>
-                {
-                    return Err(AdmissionError::Edge);
-                }
-                _ => {}
-            }
-        }
-        if roots.iter().any(|root| *root >= nodes.len()) {
-            return Err(AdmissionError::Root);
-        }
+        validate_nodes(atoms, &nodes)?;
+        validate_roots(nodes.len(), &roots)?;
         Ok(Self(Arc::new(Data {
             atoms,
             nodes,
@@ -142,6 +130,43 @@ impl Theory {
     pub fn same_instance(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+}
+
+/// Validate a node against its atom universe and preceding-node prefix.
+fn validate_node(atoms: usize, index: usize, node: Node) -> Result<(), AdmissionError> {
+    match node {
+        Node::Atom(atom) if atom >= atoms => Err(AdmissionError::Atom),
+        Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) if a >= index || b >= index => {
+            Err(AdmissionError::Edge)
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Validate nodes in stored order, retaining the first admission error.
+/// Before each visit, every preceding node satisfies its admission bounds.
+fn validate_nodes(atoms: usize, nodes: &[Node]) -> Result<(), AdmissionError> {
+    for (index, node) in nodes.iter().enumerate() {
+        validate_node(atoms, index, *node)?;
+    }
+    Ok(())
+}
+
+/// An asserted root must name a stored node.
+fn validate_root(node_count: usize, root: usize) -> Result<(), AdmissionError> {
+    if root >= node_count {
+        Err(AdmissionError::Root)
+    } else {
+        Ok(())
+    }
+}
+
+/// Validate each asserted root, stopping at the first invalid reference.
+fn validate_roots(node_count: usize, roots: &[usize]) -> Result<(), AdmissionError> {
+    for root in roots {
+        validate_root(node_count, *root)?;
+    }
+    Ok(())
 }
 
 /// Packed membership in exactly one immutable theory's finite atom universe.

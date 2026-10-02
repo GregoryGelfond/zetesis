@@ -288,7 +288,12 @@ The current extracted `Result`, callback traits and loop interfaces still use
 the fixed-observation model. Connecting the richer effect to generated calls,
 then rechecking that dependency closure, remains necessary.
 
-The pinned translator rejects the early returns inside `Theory::new`'s
-validation loop. This is a translation boundary, not a detected admission defect.
-The actual admission constructors and their storage guarantees remain separate
-from the checked abstract `TheoryAdmission` and packed-representation laws.
+`Theory::new` now delegates node and root admission to ordered pure validators.
+A separate strict translation of the constructor and these validators succeeds
+when the independently selected `Interpretation::new` export is omitted; every
+function body is retained unchanged. The generic `Interpretation::new` export
+remains unsupported by the pinned translator. This package still excludes both
+admission constructors, and fresh `Arc::new` allocation has no model here.
+Translation alone does not establish constructor invariants or storage guarantees;
+these remain separate from the checked abstract `TheoryAdmission` and
+packed-representation laws.

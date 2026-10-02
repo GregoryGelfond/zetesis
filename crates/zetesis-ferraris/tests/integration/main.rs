@@ -1,6 +1,7 @@
 //! Integration tests of `zetesis-ferraris`, compiled as one test binary.
 
 mod support;
+mod admission;
 mod aggregate_clingo;
 mod aggregate_families;
 mod aggregates;

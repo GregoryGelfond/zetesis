@@ -110,14 +110,14 @@ def oracle.Work.tick
     ok (r1, self)
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-212:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 235:4-237:5
     Visibility: public -/
 def theory.Interpretation.impl.theory
   (self : theory.Interpretation) : Result theory.Theory := do
   ok self.theory
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::same_instance]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 142:4-144:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 130:4-132:5
     Visibility: public -/
 def theory.Theory.same_instance
   (self : theory.Theory) (other : theory.Theory) : Result Bool := do
@@ -136,14 +136,14 @@ def oracle.identities
   else ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.WrongProgram)
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::atom_count]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 124:4-126:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 112:4-114:5
     Visibility: public -/
 def theory.Theory.atom_count (self : theory.Theory) : Result Std.Usize := do
   let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
   ok d.atoms
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::contains]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 216:4-218:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 241:4-243:5
     Visibility: public -/
 def theory.Interpretation.contains
   (self : theory.Interpretation) (atom : Std.Usize) : Result Bool := do
@@ -161,7 +161,7 @@ def theory.Interpretation.contains
   else ok false
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::nodes]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 130:4-132:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 118:4-120:5
     Visibility: public -/
 def theory.Theory.nodes
   (self : theory.Theory) : Result (Slice theory.Node) := do
@@ -310,7 +310,7 @@ def oracle.evaluate
     work.cancellation work.statistics
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::roots]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 136:4-138:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 124:4-126:5
     Visibility: public -/
 def theory.Theory.roots (self : theory.Theory) : Result (Slice Std.Usize) := do
   let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self

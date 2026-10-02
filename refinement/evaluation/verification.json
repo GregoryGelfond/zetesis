@@ -5,7 +5,7 @@
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "bd99aa771dc7a10cab8425d0b8a21d46f264c1701225b7e0081770d12c41126d",
+  "artifactInventorySha256": "8e4ce9e557470991cc98edff9c6cedaf7491d48e5d550b1c72c54f277c755c97",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -213,7 +213,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "0351b5401783b42d86c59225867d9e9d3029ba54656833a466f3637c4fde7b01"
+      "logSha256": "1b6ef3ed5bc0d549dfd9787ded67830a32310d332b7126c9d25dce8009623f10"
     },
     {
       "argv": [
@@ -243,7 +243,7 @@
     }
   ],
   "theoremAuditCount": 192,
-  "rustOrShaderSourcesChanged": false,
+  "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
     "inventorySha256": "a9fee760e5103cfe4284f94179a6df49f4b0a223529176c773f9d1fef6420912",
