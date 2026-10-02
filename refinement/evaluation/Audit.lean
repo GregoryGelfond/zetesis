@@ -1,5 +1,6 @@
 import ProgressExample
-import FixedReduct
+import TheorySatisfaction
+import RootScanExample
 import FixedLoopExample
 
 -- Complete authored-theorem audit for this optional refinement package.
@@ -61,3 +62,24 @@ import FixedLoopExample
 #print axioms FixedReductEvaluation.completed_satisfaction
 #print axioms ChangingObservations.refreshed_trace_differs_from_fixed_loop
 #print axioms ChangingObservations.not_every_refreshed_trace_executes
+#print axioms FixedRootScan.passed_prepend
+#print axioms FixedRootScan.report_prepend
+#print axioms FixedRootScan.report_none_iff
+#print axioms FixedRootScan.read_exact
+#print axioms FixedRootScan.body_exhausted
+#print axioms FixedRootScan.body_stopped
+#print axioms FixedRootScan.body_tested
+#print axioms FixedRootScan.loop_unfold
+#print axioms FixedRootScan.loop_stopped
+#print axioms FixedRootScan.loop_refines
+#print axioms FixedRootScan.failed_root_from_start
+#print axioms FixedRootScan.failed_root_refines
+#print axioms FixedRootScan.returned_report
+#print axioms FixedRootScan.completed_none_iff
+#print axioms FixedRootScan.returned_work_bound
+#print axioms RootSemantics.original_roots
+#print axioms RootSemantics.reduct_roots
+#print axioms TheorySatisfaction.completed_original
+#print axioms TheorySatisfaction.completed_reduct
+#print axioms RootScanExample.empty_roots_do_not_poll
+#print axioms RootScanExample.first_failure_follows_root_order

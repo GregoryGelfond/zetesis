@@ -35,8 +35,8 @@ files compile with implicit variables disabled and warnings treated as errors. O
 `Classical.choice` and `Quot.sound` may appear in the audit. The retained
 `verification.json`, `axiom-audit.txt` and `shared-axiom-audit.txt` record the
 checked artifact hashes and commands, separately from the main semantic library's gate.
-The default build includes the generated-loop correspondence, two-call reduct
-satisfaction and the changing-observation counterexample. These use the documented
+The default build includes the generated evaluator and root scan, their
+composition into theory satisfaction, and the checked boundary examples. These use the documented
 fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
 
@@ -44,8 +44,9 @@ concurrent Rust execution.
 
 Install Rust `nightly-2026-08-18`, including `rustc-dev` and `rust-src`. This is
 an extraction toolchain, not a change to the solver's ordinary Rust pin. The
-extractor selects the real private production method directly; no new Rust
-wrapper is needed.
+extractor selects the real private production evaluator and root scan directly;
+no new Rust wrapper is needed. The extraction runs offline; if dependencies are
+not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
 
 ```sh
 repository_dir="$(git rev-parse --show-toplevel)"
@@ -53,12 +54,14 @@ package_dir="$PWD"
 mkdir -p target/replay
 RUSTUP_TOOLCHAIN=nightly-2026-08-18 \
 CARGO_TARGET_DIR="$package_dir/target/rust" \
+CARGO_BUILD_JOBS=2 \
 RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
 .lake/aeneas/charon cargo --preset=aeneas --sysroot default \
   --start-from zetesis_ferraris::oracle::evaluate \
+  --start-from zetesis_ferraris::oracle::failed_root \
   --include zetesis_ferraris --include zetesis_cpu::cancellation \
   --dest-file target/replay/evaluator.raw.llbc \
-  -- --manifest-path ../../crates/zetesis-ferraris/Cargo.toml --lib --locked
+  -- --manifest-path ../../crates/zetesis-ferraris/Cargo.toml --lib --locked --offline
 ```
 
 Use an owned build directory and retire it after retaining source/tool hashes,
@@ -68,8 +71,8 @@ check; old hashes cannot qualify changed code.
 ## Normalize names and compare
 
 The destination path in LLBC is extraction metadata. Set it to a portable name.
-The second change renames one local debug spelling to avoid a generated namespace
-collision. Both fields are checked explicitly; executable operations remain
+Two local debug names are renamed to avoid generated namespace collisions. All
+three changed fields are checked explicitly; executable operations remain
 unchanged. These commands require `jq`:
 
 ```sh
@@ -81,24 +84,39 @@ jq -e --slurpfile raw target/replay/evaluator.raw.llbc '
        == $raw[0])
 ' target/replay/evaluator.source.llbc
 jq -cae '
-  .translated.fun_decls[11] as $function |
-  if $function.def_id == 11
-     and $function.item_meta.name == [
-       {"Ident":["zetesis_ferraris",0]},
-       {"Ident":["oracle",0]}, {"Ident":["evaluate",0]}]
-     and $function.body.Structured.locals.arg_count == 5
-     and $function.body.Structured.locals.locals[1].index == 1
-     and $function.body.Structured.locals.locals[1].ty ==
-       {"Value":[64,{"Ref":[{"Body":1},{"Deduplicated":4},"Shared"]}]}
-     and $function.body.Structured.locals.locals[1].name == "theory"
-  then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
-  else error("unexpected evaluator input") end
+def checked_argument($id; $name; $count; $type):
+  .translated.fun_decls[$id] as $function |
+  $function.def_id == $id
+  and $function.item_meta.name == [
+    {"Ident":["zetesis_ferraris",0]},
+    {"Ident":["oracle",0]}, {"Ident":[$name,0]}]
+  and $function.item_meta.is_local == true
+  and $function.item_meta.opacity == "Transparent"
+  and $function.body.Structured.locals.arg_count == $count
+  and $function.body.Structured.locals.locals[1].index == 1
+  and $function.body.Structured.locals.locals[1].ty == $type
+  and $function.body.Structured.locals.locals[1].name == "theory";
+if checked_argument(11; "evaluate"; 5;
+     {"Value":[64,{"Ref":[{"Body":1},{"Deduplicated":4},"Shared"]}]})
+   and checked_argument(12; "failed_root"; 3; {"Deduplicated":64})
+then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
+   | .translated.fun_decls[12].body.Structured.locals.locals[1].name = "program"
+else error("unexpected evaluator or root-scan input") end
 ' target/replay/evaluator.source.llbc > target/replay/evaluator.llbc
 
 jq -e --slurpfile source target/replay/evaluator.source.llbc '
   .translated.fun_decls[11].body.Structured.locals.locals[1].name == "program"
-  and ((.translated.fun_decls[11].body.Structured.locals.locals[1].name = "theory")
+  and .translated.fun_decls[12].body.Structured.locals.locals[1].name == "program"
+  and ((.translated.fun_decls[11].body.Structured.locals.locals[1].name = "theory"
+        | .translated.fun_decls[12].body.Structured.locals.locals[1].name = "theory")
        == $source[0])
+' target/replay/evaluator.llbc
+
+jq -e --slurpfile raw target/replay/evaluator.raw.llbc '
+  (.translated.options.dest_file = $raw[0].translated.options.dest_file
+   | .translated.fun_decls[11].body.Structured.locals.locals[1].name = "theory"
+   | .translated.fun_decls[12].body.Structured.locals.locals[1].name = "theory")
+  == $raw[0]
 ' target/replay/evaluator.llbc
 
 mkdir -p target/replay/Evaluator
@@ -109,11 +127,11 @@ cmp Evaluator/Types.lean target/replay/Evaluator/Types.lean
 cmp Evaluator/Funs.lean target/replay/Evaluator/Funs.lean
 ```
 
-Recheck the selected source hashes and the precise function/local identity in
-`provenance.json` before accepting a repeated extraction. The fixed local path is
-specific to this recorded extraction. Never reuse it silently after a structural
-change. Compiler-platform metadata may differ; generated-definition comparison,
-source identity and explicit review remain separate checks.
+Recheck the selected source hashes and both precise function/local identities in
+`provenance.json` before accepting a repeated extraction. These paths are specific
+to this recorded extraction. Never reuse them silently after a structural change.
+Compiler-platform metadata may differ; generated-definition comparison, source
+identity and explicit review remain separate checks.
 
 Do not install generated external templates. `PureExternals`, `AtomicTypes` and
 `AtomicLoad` supply the concrete, scoped models reviewed by these proofs.

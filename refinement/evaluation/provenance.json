@@ -1,13 +1,13 @@
 {
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
-    "extractionRevision": "8e01b2695907466f48c0537d051532d2d7195cf2",
-    "verifiedCurrentRevision": "ff0a441e2cb9ccffcd2f2467dfedbb9a6a7289d3",
+    "extractionRevision": "55bebe478df51729f9f4c9d471b26d7fdb194c96",
+    "verifiedCurrentRevision": "55bebe478df51729f9f4c9d471b26d7fdb194c96",
     "inventory": "source-inputs.sha256",
     "inventorySha256": "7b2015a9addf1b96bc22cf35d9976796f3cc0e108223a87e027842f4a9e5c623",
     "inventoryFiles": 304,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded source inventory for the production evaluator extraction; not a claim to inventory every file in the repository or toolchain.",
+    "scope": "Recorded source inventory for the production evaluator and root-scan extraction; not a claim to inventory every file in the repository or toolchain.",
     "sha256CheckExit": 0
   },
   "tools": {
@@ -35,7 +35,10 @@
   },
   "extraction": {
     "root": "crates/zetesis-ferraris/Cargo.toml",
-    "startFrom": "zetesis_ferraris::oracle::evaluate",
+    "startFrom": [
+      "zetesis_ferraris::oracle::evaluate",
+      "zetesis_ferraris::oracle::failed_root"
+    ],
     "include": [
       "zetesis_ferraris",
       "zetesis_cpu::cancellation"
@@ -48,7 +51,7 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "64ea2fd98909d3eeb6abf51a8f8f3c9a074274410200e0a214c243b08fc37e89"
+    "originalLlbcSha256": "5489afd657413f0e84a956297209c273c2c765cc12f4228134110fa759157f46"
   },
   "normalization": {
     "serialization": "jq -ca (compact ASCII JSON with final newline)",
@@ -65,25 +68,50 @@
     },
     "translationInput": {
       "file": "evaluator.llbc",
-      "changedPath": [
-        "translated",
-        "fun_decls",
-        11,
-        "body",
-        "Structured",
-        "locals",
-        "locals",
-        1,
-        "name"
+      "changes": [
+        {
+          "changedPath": [
+            "translated",
+            "fun_decls",
+            11,
+            "body",
+            "Structured",
+            "locals",
+            "locals",
+            1,
+            "name"
+          ],
+          "function": "zetesis_ferraris::oracle::evaluate",
+          "oldValue": "theory",
+          "newValue": "program"
+        },
+        {
+          "changedPath": [
+            "translated",
+            "fun_decls",
+            12,
+            "body",
+            "Structured",
+            "locals",
+            "locals",
+            1,
+            "name"
+          ],
+          "function": "zetesis_ferraris::oracle::failed_root",
+          "oldValue": "theory",
+          "newValue": "program"
+        }
       ],
-      "oldValue": "theory",
-      "newValue": "program",
-      "reason": "Avoid a generated Lean parameter shadowing the theory namespace. Variable uses remain numeric Local indices.",
-      "restoringBothFieldsRestoresEntireParsedOriginal": true
+      "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
+      "restoringNamesRestoresEntireParsedSource": true,
+      "restoringAllThreeFieldsRestoresEntireParsedOriginal": true
     },
-    "executableStatementTreeSha256": "f3d5900300bdcaac7983d8df2825db3876ccacfcf1599afffc1aa94f03e4b855",
-    "executableStatementTreeUnchanged": true,
-    "generatedChangeFromUnnormalizedDirectTranslation": "Only the evaluate parameter spelling and its one Theory.nodes argument use."
+    "generatedChangeFromUnnormalizedDirectTranslation": "With matching input/module basenames, only each evaluate/failed_root parameter spelling and its one Theory.nodes/roots argument use changes.",
+    "executableStatementTreesSha256": {
+      "evaluate": "8d6580c1c5cd9a5bd476681fda555ed203943979fb398f02a61556a1a997cb94",
+      "failed_root": "7bb47e01d2c4c87e3ce573df4ced62e62d1c6799f6667cfda6009a36914c47f7"
+    },
+    "executableStatementTreesUnchanged": true
   },
   "replay": {
     "jqVersion": "jq-1.8.2",
@@ -108,7 +136,7 @@
     ],
     "generatedFilesByteIdenticalToNameNormalizedTranslation": true,
     "hostPathScanClean": true,
-    "newCargoExtractionPerformed": false,
+    "newCargoExtractionPerformed": true,
     "externalTemplatesInstalled": false,
     "documentedRetainedInputCommandsExit": 0
   },
@@ -116,15 +144,29 @@
     "Published LLBC is explicitly metadata/name-normalized, not byte-exact raw Charon output.",
     "Production Rust is unchanged; generated Lean was not edited.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
-    "Atomic observations cover a single invocation, not concurrent shared-cell behavior over the generated whole loop.",
+    "Atomic loads return fixed supplied token values. Generated-loop proofs under those definitions do not establish correspondence with changing concurrent Rust observations.",
     "Source inventory and output hashes are provenance, not a proof of end-to-end solver correctness."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "c4d95eaeae42a9ca5975411cefb2e7ecac6770b71ec03a2be5193634ade02dec",
-    "evaluator.llbc": "a0a607dc39ff9024822b7311e3afa630ecbcbb43da4ad4ea82c18b633bc31cb2",
-    "Evaluator/Funs.lean": "d0f99043fecd5360b709d37087f9a44a864270c4604b0e6252f5dafa4da611e3",
+    "evaluator.source.llbc": "d7e6dd73ca6e4ab82b64ead16ff0d3dea88e8f02b341423480985b47e675af4d",
+    "evaluator.llbc": "fdfd9e745801a2e69656f2631a59c25dae69b595790cfac48a95e8ac5108b049",
+    "Evaluator/Funs.lean": "e0d1b0c982b29f9e13e09ad94c5951f74935cd687a1aaefdb87a0aed611bb4be",
     "Evaluator/FunsExternal_Template.lean": "1cd1207ee07b5f9aa78dd6979479dfc505223c51687dfab256e51319e7ee2a8a",
     "Evaluator/Types.lean": "55bd6876376523789c6869aad00b03c604b30014d3b1d0acfbabcdfbe24be64a",
     "Evaluator/TypesExternal_Template.lean": "cdbc58fec3a135c6f90a0b2cb212e4d5a04c2d72605848bf78291c7ca071b454"
+  },
+  "compatibility": {
+    "previousGeneratedFunsSha256": "d0f99043fecd5360b709d37087f9a44a864270c4604b0e6252f5dafa4da611e3",
+    "existingGeneratedFunctionsByteUnchanged": true,
+    "generatedTypesByteUnchanged": true,
+    "externalTemplatesHashesUnchanged": true,
+    "addedGeneratedLines": 61,
+    "addedDefinitions": [
+      "theory.Theory.roots",
+      "oracle.failed_root_loop.body",
+      "oracle.failed_root_loop",
+      "oracle.failed_root"
+    ],
+    "previousPackageRevision": "55bebe478df51729f9f4c9d471b26d7fdb194c96"
   }
 }

@@ -273,4 +273,65 @@ def oracle.evaluate
   oracle.evaluate_loop iter interpretation frozen output1 work.limits
     work.cancellation work.statistics
 
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::roots]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 136:4-138:5
+    Visibility: public -/
+def theory.Theory.roots (self : theory.Theory) : Result (Slice Std.Usize) := do
+  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
+  ok (alloc.vec.Vec.deref d.roots)
+
+/-- [zetesis_ferraris::oracle::failed_root]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 138:4-145:1 -/
+@[rust_loop_body]
+def oracle.failed_root_loop.body
+  (values : Slice Bool) (iter : core.slice.iter.Iter Std.Usize)
+  (work : oracle.Work) :
+  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) × oracle.Work)
+    ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop) ×
+    oracle.Work))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done (core.result.Result.Ok none, work))
+  | some root =>
+    let (r, work1) ← oracle.Work.tick work
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let b ← Slice.index_usize values root
+      if b
+      then ok (cont (iter1, work1))
+      else ok (done (core.result.Result.Ok o, work1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option Std.Usize) (core.convert.FromSame
+          zetesis_cpu.cancellation.Stop) residual
+      ok (done (r1, work1))
+
+/-- [zetesis_ferraris::oracle::failed_root]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 138:4-145:1 -/
+@[rust_loop]
+def oracle.failed_root_loop
+  (iter : core.slice.iter.Iter Std.Usize) (values : Slice Bool)
+  (work : oracle.Work) :
+  Result ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop)
+    × oracle.Work)
+  := do
+  loop
+    (fun (iter1, work1) => oracle.failed_root_loop.body values iter1 work1)
+    (iter, work)
+
+/-- [zetesis_ferraris::oracle::failed_root]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 133:0-145:1 -/
+def oracle.failed_root
+  (program : theory.Theory) (values : Slice Bool) (work : oracle.Work) :
+  Result ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop)
+    × oracle.Work)
+  := do
+  let s ← theory.Theory.roots program
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
+  oracle.failed_root_loop iter values work
+
 end ZetesisExtract

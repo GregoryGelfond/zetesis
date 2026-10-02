@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "FixedReduct", "FixedLoopExample"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -84,3 +84,15 @@ name = "FixedReduct"
 
 [[lean_lib]]
 name = "FixedLoopExample"
+
+[[lean_lib]]
+name = "RootScan"
+
+[[lean_lib]]
+name = "RootSemantics"
+
+[[lean_lib]]
+name = "TheorySatisfaction"
+
+[[lean_lib]]
+name = "RootScanExample"

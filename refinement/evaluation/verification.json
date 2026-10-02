@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-02",
-  "scope": "The unchanged generated evaluator loop terminates with exact truth prefixes and work accounting under fixed observation tokens; two successful calls establish per-node Ferraris reduct satisfaction. Changing-observation runtime correspondence and complete solver verification remain open.",
+  "scope": "Generated evaluation and root scanning preserve exact truth, work and typed stops under fixed observation tokens. Completed generated calls establish original and Ferraris reduct theory satisfaction using the computed original mask. Changing-observation runtime correspondence, subset search and complete solver verification remain open.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "7933f2d99fa9c2a539d9f0e93a38f951ede914d329735015fa127180542ef8eb",
+  "artifactInventorySha256": "17a4a5080815f4a70d93a000b1b8bfd1a434e6511ba911602363b2db0e1c4334",
   "declarations": [
     "Membership.mask_bit",
     "Membership.outside",
@@ -64,7 +64,28 @@
     "FixedReductEvaluation.completed_values",
     "FixedReductEvaluation.completed_satisfaction",
     "ChangingObservations.refreshed_trace_differs_from_fixed_loop",
-    "ChangingObservations.not_every_refreshed_trace_executes"
+    "ChangingObservations.not_every_refreshed_trace_executes",
+    "FixedRootScan.passed_prepend",
+    "FixedRootScan.report_prepend",
+    "FixedRootScan.report_none_iff",
+    "FixedRootScan.read_exact",
+    "FixedRootScan.body_exhausted",
+    "FixedRootScan.body_stopped",
+    "FixedRootScan.body_tested",
+    "FixedRootScan.loop_unfold",
+    "FixedRootScan.loop_stopped",
+    "FixedRootScan.loop_refines",
+    "FixedRootScan.failed_root_from_start",
+    "FixedRootScan.failed_root_refines",
+    "FixedRootScan.returned_report",
+    "FixedRootScan.completed_none_iff",
+    "FixedRootScan.returned_work_bound",
+    "RootSemantics.original_roots",
+    "RootSemantics.reduct_roots",
+    "TheorySatisfaction.completed_original",
+    "TheorySatisfaction.completed_reduct",
+    "RootScanExample.empty_roots_do_not_poll",
+    "RootScanExample.first_failure_follows_root_order"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -79,7 +100,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "4be2496004353fab8ebd49f9e81a54da4a5544195f0398b8158b94de6358e4ad"
+      "logSha256": "1017c70cfbbb24454ebb149b69f9863a40276c7421a64cf0d290c9e60bfe1a23"
     },
     {
       "argv": [
@@ -92,7 +113,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "9e37aef98dfcd735f1aa7332ecaea408d7efcf4c7e38b3cec329c83ff02ff683"
+      "logSha256": "cb9b748621b6977ea555e9a0de1cbdff7120205f8f25506567a42173f123bad7"
     },
     {
       "argv": [
@@ -108,7 +129,7 @@
       "logSha256": "1d48d977003ffa359de002c35d892f2f94d93c8c615de94e10955184bb84b963"
     }
   ],
-  "theoremAuditCount": 58,
+  "theoremAuditCount": 79,
   "rustOrShaderSourcesChanged": false,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
@@ -244,8 +265,8 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Generated fixed-token evaluation to concurrent Rust histories with changing atomic observations.",
+    "Generated fixed-token evaluation and root scanning to concurrent Rust histories with changing atomic observations.",
     "Rust pointer ownership, allocation, timers and concurrent memory.",
-    "FrozenReduct construction and owner checks, root scans, subset search, grounding and solver enumeration."
+    "FrozenReduct construction and wrappers, owner checks, subset search, grounding and solver enumeration."
   ]
 }

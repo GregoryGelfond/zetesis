@@ -60,12 +60,13 @@ The proof follows that definition:
 `PackedCounterSearch` composes packed updates and streaming control: every
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
-a separate obligation. The optional [evaluator refinement](evaluation.md)
-proves the generated evaluator's loop under fixed observation tokens and derives
-per-node reduct satisfaction from two successful generated calls. The first call
-computes the mask; the proof imports the same reduct theory under the extraction
-toolchain. Changing runtime observations, Rust owner checks, the `FrozenReduct`
-wrappers, root scans and subset search remain unproved.
+a separate obligation. The separately built [implementation-refinement package](evaluation.md)
+proves the generated evaluator and root scan under fixed observation tokens.
+Completed generated calls establish original and Ferraris reduct theory
+satisfaction; original evaluation computes the mask. The proof imports the same
+ASP theory under the extraction toolchain. Changing runtime observations, Rust
+owner checks, `FrozenReduct` construction and wrappers, and subset search remain
+unproved.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
@@ -138,11 +139,11 @@ system or device progress is not obtained from a set-theoretic coverage law.
 ## A practical sequence of verified milestones
 
 1. **Ground CPU membership.** Use one compatible extraction/proof toolchain.
-   Extend the generated evaluator result to changing runtime observations and
-   verify root scans, `FrozenReduct` construction and owner invariants. Connect
-   packed updates and streaming frozen evaluation to the existing laws. Establish
-   exact completed verdicts
-   for the actual general checker, then the normal-closure checker.
+   Extend the generated evaluation/root-scan results to changing runtime
+   observations and verify `FrozenReduct` construction, wrappers and owner
+   invariants. Connect packed updates and streaming frozen evaluation to the
+   existing laws. Establish exact completed verdicts for the actual general
+   checker, then the normal-closure checker.
 2. **Ground CPU enumeration.** Connect candidate generation, exact classification
    and completion accounting. Prove a complete retained family equals the
    original finite theory's world view. Add each optimized class route through
