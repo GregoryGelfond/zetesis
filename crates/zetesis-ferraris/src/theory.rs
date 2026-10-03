@@ -324,3 +324,25 @@ impl ExactSizeIterator for InterpretationWords<'_> {
 }
 
 impl std::iter::FusedIterator for InterpretationWords<'_> {}
+
+#[cfg(test)]
+mod tests {
+    use super::{AdmissionLimits, Node, Theory};
+
+    #[test]
+    fn admission_keeps_the_supplied_buffers() {
+        // Spare capacity makes a copy or a shrink visible: either would change
+        // a buffer's address or capacity.
+        let mut nodes = Vec::with_capacity(8);
+        nodes.extend([Node::False, Node::Atom(0), Node::And(0, 1)]);
+        let mut roots = Vec::with_capacity(8);
+        roots.extend([2, 2, 0]);
+        let (node_buffer, node_capacity) = (nodes.as_ptr(), nodes.capacity());
+        let (root_buffer, root_capacity) = (roots.as_ptr(), roots.capacity());
+        let theory = Theory::new(1, nodes, roots, AdmissionLimits::default()).unwrap();
+        assert_eq!(theory.0.nodes.as_ptr(), node_buffer);
+        assert_eq!(theory.0.nodes.capacity(), node_capacity);
+        assert_eq!(theory.0.roots.as_ptr(), root_buffer);
+        assert_eq!(theory.0.roots.capacity(), root_capacity);
+    }
+}
