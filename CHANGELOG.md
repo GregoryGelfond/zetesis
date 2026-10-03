@@ -17,9 +17,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   checks that establish the evaluator’s structural preconditions.
 - Lean refinement of the generated public scalar reference checker. Completed
   verdicts agree with the answer-set definition and retain their actual false-root
-  or proper-subset evidence under explicit input and library contracts. Early
-  owner, control and reservation refusals are preserved. Changing runtime
-  histories, grounding, full solver enumeration and GPU execution remain separate.
+  or proper-subset evidence under explicit input and library contracts. Runtime
+  proofs cover returning control reads and reservations, trace typed refusals to
+  their reached cause, and preserve the candidate through the owned API. The scope
+  is one finite ground theory; grounding, solver enumeration, optimized routes
+  and GPU execution remain separate.
 - Lean correspondence from successful theory and interpretation construction to
   the candidate-bound check and accepted-result conversion. The proof derives
   input invariants and preserves the exact checked candidate under explicit
@@ -35,7 +37,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   exact bounded-prefix writes and first-invalid refusal; completed construction
   retains its theory and derives exact packed contents and zero padding under an
   explicit reservation contract. Owned vectors supply the finite-input contract;
-  unrestricted iterator termination and changing runtime histories remain separate.
+  unrestricted iterator termination is not claimed.
 
 ### Changed
 

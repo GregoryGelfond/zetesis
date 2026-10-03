@@ -1,17 +1,17 @@
 # Refining the reference checker
 
 The separately built [implementation-refinement package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
-connects completed calls of the CPU reference checker's generated public `check`
-to the Ferraris answer-set definition. The result concerns one candidate of a
-ground formula theory under fixed observation tokens and explicit library
-contracts. The package also proves theory admission and construction, finite
+connects finite completed public calls of the CPU scalar reference checker
+to the Ferraris answer-set definition, including returning control reads and
+reservations. The result concerns one candidate of one finite ground formula
+theory under explicit library, runtime and extraction contracts. The package also proves theory admission and construction, finite
 interpretation construction, and stored-reduct construction and public querying.
 
 ## From the public check to answer-set membership
 
 Let `M` be the candidate and `T` the theory asserted by the stored roots.
-[`PublicMembership.completed_answer_set`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PublicMembership.lean)
-proves:
+[`RuntimeMembership.completed_answer_set`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/RuntimeMembership.lean)
+proves for a completed execution of the source-checked runtime contexts:
 
 ```text
 actual public check(T, M, limits, control) completes with checked
@@ -20,13 +20,14 @@ checked.verdict = Stable  iff  M is an answer set of T
 ```
 
 The premises require exact candidate word storage, ordered child indices,
-bounded roots, consistency of both theory views with one immutable heap, and
-preservation of empty input sequences by successful reservations for the selected
+bounded roots and consistency of both theory views with one immutable heap.
+The runtime reservation projection supplies sequence preservation for the selected
 atoms and subset words. Boolean workspaces need no content contract because
 evaluation clears them. Reservation success is not assumed.
 
-[`PublicCheckPhases`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PublicCheckPhases.lean)
-recovers the owner check, initial poll, reservations, initialization and semantic
+`RuntimeProjection` derives the actual generated public result from the observed
+execution. [`PublicCheckPhases`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PublicCheckPhases.lean)
+then recovers the owner check, initial poll, reservations, initialization and semantic
 calls from the actual completed wrapper return. Each phase receives the previous
 phase's work. Evaluation derives the frozen mask; selection derives the candidate
 carrier; the search proof establishes proper-subset coverage and reduct truth.
@@ -39,10 +40,11 @@ reduct model. [`PublicCheckBoundary`](https://github.com/GregoryGelfond/zetesis/
 also proves wrong-owner refusal, initial-control refusal and allocation refusal
 at the first reservation. Public stops carry no verdict or partial statistics.
 
-The theorem concerns completed generated calls under one pure reservation
-provider and fixed observations. It does not prove arbitrary-provider
-termination, changing runtime histories, candidate generation or optimized
-checking routes.
+`RuntimePublicRefusal` additionally follows every finite public typed stop to
+its reached operation and cause in source order. Supporting loop laws retain
+executed prefixes and internal partial state. Cancellation precedes expiry and quota checks; a refused tick charges no
+new work. This is not a proof of arbitrary-provider termination, fairness,
+candidate generation or optimized checking routes.
 
 ## From construction to a retained answer
 
@@ -60,11 +62,14 @@ and rejected conversion retains the entire decision. An arbitrary Lean record
 with a Stable field is not thereby semantic evidence; the theorem requires the
 actual constructor and check calls that produced it.
 
-The composition uses explicit successful Arc-value and reservation-sequence
-contracts. It does not require allocation to succeed on every invocation or
-assume semantic oracle agreement. A supplied allocation operation and one shared
-reservation provider interpret these calls under fixed observations. Correspondence
-to changing runtime histories remains the outstanding membership boundary.
+The constructor composition uses explicit contracts for retained Arc values and
+reservation sequences; it assumes neither allocation success nor semantic oracle
+agreement. `RuntimeMembership.completed_subject` supplies the eventful owned check
+after those successful constructors. Its `completed_stable` theorem follows the
+actual conversion and retains the same candidate as an answer set. Constructor
+providers describe their individual calls; the checking history can contain
+independently observed reservations, without a shared deterministic allocation
+history.
 
 ## Initial storage and program ownership
 
@@ -286,33 +291,40 @@ the library's formula DAG. Fold correspondence then connects completed generated
 calls and their asserted roots to the existing reduct theorem. The result is a
 checked connection to the same mathematical theory used elsewhere in the library.
 
-## Remaining implementation boundary
+## Runtime correspondence and remaining scope
 
-`FixedLoop` follows the generated loop's control threading: repeated token reads
-return the same value. The broader authored `Trace` relation permits separately
-supplied controls between body calls. Fixed-loop calls form a trace, but the
-[checked cancellation example](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FixedLoopExample.lean)
-shows that a refreshed trace can stop after one node while the fixed-clear loop
-completes two. The pinned extraction effect cannot express changing atomic read
-results, so correspondence with concurrent Rust histories remains open.
+The generated backend reads fixed observation bits. `RuntimeContexts` and
+`CheckerContexts` retain its operations and control flow while named reads and
+reservations receive returning observations. Exact reconstruction laws and a
+source checker audit this adaptation. `ReferenceEvents` is their common operational
+composition; it introduces no alternative evaluator or subset algorithm.
 
-A separate checked `RuntimeEffects` model admits returning read and reservation
-events and preserves embedded backend computations. It is not yet connected to
-the generated checker. Supporting those effects through the extraction backend's
-function and loop interfaces remains necessary.
+`RuntimeProjection` recovers the actual generated result from every successful
+finite execution. `RuntimeMembership` supplies answer-set equivalence, negative
+evidence, and the constructed subject's acceptance and conversion laws.
+`RuntimePublicRefusal` classifies stops at the reached operation and identifies
+their terminal observations. Supporting loop laws retain actual executed prefixes
+and partial state. Backend failure,
+divergence and unanswered requests are not completed verdicts or typed stops.
 
-The calls share stored nodes, roots and numeric atom vocabulary. The completed
-public-check proof derives actual setup and verdicts under its library contracts;
-relating completed and refused calls to permitted runtime allocation and control
-histories remains open. The subject-bound API and accepted-result conversion now
-compose the same generated checker and actual constructors. Finite insertion does not establish termination of
-unrestricted iterators or correspondence to a caller's borrowed iterator state
-and destruction. Source grounding, candidate enumeration and optimized checking
-routes are separate obligations. Rust's library, compiler, operating system and
-hardware are trusted. Their contracts do not replace the remaining proofs for
-zetesis's runtime control and GPU operations. The
-[reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
-records the generated wrapper's supplied-operation and runtime-history boundary.
+Read handles and deadline configuration stay unchanged. The clear representative
+used to apply the fixed-model proofs changes only unused logical bits, not a live
+Rust cancellation token; it imposes no restriction on observed read responses.
+Reservation events carry success-capacity evidence or refusal and preserve the
+logical vector sequence. Successful allocation is never assumed.
+
+The trust boundary includes Rust and its standard library, `Arc`, the allocator,
+OS and hardware, the immutable mapping of live objects and fields to handles,
+and the compiler/extraction tools and audited source-context adaptation. The
+proofs establish zetesis's use of those contracts, not their implementations.
+They require no scheduling fairness or eventual response assumption.
+
+This covers finite completed and refused public scalar reference calls for one
+finite ground formula theory, including the subject-bound API. It does not prove
+source grounding, candidate enumeration, optimized membership routes, parallel
+schedules or GPU execution. Finite interpretation insertion does not establish
+termination of arbitrary iterators or a caller's borrowed-iterator destruction
+behavior. The general ASP library remains independent and unchanged.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code

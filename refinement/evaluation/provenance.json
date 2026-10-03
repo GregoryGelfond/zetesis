@@ -371,11 +371,12 @@
     "LLBC destination metadata and eight local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
     "Stock generated bodies are unmodified. The compiled file adds exactly the recorded eight scoped provider binders; reversing them recovers the exact stock bytes. Their implicit parameters are authored Lean-signature adaptations, audited separately from LLBC normalization.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
-    "Existing generated-loop proofs use fixed supplied atomic observations, not changing concurrent Rust observations.",
+    "Original generated-loop proofs use fixed observations. Audited runtime contexts retain the generated call structure and admit changing returning read and reservation observations; RuntimeProjection and RuntimePublicRefusal discharge their completed and refused public calls under the stated handle and library mapping.",
     "Owner checks use identity and immutable-heap contracts. Allocation and reservation use explicit supplied operations with no success assumption; returning reservation refusal is distinct from backend failure. Required value, owner, sequence or capacity contracts belong to the consuming theorem.",
-    "The providers are pure per-invocation interpretations, not evolving allocator histories. The active Vec model has no capacity field. No allocator, destructor, reference-count or cross-invocation runtime correspondence is established.",
-    "The public oracle::check and owned checked::check_interpretation wrappers are selected directly. Owned acceptance/accessor/move operations retain their actual bodies; derived Clone and Debug are not selected. Generated-call proof scope is recorded separately in verification.json. Selection and dependency binding do not establish correspondence to changing allocation or control histories.",
-    "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness."
+    "The providers are pure per-invocation interpretations, not evolving allocator histories. The active Vec model has no capacity field. Allocator, destructor and reference-count implementations remain trusted. Per-call constructor contracts and the returning-event public checker compose without assuming a deterministic allocator across calls.",
+    "The public oracle::check and owned checked::check_interpretation wrappers are selected directly. Owned acceptance/accessor/move operations retain their actual bodies; derived Clone and Debug are not selected. Generated-call proof scope is recorded separately in verification.json. Selection and dependency binding alone do not establish runtime correspondence; the separately source-checked contexts and kernel runtime proofs provide the recorded finite-call correspondence.",
+    "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness.",
+    "Returning-event keys preserve cancellation/deadline object and field identity. The ghost-clear control representative changes only unused fixed-model bits, not Rust tokens or their observed responses. Observations are overapproximated; physical address, atomic memory-model and scheduler implementation proofs are outside this package."
   ],
   "generatedArtifactsSha256": {
     "evaluator.source.llbc": "c6fd22b45e9a1cde89696a9133864b2284af024c9ff5c06970ab5faf44a3d785",
@@ -430,5 +431,64 @@
     "Evaluator/FunsExternal_Template.lean": "9411d40298722743db6c5ac6051ea2cd1757d3ffb8bd9b69cc29f2f13f080e41",
     "Evaluator/Types.lean": "3ec1b7b97ea8088c1dc6e21e27a98485e462201f48f549b8b76257f5ba5cfd71",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
+  },
+  "runtimeContextAdaptation": {
+    "scope": "Generalize the exact generated public reference checker call graph to returning read and reservation observations; retain imported pure scalar, sequence, iterator and owner operations.",
+    "generatedSource": "Evaluator/Funs.lean",
+    "generatedSourceSha256": "e0c4979d76f69b62e4eef335f1bca02c514bf2eb4f9c3587b5c3ee4f20ca6d37",
+    "contexts": {
+      "RuntimeContexts.lean": "5531827bcecca535f4ac7432dd9f7536c2c22d718f7a405e724dd670e6f7ab52",
+      "CheckerContexts.lean": "7f49af47082471165a89cd23213ecb2c8ad82650e7119b31ce2a7f7a86ac6f98"
+    },
+    "checker": {
+      "source": "ContextAudit.lean",
+      "sha256": "b652a79bf1d24d56b8312689d8309425d8136e5cc89637a58ed4c26662ce8c14",
+      "checkedContexts": 22,
+      "negativeChecks": 6
+    },
+    "runtimeComposition": "ReferenceEvents.lean",
+    "runtimeCompositionSha256": "8d9e9e59513c36f8f8f7ebfede98fd002b1bfa9b43d5b9937a3a5e58965d50ed",
+    "checks": [
+      {
+        "argv": [
+          "lake",
+          "env",
+          "lean",
+          "-DautoImplicit=false",
+          "-DwarningAsError=true",
+          "--run",
+          "ContextAudit.lean",
+          "Evaluator/Funs.lean",
+          "RuntimeContexts.lean",
+          "CheckerContexts.lean"
+        ],
+        "exitCode": 0,
+        "log": "context-audit.txt",
+        "logSha256": "1178da50ac5691e6b2d91004282c048d86c9b796f12da6436751786cf30f2fca",
+        "checkedInputFingerprint": "47d227912f994aaa6369e92c8d9ba6843e3183c1c8702099f2319deb3d20aa64"
+      },
+      {
+        "argv": [
+          "lake",
+          "env",
+          "lean",
+          "-DautoImplicit=false",
+          "-DwarningAsError=true",
+          "--run",
+          "ContextAudit.lean",
+          "--self-test",
+          "Evaluator/Funs.lean",
+          "RuntimeContexts.lean",
+          "CheckerContexts.lean"
+        ],
+        "exitCode": 0,
+        "log": "context-negative-audit.txt",
+        "logSha256": "4a0d1826e6aaab15aff478a344a743dc9cf930377d0e0ae1cc7ce5b5c317275c",
+        "checkedInputFingerprint": "47d227912f994aaa6369e92c8d9ba6843e3183c1c8702099f2319deb3d20aa64"
+      }
+    ],
+    "unchangedGeneratedArtifacts": true,
+    "newRustExtractionPerformed": false,
+    "boundary": "The checked Lean IO source guard and reviewed call-graph/handle mapping are trusted extraction adaptations, not kernel proofs of a compiler or textual parser. Kernel reconstruction laws recover original generated functions, while separate runtime projection/refusal laws establish the eventful result contracts. A fixed-handler reconstruction alone cannot establish effect ordering."
   }
 }

@@ -835,7 +835,7 @@ connect that invariant to actual freezing. Reservation and public frozen queries
 use the explicit supplied operation above. Repeat the strict build and complete
 authored-theorem audit after accepting any changed extraction.
 
-## Current subset-search extraction limit
+## Generated checker boundary
 
 The allocation-free `find_countermodel` phase and its subset-query and carry
 helpers now translate directly. Their exported bodies are the production
@@ -864,10 +864,10 @@ heap consistency connects a successful owner comparison to equal stored theory
 data. Allocator internals and reference counting remain trusted library
 implementations; runtime correspondence is distinct from generated-call proofs.
 
-`RuntimeEffects` specifies returning read and reservation events separately.
-The current extracted `Result`, callback traits and loop interfaces still use
-the fixed-observation model. Connecting the richer effect to generated calls,
-then rechecking that dependency closure, remains necessary.
+`RuntimeEffects` supplies returning read and reservation events. The extracted
+`Result` retains its fixed-observation model. The source-checked contexts and
+projection/refusal laws below connect that generated call graph to finite
+runtime executions without changing the extracted backend.
 
 `Theory::new` runs `admit`, then returns its refusal unchanged or passes its
 admitted data to `Arc::new`. The constructor, admission step and validators are
@@ -883,3 +883,76 @@ zero failure. Reservation success alone does not imply an empty returned vector;
 zero initialization requires the explicit sequence-preservation contract.
 No allocator, reference-count or constructor runtime correspondence follows from
 extraction or supplied-operation bindings alone.
+
+## Check the returning-event correspondence
+
+Run this section from `refinement/evaluation` after preparing the pinned Lean
+4.31.0 dependencies above. It reuses the retained extracted source; no new Rust
+extraction or changed generated function body is needed.
+
+```sh
+(cd ../.. && shasum -a 256 -c refinement/evaluation/source-inputs.sha256)
+(cd ../.. && shasum -a 256 -c refinement/evaluation/semantic-inputs.sha256)
+shasum -a 256 -c artifacts.sha256
+lake env lean -DautoImplicit=false -DwarningAsError=true --run ContextAudit.lean \
+  Evaluator/Funs.lean RuntimeContexts.lean CheckerContexts.lean
+lake env lean -DautoImplicit=false -DwarningAsError=true --run ContextAudit.lean \
+  --self-test Evaluator/Funs.lean RuntimeContexts.lean CheckerContexts.lean
+lake build
+lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
+lake env lean -DautoImplicit=false -DwarningAsError=true SharedAudit.lean
+```
+
+`ContextAudit` checks four control/evaluator contexts and eighteen checker
+contexts. For each of these 22 definitions it requires the reviewed header,
+complete body, exact call counts and reversal to the corresponding generated
+body. It also checks the imports, namespace, monad parameters and contiguous
+order of the context definitions. An extra declaration or instance inside that
+region is rejected. The permitted changes name the context, add explicit phase
+operations and generalize its result monad; scalar, sequence, iterator and
+ownership operations remain the imported backend calls. The public checker
+retains four ordered reservation call sites.
+
+The first `ContextAudit` command reports all 22 context checks. The second repeats the checks
+and requires rejection of six changed inputs: an extra poll across a blank
+line, a deadline read moved before cancellation, a changed cancellation branch,
+a missing context, a changed namespace scaffold and a duplicated reservation.
+These tests exercise the checker without modifying any retained source file.
+Both invocations must exit successfully; passing the Lean proof build alone
+does not replace the source checks.
+
+The contexts are an authored, restricted generalization of the extracted
+functions, not additional Aeneas output. Their source check is an explicit
+trusted adaptation check. Kernel reconstruction laws recover the original
+functions when supplied their original operations. Separately,
+`ReferenceEvents` connects the checked contexts to returning control reads and
+fallible reservation observations. The projection laws derive the exact fixed
+checker result from a successful finite event execution; they do not assume
+successful inner evaluators, a correct membership verdict or always-successful
+allocation. Existing checker semantics then gives answer-set membership and
+the concrete evidence carried by either negative verdict.
+
+`RuntimePublicRefusal.classified` recovers the terminal source phase, its
+unchanged reason and the exact terminal leaf suffix. Loop refusal laws retain the actual reached state and event prefix before
+the terminal body; leaf laws identify the observed control stop, reservation
+rejection or quota refusal. Backend failure, divergence and an unanswered
+external request do not become a returned source `Stop` or a Boolean verdict.
+These are finite-execution correctness results, not a guarantee that every
+external history returns.
+
+Retain the two source-check outputs and their exit statuses with the full build
+and axiom-audit results. The artifact inventory must include `ContextAudit`,
+both context modules, their event wiring and all proof modules. The verification
+record identifies the source-check commands separately from the kernel audits.
+The unchanged Rust-source and shared-semantic-source inventories remain checked;
+regenerating a context or changing its scaffold requires repeating both source
+checks and the proof build. The shared semantic sources still compile directly
+on Lean 4.31.0, independently of the main library's Lean 4.33.1 objects.
+
+The runtime interpretation uses explicit library contracts for read handles,
+reservation contents and capacity certificates. Rust, its standard library,
+extraction and the reviewed context adaptation remain trusted boundaries.
+Constructor allocation providers remain separate from the checker's observed
+reservation history. The results do not verify allocator internals, atomic
+memory-order implementation, scheduling, grounding, solver enumeration or GPU
+execution.

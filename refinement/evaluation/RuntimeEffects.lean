@@ -11,11 +11,11 @@ read request names an immutable object handle; successive responses may differ.
 A reservation request returns either a capacity certificate or a source-level
 error. Its failure is not the backend's nonreturning failure effect.
 
-The generated `Aeneas.Std.Result` currently fixes a smaller effect signature.
-These definitions therefore demonstrate a candidate external interface, not
-correspondence of the unchanged generated checker to changing runtime events.
-The finite execution relation records exactly the responses consumed. It makes
-no scheduling, allocator implementation or Rust memory-model claim.
+The generated `Aeneas.Std.Result` fixes a smaller effect signature. Audited
+source contexts instantiate this effectful interface without changing generated
+bodies; separate projection and refusal laws connect their finite executions to
+the reference checker. The relation below records exactly the responses consumed.
+It makes no scheduling, allocator implementation or Rust memory-model claim.
 -/
 namespace RuntimeEffects
 
@@ -72,9 +72,9 @@ theorem runs_bind {T U : Type} {first : Computation T}
       exact Runs.observed request response (fun answer => ITree.bind (continuation answer) next)
           (events ++ after) result (inductionHypothesis nextRun)
 
-/-- This is the backend loop combinator specialized to the runtime effect.
-Its source-level control shape is unchanged; it is not today's hardcoded
-`Aeneas.Std.loop`, so no generated-loop correspondence is claimed. -/
+/-- The loop combinator specialized to returning runtime effects. Its control
+shape matches the backend loop; `RuntimeLoop` separately proves finite completed
+projection under explicit local correspondence and observation-progress laws. -/
 def loop {T U : Type} (body : T → Computation (ControlFlow T U)) (state : T) :
     Computation U := do
   let transition ← body state
@@ -191,7 +191,7 @@ structure Atomic where
   object : Nat
 
 /-- This has the generated load's ordinary arguments and Boolean result shape.
-Its effectful result type is deliberately distinct from today's fixed Result.
+Its effectful result type is deliberately distinct from the generated Result.
 Only the used Relaxed ordering is modeled; other orderings are an explicit
 model boundary, not a claim that those orderings necessarily fail in Rust. -/
 def load (cell : Atomic) (ordering : ZetesisExtract.core.sync.atomic.Ordering) :

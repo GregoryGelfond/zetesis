@@ -61,8 +61,9 @@ The proof follows that definition:
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
 a separate obligation. The separately built [implementation-refinement package](evaluation.md)
-connects the actual generated reference checker's completed public verdicts to
-the same ASP theory under fixed observation tokens and explicit library contracts.
+connects the actual reference checker's finite completed public verdicts to
+the same ASP theory through generated code and source-checked runtime contexts,
+under explicit library and runtime contracts.
 
 `MembershipSearch.completed_answer_set` composes actual original evaluation,
 a successful original root check, completed atom selection and completed
@@ -82,9 +83,11 @@ by the two successful reservations used without clearing, the returned `Stable`
 verdict is equivalent to the answer-set definition. The negative results carry
 the actual asserted false root or program-owned proper-subset reduct model.
 The proof assumes neither allocation success nor correct inner-call results.
-It does not yet relate the generated pure provider and fixed observations to
-changing runtime histories. Source grounding, candidate enumeration and optimized
-checking routes also remain separate. `AdmissionValidation` and
+`RuntimeProjection` derives that generated result from a finite successful
+execution with returning reads and reservations. `RuntimeMembership` carries the
+answer-set and negative-evidence laws through this projection. `RuntimePublicRefusal`
+traces typed stops to their reached source operations and exact causes. Source
+grounding, candidate enumeration and optimized checking routes remain separate. `AdmissionValidation` and
 `AdmittedData` prove the actual admission step that `Theory::new` runs before it
 allocates, including its node and root validators, so admitted data supplies the
 ordering and root-bound premises. `TheoryConstruction` derives these from a
@@ -105,15 +108,18 @@ proves that the query decides reduct satisfaction, given represented inputs,
 ordered nodes and bounded roots. Construction and query receive separate
 reservation providers, limits and fixed control tokens; no allocation-success
 law is assumed. This closes that producer/query obligation. Its per-invocation
-contracts and the completed public-membership result remain distinct from
-correspondence to changing allocator and control histories.
+contracts remain distinct from the reference checker's eventful execution
+projection; that projection does not assert an allocator implementation or
+shared fresh-allocation history for separate constructor calls.
 
 `SubjectMembership.completed_subject` now composes successful theory and
 owned-vector interpretation construction with the actual `check_interpretation`
 API. It derives structural and storage premises and retains the exact checked
 candidate. `completed_stable` proves that successful conversion of that decision
 returns the same candidate as an answer set. These results retain the explicit
-library contracts and fixed-observation boundary of the generated checker.
+library contracts. `RuntimeMembership.completed_subject` and `completed_stable`
+compose the eventful subject-bound check with the same successful constructors
+and consuming conversion.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
@@ -185,20 +191,18 @@ system or device progress is not obtained from a set-theoretic coverage law.
 
 ## A practical sequence of verified milestones
 
-1. **Public scalar reference checker.** Establish admitted input and initial
-   storage invariants, preserve program ownership, and connect the public
-   wrapper to the proved reference-checker phases. Theory construction and
-   stored-reduct construction/query are covered under per-invocation library
-   contracts. Interpretation construction now derives exact packed contents
-   and padding for finite observed inputs, with the input contract proved for
-   owned vectors. Completed public membership verdicts now compose the actual
-   wrapper's setup and semantic calls under explicit library contracts. Relate
-   completed and refused calls to permitted runtime allocation and cancellation
-   histories. The subject-bound `check_interpretation` API and its accepted-result
-   conversion now compose successful constructors with the membership theorem.
-   This milestone remains open. Unrestricted iterator termination is not an admission
-   guarantee.
-   This milestone concerns one candidate of a finite ground formula theory.
+1. **Public scalar reference checker — complete within the stated contracts.**
+   The proof chain covers admitted input,
+   exact packed storage, program ownership, original satisfaction and complete
+   proper-subset reduct search. Finite completed runtime calls agree with the
+   answer-set definition; typed refusals identify the reached operation and
+   preserve source order; supporting loop laws retain partial state. The subject-bound API retains the
+   checked candidate through acceptance and conversion. These results use the
+   explicit Rust/library, immutable-handle and extraction/context contracts.
+   The [implementation-refinement package](evaluation.md) records the checked
+   sources and reproduction commands. The scope is
+   one candidate of one finite ground formula theory, not arbitrary iterator
+   termination, fairness or complete solver enumeration.
 2. **Optimized CPU checking and enumeration.** Connect normal closure and each
    optimized membership route to the same answer-set definition. Prove candidate
    generation, plan selection, exact classification and completion accounting.

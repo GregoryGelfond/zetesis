@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
+defaultTargets = ["RuntimePublicRefusal", "RuntimeMembership", "SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -249,3 +249,93 @@ name = "CheckedResults"
 
 [[lean_lib]]
 name = "SubjectMembership"
+
+[[lean_lib]]
+name = "RuntimeContexts"
+
+[[lean_lib]]
+name = "CheckerContexts"
+
+[[lean_lib]]
+name = "ContextEvents"
+
+[[lean_lib]]
+name = "RuntimeRuns"
+
+[[lean_lib]]
+name = "RuntimeLoop"
+
+[[lean_lib]]
+name = "TickProjection"
+
+[[lean_lib]]
+name = "EvaluationContextProjection"
+
+[[lean_lib]]
+name = "RootContextProjection"
+
+[[lean_lib]]
+name = "SelectionContextProjection"
+
+[[lean_lib]]
+name = "CarryContextProjection"
+
+[[lean_lib]]
+name = "ReservationEvents"
+
+[[lean_lib]]
+name = "ReferenceEvents"
+
+[[lean_lib]]
+name = "QueryEventsProjection"
+
+[[lean_lib]]
+name = "SearchEventsProjection"
+
+[[lean_lib]]
+name = "PublicEventsProjection"
+
+[[lean_lib]]
+name = "RuntimeProjection"
+
+[[lean_lib]]
+name = "RuntimeControl"
+
+[[lean_lib]]
+name = "RuntimeSubject"
+
+[[lean_lib]]
+name = "RuntimeMembership"
+
+[[lean_lib]]
+name = "RuntimeLoopOrigin"
+
+[[lean_lib]]
+name = "RuntimeTickOrigin"
+
+[[lean_lib]]
+name = "RootRefusal"
+
+[[lean_lib]]
+name = "SelectionRefusal"
+
+[[lean_lib]]
+name = "CarryRefusal"
+
+[[lean_lib]]
+name = "RuntimeRefusal"
+
+[[lean_lib]]
+name = "QueryRefusal"
+
+[[lean_lib]]
+name = "EvaluationRefusal"
+
+[[lean_lib]]
+name = "SearchRefusal"
+
+[[lean_lib]]
+name = "PublicRefusal"
+
+[[lean_lib]]
+name = "RuntimePublicRefusal"

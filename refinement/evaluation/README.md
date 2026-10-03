@@ -1,12 +1,12 @@
 # Refining the reference checker
 
-This separately built implementation-refinement package connects completed calls
-of the CPU reference checker's generated public `check` to the Ferraris answer-set
-definition under fixed observation tokens and explicit library contracts. It
-derives the actual evaluation, root scan, atom selection and proper-subset search
-from the wrapper's return. The package also proves theory admission and
-construction, finite interpretation construction, and stored-reduct construction
-and public querying under their stated allocation and reservation contracts.
+This separately built implementation-refinement package connects finite completed
+calls of the CPU scalar reference checker to the Ferraris answer-set definition.
+Returning reads and reservations preserve the public result or its actual typed
+refusal under explicit library and runtime contracts. The scope is one candidate
+of one finite ground formula theory. The package also proves theory admission
+and construction, finite interpretation construction, and stored-reduct
+construction and public querying under their stated contracts.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the reduct-evaluation, packed-subset and admission sources directly and checks them
@@ -16,35 +16,30 @@ versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
 ## Central result
 
-[`PublicMembership.completed_answer_set`](PublicMembership.lean) proves that an
-actual completed public `oracle::check` returns `Stable` exactly when its
-candidate is an answer set of the stored formula theory.
+[`RuntimeMembership.completed_answer_set`](RuntimeMembership.lean) proves that a
+completed public eventful `check` returns `Stable` exactly when its candidate is
+an answer set of the stored formula theory. Its negative laws retain the actual
+asserted false root or program-owned proper-subset model of the frozen reduct.
 
 The premises require exact candidate word storage, ordered child indices,
-bounded roots, consistency of both theory views with one immutable heap, and
-preservation of the empty input sequence by two successful reservations: the
-selected-atom buffer and the subset-word buffer. Evaluation clears its Boolean
-workspaces, so their previous contents need no such contract. No reservation is
-assumed to succeed.
+bounded roots and consistency of both theory views with one immutable heap.
+[`RuntimeProjection`](RuntimeProjection.lean) derives the generated checker's
+actual completed call from the observed execution, with the same verdict and
+statistics. It supplies the logical reservation contracts needed by
+[`PublicMembership`](PublicMembership.lean); allocation success and successful
+inner calls are not assumed. Boolean workspaces are cleared before use.
 
-[`PublicCheckPhases`](PublicCheckPhases.lean) recovers the actual owner check,
-initial poll, reservations, initialization and semantic calls from the completed
-wrapper return. The proof derives the frozen mask's meaning, selected-atom
-coverage and proper-subset completeness. It assumes neither successful inner
-calls nor a correct subset oracle. The published statistics are those of the
-last returned work record.
-
-`completed_not_model` identifies an asserted root with a present false original
-value. `completed_nonminimal` identifies the actual returned program-owned proper
-subset that models the candidate's reduct. These are the wrapper's own negative
-evidence. [`PublicCheckBoundary`](PublicCheckBoundary.lean) separately proves
-wrong-owner refusal, initial-control refusal and the first reservation's
-allocation refusal, in source order.
-
-These are completed-result theorems under one supplied pure reservation operation
-and fixed observations. They do not assert termination of an arbitrary provider
-or correspondence to changing runtime histories. A public stop carries no
+[`RuntimePublicRefusal`](RuntimePublicRefusal.lean) traces a public typed stop to
+its reached source operation and cause. Owner and reservation refusals retain
+source order. Cancellation precedes deadline expiry; clear controls precede
+work or candidate-limit tests. Refused ticks charge no new work. Loop receipts
+retain executed prefixes and partial state, while the public error carries no
 membership verdict or partial statistics.
+
+These results concern finite returning executions of the source-checked
+contexts. They make no progress or fairness guarantee for unanswered requests,
+backend failure, divergence or arbitrary providers. The trusted correspondence
+from Rust and its libraries to these contexts is stated below.
 
 ## From construction to a retained answer
 
@@ -62,11 +57,14 @@ and rejected conversion retains the entire decision. An arbitrary Lean record
 with a Stable field is not thereby semantic evidence; the theorem requires the
 actual constructor and check calls that produced it.
 
-The composition uses explicit successful Arc-value and reservation-sequence
-contracts. It does not require allocation to succeed on every invocation or
-assume semantic oracle agreement. A supplied allocation operation and one shared
-reservation provider interpret these calls under fixed observations. Correspondence
-to changing runtime histories remains the outstanding membership boundary.
+The constructor composition uses explicit contracts for retained Arc values and
+reservation sequences; it assumes neither allocation success nor semantic oracle
+agreement. `RuntimeMembership.completed_subject` supplies the eventful owned check
+after those successful constructors. Its `completed_stable` theorem follows the
+actual conversion and retains the same candidate as an answer set. Constructor
+providers describe their individual calls; the checking history can contain
+independently observed reservations, without a shared deterministic allocation
+history.
 
 ## Storage and ownership
 
@@ -96,8 +94,8 @@ separately. Admission and reservation remain outside this composition.
 
 These results supply the public composition without assuming successful
 allocation or equating owner identity with value equality. The theory and
-interpretation constructors below supply its input invariants. Correspondence
-to changing runtime histories remains a separate obligation.
+interpretation constructors below supply its input invariants. The runtime
+projection composes these contracts with the eventful reference check.
 
 ## Admission validation
 
@@ -266,7 +264,10 @@ construction work. A stop remains an error, not a satisfaction verdict.
 | `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
 | `SearchFrame` | Typed search returns preserve theory, word length, limits and control, with nondecreasing work and subset counts |
 | `PublicCheckBoundary`, `PublicCheckPhases` | Early refusals follow source order; completed public returns supply the actual setup and semantic calls |
-| `PublicMembership` | Completed public verdicts give answer-set equivalence and their actual false-root or proper-subset evidence under explicit input and library contracts |
+| `PublicMembership` | Completed generated verdicts give answer-set equivalence and their actual false-root or proper-subset evidence under explicit input and library contracts |
+| `RuntimeContexts`, `CheckerContexts`, `ReferenceEvents` | Audited source contexts and one operational composition retain pure calls, phase order and independently returning reads and reservations |
+| `RuntimeProjection`, `RuntimeMembership` | Successful eventful public calls yield the generated result and its answer-set meaning, including the retained subject and negative evidence |
+| `RuntimePublicRefusal` | A public stop identifies its reached phase and exact cause; supporting loop receipts retain executed prefixes and partial state |
 | `AdmissionValidation` | The generated node and root validators compute the authored node and root scans, report the first refused node's error, and supply ordered-children and bounded-root premises |
 | `AdmittedData` | The generated admission step computes the authored validator, including the padded-count check, and returns the supplied data unchanged |
 | `UsizeCeiling`, `InterpretationConstruction` | Exact packed word count and actual constructor phase order, reservation refusal and retained theory |
@@ -330,52 +331,46 @@ packed interpretation, obtains the selected atoms from the actual scan, and
 composes search with the actual original root check. The resulting answer-set
 criterion concerns one candidate of the ground formula theory. It does not
 establish coverage of the solver's candidate generator or optimized checking
-routes. The [reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
-records the supplied-operation and runtime-history boundary.
+routes. The [reproduction guide](REPRODUCING.md#generated-checker-boundary)
+records the supplied-operation and source-context adaptations.
 
-## Observation boundary
+## Observations and trusted contracts
 
-The atomic external model returns the Boolean stored in its supplied token.
-An evaluator body reads cancellation at most once and optionally expiry at most
-once.
-A single invocation can use fresh observations; `FixedLoop` follows the actual
-generated loop's control threading, so repeated reads return fixed values.
-Only the Relaxed loads used here are modeled; other model orderings do not
-assert which loads are valid in Rust.
+The extracted backend's atomic model reads a fixed bit. The event interpretation
+instead requests a fresh response at each reached read, keeping the same owner
+and field identity. Only the Relaxed loads used by this code are modeled.
+`RuntimeControl.representative` clears unused fixed-model bits for comparison;
+it changes no handle or configured deadline and does not clear a Rust token or
+require future observations to remain false.
 
-`Trace` is broader: each body call may receive a separately supplied control
-value. Fixed-loop calls form such a trace; refreshed-control traces need not be
-executions of that loop. A checked [example](FixedLoopExample.lean) stops after
-one node and work unit when cancellation is refreshed, while the fixed-clear
-loop completes two nodes and charges two units. The pinned result effect has no
-changing external-read event. Correspondence with varying Rust atomic observations
-and concurrent histories remains open.
+[`RuntimeEffects`](RuntimeEffects.lean) preserves embedded backend success,
+failure and divergence. A reservation response supplies capacity evidence or a
+typed refusal, while the logical vector sequence is preserved.
+`RuntimeContexts` and `CheckerContexts` replace only named effect/phase calls and
+the result monad in audited generated definitions. Exact reconstruction laws and
+a source checker verify that restoring the original calls recovers their bodies.
+This adaptation is explicit; the generated backend itself has not acquired a new
+effect type. `ReferenceEvents` supplies one composition of these contexts.
 
-[`RuntimeEffects`](RuntimeEffects.lean) provides a separately checked event model
-for that boundary. Reads can return different values for the same handle;
-reservation can return a capacity certificate or a typed refusal. Its embedding
-of existing backend computations preserves success, failure, divergence and
-sequential composition. The model is not installed as the generated checker's
-result type. Its examples therefore establish feasibility, not correspondence
-of the current extraction to concurrent execution.
+Successful executions project phase by phase to the generated fixed-observation
+checker, preserving outputs, control handles and work. Refused executions retain
+the actual reached operation and ordered observation history instead of being
+normalized into successful results. The older fixed-token laws and broader
+`Trace` relation remain separate: not every refreshed trace is a fixed loop run.
 
-## Representation and trust
+Rust, its standard library, `Arc`, allocator, OS and hardware are trusted to
+satisfy their contracts. The immutable handle/field mapping, heap consistency,
+physical capacity and library-model correspondence are explicit assumptions.
+The compiler, Charon, Aeneas and audited extraction/context adaptations are also
+trusted. These proofs do not verify reference counting, destruction, timers or
+the platform memory model. No allocation-success or fairness assumption is
+introduced, and there are no project axioms, proof holes or native proof shortcuts.
 
-Both passes use the same stored table and numeric atom vocabulary. The Arc
-model carries explicit owner identity; its connection to Rust allocations and
-immutable-heap consistency are library contracts. Aeneas's vector
-model records logical elements and checked indices, not allocation capacity.
-`VectorReservation` supplies fallible reservation outcomes without assuming
-success or modeling physical storage. Unused clock and synchronization fields have tokens but no
-modeled operations. Reference counting, destruction, timers, concurrent memory,
-machine code and GPU execution remain outside this model.
-
-The Rust compiler, Charon and Aeneas translations, and the correspondence of
-library models to Rust, remain trusted boundaries. There are no project axioms,
-proof holes or native proof-evaluation shortcuts. The package does not establish
-termination of unrestricted iterators, correspondence to changing allocation
-or control histories, source grounding, candidate enumeration, optimized checking routes or end-to-end solver
-verification.
+The covered boundary is a finite completed or refused scalar reference check of
+one candidate against a finite ground formula theory. It does not establish
+termination of unrestricted iterators, source grounding, candidate enumeration,
+optimized checking routes, parallel schedules, GPU execution or whole-solver
+correctness. The general ASP library and its semantics are unchanged.
 
 ## Extraction identity and reproduction
 
