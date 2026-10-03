@@ -39,7 +39,7 @@ structure alloc.sync.Arc (T : Type) where
 /-- An opaque reservation error. Extracted wrappers discard its fields when
 mapping a refusal to their allocation error. The token supplies the error type,
 not allocator internals; `VectorReservation` supplies the operation separately.
-Interpretation construction remains unproved. -/
+Constructor correspondence states the required library contracts explicitly. -/
 @[rust_type "alloc::collections::TryReserveError"]
 structure alloc.collections.TryReserveError where
   token : Nat

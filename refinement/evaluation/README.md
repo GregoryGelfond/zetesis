@@ -46,6 +46,28 @@ and fixed observations. They do not assert termination of an arbitrary provider
 or correspondence to changing runtime histories. A public stop carries no
 membership verdict or partial statistics.
 
+## From construction to a retained answer
+
+[`SubjectMembership.completed_subject`](SubjectMembership.lean) starts with
+successful generated `Theory::new`, owned-vector `Interpretation::new` and
+`check_interpretation` calls. It derives the node, root, storage and owner
+invariants rather than requiring them again. The returned decision retains the
+exact candidate, and its acceptance accessor returns true exactly when that
+candidate is an answer set of the constructed theory.
+
+`completed_stable` carries this result through the actual consuming conversion
+to `StableInterpretation`. [`CheckedResults`](CheckedResults.lean) proves that
+accessors preserve the stored values, successful conversion retains the subject,
+and rejected conversion retains the entire decision. An arbitrary Lean record
+with a Stable field is not thereby semantic evidence; the theorem requires the
+actual constructor and check calls that produced it.
+
+The composition uses explicit successful Arc-value and reservation-sequence
+contracts. It does not require allocation to succeed on every invocation or
+assume semantic oracle agreement. A supplied allocation operation and one shared
+reservation provider interpret these calls under fixed observations. Correspondence
+to changing runtime histories remains the outstanding membership boundary.
+
 ## Storage and ownership
 
 [`PackedSetup`](PackedSetup.lean) proves that the backend's zero-resize operation
@@ -352,8 +374,7 @@ The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
 termination of unrestricted iterators, correspondence to changing allocation
-or control histories, the subject-bound `check_interpretation` API, source grounding,
-candidate enumeration, optimized checking routes or end-to-end solver
+or control histories, source grounding, candidate enumeration, optimized checking routes or end-to-end solver
 verification.
 
 ## Extraction identity and reproduction
@@ -362,8 +383,9 @@ The generated types and functions come directly from production Rust, including
 the four private subset-search operations, `Theory::new` with its private
 admission step and four validators, `Interpretation::new` and its private
 `insert_atoms` helper, and the stored-reduct constructor, public query and
-reservation wrapper, together with public `oracle::check`. The LLBC destination
-becomes portable,
+reservation wrapper, together with public `oracle::check`, `check_interpretation`
+and its decision/accepted-interpretation accessors and consuming conversion.
+The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
@@ -377,7 +399,8 @@ parsed raw input.
 
 Scoped section binders supply `ArcAllocation` to generated `Theory::new` and
 `VectorReservation` to `oracle::{reserve, check}`, `FrozenReduct::{freeze, new,
-is_satisfied_by}` and `Interpretation::new`. No body is rewritten. Removing the
+is_satisfied_by}`, `Interpretation::new` and `check_interpretation`. No body is
+rewritten. Removing the
 recorded insertions restores the exact generated Lean. This dependency
 parameterization is distinct from metadata normalization and remains part of the
 trusted extraction adaptation.

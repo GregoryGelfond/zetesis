@@ -108,6 +108,13 @@ law is assumed. This closes that producer/query obligation. Its per-invocation
 contracts and the completed public-membership result remain distinct from
 correspondence to changing allocator and control histories.
 
+`SubjectMembership.completed_subject` now composes successful theory and
+owned-vector interpretation construction with the actual `check_interpretation`
+API. It derives structural and storage premises and retains the exact checked
+candidate. `completed_stable` proves that successful conversion of that decision
+returns the same candidate as an answer set. These results retain the explicit
+library contracts and fixed-observation boundary of the generated checker.
+
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
 closure and acceptance results. Their link to general reduct semantics is
@@ -187,8 +194,9 @@ system or device progress is not obtained from a set-theoretic coverage law.
    owned vectors. Completed public membership verdicts now compose the actual
    wrapper's setup and semantic calls under explicit library contracts. Relate
    completed and refused calls to permitted runtime allocation and cancellation
-   histories, and compose the subject-bound `check_interpretation` API. This
-   milestone remains open. Unrestricted iterator termination is not an admission
+   histories. The subject-bound `check_interpretation` API and its accepted-result
+   conversion now compose successful constructors with the membership theorem.
+   This milestone remains open. Unrestricted iterator termination is not an admission
    guarantee.
    This milestone concerns one candidate of a finite ground formula theory.
 2. **Optimized CPU checking and enumeration.** Connect normal closure and each

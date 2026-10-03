@@ -20,6 +20,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   or proper-subset evidence under explicit input and library contracts. Early
   owner, control and reservation refusals are preserved. Changing runtime
   histories, grounding, full solver enumeration and GPU execution remain separate.
+- Lean correspondence from successful theory and interpretation construction to
+  the candidate-bound check and accepted-result conversion. The proof derives
+  input invariants and preserves the exact checked candidate under explicit
+  library contracts.
 - Lean refinement of formula admission and theory construction. The generated
   checks preserve the first refusal and establish the evaluator's structural
   preconditions. Constructor proofs use explicit Rust allocation and ownership

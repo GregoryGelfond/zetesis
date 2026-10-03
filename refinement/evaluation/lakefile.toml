@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
+defaultTargets = ["SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -243,3 +243,9 @@ name = "PublicCheckPhases"
 
 [[lean_lib]]
 name = "PublicMembership"
+
+[[lean_lib]]
+name = "CheckedResults"
+
+[[lean_lib]]
+name = "SubjectMembership"

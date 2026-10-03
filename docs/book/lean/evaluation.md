@@ -44,6 +44,28 @@ provider and fixed observations. It does not prove arbitrary-provider
 termination, changing runtime histories, candidate generation or optimized
 checking routes.
 
+## From construction to a retained answer
+
+[`SubjectMembership.completed_subject`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SubjectMembership.lean) starts with
+successful generated `Theory::new`, owned-vector `Interpretation::new` and
+`check_interpretation` calls. It derives the node, root, storage and owner
+invariants rather than requiring them again. The returned decision retains the
+exact candidate, and its acceptance accessor returns true exactly when that
+candidate is an answer set of the constructed theory.
+
+`completed_stable` carries this result through the actual consuming conversion
+to `StableInterpretation`. [`CheckedResults`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/CheckedResults.lean) proves that
+accessors preserve the stored values, successful conversion retains the subject,
+and rejected conversion retains the entire decision. An arbitrary Lean record
+with a Stable field is not thereby semantic evidence; the theorem requires the
+actual constructor and check calls that produced it.
+
+The composition uses explicit successful Arc-value and reservation-sequence
+contracts. It does not require allocation to succeed on every invocation or
+assume semantic oracle agreement. A supplied allocation operation and one shared
+reservation provider interpret these calls under fixed observations. Correspondence
+to changing runtime histories remains the outstanding membership boundary.
+
 ## Initial storage and program ownership
 
 [`PackedSetup`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PackedSetup.lean)
@@ -282,8 +304,8 @@ function and loop interfaces remains necessary.
 The calls share stored nodes, roots and numeric atom vocabulary. The completed
 public-check proof derives actual setup and verdicts under its library contracts;
 relating completed and refused calls to permitted runtime allocation and control
-histories remains open. The subject-bound `check_interpretation` API is also a
-separate composition. Finite insertion does not establish termination of
+histories remains open. The subject-bound API and accepted-result conversion now
+compose the same generated checker and actual constructors. Finite insertion does not establish termination of
 unrestricted iterators or correspondence to a caller's borrowed iterator state
 and destruction. Source grounding, candidate enumeration and optimized checking
 routes are separate obligations. Rust's library, compiler, operating system and

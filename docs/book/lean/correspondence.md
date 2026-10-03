@@ -80,6 +80,16 @@ when the candidate satisfies `Ferraris.Stable` for the asserted theory.
 The mask's meaning, selected-coordinate coverage and query correctness are
 derived, not supplied as oracle equations.
 
+`SubjectMembership.completed_subject` further derives those input invariants
+from successful actual theory and owned-vector interpretation constructors, then
+recovers the candidate's own check from `check_interpretation`. Its acceptance
+accessor agrees with answer-set membership. `completed_stable` follows the
+actual consuming conversion and proves that its accepted interpretation retains
+the same candidate. `CheckedResults` establishes the accessor and conversion
+contracts, including full retention of a rejected decision. These results keep
+the fixed-observation and successful-library-value contracts explicit; they do
+not assume correct inner evaluation or a supplied verdict's semantic validity.
+
 `PublicMembership.completed_answer_set` recovers those phases from an actual
 completed public `oracle::check`: its verdict is `Stable` exactly for a Ferraris
 answer set. Its premises are exact candidate word storage, ordered nodes, bounded

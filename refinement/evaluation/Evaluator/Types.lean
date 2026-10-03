@@ -92,20 +92,6 @@ inductive zetesis_cpu.cancellation.Stop where
   "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure"]
 def zetesis_cpu.cancellation.Cancellation.poll.closure := Unit
 
-/-- [zetesis_ferraris::oracle::Limits]
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 10:0-15:1
-    Visibility: public -/
-structure oracle.Limits where
-  max_work : Std.U64
-  max_subsets : Std.U64
-
-/-- [zetesis_ferraris::oracle::Statistics]
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 27:0-32:1
-    Visibility: public -/
-structure oracle.Statistics where
-  work : Std.U64
-  subsets : Std.U64
-
 /-- [zetesis_ferraris::theory::Node]
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 7:0-18:1
     Visibility: public -/
@@ -146,12 +132,39 @@ inductive oracle.Verdict where
 | NotModel : Std.Usize → oracle.Verdict
 | NonMinimal : theory.Interpretation → oracle.Verdict
 
+/-- [zetesis_ferraris::oracle::Statistics]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 27:0-32:1
+    Visibility: public -/
+structure oracle.Statistics where
+  work : Std.U64
+  subsets : Std.U64
+
 /-- [zetesis_ferraris::oracle::Check]
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 55:0-58:1
     Visibility: public -/
 structure oracle.Check where
   verdict : oracle.Verdict
   statistics : oracle.Statistics
+
+/-- [zetesis_ferraris::checked::CheckedInterpretation]
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 20:0-23:1
+    Visibility: public -/
+structure checked.CheckedInterpretation where
+  candidate : theory.Interpretation
+  check : oracle.Check
+
+/-- [zetesis_ferraris::checked::StableInterpretation]
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 79:0-81:1
+    Visibility: public -/
+structure checked.StableInterpretation where
+  interpretation : theory.Interpretation
+
+/-- [zetesis_ferraris::oracle::Limits]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 10:0-15:1
+    Visibility: public -/
+structure oracle.Limits where
+  max_work : Std.U64
+  max_subsets : Std.U64
 
 /-- [zetesis_ferraris::oracle::Work]
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 77:0-81:1 -/
@@ -160,15 +173,15 @@ structure oracle.Work where
   cancellation : zetesis_cpu.cancellation.Cancellation
   statistics : oracle.Statistics
 
-/-- [zetesis_ferraris::oracle::reserve::{closure}]
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
-@[reducible]
-def oracle.reserve.closure (T : Type) := Unit
-
 /-- [zetesis_ferraris::oracle::evaluate::{closure}]
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 128:47-128:65 -/
 @[reducible]
 def oracle.evaluate.closure := Std.Usize
+
+/-- [zetesis_ferraris::oracle::reserve::{closure}]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
+@[reducible]
+def oracle.reserve.closure (T : Type) := Unit
 
 /-- [zetesis_ferraris::reduct::FrozenReduct]
     Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 28:0-31:1

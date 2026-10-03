@@ -85,16 +85,129 @@ def zetesis_cpu.cancellation.Cancellation.poll
     then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
     else ok (core.result.Result.Ok ())
 
-/-- [zetesis_ferraris::oracle::{impl core::default::Default for zetesis_ferraris::oracle::Statistics}::default]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 26:29-26:36
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::CheckedInterpretation}::candidate]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 28:4-30:5
     Visibility: public -/
-def oracle.Statistics.Insts.CoreDefaultDefault.default
-  : Result oracle.Statistics := do
-  ok
-    {
-      work := (core.default.DefaultU64.default),
-      subsets := (core.default.DefaultU64.default)
-    }
+def checked.CheckedInterpretation.impl.candidate
+  (self : checked.CheckedInterpretation) : Result theory.Interpretation := do
+  ok self.candidate
+
+/-- [zetesis_ferraris::oracle::{zetesis_ferraris::oracle::Check}::verdict]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 62:4-64:5
+    Visibility: public -/
+def oracle.Check.impl.verdict
+  (self : oracle.Check) : Result oracle.Verdict := do
+  ok self.verdict
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::CheckedInterpretation}::verdict]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 34:4-36:5
+    Visibility: public -/
+def checked.CheckedInterpretation.verdict
+  (self : checked.CheckedInterpretation) : Result oracle.Verdict := do
+  oracle.Check.impl.verdict self.check
+
+/-- [zetesis_ferraris::oracle::{zetesis_ferraris::oracle::Check}::accepted]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 67:4-69:5
+    Visibility: public -/
+def oracle.Check.accepted (self : oracle.Check) : Result Bool := do
+  match self.verdict with
+  | oracle.Verdict.Stable => ok true
+  | oracle.Verdict.NotModel _ => ok false
+  | oracle.Verdict.NonMinimal _ => ok false
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::CheckedInterpretation}::accepted]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 40:4-42:5
+    Visibility: public -/
+def checked.CheckedInterpretation.accepted
+  (self : checked.CheckedInterpretation) : Result Bool := do
+  oracle.Check.accepted self.check
+
+/-- [zetesis_ferraris::oracle::{zetesis_ferraris::oracle::Check}::statistics]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 72:4-74:5
+    Visibility: public -/
+def oracle.Check.impl.statistics
+  (self : oracle.Check) : Result oracle.Statistics := do
+  ok self.statistics
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::CheckedInterpretation}::statistics]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 46:4-48:5
+    Visibility: public -/
+def checked.CheckedInterpretation.statistics
+  (self : checked.CheckedInterpretation) : Result oracle.Statistics := do
+  oracle.Check.impl.statistics self.check
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::CheckedInterpretation}::into_stable_interpretation]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 55:4-63:5
+    Visibility: public -/
+def checked.CheckedInterpretation.into_stable_interpretation
+  (self : checked.CheckedInterpretation) :
+  Result (core.result.Result checked.StableInterpretation
+    checked.CheckedInterpretation)
+  := do
+  let b ← checked.CheckedInterpretation.accepted self
+  if b
+  then ok (core.result.Result.Ok { interpretation := self.candidate })
+  else ok (core.result.Result.Err self)
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 263:4-265:5
+    Visibility: public -/
+def theory.Interpretation.impl.theory
+  (self : theory.Interpretation) : Result theory.Theory := do
+  ok self.theory
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::StableInterpretation}::theory]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 86:4-88:5
+    Visibility: public -/
+def checked.StableInterpretation.theory
+  (self : checked.StableInterpretation) : Result theory.Theory := do
+  theory.Interpretation.impl.theory self.interpretation
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::StableInterpretation}::interpretation]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 92:4-94:5
+    Visibility: public -/
+def checked.StableInterpretation.impl.interpretation
+  (self : checked.StableInterpretation) : Result theory.Interpretation := do
+  ok self.interpretation
+
+/-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::StableInterpretation}::into_interpretation]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 98:4-100:5
+    Visibility: public -/
+def checked.StableInterpretation.into_interpretation
+  (self : checked.StableInterpretation) : Result theory.Interpretation := do
+  ok self.interpretation
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::nodes]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 107:4-109:5
+    Visibility: public -/
+def theory.Theory.nodes
+  (self : theory.Theory) : Result (Slice theory.Node) := do
+  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
+  ok (alloc.vec.Vec.deref d.nodes)
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::atom_count]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 101:4-103:5
+    Visibility: public -/
+def theory.Theory.atom_count (self : theory.Theory) : Result Std.Usize := do
+  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
+  ok d.atoms
+
+/-- [zetesis_ferraris::theory::{impl core::clone::Clone for zetesis_ferraris::theory::Theory}::clone]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 75:9-75:14
+    Visibility: public -/
+def theory.Theory.Insts.CoreCloneClone.clone
+  (self : theory.Theory) : Result theory.Theory := do
+  let a ←
+    alloc.sync.Arc.Insts.CoreCloneClone.clone
+      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self
+  ok a
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::roots]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 113:4-115:5
+    Visibility: public -/
+def theory.Theory.roots (self : theory.Theory) : Result (Slice Std.Usize) := do
+  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
+  ok (alloc.vec.Vec.deref d.roots)
 
 /-- [zetesis_ferraris::oracle::{zetesis_ferraris::oracle::Work<'_0>}::tick]:
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 83:4-90:5 -/
@@ -120,84 +233,59 @@ def oracle.Work.tick
         Unit (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
     ok (r1, self)
 
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 263:4-265:5
-    Visibility: public -/
-def theory.Interpretation.impl.theory
-  (self : theory.Interpretation) : Result theory.Theory := do
-  ok self.theory
-
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::same_instance]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 119:4-121:5
-    Visibility: public -/
-def theory.Theory.same_instance
-  (self : theory.Theory) (other : theory.Theory) : Result Bool := do
-  alloc.sync.Arc.ptr_eq Global self other
-
-/-- [zetesis_ferraris::oracle::identities]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 93:0-99:1 -/
-def oracle.identities
-  (program : theory.Theory) (interpretation : theory.Interpretation) :
-  Result (core.result.Result Unit zetesis_cpu.cancellation.Stop)
+/-- [zetesis_ferraris::oracle::failed_root]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 138:4-145:1 -/
+@[rust_loop_body]
+def oracle.failed_root_loop.body
+  (values : Slice Bool) (iter : core.slice.iter.Iter Std.Usize)
+  (work : oracle.Work) :
+  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) × oracle.Work)
+    ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop) ×
+    oracle.Work))
   := do
-  let t ← theory.Interpretation.impl.theory interpretation
-  let b ← theory.Theory.same_instance program t
-  if b
-  then ok (core.result.Result.Ok ())
-  else ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.WrongProgram)
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done (core.result.Result.Ok none, work))
+  | some root =>
+    let (r, work1) ← oracle.Work.tick work
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let b ← Slice.index_usize values root
+      if b
+      then ok (cont (iter1, work1))
+      else ok (done (core.result.Result.Ok o, work1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option Std.Usize) (core.convert.FromSame
+          zetesis_cpu.cancellation.Stop) residual
+      ok (done (r1, work1))
 
-/-- [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}::call_once]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
-def
-  oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
-  {T : Type} (c : oracle.reserve.closure T)
-  (tupled_args : alloc.collections.TryReserveError) :
-  Result zetesis_cpu.cancellation.Stop
+/-- [zetesis_ferraris::oracle::failed_root]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 138:4-145:1 -/
+@[rust_loop]
+def oracle.failed_root_loop
+  (iter : core.slice.iter.Iter Std.Usize) (values : Slice Bool)
+  (work : oracle.Work) :
+  Result ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop)
+    × oracle.Work)
   := do
-  ok zetesis_cpu.cancellation.Stop.Allocation
+  loop
+    (fun (iter1, work1) => oracle.failed_root_loop.body values iter1 work1)
+    (iter, work)
 
-/-- Trait implementation: [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}]
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
-@[reducible]
-def oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
-  (T : Type) : core.ops.function.FnOnce (oracle.reserve.closure T)
-  alloc.collections.TryReserveError zetesis_cpu.cancellation.Stop := {
-  call_once :=
-    oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
-}
-
-section StorageReservation
-variable [VectorReservation]
-
-/-- [zetesis_ferraris::oracle::reserve]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 101:0-107:1 -/
-def oracle.reserve
-  (T : Type) (count : Std.Usize) :
-  Result (core.result.Result (alloc.vec.Vec T) zetesis_cpu.cancellation.Stop)
+/-- [zetesis_ferraris::oracle::failed_root]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 133:0-145:1 -/
+def oracle.failed_root
+  (program : theory.Theory) (values : Slice Bool) (work : oracle.Work) :
+  Result ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop)
+    × oracle.Work)
   := do
-  let (r, vector) ←
-    alloc.vec.Vec.try_reserve_exact Global (alloc.vec.Vec.new T) count
-  let r1 ←
-    core.result.Result.map_err
-      (oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
-      T) r ()
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue _ =>
-    ok (core.result.Result.Ok vector)
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-      (alloc.vec.Vec T) (core.convert.FromSame zetesis_cpu.cancellation.Stop)
-      residual
-
-end StorageReservation
-
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::atom_count]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 101:4-103:5
-    Visibility: public -/
-def theory.Theory.atom_count (self : theory.Theory) : Result Std.Usize := do
-  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
-  ok d.atoms
+  let s ← theory.Theory.roots program
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
+  oracle.failed_root_loop iter values work
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::contains]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 269:4-271:5
@@ -216,14 +304,6 @@ def theory.Interpretation.contains
     let i5 ← lift (i2 &&& i4)
     ok (i5 != 0#u64)
   else ok false
-
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::nodes]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 107:4-109:5
-    Visibility: public -/
-def theory.Theory.nodes
-  (self : theory.Theory) : Result (Slice theory.Node) := do
-  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
-  ok (alloc.vec.Vec.deref d.nodes)
 
 /-- [zetesis_ferraris::oracle::evaluate::{impl core::ops::function::FnOnce<(&'_ [bool],), bool> for zetesis_ferraris::oracle::evaluate::{closure}<'_0>}::call_once]:
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 128:47-128:65 -/
@@ -366,124 +446,53 @@ def oracle.evaluate
   oracle.evaluate_loop iter interpretation frozen output1 work.limits
     work.cancellation work.statistics
 
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::roots]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 113:4-115:5
-    Visibility: public -/
-def theory.Theory.roots (self : theory.Theory) : Result (Slice Std.Usize) := do
-  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
-  ok (alloc.vec.Vec.deref d.roots)
-
-/-- [zetesis_ferraris::oracle::failed_root]: loop body 0:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 138:4-145:1 -/
-@[rust_loop_body]
-def oracle.failed_root_loop.body
-  (values : Slice Bool) (iter : core.slice.iter.Iter Std.Usize)
-  (work : oracle.Work) :
-  Result (ControlFlow ((core.slice.iter.Iter Std.Usize) × oracle.Work)
-    ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop) ×
-    oracle.Work))
+/-- [zetesis_ferraris::oracle::check_subset]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 253:0-267:1 -/
+def oracle.check_subset
+  (program : theory.Theory) (subset : theory.Interpretation)
+  (frozen : Slice Bool) (values : alloc.vec.Vec Bool) (work : oracle.Work) :
+  Result ((core.result.Result Bool zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Bool) × oracle.Work)
   := do
-  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  match o with
-  | none => ok (done (core.result.Result.Ok none, work))
-  | some root =>
-    let (r, work1) ← oracle.Work.tick work
-    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue _ =>
-      let b ← Slice.index_usize values root
-      if b
-      then ok (cont (iter1, work1))
-      else ok (done (core.result.Result.Ok o, work1))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-          (Option Std.Usize) (core.convert.FromSame
-          zetesis_cpu.cancellation.Stop) residual
-      ok (done (r1, work1))
-
-/-- [zetesis_ferraris::oracle::failed_root]: loop 0:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 138:4-145:1 -/
-@[rust_loop]
-def oracle.failed_root_loop
-  (iter : core.slice.iter.Iter Std.Usize) (values : Slice Bool)
-  (work : oracle.Work) :
-  Result ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop)
-    × oracle.Work)
-  := do
-  loop
-    (fun (iter1, work1) => oracle.failed_root_loop.body values iter1 work1)
-    (iter, work)
-
-/-- [zetesis_ferraris::oracle::failed_root]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 133:0-145:1 -/
-def oracle.failed_root
-  (program : theory.Theory) (values : Slice Bool) (work : oracle.Work) :
-  Result ((core.result.Result (Option Std.Usize) zetesis_cpu.cancellation.Stop)
-    × oracle.Work)
-  := do
-  let s ← theory.Theory.roots program
-  let iter ←
-    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
-  oracle.failed_root_loop iter values work
-
-/-- [zetesis_ferraris::oracle::select_atoms]: loop body 0:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 214:4-221:1 -/
-@[rust_loop_body]
-def oracle.select_atoms_loop.body
-  (candidate : theory.Interpretation) (iter : core.ops.range.Range Std.Usize)
-  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
-  Result (ControlFlow ((core.ops.range.Range Std.Usize) × (alloc.vec.Vec
-    Std.Usize) × oracle.Work) ((core.result.Result Unit
-    zetesis_cpu.cancellation.Stop) × (alloc.vec.Vec Std.Usize) ×
-    oracle.Work))
-  := do
-  let (o, iter1) ←
-    core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
-  match o with
-  | none => ok (done (core.result.Result.Ok (), selected, work))
-  | some atom =>
-    let (r, work1) ← oracle.Work.tick work
-    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-    match cf with
-    | core.ops.control_flow.ControlFlow.Continue _ =>
-      let b ← theory.Interpretation.contains candidate atom
-      if b
-      then
-        let selected1 ← alloc.vec.Vec.push selected atom
-        ok (cont (iter1, selected1, work1))
-      else ok (cont (iter1, selected, work1))
-    | core.ops.control_flow.ControlFlow.Break residual =>
-      let r1 ←
-        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-          Unit (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
-      ok (done (r1, selected, work1))
-
-/-- [zetesis_ferraris::oracle::select_atoms]: loop 0:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 214:4-221:1 -/
-@[rust_loop]
-def oracle.select_atoms_loop
-  (iter : core.ops.range.Range Std.Usize) (candidate : theory.Interpretation)
-  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
-  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
-    (alloc.vec.Vec Std.Usize) × oracle.Work)
-  := do
-  loop
-    (fun (iter1, selected1, work1) => oracle.select_atoms_loop.body candidate
-      iter1 selected1 work1)
-    (iter, selected, work)
-
-/-- [zetesis_ferraris::oracle::select_atoms]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 208:0-221:1 -/
-def oracle.select_atoms
-  (program : theory.Theory) (candidate : theory.Interpretation)
-  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
-  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
-    (alloc.vec.Vec Std.Usize) × oracle.Work)
-  := do
-  let i ← theory.Theory.atom_count program
-  oracle.select_atoms_loop { start := 0#usize, «end» := i } candidate
-    selected work
+  let r ← zetesis_cpu.cancellation.Cancellation.poll work.cancellation
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    if work.statistics.subsets >= work.limits.max_subsets
+    then
+      ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.CandidateLimit,
+        values, work)
+    else
+      let i ← work.statistics.subsets + 1#u64
+      let (r1, values1, work1) ←
+        oracle.evaluate program subset (some frozen) values
+          { work with statistics := { work.statistics with subsets := i } }
+      let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+      match cf1 with
+      | core.ops.control_flow.ControlFlow.Continue _ =>
+        let s := alloc.vec.Vec.deref values1
+        let (r2, work2) ← oracle.failed_root program s work1
+        let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+        match cf2 with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let b := core.option.Option.is_none val
+          ok (core.result.Result.Ok b, values1, work2)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r3 ←
+            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+              Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop)
+              residual
+          ok (r3, values1, work2)
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        let r2 ←
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+        ok (r2, values1, work1)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+    ok (r1, values, work)
 
 /-- [zetesis_ferraris::oracle::advance_subset]: loop body 0:
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 234:4-247:1 -/
@@ -557,54 +566,6 @@ def oracle.advance_subset
       selected
   oracle.advance_subset_loop iter subset present work
 
-/-- [zetesis_ferraris::oracle::check_subset]:
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 253:0-267:1 -/
-def oracle.check_subset
-  (program : theory.Theory) (subset : theory.Interpretation)
-  (frozen : Slice Bool) (values : alloc.vec.Vec Bool) (work : oracle.Work) :
-  Result ((core.result.Result Bool zetesis_cpu.cancellation.Stop) ×
-    (alloc.vec.Vec Bool) × oracle.Work)
-  := do
-  let r ← zetesis_cpu.cancellation.Cancellation.poll work.cancellation
-  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-  match cf with
-  | core.ops.control_flow.ControlFlow.Continue _ =>
-    if work.statistics.subsets >= work.limits.max_subsets
-    then
-      ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.CandidateLimit,
-        values, work)
-    else
-      let i ← work.statistics.subsets + 1#u64
-      let (r1, values1, work1) ←
-        oracle.evaluate program subset (some frozen) values
-          { work with statistics := { work.statistics with subsets := i } }
-      let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-      match cf1 with
-      | core.ops.control_flow.ControlFlow.Continue _ =>
-        let s := alloc.vec.Vec.deref values1
-        let (r2, work2) ← oracle.failed_root program s work1
-        let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
-        match cf2 with
-        | core.ops.control_flow.ControlFlow.Continue val =>
-          let b := core.option.Option.is_none val
-          ok (core.result.Result.Ok b, values1, work2)
-        | core.ops.control_flow.ControlFlow.Break residual =>
-          let r3 ←
-            core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-              Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop)
-              residual
-          ok (r3, values1, work2)
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        let r2 ←
-          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-            Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
-        ok (r2, values1, work1)
-  | core.ops.control_flow.ControlFlow.Break residual =>
-    let r1 ←
-      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
-        Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
-    ok (r1, values, work)
-
 /-- [zetesis_ferraris::oracle::find_countermodel]: loop body 0:
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 287:4-298:5 -/
 @[rust_loop_body]
@@ -667,15 +628,139 @@ def oracle.find_countermodel
       0#usize
   ok (countermodel, subset1, values1, work1)
 
-/-- [zetesis_ferraris::theory::{impl core::clone::Clone for zetesis_ferraris::theory::Theory}::clone]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 75:9-75:14
+/-- [zetesis_ferraris::oracle::select_atoms]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 214:4-221:1 -/
+@[rust_loop_body]
+def oracle.select_atoms_loop.body
+  (candidate : theory.Interpretation) (iter : core.ops.range.Range Std.Usize)
+  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
+  Result (ControlFlow ((core.ops.range.Range Std.Usize) × (alloc.vec.Vec
+    Std.Usize) × oracle.Work) ((core.result.Result Unit
+    zetesis_cpu.cancellation.Stop) × (alloc.vec.Vec Std.Usize) ×
+    oracle.Work))
+  := do
+  let (o, iter1) ←
+    core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
+  match o with
+  | none => ok (done (core.result.Result.Ok (), selected, work))
+  | some atom =>
+    let (r, work1) ← oracle.Work.tick work
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let b ← theory.Interpretation.contains candidate atom
+      if b
+      then
+        let selected1 ← alloc.vec.Vec.push selected atom
+        ok (cont (iter1, selected1, work1))
+      else ok (cont (iter1, selected, work1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Unit (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+      ok (done (r1, selected, work1))
+
+/-- [zetesis_ferraris::oracle::select_atoms]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 214:4-221:1 -/
+@[rust_loop]
+def oracle.select_atoms_loop
+  (iter : core.ops.range.Range Std.Usize) (candidate : theory.Interpretation)
+  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
+  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Std.Usize) × oracle.Work)
+  := do
+  loop
+    (fun (iter1, selected1, work1) => oracle.select_atoms_loop.body candidate
+      iter1 selected1 work1)
+    (iter, selected, work)
+
+/-- [zetesis_ferraris::oracle::select_atoms]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 208:0-221:1 -/
+def oracle.select_atoms
+  (program : theory.Theory) (candidate : theory.Interpretation)
+  (selected : alloc.vec.Vec Std.Usize) (work : oracle.Work) :
+  Result ((core.result.Result Unit zetesis_cpu.cancellation.Stop) ×
+    (alloc.vec.Vec Std.Usize) × oracle.Work)
+  := do
+  let i ← theory.Theory.atom_count program
+  oracle.select_atoms_loop { start := 0#usize, «end» := i } candidate
+    selected work
+
+/-- [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}::call_once]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
+def
+  oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
+  {T : Type} (c : oracle.reserve.closure T)
+  (tupled_args : alloc.collections.TryReserveError) :
+  Result zetesis_cpu.cancellation.Stop
+  := do
+  ok zetesis_cpu.cancellation.Stop.Allocation
+
+/-- Trait implementation: [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
+@[reducible]
+def oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
+  (T : Type) : core.ops.function.FnOnce (oracle.reserve.closure T)
+  alloc.collections.TryReserveError zetesis_cpu.cancellation.Stop := {
+  call_once :=
+    oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
+}
+
+section StorageReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::oracle::reserve]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 101:0-107:1 -/
+def oracle.reserve
+  (T : Type) (count : Std.Usize) :
+  Result (core.result.Result (alloc.vec.Vec T) zetesis_cpu.cancellation.Stop)
+  := do
+  let (r, vector) ←
+    alloc.vec.Vec.try_reserve_exact Global (alloc.vec.Vec.new T) count
+  let r1 ←
+    core.result.Result.map_err
+      (oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
+      T) r ()
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    ok (core.result.Result.Ok vector)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      (alloc.vec.Vec T) (core.convert.FromSame zetesis_cpu.cancellation.Stop)
+      residual
+
+end StorageReservation
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::same_instance]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 119:4-121:5
     Visibility: public -/
-def theory.Theory.Insts.CoreCloneClone.clone
-  (self : theory.Theory) : Result theory.Theory := do
-  let a ←
-    alloc.sync.Arc.Insts.CoreCloneClone.clone
-      alloc.alloc.Global.Insts.CoreAllocAllocatorClone self
-  ok a
+def theory.Theory.same_instance
+  (self : theory.Theory) (other : theory.Theory) : Result Bool := do
+  alloc.sync.Arc.ptr_eq Global self other
+
+/-- [zetesis_ferraris::oracle::identities]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 93:0-99:1 -/
+def oracle.identities
+  (program : theory.Theory) (interpretation : theory.Interpretation) :
+  Result (core.result.Result Unit zetesis_cpu.cancellation.Stop)
+  := do
+  let t ← theory.Interpretation.impl.theory interpretation
+  let b ← theory.Theory.same_instance program t
+  if b
+  then ok (core.result.Result.Ok ())
+  else ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.WrongProgram)
+
+/-- [zetesis_ferraris::oracle::{impl core::default::Default for zetesis_ferraris::oracle::Statistics}::default]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 26:29-26:36
+    Visibility: public -/
+def oracle.Statistics.Insts.CoreDefaultDefault.default
+  : Result oracle.Statistics := do
+  ok
+    {
+      work := (core.default.DefaultU64.default),
+      subsets := (core.default.DefaultU64.default)
+    }
 
 section CheckReservation
 variable [VectorReservation]
@@ -810,6 +895,31 @@ def oracle.check
       residual
 
 end CheckReservation
+
+section SubjectReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::checked::check_interpretation]:
+    Source: 'crates/zetesis-ferraris/src/checked.rs', lines 111:0-118:1
+    Visibility: public -/
+def checked.check_interpretation
+  (candidate : theory.Interpretation) (limits : oracle.Limits)
+  (cancellation : zetesis_cpu.cancellation.Cancellation) :
+  Result (core.result.Result checked.CheckedInterpretation
+    zetesis_cpu.cancellation.Stop)
+  := do
+  let t ← theory.Interpretation.impl.theory candidate
+  let r ← oracle.check t candidate limits cancellation
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    ok (core.result.Result.Ok { candidate, check := val })
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      checked.CheckedInterpretation (core.convert.FromSame
+      zetesis_cpu.cancellation.Stop) residual
+
+end SubjectReservation
 
 section FreezeReservation
 variable [VectorReservation]

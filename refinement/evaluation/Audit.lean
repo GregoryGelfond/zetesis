@@ -1,3 +1,4 @@
+import SubjectMembership
 import PublicMembership
 import InterpretationStorage
 import InsertionBoundaryExample
@@ -350,3 +351,20 @@ import FrozenBoundaryExample
 #print axioms PublicMembership.completed_answer_set
 #print axioms PublicMembership.completed_not_model
 #print axioms PublicMembership.completed_nonminimal
+
+#print axioms CheckedResults.candidate_exact
+#print axioms CheckedResults.verdict_exact
+#print axioms CheckedResults.statistics_exact
+#print axioms CheckedResults.accepted_iff
+#print axioms CheckedResults.conversion_success_iff
+#print axioms CheckedResults.conversion_refusal_iff
+#print axioms CheckedResults.theory_exact
+#print axioms CheckedResults.interpretation_exact
+#print axioms CheckedResults.moved_exact
+#print axioms SubjectMembership.constructed_input
+#print axioms SubjectMembership.completed_constructed_check
+#print axioms SubjectMembership.subject_exact
+#print axioms SubjectMembership.subject_refused
+#print axioms SubjectMembership.completed_subject_phases
+#print axioms SubjectMembership.completed_subject
+#print axioms SubjectMembership.completed_stable
