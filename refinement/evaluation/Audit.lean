@@ -12,6 +12,7 @@ import RootScanExample
 import FixedLoopExample
 import FrozenQueryExample
 import AdmissionValidationExample
+import AdmittedData
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
@@ -238,3 +239,9 @@ import AdmissionValidationExample
 #print axioms AdmissionValidationExample.empty_roots_are_admitted
 #print axioms AdmissionValidationExample.repeated_stored_roots_are_admitted
 #print axioms AdmissionValidationExample.missing_root_after_repetitions_is_refused
+#print axioms AdmittedData.admit_exact
+#print axioms AdmittedData.admit_accepts_iff
+#print axioms AdmittedData.admit_refuses_iff
+#print axioms AdmittedData.admit_never_allocation
+#print axioms AdmittedData.admitted_word_counts
+#print axioms AdmittedData.admitted_program_structure

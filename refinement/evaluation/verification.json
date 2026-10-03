@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-03",
-  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The generated admission validators called by Theory::new compute the authored node scan and root scan for every represented slice; acceptance supplies the ordered-children and bounded-root premises, which remain premises of the composed theorems, and a node refusal reports the error of the first refused node. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
+  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The generated admission step called by Theory::new computes the authored validator, including the dimension and padded-count checks, and returns the supplied data unchanged; its node and root validators compute the authored scans for every represented slice, and a node refusal reports the error of the first refused node. Data returned by the admission step supplies the ordered-children and bounded-root premises, which remain premises of the composed theorems. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "e75655e5ff3647582ff7ab6d0974cd32fc3f6e4195b30ab56aeb313ccb7e1ab2",
+  "artifactInventorySha256": "ea8890d81578b329e162635fd047c76da1f0e3375b62e776f9fc4f1a59d04af0",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -230,7 +230,13 @@
     "AdmissionValidationExample.empty_nodes_are_admitted",
     "AdmissionValidationExample.empty_roots_are_admitted",
     "AdmissionValidationExample.repeated_stored_roots_are_admitted",
-    "AdmissionValidationExample.missing_root_after_repetitions_is_refused"
+    "AdmissionValidationExample.missing_root_after_repetitions_is_refused",
+    "AdmittedData.admit_exact",
+    "AdmittedData.admit_accepts_iff",
+    "AdmittedData.admit_refuses_iff",
+    "AdmittedData.admit_never_allocation",
+    "AdmittedData.admitted_word_counts",
+    "AdmittedData.admitted_program_structure"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -245,7 +251,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "0f16d8aaf27c168e75475e3deea1d6618af9776afb45f4ebd65320146e3d8b0f"
+      "logSha256": "fe8bcbb0dcc5dbd0be0aeaefe3e47b12802bba353ebd691c503d6bcf9937aa39"
     },
     {
       "argv": [
@@ -258,7 +264,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "7634454ab252ef31a67e6004870bc293669c3313aed3e5926ddefcac1dbec92e"
+      "logSha256": "f56f8fd9bc5bff062295ef5a1994befaf5618f665034f444dfb124583fc95109"
     },
     {
       "argv": [
@@ -274,8 +280,8 @@
       "logSha256": "bf0d8c0deecd7298dc7ad7908bc9167637e112c0f29395022a021c96eb020dbb"
     }
   ],
-  "theoremAuditCount": 224,
-  "rustOrShaderSourcesChanged": false,
+  "theoremAuditCount": 230,
+  "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
     "inventorySha256": "d81db0b127d9e8b1a0c5c155557b99a58fb7b91380738790d4177b47061fba0d",
@@ -509,7 +515,7 @@
   "unprovedCorrespondences": [
     "The separate returning-event specification to generated public-checker execution and concurrent Rust histories.",
     "Use of allocator capacity/failure and runtime ownership contracts in the public wrapper; timers and concurrent memory.",
-    "Theory::new's dimension and padded-count checks, its order of dimensions, then nodes, then roots, and storage of exactly the validated vectors as the theory's value, with Arc::new storing that value; the fresh owner of its Arc allocation, which only ownership results use; Interpretation::new's exact packed storage and fallible reservation.",
+    "Theory::new's wrapper, which returns admit's refusal unchanged and otherwise Arc::new of the admitted data, with Arc::new storing that value; the fresh owner of that allocation, which only ownership results use; Interpretation::new's exact packed storage and fallible reservation.",
     "FrozenReduct construction, public allocation/setup and complete owner-checking wrapper composition.",
     "Source grounding, specialized execution plans, complete solver enumeration and GPU execution."
   ]

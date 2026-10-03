@@ -37,7 +37,7 @@ files compile with implicit variables disabled and warnings treated as errors. O
 checked artifact hashes and commands, separately from the main semantic library's gate.
 The default build includes the generated evaluator, root scan and private
 `FrozenReduct::satisfied_by` query, their semantic composition, the generated
-admission validators, and the checked boundary examples. These use the documented
+admission step and validators, and the checked boundary examples. These use the documented
 fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
 
@@ -47,8 +47,8 @@ Install Rust `nightly-2026-08-18`, including `rustc-dev` and `rust-src`. This is
 an extraction toolchain, not a change to the solver's ordinary Rust pin. The
 extractor selects the real private production evaluator, root scan, subset
 query and countermodel-search phases directly.
-It also selects the actual owner check and theory clone, and the four private
-admission validators that `Theory::new` calls before allocation. It selects
+It also selects the actual owner check and theory clone, and the private
+admission step and four validators that `Theory::new` runs before allocation. It selects
 `FrozenReduct::satisfied_by` through the existing reduct module, then
 excludes the other methods. No new Rust wrapper is needed. The extraction runs offline; if dependencies are
 not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
@@ -75,6 +75,7 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --start-from zetesis_ferraris::theory::validate_nodes \
   --start-from zetesis_ferraris::theory::validate_root \
   --start-from zetesis_ferraris::theory::validate_roots \
+  --start-from zetesis_ferraris::theory::admit \
   --exclude zetesis_ferraris::oracle::check \
   --exclude zetesis_ferraris::oracle::reserve \
   --include zetesis_ferraris --include zetesis_cpu::cancellation \
@@ -146,9 +147,9 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 189
-  and $t.fun_decls[189] == null
-  and $t.ordered_decls[121] == {"TraitImpl":{"NonRec":25}}
+  and $debug.methods[0].skip_binder.id == 192
+  and $t.fun_decls[192] == null
+  and $t.ordered_decls[124] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -178,20 +179,20 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 182)
-  and step_method(6; "backward_overflowing"; 186)
+  and step_method(2; "forward_overflowing"; 185)
+  and step_method(6; "backward_overflowing"; 189)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[182] |= del(.src)
-    | .translated.fun_decls[186] |= del(.src)
+    | .translated.fun_decls[185] |= del(.src)
+    | .translated.fun_decls[189] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 182 or .Fun? == 186
+        .Fun? == 185 or .Fun? == 189
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
@@ -211,7 +212,7 @@ then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "program"
    | .translated.trait_impls[25] = null
-   | del(.translated.ordered_decls[121])
+   | del(.translated.ordered_decls[124])
    | .translated.trait_decls[9].methods[2] = null
    | .translated.trait_decls[9].methods[6] = null
    | .translated.trait_impls[23].methods[2] = null
@@ -227,8 +228,8 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:121]
-     + [$source[0].translated.ordered_decls[121]] + .translated.ordered_decls[121:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:124]
+     + [$source[0].translated.ordered_decls[124]] + .translated.ordered_decls[124:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -244,8 +245,8 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:121]
-     + [$source[0].translated.ordered_decls[121]] + .translated.ordered_decls[121:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:124]
+     + [$source[0].translated.ordered_decls[124]] + .translated.ordered_decls[124:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -299,14 +300,16 @@ The current extracted `Result`, callback traits and loop interfaces still use
 the fixed-observation model. Connecting the richer effect to generated calls,
 then rechecking that dependency closure, remains necessary.
 
-`Theory::new` delegates node and root admission to ordered pure validators.
-This package selects the four validators directly as extraction roots, so
-neither constructor, fresh `Arc::new` allocation nor generic `Interpretation::new`
-enters its translation. A separate strict translation of the constructor itself
-succeeds only when the independently selected `Interpretation::new` export is
-omitted; that generic export remains unsupported by the pinned translator, and
-fresh allocation has no model here. `AdmissionValidation` proves the generated
-validators against the authored admission checks; it establishes no property of
-the dimension checks, the checked padded-count addition, the order in which
-`Theory::new` runs its checks, or the allocation and owner that it adds around
-them.
+`Theory::new` runs the private admission step `admit`, which checks the
+dimensions and padded count and then calls the ordered node and root
+validators, and only then allocates. This package selects `admit` and the four
+validators directly as extraction roots, so neither constructor, fresh
+`Arc::new` allocation nor generic `Interpretation::new` enters its translation.
+A separate strict translation of the constructor itself succeeds only when the
+independently selected `Interpretation::new` export is omitted; that generic
+export remains unsupported by the pinned translator, and fresh allocation has no
+model here. `AdmissionValidation` and `AdmittedData` prove the generated
+validators and admission step against the authored admission checks; they
+establish no property of the wrapper that returns the admission step's refusal
+unchanged and otherwise passes the admitted data to `Arc::new`, of that
+allocation or of its owner.

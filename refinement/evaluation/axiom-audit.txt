@@ -234,3 +234,9 @@
 'AdmissionValidationExample.missing_root_after_repetitions_is_refused' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'AdmittedData.admit_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'AdmittedData.admit_accepts_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'AdmittedData.admit_refuses_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'AdmittedData.admit_never_allocation' depends on axioms: [propext, Classical.choice, Quot.sound]
+'AdmittedData.admitted_word_counts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'AdmittedData.admitted_program_structure' depends on axioms: [propext, Classical.choice, Quot.sound]
