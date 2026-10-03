@@ -5,6 +5,8 @@ connects the CPU reference checker's actual generated evaluation, root scan,
 atom selection and proper-subset search to the Ferraris answer-set definition.
 The result concerns one candidate of a ground formula theory under fixed
 observation tokens; public allocation and owner checking remain outside it.
+The package also proves the node and root validators that admission runs before
+a theory exists.
 
 ## From original truth to answer-set membership
 
@@ -48,6 +50,41 @@ Owner identity is distinct from data equality. Consistency with one immutable
 heap permits a successful identity check to establish equal theory data;
 independently owned equal theories remain distinct. These laws do not verify
 reference counting or allocation.
+
+## Admission validation
+
+`Theory::new` checks dimensions and the padded word count, then calls two
+private validators before it allocates the shared theory. `validate_nodes`
+checks every node in stored order against the atom universe and the nodes
+before it; `validate_roots` checks that every asserted root names a stored node.
+[`AdmissionValidation`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/AdmissionValidation.lean)
+proves their generated code against the authored checks of the general
+library's [`TheoryAdmission`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TheoryAdmission.lean):
+
+```text
+validate_nodes(atoms, nodes) returns the verdict of scan(atoms, 0, nodes)
+validate_roots(count, roots) returns the verdict of rootScan(count, roots)
+```
+
+`TheoryAdmission.validate_phases` identifies `rootScan` as the root clause of
+`validate`. Both equations hold for every represented slice. The generated
+loops always return, enumeration positions are list positions, and neither
+validator reports an allocation refusal. Acceptance derives ordered children,
+in-universe atoms and bounded roots; `accepted_structure` states these for the
+vectors that `Theory::new` validates. A node refusal reports the error of the
+first refused node in stored order, every earlier node having passed; this
+follows from the general `scan_refusal_exact`. Root validation accepts exactly
+when every asserted root names a stored node, so repeated stored roots are
+accepted and an unstored root is refused wherever it occurs.
+
+The membership and stored-query theorems keep their ordering and root-bound
+premises; these now follow from accepted validation of a theory's stored
+vectors. Connecting them to an actual `Theory::new` call needs further facts.
+Most concern values: the constructor's dimension and padded-count checks, its
+order of dimensions, then nodes, then roots, and storage of exactly the
+validated vectors as the theory's value. One concerns identity: the allocation
+has a fresh owner, which only ownership results use. None of them is proved
+here, nor is `Interpretation::new`.
 
 ## From evaluation to theory satisfaction
 
@@ -170,7 +207,8 @@ function and loop interfaces remains necessary.
 
 The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
 construction, public allocation, composition of owner checks with the public
-wrapper, and actual admission constructors remain unproved. Source grounding, candidate
+wrapper, and the admission constructors around the proved validators remain
+unproved. Source grounding, candidate
 enumeration and optimized checking routes are separate obligations. Allocation,
 reference counting, timers, concurrent memory, machine code and GPU execution
 remain outside these models. The

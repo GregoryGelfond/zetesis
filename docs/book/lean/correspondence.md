@@ -82,8 +82,9 @@ backend's actual resize operation and exact candidate word length.
 `MembershipVerdicts.returned_witness` identifies the proper-subset reduct model
 returned by the actual search. `OwnerChecks` connects generated identity and
 clone operations to owner tokens and immutable-heap consistency. These results
-close individual setup obligations; the public wrapper and actual admission
-constructors remain unproved.
+close individual setup obligations; the public wrapper and the admission
+constructors remain unproved. `AdmissionValidation` proves the node and root
+validators those constructors call; it is described with `TheoryAdmission` below.
 
 The separate `RuntimeEffects` specification permits changing read observations
 and typed reservation failure. Its embedding preserves existing backend
@@ -204,11 +205,28 @@ and changing runtime observations remain open.
 
 `Refinement.TheoryAdmission` checks dimension limits and padded atom count,
 then every node, then asserted roots. `validate_exact` derives the DAG, atom
-and root premises from successful checks. `validated_reduct_exact` supplies
+and root premises from successful checks, and `scan_refusal_exact` identifies
+the first refused node of a refused scan. `validated_reduct_exact` supplies
 those premises to checked evaluation. The supplied host maximum also bounds
 word counts and live export-cursor increments. This is an authored validator
-over represented natural-number lengths, not extraction of `Theory::new`;
-allocation, machine operations and owner identity remain separate obligations.
+over represented natural-number lengths.
+
+`root` and `rootScan` name the root check; `validate_phases` shows that
+validation is the dimension check, then `scan`, then `rootScan`, each stopping
+at its first refusal.
+
+The refinement package's `AdmissionValidation` proves that the generated node
+and root validators called by `Theory::new` compute `scan` and `rootScan`
+exactly, for every represented slice. The generated loops always return, and a
+node refusal reports the error of the first refused node. `accepted_structure`
+derives the evaluator's ordered-children and bounded-root premises from both
+acceptances, as applied to the constructor's input vectors. Those premises
+remain premises of the composed membership theorems. Connecting them to an
+actual `Theory::new` call needs the constructor's dimension and padded-count
+checks, its order of dimensions, then nodes, then roots, and the preservation of
+the validated vectors as the stored value; a fresh owner is needed only by
+ownership results. These remain separate
+obligations, as does `Interpretation::new`.
 
 The [iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
 [packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md),

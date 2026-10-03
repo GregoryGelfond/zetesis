@@ -60,7 +60,8 @@ The proof follows that definition:
 `PackedCounterSearch` composes packed updates and streaming control: every
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
-a separate obligation. The separately built [implementation-refinement package](evaluation.md)
+a separate obligation, discharged so far for the reference checker's phases
+and admission validators below. The separately built [implementation-refinement package](evaluation.md)
 connects the actual generated reference-checker phases to the same ASP theory
 under fixed observation tokens.
 
@@ -78,7 +79,11 @@ Typed stops retain their actual state and work and do not establish exhaustion.
 This closes the reference search's semantic composition under the modeled
 primitives. Public allocation, owner checks and buffer construction remain
 outside it, as do changing runtime observations, source grounding, candidate
-enumeration and optimized checking routes. The separate stored-reduct query
+enumeration and optimized checking routes. `AdmissionValidation` proves the
+actual node and root validators that `Theory::new` runs, so accepted admission
+checks supply the ordering and root-bound premises; the constructor's dimension
+and padded-count checks, the order in which it runs its checks, its allocation
+and owner, and `Interpretation::new`, are not yet connected. The separate stored-reduct query
 proof still requires explicit mask agreement; actual original evaluation can
 supply that agreement, but `FrozenReduct::freeze` remains unproved.
 
