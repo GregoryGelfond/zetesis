@@ -23,6 +23,11 @@ composition law for consecutive segments. `scan_extends` constructs a larger
 proves that every structurally admitted table passes. Thus `scan_exact` is an
 equivalence, not only an implication supplied by a caller.
 
+`scan_refusal_exact` characterizes the other outcome. A refused scan names its
+first refused node: every earlier node passes its check at its actual position,
+and the reported error is that node's own. A later node's error cannot be
+reported in its place.
+
 `validate_exact` composes the scan with the dimension checks and root reduction.
 Its result derives all evaluator indices from successful validation. The named
 `maximum` is the supplied host integer maximum; the model checks
@@ -44,7 +49,8 @@ iteration, checked arithmetic, vectors, allocation and transfer into an immutabl
 `Arc` still require concrete correspondence. No theory-owner identity is created
 by the Lean result, and the validator does not check interpretation storage.
 
-The node and root predicates are exact for successful validation. Error kinds
-and check ordering are represented, but this module does not prove source spans,
-rendered diagnostics or the complete Rust failure trace. Grounding must still
-establish that the proposed theory means the intended source program.
+The node and root predicates are exact for successful validation, and the first
+refused node is identified exactly. Error kinds and check ordering are
+represented, but this module does not prove source spans, rendered diagnostics
+or the complete Rust failure trace. Grounding must still establish that the
+proposed theory means the intended source program.

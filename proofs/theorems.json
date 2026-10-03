@@ -7065,39 +7065,44 @@
     "line": 121
   },
   {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_refusal_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 139
+  },
+  {
     "name": "Zetesis.Refinement.TheoryAdmission.validate_exact",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 145
+    "line": 219
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.word_counts_fit",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 177
+    "line": 251
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.export_successor_fits",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 188
+    "line": 262
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.validated_reduct_exact",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 198
+    "line": 272
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 208
+    "line": 282
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.self_reference_is_refused",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 212
+    "line": 286
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 216
+    "line": 290
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",

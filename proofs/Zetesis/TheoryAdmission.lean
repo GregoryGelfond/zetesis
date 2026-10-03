@@ -128,6 +128,80 @@ theorem scan_exact (size : Nat) (table : List (Node Nat)) :
   · rintro ⟨valid, bounded⟩
     exact scan_complete size table valid bounded
 
+/-- A refused scan reports its first refused node: every earlier node passes
+its check at its actual position, and the reported error is that node's own.
+A later node's error therefore cannot be reported in its place.
+
+Proof: induct on the table. A refused head is the first refused node, and no
+witness can lie beyond it because the witness's earlier nodes include the head.
+An accepted head leaves the scan of the tail one position later, so a tail
+witness and a witness beyond the head correspond by shifting one position. -/
+theorem scan_refusal_exact (size index : Nat) (table : List (Node Nat))
+    (reason : Error) :
+    scan size index table = .error reason ↔
+      ∃ position, ∃ inside : position < table.length,
+        (∀ earlier, ∀ before : earlier < position,
+          node size (index + earlier) table[earlier] = .ok ()) ∧
+        node size (index + position) table[position] = .error reason := by
+  induction table generalizing index with
+  | nil =>
+    simp [scan]
+  | cons entry rest inductionHypothesis =>
+    cases headCheck : node size index entry with
+    | error headReason =>
+      have refusedHere : scan size index (entry :: rest) = .error headReason := by
+        simp [scan, headCheck, Except.bind]
+      rw [refusedHere]
+      constructor
+      · intro sameReason
+        cases sameReason
+        refine ⟨0, Nat.succ_pos _, fun earlier before => absurd before (Nat.not_lt_zero _), ?_⟩
+        simpa using headCheck
+      · rintro ⟨position, inside, earlierPass, refusedAt⟩
+        cases position with
+        | zero =>
+          have reported : Except.error headReason = (Except.error reason : Except Error Unit) := by
+            simpa [headCheck] using refusedAt
+          exact reported
+        | succ later =>
+          have headPasses : node size index entry = .ok () := by
+            simpa using earlierPass 0 (Nat.succ_pos _)
+          rw [headCheck] at headPasses
+          cases headPasses
+    | ok accepted =>
+      cases accepted
+      have continued : scan size index (entry :: rest) = scan size (index + 1) rest := by
+        simp [scan, headCheck, Except.bind]
+      have shifted (offset : Nat) : index + 1 + offset = index + (offset + 1) := by omega
+      rw [continued, inductionHypothesis (index + 1)]
+      constructor
+      · rintro ⟨position, inside, earlierPass, refusedAt⟩
+        refine ⟨position + 1, by simpa using inside, ?_, ?_⟩
+        · intro earlier before
+          cases earlier with
+          | zero => simpa using headCheck
+          | succ previous =>
+            have tailPasses := earlierPass previous (by omega)
+            rw [shifted] at tailPasses
+            simpa using tailPasses
+        · rw [shifted] at refusedAt
+          simpa using refusedAt
+      · rintro ⟨position, inside, earlierPass, refusedAt⟩
+        cases position with
+        | zero =>
+          have headRefused : node size index entry = .error reason := by
+            simpa using refusedAt
+          rw [headCheck] at headRefused
+          cases headRefused
+        | succ later =>
+          refine ⟨later, by simpa using inside, ?_, ?_⟩
+          · intro earlier before
+            have tailPasses := earlierPass (earlier + 1) (by omega)
+            rw [← shifted] at tailPasses
+            simpa using tailPasses
+          · rw [← shifted] at refusedAt
+            simpa using refusedAt
+
 /-- Validate dimensions before any node, then nodes before roots. The padded
 count check models successful `checked_add(63)` against the host maximum. -/
 def validate (maximum : Nat) (limits : Limits) (size : Nat)
