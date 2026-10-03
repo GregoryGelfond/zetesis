@@ -3,11 +3,12 @@
 This separately built implementation-refinement package connects the CPU
 reference checker's generated evaluation, root scan, atom selection and
 proper-subset search to the Ferraris answer-set definition under fixed
-observation tokens. The public allocation and owner-checking wrapper remains
-outside the proved composition.
+observation tokens. It also proves that the generated admission validators
+called by `Theory::new` compute the authored admission checks. The public
+allocation and owner-checking wrapper remains outside the proved composition.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
-imports the reduct-evaluation and packed-subset sources directly and checks them
+imports the reduct-evaluation, packed-subset and admission sources directly and checks them
 with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
@@ -57,9 +58,51 @@ check and zero initialization with the membership phases. It derives agreement
 of the atom universes and the initial empty subset instead of assuming them
 separately. Admission and reservation remain outside this composition.
 
-These results do not yet compose the entire public wrapper or prove the actual
-admission constructors. They establish specific setup obligations without
-assuming successful allocation or equating owner identity with value equality.
+These results do not yet compose the entire public wrapper or prove the
+admission constructors themselves. They establish specific setup obligations
+without assuming successful allocation or equating owner identity with value
+equality.
+
+## Admission validation
+
+`Theory::new` checks dimensions and the padded word count, then calls two
+private validators before it allocates the shared theory: `validate_nodes`
+checks every node in stored order against the atom universe and the nodes before
+it, and `validate_roots` checks that every asserted root names a stored node.
+[`AdmissionValidation`](AdmissionValidation.lean) proves the generated code of
+both, with no premise on the input slices.
+
+`validate_nodes_exact` shows that the generated node validator returns the verdict
+of the authored scan `TheoryAdmission.scan`, started at position zero, over the
+converted nodes. Enumeration positions are list positions, and every enumeration
+step is justified by the slice length bound, so the call always returns.
+`validate_nodes_accepts_iff` derives acceptance exactly from ordered children and
+in-universe atoms; `validate_nodes_refuses_iff` shows that a refusal reports the
+error of the first refused node, every earlier node having passed its check.
+`validate_roots_exact` identifies the generated root validator with the authored
+root scan `TheoryAdmission.rootScan`, which `TheoryAdmission.validate_phases`
+identifies as the root clause of `validate`. It accepts exactly when every
+asserted root names a stored node: repeated stored roots and empty roots are
+accepted, and an unstored root is refused wherever it occurs.
+
+`accepted_structure` applies both acceptances exactly as `Theory::new` applies
+the validators to its input vectors. It derives ordered children, bounded roots
+and in-universe atoms for those vectors. Neither validator can report an
+allocation refusal. [Examples](AdmissionValidationExample.lean) check refusal
+order in both directions, repeated roots and empty input on the generated
+functions.
+
+The membership and query theorems keep `ordered` and `rootsBounded` as premises
+of `CountermodelSemantics.FrozenEvaluation`; no theorem here removes them.
+`accepted_structure` derives both for a theory whose stored vectors passed the
+generated validators. Connecting that to an actual `Theory::new` call needs
+further facts. Most concern values: the constructor's dimension and padded-count
+checks, its order of dimensions, then nodes, then roots, and storage of exactly
+the validated vectors as the theory's value, which `Arc::new` must keep. One
+concerns identity: the shared allocation has a fresh owner. Only ownership
+results, such as the owner checks, use the identity fact; the structural
+premises need only the value facts. None of them is proved here, nor is
+`Interpretation::new`.
 
 ## Stored reduct queries
 
@@ -104,6 +147,7 @@ root occurrences, including typed stops. Neither original modelhood of `M` nor
 | `SearchSteps`, `CountermodelTrace` | Exact generated search branches and their finite composition retain returned state and work |
 | `SearchRepresentation`, `SearchSemantics` | Packed counter states denote semantic subsets and queries use the actually computed original mask |
 | `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
+| `AdmissionValidation` | The generated node and root validators compute the authored node and root scans, report the first refused node's error, and supply ordered-children and bounded-root premises |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -203,9 +247,10 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-`FrozenReduct` construction, public allocation and owner-checking wrappers,
-source grounding, candidate enumeration, optimized checking routes or end-to-end
-solver verification.
+`FrozenReduct` construction, the admission constructors' dimension checks and
+allocation, public allocation and owner-checking wrappers, source grounding,
+candidate enumeration, optimized checking routes or end-to-end solver
+verification.
 
 ## Extraction identity and reproduction
 

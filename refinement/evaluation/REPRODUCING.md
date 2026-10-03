@@ -36,8 +36,8 @@ files compile with implicit variables disabled and warnings treated as errors. O
 `verification.json`, `axiom-audit.txt` and `shared-axiom-audit.txt` record the
 checked artifact hashes and commands, separately from the main semantic library's gate.
 The default build includes the generated evaluator, root scan and private
-`FrozenReduct::satisfied_by` query, their semantic composition, and the checked
-boundary examples. These use the documented
+`FrozenReduct::satisfied_by` query, their semantic composition, the generated
+admission validators, and the checked boundary examples. These use the documented
 fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
 
@@ -305,5 +305,8 @@ neither constructor, fresh `Arc::new` allocation nor generic `Interpretation::ne
 enters its translation. A separate strict translation of the constructor itself
 succeeds only when the independently selected `Interpretation::new` export is
 omitted; that generic export remains unsupported by the pinned translator, and
-fresh allocation has no model here. Translation alone establishes no constructor
-invariant or storage guarantee.
+fresh allocation has no model here. `AdmissionValidation` proves the generated
+validators against the authored admission checks; it establishes no property of
+the dimension checks, the checked padded-count addition, the order in which
+`Theory::new` runs its checks, or the allocation and owner that it adds around
+them.

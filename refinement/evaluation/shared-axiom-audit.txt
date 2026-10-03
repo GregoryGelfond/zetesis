@@ -85,6 +85,13 @@
 'Zetesis.FiniteMembership.proper_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.FiniteMembership.has_countermodel_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FiniteMembership.check_iff_answer_set' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.node_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.evaluate_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.original_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.reduct_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.roots_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.mask_bit' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.contains_eq_bit' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.insert_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -169,6 +176,24 @@
 'Zetesis.SubsetCounter.three_atom_visit_order' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SubsetCounter.short_walk_is_unfinished' does not depend on any axioms
 'Zetesis.SubsetCounter.carried_population_is_updated' does not depend on any axioms
+'Zetesis.Refinement.TheoryAdmission.node_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.checks_succeed' depends on axioms: [propext]
+'Zetesis.Refinement.TheoryAdmission.scan_append' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_extends' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_atoms' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.scan_refusal_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.rootScan_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.rootScan_refusal_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.validate_phases' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.validate_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.word_counts_fit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.export_successor_fits' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.validated_reduct_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes' does not depend on any axioms
+'Zetesis.Refinement.TheoryAdmission.self_reference_is_refused' does not depend on any axioms
+'Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked' does not depend on any axioms
 'Zetesis.TightEvaluation.formula_value_true' depends on axioms: [propext]
 'Zetesis.TightEvaluation.node_value_decode' depends on axioms: [propext]
 'Zetesis.TightEvaluation.values_correspond' depends on axioms: [propext]

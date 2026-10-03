@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -63,6 +63,8 @@ globs = [
   "Zetesis.SubsetCounter",
   "Zetesis.PackedInterpretations",
   "Zetesis.PackedSubsets",
+  "Zetesis.IndexedEvaluation",
+  "Zetesis.TheoryAdmission",
 ]
 
 [[lean_lib]]
@@ -172,3 +174,9 @@ name = "OwnedMembership"
 
 [[lean_lib]]
 name = "RuntimeEffects"
+
+[[lean_lib]]
+name = "AdmissionValidation"
+
+[[lean_lib]]
+name = "AdmissionValidationExample"

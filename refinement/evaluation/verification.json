@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-03",
-  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The selected extraction also contains the four private admission validators called by Theory::new; this record claims no property of them. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
+  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The generated admission validators called by Theory::new compute the authored node scan and root scan for every represented slice; acceptance supplies the ordered-children and bounded-root premises, which remain premises of the composed theorems, and a node refusal reports the error of the first refused node. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "648759f3ca6fea476aa7026c6fd3abc020ccd891ffd1d0a116383ec797991337",
+  "artifactInventorySha256": "e75655e5ff3647582ff7ab6d0974cd32fc3f6e4195b30ab56aeb313ccb7e1ab2",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -198,7 +198,39 @@
     "RuntimeEffects.distinct_reads",
     "RuntimeEffects.reservation_refusal",
     "RuntimeEffects.reservation_success",
-    "RuntimeEffects.loop_observes_change"
+    "RuntimeEffects.loop_observes_change",
+    "AdmissionValidation.verdict_accepts_iff",
+    "AdmissionValidation.verdict_refuses_iff",
+    "AdmissionValidation.refusal_ne_allocation",
+    "AdmissionValidation.node_exact",
+    "AdmissionValidation.valid_node_iff",
+    "AdmissionValidation.node_accepts_iff",
+    "AdmissionValidation.nodes_body_exhausted",
+    "AdmissionValidation.nodes_body_present",
+    "AdmissionValidation.nodes_loop_unfold",
+    "AdmissionValidation.nodes_loop_exact",
+    "AdmissionValidation.validate_nodes_exact",
+    "AdmissionValidation.validate_nodes_accepts_iff",
+    "AdmissionValidation.validate_nodes_refuses_iff",
+    "AdmissionValidation.accepted_ordered",
+    "AdmissionValidation.validate_nodes_never_allocation",
+    "AdmissionValidation.root_exact",
+    "AdmissionValidation.roots_body_exhausted",
+    "AdmissionValidation.roots_body_present",
+    "AdmissionValidation.roots_loop_unfold",
+    "AdmissionValidation.roots_loop_exact",
+    "AdmissionValidation.validate_roots_exact",
+    "AdmissionValidation.validate_roots_accepts_iff",
+    "AdmissionValidation.validate_roots_refuses_iff",
+    "AdmissionValidation.validate_roots_never_allocation",
+    "AdmissionValidation.accepted_structure",
+    "AdmissionValidationExample.atom_refusal_precedes_later_edge",
+    "AdmissionValidationExample.edge_refusal_precedes_later_atom",
+    "AdmissionValidationExample.falsum_is_admitted",
+    "AdmissionValidationExample.empty_nodes_are_admitted",
+    "AdmissionValidationExample.empty_roots_are_admitted",
+    "AdmissionValidationExample.repeated_stored_roots_are_admitted",
+    "AdmissionValidationExample.missing_root_after_repetitions_is_refused"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -213,7 +245,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "5beb8a5f09ed5fcf7afe98027a1e636517f23cbcfde335842469411a03559c6f"
+      "logSha256": "0f16d8aaf27c168e75475e3deea1d6618af9776afb45f4ebd65320146e3d8b0f"
     },
     {
       "argv": [
@@ -226,7 +258,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "b73dea59b28386dbcef7903c8030274912d73e2144abc51dfa19238a337565a3"
+      "logSha256": "7634454ab252ef31a67e6004870bc293669c3313aed3e5926ddefcac1dbec92e"
     },
     {
       "argv": [
@@ -239,17 +271,17 @@
       ],
       "exitCode": 0,
       "log": "shared-axiom-audit.txt",
-      "logSha256": "da83106f15652cb0bd205631286163998f0f2a6c4210b5e43dd1fc72cfdc82e8"
+      "logSha256": "bf0d8c0deecd7298dc7ad7908bc9167637e112c0f29395022a021c96eb020dbb"
     }
   ],
-  "theoremAuditCount": 192,
-  "rustOrShaderSourcesChanged": true,
+  "theoremAuditCount": 224,
+  "rustOrShaderSourcesChanged": false,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
-    "inventorySha256": "a9fee760e5103cfe4284f94179a6df49f4b0a223529176c773f9d1fef6420912",
-    "moduleCount": 15,
+    "inventorySha256": "d81db0b127d9e8b1a0c5c155557b99a58fb7b91380738790d4177b47061fba0d",
+    "moduleCount": 17,
     "unchangedSourceImports": true,
-    "declarationAuditCount": 194,
+    "declarationAuditCount": 219,
     "declarations": [
       "Zetesis.BatchAccounting.initial_covers",
       "Zetesis.BatchAccounting.initial_sound",
@@ -338,6 +370,13 @@
       "Zetesis.FiniteMembership.proper_iff",
       "Zetesis.FiniteMembership.has_countermodel_iff",
       "Zetesis.FiniteMembership.check_iff_answer_set",
+      "Zetesis.Refinement.IndexedEvaluation.node_exact",
+      "Zetesis.Refinement.IndexedEvaluation.evaluate_exact",
+      "Zetesis.Refinement.IndexedEvaluation.original_exact",
+      "Zetesis.Refinement.IndexedEvaluation.reduct_exact",
+      "Zetesis.Refinement.IndexedEvaluation.roots_exact",
+      "Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_exact",
+      "Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_iff",
       "Zetesis.Refinement.PackedInterpretations.mask_bit",
       "Zetesis.Refinement.PackedInterpretations.contains_eq_bit",
       "Zetesis.Refinement.PackedInterpretations.insert_exact",
@@ -420,6 +459,24 @@
       "Zetesis.SubsetCounter.three_atom_visit_order",
       "Zetesis.SubsetCounter.short_walk_is_unfinished",
       "Zetesis.SubsetCounter.carried_population_is_updated",
+      "Zetesis.Refinement.TheoryAdmission.node_exact",
+      "Zetesis.Refinement.TheoryAdmission.checks_succeed",
+      "Zetesis.Refinement.TheoryAdmission.scan_append",
+      "Zetesis.Refinement.TheoryAdmission.scan_extends",
+      "Zetesis.Refinement.TheoryAdmission.scan_atoms",
+      "Zetesis.Refinement.TheoryAdmission.scan_complete",
+      "Zetesis.Refinement.TheoryAdmission.scan_exact",
+      "Zetesis.Refinement.TheoryAdmission.scan_refusal_exact",
+      "Zetesis.Refinement.TheoryAdmission.rootScan_exact",
+      "Zetesis.Refinement.TheoryAdmission.rootScan_refusal_exact",
+      "Zetesis.Refinement.TheoryAdmission.validate_phases",
+      "Zetesis.Refinement.TheoryAdmission.validate_exact",
+      "Zetesis.Refinement.TheoryAdmission.word_counts_fit",
+      "Zetesis.Refinement.TheoryAdmission.export_successor_fits",
+      "Zetesis.Refinement.TheoryAdmission.validated_reduct_exact",
+      "Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes",
+      "Zetesis.Refinement.TheoryAdmission.self_reference_is_refused",
+      "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked",
       "Zetesis.TightEvaluation.formula_value_true",
       "Zetesis.TightEvaluation.node_value_decode",
       "Zetesis.TightEvaluation.values_correspond",
@@ -452,7 +509,7 @@
   "unprovedCorrespondences": [
     "The separate returning-event specification to generated public-checker execution and concurrent Rust histories.",
     "Use of allocator capacity/failure and runtime ownership contracts in the public wrapper; timers and concurrent memory.",
-    "Actual admission constructors establishing represented inputs, including exact packed storage and valid formula indices.",
+    "Theory::new's dimension and padded-count checks, its order of dimensions, then nodes, then roots, and storage of exactly the validated vectors as the theory's value, with Arc::new storing that value; the fresh owner of its Arc allocation, which only ownership results use; Interpretation::new's exact packed storage and fallible reservation.",
     "FrozenReduct construction, public allocation/setup and complete owner-checking wrapper composition.",
     "Source grounding, specialized execution plans, complete solver enumeration and GPU execution."
   ]

@@ -11,6 +11,7 @@ import TheorySatisfaction
 import RootScanExample
 import FixedLoopExample
 import FrozenQueryExample
+import AdmissionValidationExample
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
@@ -205,3 +206,35 @@ import FrozenQueryExample
 #print axioms RuntimeEffects.reservation_refusal
 #print axioms RuntimeEffects.reservation_success
 #print axioms RuntimeEffects.loop_observes_change
+#print axioms AdmissionValidation.verdict_accepts_iff
+#print axioms AdmissionValidation.verdict_refuses_iff
+#print axioms AdmissionValidation.refusal_ne_allocation
+#print axioms AdmissionValidation.node_exact
+#print axioms AdmissionValidation.valid_node_iff
+#print axioms AdmissionValidation.node_accepts_iff
+#print axioms AdmissionValidation.nodes_body_exhausted
+#print axioms AdmissionValidation.nodes_body_present
+#print axioms AdmissionValidation.nodes_loop_unfold
+#print axioms AdmissionValidation.nodes_loop_exact
+#print axioms AdmissionValidation.validate_nodes_exact
+#print axioms AdmissionValidation.validate_nodes_accepts_iff
+#print axioms AdmissionValidation.validate_nodes_refuses_iff
+#print axioms AdmissionValidation.accepted_ordered
+#print axioms AdmissionValidation.validate_nodes_never_allocation
+#print axioms AdmissionValidation.root_exact
+#print axioms AdmissionValidation.roots_body_exhausted
+#print axioms AdmissionValidation.roots_body_present
+#print axioms AdmissionValidation.roots_loop_unfold
+#print axioms AdmissionValidation.roots_loop_exact
+#print axioms AdmissionValidation.validate_roots_exact
+#print axioms AdmissionValidation.validate_roots_accepts_iff
+#print axioms AdmissionValidation.validate_roots_refuses_iff
+#print axioms AdmissionValidation.validate_roots_never_allocation
+#print axioms AdmissionValidation.accepted_structure
+#print axioms AdmissionValidationExample.atom_refusal_precedes_later_edge
+#print axioms AdmissionValidationExample.edge_refusal_precedes_later_atom
+#print axioms AdmissionValidationExample.falsum_is_admitted
+#print axioms AdmissionValidationExample.empty_nodes_are_admitted
+#print axioms AdmissionValidationExample.empty_roots_are_admitted
+#print axioms AdmissionValidationExample.repeated_stored_roots_are_admitted
+#print axioms AdmissionValidationExample.missing_root_after_repetitions_is_refused
