@@ -14,7 +14,7 @@ with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
-## Tight-body recognition
+## Tight-body and atomic-choice recognition
 
 The tight specialization is being connected to the same answer-set definition.
 Its first correspondence is the actual `tight::compile::classify` scan: successful
@@ -31,6 +31,14 @@ translated steps, including uncharged refusals and one charge per classified
 node. The loop and entry proofs retain full-node coverage and the reservation's
 explicit sequence contract. These are fixed-provider proofs, not a new
 runtime-event correspondence for tight checking.
+
+[`AtomicChoice.atom_meaning_iff`](AtomicChoice.lean) proves the actual head
+recognizer accepts exactly `a ∨ not a` or its reversed order in an ordered DAG.
+The two atom nodes may be distinct occurrences of the same semantic atom.
+Bounded decoding supplies formula equality; no classical rewriting or assumed
+recognizer agreement is used. The operation allocates nothing and charges no
+work itself: its callers account for the inspection. Its pure standard-library
+models preserve eager `then_some` and the None-only fallback of `or_else`.
 
 A body class is not a complete tight certificate. Actual producer extraction,
 root coverage, rank validation and the support-checking loop still need their
@@ -405,7 +413,9 @@ admission step and four validators, `Interpretation::new` and its private
 reservation wrapper, together with public `oracle::check`, `check_interpretation`
 and its decision/accepted-interpretation accessors and consuming conversion.
 The tight-body classifier, its work/reservation helpers and node equality are
-selected as the first optimized-route slice.
+selected with the exact atomic-choice recognizer and its pair helper. Each
+discriminated node is copied to a local value before pattern matching, keeping
+the same reads and short-circuit order while exposing one value to translation.
 The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`

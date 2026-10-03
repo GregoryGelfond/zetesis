@@ -38,6 +38,10 @@ harness = false
 name = "interpretation"
 harness = false
 
+[[bench]]
+name = "tight_admission"
+harness = false
+
 [[example]]
 name = "book-reduct"
 path = "../../docs/book/examples/reduct.rs"

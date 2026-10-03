@@ -8,17 +8,20 @@ use crate::{Node, Theory};
 /// rewriting. Each consumer charges it within its root/producer inspection.
 /// Cross-atom alternatives and richer classically equivalent forms decline.
 pub(crate) fn atom(theory: &Theory, head: usize) -> Option<usize> {
-    let Node::Or(left, right) = theory.nodes()[head] else {
+    let node = theory.nodes()[head];
+    let Node::Or(left, right) = node else {
         return None;
     };
     pair(theory, left, right).or_else(|| pair(theory, right, left))
 }
 
 fn pair(theory: &Theory, positive: usize, negative: usize) -> Option<usize> {
-    let Node::Atom(atom) = theory.nodes()[positive] else {
+    let node = theory.nodes()[positive];
+    let Node::Atom(atom) = node else {
         return None;
     };
-    let Node::Implies(left, right) = theory.nodes()[negative] else {
+    let node = theory.nodes()[negative];
+    let Node::Implies(left, right) = node else {
         return None;
     };
     (theory.nodes()[left] == Node::Atom(atom) && theory.nodes()[right] == Node::False)

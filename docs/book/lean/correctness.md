@@ -208,10 +208,11 @@ system or device progress is not obtained from a set-theoretic coverage law.
    generation, plan selection, exact classification and completion accounting.
    A complete retained family must equal the original finite theory's world
    view. Each specialization needs its recognizer and preservation argument.
-   The first implementation slice verifies tight-body classification against
-   the exact body grammar and its unfrozen atom occurrences. Producer/root
-   coverage, rank validation and the optimized membership loop remain next;
-   body classification alone does not establish a tight certificate.
+   The implementation proofs verify tight-body classification against the
+   exact body grammar and its unfrozen atom occurrences, plus exact atomic-choice
+   recognition in either operand order. Producer/root coverage, rank validation
+   and the optimized membership loop remain next; these recognizers alone do not
+   establish a tight certificate.
 3. **Source compilation.** Start from an admitted program in a declared finite
    normal-language fragment. Prove concrete grounding and reconstruction, then extend the theorem
    construct by construct to the admitted language. Include arithmetic errors

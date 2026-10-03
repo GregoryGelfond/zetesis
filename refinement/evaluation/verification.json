@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-03",
-  "scope": "Completed public scalar reference checks decide Ferraris answer-set membership for one candidate of a finite ground formula theory. Finite typed-refused calls retain their actual reached cause and publish no verdict. Both results use explicit Rust/library contracts and audited extraction/context adaptation. Actual successful Theory::new and owned-vector Interpretation::new calls establish ordered nodes, bounded roots, exact packed storage and retained ownership. Finite generic insertion additionally preserves bounded-prefix writes and first-invalid refusal; unrestricted iterator termination is not claimed. The eventful public checker composes 22 source-checked contexts with imported pure scalar, sequence, iterator and owner operations. Cancellation/deadline reads retain logical object/field identity and consume independent responses; each reservation has its own grant or rejection. Successful runs project to the actual fixed generated checker with the same verdict, statistics and witness; all inner phase contracts are discharged by concrete proofs. Stable is equivalent to answer-set membership, NotModel carries an actual false asserted root, and NonMinimal carries an actual program-owned proper-subset reduct model. Constructed subject checks and consuming accepted-result conversion retain the exact candidate. Public typed refusals recover an actual terminal phase and its reached leaf cause, preserving source order and the returned Stop. Internal loop receipts retain actual reached states and histories, including earlier charged work. No stopped call publishes a decision or establishes exhaustive failure. Stored-reduct construction and public satisfaction queries retain their earlier per-invocation fixed-provider contracts; the runtime event correspondence here covers the public membership checker call graph. Backend failure, divergence and unanswered observations are not typed source returns. There is no unconditional termination/fairness theorem. Source grounding, optimized routes, full solver enumeration, parallel schedules and GPU execution remain outside this milestone. The additional optimized-route slice proves the actual tight-body classifier against exact formula recognition. Successful entry calls derive the full ordered class sequence, one charged unit per classified node and preserved work/control fields. Its loop constructively yields a typed outcome from ordered storage and a valid counter; entry success derives initialized storage from the reached reservation under explicit successful sequence preservation. These classifier laws use fixed providers and observations, not a new returning-event correspondence. They do not establish complete tight-plan certification or optimized membership.",
+  "scope": "Completed public scalar reference checks decide Ferraris answer-set membership for one candidate of a finite ground formula theory. Finite typed-refused calls retain their actual reached cause and publish no verdict. Both results use explicit Rust/library contracts and audited extraction/context adaptation. Actual successful Theory::new and owned-vector Interpretation::new calls establish ordered nodes, bounded roots, exact packed storage and retained ownership. Finite generic insertion additionally preserves bounded-prefix writes and first-invalid refusal; unrestricted iterator termination is not claimed. The eventful public checker composes 22 source-checked contexts with imported pure scalar, sequence, iterator and owner operations. Cancellation/deadline reads retain logical object/field identity and consume independent responses; each reservation has its own grant or rejection. Successful runs project to the actual fixed generated checker with the same verdict, statistics and witness; all inner phase contracts are discharged by concrete proofs. Stable is equivalent to answer-set membership, NotModel carries an actual false asserted root, and NonMinimal carries an actual program-owned proper-subset reduct model. Constructed subject checks and consuming accepted-result conversion retain the exact candidate. Public typed refusals recover an actual terminal phase and its reached leaf cause, preserving source order and the returned Stop. Internal loop receipts retain actual reached states and histories, including earlier charged work. No stopped call publishes a decision or establishes exhaustive failure. Stored-reduct construction and public satisfaction queries retain their earlier per-invocation fixed-provider contracts; the runtime event correspondence here covers the public membership checker call graph. Backend failure, divergence and unanswered observations are not typed source returns. There is no unconditional termination/fairness theorem. Source grounding, optimized routes, full solver enumeration, parallel schedules and GPU execution remain outside this milestone. The additional optimized-route slice proves the actual tight-body classifier against exact formula recognition. Successful entry calls derive the full ordered class sequence, one charged unit per classified node and preserved work/control fields. Its loop constructively yields a typed outcome from ordered storage and a valid counter; entry success derives initialized storage from the reached reservation under explicit successful sequence preservation. These classifier laws use fixed providers and observations, not a new returning-event correspondence. They do not establish complete tight-plan certification or optimized membership. The shared atomic-choice recognizer is additionally proved against exact stored syntax: under ordered DAG links and a bounded head, actual recognition returns the atom exactly for either orientation of its atom/default-negation disjunction. Distinct node occurrences may name the same atom. Rust copies each discriminated node to one value local before matching, preserving reads and branch order; the existing Option/Bool operations have explicit pure standard-library models. This does not establish producer coverage, rank validation or complete optimized membership.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "a6ad04f9d1db55736c4a80925398d63cb6d61fef160562319d38889293521828",
+  "artifactInventorySha256": "f99b6e9a66bee59e2fa98c6c63da55626e29b66ef0c11c06dfa93e61d51040ae",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -477,7 +477,16 @@
     "TightClassification.reserve_from_oracle",
     "TightClassification.classify_setup",
     "TightClassification.completed_classes",
-    "TightClassification.completed_semantics"
+    "TightClassification.completed_semantics",
+    "AtomicChoice.atom_test",
+    "AtomicChoice.pair_shape_iff",
+    "AtomicChoice.reversed_declines",
+    "AtomicChoice.either_pair_iff",
+    "AtomicChoice.atom_shape_iff",
+    "AtomicChoice.meaning_atom_iff",
+    "AtomicChoice.meaning_negation_iff",
+    "AtomicChoice.pair_meaning_iff",
+    "AtomicChoice.atom_meaning_iff"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -492,8 +501,8 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "8db28649a014cb092d21927b38f6d93d49c6542fa09166f8ec39884ab4ab3d42",
-      "checkedInputFingerprint": "2ef1657f96fd189d69a26428d54cfc6165f62b6188f0031091e01a9453607971"
+      "logSha256": "6af38107c19dfcbd86726152c16f86dc5597e65db67076b5df7a017f9cc02933",
+      "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
     },
     {
       "argv": [
@@ -506,8 +515,8 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "143ec7febe3e680428a3f44d7253ed3e512199b0633508529927535afcb3ec71",
-      "checkedInputFingerprint": "2ef1657f96fd189d69a26428d54cfc6165f62b6188f0031091e01a9453607971"
+      "logSha256": "281ce31a0bbf692552da09aa8e786973f32078d232dbb247d0411cdfec4812fe",
+      "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
     },
     {
       "argv": [
@@ -521,7 +530,7 @@
       "exitCode": 0,
       "log": "shared-axiom-audit.txt",
       "logSha256": "8ffe99995c550c5e37a2c76a56bc0baf2de855a41f8ca91a84f16b690ab280f4",
-      "checkedInputFingerprint": "2ef1657f96fd189d69a26428d54cfc6165f62b6188f0031091e01a9453607971"
+      "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
     },
     {
       "argv": [
@@ -539,7 +548,7 @@
       "exitCode": 0,
       "log": "context-audit.txt",
       "logSha256": "1178da50ac5691e6b2d91004282c048d86c9b796f12da6436751786cf30f2fca",
-      "checkedInputFingerprint": "2ef1657f96fd189d69a26428d54cfc6165f62b6188f0031091e01a9453607971"
+      "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
     },
     {
       "argv": [
@@ -558,11 +567,11 @@
       "exitCode": 0,
       "log": "context-negative-audit.txt",
       "logSha256": "4a0d1826e6aaab15aff478a344a743dc9cf930377d0e0ae1cc7ce5b5c317275c",
-      "checkedInputFingerprint": "2ef1657f96fd189d69a26428d54cfc6165f62b6188f0031091e01a9453607971"
+      "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
     }
   ],
-  "theoremAuditCount": 471,
-  "rustOrShaderSourcesChanged": false,
+  "theoremAuditCount": 480,
+  "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
     "inventorySha256": "34990554258d6722d6d623d0b0dc79990e58640c8ba566edab958a1437f9d183",
@@ -799,7 +808,7 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Source grounding, specialized plan construction beyond tight-body classification, optimized membership decisions, complete solver enumeration, parallel schedules and GPU execution.",
+    "Source grounding, specialized plan construction beyond tight-body classification and exact atomic-choice recognition, optimized membership decisions, complete solver enumeration, parallel schedules and GPU execution.",
     "Correspondence of arbitrary custom iterator effects, borrowed iterator-state updates and destruction beyond the trusted standard-library model; no unrestricted iterator termination or universal runtime liveness is claimed.",
     "Changing runtime histories for the separate public stored-reduct constructor/query API beyond its stated per-invocation fixed-provider contracts. The membership checker runtime call graph is covered here.",
     "Runtime changing-observation correspondence for the tight classifier; current classifier proofs use fixed-provider operations and explicit valid work/sequence contracts."

@@ -116,6 +116,10 @@ structure theory.Data where
 @[reducible]
 def theory.Theory := alloc.sync.Arc theory.Data
 
+/-- [zetesis_ferraris::atomic_choice::atom::{closure}]
+    Source: 'crates/zetesis-ferraris/src/atomic_choice.rs', lines 15:38-15:66 -/
+def atomic_choice.atom.closure := theory.Theory × Std.Usize × Std.Usize
+
 /-- [zetesis_ferraris::theory::Interpretation]
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 208:0-211:1
     Visibility: public -/

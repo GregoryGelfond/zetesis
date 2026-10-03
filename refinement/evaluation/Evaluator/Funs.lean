@@ -85,6 +85,137 @@ def zetesis_cpu.cancellation.Cancellation.poll
     then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
     else ok (core.result.Result.Ok ())
 
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::nodes]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 107:4-109:5
+    Visibility: public -/
+def theory.Theory.nodes
+  (self : theory.Theory) : Result (Slice theory.Node) := do
+  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
+  ok (alloc.vec.Vec.deref d.nodes)
+
+/-- [zetesis_ferraris::theory::{impl core::cmp::PartialEq<zetesis_ferraris::theory::Node> for zetesis_ferraris::theory::Node}::eq]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 6:29-6:38
+    Visibility: public -/
+def theory.Node.Insts.CoreCmpPartialEqNode.eq
+  (self : theory.Node) (other : theory.Node) : Result Bool := do
+  let self1 := read_discriminant self
+  let other1 := read_discriminant other
+  if self1 = other1
+  then
+    match self with
+    | theory.Node.Atom __self_0 =>
+      match other with
+      | theory.Node.Atom __arg1_0 =>
+        lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+      | theory.Node.False => ok true
+      | theory.Node.And _ _ => ok true
+      | theory.Node.Or _ _ => ok true
+      | theory.Node.Implies _ _ => ok true
+    | theory.Node.False => ok true
+    | theory.Node.And __self_0 __self_1 =>
+      match other with
+      | theory.Node.Atom _ => ok true
+      | theory.Node.False => ok true
+      | theory.Node.And __arg1_0 __arg1_1 =>
+        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+        if b
+        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
+        else ok false
+      | theory.Node.Or _ _ => ok true
+      | theory.Node.Implies _ _ => ok true
+    | theory.Node.Or __self_0 __self_1 =>
+      match other with
+      | theory.Node.Atom _ => ok true
+      | theory.Node.False => ok true
+      | theory.Node.And _ _ => ok true
+      | theory.Node.Or __arg1_0 __arg1_1 =>
+        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+        if b
+        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
+        else ok false
+      | theory.Node.Implies _ _ => ok true
+    | theory.Node.Implies __self_0 __self_1 =>
+      match other with
+      | theory.Node.Atom _ => ok true
+      | theory.Node.False => ok true
+      | theory.Node.And _ _ => ok true
+      | theory.Node.Or _ _ => ok true
+      | theory.Node.Implies __arg1_0 __arg1_1 =>
+        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+        if b
+        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
+        else ok false
+  else ok false
+
+/-- [zetesis_ferraris::atomic_choice::pair]:
+    Source: 'crates/zetesis-ferraris/src/atomic_choice.rs', lines 18:0-29:1 -/
+def atomic_choice.pair
+  (program : theory.Theory) (positive : Std.Usize) (negative : Std.Usize) :
+  Result (Option Std.Usize)
+  := do
+  let s ← theory.Theory.nodes program
+  let node ← Slice.index_usize s positive
+  match node with
+  | theory.Node.Atom atom =>
+    let node1 ← Slice.index_usize s negative
+    match node1 with
+    | theory.Node.Atom _ => ok none
+    | theory.Node.False => ok none
+    | theory.Node.And _ _ => ok none
+    | theory.Node.Or _ _ => ok none
+    | theory.Node.Implies left right =>
+      let n ← Slice.index_usize s left
+      let b ← theory.Node.Insts.CoreCmpPartialEqNode.eq n node
+      let b1 ←
+        if b
+        then
+          do
+          let n1 ← Slice.index_usize s right
+          theory.Node.Insts.CoreCmpPartialEqNode.eq n1 theory.Node.False
+        else ok false
+      core.bool.Bool.then_some b1 atom
+  | theory.Node.False => ok none
+  | theory.Node.And _ _ => ok none
+  | theory.Node.Or _ _ => ok none
+  | theory.Node.Implies _ _ => ok none
+
+/-- [zetesis_ferraris::atomic_choice::atom::{impl core::ops::function::FnOnce<(), core::option::Option<usize>> for zetesis_ferraris::atomic_choice::atom::{closure}<'_0, '_1, '_2>}::call_once]:
+    Source: 'crates/zetesis-ferraris/src/atomic_choice.rs', lines 15:38-15:66 -/
+def
+  atomic_choice.atom.closure.Insts.CoreOpsFunctionFnOnceTupleOptionUsize.call_once
+  (c : atomic_choice.atom.closure) (_ : Unit) : Result (Option Std.Usize) := do
+  let (t, i, i1) := c
+  atomic_choice.pair t i i1
+
+/-- Trait implementation: [zetesis_ferraris::atomic_choice::atom::{impl core::ops::function::FnOnce<(), core::option::Option<usize>> for zetesis_ferraris::atomic_choice::atom::{closure}<'_0, '_1, '_2>}]
+    Source: 'crates/zetesis-ferraris/src/atomic_choice.rs', lines 15:38-15:66 -/
+@[reducible]
+def atomic_choice.atom.closure.Insts.CoreOpsFunctionFnOnceTupleOptionUsize :
+  core.ops.function.FnOnce atomic_choice.atom.closure Unit (Option Std.Usize)
+  := {
+  call_once :=
+    atomic_choice.atom.closure.Insts.CoreOpsFunctionFnOnceTupleOptionUsize.call_once
+}
+
+/-- [zetesis_ferraris::atomic_choice::atom]:
+    Source: 'crates/zetesis-ferraris/src/atomic_choice.rs', lines 10:0-16:1 -/
+def atomic_choice.atom
+  (program : theory.Theory) (head : Std.Usize) :
+  Result (Option Std.Usize)
+  := do
+  let s ← theory.Theory.nodes program
+  let node ← Slice.index_usize s head
+  match node with
+  | theory.Node.Atom _ => ok none
+  | theory.Node.False => ok none
+  | theory.Node.And _ _ => ok none
+  | theory.Node.Or left right =>
+    let o ← atomic_choice.pair program left right
+    core.option.Option.or_else
+      atomic_choice.atom.closure.Insts.CoreOpsFunctionFnOnceTupleOptionUsize o
+      (program, right, left)
+  | theory.Node.Implies _ _ => ok none
+
 /-- [zetesis_ferraris::checked::{zetesis_ferraris::checked::CheckedInterpretation}::candidate]:
     Source: 'crates/zetesis-ferraris/src/checked.rs', lines 28:4-30:5
     Visibility: public -/
@@ -176,14 +307,6 @@ def checked.StableInterpretation.impl.interpretation
 def checked.StableInterpretation.into_interpretation
   (self : checked.StableInterpretation) : Result theory.Interpretation := do
   ok self.interpretation
-
-/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::nodes]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 107:4-109:5
-    Visibility: public -/
-def theory.Theory.nodes
-  (self : theory.Theory) : Result (Slice theory.Node) := do
-  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self
-  ok (alloc.vec.Vec.deref d.nodes)
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::atom_count]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 101:4-103:5
@@ -1066,60 +1189,6 @@ def reduct.FrozenReduct.is_satisfied_by
       Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
 
 end QueryReservation
-
-/-- [zetesis_ferraris::theory::{impl core::cmp::PartialEq<zetesis_ferraris::theory::Node> for zetesis_ferraris::theory::Node}::eq]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 6:29-6:38
-    Visibility: public -/
-def theory.Node.Insts.CoreCmpPartialEqNode.eq
-  (self : theory.Node) (other : theory.Node) : Result Bool := do
-  let self1 := read_discriminant self
-  let other1 := read_discriminant other
-  if self1 = other1
-  then
-    match self with
-    | theory.Node.Atom __self_0 =>
-      match other with
-      | theory.Node.Atom __arg1_0 =>
-        lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
-      | theory.Node.False => ok true
-      | theory.Node.And _ _ => ok true
-      | theory.Node.Or _ _ => ok true
-      | theory.Node.Implies _ _ => ok true
-    | theory.Node.False => ok true
-    | theory.Node.And __self_0 __self_1 =>
-      match other with
-      | theory.Node.Atom _ => ok true
-      | theory.Node.False => ok true
-      | theory.Node.And __arg1_0 __arg1_1 =>
-        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
-        if b
-        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
-        else ok false
-      | theory.Node.Or _ _ => ok true
-      | theory.Node.Implies _ _ => ok true
-    | theory.Node.Or __self_0 __self_1 =>
-      match other with
-      | theory.Node.Atom _ => ok true
-      | theory.Node.False => ok true
-      | theory.Node.And _ _ => ok true
-      | theory.Node.Or __arg1_0 __arg1_1 =>
-        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
-        if b
-        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
-        else ok false
-      | theory.Node.Implies _ _ => ok true
-    | theory.Node.Implies __self_0 __self_1 =>
-      match other with
-      | theory.Node.Atom _ => ok true
-      | theory.Node.False => ok true
-      | theory.Node.And _ _ => ok true
-      | theory.Node.Or _ _ => ok true
-      | theory.Node.Implies __arg1_0 __arg1_1 =>
-        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
-        if b
-        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
-        else ok false
-  else ok false
 
 /-- [zetesis_ferraris::theory::validate_root]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 170:0-176:1 -/

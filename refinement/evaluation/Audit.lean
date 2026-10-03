@@ -1,3 +1,4 @@
+import AtomicChoice
 import TightClassification
 import TightClassificationLoop
 import TightClassificationStep
@@ -563,3 +564,13 @@ import FrozenBoundaryExample
 #print axioms TightClassification.classify_setup
 #print axioms TightClassification.completed_classes
 #print axioms TightClassification.completed_semantics
+
+#print axioms AtomicChoice.atom_test
+#print axioms AtomicChoice.pair_shape_iff
+#print axioms AtomicChoice.reversed_declines
+#print axioms AtomicChoice.either_pair_iff
+#print axioms AtomicChoice.atom_shape_iff
+#print axioms AtomicChoice.meaning_atom_iff
+#print axioms AtomicChoice.meaning_negation_iff
+#print axioms AtomicChoice.pair_meaning_iff
+#print axioms AtomicChoice.atom_meaning_iff

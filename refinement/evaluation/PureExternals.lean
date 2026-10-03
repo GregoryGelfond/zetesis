@@ -4,9 +4,10 @@ import Aeneas
 # Pure library models for the extracted evaluator
 
 These definitions fill only the pure external signatures used by the current
-`Evaluator` extraction. Options preserve the extracted callback's result and do
-not invoke it when absent. Arc dereference exposes an already live cell's stored
-value; cloning preserves its explicit owner identity, and pointer comparison
+`Evaluator` extraction. Options invoke the extracted callback only in the
+branch prescribed by the operation and preserve its result. Boolean `then_some`
+receives its value already evaluated; it does not represent a lazy callback.
+Arc dereference exposes an already live cell's stored value; cloning preserves its explicit owner identity, and pointer comparison
 tests that identity. Vector clear erases logical elements in the backend's
 sequence model.
 
@@ -87,6 +88,26 @@ def core.option.Option.is_none_or {T Closure : Type}
   match value with
   | none => .ok true
   | some item => callback.call_once closure item
+
+/-- Return the already supplied value exactly when the condition is true.
+Argument evaluation precedes this call; this operation is not a lazy branch. -/
+@[rust_fun "core::bool::{bool}::then_some"]
+def core.bool.Bool.then_some {T : Type} (condition : Bool) (value : T) :
+    Result (Option T) :=
+  .ok (if condition then some value else none)
+
+/-- A present option is returned without invoking the fallback. Absence invokes
+that extracted callback exactly once and preserves its complete result,
+including backend failure or divergence. The selected closure captures only
+shared theory data and scalar indices; arbitrary closure drop effects are not
+modeled by this generic signature. -/
+@[rust_fun "core::option::{core::option::Option<@T>}::or_else"]
+def core.option.Option.or_else {T Closure : Type}
+    (callback : core.ops.function.FnOnce Closure Unit (Option T))
+    (value : Option T) (closure : Closure) : Result (Option T) :=
+  match value with
+  | none => callback.call_once closure ()
+  | some item => .ok (some item)
 
 /-- Dereferencing an already live wrapper exposes its stored value.
 The unused allocator parameter matches the generated signature; no allocator

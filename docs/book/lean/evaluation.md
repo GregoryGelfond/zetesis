@@ -30,6 +30,26 @@ rank validation and the optimized membership verdict remain separate obligations
 The classifier's fixed-provider proof does not extend the reference checker's
 runtime-event theorem to the optimized route.
 
+## Recognizing atomic choices
+
+[`AtomicChoice.atom_meaning_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/AtomicChoice.lean)
+connects the actual head recognizer to exact formula syntax:
+
+```text
+recognize(head) = Some(a)
+  iff meaning(head) = a ∨ not a or meaning(head) = not a ∨ a
+```
+
+The node table must be ordered and the head index bounded. Distinct stored atom
+occurrences are allowed when they name the same atom; alternatives involving
+different atoms and richer equivalent formulas are excluded. The proof derives
+the stored-node witnesses from execution and uses DAG decoding in both directions.
+The operation has no allocation, cancellation read or separate work charge.
+
+The existing choice-reduct laws apply to these recognized shapes. Extracting all
+original producers, validating their ranks and checking their support remain
+separate implementation obligations.
+
 ## From the public check to answer-set membership
 
 Let `M` be the candidate and `T` the theory asserted by the stored roots.
