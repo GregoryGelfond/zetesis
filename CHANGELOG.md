@@ -25,6 +25,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   preconditions. Constructor proofs use explicit Rust allocation and ownership
   contracts; interpretation construction and complete public membership checking
   remain separate obligations.
+- Lean refinement of frozen-reduct construction and its public satisfaction query.
+  Completed calls agree with the Ferraris reduct, preserving ownership checks,
+  typed stops and separate work budgets under explicit library contracts.
 
 ### Changed
 

@@ -5,10 +5,10 @@
     "inventorySha256": "b35ed55fdef1ee39191fe509c180ce399c4c5bfc2c0364660480dd7b16ec809b",
     "inventoryFiles": 307,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded source inventory for the evaluator, root scan, private frozen query, countermodel-search phases, ownership/clone helpers, admission validators, admission step and Theory::new wrapper; not every repository or toolchain file.",
+    "scope": "Recorded source inventory for the evaluator, root scan, private frozen query, countermodel-search phases, ownership/clone helpers, admission and Theory::new, and frozen-reduct construction/public query/reservation; not every repository or toolchain file.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "42ebfa6aff080d63a98e74f8126844b1575276e8",
-    "extractionSourceState": "Unchanged Rust source at this revision; all 307 inventory hashes match the previous admission refinement.",
+    "extractionBaseRevision": "4e80eff38db670ff7c9f0763016aa5a5cb25be1a",
+    "extractionSourceState": "Unchanged Rust source at this revision; all 307 inventory hashes match the preceding constructor refinement.",
     "workingTreeSourceChanges": {}
   },
   "tools": {
@@ -51,7 +51,11 @@
       "zetesis_ferraris::theory::validate_root",
       "zetesis_ferraris::theory::validate_roots",
       "zetesis_ferraris::theory::admit",
-      "zetesis_ferraris::theory::_::new"
+      "zetesis_ferraris::theory::_::new",
+      "zetesis_ferraris::oracle::reserve",
+      "zetesis_ferraris::reduct::_::freeze",
+      "zetesis_ferraris::reduct::_::new",
+      "zetesis_ferraris::reduct::_::is_satisfied_by"
     ],
     "include": [
       "zetesis_ferraris",
@@ -68,13 +72,9 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "f8c41a3af2ce15ed7b485952d3234b439af38b9c79562074be4d384c678c4f7f",
+    "originalLlbcSha256": "6ff34cf833ef9b40286219fdc940a636608fcf6cd6f43e188a2cf61fc1b760e2",
     "exclude": [
       "zetesis_ferraris::oracle::check",
-      "zetesis_ferraris::oracle::reserve",
-      "zetesis_ferraris::reduct::_::new",
-      "zetesis_ferraris::reduct::_::freeze",
-      "zetesis_ferraris::reduct::_::is_satisfied_by",
       "zetesis_ferraris::reduct::_::candidate",
       "zetesis_ferraris::reduct::_::fmt"
     ],
@@ -201,11 +201,11 @@
       "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
       "declarationSelection": {
         "removedTraitImplIndex": 25,
-        "removedOrderedRegistrationIndex": 136,
+        "removedOrderedRegistrationIndex": 144,
         "trait": "core::fmt::Debug",
         "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
         "derived": true,
-        "excludedMethodId": 200,
+        "excludedMethodId": 207,
         "excludedMethod": "fmt",
         "noSurvivingSemanticReferences": true,
         "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
@@ -222,21 +222,21 @@
           {
             "name": "forward_overflowing",
             "slot": 2,
-            "opaqueFunctionId": 193
+            "opaqueFunctionId": 200
           },
           {
             "name": "backward_overflowing",
             "slot": 6,
-            "opaqueFunctionId": 197
+            "opaqueFunctionId": 204
           }
         ],
         "selection": "Replace the two unused trait and implementation method slots with null; retain indices and all function declarations.",
         "noSurvivingSemanticReferences": true,
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
       },
-      "identifierRederivation": "With Theory::new added after the 14 existing roots, function24 is Theory::new and function25 is Interpretation::new. The six local names remain functions11 and13\u201317; their shared Theory parameter uses serialized type67 referring to type3. Debug impl25 moves to ordered136, fmt200; Step trait9/impl23 retains slots2,6 with functions193,197. Interpretation export is ordered156. All identities, method tables and reference guards are rechecked.",
+      "identifierRederivation": "The fifteen preceding roots retain their function IDs. Added roots are reserve26, freeze27, FrozenReduct.new28 and is_satisfied_by29. Six local names remain11 and13\u201317/type67 referring to type3. Debug impl25 moves to ordered144/fmt207; Step trait9/impl23 retains slots2,6 with functions200,204. Generic Interpretation.new remains function25 and moves to ordered169. Every identity and reference guard is rechecked.",
       "interpretationExportSelection": {
-        "omittedOrderedRegistrationIndex": 156,
+        "omittedOrderedRegistrationIndex": 169,
         "retainedFunctionIndex": 25,
         "function": "zetesis_ferraris::theory::Interpretation::new",
         "fullFunctionDeclarationRetained": true,
@@ -245,21 +245,43 @@
         "reason": "The independently selected unused generic constructor export fails in pinned Aeneas with type_var_id: 0. Only its ordered export is omitted; all function declarations and bodies remain intact."
       }
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "The guarded Debug/Step selection, six local names and omission of the unused generic Interpretation::new ordered export permit strict stock translation. Stock output retains every previous generated byte before the final namespace end and adds Theory::new plus unused interpretation closure declarations. The allocation binder described separately changes only Theory::new\u2019s Lean signature, not its body.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded LLBC selection and local renaming permit strict stock translation. All previous stock declaration blocks are byte-identical; declaration order may move. New blocks are the reserve closure/type, actual reserve, Statistics.default, freeze, FrozenReduct.new and is_satisfied_by. Separate scoped Lean binders parameterize only Theory.new and the four reservation callers.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true,
     "generatedBindingAdaptation": {
       "file": "Evaluator/Funs.lean",
-      "declaration": "ZetesisExtract.theory.Theory.new",
-      "rawGeneratedSha256": "3955f00e2fa32fe39001937ef00c1dbc6ab8a493d53f273988d5ea0d3c9624bf",
-      "adaptedSha256": "6dce2f17708d9d6463d94fe52703b38a9c607d621e9bed2507e1263f91edd4a5",
-      "insertions": [
-        "section TheoryAllocation\nvariable [ArcAllocation]\n\n",
-        "end TheoryAllocation\n\n"
+      "rawGeneratedSha256": "8f25613040d5a3af06758645445cac3952dc6f7c68261ff8b1f7ff9e9d844d78",
+      "adaptedSha256": "16860a24bd70b81ec43944f23a408deff027fcd5807e5a68b97733a7302e5b38",
+      "blocks": [
+        {
+          "declaration": "theory.Theory.new",
+          "prefix": "section TheoryAllocation\nvariable [ArcAllocation]\n\n",
+          "suffix": "end TheoryAllocation\n\n"
+        },
+        {
+          "declaration": "oracle.reserve",
+          "prefix": "section StorageReservation\nvariable [VectorReservation]\n\n",
+          "suffix": "end StorageReservation\n\n"
+        },
+        {
+          "declaration": "reduct.FrozenReduct.freeze",
+          "prefix": "section FreezeReservation\nvariable [VectorReservation]\n\n",
+          "suffix": "end FreezeReservation\n\n"
+        },
+        {
+          "declaration": "reduct.FrozenReduct.new",
+          "prefix": "section ReductReservation\nvariable [VectorReservation]\n\n",
+          "suffix": "end ReductReservation\n\n"
+        },
+        {
+          "declaration": "reduct.FrozenReduct.is_satisfied_by",
+          "prefix": "section QueryReservation\nvariable [VectorReservation]\n\n",
+          "suffix": "end QueryReservation\n\n"
+        }
       ],
       "reversalRestoresExactRawBytes": true,
-      "signatureChange": "Only Theory.new acquires an implicit ArcAllocation provider; its executable body is byte-for-byte unchanged. This is an authored elaboration binder, not stock Aeneas output.",
-      "providerBoundary": "No global provider instance. The operation may return, fail or diverge; returned-value and heap/freshness contracts are explicit per-invocation hypotheses. Reusing a pure provider is not a model of fresh allocation across repeated calls."
+      "signatureChange": "Theory.new takes the existing implicit ArcAllocation provider. Only oracle.reserve, FrozenReduct.freeze, FrozenReduct.new and FrozenReduct.is_satisfied_by gain VectorReservation. These are authored changes to Lean signatures; all executable bodies are unchanged.",
+      "providerBoundary": "Neither provider has a global instance or success assumption. Returning reservation refusal, backend failure and divergence remain distinct. Needed value/sequence/owner/capacity contracts are explicit; repeated identical pure calls do not model changing allocator outcomes or fresh histories."
     }
   },
   "replay": {
@@ -293,66 +315,66 @@
     "allocationBinderReversalRestoresStockOutput": true,
     "documentedAllocationBindingCommandsExit": 0,
     "documentedExtractionArgvMatchesRecordedRun": true,
-    "documentedExtractionArgvComparison": "Parsed shell arguments match the recorded successful extraction in order and value after substituting only the Charon executable, output LLBC path and checkout-relative Cargo manifest path. No new extraction is claimed for the documentation update."
+    "documentedExtractionArgvComparison": "Parsed shell arguments match the recorded successful extraction in order and value after substituting only the Charon executable, output LLBC path and checkout-relative Cargo manifest path.",
+    "documentedExternalBindingCommandsExit": 0
   },
   "trustBoundary": [
-    "LLBC destination metadata and six local names are normalized; checked unused Debug/Step registrations and the unused generic Interpretation::new ordered export are omitted. Restoring these changes reproduces the complete parsed raw Charon output.",
-    "Stock generated bodies are unmodified. The compiled Theory.new binding adds an explicit ArcAllocation provider through a scoped section binder; removing the two inserted blocks recovers the exact stock file. This authored parameterization changes its Lean signature and is audited separately from LLBC normalization.",
+    "LLBC destination metadata and six local names are normalized; checked unused Debug/Step registrations and the unused generic Interpretation::new ordered export are omitted. Restoration recovers the complete parsed raw Charon output.",
+    "Stock generated bodies are unmodified. The compiled file adds exactly the recorded five scoped provider binders; reversing them recovers the exact stock bytes. Their implicit parameters are authored Lean-signature adaptations, audited separately from LLBC normalization.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Existing generated-loop proofs use fixed supplied atomic observations, not changing concurrent Rust observations.",
-    "Owner checks and clone use explicit identity and immutable-heap contracts. Constructor allocation proofs require the stated contract for that invocation\u2019s external call. No allocator, reference-count, destruction or cross-invocation freshness correspondence is established.",
-    "Public oracle::check, reservation, generic Interpretation::new and FrozenReduct construction/public query wrappers remain outside the proved composition. The retained TryReserveError token for unused closure declarations supplies no reservation model.",
+    "Owner checks use identity and immutable-heap contracts. Allocation and reservation use explicit supplied operations with no success assumption; returning reservation refusal is distinct from backend failure. Required value, owner, sequence or capacity contracts belong to the consuming theorem.",
+    "The providers are pure per-invocation interpretations, not evolving allocator histories. The active Vec model has no capacity field. No allocator, destructor, reference-count or cross-invocation runtime correspondence is established.",
+    "Public oracle::check and generic Interpretation::new remain outside the proved composition. Frozen-reduct producers and public queries are now selected directly and receive the explicit reservation provider; their proof scope is recorded separately in verification.json.",
     "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "1189dfff777ef00079f7218f5f9d57c75ba0f89718eb4fd7f815f4d755f2ccd3",
-    "evaluator.llbc": "04cb0162ee610e9d17ed7148615644e9c784678c5a17ed918b1c219e9ebda2b7",
-    "Evaluator/Funs.lean": "6dce2f17708d9d6463d94fe52703b38a9c607d621e9bed2507e1263f91edd4a5",
+    "evaluator.source.llbc": "6fc7cd301038584088eb0c01851fd66c9d3b7f9c0d7f82bc1b17c5eda0184a50",
+    "evaluator.llbc": "2524f01d4883e1ae6d2d217939fe9e8f089c7c17911ec1e51ccaa3b12350f695",
+    "Evaluator/Funs.lean": "16860a24bd70b81ec43944f23a408deff027fcd5807e5a68b97733a7302e5b38",
     "Evaluator/FunsExternal_Template.lean": "9411d40298722743db6c5ac6051ea2cd1757d3ffb8bd9b69cc29f2f13f080e41",
-    "Evaluator/Types.lean": "9ff0562dfd0ee68cc88bb11c4eebccb9c16402bdfc1ae90ef88935fea8a298ae",
+    "Evaluator/Types.lean": "81b3a6737ea50a76daa3e8ca3b4133f4df60f9366c67e47eca39c82c476c3478",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
   },
   "compatibility": {
-    "previousPackageRevision": "42ebfa6aff080d63a98e74f8126844b1575276e8",
-    "previousGeneratedFunsSha256": "01a7cf54d62baeaefd4eb9c4c63b87aa5aeabcbdfb9a8e61fb9f2a8da09d7459",
-    "previousGeneratedTypesSha256": "b02e0c66c1f68399ff2b3b44bdd99de1645570c1877317cb8390f38efcd59567",
-    "comparison": "Every byte of each previous generated file before its final namespace end is unchanged in stock output. Only the new constructor receives the separately recorded allocation binder in the compiled file.",
+    "previousPackageRevision": "4e80eff38db670ff7c9f0763016aa5a5cb25be1a",
+    "previousGeneratedFunsSha256": "6dce2f17708d9d6463d94fe52703b38a9c607d621e9bed2507e1263f91edd4a5",
+    "previousGeneratedTypesSha256": "9ff0562dfd0ee68cc88bb11c4eebccb9c16402bdfc1ae90ef88935fea8a298ae",
+    "comparison": "Exact generated declaration blocks, restoring previous stock output by deleting only its separately audited TheoryAllocation section binder. Declaration order is not required to match.",
     "existingGeneratedExecutableDeclarationsUnchanged": true,
     "existingGeneratedTypeDeclarationsUnchanged": true,
     "sourceCoordinateCommentLinesChanged": false,
-    "externalFunctionsTemplateHashUnchanged": false,
-    "externalTypesTemplateHashUnchanged": false,
+    "externalFunctionsTemplateHashUnchanged": true,
+    "externalTypesTemplateHashUnchanged": true,
     "addedDefinitions": [
-      "theory.Theory.new",
-      "theory.Interpretation.new.closure",
-      "theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError.call_once",
-      "theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError"
+      "[zetesis_ferraris::oracle::reserve::{closure}]",
+      "[zetesis_ferraris::oracle::{impl core::default::Default for zetesis_ferraris::oracle::Statistics}::default]:",
+      "[zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}::call_once]:",
+      "Trait implementation: [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}]",
+      "[zetesis_ferraris::oracle::reserve]:",
+      "[zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::freeze]:",
+      "[zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::new]:",
+      "[zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::is_satisfied_by]:"
     ],
-    "addedExternalTemplateFunctions": [
-      "core.num.Usize.div_ceil",
-      "alloc.sync.Arc.new",
-      "alloc.vec.Vec.try_reserve_exact"
-    ],
-    "addedExternalTemplateTypes": [
-      "alloc.collections.TryReserveError"
-    ],
-    "activeExternalCapabilityAdded": "ArcAllocation dispatch for the new constructor only; no generated axiom templates installed and no reservation operation added.",
+    "addedExternalTemplateFunctions": [],
+    "addedExternalTemplateTypes": [],
+    "activeExternalCapabilityAdded": "VectorReservation activates the previously unused exact try_reserve_exact signature. No template axiom, always-success operation or capacity field is installed.",
     "strictExistingPackageCheckExit": 0,
-    "proofReplayScope": "The integrated package and its complete authored/shared axiom audits pass. TheoryConstruction proves the per-invocation constructor under the explicit allocation-value contract and guarded binding parameterization. The public membership wrapper and changing runtime observations remain unproved; see verification.json.",
-    "generatedLinesAdded": {
-      "Evaluator/Types.lean": 6,
-      "Evaluator/Funs.lean": 47
+    "proofReplayScope": "The integrated package and complete authored/shared axiom audits pass. FrozenConstruction derives the stored mask from actual construction; PublicFrozenQuery composes actual successful public construction and satisfaction calls under separately supplied per-invocation reservation operations and fixed control observations. Interpretation construction, the complete public membership wrapper and changing runtime histories remain open; Rust library, compiler, OS and hardware contracts are trusted. See verification.json.",
+    "previousStockDeclarationBlocks": {
+      "Evaluator/Types.lean": 19,
+      "Evaluator/Funs.lean": 45
     },
-    "generatedLinesRemoved": {
-      "Evaluator/Types.lean": 0,
-      "Evaluator/Funs.lean": 0
+    "addedStockDeclarationBlocks": {
+      "Evaluator/Types.lean": 1,
+      "Evaluator/Funs.lean": 7
     },
-    "bindingLinesAdded": 5
+    "bindingLinesAdded": 25
   },
   "stockGeneratedArtifactsSha256": {
-    "Evaluator/Funs.lean": "3955f00e2fa32fe39001937ef00c1dbc6ab8a493d53f273988d5ea0d3c9624bf",
+    "Evaluator/Funs.lean": "8f25613040d5a3af06758645445cac3952dc6f7c68261ff8b1f7ff9e9d844d78",
     "Evaluator/FunsExternal_Template.lean": "9411d40298722743db6c5ac6051ea2cd1757d3ffb8bd9b69cc29f2f13f080e41",
-    "Evaluator/Types.lean": "9ff0562dfd0ee68cc88bb11c4eebccb9c16402bdfc1ae90ef88935fea8a298ae",
+    "Evaluator/Types.lean": "81b3a6737ea50a76daa3e8ca3b4133f4df60f9366c67e47eca39c82c476c3478",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
   }
 }

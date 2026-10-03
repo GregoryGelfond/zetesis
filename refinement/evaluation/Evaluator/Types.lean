@@ -144,6 +144,11 @@ structure theory.Interpretation where
   theory : theory.Theory
   words : alloc.vec.Vec Std.U64
 
+/-- [zetesis_ferraris::oracle::reserve::{closure}]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
+@[reducible]
+def oracle.reserve.closure (T : Type) := Unit
+
 /-- [zetesis_ferraris::oracle::evaluate::{closure}]
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 128:47-128:65 -/
 @[reducible]

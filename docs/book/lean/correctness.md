@@ -85,9 +85,15 @@ allocates, including its node and root validators, so admitted data supplies the
 ordering and root-bound premises. `TheoryConstruction` derives these from a
 successful generated constructor return under the trusted allocation-value
 contract. Its explicit provider describes one invocation; multiple-allocation
-histories and `Interpretation::new` remain outside this proof. The separate stored-reduct query
-proof still requires explicit mask agreement; actual original evaluation can
-supply that agreement, but `FrozenReduct::freeze` remains unproved.
+histories and `Interpretation::new` remain outside this proof.
+
+`PublicFrozenQuery.constructed_satisfaction` composes actual successful public
+stored-reduct construction and query calls. It derives the mask invariant and
+proves that the query decides reduct satisfaction, given represented inputs,
+ordered nodes and bounded roots. Construction and query receive separate
+reservation providers, limits and fixed control tokens; no allocation-success
+law is assumed. This closes that producer/query obligation without proving the
+complete public membership wrapper or changing allocator and control histories.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
@@ -161,10 +167,11 @@ system or device progress is not obtained from a set-theoretic coverage law.
 
 1. **Public scalar reference checker.** Establish admitted input and initial
    storage invariants, preserve program ownership, and connect the public
-   wrapper to the proved reference-checker phases. Model fallible allocation
-   and changing cancellation observations. Include `FrozenReduct` construction
-   and its public checks. This milestone concerns one candidate of a finite
-   ground formula theory.
+   wrapper to the proved reference-checker phases. Theory construction and
+   stored-reduct construction/query are covered under per-invocation library
+   contracts; interpretation construction and the full membership wrapper remain.
+   Connect these results to changing allocator and cancellation histories.
+   This milestone concerns one candidate of a finite ground formula theory.
 2. **Optimized CPU checking and enumeration.** Connect normal closure and each
    optimized membership route to the same answer-set definition. Prove candidate
    generation, plan selection, exact classification and completion accounting.

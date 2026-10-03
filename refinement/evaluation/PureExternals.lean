@@ -36,10 +36,10 @@ structure alloc.sync.Arc (T : Type) where
   value : T
   owner : Nat
 
-/-- An opaque reservation error retained by an unused extracted closure. The
-closure discards its input and returns `AdmissionError::Allocation`; no error
-field is inspected. This token supplies its type, not a reservation operation
-or a claim that interpretation construction has been verified. -/
+/-- An opaque reservation error. Extracted wrappers discard its fields when
+mapping a refusal to their allocation error. The token supplies the error type,
+not allocator internals; `VectorReservation` supplies the operation separately.
+Interpretation construction remains unproved. -/
 @[rust_type "alloc::collections::TryReserveError"]
 structure alloc.collections.TryReserveError where
   token : Nat

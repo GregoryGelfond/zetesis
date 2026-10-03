@@ -85,6 +85,17 @@ def zetesis_cpu.cancellation.Cancellation.poll
     then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
     else ok (core.result.Result.Ok ())
 
+/-- [zetesis_ferraris::oracle::{impl core::default::Default for zetesis_ferraris::oracle::Statistics}::default]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 26:29-26:36
+    Visibility: public -/
+def oracle.Statistics.Insts.CoreDefaultDefault.default
+  : Result oracle.Statistics := do
+  ok
+    {
+      work := (core.default.DefaultU64.default),
+      subsets := (core.default.DefaultU64.default)
+    }
+
 /-- [zetesis_ferraris::oracle::{zetesis_ferraris::oracle::Work<'_0>}::tick]:
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 83:4-90:5 -/
 def oracle.Work.tick
@@ -134,6 +145,52 @@ def oracle.identities
   if b
   then ok (core.result.Result.Ok ())
   else ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.WrongProgram)
+
+/-- [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}::call_once]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
+def
+  oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
+  {T : Type} (c : oracle.reserve.closure T)
+  (tupled_args : alloc.collections.TryReserveError) :
+  Result zetesis_cpu.cancellation.Stop
+  := do
+  ok zetesis_cpu.cancellation.Stop.Allocation
+
+/-- Trait implementation: [zetesis_ferraris::oracle::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::oracle::reserve::{closure}<T>}]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/
+@[reducible]
+def oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
+  (T : Type) : core.ops.function.FnOnce (oracle.reserve.closure T)
+  alloc.collections.TryReserveError zetesis_cpu.cancellation.Stop := {
+  call_once :=
+    oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
+}
+
+section StorageReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::oracle::reserve]:
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 101:0-107:1 -/
+def oracle.reserve
+  (T : Type) (count : Std.Usize) :
+  Result (core.result.Result (alloc.vec.Vec T) zetesis_cpu.cancellation.Stop)
+  := do
+  let (r, vector) ←
+    alloc.vec.Vec.try_reserve_exact Global (alloc.vec.Vec.new T) count
+  let r1 ←
+    core.result.Result.map_err
+      (oracle.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
+      T) r ()
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    ok (core.result.Result.Ok vector)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      (alloc.vec.Vec T) (core.convert.FromSame zetesis_cpu.cancellation.Stop)
+      residual
+
+end StorageReservation
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::atom_count]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 101:4-103:5
@@ -610,6 +667,70 @@ def oracle.find_countermodel
       0#usize
   ok (countermodel, subset1, values1, work1)
 
+section FreezeReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::freeze]:
+    Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 106:4-110:5 -/
+def reduct.FrozenReduct.freeze
+  (candidate : theory.Interpretation) (work : oracle.Work) :
+  Result ((core.result.Result reduct.FrozenReduct
+    zetesis_cpu.cancellation.Stop) × oracle.Work)
+  := do
+  let t ← theory.Interpretation.impl.theory candidate
+  let s ← theory.Theory.nodes t
+  let i := Slice.len s
+  let r ← oracle.reserve Bool i
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let (r1, val1, work1) ← oracle.evaluate t candidate none val work
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      ok (core.result.Result.Ok { candidate, truth := val1 }, work1)
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r2 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          reduct.FrozenReduct (core.convert.FromSame
+          zetesis_cpu.cancellation.Stop) residual
+      ok (r2, work1)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        reduct.FrozenReduct (core.convert.FromSame
+        zetesis_cpu.cancellation.Stop) residual
+    ok (r1, work)
+
+end FreezeReservation
+
+section ReductReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::new]:
+    Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 45:4-57:5
+    Visibility: public -/
+def reduct.FrozenReduct.new
+  (candidate : theory.Interpretation) (limits : oracle.Limits)
+  (cancellation : zetesis_cpu.cancellation.Cancellation) :
+  Result (core.result.Result reduct.FrozenReduct zetesis_cpu.cancellation.Stop)
+  := do
+  let r ← zetesis_cpu.cancellation.Cancellation.poll cancellation
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    let s ← oracle.Statistics.Insts.CoreDefaultDefault.default
+    let (r1, _) ←
+      reduct.FrozenReduct.freeze candidate
+        { limits, cancellation, statistics := s }
+    ok r1
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      reduct.FrozenReduct (core.convert.FromSame zetesis_cpu.cancellation.Stop)
+      residual
+
+end ReductReservation
+
 /-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::theory]:
     Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 67:4-69:5
     Visibility: public -/
@@ -648,6 +769,49 @@ def reduct.FrozenReduct.satisfied_by
       core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
         Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
     ok (r1, values1, work1)
+
+section QueryReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::reduct::{zetesis_ferraris::reduct::FrozenReduct<'a>}::is_satisfied_by]:
+    Source: 'crates/zetesis-ferraris/src/reduct.rs', lines 86:4-101:5
+    Visibility: public -/
+def reduct.FrozenReduct.is_satisfied_by
+  (self : reduct.FrozenReduct) (tested : theory.Interpretation)
+  (limits : oracle.Limits)
+  (cancellation : zetesis_cpu.cancellation.Cancellation) :
+  Result (core.result.Result Bool zetesis_cpu.cancellation.Stop)
+  := do
+  let t ← reduct.FrozenReduct.theory self
+  let r ← oracle.identities t tested
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    let r1 ← zetesis_cpu.cancellation.Cancellation.poll cancellation
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let s ← oracle.Statistics.Insts.CoreDefaultDefault.default
+      let i := alloc.vec.Vec.len self.truth
+      let r2 ← oracle.reserve Bool i
+      let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
+      match cf2 with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        let (r3, _, _) ←
+          reduct.FrozenReduct.satisfied_by self tested val
+            { limits, cancellation, statistics := s }
+        ok r3
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      Bool (core.convert.FromSame zetesis_cpu.cancellation.Stop) residual
+
+end QueryReservation
 
 /-- [zetesis_ferraris::theory::{impl core::clone::Clone for zetesis_ferraris::theory::Theory}::clone]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 75:9-75:14

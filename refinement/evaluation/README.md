@@ -6,8 +6,10 @@ proper-subset search to the Ferraris answer-set definition under fixed
 observation tokens. It also proves that the generated admission step called by
 `Theory::new`, with its node and root validators, computes the authored
 admission checks. `TheoryConstruction` connects those checks to the public
-theory constructor under an explicit library allocation contract. The public
-membership wrapper remains outside the proved composition.
+theory constructor under an explicit library allocation contract. Completed
+stored-reduct construction and public querying agree with reduct satisfaction,
+using supplied reservation operations. The public membership wrapper remains outside the proved
+composition.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the reduct-evaluation, packed-subset and admission sources directly and checks them
@@ -129,21 +131,37 @@ or assumption of allocation success. See [reproduction](REPRODUCING.md).
 
 ## Stored reduct queries
 
-[`FrozenQuery.completed_satisfaction`](FrozenQuery.lean) proves that a completed
-actual private query returns `true` exactly when the tested interpretation `J`
-models the asserted theory's Ferraris reduct frozen at `M`.
+[`PublicFrozenQuery.constructed_satisfaction`](PublicFrozenQuery.lean) proves
+that, after actual `FrozenReduct::new` and `is_satisfied_by` calls complete,
+the query returns `true` exactly when the tested interpretation `J` models the
+asserted theory's Ferraris reduct frozen at the supplied candidate `M`.
+It requires represented storage for both interpretations, ordered child indices
+and bounded roots. Neither original modelhood of `M` nor `J ⊆ M` is required;
+this is satisfaction, not answer-set membership.
 
-Its explicit `Represents` premise says the stored mask is original truth for the
-stored candidate and theory. `represents_from_evaluation` derives that agreement
-for the corresponding record from an actual completed original evaluation;
-it does not prove the `freeze` constructor. Other premises require represented
-packed input, ordered child indices and bounded roots. The single query result
-determines its evaluation and root-scan calls; neither is assumed correct.
+[`FrozenConstruction`](FrozenConstruction.lean) derives candidate retention and
+the stored mask's agreement with original truth from actual construction.
+[`PublicFrozenQuery`](PublicFrozenQuery.lean) follows the public query's owner
+check, initial poll and reservation before applying the private
+[`FrozenQuery.completed_satisfaction`](FrozenQuery.lean) result. The composed
+theorem assumes neither mask agreement nor successful internal calls. A wrong
+owner is refused before polling or reservation, even when theory contents agree.
 
-The query passes evaluation's returned work into the root scan. It preserves
-limits and subset statistics and charges at most `N + R` for `N` nodes and `R`
-root occurrences, including typed stops. Neither original modelhood of `M` nor
-`J ⊆ M` is required; this is satisfaction, not answer-set membership.
+Construction and query have separate reservation providers, limits and control
+tokens. These describe their individual invocations, not an allocator history;
+no provider instance or allocation-success law is installed.
+[`ReservedStorage`](ReservedStorage.lean) proves that the actual reservation
+wrapper maps a source refusal to `Stop.Allocation` and retains backend failure
+and divergence. The semantic construction proof needs no premise about reserved
+contents because evaluation clears its workspace. Physical capacity remains a
+trusted library contract.
+
+For `N` nodes and `R` root occurrences, a completed freeze charges exactly `N`
+node visits. The private query shares one
+work record across evaluation and root scanning, preserving limits and subset
+statistics and charging at most `N + R`, including typed stops. The public
+constructor and query each start fresh counters; query limits do not include
+construction work. A stop remains an error, not a satisfaction verdict.
 `TheorySatisfaction` retains the separate-call original and reduct results.
 
 ## Argument
@@ -164,6 +182,8 @@ root occurrences, including typed stops. Neither original modelhood of `M` nor
 | `RootScan` | The actual root scan returns the first false occurrence or complete success, with exact work and typed stops |
 | `RootSemantics`, `TheorySatisfaction` | Generated evaluation and root scanning decide original or reduct theory satisfaction on completion |
 | `FrozenQuery` | The actual private query decides the represented reduct and threads one work record through both phases |
+| `ReservedStorage`, `WorkInitialization` | Actual reservation outcomes are preserved and public calls start with zero counters |
+| `FrozenConstruction`, `PublicFrozenQuery` | Actual construction establishes the mask invariant; the completed public query decides that reduct under supplied reservation operations |
 | `SubsetQuery`, `SubsetQueryTotal` | Actual subset queries decide reduct satisfaction on completion; every typed return retains the admission charge and shared work bounds |
 | `FixedSelection` | The actual scan returns the exact ordered candidate atoms, or a stopped prefix with exact work |
 | `SubsetCarry` | Actual proper carries preserve packed selection and population on completion, retaining partial state on stops |
@@ -263,24 +283,26 @@ of the current extraction to concurrent execution.
 Both passes use the same stored table and numeric atom vocabulary. The Arc
 model carries explicit owner identity; its connection to Rust allocations and
 immutable-heap consistency are library contracts. Aeneas's vector
-model records logical elements and checked indices, not allocation capacity or
-allocation failure. Unused clock and synchronization fields have tokens but no
+model records logical elements and checked indices, not allocation capacity.
+`VectorReservation` supplies fallible reservation outcomes without assuming
+success or modeling physical storage. Unused clock and synchronization fields have tokens but no
 modeled operations. Reference counting, destruction, timers, concurrent memory,
 machine code and GPU execution remain outside this model.
 
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-`FrozenReduct` construction, `Interpretation::new`, the complete public
-membership wrapper, multiple-allocation runtime histories, source grounding,
+`Interpretation::new`, the complete public membership wrapper,
+multiple-allocation runtime histories, source grounding,
 candidate enumeration, optimized checking routes or end-to-end solver
 verification.
 
 ## Extraction identity and reproduction
 
 The generated types and functions come directly from production Rust, including
-the four private subset-search operations and `Theory::new` with its private
-admission step and four validators. The LLBC destination becomes portable,
+the four private subset-search operations, `Theory::new` with its private
+admission step and four validators, and the stored-reduct constructor, public
+query and reservation wrapper. The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
@@ -293,10 +315,11 @@ after checking that no retained operation references it; its declaration and
 body remain in the input. Restoring these selections and metadata/name fields
 recovers the parsed raw input.
 
-A scoped section binder adds the supplied allocation parameter to the generated
-`Theory::new`; no body is rewritten. Removing that recorded insertion restores
-the exact generated Lean. This dependency parameterization is distinct from
-metadata normalization, and remains part of the trusted extraction adaptation.
+Scoped section binders supply `ArcAllocation` to generated `Theory::new` and
+`VectorReservation` to `oracle::reserve` and `FrozenReduct::{freeze, new,
+is_satisfied_by}`. No body is rewritten. Removing the five recorded insertions
+restores the exact generated Lean. This dependency parameterization is distinct
+from metadata normalization and remains part of the trusted extraction adaptation.
 
 These are audited preprocessing steps, not verified transformations or a claim
 of byte-identical raw extraction. `provenance.json` and the source/artifact

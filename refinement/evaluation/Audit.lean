@@ -15,6 +15,10 @@ import AdmissionValidationExample
 import AdmittedData
 import TheoryConstructionExample
 
+import ReservedStorage
+import WorkInitialization
+import FrozenBoundaryExample
+
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
 #print axioms SubsetQuery.completed_admission
@@ -256,3 +260,43 @@ import TheoryConstructionExample
 #print axioms TheoryConstructionExample.refused_input_does_not_allocate
 #print axioms TheoryConstructionExample.admitted_input_can_diverge
 #print axioms TheoryConstructionExample.separate_invocations_can_return_distinct_owners
+
+#print axioms ReservedStorage.reserve_exact
+
+#print axioms ReservedStorage.completed_reservation
+
+#print axioms ReservedStorage.returned_refusal
+
+#print axioms ReservedStorage.returned_empty
+
+#print axioms WorkInitialization.statistics_default
+
+#print axioms FrozenConstruction.reservation_stopped
+
+#print axioms FrozenConstruction.evaluated
+
+#print axioms FrozenConstruction.completed_phases
+
+#print axioms FrozenConstruction.completed_represents
+
+#print axioms FrozenConstruction.completed_work
+
+#print axioms FrozenConstruction.new_stopped
+
+#print axioms FrozenConstruction.new_completed_phases
+
+#print axioms FrozenConstruction.new_represents
+
+#print axioms PublicFrozenQuery.wrong_owner
+
+#print axioms PublicFrozenQuery.prepared
+
+#print axioms PublicFrozenQuery.completed_phases
+
+#print axioms PublicFrozenQuery.completed_satisfaction
+
+#print axioms PublicFrozenQuery.constructed_satisfaction
+
+#print axioms FrozenBoundaryExample.foreign_theory_is_refused_first
+
+#print axioms FrozenBoundaryExample.empty_construction_still_polls

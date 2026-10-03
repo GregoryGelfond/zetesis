@@ -4,9 +4,10 @@ The separately built [implementation-refinement package](https://github.com/Greg
 connects the CPU reference checker's actual generated evaluation, root scan,
 atom selection and proper-subset search to the Ferraris answer-set definition.
 The result concerns one candidate of a ground formula theory under fixed
-observation tokens; public allocation and owner checking remain outside it.
-The package also proves the node and root validators that admission runs before
-a theory exists.
+observation tokens; the complete public membership wrapper remains outside it.
+The package also proves theory admission and construction under an explicit
+allocation contract, and connects stored-reduct construction to its public query
+under supplied reservation operations.
 
 ## From original truth to answer-set membership
 
@@ -106,30 +107,41 @@ membership composition remain unproved.
 
 ## From evaluation to theory satisfaction
 
-The lower-level stored-reduct query accepts any tested interpretation `J`:
+The public stored-reduct constructor and query now compose directly:
 
 ```text
-Represents frozen: its stored mask is original node truth at M
-completed actual private satisfied_by query at J → Boolean answer
+actual FrozenReduct::new at M completes with frozen
+actual frozen.is_satisfied_by at J completes with answer
 
 answer = true  iff  J models the Ferraris reduct of T frozen at M
 ```
 
-[`FrozenQuery.completed_satisfaction`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FrozenQuery.lean)
-requires this mask agreement, represented packed input, ordered children and
-bounded roots. It derives the two internal calls from the actual query result,
-then establishes their meaning and read bounds. `represents_from_evaluation`
-derives the mask agreement for the corresponding record from completed original
-evaluation; it does not verify `FrozenReduct::freeze` or its allocation.
-The existing `TheorySatisfaction` results cover separate original and reduct
-calls. No candidate modelhood or tested-subset premise is required; satisfaction
-does not establish answer-set membership.
+[`PublicFrozenQuery.constructed_satisfaction`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PublicFrozenQuery.lean)
+requires represented storage for both interpretations, ordered children and
+bounded roots. Actual construction establishes the stored mask's meaning and
+retains the supplied candidate; no mask agreement or successful internal call
+is assumed. No candidate modelhood or tested-subset premise is required.
+This is reduct satisfaction, not answer-set membership.
 
-The query retains one work record across evaluation and root checking. For `N`
-nodes and `R` root occurrences, every typed return charges at most `N + R`,
-without resetting prior work. Limits and subset statistics are preserved.
+Construction and query use separately supplied reservation operations, limits
+and fixed control tokens. The theorem concerns their completed calls and assumes
+no allocation-success law. The public query checks owner identity before polling
+or reservation. Source reservation refusal becomes `Stop.Allocation`; backend
+failure and divergence remain distinct. Evaluation clears the reserved workspace,
+so its prior contents need no preservation premise. Physical capacity and the
+correspondence to allocator behavior remain trusted library contracts.
+
+[`FrozenConstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FrozenConstruction.lean)
+proves the producer invariant consumed by the private
+[`FrozenQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/FrozenQuery.lean).
+For `N` nodes and `R` root occurrences, a completed freeze charges exactly `N`
+node visits. The private query retains one
+work record across evaluation and root checking: every typed return charges at
+most `N + R`, preserving limits and subset statistics. The public constructor
+and query each start fresh counters, so query limits exclude construction work.
 An evaluation stop skips the root scan; a root-scan stop remains the same error.
-The argument composes these boundaries:
+The existing `TheorySatisfaction` results cover separate original and reduct
+calls. The argument composes these boundaries:
 
 | Boundary | Argument |
 | --- | --- |
@@ -142,6 +154,7 @@ The argument composes these boundaries:
 | Roots | The actual scan preserves root order, duplicates, first-failure identity and exact work |
 | Theory | A completed scan returns no failed root exactly when the tested interpretation models the asserted theory |
 | Stored query | The actual method uses the represented mask and shares evaluation's returned work with the root scan |
+| Construction and public query | Actual construction establishes that mask; the public query checks ownership, polls and reserves before querying |
 
 An exhausted iterator completes without polling or charging a node. With a node
 present, the iterator fetches it before polling; cancellation, deadline and work
@@ -223,12 +236,14 @@ events and preserves embedded backend computations. It is not yet connected to
 the generated checker. Supporting those effects through the extraction backend's
 function and loop interfaces remains necessary.
 
-The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
-construction, interpretation construction and composition of allocation and
-owner checks with the public membership wrapper remain unproved. Source grounding, candidate
-enumeration and optimized checking routes are separate obligations. Allocation,
-reference counting, timers, concurrent memory, machine code and GPU execution
-remain outside these models. The
+The calls share stored nodes, roots and numeric atom vocabulary. Interpretation
+construction and composition of allocation and owner checks with the complete
+public membership wrapper remain unproved. The supplied allocation and
+reservation operations describe individual invocations, not changing runtime
+histories. Source grounding, candidate enumeration and optimized checking routes
+are separate obligations. Rust's library, compiler, operating system and hardware
+are trusted. Their contracts do not replace the remaining proofs for zetesis's
+runtime control and GPU operations. The
 [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
 distinguishes this loop from the public wrapper's allocation and ownership models.
 

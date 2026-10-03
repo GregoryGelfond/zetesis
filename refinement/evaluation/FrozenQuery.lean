@@ -13,9 +13,10 @@ represent original truth for the stored candidate. That agreement is explicit:
 the extracted record type alone does not establish its producer invariant.
 
 These proofs cover the private `satisfied_by` operation under the existing fixed
-observation and sequence models. Construction, fallible reservation, public owner
-checks and concurrent observations remain separate obligations. In particular,
-the record formed from a proved original evaluation is not a proof of `freeze`.
+observation and sequence models. `FrozenConstruction` separately derives the mask
+invariant from actual construction; `PublicFrozenQuery` composes the public
+constructor and query under supplied reservation operations. Physical storage and
+changing runtime observations remain outside these results.
 -/
 namespace FrozenQuery
 

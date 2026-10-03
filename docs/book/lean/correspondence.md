@@ -25,14 +25,17 @@ for original truth followed by frozen-reduct truth. It derives the mask from
 Rust loop is `zetesis_ferraris::oracle::evaluate`, used by `FrozenReduct`, but
 these proofs do not extract or verify that Rust loop. The separate
 [implementation-refinement package](evaluation.md) proves the generated evaluator,
-root scan, private stored-reduct query and reference proper-subset search under
-fixed observation tokens.
-`FrozenQuery.completed_satisfaction` connects the actual query Boolean to Ferraris
-reduct satisfaction, with explicit `Represents` agreement between the stored mask
-and original truth. `represents_from_evaluation` establishes that agreement for
-a record formed from actual completed original evaluation; it is not a proof of
-the `freeze` constructor. Neither original modelhood nor a tested-subset relation
-is required. `TheorySatisfaction` retains the separate-call original and reduct
+root scan, stored-reduct construction/query and reference proper-subset search
+under fixed observation tokens.
+`FrozenQuery.completed_satisfaction` connects the private query Boolean to Ferraris
+reduct satisfaction under explicit stored-mask agreement. `FrozenConstruction`
+derives that agreement and candidate retention from the actual producer.
+`PublicFrozenQuery.constructed_satisfaction` composes successful public constructor
+and query calls without an assumed mask, given represented inputs, ordered nodes
+and bounded roots. Construction and query use separate reservation providers,
+limits and fixed controls; this does not model an allocator history or assume
+allocation succeeds. Neither original modelhood nor a tested-subset relation is
+required. `TheorySatisfaction` retains the separate-call original and reduct
 results, using the same semantic sources under Lean 4.31.0.
 
 `EvaluationAccounting` derives the exact charged prefix length from every typed
@@ -41,8 +44,11 @@ the actual root scan over the returned work record: limits and subset counts
 are preserved, and the query charges at most `N + R` for `N` nodes and `R` root
 occurrences. Typed stops remain errors. The broader trace relation permits fresh
 control inputs; its traces need not be executions of the fixed-token loop.
-Changing runtime observations, `FrozenReduct` construction and public allocation
-and owner-checking wrappers remain unproved.
+The public reduct query checks owner identity before polling or reservation;
+reservation refusal remains `Stop.Allocation`. Its fresh query budget excludes
+construction work. Interpretation construction, the complete public membership
+wrapper and changing runtime histories remain unproved; physical storage and
+owner-token correspondence remain trusted library contracts.
 
 `FixedSelection` proves the actual selected-atom loop and entry function. Each
 typed return retains the exact visited prefix and work; completion produces the
@@ -1190,9 +1196,11 @@ The normal-rule and Ferraris foundations retain independent definitions.
 The [NormalFerraris bridge](normal-rules.md) proves their equivalence under the
 specified normalized-rule translation, including its filtered/direct-map
 distinction. It does not verify `from_ground_program`, atom interning or formula
-DAG construction. Likewise, `FrozenReduct` is a Rust representation of a fixed
-candidate's reduct. Its private query now has a generated-code proof conditional
-on stored-mask agreement; construction must still establish that invariant.
+DAG construction. `FrozenReduct` represents a fixed candidate's reduct.
+The separate generated-code proofs establish its stored-mask invariant through
+actual construction and compose it with the public query under per-invocation
+reservation providers and fixed observations. They do not establish source
+lowering, interpretation construction or the complete public membership wrapper.
 
 `FormulaNodes` retains a completed topology-validation prefix across aggregate
 compilations. Its obligation is the inductive one in `DagSharing.WellFormed.snoc`:

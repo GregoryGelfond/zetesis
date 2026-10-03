@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -192,3 +192,21 @@ name = "TheoryConstruction"
 
 [[lean_lib]]
 name = "TheoryConstructionExample"
+
+[[lean_lib]]
+name = "VectorReservation"
+
+[[lean_lib]]
+name = "WorkInitialization"
+
+[[lean_lib]]
+name = "ReservedStorage"
+
+[[lean_lib]]
+name = "FrozenConstruction"
+
+[[lean_lib]]
+name = "PublicFrozenQuery"
+
+[[lean_lib]]
+name = "FrozenBoundaryExample"
