@@ -89,14 +89,20 @@ the supplied atom count and vectors unchanged, in their stored order and
 multiplicity, and the admitted atom count has representable 64-bit and 32-bit
 word counts.
 
-The membership and stored-query theorems keep their ordering and root-bound
-premises. `admitted_program_structure` derives both for any theory whose stored
-value is data returned by `admit`. Connecting them to an actual `Theory::new`
-call needs further facts. Most concern values: the constructor's wrapper returns
-`admit`'s refusal unchanged and otherwise passes the admitted data to `Arc::new`,
-which stores it as the theory's value. One concerns identity: the allocation has
-a fresh owner, which only ownership results use. None of them is proved here,
-nor is `Interpretation::new`.
+[`TheoryConstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/TheoryConstruction.lean)
+connects admission to the generated `Theory::new` wrapper. A successful return
+establishes both successful admission and allocation. Typed refusal is exactly
+admission refusal; allocation failure or nonreturn cannot become a successful
+theory. Under the trusted `Arc` contract that allocation stores its input,
+`returned_structure` derives ordered nodes and bounded roots. Those remain
+premises of the membership theorems, now supplied by the constructor.
+
+The generated wrapper has an explicit allocation parameter, introduced by a
+checked, reversible binding adaptation; its body is unchanged. This models one
+invocation without assuming allocation succeeds. Freshness is a separate
+per-invocation heap contract. A single pure provider does not model repeated
+fresh allocations of equal data. `Interpretation::new` and complete public
+membership composition remain unproved.
 
 ## From evaluation to theory satisfaction
 
@@ -218,9 +224,8 @@ the generated checker. Supporting those effects through the extraction backend's
 function and loop interfaces remains necessary.
 
 The calls share stored nodes, roots and numeric atom vocabulary. `FrozenReduct`
-construction, public allocation, composition of owner checks with the public
-wrapper, and the admission constructors around the proved validators remain
-unproved. Source grounding, candidate
+construction, interpretation construction and composition of allocation and
+owner checks with the public membership wrapper remain unproved. Source grounding, candidate
 enumeration and optimized checking routes are separate obligations. Allocation,
 reference counting, timers, concurrent memory, machine code and GPU execution
 remain outside these models. The

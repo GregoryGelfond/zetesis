@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData"]
+defaultTargets = ["ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -183,3 +183,12 @@ name = "AdmissionValidationExample"
 
 [[lean_lib]]
 name = "AdmittedData"
+
+[[lean_lib]]
+name = "ArcAllocation"
+
+[[lean_lib]]
+name = "TheoryConstruction"
+
+[[lean_lib]]
+name = "TheoryConstructionExample"

@@ -240,3 +240,15 @@
 'AdmittedData.admit_never_allocation' depends on axioms: [propext, Classical.choice, Quot.sound]
 'AdmittedData.admitted_word_counts' depends on axioms: [propext, Classical.choice, Quot.sound]
 'AdmittedData.admitted_program_structure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.refused' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.admitted_allocation' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.completed_phases' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.refused_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.returned_value' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.returned_structure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstruction.returned_heap' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstructionExample.refused_input_does_not_allocate' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstructionExample.admitted_input_can_diverge' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TheoryConstructionExample.separate_invocations_can_return_distinct_owners' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]

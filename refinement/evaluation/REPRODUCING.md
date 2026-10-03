@@ -37,7 +37,8 @@ files compile with implicit variables disabled and warnings treated as errors. O
 checked artifact hashes and commands, separately from the main semantic library's gate.
 The default build includes the generated evaluator, root scan and private
 `FrozenReduct::satisfied_by` query, their semantic composition, the generated
-admission step and validators, and the checked boundary examples. These use the documented
+admission step, validators and `Theory::new` wrapper, and the checked boundary
+examples. The wrapper receives the explicit allocation operation described below. These use the documented
 fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
 
@@ -48,7 +49,7 @@ an extraction toolchain, not a change to the solver's ordinary Rust pin. The
 extractor selects the real private production evaluator, root scan, subset
 query and countermodel-search phases directly.
 It also selects the actual owner check and theory clone, and the private
-admission step and four validators that `Theory::new` runs before allocation. It selects
+admission step, four validators and `Theory::new` itself. It selects
 `FrozenReduct::satisfied_by` through the existing reduct module, then
 excludes the other methods. No new Rust wrapper is needed. The extraction runs offline; if dependencies are
 not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
@@ -76,17 +77,19 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --start-from zetesis_ferraris::theory::validate_root \
   --start-from zetesis_ferraris::theory::validate_roots \
   --start-from zetesis_ferraris::theory::admit \
+  --start-from zetesis_ferraris::theory::_::new \
+  --include zetesis_ferraris \
+  --include zetesis_cpu::cancellation \
+  --include zetesis_ferraris::reduct::FrozenReduct \
+  --include zetesis_ferraris::reduct::_::satisfied_by \
+  --include zetesis_ferraris::reduct::_::theory \
   --exclude zetesis_ferraris::oracle::check \
   --exclude zetesis_ferraris::oracle::reserve \
-  --include zetesis_ferraris --include zetesis_cpu::cancellation \
-  --include zetesis_ferraris::reduct::FrozenReduct \
-  --include 'zetesis_ferraris::reduct::_::satisfied_by' \
-  --include 'zetesis_ferraris::reduct::_::theory' \
-  --exclude 'zetesis_ferraris::reduct::_::new' \
-  --exclude 'zetesis_ferraris::reduct::_::freeze' \
-  --exclude 'zetesis_ferraris::reduct::_::is_satisfied_by' \
-  --exclude 'zetesis_ferraris::reduct::_::candidate' \
-  --exclude 'zetesis_ferraris::reduct::_::fmt' \
+  --exclude zetesis_ferraris::reduct::_::new \
+  --exclude zetesis_ferraris::reduct::_::freeze \
+  --exclude zetesis_ferraris::reduct::_::is_satisfied_by \
+  --exclude zetesis_ferraris::reduct::_::candidate \
+  --exclude zetesis_ferraris::reduct::_::fmt \
   --dest-file "$package_dir/target/replay/evaluator.raw.llbc" \
   -- --manifest-path ../../crates/zetesis-ferraris/Cargo.toml --lib --locked --offline
 ```
@@ -105,17 +108,22 @@ generated files below, not by the bytes of `evaluator.source.llbc`.
 
 The public source LLBC changes only destination metadata. The translation input
 also renames six local debug names to avoid Lean namespace collisions, removes
-the unused derived `Debug` registration, and clears two unused `Step` method
-slots in the trait and its `usize` implementation. Pinned Charon registers
+the unused derived `Debug` registration, omits the unused generic
+`Interpretation::new` ordered export, and clears two unused `Step` method slots
+in the trait and its `usize` implementation. Pinned Charon registers
 `forward_overflowing` and `backward_overflowing`, but the pinned Lean `Step`
 record lacks those fields. Its range iterator calls `forward_checked`.
 The official `-filter-trait-methods` option alone does not resolve this mismatch.
+The independently selected generic `Interpretation::new` export fails in the
+pinned translator; its complete function declaration and closure bodies remain
+in the input. Only its unreferenced ordered export is omitted.
 
 The guarded selection below checks identities, the `usize` implementation,
 absence of a vtable and absence of direct or indirect references in surviving
 semantic declarations. Method indices remain fixed; all function declarations
 and executable bodies remain intact except the stated local debug names.
-Restoration must reproduce the entire parsed source and raw output. This is
+Restoration must reproduce the entire parsed source and raw output. The later
+Lean allocation binder is a separate, explicitly documented adaptation. This is
 explicit tool-model compatibility selection, not verification of Rust's standard
 library. These commands require `jq`:
 
@@ -147,9 +155,9 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 192
-  and $t.fun_decls[192] == null
-  and $t.ordered_decls[124] == {"TraitImpl":{"NonRec":25}}
+  and $debug.methods[0].skip_binder.id == 200
+  and $t.fun_decls[200] == null
+  and $t.ordered_decls[136] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -179,32 +187,58 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 185)
-  and step_method(6; "backward_overflowing"; 189)
+  and step_method(2; "forward_overflowing"; 193)
+  and step_method(6; "backward_overflowing"; 197)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[185] |= del(.src)
-    | .translated.fun_decls[189] |= del(.src)
+    | .translated.fun_decls[193] |= del(.src)
+    | .translated.fun_decls[197] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 185 or .Fun? == 189
+        .Fun? == 193 or .Fun? == 197
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
       | length) == 0;
+def interpretation_export_is_unused:
+  .translated as $t |
+  $t.fun_decls[25] as $function |
+  $function.def_id == 25
+  and $function.item_meta.name == [
+    {"Ident":["zetesis_ferraris",0]}, {"Ident":["theory",0]},
+    {"Impl":{"Ty":{"params":{"regions":[],"types":[],"const_generics":[],
+      "trait_clauses":[],"regions_outlive":[],"types_outlive":[],
+      "trait_type_constraints":[]},"skip_binder":{"Deduplicated":4},
+      "kind":"InherentImplBlock"}}}, {"Ident":["new",0]}]
+  and $function.src == "Normal"
+  and $function.item_meta.is_local == true
+  and $function.item_meta.opacity == "Transparent"
+  and $function.body.Structured.locals.arg_count == 2
+  and $function.body.Structured.locals.locals[1].name == "theory"
+  and $t.ordered_decls[156] == {"Fun":{"NonRec":25}}
+  and ([$t.ordered_decls[] | select(. == {"Fun":{"NonRec":25}})] | length) == 1
+  and ([[$t.type_decls,
+          ($t.fun_decls | to_entries | map(select(.key != 25) | .value)),
+          $t.global_decls, $t.trait_decls, $t.trait_impls]
+        | walk(if type == "object" then del(.item_meta) else . end)
+        | .. | objects | select(.Fun? == 25 or .Regular? == 25
+            or .fun_id? == 25 or .function_id? == 25)] | length) == 0
+  and ([[$t.trait_decls[], $t.trait_impls[]] | .[] | select(. != null)
+        | .methods[]? | select(. != null) | select(.skip_binder.id? == 25)]
+       | length) == 0;
 if checked_argument(11; "identities"; 2;
-     {"Value":[62,{"Ref":[{"Body":1},{"Deduplicated":4},"Shared"]}]})
-   and checked_argument(13; "evaluate"; 5; {"Deduplicated":62})
-   and checked_argument(14; "failed_root"; 3; {"Deduplicated":62})
-   and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":62})
-   and checked_argument(16; "check_subset"; 5; {"Deduplicated":62})
-   and checked_argument(17; "select_atoms"; 4; {"Deduplicated":62})
-   and debug_is_unused and step_is_unused
+     {"Value":[67,{"Ref":[{"Body":1},{"Deduplicated":3},"Shared"]}]})
+   and checked_argument(13; "evaluate"; 5; {"Deduplicated":67})
+   and checked_argument(14; "failed_root"; 3; {"Deduplicated":67})
+   and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":67})
+   and checked_argument(16; "check_subset"; 5; {"Deduplicated":67})
+   and checked_argument(17; "select_atoms"; 4; {"Deduplicated":67})
+   and debug_is_unused and step_is_unused and interpretation_export_is_unused
 then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[13].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[14].body.Structured.locals.locals[1].name = "program"
@@ -212,12 +246,13 @@ then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "program"
    | .translated.trait_impls[25] = null
-   | del(.translated.ordered_decls[124])
+   | del(.translated.ordered_decls[156])
+   | del(.translated.ordered_decls[136])
    | .translated.trait_decls[9].methods[2] = null
    | .translated.trait_decls[9].methods[6] = null
    | .translated.trait_impls[23].methods[2] = null
    | .translated.trait_impls[23].methods[6] = null
-else error("unexpected selected function, unused Debug declaration or Step method") end
+else error("unexpected selected function, unused Debug/Interpretation export or Step method") end
 ' target/replay/evaluator.source.llbc > target/replay/evaluator.llbc
 
 jq -e --slurpfile source target/replay/evaluator.source.llbc '
@@ -228,8 +263,10 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:124]
-     + [$source[0].translated.ordered_decls[124]] + .translated.ordered_decls[124:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:136]
+     + [$source[0].translated.ordered_decls[136]] + .translated.ordered_decls[136:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:156]
+     + [$source[0].translated.ordered_decls[156]] + .translated.ordered_decls[156:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -245,8 +282,10 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:124]
-     + [$source[0].translated.ordered_decls[124]] + .translated.ordered_decls[124:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:136]
+     + [$source[0].translated.ordered_decls[136]] + .translated.ordered_decls[136:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:156]
+     + [$source[0].translated.ordered_decls[156]] + .translated.ordered_decls[156:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -258,19 +297,81 @@ mkdir -p target/replay/Evaluator
   -split-files -namespace ZetesisExtract -all-computable -no-progress-bar \
   -sequential -warnings-as-errors -abort-on-error target/replay/evaluator.llbc
 cmp Evaluator/Types.lean target/replay/Evaluator/Types.lean
-cmp Evaluator/Funs.lean target/replay/Evaluator/Funs.lean
+# Compare Funs.lean after the explicit allocation binding below.
 ```
 
 Recheck the selected source hashes, all six precise function/local identities and
-the unused Debug and Step declarations in `provenance.json` before accepting a
+the unused Debug, Interpretation export and Step declarations in `provenance.json` before accepting a
 repeated extraction. These paths are specific
 to this recorded extraction. Never reuse them silently after a structural change.
 Compiler-platform metadata may differ; generated-definition comparison, source
 identity and explicit review remain separate checks.
 
-Do not install generated external templates. `PureExternals`, `OwnerExternals`, `AtomicTypes` and
-`AtomicLoad` supply the concrete, scoped models reviewed by these proofs.
-Regeneration does not establish external-model correspondence to Rust. The
+## Bind the allocation operation
+
+Stock Aeneas emits `Theory::new` with a call to `alloc.sync.Arc.new` and no
+allocation parameter. This package adds a section binder only around that
+constructor. It changes the Lean signature: the constructor now takes an
+implicit `ArcAllocation` provider. The executable body is unchanged, but this
+parameterization is an authored binding adaptation, not stock translator output
+or merely a debug-name change.
+
+`ArcAllocation` supplies one external operation; it has no global instance and
+assumes neither success, value preservation nor freshness. Theorems state any
+needed contract for a returned invocation explicitly. A pure provider reused on
+equal inputs does not model independent fresh allocations. Heap freshness and
+composition across invocations require their own runtime account. Rust's
+`Arc::new` does not report a typed admission error on allocation failure.
+
+Keep the raw generated file, check its recorded identity, insert the binder and
+check that removing it recovers the exact raw bytes:
+
+```sh
+printf '%s\n' '3955f00e2fa32fe39001937ef00c1dbc6ab8a493d53f273988d5ea0d3c9624bf  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
+awk '
+/^\/-- \[zetesis_ferraris::theory::\{zetesis_ferraris::theory::Theory\}::new\]:$/ {
+  if (opened != 0 || closed != 0) exit 1
+  print "section TheoryAllocation"
+  print "variable [ArcAllocation]"
+  print ""
+  opened++
+}
+/^\/-- \[zetesis_ferraris::theory::\{zetesis_ferraris::theory::Interpretation\}::new::\{impl / {
+  if (opened != 1 || closed != 0) exit 1
+  print "end TheoryAllocation"
+  print ""
+  closed++
+}
+{ print }
+END { if (opened != 1 || closed != 1) exit 1 }
+' target/replay/Evaluator/Funs.lean > target/replay/Funs.bound.lean
+printf '%s\n' '6dce2f17708d9d6463d94fe52703b38a9c607d621e9bed2507e1263f91edd4a5  target/replay/Funs.bound.lean' | shasum -a 256 -c -
+awk '
+$0 == "section TheoryAllocation" {
+  if (opened != 0 || closed != 0) exit 1
+  if (getline <= 0 || $0 != "variable [ArcAllocation]") exit 1
+  if (getline <= 0 || $0 != "") exit 1
+  opened++
+  next
+}
+$0 == "end TheoryAllocation" {
+  if (opened != 1 || closed != 0) exit 1
+  if (getline <= 0 || $0 != "") exit 1
+  closed++
+  next
+}
+{ print }
+END { if (opened != 1 || closed != 1) exit 1 }
+' target/replay/Funs.bound.lean > target/replay/Funs.restored.lean
+cmp target/replay/Evaluator/Funs.lean target/replay/Funs.restored.lean
+cmp Evaluator/Funs.lean target/replay/Funs.bound.lean
+```
+
+Do not install generated external templates. `PureExternals`, `OwnerExternals`, `AtomicTypes`,
+`AtomicLoad` and `ArcAllocation` supply the concrete, scoped models reviewed by these proofs.
+Regeneration does not establish external-model correspondence to Rust.
+The retained unused interpretation closure mentions `TryReserveError`; its
+abstract token in `PureExternals` supplies no reservation operation or model. The
 private query does not cover frozen-mask construction, fallible reservation,
 composition of owner checks with the public wrapper, or public query wrappers. Repeat the strict build and complete authored-theorem audit
 after accepting any changed extraction.
@@ -300,16 +401,13 @@ The current extracted `Result`, callback traits and loop interfaces still use
 the fixed-observation model. Connecting the richer effect to generated calls,
 then rechecking that dependency closure, remains necessary.
 
-`Theory::new` runs the private admission step `admit`, which checks the
-dimensions and padded count and then calls the ordered node and root
-validators, and only then allocates. This package selects `admit` and the four
-validators directly as extraction roots, so neither constructor, fresh
-`Arc::new` allocation nor generic `Interpretation::new` enters its translation.
-A separate strict translation of the constructor itself succeeds only when the
-independently selected `Interpretation::new` export is omitted; that generic
-export remains unsupported by the pinned translator, and fresh allocation has no
-model here. `AdmissionValidation` and `AdmittedData` prove the generated
-validators and admission step against the authored admission checks; they
-establish no property of the wrapper that returns the admission step's refusal
-unchanged and otherwise passes the admitted data to `Arc::new`, of that
-allocation or of its owner.
+`Theory::new` runs `admit`, then returns its refusal unchanged or passes its
+admitted data to `Arc::new`. The constructor, admission step and validators are
+now selected directly. `AdmissionValidation` and `AdmittedData` prove the
+validators and admission step; constructor proofs use the explicit allocation
+binding above. Any stored-value or owner conclusion depends on the stated
+contract for that invocation's returned allocation. The generic
+`Interpretation::new` export remains unsupported and omitted, although its full
+LLBC declaration and generated closure bodies are retained. No reservation,
+allocator, reference-count or constructor runtime correspondence follows from
+this extraction or binding.

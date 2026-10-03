@@ -19,11 +19,10 @@ equation holds for every input, so `admit` always returns: a refusal is the
 authored refusal, and success returns the supplied atom count and vectors
 unchanged, in their stored order and multiplicity.
 
-`Theory::new`'s wrapper, which returns `admit`'s refusal unchanged and
-otherwise passes the admitted data to `Arc::new`, `Arc::new`'s storage of that
-value, and the fresh owner of the allocation are not extracted here. The
-structural premises of evaluation need only the first two; the fresh owner
-matters only to ownership results.
+`TheoryConstruction` connects these results to the generated `Theory::new`
+wrapper under an explicit allocation contract. It derives the stored value
+needed by the structural results below. A fresh owner is a separate library
+contract, needed only for ownership results.
 -/
 
 namespace AdmittedData
@@ -191,8 +190,8 @@ theorem admitted_word_counts (atoms : Usize) (nodes : alloc.vec.Vec theory.Node)
 
 /-- A theory whose stored value is admitted data satisfies the structural
 premises of the membership and query theorems: ordered children and bounded
-roots. The value equation is the remaining premise; it is what `Theory::new`'s
-wrapper and `Arc::new` must supply. The owner plays no part. -/
+roots. `TheoryConstruction.returned_structure` supplies the value equation
+from the generated wrapper and its allocation contract. The owner plays no part. -/
 theorem admitted_program_structure (atoms : Usize) (nodes : alloc.vec.Vec theory.Node)
     (roots : alloc.vec.Vec Usize) (limits : theory.AdmissionLimits) (data : theory.Data)
     (admitted : theory.admit atoms nodes roots limits = ok (.Ok data))

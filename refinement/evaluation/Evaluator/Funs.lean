@@ -843,4 +843,56 @@ def theory.admit
               theory.Data (core.convert.FromSame theory.AdmissionError)
               residual
 
+section TheoryAllocation
+variable [ArcAllocation]
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::new]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 89:4-97:5
+    Visibility: public -/
+def theory.Theory.new
+  (atoms : Std.Usize) (nodes : alloc.vec.Vec theory.Node)
+  (roots : alloc.vec.Vec Std.Usize) (limits : theory.AdmissionLimits) :
+  Result (core.result.Result theory.Theory theory.AdmissionError)
+  := do
+  let r ← theory.admit atoms nodes roots limits
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let a ← alloc.sync.Arc.new val
+    ok (core.result.Result.Ok a)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      theory.Theory (core.convert.FromSame theory.AdmissionError) residual
+
+end TheoryAllocation
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_ferraris::theory::AdmissionError> for zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{closure}<T0, Clause0_IntoIter>}::call_once]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 211:21-211:51 -/
+def
+  theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError.call_once
+  {T0 : Type} {Clause0_IntoIter : Type}
+  (coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst :
+  core.iter.traits.collect.IntoIterator T0 Std.Usize Clause0_IntoIter)
+  (c : theory.Interpretation.new.closure T0 Clause0_IntoIter)
+  (tupled_args : alloc.collections.TryReserveError) :
+  Result theory.AdmissionError
+  := do
+  ok theory.AdmissionError.Allocation
+
+/-- Trait implementation: [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_ferraris::theory::AdmissionError> for zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{closure}<T0, Clause0_IntoIter>}]
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 211:21-211:51 -/
+@[reducible]
+def
+  theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError
+  {T0 : Type} {Clause0_IntoIter : Type}
+  (coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst :
+  core.iter.traits.collect.IntoIterator T0 Std.Usize Clause0_IntoIter) :
+  core.ops.function.FnOnce (theory.Interpretation.new.closure T0
+  Clause0_IntoIter) alloc.collections.TryReserveError theory.AdmissionError
+  := {
+  call_once :=
+    theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError.call_once
+    coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst
+}
+
 end ZetesisExtract

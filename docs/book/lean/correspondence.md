@@ -82,8 +82,8 @@ backend's actual resize operation and exact candidate word length.
 `MembershipVerdicts.returned_witness` identifies the proper-subset reduct model
 returned by the actual search. `OwnerChecks` connects generated identity and
 clone operations to owner tokens and immutable-heap consistency. These results
-close individual setup obligations; the public wrapper and the admission
-constructors remain unproved. `AdmissionValidation` proves the node and root
+close individual setup obligations; interpretation construction and the complete
+public membership wrapper remain unproved. `AdmissionValidation` proves the node and root
 validators called by `admit` for `Theory::new`; it is described with
 `TheoryAdmission` below.
 
@@ -227,11 +227,13 @@ it computes `validate` with the host's `Usize.max`, including Rust's checked
 padded-count addition, and returns the supplied vectors unchanged.
 `admitted_program_structure` derives the evaluator's premises for any theory
 whose stored value is admitted data. Those premises remain premises of the
-composed membership theorems. Connecting them to an actual `Theory::new` call
-needs its wrapper, which returns the refusal unchanged and otherwise `Arc::new`
-of the admitted data, and `Arc::new`'s storage of that data; a fresh owner is
-needed only by ownership results. These remain separate
-obligations, as does `Interpretation::new`.
+composed membership theorems. `TheoryConstruction` supplies them from the
+generated `Theory::new` return under an explicit allocation-value contract.
+It also preserves the exact admission refusal and separates it from allocation
+nonreturn. The wrapper's allocation parameter is an audited binding adaptation;
+its body is unchanged. A per-invocation fresh-heap contract supports ownership,
+without claiming that one pure provider models repeated fresh allocation.
+`Interpretation::new` and public membership composition remain unproved.
 
 The [iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
 [packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md),

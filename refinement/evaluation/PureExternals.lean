@@ -36,6 +36,14 @@ structure alloc.sync.Arc (T : Type) where
   value : T
   owner : Nat
 
+/-- An opaque reservation error retained by an unused extracted closure. The
+closure discards its input and returns `AdmissionError::Allocation`; no error
+field is inspected. This token supplies its type, not a reservation operation
+or a claim that interpretation construction has been verified. -/
+@[rust_type "alloc::collections::TryReserveError"]
+structure alloc.collections.TryReserveError where
+  token : Nat
+
 /-- An unobserved Instant is represented by a token, without time or ordering.
 The generated evaluator does not inspect the deadline's `at` field. -/
 @[rust_type "std::time::Instant"]

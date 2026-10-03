@@ -59,11 +59,12 @@ shows that its node and root validators compute `scan` and `rootScan` exactly,
 including their iteration over the stored slices, and `AdmittedData` shows that
 the whole step computes `validate` with the host's `Usize.max`, including Rust's
 checked padded-count addition, and returns the supplied vectors unchanged. The
-wrapper still needs correspondence for both returns: it propagates refusal
-unchanged, or passes admitted data to `Arc::new`. Structural guarantees require
-that allocation to store the supplied value; ownership results additionally
-require a fresh owner. No theory-owner identity is created by the Lean result,
-and the validator does not check interpretation storage.
+wrapper is connected by `TheoryConstruction`: it propagates refusal unchanged,
+or passes admitted data to the supplied allocation operation. Under its explicit
+value-preservation contract, successful construction supplies the structural
+guarantees. Ownership additionally needs a fresh owner relative to the prior
+heap. This per-invocation result does not model repeated fresh allocation or
+interpretation construction.
 
 The node and root predicates are exact for successful validation, and the first
 refused node is identified exactly. Error kinds and check ordering are

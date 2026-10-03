@@ -13,6 +13,7 @@ import FixedLoopExample
 import FrozenQueryExample
 import AdmissionValidationExample
 import AdmittedData
+import TheoryConstructionExample
 
 -- Complete authored-theorem audit for this optional refinement package.
 #print axioms Membership.mask_bit
@@ -245,3 +246,13 @@ import AdmittedData
 #print axioms AdmittedData.admit_never_allocation
 #print axioms AdmittedData.admitted_word_counts
 #print axioms AdmittedData.admitted_program_structure
+#print axioms TheoryConstruction.refused
+#print axioms TheoryConstruction.admitted_allocation
+#print axioms TheoryConstruction.completed_phases
+#print axioms TheoryConstruction.refused_iff
+#print axioms TheoryConstruction.returned_value
+#print axioms TheoryConstruction.returned_structure
+#print axioms TheoryConstruction.returned_heap
+#print axioms TheoryConstructionExample.refused_input_does_not_allocate
+#print axioms TheoryConstructionExample.admitted_input_can_diverge
+#print axioms TheoryConstructionExample.separate_invocations_can_return_distinct_owners

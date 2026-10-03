@@ -82,8 +82,10 @@ outside it, as do changing runtime observations, source grounding, candidate
 enumeration and optimized checking routes. `AdmissionValidation` and
 `AdmittedData` prove the actual admission step that `Theory::new` runs before it
 allocates, including its node and root validators, so admitted data supplies the
-ordering and root-bound premises. The constructor's wrapper, allocation and
-owner, and `Interpretation::new`, are not yet connected. The separate stored-reduct query
+ordering and root-bound premises. `TheoryConstruction` derives these from a
+successful generated constructor return under the trusted allocation-value
+contract. Its explicit provider describes one invocation; multiple-allocation
+histories and `Interpretation::new` remain outside this proof. The separate stored-reduct query
 proof still requires explicit mask agreement; actual original evaluation can
 supply that agreement, but `FrozenReduct::freeze` remains unproved.
 

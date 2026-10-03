@@ -175,4 +175,10 @@ inductive theory.AdmissionError where
 | Root : theory.AdmissionError
 | Allocation : theory.AdmissionError
 
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{closure}]
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 211:21-211:51 -/
+@[reducible]
+def theory.Interpretation.new.closure (T0 : Type) (Clause0_IntoIter : Type) :=
+Unit
+
 end ZetesisExtract

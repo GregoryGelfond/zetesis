@@ -5,8 +5,9 @@ reference checker's generated evaluation, root scan, atom selection and
 proper-subset search to the Ferraris answer-set definition under fixed
 observation tokens. It also proves that the generated admission step called by
 `Theory::new`, with its node and root validators, computes the authored
-admission checks. The public allocation and owner-checking wrapper remains
-outside the proved composition.
+admission checks. `TheoryConstruction` connects those checks to the public
+theory constructor under an explicit library allocation contract. The public
+membership wrapper remains outside the proved composition.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the reduct-evaluation, packed-subset and admission sources directly and checks them
@@ -59,10 +60,10 @@ check and zero initialization with the membership phases. It derives agreement
 of the atom universes and the initial empty subset instead of assuming them
 separately. Admission and reservation remain outside this composition.
 
-These results do not yet compose the entire public wrapper or prove the
-admission constructors themselves. They establish specific setup obligations
-without assuming successful allocation or equating owner identity with value
-equality.
+These results establish specific setup obligations without assuming successful
+allocation or equating owner identity with value equality. The theory constructor
+is covered below; interpretation construction and the complete public membership
+wrapper remain separate obligations.
 
 ## Admission validation
 
@@ -105,16 +106,26 @@ refusal; `admitted_word_counts` derives the representable 64-bit and 32-bit word
 counts. The equation holds for every input, so `admit` always returns and never
 reports an allocation refusal.
 
-The membership and query theorems keep `ordered` and `rootsBounded` as premises
-of `CountermodelSemantics.FrozenEvaluation`; no theorem here removes them.
-`admitted_program_structure` derives both for any theory whose stored value is
-data returned by `admit`. Connecting that to an actual `Theory::new` call needs
-further facts. Most concern values: `Theory::new`'s wrapper returns `admit`'s
-refusal unchanged and otherwise passes the admitted data to `Arc::new`, which
-stores it as the theory's value. One concerns identity: the allocation has a
-fresh owner. Only ownership results, such as the owner checks, use the identity
-fact; the structural premises need only the value facts. None of them is proved
-here, nor is `Interpretation::new`.
+[`TheoryConstruction`](TheoryConstruction.lean) proves the generated
+`Theory::new` wrapper with a supplied allocation operation.
+`completed_phases` derives successful admission and allocation from a successful
+constructor return. `refused_iff` identifies each typed constructor refusal with
+its admission refusal. Allocation failure or divergence is not converted to an
+admission error or a successful theory.
+
+Under the library contract that allocation returns the supplied value,
+`returned_structure` derives ordered nodes and bounded roots for the returned
+theory. The membership theorems retain those premises; the constructor now
+supplies them. `returned_heap` additionally preserves existing views under an
+explicit fresh heap transition. Rust, `Arc`, the allocator, OS and hardware are
+trusted to satisfy their contracts, not reimplemented or verified here.
+
+The allocation parameter is an audited addition around the generated wrapper;
+its body is unchanged. It describes one invocation. One pure provider cannot
+model repeated fresh allocations of identical data; their composition requires
+separate invocation/heap correspondence. There is no global provider instance
+or assumption of allocation success. See [reproduction](REPRODUCING.md).
+`Interpretation::new` remains unproved.
 
 ## Stored reduct queries
 
@@ -260,25 +271,32 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-`FrozenReduct` construction, the allocation and owner of `Theory::new`,
-`Interpretation::new`, public allocation and owner-checking wrappers, source grounding,
+`FrozenReduct` construction, `Interpretation::new`, the complete public
+membership wrapper, multiple-allocation runtime histories, source grounding,
 candidate enumeration, optimized checking routes or end-to-end solver
 verification.
 
 ## Extraction identity and reproduction
 
 The generated types and functions come directly from production Rust, including
-the four private subset-search operations and the private admission step of
-`Theory::new` with its four validators. The LLBC destination becomes portable,
+the four private subset-search operations and `Theory::new` with its private
+admission step and four validators. The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
 ordered registration, after checking for surviving semantic references.
 Two unused range-trait method registrations are omitted from both the trait and
 its implementation to match the pinned backend model, with indices preserved.
-The selected operations do not refer to either method. Restoring these selections
-and metadata/name fields recovers the parsed raw input. No executable body is
-rewritten; regenerated Lean is retained unedited.
+The selected operations do not refer to either method. The unsupported generic
+`Interpretation::new` export is omitted only from the ordered translation list,
+after checking that no retained operation references it; its declaration and
+body remain in the input. Restoring these selections and metadata/name fields
+recovers the parsed raw input.
+
+A scoped section binder adds the supplied allocation parameter to the generated
+`Theory::new`; no body is rewritten. Removing that recorded insertion restores
+the exact generated Lean. This dependency parameterization is distinct from
+metadata normalization, and remains part of the trusted extraction adaptation.
 
 These are audited preprocessing steps, not verified transformations or a claim
 of byte-identical raw extraction. `provenance.json` and the source/artifact

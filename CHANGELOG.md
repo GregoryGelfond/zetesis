@@ -20,11 +20,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   answer-set definition under explicit storage and runtime-model assumptions;
   interrupted checks remain distinct. Public allocation and ownership checks,
   grounding, full solver enumeration and GPU execution remain outside this proof.
-- Lean refinement of the extracted formula admission step and its node and root
-  validators. The generated checks compute the authored admission validator,
-  report the first refused node and supply the evaluator's ordering and
-  root-bound premises. The theory's allocation and owner, and interpretation
-  construction, remain outside this proof.
+- Lean refinement of formula admission and theory construction. The generated
+  checks preserve the first refusal and establish the evaluator's structural
+  preconditions. Constructor proofs use explicit Rust allocation and ownership
+  contracts; interpretation construction and complete public membership checking
+  remain separate obligations.
 
 ### Changed
 
