@@ -1,4 +1,5 @@
 import Zetesis.PackedSubsets
+import Zetesis.TheoryAdmission
 
 -- Existing semantic declarations checked under this package toolchain.
 #print axioms Zetesis.BatchAccounting.initial_covers
@@ -88,6 +89,13 @@ import Zetesis.PackedSubsets
 #print axioms Zetesis.FiniteMembership.proper_iff
 #print axioms Zetesis.FiniteMembership.has_countermodel_iff
 #print axioms Zetesis.FiniteMembership.check_iff_answer_set
+#print axioms Zetesis.Refinement.IndexedEvaluation.node_exact
+#print axioms Zetesis.Refinement.IndexedEvaluation.evaluate_exact
+#print axioms Zetesis.Refinement.IndexedEvaluation.original_exact
+#print axioms Zetesis.Refinement.IndexedEvaluation.reduct_exact
+#print axioms Zetesis.Refinement.IndexedEvaluation.roots_exact
+#print axioms Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_exact
+#print axioms Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_iff
 #print axioms Zetesis.Refinement.PackedInterpretations.mask_bit
 #print axioms Zetesis.Refinement.PackedInterpretations.contains_eq_bit
 #print axioms Zetesis.Refinement.PackedInterpretations.insert_exact
@@ -170,6 +178,24 @@ import Zetesis.PackedSubsets
 #print axioms Zetesis.SubsetCounter.three_atom_visit_order
 #print axioms Zetesis.SubsetCounter.short_walk_is_unfinished
 #print axioms Zetesis.SubsetCounter.carried_population_is_updated
+#print axioms Zetesis.Refinement.TheoryAdmission.node_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.checks_succeed
+#print axioms Zetesis.Refinement.TheoryAdmission.scan_append
+#print axioms Zetesis.Refinement.TheoryAdmission.scan_extends
+#print axioms Zetesis.Refinement.TheoryAdmission.scan_atoms
+#print axioms Zetesis.Refinement.TheoryAdmission.scan_complete
+#print axioms Zetesis.Refinement.TheoryAdmission.scan_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.scan_refusal_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.rootScan_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.rootScan_refusal_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.validate_phases
+#print axioms Zetesis.Refinement.TheoryAdmission.validate_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.word_counts_fit
+#print axioms Zetesis.Refinement.TheoryAdmission.export_successor_fits
+#print axioms Zetesis.Refinement.TheoryAdmission.validated_reduct_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes
+#print axioms Zetesis.Refinement.TheoryAdmission.self_reference_is_refused
+#print axioms Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked
 #print axioms Zetesis.TightEvaluation.formula_value_true
 #print axioms Zetesis.TightEvaluation.node_value_decode
 #print axioms Zetesis.TightEvaluation.values_correspond

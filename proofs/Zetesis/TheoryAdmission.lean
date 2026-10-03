@@ -128,6 +128,132 @@ theorem scan_exact (size : Nat) (table : List (Node Nat)) :
   · rintro ⟨valid, bounded⟩
     exact scan_complete size table valid bounded
 
+/-- A refused scan reports its first refused node: every earlier node passes
+its check at its actual position, and the reported error is that node's own.
+A later node's error therefore cannot be reported in its place.
+
+Proof: induct on the table. A refused head is the first refused node, and no
+witness can lie beyond it because the witness's earlier nodes include the head.
+An accepted head leaves the scan of the tail one position later, so a tail
+witness and a witness beyond the head correspond by shifting one position. -/
+theorem scan_refusal_exact (size index : Nat) (table : List (Node Nat))
+    (reason : Error) :
+    scan size index table = .error reason ↔
+      ∃ position, ∃ inside : position < table.length,
+        (∀ earlier, ∀ before : earlier < position,
+          node size (index + earlier) table[earlier] = .ok ()) ∧
+        node size (index + position) table[position] = .error reason := by
+  induction table generalizing index with
+  | nil =>
+    simp [scan]
+  | cons entry rest inductionHypothesis =>
+    cases headCheck : node size index entry with
+    | error headReason =>
+      have refusedHere : scan size index (entry :: rest) = .error headReason := by
+        simp [scan, headCheck, Except.bind]
+      rw [refusedHere]
+      constructor
+      · intro sameReason
+        cases sameReason
+        refine ⟨0, Nat.succ_pos _, fun earlier before => absurd before (Nat.not_lt_zero _), ?_⟩
+        simpa using headCheck
+      · rintro ⟨position, inside, earlierPass, refusedAt⟩
+        cases position with
+        | zero =>
+          have reported : Except.error headReason = (Except.error reason : Except Error Unit) := by
+            simpa [headCheck] using refusedAt
+          exact reported
+        | succ later =>
+          have headPasses : node size index entry = .ok () := by
+            simpa using earlierPass 0 (Nat.succ_pos _)
+          rw [headCheck] at headPasses
+          cases headPasses
+    | ok accepted =>
+      cases accepted
+      have continued : scan size index (entry :: rest) = scan size (index + 1) rest := by
+        simp [scan, headCheck, Except.bind]
+      have shifted (offset : Nat) : index + 1 + offset = index + (offset + 1) := by omega
+      rw [continued, inductionHypothesis (index + 1)]
+      constructor
+      · rintro ⟨position, inside, earlierPass, refusedAt⟩
+        refine ⟨position + 1, by simpa using inside, ?_, ?_⟩
+        · intro earlier before
+          cases earlier with
+          | zero => simpa using headCheck
+          | succ previous =>
+            have tailPasses := earlierPass previous (by omega)
+            rw [shifted] at tailPasses
+            simpa using tailPasses
+        · rw [shifted] at refusedAt
+          simpa using refusedAt
+      · rintro ⟨position, inside, earlierPass, refusedAt⟩
+        cases position with
+        | zero =>
+          have headRefused : node size index entry = .error reason := by
+            simpa using refusedAt
+          rw [headCheck] at headRefused
+          cases headRefused
+        | succ later =>
+          refine ⟨later, by simpa using inside, ?_, ?_⟩
+          · intro earlier before
+            have tailPasses := earlierPass (earlier + 1) (by omega)
+            rw [← shifted] at tailPasses
+            simpa using tailPasses
+          · rw [← shifted] at refusedAt
+            simpa using refusedAt
+
+/-- Check one asserted root against the number of stored nodes: it must name a
+stored node. -/
+def root (count asserted : Nat) : Except Error Unit :=
+  if asserted < count then .ok () else .error .root
+
+/-- Walk the asserted roots in stored order, retaining the first refusal.
+Repeated roots are checked as they occur. -/
+def rootScan (count : Nat) : List Nat → Except Error Unit
+  | [] => .ok ()
+  | asserted :: rest => (root count asserted).bind (fun _ => rootScan count rest)
+
+/-- The root scan accepts exactly when every asserted root names a stored node. -/
+theorem rootScan_exact (count : Nat) (roots : List Nat) :
+    rootScan count roots = .ok () ↔ ∀ asserted ∈ roots, asserted < count := by
+  induction roots with
+  | nil => simp [rootScan]
+  | cons asserted rest inductionHypothesis =>
+    have headCheck : root count asserted = .ok () ↔ asserted < count := by
+      unfold root
+      split <;> simp_all
+    rw [rootScan, checks_succeed, headCheck, inductionHypothesis, List.forall_mem_cons]
+
+/-- The root scan returns a given refusal exactly when it is a root refusal
+and some asserted root is outside the node table. The refusal does not identify
+which occurrence failed. -/
+theorem rootScan_refusal_exact (count : Nat) (roots : List Nat) (reason : Error) :
+    rootScan count roots = .error reason ↔
+      reason = .root ∧ ∃ asserted ∈ roots, count ≤ asserted := by
+  induction roots with
+  | nil => simp [rootScan]
+  | cons asserted rest inductionHypothesis =>
+    by_cases stored : asserted < count
+    · have continued : rootScan count (asserted :: rest) = rootScan count rest := by
+        simp [rootScan, root, stored, Except.bind]
+      rw [continued, inductionHypothesis]
+      constructor
+      · rintro ⟨sameReason, unstored, member, outside⟩
+        exact ⟨sameReason, unstored, List.mem_cons_of_mem _ member, outside⟩
+      · rintro ⟨sameReason, unstored, member, outside⟩
+        rcases List.mem_cons.mp member with rfl | later
+        · omega
+        · exact ⟨sameReason, unstored, later, outside⟩
+    · have refusedHere : rootScan count (asserted :: rest) = .error .root := by
+        simp [rootScan, root, stored, Except.bind]
+      rw [refusedHere]
+      constructor
+      · intro sameReason
+        cases sameReason
+        exact ⟨rfl, asserted, List.mem_cons_self, by omega⟩
+      · rintro ⟨sameReason, _⟩
+        rw [sameReason]
+
 /-- Validate dimensions before any node, then nodes before roots. The padded
 count check models successful `checked_add(63)` against the host maximum. -/
 def validate (maximum : Nat) (limits : Limits) (size : Nat)
@@ -138,6 +264,32 @@ def validate (maximum : Nat) (limits : Limits) (size : Nat)
   else
     (scan size 0 table).bind (fun _ =>
       if roots.all (fun root => decide (root < table.length)) then .ok () else .error .root)
+
+/-- Validation checks dimensions and the padded count, then scans the nodes,
+then scans the asserted roots against the stored node count, stopping at the
+first refusal. Its root clause is the root scan.
+
+Proof: the root clause and the root scan agree because each accepts exactly
+when every asserted root names a stored node, and each otherwise refuses with
+a root refusal. -/
+theorem validate_phases (maximum : Nat) (limits : Limits) (size : Nat)
+    (table : List (Node Nat)) (roots : List Nat) :
+    validate maximum limits size table roots =
+      if limits.atoms < size ∨ limits.nodes < table.length ∨
+          limits.roots < roots.length ∨ maximum < size + 63 then .error .limit
+      else (scan size 0 table).bind (fun _ => rootScan table.length roots) := by
+  have rootClause : (if roots.all (fun root => decide (root < table.length)) then
+      Except.ok () else Except.error Error.root) = rootScan table.length roots := by
+    by_cases allStored : ∀ asserted ∈ roots, asserted < table.length
+    · rw [(rootScan_exact _ _).mpr allStored]
+      simp only [List.all_eq_true, decide_eq_true_eq]
+      rw [if_pos allStored]
+    · have someUnstored : ∃ asserted ∈ roots, table.length ≤ asserted := by
+        simpa using allStored
+      rw [(rootScan_refusal_exact _ _ _).mpr ⟨rfl, someUnstored⟩]
+      simp only [List.all_eq_true, decide_eq_true_eq]
+      rw [if_neg allStored]
+  simp only [validate, rootClause]
 
 /-- Validation succeeds exactly when dimensions, word-count addition, nodes
 and roots meet the structural contract. The scan theorem supplies the DAG

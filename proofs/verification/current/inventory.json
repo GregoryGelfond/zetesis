@@ -7067,37 +7067,57 @@
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 145,
+      "line": 139,
+      "name": "Zetesis.Refinement.TheoryAdmission.scan_refusal_exact"
+    },
+    {
+      "file": "Zetesis/TheoryAdmission.lean",
+      "line": 217,
+      "name": "Zetesis.Refinement.TheoryAdmission.rootScan_exact"
+    },
+    {
+      "file": "Zetesis/TheoryAdmission.lean",
+      "line": 230,
+      "name": "Zetesis.Refinement.TheoryAdmission.rootScan_refusal_exact"
+    },
+    {
+      "file": "Zetesis/TheoryAdmission.lean",
+      "line": 275,
+      "name": "Zetesis.Refinement.TheoryAdmission.validate_phases"
+    },
+    {
+      "file": "Zetesis/TheoryAdmission.lean",
+      "line": 297,
       "name": "Zetesis.Refinement.TheoryAdmission.validate_exact"
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 177,
+      "line": 329,
       "name": "Zetesis.Refinement.TheoryAdmission.word_counts_fit"
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 188,
+      "line": 340,
       "name": "Zetesis.Refinement.TheoryAdmission.export_successor_fits"
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 198,
+      "line": 350,
       "name": "Zetesis.Refinement.TheoryAdmission.validated_reduct_exact"
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 208,
+      "line": 360,
       "name": "Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes"
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 212,
+      "line": 364,
       "name": "Zetesis.Refinement.TheoryAdmission.self_reference_is_refused"
     },
     {
       "file": "Zetesis/TheoryAdmission.lean",
-      "line": 216,
+      "line": 368,
       "name": "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked"
     },
     {
@@ -7901,7 +7921,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "ec9a048c638e2e095f742fe0e0e821f6a5fe982c6523c1634f6c11a7774240e7",
+    "Audit.lean": "672e29d4bf910841f62c680156328415c99777ecc88f04e55330614f496fcb1d",
     "Zetesis.lean": "210e59d7dd3d7baf3127b97f6f38f35358c1a6bf804092d6866019825532bd53",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
@@ -8052,7 +8072,7 @@
     "Zetesis/TableBindings.lean": "dd0584c9a72627b8205f5c6773bfd3b50be67a9f48dee86322567d86df822e6b",
     "Zetesis/TerminalDefinitions.lean": "5d58652ba9c73381248f195e2d416dad03953a059854b87a82d78fa964da0513",
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
-    "Zetesis/TheoryAdmission.lean": "8b61800c308b9155c45ae0393fac524e2954af350c98f19b859b94a901e061a8",
+    "Zetesis/TheoryAdmission.lean": "4a0e96734f7771ea907af99a4cc1739f1e1e7732d0e15f11a192b74dea5b2143",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightEvaluation.lean": "a8dfdd3824eae4fdd35696869d47e56cb26ae1d931e0a0442a68f29498822864",
     "Zetesis/TightPlans.lean": "6324a09643454c507c4daf1a287ec082545b621e52bea3196026043ea99bac98",

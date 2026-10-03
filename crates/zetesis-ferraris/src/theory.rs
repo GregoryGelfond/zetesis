@@ -78,8 +78,9 @@ impl Theory {
     /// Validate a circuit without recursive traversal. The caller owns input
     /// vector construction; these bounds govern admission and later evaluation.
     /// Scans every node and root in O(nodes + roots) time and transfers their
-    /// vectors without copying elements. The shared instance handle uses one
-    /// infallible `Arc` allocation; subsequent clones share it in constant time.
+    /// vectors without copying elements. Every check precedes the shared
+    /// instance handle's one infallible `Arc` allocation, so a refusal
+    /// allocates nothing; subsequent clones share the handle in constant time.
     /// No formula evaluation, grounding, or search occurs.
     ///
     /// # Errors
@@ -91,20 +92,8 @@ impl Theory {
         roots: Vec<usize>,
         limits: AdmissionLimits,
     ) -> Result<Self, AdmissionError> {
-        if atoms > limits.max_atoms
-            || nodes.len() > limits.max_nodes
-            || roots.len() > limits.max_roots
-            || atoms.checked_add(63).is_none()
-        {
-            return Err(AdmissionError::Limit);
-        }
-        validate_nodes(atoms, &nodes)?;
-        validate_roots(nodes.len(), &roots)?;
-        Ok(Self(Arc::new(Data {
-            atoms,
-            nodes,
-            roots,
-        })))
+        let data = admit(atoms, nodes, roots, limits)?;
+        Ok(Self(Arc::new(data)))
     }
 
     /// Number of atoms, whether or not they occur in an asserted formula.
@@ -130,6 +119,31 @@ impl Theory {
     pub fn same_instance(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+}
+
+/// Check the dimensions and the padded word count, then every node in stored
+/// order, then every root, retaining the first refusal. The admitted data holds
+/// the supplied vectors unchanged.
+fn admit(
+    atoms: usize,
+    nodes: Vec<Node>,
+    roots: Vec<usize>,
+    limits: AdmissionLimits,
+) -> Result<Data, AdmissionError> {
+    if atoms > limits.max_atoms
+        || nodes.len() > limits.max_nodes
+        || roots.len() > limits.max_roots
+        || atoms.checked_add(63).is_none()
+    {
+        return Err(AdmissionError::Limit);
+    }
+    validate_nodes(atoms, &nodes)?;
+    validate_roots(nodes.len(), &roots)?;
+    Ok(Data {
+        atoms,
+        nodes,
+        roots,
+    })
 }
 
 /// Validate a node against its atom universe and preceding-node prefix.
@@ -324,3 +338,25 @@ impl ExactSizeIterator for InterpretationWords<'_> {
 }
 
 impl std::iter::FusedIterator for InterpretationWords<'_> {}
+
+#[cfg(test)]
+mod tests {
+    use super::{AdmissionLimits, Node, Theory};
+
+    #[test]
+    fn admission_keeps_the_supplied_buffers() {
+        // Spare capacity makes a copy or a shrink visible: either would change
+        // a buffer's address or capacity.
+        let mut nodes = Vec::with_capacity(8);
+        nodes.extend([Node::False, Node::Atom(0), Node::And(0, 1)]);
+        let mut roots = Vec::with_capacity(8);
+        roots.extend([2, 2, 0]);
+        let (node_buffer, node_capacity) = (nodes.as_ptr(), nodes.capacity());
+        let (root_buffer, root_capacity) = (roots.as_ptr(), roots.capacity());
+        let theory = Theory::new(1, nodes, roots, AdmissionLimits::default()).unwrap();
+        assert_eq!(theory.0.nodes.as_ptr(), node_buffer);
+        assert_eq!(theory.0.nodes.capacity(), node_capacity);
+        assert_eq!(theory.0.roots.as_ptr(), root_buffer);
+        assert_eq!(theory.0.roots.capacity(), root_capacity);
+    }
+}

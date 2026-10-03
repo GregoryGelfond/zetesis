@@ -36,8 +36,8 @@ files compile with implicit variables disabled and warnings treated as errors. O
 `verification.json`, `axiom-audit.txt` and `shared-axiom-audit.txt` record the
 checked artifact hashes and commands, separately from the main semantic library's gate.
 The default build includes the generated evaluator, root scan and private
-`FrozenReduct::satisfied_by` query, their semantic composition, and the checked
-boundary examples. These use the documented
+`FrozenReduct::satisfied_by` query, their semantic composition, the generated
+admission step and validators, and the checked boundary examples. These use the documented
 fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
 
@@ -47,7 +47,8 @@ Install Rust `nightly-2026-08-18`, including `rustc-dev` and `rust-src`. This is
 an extraction toolchain, not a change to the solver's ordinary Rust pin. The
 extractor selects the real private production evaluator, root scan, subset
 query and countermodel-search phases directly.
-It also selects the actual owner check and theory clone. It selects
+It also selects the actual owner check and theory clone, and the private
+admission step and four validators that `Theory::new` runs before allocation. It selects
 `FrozenReduct::satisfied_by` through the existing reduct module, then
 excludes the other methods. No new Rust wrapper is needed. The extraction runs offline; if dependencies are
 not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
@@ -70,6 +71,11 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --start-from zetesis_ferraris::oracle::select_atoms \
   --start-from zetesis_ferraris::oracle::advance_subset \
   --start-from zetesis_ferraris::reduct \
+  --start-from zetesis_ferraris::theory::validate_node \
+  --start-from zetesis_ferraris::theory::validate_nodes \
+  --start-from zetesis_ferraris::theory::validate_root \
+  --start-from zetesis_ferraris::theory::validate_roots \
+  --start-from zetesis_ferraris::theory::admit \
   --exclude zetesis_ferraris::oracle::check \
   --exclude zetesis_ferraris::oracle::reserve \
   --include zetesis_ferraris --include zetesis_cpu::cancellation \
@@ -81,13 +87,19 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --exclude 'zetesis_ferraris::reduct::_::is_satisfied_by' \
   --exclude 'zetesis_ferraris::reduct::_::candidate' \
   --exclude 'zetesis_ferraris::reduct::_::fmt' \
-  --dest-file target/replay/evaluator.raw.llbc \
+  --dest-file "$package_dir/target/replay/evaluator.raw.llbc" \
   -- --manifest-path ../../crates/zetesis-ferraris/Cargo.toml --lib --locked --offline
 ```
 
 Use an owned build directory and retire it after retaining source/tool hashes,
 extraction and proof evidence. Source changes require a new extraction and proof
 check; old hashes cannot qualify changed code.
+
+Pinned Charon serializes its `short_names` table in an order that can differ
+between runs of the same extraction. Every declaration, the ordered declaration
+list, item names, files and options are unaffected, and the generated Lean is
+byte-identical. Compare a repeated extraction by those sections and by the
+generated files below, not by the bytes of `evaluator.source.llbc`.
 
 ## Normalize the translation input and compare
 
@@ -135,9 +147,9 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 185
-  and $t.fun_decls[185] == null
-  and $t.ordered_decls[121] == {"TraitImpl":{"NonRec":25}}
+  and $debug.methods[0].skip_binder.id == 192
+  and $t.fun_decls[192] == null
+  and $t.ordered_decls[124] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -167,20 +179,20 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 178)
-  and step_method(6; "backward_overflowing"; 182)
+  and step_method(2; "forward_overflowing"; 185)
+  and step_method(6; "backward_overflowing"; 189)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[178] |= del(.src)
-    | .translated.fun_decls[182] |= del(.src)
+    | .translated.fun_decls[185] |= del(.src)
+    | .translated.fun_decls[189] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 178 or .Fun? == 182
+        .Fun? == 185 or .Fun? == 189
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
@@ -200,7 +212,7 @@ then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "program"
    | .translated.trait_impls[25] = null
-   | del(.translated.ordered_decls[121])
+   | del(.translated.ordered_decls[124])
    | .translated.trait_decls[9].methods[2] = null
    | .translated.trait_decls[9].methods[6] = null
    | .translated.trait_impls[23].methods[2] = null
@@ -216,8 +228,8 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:121]
-     + [$source[0].translated.ordered_decls[121]] + .translated.ordered_decls[121:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:124]
+     + [$source[0].translated.ordered_decls[124]] + .translated.ordered_decls[124:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -233,8 +245,8 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:121]
-     + [$source[0].translated.ordered_decls[121]] + .translated.ordered_decls[121:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:124]
+     + [$source[0].translated.ordered_decls[124]] + .translated.ordered_decls[124:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -288,12 +300,16 @@ The current extracted `Result`, callback traits and loop interfaces still use
 the fixed-observation model. Connecting the richer effect to generated calls,
 then rechecking that dependency closure, remains necessary.
 
-`Theory::new` now delegates node and root admission to ordered pure validators.
-A separate strict translation of the constructor and these validators succeeds
-when the independently selected `Interpretation::new` export is omitted; every
-function body is retained unchanged. The generic `Interpretation::new` export
-remains unsupported by the pinned translator. This package still excludes both
-admission constructors, and fresh `Arc::new` allocation has no model here.
-Translation alone does not establish constructor invariants or storage guarantees;
-these remain separate from the checked abstract `TheoryAdmission` and
-packed-representation laws.
+`Theory::new` runs the private admission step `admit`, which checks the
+dimensions and padded count and then calls the ordered node and root
+validators, and only then allocates. This package selects `admit` and the four
+validators directly as extraction roots, so neither constructor, fresh
+`Arc::new` allocation nor generic `Interpretation::new` enters its translation.
+A separate strict translation of the constructor itself succeeds only when the
+independently selected `Interpretation::new` export is omitted; that generic
+export remains unsupported by the pinned translator, and fresh allocation has no
+model here. `AdmissionValidation` and `AdmittedData` prove the generated
+validators and admission step against the authored admission checks; they
+establish no property of the wrapper that returns the admission step's refusal
+unchanged and otherwise passes the admitted data to `Arc::new`, of that
+allocation or of its owner.

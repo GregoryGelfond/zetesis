@@ -3,11 +3,13 @@
 This separately built implementation-refinement package connects the CPU
 reference checker's generated evaluation, root scan, atom selection and
 proper-subset search to the Ferraris answer-set definition under fixed
-observation tokens. The public allocation and owner-checking wrapper remains
+observation tokens. It also proves that the generated admission step called by
+`Theory::new`, with its node and root validators, computes the authored
+admission checks. The public allocation and owner-checking wrapper remains
 outside the proved composition.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
-imports the reduct-evaluation and packed-subset sources directly and checks them
+imports the reduct-evaluation, packed-subset and admission sources directly and checks them
 with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
@@ -57,9 +59,62 @@ check and zero initialization with the membership phases. It derives agreement
 of the atom universes and the initial empty subset instead of assuming them
 separately. Admission and reservation remain outside this composition.
 
-These results do not yet compose the entire public wrapper or prove the actual
-admission constructors. They establish specific setup obligations without
-assuming successful allocation or equating owner identity with value equality.
+These results do not yet compose the entire public wrapper or prove the
+admission constructors themselves. They establish specific setup obligations
+without assuming successful allocation or equating owner identity with value
+equality.
+
+## Admission validation
+
+`Theory::new` runs the private step `admit` before it allocates the shared
+theory. `admit` checks dimensions and the padded word count, then calls two
+private validators: `validate_nodes` checks every node in stored order against
+the atom universe and the nodes before it, and `validate_roots` checks that
+every asserted root names a stored node.
+[`AdmissionValidation`](AdmissionValidation.lean) proves the generated code of
+both validators, with no premise on the input slices.
+
+`validate_nodes_exact` shows that the generated node validator returns the verdict
+of the authored scan `TheoryAdmission.scan`, started at position zero, over the
+converted nodes. Enumeration positions are list positions, and every enumeration
+step is justified by the slice length bound, so the call always returns.
+`validate_nodes_accepts_iff` derives acceptance exactly from ordered children and
+in-universe atoms; `validate_nodes_refuses_iff` shows that a refusal reports the
+error of the first refused node, every earlier node having passed its check.
+`validate_roots_exact` identifies the generated root validator with the authored
+root scan `TheoryAdmission.rootScan`, which `TheoryAdmission.validate_phases`
+identifies as the root clause of `validate`. This checks root indices, whereas
+the evaluator's `RootScan` checks root truth. It accepts exactly when every root
+index is within the node table. Repeated in-range indices and an empty root list
+are accepted; an out-of-range index is refused wherever it occurs.
+
+`accepted_structure` applies both acceptances exactly as `admit` applies
+the validators to its input vectors. It derives ordered children, bounded roots
+and in-universe atoms for those vectors. Neither validator can report an
+allocation refusal. [Examples](AdmissionValidationExample.lean) check refusal
+order in both directions, repeated roots and empty input on the generated
+functions.
+
+[`AdmittedData`](AdmittedData.lean) proves the generated `admit` itself.
+`admit_exact` shows that it returns the verdict of the authored
+`TheoryAdmission.validate` with the host's `Usize.max` as its maximum, so Rust's
+`checked_add(63)` is exactly the authored padded-count check, and that success
+returns the supplied atom count and vectors unchanged, in their stored order and
+multiplicity. `admit_accepts_iff` and `admit_refuses_iff` read off acceptance and
+refusal; `admitted_word_counts` derives the representable 64-bit and 32-bit word
+counts. The equation holds for every input, so `admit` always returns and never
+reports an allocation refusal.
+
+The membership and query theorems keep `ordered` and `rootsBounded` as premises
+of `CountermodelSemantics.FrozenEvaluation`; no theorem here removes them.
+`admitted_program_structure` derives both for any theory whose stored value is
+data returned by `admit`. Connecting that to an actual `Theory::new` call needs
+further facts. Most concern values: `Theory::new`'s wrapper returns `admit`'s
+refusal unchanged and otherwise passes the admitted data to `Arc::new`, which
+stores it as the theory's value. One concerns identity: the allocation has a
+fresh owner. Only ownership results, such as the owner checks, use the identity
+fact; the structural premises need only the value facts. None of them is proved
+here, nor is `Interpretation::new`.
 
 ## Stored reduct queries
 
@@ -104,6 +159,8 @@ root occurrences, including typed stops. Neither original modelhood of `M` nor
 | `SearchSteps`, `CountermodelTrace` | Exact generated search branches and their finite composition retain returned state and work |
 | `SearchRepresentation`, `SearchSemantics` | Packed counter states denote semantic subsets and queries use the actually computed original mask |
 | `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
+| `AdmissionValidation` | The generated node and root validators compute the authored node and root scans, report the first refused node's error, and supply ordered-children and bounded-root premises |
+| `AdmittedData` | The generated admission step computes the authored validator, including the padded-count check, and returns the supplied data unchanged |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -203,14 +260,16 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-`FrozenReduct` construction, public allocation and owner-checking wrappers,
-source grounding, candidate enumeration, optimized checking routes or end-to-end
-solver verification.
+`FrozenReduct` construction, the allocation and owner of `Theory::new`,
+`Interpretation::new`, public allocation and owner-checking wrappers, source grounding,
+candidate enumeration, optimized checking routes or end-to-end solver
+verification.
 
 ## Extraction identity and reproduction
 
 The generated types and functions come directly from production Rust, including
-the four private subset-search operations. The LLBC destination becomes portable,
+the four private subset-search operations and the private admission step of
+`Theory::new` with its four validators. The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its

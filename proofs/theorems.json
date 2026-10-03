@@ -7065,39 +7065,59 @@
     "line": 121
   },
   {
+    "name": "Zetesis.Refinement.TheoryAdmission.scan_refusal_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 139
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.rootScan_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 217
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.rootScan_refusal_exact",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 230
+  },
+  {
+    "name": "Zetesis.Refinement.TheoryAdmission.validate_phases",
+    "file": "Zetesis/TheoryAdmission.lean",
+    "line": 275
+  },
+  {
     "name": "Zetesis.Refinement.TheoryAdmission.validate_exact",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 145
+    "line": 297
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.word_counts_fit",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 177
+    "line": 329
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.export_successor_fits",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 188
+    "line": 340
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.validated_reduct_exact",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 198
+    "line": 350
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 208
+    "line": 360
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.self_reference_is_refused",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 212
+    "line": 364
   },
   {
     "name": "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked",
     "file": "Zetesis/TheoryAdmission.lean",
-    "line": 216
+    "line": 368
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",

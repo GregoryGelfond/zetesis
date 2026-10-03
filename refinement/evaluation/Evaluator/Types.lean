@@ -138,7 +138,7 @@ structure theory.Data where
 def theory.Theory := alloc.sync.Arc theory.Data
 
 /-- [zetesis_ferraris::theory::Interpretation]
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 176:0-179:1
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 190:0-193:1
     Visibility: public -/
 structure theory.Interpretation where
   theory : theory.Theory
@@ -155,5 +155,24 @@ def oracle.evaluate.closure := Std.Usize
 structure reduct.FrozenReduct where
   candidate : theory.Interpretation
   truth : alloc.vec.Vec Bool
+
+/-- [zetesis_ferraris::theory::AdmissionLimits]
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 22:0-29:1
+    Visibility: public -/
+structure theory.AdmissionLimits where
+  max_atoms : Std.Usize
+  max_nodes : Std.Usize
+  max_roots : Std.Usize
+
+/-- [zetesis_ferraris::theory::AdmissionError]
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 42:0-53:1
+    Visibility: public -/
+@[discriminant isize]
+inductive theory.AdmissionError where
+| Limit : theory.AdmissionError
+| Atom : theory.AdmissionError
+| Edge : theory.AdmissionError
+| Root : theory.AdmissionError
+| Allocation : theory.AdmissionError
 
 end ZetesisExtract
