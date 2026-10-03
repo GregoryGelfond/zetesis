@@ -39,7 +39,7 @@
 - [Proving the solver correct](lean/correctness.md)
 - [Connecting proofs to implementations](lean/correspondence.md)
 - [Refining packed membership](lean/membership.md)
-- [Refining formula evaluation](lean/evaluation.md)
+- [Refining the reference checker](lean/evaluation.md)
 
 # Appendices
 

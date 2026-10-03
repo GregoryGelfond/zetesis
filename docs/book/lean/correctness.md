@@ -60,10 +60,9 @@ The proof follows that definition:
 `PackedCounterSearch` composes packed updates and streaming control: every
 completed verdict is exact. `TheoryAdmission` derives evaluator index bounds
 from ordered finite checks. Refinement of the actual Rust operations remains
-a separate obligation, discharged so far for the reference checker's phases
-and admission validators below. The separately built [implementation-refinement package](evaluation.md)
-connects the actual generated reference-checker phases to the same ASP theory
-under fixed observation tokens.
+a separate obligation. The separately built [implementation-refinement package](evaluation.md)
+connects the actual generated reference checker's completed public verdicts to
+the same ASP theory under fixed observation tokens and explicit library contracts.
 
 `MembershipSearch.completed_answer_set` composes actual original evaluation,
 a successful original root check, completed atom selection and completed
@@ -76,10 +75,16 @@ proof derives mask meaning and selected-atom coverage, then constructs the actua
 search execution using query correctness and the packed counter's rank argument.
 Typed stops retain their actual state and work and do not establish exhaustion.
 
-This closes the reference search's semantic composition under the modeled
-primitives. Public allocation, owner checks and buffer construction remain
-outside it, as do changing runtime observations, source grounding, candidate
-enumeration and optimized checking routes. `AdmissionValidation` and
+`PublicMembership.completed_answer_set` now derives those phase calls from the
+actual completed public wrapper. Given exact candidate storage, ordered nodes,
+bounded roots, a common consistent immutable heap and empty-sequence preservation
+by the two successful reservations used without clearing, the returned `Stable`
+verdict is equivalent to the answer-set definition. The negative results carry
+the actual asserted false root or program-owned proper-subset reduct model.
+The proof assumes neither allocation success nor correct inner-call results.
+It does not yet relate the generated pure provider and fixed observations to
+changing runtime histories. Source grounding, candidate enumeration and optimized
+checking routes also remain separate. `AdmissionValidation` and
 `AdmittedData` prove the actual admission step that `Theory::new` runs before it
 allocates, including its node and root validators, so admitted data supplies the
 ordering and root-bound premises. `TheoryConstruction` derives these from a
@@ -99,8 +104,9 @@ stored-reduct construction and query calls. It derives the mask invariant and
 proves that the query decides reduct satisfaction, given represented inputs,
 ordered nodes and bounded roots. Construction and query receive separate
 reservation providers, limits and fixed control tokens; no allocation-success
-law is assumed. This closes that producer/query obligation without proving the
-complete public membership wrapper or changing allocator and control histories.
+law is assumed. This closes that producer/query obligation. Its per-invocation
+contracts and the completed public-membership result remain distinct from
+correspondence to changing allocator and control histories.
 
 For normal rules, the positive reduct has a unique least consequence set.
 `FiniteClosure`, `PackedClosure` and `PackedAcceptance` prove constructive
@@ -178,9 +184,12 @@ system or device progress is not obtained from a set-theoretic coverage law.
    stored-reduct construction/query are covered under per-invocation library
    contracts. Interpretation construction now derives exact packed contents
    and padding for finite observed inputs, with the input contract proved for
-   owned vectors. Connect the full membership wrapper to these results, then
-   relate completed and refused calls to runtime allocation and cancellation
-   observations. Unrestricted iterator termination is not an admission guarantee.
+   owned vectors. Completed public membership verdicts now compose the actual
+   wrapper's setup and semantic calls under explicit library contracts. Relate
+   completed and refused calls to permitted runtime allocation and cancellation
+   histories, and compose the subject-bound `check_interpretation` API. This
+   milestone remains open. Unrestricted iterator termination is not an admission
+   guarantee.
    This milestone concerns one candidate of a finite ground formula theory.
 2. **Optimized CPU checking and enumeration.** Connect normal closure and each
    optimized membership route to the same answer-set definition. Prove candidate

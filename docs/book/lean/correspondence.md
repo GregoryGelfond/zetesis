@@ -25,8 +25,9 @@ for original truth followed by frozen-reduct truth. It derives the mask from
 Rust loop is `zetesis_ferraris::oracle::evaluate`, used by `FrozenReduct`, but
 these proofs do not extract or verify that Rust loop. The separate
 [implementation-refinement package](evaluation.md) proves the generated evaluator,
-root scan, stored-reduct construction/query and reference proper-subset search
-under fixed observation tokens.
+root scan, stored-reduct construction/query, reference proper-subset search and
+completed public membership checks under fixed observation tokens and explicit
+library contracts.
 `FrozenQuery.completed_satisfaction` connects the private query Boolean to Ferraris
 reduct satisfaction under explicit stored-mask agreement. `FrozenConstruction`
 derives that agreement and candidate retention from the actual producer.
@@ -46,8 +47,8 @@ occurrences. Typed stops remain errors. The broader trace relation permits fresh
 control inputs; its traces need not be executions of the fixed-token loop.
 The public reduct query checks owner identity before polling or reservation;
 reservation refusal remains `Stop.Allocation`. Its fresh query budget excludes
-construction work. The complete public membership wrapper and changing runtime
-histories remain unproved; physical storage and owner-token correspondence remain
+construction work. Correspondence to changing runtime histories remains open;
+physical storage and owner-token correspondence remain
 trusted library contracts. The finite construction results below supply exact
 contents and padding under their stated input and reservation contracts.
 
@@ -77,21 +78,34 @@ storage, ordered nodes, bounded roots, matching atom counts, an empty selection
 vector and zero-filled packed subset storage, search returns no countermodel exactly
 when the candidate satisfies `Ferraris.Stable` for the asserted theory.
 The mask's meaning, selected-coordinate coverage and query correctness are
-derived, not supplied as oracle equations. Public allocation, owner checks and
-construction of the initial buffers remain outside this theorem. It concerns
-the reference checker; candidate generation, optimized checking, source grounding
-and device execution remain separate obligations. The
-[reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
-records the public-wrapper boundary.
+derived, not supplied as oracle equations.
+
+`PublicMembership.completed_answer_set` recovers those phases from an actual
+completed public `oracle::check`: its verdict is `Stable` exactly for a Ferraris
+answer set. Its premises are exact candidate word storage, ordered nodes, bounded
+roots, a common consistent immutable heap, and empty-sequence preservation by the
+successful selected-atom and subset-word reservations. The actual calls establish
+owner agreement and initial buffers; Boolean workspaces are cleared before use.
+No allocation success or successful inner call is assumed. The negative theorems
+identify an asserted false root or the actual program-owned proper-subset reduct
+model. `PublicCheckPhases` also identifies the published final statistics;
+`PublicCheckBoundary` proves wrong-owner, initial-control and first-reservation
+refusals. A public stop returns no partial statistics or membership verdict.
+
+These are completed-result laws for the generated reference checker. Candidate
+generation, optimized checking, source grounding and device execution remain
+separate. The [reproduction guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#current-subset-search-extraction-limit)
+records the pure-provider and runtime-history boundary.
 
 `PackedSetup.initialized_membership` derives the zero-storage premise from the
 backend's actual resize operation and exact candidate word length.
 `MembershipVerdicts.returned_witness` identifies the proper-subset reduct model
 returned by the actual search. `OwnerChecks` connects generated identity and
 clone operations to owner tokens and immutable-heap consistency. These results
-close individual setup obligations; the constructor laws below also establish
-exact packed storage for finite inputs. The complete public membership wrapper
-remains unproved. `AdmissionValidation` proves the node and root validators
+supply the completed public composition; the constructor laws below establish
+exact packed storage for finite inputs. `SearchFrame` retains the actual theory,
+word length, limits and control across typed search returns, with nondecreasing
+work and subset counts. `AdmissionValidation` proves the node and root validators
 called by `admit` for `Theory::new`; it is described with
 `TheoryAdmission` below.
 
@@ -270,8 +284,8 @@ trace or validity premise. `InsertionBoundaryExample` checks first-invalid
 refusal before a diverging tail and completion at the first None.
 
 These results do not establish unrestricted iterator termination or expose a
-terminal iterator state that the helper does not return. The complete public
-membership wrapper and changing runtime histories remain separate obligations.
+terminal iterator state that the helper does not return. Correspondence to
+changing runtime histories remains separate from the completed public-check law.
 
 The [iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
 [packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md),
@@ -1231,9 +1245,10 @@ distinction. It does not verify `from_ground_program`, atom interning or formula
 DAG construction. `FrozenReduct` represents a fixed candidate's reduct.
 The separate generated-code proofs establish its stored-mask invariant through
 actual construction and compose it with the public query under per-invocation
-reservation providers and fixed observations. They do not establish source
-lowering or the complete public membership wrapper. Interpretation construction
-has its separate finite-input and reservation-contract proof above.
+reservation providers and fixed observations. Source lowering and runtime-history
+correspondence remain separate. `PublicMembership` supplies the completed public
+membership composition; interpretation construction has its finite-input and
+reservation-contract proof above.
 
 `FormulaNodes` retains a completed topology-validation prefix across aggregate
 compilations. Its obligation is the inductive one in `DagSharing.WellFormed.snoc`:

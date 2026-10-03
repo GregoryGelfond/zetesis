@@ -106,13 +106,6 @@ structure oracle.Statistics where
   work : Std.U64
   subsets : Std.U64
 
-/-- [zetesis_ferraris::oracle::Work]
-    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 77:0-81:1 -/
-structure oracle.Work where
-  limits : oracle.Limits
-  cancellation : zetesis_cpu.cancellation.Cancellation
-  statistics : oracle.Statistics
-
 /-- [zetesis_ferraris::theory::Node]
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 7:0-18:1
     Visibility: public -/
@@ -143,6 +136,29 @@ def theory.Theory := alloc.sync.Arc theory.Data
 structure theory.Interpretation where
   theory : theory.Theory
   words : alloc.vec.Vec Std.U64
+
+/-- [zetesis_ferraris::oracle::Verdict]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 38:0-51:1
+    Visibility: public -/
+@[discriminant isize]
+inductive oracle.Verdict where
+| Stable : oracle.Verdict
+| NotModel : Std.Usize → oracle.Verdict
+| NonMinimal : theory.Interpretation → oracle.Verdict
+
+/-- [zetesis_ferraris::oracle::Check]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 55:0-58:1
+    Visibility: public -/
+structure oracle.Check where
+  verdict : oracle.Verdict
+  statistics : oracle.Statistics
+
+/-- [zetesis_ferraris::oracle::Work]
+    Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 77:0-81:1 -/
+structure oracle.Work where
+  limits : oracle.Limits
+  cancellation : zetesis_cpu.cancellation.Cancellation
+  statistics : oracle.Statistics
 
 /-- [zetesis_ferraris::oracle::reserve::{closure}]
     Source: 'crates/zetesis-ferraris/src/oracle.rs', lines 105:17-105:37 -/

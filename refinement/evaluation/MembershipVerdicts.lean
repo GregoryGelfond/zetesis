@@ -12,8 +12,8 @@ positive subset search returns the actual proper-subset witness, rather than
 merely asserting that some countermodel exists. Both refute answer-set membership.
 
 These laws concern generated phase calls under the recorded library models.
-They complement the positive membership equivalence; the public wrapper's
-allocation and ownership contracts remain separate obligations.
+PublicMembership derives these calls from completed public-wrapper returns,
+retaining explicit input, allocation and ownership contracts.
 -/
 namespace MembershipVerdicts
 

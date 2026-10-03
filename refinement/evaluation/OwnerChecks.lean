@@ -9,8 +9,8 @@ identities. Common immutable-heap consistency then supplies equal theory data,
 including atoms, nodes and roots. The actual Theory clone retains that identity.
 
 The external Arc operations use the explicit owner model. This is not an
-allocator, reference-count or concurrent-memory proof. The public checker and
-its reservation/setup operations remain separate from these extracted calls.
+allocator, reference-count or concurrent-memory proof. These laws supply the
+owner contracts used by the completed public-check composition.
 -/
 
 namespace OwnerChecks

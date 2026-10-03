@@ -1,3 +1,4 @@
+import PublicMembership
 import InterpretationStorage
 import InsertionBoundaryExample
 import InterpretationConstruction
@@ -334,3 +335,18 @@ import FrozenBoundaryExample
 #print axioms InterpretationStorage.completed_vector
 #print axioms InsertionBoundaryExample.invalid_atom_avoids_diverging_tail
 #print axioms InsertionBoundaryExample.first_none_finishes_nonfused_input
+
+#print axioms SearchFrame.frame_trans
+#print axioms SearchFrame.returned_carry
+#print axioms SearchFrame.calls_frame
+#print axioms SearchFrame.returned_frame
+#print axioms PublicCheckBoundary.wrong_owner
+#print axioms PublicCheckBoundary.stopped
+#print axioms PublicCheckBoundary.reservation_refused
+#print axioms PublicCheckPhases.completed_phases
+#print axioms PublicMembership.original_counterexample
+#print axioms PublicMembership.searched_answer_set
+#print axioms PublicMembership.searched_witness
+#print axioms PublicMembership.completed_answer_set
+#print axioms PublicMembership.completed_not_model
+#print axioms PublicMembership.completed_nonminimal

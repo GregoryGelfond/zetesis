@@ -1,15 +1,12 @@
-# Refining formula evaluation
+# Refining the reference checker
 
-This separately built implementation-refinement package connects the CPU
-reference checker's generated evaluation, root scan, atom selection and
-proper-subset search to the Ferraris answer-set definition under fixed
-observation tokens. It also proves that the generated admission step called by
-`Theory::new`, with its node and root validators, computes the authored
-admission checks. `TheoryConstruction` connects those checks to the public
-theory constructor under an explicit library allocation contract. Completed
-stored-reduct construction and public querying agree with reduct satisfaction,
-using supplied reservation operations. The public membership wrapper remains outside the proved
-composition.
+This separately built implementation-refinement package connects completed calls
+of the CPU reference checker's generated public `check` to the Ferraris answer-set
+definition under fixed observation tokens and explicit library contracts. It
+derives the actual evaluation, root scan, atom selection and proper-subset search
+from the wrapper's return. The package also proves theory admission and
+construction, finite interpretation construction, and stored-reduct construction
+and public querying under their stated allocation and reservation contracts.
 
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the reduct-evaluation, packed-subset and admission sources directly and checks them
@@ -19,23 +16,35 @@ versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
 ## Central result
 
-[`MembershipSearch.completed_answer_set`](MembershipSearch.lean) proves that,
-after actual original evaluation and a successful original root check, completed
-actual atom selection and proper-subset search return no countermodel exactly
-when the candidate is an answer set of the stored formula theory.
+[`PublicMembership.completed_answer_set`](PublicMembership.lean) proves that an
+actual completed public `oracle::check` returns `Stable` exactly when its
+candidate is an answer set of the stored formula theory.
 
-The premises require represented candidate storage, ordered child indices,
-bounded roots, matching atom counts, an initially empty selection vector and
-packed subset storage representing the empty interpretation. The theorem threads
-work through these actual calls in source order. It derives the frozen mask's
-meaning and the selected atoms' coverage; it does not assume a correct subset
-oracle or complete enumeration. `FixedSearch.calls_refine` constructs the actual
-search execution, including typed stops. A stopped search establishes no
-membership verdict.
+The premises require exact candidate word storage, ordered child indices,
+bounded roots, consistency of both theory views with one immutable heap, and
+preservation of the empty input sequence by two successful reservations: the
+selected-atom buffer and the subset-word buffer. Evaluation clears its Boolean
+workspaces, so their previous contents need no such contract. No reservation is
+assumed to succeed.
 
-These premises describe the reference checker's semantic phases. They do not
-prove that the public wrapper allocates the initial buffers, establishes their
-owners or handles every setup failure correctly.
+[`PublicCheckPhases`](PublicCheckPhases.lean) recovers the actual owner check,
+initial poll, reservations, initialization and semantic calls from the completed
+wrapper return. The proof derives the frozen mask's meaning, selected-atom
+coverage and proper-subset completeness. It assumes neither successful inner
+calls nor a correct subset oracle. The published statistics are those of the
+last returned work record.
+
+`completed_not_model` identifies an asserted root with a present false original
+value. `completed_nonminimal` identifies the actual returned program-owned proper
+subset that models the candidate's reduct. These are the wrapper's own negative
+evidence. [`PublicCheckBoundary`](PublicCheckBoundary.lean) separately proves
+wrong-owner refusal, initial-control refusal and the first reservation's
+allocation refusal, in source order.
+
+These are completed-result theorems under one supplied pure reservation operation
+and fixed observations. They do not assert termination of an arbitrary provider
+or correspondence to changing runtime histories. A public stop carries no
+membership verdict or partial statistics.
 
 ## Storage and ownership
 
@@ -63,10 +72,10 @@ check and zero initialization with the membership phases. It derives agreement
 of the atom universes and the initial empty subset instead of assuming them
 separately. Admission and reservation remain outside this composition.
 
-These results establish specific setup obligations without assuming successful
-allocation or equating owner identity with value equality. The theory constructor
-and interpretation constructor are covered below. The complete public
-membership wrapper and changing runtime histories remain separate obligations.
+These results supply the public composition without assuming successful
+allocation or equating owner identity with value equality. The theory and
+interpretation constructors below supply its input invariants. Correspondence
+to changing runtime histories remains a separate obligation.
 
 ## Admission validation
 
@@ -233,6 +242,9 @@ construction work. A stop remains an error, not a satisfaction verdict.
 | `SearchSteps`, `CountermodelTrace` | Exact generated search branches and their finite composition retain returned state and work |
 | `SearchRepresentation`, `SearchSemantics` | Packed counter states denote semantic subsets and queries use the actually computed original mask |
 | `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
+| `SearchFrame` | Typed search returns preserve theory, word length, limits and control, with nondecreasing work and subset counts |
+| `PublicCheckBoundary`, `PublicCheckPhases` | Early refusals follow source order; completed public returns supply the actual setup and semantic calls |
+| `PublicMembership` | Completed public verdicts give answer-set equivalence and their actual false-root or proper-subset evidence under explicit input and library contracts |
 | `AdmissionValidation` | The generated node and root validators compute the authored node and root scans, report the first refused node's error, and supply ordered-children and bounded-root premises |
 | `AdmittedData` | The generated admission step computes the authored validator, including the padded-count check, and returns the supplied data unchanged |
 | `UsizeCeiling`, `InterpretationConstruction` | Exact packed word count and actual constructor phase order, reservation refusal and retained theory |
@@ -297,7 +309,7 @@ composes search with the actual original root check. The resulting answer-set
 criterion concerns one candidate of the ground formula theory. It does not
 establish coverage of the solver's candidate generator or optimized checking
 routes. The [reproduction guide](REPRODUCING.md#current-subset-search-extraction-limit)
-records the remaining public allocation and ownership boundary.
+records the supplied-operation and runtime-history boundary.
 
 ## Observation boundary
 
@@ -339,8 +351,8 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-termination of unrestricted iterators, the complete public membership wrapper,
-changing allocation or control histories, source grounding,
+termination of unrestricted iterators, correspondence to changing allocation
+or control histories, the subject-bound `check_interpretation` API, source grounding,
 candidate enumeration, optimized checking routes or end-to-end solver
 verification.
 
@@ -350,7 +362,8 @@ The generated types and functions come directly from production Rust, including
 the four private subset-search operations, `Theory::new` with its private
 admission step and four validators, `Interpretation::new` and its private
 `insert_atoms` helper, and the stored-reduct constructor, public query and
-reservation wrapper. The LLBC destination becomes portable,
+reservation wrapper, together with public `oracle::check`. The LLBC destination
+becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
@@ -363,7 +376,7 @@ arguments intact. Restoring the selections and metadata/name fields recovers the
 parsed raw input.
 
 Scoped section binders supply `ArcAllocation` to generated `Theory::new` and
-`VectorReservation` to `oracle::reserve`, `FrozenReduct::{freeze, new,
+`VectorReservation` to `oracle::{reserve, check}`, `FrozenReduct::{freeze, new,
 is_satisfied_by}` and `Interpretation::new`. No body is rewritten. Removing the
 recorded insertions restores the exact generated Lean. This dependency
 parameterization is distinct from metadata normalization and remains part of the

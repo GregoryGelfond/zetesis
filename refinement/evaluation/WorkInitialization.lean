@@ -6,9 +6,9 @@ open ZetesisExtract
 /-!
 # Initial work accounting
 
-Public frozen-reduct construction and queries start separate budgets with zero
-statistics. This shared record describes both starts; the theorem checks the
-actual generated default operation used by those wrappers.
+The public membership checker, frozen-reduct construction and reduct queries
+start separate budgets with zero statistics. This shared record describes each
+start; the theorem checks their actual generated default operation.
 -/
 namespace WorkInitialization
 

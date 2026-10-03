@@ -5,19 +5,12 @@
     "inventorySha256": "228decedc89b0635e55d667bed97c7377a8759326727558223330585855c22bc",
     "inventoryFiles": 308,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded source inventory for the evaluator, root scan, frozen operations, countermodel search, ownership/clone, admission and both constructors, including fixed-length interpretation insertion; not every repository or toolchain file.",
+    "scope": "Recorded source inventory for the public reference checker, evaluator, root scan, frozen operations, countermodel search, ownership/clone, admission and both constructors, including fixed-length interpretation insertion; not every repository or toolchain file.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "0c92aa68732d6a07b6757f0c215b595a95a9a22b",
-    "extractionSourceState": "Working tree at the recorded base revision with the listed approved insertion factoring, regression and benchmark changes; all 308 recorded input hashes match this extraction.",
-    "workingTreeSourceChanges": {
-      "crates/zetesis-ferraris/Cargo.toml": "ff45a3562888b2932132baca05ddfe277723708b5f1c5640b6e7e95748f229d4",
-      "crates/zetesis-ferraris/benches/interpretation.rs": "d8589cacbf0b6895eed6eab030ba6f3f1b502bb253c581437bda63aeb57dc9e7",
-      "crates/zetesis-ferraris/src/theory.rs": "4e78e0d3e98593801e0eb5e79d4b78a6aea93af5b5996665cf0b53ad8f42c6e4",
-      "crates/zetesis-ferraris/tests/integration/interpretation.rs": "e2c94ec8b286b3d579fbf27213c6ceb0e7b52aa364322939e1be071f700f804b"
-    },
-    "additionalWorkingTreeHashes": {
-      "scripts/check.sh": "097e52d1f3d50b4fa1a51b7b21004ab20169b34ab375653f6069d48bd8034b4b"
-    }
+    "extractionBaseRevision": "e2cbcce4a59312ced80cbdd736e882381279230d",
+    "extractionSourceState": "Committed source at the recorded revision; all 308 input hashes match the unchanged source inventory.",
+    "workingTreeSourceChanges": {},
+    "additionalWorkingTreeHashes": {}
   },
   "tools": {
     "charon": {
@@ -64,7 +57,8 @@
       "zetesis_ferraris::reduct::_::freeze",
       "zetesis_ferraris::reduct::_::new",
       "zetesis_ferraris::reduct::_::is_satisfied_by",
-      "zetesis_ferraris::theory::insert_atoms"
+      "zetesis_ferraris::theory::insert_atoms",
+      "zetesis_ferraris::oracle::check"
     ],
     "include": [
       "zetesis_ferraris",
@@ -81,9 +75,8 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "4338f91bfe60dd417daae6253c7f364f6dcb5b663b11c0db68a0d36c2853ec1d",
+    "originalLlbcSha256": "81f6d2835a67710f04b91af7c987bc026733ad960276dc1ab28cd7c98716ac89",
     "exclude": [
-      "zetesis_ferraris::oracle::check",
       "zetesis_ferraris::reduct::_::candidate",
       "zetesis_ferraris::reduct::_::fmt"
     ],
@@ -221,16 +214,32 @@
           "function": "zetesis_ferraris::theory::Interpretation::new",
           "oldValue": "theory",
           "newValue": "program"
+        },
+        {
+          "changedPath": [
+            "translated",
+            "fun_decls",
+            31,
+            "body",
+            "Structured",
+            "locals",
+            "locals",
+            1,
+            "name"
+          ],
+          "function": "zetesis_ferraris::oracle::check",
+          "oldValue": "theory",
+          "newValue": "program"
         }
       ],
       "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
       "declarationSelection": {
         "removedTraitImplIndex": 25,
-        "removedOrderedRegistrationIndex": 145,
+        "removedOrderedRegistrationIndex": 153,
         "trait": "core::fmt::Debug",
         "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
         "derived": true,
-        "excludedMethodId": 209,
+        "excludedMethodId": 210,
         "excludedMethod": "fmt",
         "noSurvivingSemanticReferences": true,
         "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
@@ -247,32 +256,37 @@
           {
             "name": "forward_overflowing",
             "slot": 2,
-            "opaqueFunctionId": 202
+            "opaqueFunctionId": 203
           },
           {
             "name": "backward_overflowing",
             "slot": 6,
-            "opaqueFunctionId": 206
+            "opaqueFunctionId": 207
           }
         ],
         "selection": "Replace the two unused trait and implementation method slots with null; retain indices and all function declarations.",
         "noSurvivingSemanticReferences": true,
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
       },
-      "identifierRederivation": "All 19 preceding roots remain. The added insertion phase is function30; both Theory.new24 and Interpretation.new25 remain exported. Seven local names are11,13\u201317,25/type67; insert_atoms takes a scalar atom_count and needs no namespace rename. Debug impl25 moves to ordered145/fmt209; Step trait9/impl23 retains slots2,6 with functions202,206. Identities, receiver types, unique exports and full surviving-declaration reference guards are rechecked."
+      "identifierRederivation": "All 20 preceding roots remain and public oracle.check is added as function31. Both constructors24/25 and insertion30 remain exported. Eight local names are11,13\u201317,25,31 with shared-theory reference type68. Debug impl25 is ordered153/fmt210; Step trait9/impl23 retains slots2,6 with functions203,207. Identities, receiver types, unique exports and full surviving-declaration reference guards are rechecked."
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "Guarded LLBC selection and seven local renames permit strict stock translation. Existing executable declaration blocks remain unchanged; source-coordinate comments and declaration order may differ. Four new blocks are the actual insertion loop/body/entry and generic Interpretation.new; its closure/type declarations were already retained. The former omission of the constructor ordered export is removed. Six scoped Lean binders parameterize only the documented allocation/reservation callers.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "Guarded LLBC selection and eight local renames permit strict stock translation. All 56 preceding function blocks and 20 type blocks, including source comments, remain byte-identical apart from declaration order. Only oracle.check and Check/Verdict are added. Seven scoped Lean binders parameterize only the documented allocation/reservation callers; no executable body changes.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true,
     "generatedBindingAdaptation": {
       "file": "Evaluator/Funs.lean",
-      "rawGeneratedSha256": "ed908e268ed6f51d2c2a03b8a753479a4e18720c167d9d876e30eb48b46d97b4",
-      "adaptedSha256": "ff1ef834de52767fa8e6deab2a0b40ab55a3dd292a62dc5761c76c3ff5e1ebe5",
+      "rawGeneratedSha256": "8f278eb5164d71cca30afa1304e2410099a509dfabd73cae713a475103f60ed5",
+      "adaptedSha256": "4f64efc029caedc5a26552dd48b2bc603d55d8f8c074dce3e7d2ad42e5a5a0fb",
       "blocks": [
         {
           "declaration": "oracle.reserve",
           "prefix": "section StorageReservation\nvariable [VectorReservation]\n\n",
           "suffix": "end StorageReservation\n\n"
+        },
+        {
+          "declaration": "oracle.check",
+          "prefix": "section CheckReservation\nvariable [VectorReservation]\n\n",
+          "suffix": "end CheckReservation\n\n"
         },
         {
           "declaration": "reduct.FrozenReduct.freeze",
@@ -301,7 +315,7 @@
         }
       ],
       "reversalRestoresExactRawBytes": true,
-      "signatureChange": "Theory.new takes the existing implicit ArcAllocation provider. Only oracle.reserve, FrozenReduct.freeze, FrozenReduct.new, FrozenReduct.is_satisfied_by and Interpretation.new gain VectorReservation. These are authored changes to Lean signatures; all executable bodies are unchanged.",
+      "signatureChange": "Theory.new takes the existing implicit ArcAllocation provider. Only oracle.reserve, oracle.check, FrozenReduct.freeze, FrozenReduct.new, FrozenReduct.is_satisfied_by and Interpretation.new take VectorReservation. These are authored changes to Lean signatures; all executable bodies are unchanged.",
       "providerBoundary": "Neither provider has a global instance or success assumption. Returning reservation refusal, backend failure and divergence remain distinct. Needed value/sequence/owner/capacity contracts are explicit; repeated identical pure calls do not model changing allocator outcomes or fresh histories."
     }
   },
@@ -328,69 +342,68 @@
     "hostPathScanClean": true,
     "newCargoExtractionPerformed": true,
     "externalTemplatesInstalled": false,
-    "documentedRetainedInputCommandsExit": 0,
     "declarationAndNameRestoreComparison": true,
     "generatedFilesByteIdenticalToNormalizedTranslation": false,
-    "documentedExtractionAndNormalizationCommandsExit": 0,
     "stockGeneratedFilesByteIdenticalToNormalizedTranslation": true,
     "allocationBinderReversalRestoresStockOutput": true,
-    "documentedAllocationBindingCommandsExit": 0,
-    "documentedExtractionArgvMatchesRecordedRun": true,
     "documentedExtractionArgvComparison": "Parsed shell arguments match the recorded successful extraction in order and value after substituting only the Charon executable, output LLBC path and checkout-relative Cargo manifest path.",
-    "documentedExternalBindingCommandsExit": 0
+    "documentedRetainedInputCommandsExit": 0,
+    "documentedExtractionAndNormalizationCommandsExit": 0,
+    "documentedAllocationBindingCommandsExit": 0,
+    "documentedExternalBindingCommandsExit": 0,
+    "documentedExtractionArgvMatchesRecordedRun": true
   },
   "trustBoundary": [
-    "LLBC destination metadata and seven local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors and the insertion phase remain exported. Restoration recovers the complete parsed raw Charon output.",
-    "Stock generated bodies are unmodified. The compiled file adds exactly the recorded six scoped provider binders; reversing them recovers the exact stock bytes. Their implicit parameters are authored Lean-signature adaptations, audited separately from LLBC normalization.",
+    "LLBC destination metadata and eight local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
+    "Stock generated bodies are unmodified. The compiled file adds exactly the recorded seven scoped provider binders; reversing them recovers the exact stock bytes. Their implicit parameters are authored Lean-signature adaptations, audited separately from LLBC normalization.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Existing generated-loop proofs use fixed supplied atomic observations, not changing concurrent Rust observations.",
     "Owner checks use identity and immutable-heap contracts. Allocation and reservation use explicit supplied operations with no success assumption; returning reservation refusal is distinct from backend failure. Required value, owner, sequence or capacity contracts belong to the consuming theorem.",
     "The providers are pure per-invocation interpretations, not evolving allocator histories. The active Vec model has no capacity field. No allocator, destructor, reference-count or cross-invocation runtime correspondence is established.",
-    "The public oracle::check composition remains outside this extraction scope. Both constructors and the frozen producers/queries are selected directly; their proved scope is recorded separately in verification.json. UsizeCeiling supplies the exact trusted usize::div_ceil signature, including zero-divisor failure and checked scalar conversion.",
+    "The public oracle::check wrapper is now selected directly. Its generated-call proof scope is recorded separately in verification.json. Selection and dependency binding do not establish correspondence to changing allocation or control histories. Both constructors and frozen producers/queries remain selected; UsizeCeiling retains the exact trusted usize::div_ceil signature.",
     "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "aa279071c5fed259158d1e077dce07a8486a975dded4415a937e92a3bfd0e731",
-    "evaluator.llbc": "276edcc70248b51731c1a67aa2d8b01da9904d285974678db4f070a878734e45",
-    "Evaluator/Funs.lean": "ff1ef834de52767fa8e6deab2a0b40ab55a3dd292a62dc5761c76c3ff5e1ebe5",
+    "evaluator.source.llbc": "6462e52eb23a0cf3b5543841bd0b81df498bbe88a84f342a6eb300ce56b4e0a3",
+    "evaluator.llbc": "3c2b93ae5860503198b47d518c2b44224421cce52ac9a2bb9a5311e969af4958",
+    "Evaluator/Funs.lean": "4f64efc029caedc5a26552dd48b2bc603d55d8f8c074dce3e7d2ad42e5a5a0fb",
     "Evaluator/FunsExternal_Template.lean": "9411d40298722743db6c5ac6051ea2cd1757d3ffb8bd9b69cc29f2f13f080e41",
-    "Evaluator/Types.lean": "93c4a80cc7dcf809ba0dc214fda306f701e7a6983f0c44d02c772a654201d852",
+    "Evaluator/Types.lean": "a257ec48f4b9669fe17c98130047661a775d1506a566437ba8582d9a79859f99",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
   },
   "compatibility": {
-    "previousPackageRevision": "0c92aa68732d6a07b6757f0c215b595a95a9a22b",
-    "previousGeneratedFunsSha256": "16860a24bd70b81ec43944f23a408deff027fcd5807e5a68b97733a7302e5b38",
-    "previousGeneratedTypesSha256": "81b3a6737ea50a76daa3e8ca3b4133f4df60f9366c67e47eca39c82c476c3478",
-    "comparison": "Compare exact generated declaration blocks after reversing the previous five audited provider scopes and ignoring source-coordinate comment lines. Declaration order may differ.",
+    "previousPackageRevision": "e2cbcce4a59312ced80cbdd736e882381279230d",
+    "previousGeneratedFunsSha256": "ff1ef834de52767fa8e6deab2a0b40ab55a3dd292a62dc5761c76c3ff5e1ebe5",
+    "previousGeneratedTypesSha256": "93c4a80cc7dcf809ba0dc214fda306f701e7a6983f0c44d02c772a654201d852",
+    "comparison": "Compare exact generated declaration blocks after reversing the previous six audited provider scopes. All existing blocks, including source-coordinate comments, are byte-identical; declaration order may differ.",
     "existingGeneratedExecutableDeclarationsUnchanged": true,
     "existingGeneratedTypeDeclarationsUnchanged": true,
-    "sourceCoordinateCommentLinesChanged": true,
+    "sourceCoordinateCommentLinesChanged": false,
     "externalFunctionsTemplateHashUnchanged": true,
     "externalTypesTemplateHashUnchanged": true,
     "addedDefinitions": [
-      "[zetesis_ferraris::theory::insert_atoms]: loop body 0:",
-      "[zetesis_ferraris::theory::insert_atoms]: loop 0:",
-      "[zetesis_ferraris::theory::insert_atoms]:",
-      "[zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new]:"
+      "oracle.check",
+      "oracle.Check",
+      "oracle.Verdict"
     ],
     "addedExternalTemplateFunctions": [],
     "addedExternalTemplateTypes": [],
-    "activeExternalCapabilityAdded": "UsizeCeiling activates the previously unused exact usize::div_ceil signature. The existing VectorReservation binding extends to Interpretation.new. No template axiom, always-success operation or new capacity state is installed.",
-    "proofReplayScope": "This record establishes extraction, generated-declaration compatibility and reversible external binding. verification.json separately records the strict proof replay and its theorem scope; extraction alone does not prove the constructor loop or runtime library correspondence.",
+    "activeExternalCapabilityAdded": "No new external operation or model; the existing VectorReservation provider extends to oracle.check.",
+    "proofReplayScope": "This record establishes extraction, generated-declaration compatibility and reversible external binding. verification.json separately records strict proof replay and theorem scope; extraction alone does not establish wrapper correctness or runtime correspondence.",
     "previousStockDeclarationBlocks": {
-      "Evaluator/Funs.lean": 52,
+      "Evaluator/Funs.lean": 56,
       "Evaluator/Types.lean": 20
     },
     "addedStockDeclarationBlocks": {
-      "Evaluator/Funs.lean": 4,
-      "Evaluator/Types.lean": 0
+      "Evaluator/Funs.lean": 1,
+      "Evaluator/Types.lean": 2
     },
-    "bindingLinesAdded": 30
+    "bindingLinesAdded": 35
   },
   "stockGeneratedArtifactsSha256": {
-    "Evaluator/Funs.lean": "ed908e268ed6f51d2c2a03b8a753479a4e18720c167d9d876e30eb48b46d97b4",
+    "Evaluator/Funs.lean": "8f278eb5164d71cca30afa1304e2410099a509dfabd73cae713a475103f60ed5",
     "Evaluator/FunsExternal_Template.lean": "9411d40298722743db6c5ac6051ea2cd1757d3ffb8bd9b69cc29f2f13f080e41",
-    "Evaluator/Types.lean": "93c4a80cc7dcf809ba0dc214fda306f701e7a6983f0c44d02c772a654201d852",
+    "Evaluator/Types.lean": "a257ec48f4b9669fe17c98130047661a775d1506a566437ba8582d9a79859f99",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
   }
 }

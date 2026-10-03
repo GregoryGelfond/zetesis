@@ -15,15 +15,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   reduct checking, including correctness of completed decisions under a query limit.
 - A composed packed streaming membership proof and finite theory-admission
   checks that establish the evaluator’s structural preconditions.
-- Lean refinement of extracted formula evaluation, root checking, atom selection
-  and proper-subset search. Completed membership checks agree with the
-  answer-set definition under explicit storage and runtime-model assumptions;
-  interrupted checks remain distinct. Public allocation and ownership checks,
-  grounding, full solver enumeration and GPU execution remain outside this proof.
+- Lean refinement of the generated public scalar reference checker. Completed
+  verdicts agree with the answer-set definition and retain their actual false-root
+  or proper-subset evidence under explicit input and library contracts. Early
+  owner, control and reservation refusals are preserved. Changing runtime
+  histories, grounding, full solver enumeration and GPU execution remain separate.
 - Lean refinement of formula admission and theory construction. The generated
   checks preserve the first refusal and establish the evaluator's structural
   preconditions. Constructor proofs use explicit Rust allocation and ownership
-  contracts; complete public membership checking remains a separate obligation.
+  contracts without assuming successful allocation.
 - Lean refinement of frozen-reduct construction and its public satisfaction query.
   Completed calls agree with the Ferraris reduct, preserving ownership checks,
   typed stops and separate work budgets under explicit library contracts.
@@ -31,7 +31,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   exact bounded-prefix writes and first-invalid refusal; completed construction
   retains its theory and derives exact packed contents and zero padding under an
   explicit reservation contract. Owned vectors supply the finite-input contract;
-  unrestricted iterator termination and the full public checker remain separate.
+  unrestricted iterator termination and changing runtime histories remain separate.
 
 ### Changed
 
