@@ -7135,6 +7135,31 @@
     "line": 59
   },
   {
+    "name": "Zetesis.TightBodyRecognition.recognized_formula",
+    "file": "Zetesis/TightBodyRecognition.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.TightBodyRecognition.recognize_body",
+    "file": "Zetesis/TightBodyRecognition.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.TightBodyRecognition.recognize_exact",
+    "file": "Zetesis/TightBodyRecognition.lean",
+    "line": 104
+  },
+  {
+    "name": "Zetesis.TightBodyRecognition.hasPositive_iff",
+    "file": "Zetesis/TightBodyRecognition.lean",
+    "line": 121
+  },
+  {
+    "name": "Zetesis.TightBodyRecognition.hasPositive_false_iff",
+    "file": "Zetesis/TightBodyRecognition.lean",
+    "line": 137
+  },
+  {
     "name": "Zetesis.TightEvaluation.formula_value_true",
     "file": "Zetesis/TightEvaluation.lean",
     "line": 44

@@ -219,3 +219,8 @@
 'Zetesis.TightPlans.stable_iff_ranked_support' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TightPlans.ranked_no_self' does not depend on any axioms
 'Zetesis.TightPlans.ranked_mono' does not depend on any axioms
+'Zetesis.TightBodyRecognition.recognized_formula' depends on axioms: [propext]
+'Zetesis.TightBodyRecognition.recognize_body' depends on axioms: [propext]
+'Zetesis.TightBodyRecognition.recognize_exact' depends on axioms: [propext]
+'Zetesis.TightBodyRecognition.hasPositive_iff' depends on axioms: [propext]
+'Zetesis.TightBodyRecognition.hasPositive_false_iff' depends on axioms: [propext]

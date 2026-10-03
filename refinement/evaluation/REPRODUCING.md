@@ -39,7 +39,8 @@ The default build includes the generated evaluator, root scan and private
 `FrozenReduct::satisfied_by` query, their semantic composition, the generated
 admission step, validators, `Theory::new`, and the frozen-reduct producer and
 public query, the generic interpretation constructor and insertion phase, and
-the public `oracle::check` wrapper and owned `check_interpretation` decision API.
+the public `oracle::check` wrapper and owned `check_interpretation` decision API,
+and the tight body classifier with its reservation/work helpers.
 Allocation and reservation use the explicit supplied operations
 described below. These use the documented fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
@@ -59,7 +60,10 @@ which takes the atom bound, an iterator and a fixed-length mutable word slice. B
 directly. The public `oracle::check` wrapper is selected with the same operations
 and library bindings. The owned `checked::check_interpretation` wrapper and its
 candidate, verdict, acceptance, statistics and move/accessor methods are selected
-individually; derived `Clone` and `Debug` are outside this selected API. Extraction runs offline; if dependencies are not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
+individually; derived `Clone` and `Debug` are outside this selected API. The additional
+root `tight::compile::classify` selects body classification and its directly used
+operations; the atomic-choice/producer recognizers and complete tight-plan compiler
+are outside this extraction. Extraction runs offline; if dependencies are not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
 
 ```sh
 repository_dir="$(git rev-parse --show-toplevel)"
@@ -100,6 +104,7 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --start-from zetesis_ferraris::checked::_::theory \
   --start-from zetesis_ferraris::checked::_::interpretation \
   --start-from zetesis_ferraris::checked::_::into_interpretation \
+  --start-from zetesis_ferraris::tight::compile::classify \
   --include zetesis_ferraris \
   --include zetesis_cpu::cancellation \
   --include zetesis_ferraris::reduct::FrozenReduct \
@@ -124,7 +129,7 @@ generated files below, not by the bytes of `evaluator.source.llbc`.
 ## Normalize the translation input and compare
 
 The public source LLBC changes only destination metadata. The translation input
-also renames eight local debug names to avoid Lean namespace collisions, removes
+also renames nine local debug names to avoid Lean namespace collisions, removes
 the unused derived `Debug` registration, and clears two unused `Step` method slots
 in the trait and its `usize` implementation. Pinned Charon registers
 `forward_overflowing` and `backward_overflowing`, but the pinned Lean `Step`
@@ -171,9 +176,9 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 222
-  and $t.fun_decls[222] == null
-  and $t.ordered_decls[169] == {"TraitImpl":{"NonRec":25}}
+  and $debug.methods[0].skip_binder.id == 226
+  and $t.fun_decls[226] == null
+  and $t.ordered_decls[171] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -203,23 +208,23 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 215)
-  and step_method(6; "backward_overflowing"; 219)
+  and step_method(2; "forward_overflowing"; 219)
+  and step_method(6; "backward_overflowing"; 223)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[215] |= del(.src)
     | .translated.fun_decls[219] |= del(.src)
+    | .translated.fun_decls[223] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 215 or .Fun? == 219
-        or .Regular? == 215 or .Regular? == 219
-        or .fun_id? == 215 or .fun_id? == 219
-        or .function_id? == 215 or .function_id? == 219
+        .Fun? == 219 or .Fun? == 223
+        or .Regular? == 219 or .Regular? == 223
+        or .fun_id? == 219 or .fun_id? == 223
+        or .function_id? == 219 or .function_id? == 223
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
@@ -234,7 +239,7 @@ def checked_interpretation_constructor:
   and $function.body.Structured.locals.arg_count == 2
   and $function.body.Structured.locals.locals[1].index == 1
   and $function.body.Structured.locals.locals[1].name == "theory"
-  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":71}
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":74}
   and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":25}})] | length) == 1;
 def checked_insertion:
   .translated.fun_decls[30] as $function |
@@ -248,6 +253,20 @@ def checked_insertion:
   and $function.body.Structured.locals.locals[1].name == "atom_count"
   and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":0}
   and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":30}})] | length) == 1;
+def checked_classifier:
+  .translated.fun_decls[41] as $function |
+  $function.def_id == 41
+  and $function.item_meta.name == [
+    {"Ident":["zetesis_ferraris",0]}, {"Ident":["tight",0]},
+    {"Ident":["compile",0]}, {"Ident":["classify",0]}]
+  and $function.src == "Normal"
+  and $function.item_meta.is_local == true
+  and $function.item_meta.opacity == "Transparent"
+  and $function.body.Structured.locals.arg_count == 2
+  and $function.body.Structured.locals.locals[1].index == 1
+  and $function.body.Structured.locals.locals[1].name == "theory"
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":74}
+  and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":41}})] | length) == 1;
 def checked_owned_exports:
   .translated as $t |
   all([
@@ -628,14 +647,15 @@ def checked_owned_exports:
     and $function.body.Structured.locals.arg_count == $expected.arguments
     and ([$t.ordered_decls[] | select(. == {"Fun":{"NonRec":$expected.id}})] | length) == 1);
 if checked_argument(11; "identities"; 2;
-     {"Value":[71,{"Ref":[{"Body":1},{"Deduplicated":3},"Shared"]}]})
-   and checked_argument(13; "evaluate"; 5; {"Deduplicated":71})
-   and checked_argument(14; "failed_root"; 3; {"Deduplicated":71})
-   and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":71})
-   and checked_argument(16; "check_subset"; 5; {"Deduplicated":71})
-   and checked_argument(17; "select_atoms"; 4; {"Deduplicated":71})
-   and checked_argument(31; "check"; 4; {"Deduplicated":71})
+     {"Value":[74,{"Ref":[{"Body":1},{"Deduplicated":3},"Shared"]}]})
+   and checked_argument(13; "evaluate"; 5; {"Deduplicated":74})
+   and checked_argument(14; "failed_root"; 3; {"Deduplicated":74})
+   and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":74})
+   and checked_argument(16; "check_subset"; 5; {"Deduplicated":74})
+   and checked_argument(17; "select_atoms"; 4; {"Deduplicated":74})
+   and checked_argument(31; "check"; 4; {"Deduplicated":74})
    and checked_interpretation_constructor and checked_insertion and checked_owned_exports
+   and checked_classifier
    and debug_is_unused and step_is_unused
 then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[13].body.Structured.locals.locals[1].name = "program"
@@ -645,8 +665,9 @@ then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[25].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[31].body.Structured.locals.locals[1].name = "program"
+   | .translated.fun_decls[41].body.Structured.locals.locals[1].name = "program"
    | .translated.trait_impls[25] = null
-   | del(.translated.ordered_decls[169])
+   | del(.translated.ordered_decls[171])
    | .translated.trait_decls[9].methods[2] = null
    | .translated.trait_decls[9].methods[6] = null
    | .translated.trait_impls[23].methods[2] = null
@@ -663,9 +684,10 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[25].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[31].body.Structured.locals.locals[1].name = "theory"
+ | .translated.fun_decls[41].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:169]
-     + [$source[0].translated.ordered_decls[169]] + .translated.ordered_decls[169:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:171]
+     + [$source[0].translated.ordered_decls[171]] + .translated.ordered_decls[171:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -682,9 +704,10 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[25].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[31].body.Structured.locals.locals[1].name = "theory"
+ | .translated.fun_decls[41].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:169]
-     + [$source[0].translated.ordered_decls[169]] + .translated.ordered_decls[169:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:171]
+     + [$source[0].translated.ordered_decls[171]] + .translated.ordered_decls[171:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -699,7 +722,7 @@ cmp Evaluator/Types.lean target/replay/Evaluator/Types.lean
 # Compare Funs.lean after the explicit external bindings below.
 ```
 
-Recheck the selected source hashes, all eight precise function/local identities and
+Recheck the selected source hashes, all nine precise function/local identities and
 the unused Debug and Step declarations in `provenance.json` before accepting a
 repeated extraction. These paths are specific
 to this recorded extraction. Never reuse them silently after a structural change.
@@ -710,10 +733,10 @@ identity and explicit review remain separate checks.
 
 Stock Aeneas emits calls to `alloc.sync.Arc.new` and
 `alloc.vec.Vec.try_reserve_exact` without provider parameters. This package adds
-eight scoped section binders: `Theory::new` takes `ArcAllocation`, and
+ten scoped section binders: `Theory::new` takes `ArcAllocation`, and
 `oracle::{reserve,check}`, `checked::check_interpretation`,
-`FrozenReduct::{freeze,new,is_satisfied_by}` and `Interpretation::new` take
-`VectorReservation`. No other declaration
+`FrozenReduct::{freeze,new,is_satisfied_by}`, `Interpretation::new`,
+`tight::reserve` and `tight::compile::classify` take `VectorReservation`. No other declaration
 receives either parameter. These are authored changes to the Lean signatures,
 not stock translator output or debug-name normalization. Every executable body
 remains unchanged.
@@ -736,11 +759,11 @@ successful logical outputs under the sequence-preservation contract, but does no
 establish correspondence to mixed success/refusal histories or changing runtime
 observations.
 
-Keep the raw generated file, check its identity, insert exactly the eight binders,
+Keep the raw generated file, check its identity, insert exactly the ten binders,
 and verify that removing them recovers the raw bytes:
 
 ```sh
-printf '%s\n' 'a4dca2591195c0bf381f16f7c187ff773ba3cf353e0f4e6f290a4356541f7daf  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
+printf '%s\n' 'faa7421c710314ce2b38fc432ae28840975b6cf1e6e3a9ea3db02f96438a1747  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
 awk '
 function begin_scope(name, provider) {
   if (active != "" || seen[name] != 0) exit 1
@@ -772,6 +795,10 @@ function begin_scope(name, provider) {
     begin_scope("QueryReservation", "VectorReservation")
   if ($0 ~ /^\/-- \[zetesis_ferraris::theory::\{zetesis_ferraris::theory::Interpretation\}::new\]:$/)
     begin_scope("InterpretationReservation", "VectorReservation")
+  if ($0 ~ /^\/-- \[zetesis_ferraris::tight::reserve\]:$/)
+    begin_scope("TightStorageReservation", "VectorReservation")
+  if ($0 ~ /^\/-- \[zetesis_ferraris::tight::compile::classify\]:$/)
+    begin_scope("TightClassificationReservation", "VectorReservation")
 }
 /^end ZetesisExtract$/ {
   if (active != "") {
@@ -784,10 +811,11 @@ function begin_scope(name, provider) {
 END {
   if (active != "" || seen["TheoryAllocation"] != 1 || seen["StorageReservation"] != 1 ||
       seen["FreezeReservation"] != 1 || seen["ReductReservation"] != 1 || seen["QueryReservation"] != 1 ||
-      seen["InterpretationReservation"] != 1 || seen["CheckReservation"] != 1 || seen["SubjectReservation"] != 1) exit 1
+      seen["InterpretationReservation"] != 1 || seen["CheckReservation"] != 1 || seen["SubjectReservation"] != 1 ||
+      seen["TightStorageReservation"] != 1 || seen["TightClassificationReservation"] != 1) exit 1
 }
 ' target/replay/Evaluator/Funs.lean > target/replay/Funs.bound.lean
-printf '%s\n' 'e0c4979d76f69b62e4eef335f1bca02c514bf2eb4f9c3587b5c3ee4f20ca6d37  target/replay/Funs.bound.lean' | shasum -a 256 -c -
+printf '%s\n' '450a4e700f47cc815a72f7f357d35cc886da0acf3c86358e77287bcce8bf5272  target/replay/Funs.bound.lean' | shasum -a 256 -c -
 awk '
 BEGIN {
   provider["TheoryAllocation"] = "ArcAllocation"
@@ -798,6 +826,8 @@ BEGIN {
   provider["ReductReservation"] = "VectorReservation"
   provider["QueryReservation"] = "VectorReservation"
   provider["InterpretationReservation"] = "VectorReservation"
+  provider["TightStorageReservation"] = "VectorReservation"
+  provider["TightClassificationReservation"] = "VectorReservation"
 }
 $1 == "section" && ($2 in provider) {
   if (NF != 2 || active != "" || seen[$2] != 0) exit 1
@@ -850,7 +880,13 @@ candidate's theory and moves the candidate into the returned decision. Its
 acceptance, verdict/statistics, checked-subject, stable conversion and stable
 subject/theory accessors are selected too. The additions are these operations,
 three directly used `Check` accessors, and the two checked/stable record types.
-All preceding generated declarations and external templates are unchanged.
+The classifier addition contains the actual `tight::compile::classify` body/loop,
+`tight::reserve`, tight work admission, the used `Node` equality and the associated
+error conversion. All 69 preceding generated function blocks and 24 type blocks,
+including their source comments, and both external templates are unchanged.
+The existing returning-event contexts still cover the reference checker only;
+no tight-route runtime or complete plan eligibility result follows from this
+additional extraction.
 Completed-call proof scope is recorded separately in `verification.json`;
 extraction alone establishes no verdict theorem.
 
@@ -944,7 +980,8 @@ Retain the two source-check outputs and their exit statuses with the full build
 and axiom-audit results. The artifact inventory must include `ContextAudit`,
 both context modules, their event wiring and all proof modules. The verification
 record identifies the source-check commands separately from the kernel audits.
-The unchanged Rust-source and shared-semantic-source inventories remain checked;
+The Rust-source inventory and the extended shared-semantic-source inventory
+remain checked;
 regenerating a context or changing its scaffold requires repeating both source
 checks and the proof build. The shared semantic sources still compile directly
 on Lean 4.31.0, independently of the main library's Lean 4.33.1 objects.

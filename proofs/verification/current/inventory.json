@@ -7136,6 +7136,31 @@
       "name": "Zetesis.Thresholds.threshold_sum_monotone"
     },
     {
+      "file": "Zetesis/TightBodyRecognition.lean",
+      "line": 42,
+      "name": "Zetesis.TightBodyRecognition.recognized_formula"
+    },
+    {
+      "file": "Zetesis/TightBodyRecognition.lean",
+      "line": 92,
+      "name": "Zetesis.TightBodyRecognition.recognize_body"
+    },
+    {
+      "file": "Zetesis/TightBodyRecognition.lean",
+      "line": 104,
+      "name": "Zetesis.TightBodyRecognition.recognize_exact"
+    },
+    {
+      "file": "Zetesis/TightBodyRecognition.lean",
+      "line": 121,
+      "name": "Zetesis.TightBodyRecognition.hasPositive_iff"
+    },
+    {
+      "file": "Zetesis/TightBodyRecognition.lean",
+      "line": 137,
+      "name": "Zetesis.TightBodyRecognition.hasPositive_false_iff"
+    },
+    {
       "file": "Zetesis/TightEvaluation.lean",
       "line": 44,
       "name": "Zetesis.TightEvaluation.formula_value_true"
@@ -7908,6 +7933,7 @@
     "Zetesis/TernaryWatch.lean",
     "Zetesis/TheoryAdmission.lean",
     "Zetesis/Thresholds.lean",
+    "Zetesis/TightBodyRecognition.lean",
     "Zetesis/TightEvaluation.lean",
     "Zetesis/TightPlans.lean",
     "Zetesis/Transformers.lean",
@@ -7921,8 +7947,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "672e29d4bf910841f62c680156328415c99777ecc88f04e55330614f496fcb1d",
-    "Zetesis.lean": "210e59d7dd3d7baf3127b97f6f38f35358c1a6bf804092d6866019825532bd53",
+    "Audit.lean": "afc1b15fa75c932cd4e9410eb0d55291ae25b2fb71c11d3c96bcad81ccc3859e",
+    "Zetesis.lean": "0a997e51795d18a86a90e51ee345ff71c4f01395cc57c3bb8cf8f9a6dd7b0265",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -8074,6 +8100,7 @@
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
     "Zetesis/TheoryAdmission.lean": "4a0e96734f7771ea907af99a4cc1739f1e1e7732d0e15f11a192b74dea5b2143",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
+    "Zetesis/TightBodyRecognition.lean": "fc2f7e335c6fb1d96f807f073ba54afa1e3c6ea37da6003f89e8733599c1ccdb",
     "Zetesis/TightEvaluation.lean": "a8dfdd3824eae4fdd35696869d47e56cb26ae1d931e0a0442a68f29498822864",
     "Zetesis/TightPlans.lean": "6324a09643454c507c4daf1a287ec082545b621e52bea3196026043ea99bac98",
     "Zetesis/Transformers.lean": "e01d5f8de5ca692d1efdc79db7c433d20d832fc551cac37742b33fd2fc148648",

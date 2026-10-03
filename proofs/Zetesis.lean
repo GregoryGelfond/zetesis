@@ -160,3 +160,4 @@ import Zetesis.PackedSubsets
 import Zetesis.CounterSearch
 import Zetesis.PackedCounterSearch
 import Zetesis.TheoryAdmission
+import Zetesis.TightBodyRecognition

@@ -1,4 +1,4 @@
-# Refining the reference checker
+# Refining CPU checks
 
 The separately built [implementation-refinement package](https://github.com/GregoryGelfond/zetesis/tree/main/refinement/evaluation)
 connects finite completed public calls of the CPU scalar reference checker
@@ -6,6 +6,29 @@ to the Ferraris answer-set definition, including returning control reads and
 reservations. The result concerns one candidate of one finite ground formula
 theory under explicit library, runtime and extraction contracts. The package also proves theory admission and construction, finite
 interpretation construction, and stored-reduct construction and public querying.
+
+## Recognizing bodies for tight checking
+
+The optimized tight check needs a structural certificate before it may replace
+proper-subset reduct search. Its body classifier distinguishes exact admitted
+body syntax from unsupported implications, then records whether an atom occurs
+outside default negation. Negation freezes its entire interior, including any
+implications there.
+
+[`TightBodyRecognition`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TightBodyRecognition.lean)
+proves recognition and positive-occurrence laws over formulas independently of
+Rust. [`TightClassification.completed_semantics`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/TightClassification.lean) connects the generated node scan to
+those laws. Each successful scan classifies every node in its original order;
+its classes are `Opaque`, `Frozen` or `Positive` according to that exact grammar.
+These describe syntax, not truth: a conjunction containing falsum can still
+have an unfrozen positive occurrence.
+
+The implementation proof retains the supplied reservation and control contracts,
+bounded reads and exact work charged by the scan. It does not assume allocation
+success or a correct classifier. Producer extraction, complete root coverage,
+rank validation and the optimized membership verdict remain separate obligations.
+The classifier's fixed-provider proof does not extend the reference checker's
+runtime-event theorem to the optimized route.
 
 ## From the public check to answer-set membership
 
@@ -324,7 +347,8 @@ finite ground formula theory, including the subject-bound API. It does not prove
 source grounding, candidate enumeration, optimized membership routes, parallel
 schedules or GPU execution. Finite interpretation insertion does not establish
 termination of arbitrary iterators or a caller's borrowed-iterator destruction
-behavior. The general ASP library remains independent and unchanged.
+behavior. The general ASP library remains independent; the added body-recognition
+laws preserve its existing semantic definitions.
 
 The [package guide](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/README.md)
 records the exact scope, source hashes and reproduction commands. Generated code

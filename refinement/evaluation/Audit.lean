@@ -1,3 +1,9 @@
+import TightClassification
+import TightClassificationLoop
+import TightClassificationStep
+import TightClassificationSemantics
+import TightWork
+import TightDag
 import RuntimePublicRefusal
 import RuntimeContexts
 import CheckerContexts
@@ -523,3 +529,37 @@ import FrozenBoundaryExample
 
 #print axioms RuntimePublicRefusal.classified
 #print axioms RuntimePublicRefusal.classified_subject
+#print axioms TightDag.ordered_well_formed
+#print axioms TightDag.stored_meaning
+#print axioms TightDag.stored_atom
+#print axioms TightDag.stored_false
+#print axioms TightDag.stored_or
+#print axioms TightDag.stored_implies
+#print axioms TightWork.stopped
+#print axioms TightWork.at_limit
+#print axioms TightWork.advances
+#print axioms TightWork.refines
+#print axioms TightClassificationSemantics.scan_length
+#print axioms TightClassificationSemantics.scan_snoc
+#print axioms TightClassificationSemantics.meaning_bot_iff
+#print axioms TightClassificationSemantics.formulaClass_conj
+#print axioms TightClassificationSemantics.formulaClass_disj
+#print axioms TightClassificationSemantics.node_exact
+#print axioms TightClassificationSemantics.scan_take_exact
+#print axioms TightClassificationSemantics.classes_exact
+#print axioms TightClassificationSemantics.formulaClass_opaque
+#print axioms TightClassificationSemantics.formulaClass_frozen
+#print axioms TightClassificationSemantics.formulaClass_positive
+#print axioms TightClassificationStep.false_test
+#print axioms TightClassificationStep.step_stopped
+#print axioms TightClassificationStep.exhausted
+#print axioms TightClassificationStep.step_after_tick
+#print axioms TightClassificationLoop.prefix_length
+#print axioms TightClassificationLoop.advance_invariant
+#print axioms TightClassificationLoop.loop_unfold
+#print axioms TightClassificationLoop.loop_refines
+#print axioms TightClassificationLoop.completed_classes
+#print axioms TightClassification.reserve_from_oracle
+#print axioms TightClassification.classify_setup
+#print axioms TightClassification.completed_classes
+#print axioms TightClassification.completed_semantics

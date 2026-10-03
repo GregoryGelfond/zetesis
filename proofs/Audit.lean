@@ -1427,6 +1427,11 @@ import Zetesis
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_sum_monotone
+#print axioms Zetesis.TightBodyRecognition.recognized_formula
+#print axioms Zetesis.TightBodyRecognition.recognize_body
+#print axioms Zetesis.TightBodyRecognition.recognize_exact
+#print axioms Zetesis.TightBodyRecognition.hasPositive_iff
+#print axioms Zetesis.TightBodyRecognition.hasPositive_false_iff
 #print axioms Zetesis.TightEvaluation.formula_value_true
 #print axioms Zetesis.TightEvaluation.node_value_decode
 #print axioms Zetesis.TightEvaluation.values_correspond

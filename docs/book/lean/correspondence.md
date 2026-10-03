@@ -16,6 +16,20 @@ verified milestones. This chapter records the more detailed correspondences.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
+## Tight-body classification
+
+`TightClassification.completed_semantics` connects the generated tight-body
+classifier to `TightBodyRecognition`: successful classification covers every
+stored node, preserves its exact formula syntax, and distinguishes bodies with
+and without atom occurrences outside negation. Its loop receipt derives the
+full class sequence and work count from actual steps. The proof uses ordered
+nodes, a valid work counter and the successful reservation's sequence contract;
+it assumes neither allocation success nor class agreement. This is the first
+optimized-route correspondence, not a proof of the whole tight certificate.
+Producer coverage, ranks and membership checking remain separate obligations.
+See [the refinement account](evaluation.md#recognizing-bodies-for-tight-checking)
+for the fixed-provider scope.
+
 ## Executable finite algorithms
 
 `ReductEvaluation.values_correspond` proves the actual two-fold Lean algorithm

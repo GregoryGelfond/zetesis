@@ -215,4 +215,47 @@ inductive theory.AdmissionError where
 def theory.Interpretation.new.closure (T0 : Type) (Clause0_IntoIter : Type) :=
 Unit
 
+/-- [zetesis_ferraris::tight::compile::Body]
+    Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 11:0-15:1 -/
+@[discriminant isize]
+inductive tight.compile.Body where
+| Opaque : tight.compile.Body
+| Frozen : tight.compile.Body
+| Positive : tight.compile.Body
+
+/-- [zetesis_ferraris::tight::reserve::{closure}]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
+@[reducible]
+def tight.reserve.closure (T : Type) := Unit
+
+/-- [zetesis_ferraris::tight::TightResource]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 57:0-66:1
+    Visibility: public -/
+@[discriminant isize]
+inductive tight.TightResource where
+| Producers : tight.TightResource
+| Dependencies : tight.TightResource
+| Bytes : tight.TightResource
+| Work : tight.TightResource
+
+/-- [zetesis_ferraris::tight::TightError]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 70:0-99:1
+    Visibility: public -/
+@[discriminant isize]
+inductive tight.TightError where
+| UnsupportedRoot : Std.Usize → tight.TightError
+| UnsupportedBody : Std.Usize → Std.Usize → tight.TightError
+| PositiveCycle : Std.Usize → tight.TightError
+| RankShape : tight.TightError
+| RankOrder : Std.Usize → tight.TightError
+| Limit : tight.TightResource → tight.TightError
+| Stopped : zetesis_cpu.cancellation.Stop → tight.TightError
+
+/-- [zetesis_ferraris::tight::Work]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 256:0-260:1 -/
+structure tight.Work where
+  used : Std.U64
+  max : Std.U64
+  cancellation : zetesis_cpu.cancellation.Cancellation
+
 end ZetesisExtract

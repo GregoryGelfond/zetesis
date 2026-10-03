@@ -1067,6 +1067,60 @@ def reduct.FrozenReduct.is_satisfied_by
 
 end QueryReservation
 
+/-- [zetesis_ferraris::theory::{impl core::cmp::PartialEq<zetesis_ferraris::theory::Node> for zetesis_ferraris::theory::Node}::eq]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 6:29-6:38
+    Visibility: public -/
+def theory.Node.Insts.CoreCmpPartialEqNode.eq
+  (self : theory.Node) (other : theory.Node) : Result Bool := do
+  let self1 := read_discriminant self
+  let other1 := read_discriminant other
+  if self1 = other1
+  then
+    match self with
+    | theory.Node.Atom __self_0 =>
+      match other with
+      | theory.Node.Atom __arg1_0 =>
+        lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+      | theory.Node.False => ok true
+      | theory.Node.And _ _ => ok true
+      | theory.Node.Or _ _ => ok true
+      | theory.Node.Implies _ _ => ok true
+    | theory.Node.False => ok true
+    | theory.Node.And __self_0 __self_1 =>
+      match other with
+      | theory.Node.Atom _ => ok true
+      | theory.Node.False => ok true
+      | theory.Node.And __arg1_0 __arg1_1 =>
+        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+        if b
+        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
+        else ok false
+      | theory.Node.Or _ _ => ok true
+      | theory.Node.Implies _ _ => ok true
+    | theory.Node.Or __self_0 __self_1 =>
+      match other with
+      | theory.Node.Atom _ => ok true
+      | theory.Node.False => ok true
+      | theory.Node.And _ _ => ok true
+      | theory.Node.Or __arg1_0 __arg1_1 =>
+        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+        if b
+        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
+        else ok false
+      | theory.Node.Implies _ _ => ok true
+    | theory.Node.Implies __self_0 __self_1 =>
+      match other with
+      | theory.Node.Atom _ => ok true
+      | theory.Node.False => ok true
+      | theory.Node.And _ _ => ok true
+      | theory.Node.Or _ _ => ok true
+      | theory.Node.Implies __arg1_0 __arg1_1 =>
+        let b ← lift (core.cmp.impls.PartialEqUsize.eq __self_0 __arg1_0)
+        if b
+        then lift (core.cmp.impls.PartialEqUsize.eq __self_1 __arg1_1)
+        else ok false
+  else ok false
+
 /-- [zetesis_ferraris::theory::validate_root]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 170:0-176:1 -/
 def theory.validate_root
@@ -1403,5 +1457,252 @@ def theory.Interpretation.new
       residual
 
 end InterpretationReservation
+
+/-- [zetesis_ferraris::tight::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::reserve::{closure}<T>}::call_once]:
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
+def
+  tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
+  {T : Type} (c : tight.reserve.closure T)
+  (tupled_args : alloc.collections.TryReserveError) :
+  Result zetesis_cpu.cancellation.Stop
+  := do
+  ok zetesis_cpu.cancellation.Stop.Allocation
+
+/-- Trait implementation: [zetesis_ferraris::tight::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::reserve::{closure}<T>}]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
+@[reducible]
+def tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
+  (T : Type) : core.ops.function.FnOnce (tight.reserve.closure T)
+  alloc.collections.TryReserveError zetesis_cpu.cancellation.Stop := {
+  call_once :=
+    tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
+}
+
+/-- [zetesis_ferraris::tight::{impl core::convert::From<zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::TightError}::from]:
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 120:4-122:5
+    Visibility: public -/
+def tight.TightError.Insts.CoreConvertFromStop.from
+  (stop : zetesis_cpu.cancellation.Stop) : Result tight.TightError := do
+  ok (tight.TightError.Stopped stop)
+
+/-- Trait implementation: [zetesis_ferraris::tight::{impl core::convert::From<zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::TightError}]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 119:0-123:1 -/
+@[reducible]
+def tight.TightError.Insts.CoreConvertFromStop : core.convert.From
+  tight.TightError zetesis_cpu.cancellation.Stop := {
+  «from» := tight.TightError.Insts.CoreConvertFromStop.from
+}
+
+section TightStorageReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::tight::reserve]:
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 280:0-286:1 -/
+def tight.reserve
+  (T : Type) (count : Std.Usize) :
+  Result (core.result.Result (alloc.vec.Vec T) tight.TightError)
+  := do
+  let (r, vector) ←
+    alloc.vec.Vec.try_reserve_exact Global (alloc.vec.Vec.new T) count
+  let r1 ←
+    core.result.Result.map_err
+      (tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
+      T) r ()
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    ok (core.result.Result.Ok vector)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      (alloc.vec.Vec T) tight.TightError.Insts.CoreConvertFromStop residual
+
+end TightStorageReservation
+
+/-- [zetesis_ferraris::tight::{zetesis_ferraris::tight::Work<'_0>}::tick]:
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 262:4-269:5 -/
+def tight.Work.tick
+  (self : tight.Work) :
+  Result ((core.result.Result Unit tight.TightError) × tight.Work)
+  := do
+  let r ← zetesis_cpu.cancellation.Cancellation.poll self.cancellation
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    if self.used = self.max
+    then
+      ok (core.result.Result.Err (tight.TightError.Limit
+        tight.TightResource.Work), self)
+    else
+      let i ← self.used + 1#u64
+      ok (core.result.Result.Ok (), { self with used := i })
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        Unit tight.TightError.Insts.CoreConvertFromStop residual
+    ok (r1, self)
+
+/-- [zetesis_ferraris::tight::compile::classify]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 90:4-105:1 -/
+@[rust_loop_body]
+def tight.compile.classify_loop.body
+  (program : theory.Theory) (iter : core.slice.iter.Iter theory.Node)
+  (work : tight.Work) (classes : alloc.vec.Vec tight.compile.Body) :
+  Result (ControlFlow ((core.slice.iter.Iter theory.Node) × tight.Work ×
+    (alloc.vec.Vec tight.compile.Body)) ((core.result.Result (alloc.vec.Vec
+    tight.compile.Body) tight.TightError) × tight.Work))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done (core.result.Result.Ok classes, work))
+  | some node =>
+    let (r, work1) ← tight.Work.tick work
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      match node with
+      | theory.Node.Atom _ =>
+        let classes1 ← alloc.vec.Vec.push classes tight.compile.Body.Positive
+        ok (cont (iter1, work1, classes1))
+      | theory.Node.False =>
+        let classes1 ← alloc.vec.Vec.push classes tight.compile.Body.Frozen
+        ok (cont (iter1, work1, classes1))
+      | theory.Node.And a b =>
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            tight.compile.Body) classes a
+        let b2 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            tight.compile.Body) classes b
+        match b1 with
+        | tight.compile.Body.Opaque =>
+          let classes1 ← alloc.vec.Vec.push classes tight.compile.Body.Opaque
+          ok (cont (iter1, work1, classes1))
+        | tight.compile.Body.Frozen =>
+          match b2 with
+          | tight.compile.Body.Opaque =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Opaque
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Frozen =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Frozen
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Positive =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Positive
+            ok (cont (iter1, work1, classes1))
+        | tight.compile.Body.Positive =>
+          match b2 with
+          | tight.compile.Body.Opaque =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Opaque
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Frozen =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Positive
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Positive =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Positive
+            ok (cont (iter1, work1, classes1))
+      | theory.Node.Or a b =>
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            tight.compile.Body) classes a
+        let b2 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            tight.compile.Body) classes b
+        match b1 with
+        | tight.compile.Body.Opaque =>
+          let classes1 ← alloc.vec.Vec.push classes tight.compile.Body.Opaque
+          ok (cont (iter1, work1, classes1))
+        | tight.compile.Body.Frozen =>
+          match b2 with
+          | tight.compile.Body.Opaque =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Opaque
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Frozen =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Frozen
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Positive =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Positive
+            ok (cont (iter1, work1, classes1))
+        | tight.compile.Body.Positive =>
+          match b2 with
+          | tight.compile.Body.Opaque =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Opaque
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Frozen =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Positive
+            ok (cont (iter1, work1, classes1))
+          | tight.compile.Body.Positive =>
+            let classes1 ←
+              alloc.vec.Vec.push classes tight.compile.Body.Positive
+            ok (cont (iter1, work1, classes1))
+      | theory.Node.Implies _ b =>
+        let s ← theory.Theory.nodes program
+        let n ← Slice.index_usize s b
+        let b1 ←
+          theory.Node.Insts.CoreCmpPartialEqNode.eq n theory.Node.False
+        if b1
+        then
+          let classes1 ← alloc.vec.Vec.push classes tight.compile.Body.Frozen
+          ok (cont (iter1, work1, classes1))
+        else
+          let classes1 ← alloc.vec.Vec.push classes tight.compile.Body.Opaque
+          ok (cont (iter1, work1, classes1))
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (alloc.vec.Vec tight.compile.Body) (core.convert.FromSame
+          tight.TightError) residual
+      ok (done (r1, work1))
+
+/-- [zetesis_ferraris::tight::compile::classify]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 90:4-105:1 -/
+@[rust_loop]
+def tight.compile.classify_loop
+  (iter : core.slice.iter.Iter theory.Node) (program : theory.Theory)
+  (work : tight.Work) (classes : alloc.vec.Vec tight.compile.Body) :
+  Result ((core.result.Result (alloc.vec.Vec tight.compile.Body)
+    tight.TightError) × tight.Work)
+  := do
+  loop
+    (fun (iter1, work1, classes1) => tight.compile.classify_loop.body program
+      iter1 work1 classes1)
+    (iter, work, classes)
+
+section TightClassificationReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::tight::compile::classify]:
+    Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 88:0-105:1 -/
+def tight.compile.classify
+  (program : theory.Theory) (work : tight.Work) :
+  Result ((core.result.Result (alloc.vec.Vec tight.compile.Body)
+    tight.TightError) × tight.Work)
+  := do
+  let s ← theory.Theory.nodes program
+  let i := Slice.len s
+  let r ← tight.reserve tight.compile.Body i
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let iter ←
+      SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter s
+    tight.compile.classify_loop iter program work val
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    let r1 ←
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        (alloc.vec.Vec tight.compile.Body) (core.convert.FromSame
+        tight.TightError) residual
+    ok (r1, work)
+
+end TightClassificationReservation
 
 end ZetesisExtract

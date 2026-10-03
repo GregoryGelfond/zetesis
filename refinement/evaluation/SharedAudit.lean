@@ -1,3 +1,4 @@
+import Zetesis.TightBodyRecognition
 import Zetesis.PackedSubsets
 import Zetesis.TheoryAdmission
 
@@ -221,3 +222,8 @@ import Zetesis.TheoryAdmission
 #print axioms Zetesis.TightPlans.stable_iff_ranked_support
 #print axioms Zetesis.TightPlans.ranked_no_self
 #print axioms Zetesis.TightPlans.ranked_mono
+#print axioms Zetesis.TightBodyRecognition.recognized_formula
+#print axioms Zetesis.TightBodyRecognition.recognize_body
+#print axioms Zetesis.TightBodyRecognition.recognize_exact
+#print axioms Zetesis.TightBodyRecognition.hasPositive_iff
+#print axioms Zetesis.TightBodyRecognition.hasPositive_false_iff

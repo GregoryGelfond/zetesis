@@ -1,4 +1,4 @@
-# Refining the reference checker
+# Refining CPU checks
 
 This separately built implementation-refinement package connects finite completed
 calls of the CPU scalar reference checker to the Ferraris answer-set definition.
@@ -13,6 +13,29 @@ imports the reduct-evaluation, packed-subset and admission sources directly and 
 with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
+
+## Tight-body recognition
+
+The tight specialization is being connected to the same answer-set definition.
+Its first correspondence is the actual `tight::compile::classify` scan: successful
+classification covers the complete ordered node table and agrees with
+[`TightBodyRecognition`](../../proofs/Zetesis/TightBodyRecognition.lean).
+That reusable formula-level recognizer preserves exact syntax; a separate test
+identifies atom occurrences outside every default negation. It does not rewrite
+classically equivalent formulas into the grammar.
+
+`TightDag` connects bounded node lookups to their unfolded formulas.
+`TightClassificationSemantics` identifies the finite classification fold with
+formula recognition. `TightClassificationStep` and `TightWork` prove the actual
+translated steps, including uncharged refusals and one charge per classified
+node. The loop and entry proofs retain full-node coverage and the reservation's
+explicit sequence contract. These are fixed-provider proofs, not a new
+runtime-event correspondence for tight checking.
+
+A body class is not a complete tight certificate. Actual producer extraction,
+root coverage, rank validation and the support-checking loop still need their
+implementation proofs. Existing ranked-support laws provide their semantic
+endpoint; they do not supply those unproved premises.
 
 ## Central result
 
@@ -370,7 +393,8 @@ The covered boundary is a finite completed or refused scalar reference check of
 one candidate against a finite ground formula theory. It does not establish
 termination of unrestricted iterators, source grounding, candidate enumeration,
 optimized checking routes, parallel schedules, GPU execution or whole-solver
-correctness. The general ASP library and its semantics are unchanged.
+correctness. The reusable body-recognition laws extend the general ASP library
+without changing its existing semantic definitions.
 
 ## Extraction identity and reproduction
 
@@ -380,6 +404,8 @@ admission step and four validators, `Interpretation::new` and its private
 `insert_atoms` helper, and the stored-reduct constructor, public query and
 reservation wrapper, together with public `oracle::check`, `check_interpretation`
 and its decision/accepted-interpretation accessors and consuming conversion.
+The tight-body classifier, its work/reservation helpers and node equality are
+selected as the first optimized-route slice.
 The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
@@ -394,7 +420,8 @@ parsed raw input.
 
 Scoped section binders supply `ArcAllocation` to generated `Theory::new` and
 `VectorReservation` to `oracle::{reserve, check}`, `FrozenReduct::{freeze, new,
-is_satisfied_by}`, `Interpretation::new` and `check_interpretation`. No body is
+is_satisfied_by}`, `Interpretation::new`, `check_interpretation`, `tight::reserve`
+and `tight::compile::classify`. No body is
 rewritten. Removing the
 recorded insertions restores the exact generated Lean. This dependency
 parameterization is distinct from metadata normalization and remains part of the

@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["RuntimePublicRefusal", "RuntimeMembership", "SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
+defaultTargets = ["TightClassification", "RuntimePublicRefusal", "RuntimeMembership", "SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -55,6 +55,7 @@ globs = [
   "Zetesis.FerrarisGuards",
   "Zetesis.RuleFactorization",
   "Zetesis.TightPlans",
+  "Zetesis.TightBodyRecognition",
   "Zetesis.BatchAccounting",
   "Zetesis.CertifiedExecution",
   "Zetesis.TightEvaluation",
@@ -339,3 +340,21 @@ name = "PublicRefusal"
 
 [[lean_lib]]
 name = "RuntimePublicRefusal"
+
+[[lean_lib]]
+name = "TightDag"
+
+[[lean_lib]]
+name = "TightWork"
+
+[[lean_lib]]
+name = "TightClassificationSemantics"
+
+[[lean_lib]]
+name = "TightClassificationStep"
+
+[[lean_lib]]
+name = "TightClassificationLoop"
+
+[[lean_lib]]
+name = "TightClassification"
