@@ -1414,6 +1414,9 @@ import Zetesis
 #print axioms Zetesis.Refinement.TheoryAdmission.scan_complete
 #print axioms Zetesis.Refinement.TheoryAdmission.scan_exact
 #print axioms Zetesis.Refinement.TheoryAdmission.scan_refusal_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.rootScan_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.rootScan_refusal_exact
+#print axioms Zetesis.Refinement.TheoryAdmission.validate_phases
 #print axioms Zetesis.Refinement.TheoryAdmission.validate_exact
 #print axioms Zetesis.Refinement.TheoryAdmission.word_counts_fit
 #print axioms Zetesis.Refinement.TheoryAdmission.export_successor_fits

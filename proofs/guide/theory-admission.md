@@ -23,11 +23,20 @@ composition law for consecutive segments. `scan_extends` constructs a larger
 proves that every structurally admitted table passes. Thus `scan_exact` is an
 equivalence, not only an implication supplied by a caller.
 
-`scan_refusal_exact` characterizes the other outcome. A refused scan names its
-first refused node: every earlier node passes its check at its actual position,
-and the reported error is that node's own. A later node's error cannot be
-reported in its place.
+`scan_refusal_exact` characterizes the other outcome. A refused scan reports
+its first refused node's error: every earlier node passes its check at its
+actual position, and the reported error is that node's own. A later node's
+error cannot be reported in its place.
 
+`root` checks one asserted root against the stored node count, and `rootScan`
+walks the asserted roots in order. `rootScan_exact` shows that the scan accepts
+exactly when every asserted root names a stored node; `rootScan_refusal_exact`
+shows that a refusal is always a root refusal and occurs exactly when some
+asserted root names no stored node. A root refusal does not identify which
+occurrence failed.
+
+`validate_phases` shows that `validate` is the dimension check, then `scan`,
+then `rootScan` over the stored node count, each stopping at its first refusal.
 `validate_exact` composes the scan with the dimension checks and root reduction.
 Its result derives all evaluator indices from successful validation. The named
 `maximum` is the supplied host integer maximum; the model checks

@@ -202,6 +202,58 @@ theorem scan_refusal_exact (size index : Nat) (table : List (Node Nat))
           · rw [← shifted] at refusedAt
             simpa using refusedAt
 
+/-- Check one asserted root against the number of stored nodes: it must name a
+stored node. -/
+def root (count asserted : Nat) : Except Error Unit :=
+  if asserted < count then .ok () else .error .root
+
+/-- Walk the asserted roots in stored order, retaining the first refusal.
+Repeated roots are checked as they occur. -/
+def rootScan (count : Nat) : List Nat → Except Error Unit
+  | [] => .ok ()
+  | asserted :: rest => (root count asserted).bind (fun _ => rootScan count rest)
+
+/-- The root scan accepts exactly when every asserted root names a stored node. -/
+theorem rootScan_exact (count : Nat) (roots : List Nat) :
+    rootScan count roots = .ok () ↔ ∀ asserted ∈ roots, asserted < count := by
+  induction roots with
+  | nil => simp [rootScan]
+  | cons asserted rest inductionHypothesis =>
+    have headCheck : root count asserted = .ok () ↔ asserted < count := by
+      unfold root
+      split <;> simp_all
+    rw [rootScan, checks_succeed, headCheck, inductionHypothesis, List.forall_mem_cons]
+
+/-- A refused root scan reports a root refusal, and some asserted root names no
+stored node. Every root refusal has the same kind, so a refusal does not
+identify which occurrence failed. -/
+theorem rootScan_refusal_exact (count : Nat) (roots : List Nat) (reason : Error) :
+    rootScan count roots = .error reason ↔
+      reason = .root ∧ ∃ asserted ∈ roots, count ≤ asserted := by
+  induction roots with
+  | nil => simp [rootScan]
+  | cons asserted rest inductionHypothesis =>
+    by_cases stored : asserted < count
+    · have continued : rootScan count (asserted :: rest) = rootScan count rest := by
+        simp [rootScan, root, stored, Except.bind]
+      rw [continued, inductionHypothesis]
+      constructor
+      · rintro ⟨sameReason, unstored, member, outside⟩
+        exact ⟨sameReason, unstored, List.mem_cons_of_mem _ member, outside⟩
+      · rintro ⟨sameReason, unstored, member, outside⟩
+        rcases List.mem_cons.mp member with rfl | later
+        · omega
+        · exact ⟨sameReason, unstored, later, outside⟩
+    · have refusedHere : rootScan count (asserted :: rest) = .error .root := by
+        simp [rootScan, root, stored, Except.bind]
+      rw [refusedHere]
+      constructor
+      · intro sameReason
+        cases sameReason
+        exact ⟨rfl, asserted, List.mem_cons_self, by omega⟩
+      · rintro ⟨sameReason, _⟩
+        rw [sameReason]
+
 /-- Validate dimensions before any node, then nodes before roots. The padded
 count check models successful `checked_add(63)` against the host maximum. -/
 def validate (maximum : Nat) (limits : Limits) (size : Nat)
@@ -212,6 +264,32 @@ def validate (maximum : Nat) (limits : Limits) (size : Nat)
   else
     (scan size 0 table).bind (fun _ =>
       if roots.all (fun root => decide (root < table.length)) then .ok () else .error .root)
+
+/-- Validation checks dimensions and the padded count, then scans the nodes,
+then scans the asserted roots against the stored node count, stopping at the
+first refusal. Its root clause is the root scan.
+
+Proof: the root clause and the root scan agree because each accepts exactly
+when every asserted root names a stored node, and each otherwise refuses with
+a root refusal. -/
+theorem validate_phases (maximum : Nat) (limits : Limits) (size : Nat)
+    (table : List (Node Nat)) (roots : List Nat) :
+    validate maximum limits size table roots =
+      if limits.atoms < size ∨ limits.nodes < table.length ∨
+          limits.roots < roots.length ∨ maximum < size + 63 then .error .limit
+      else (scan size 0 table).bind (fun _ => rootScan table.length roots) := by
+  have rootClause : (if roots.all (fun root => decide (root < table.length)) then
+      Except.ok () else Except.error Error.root) = rootScan table.length roots := by
+    by_cases allStored : ∀ asserted ∈ roots, asserted < table.length
+    · rw [(rootScan_exact _ _).mpr allStored]
+      simp only [List.all_eq_true, decide_eq_true_eq]
+      rw [if_pos allStored]
+    · have someUnstored : ∃ asserted ∈ roots, table.length ≤ asserted := by
+        simpa using allStored
+      rw [(rootScan_refusal_exact _ _ _).mpr ⟨rfl, someUnstored⟩]
+      simp only [List.all_eq_true, decide_eq_true_eq]
+      rw [if_neg allStored]
+  simp only [validate, rootClause]
 
 /-- Validation succeeds exactly when dimensions, word-count addition, nodes
 and roots meet the structural contract. The scan theorem supplies the DAG
