@@ -9,8 +9,8 @@ open Zetesis Zetesis.Refinement
 /-!
 # The generated admission validators
 
-`Theory::new` refuses a proposed formula table before it allocates the shared
-theory. After its dimension and padded-count checks it calls two private
+`Theory::new` calls `admit` before it allocates the shared theory. After
+checking dimensions and the padded word count, `admit` calls two private
 validators. `validate_nodes` checks every node, in stored order, against the
 atom universe and the nodes before it. `validate_roots` checks that every
 asserted root names a stored node. Each stops at its first refusal.
@@ -162,10 +162,10 @@ theorem nodes_loop_unfold (atoms : Usize) (cursor : Evaluation.Cursor) :
   funext transition
   cases transition <;> rfl
 
-/-- From an aligned cursor, the generated loop returns the authored scan's
-verdict on the remaining nodes, starting at the cursor's position. It always
-returns: every continuation advances the position, and the slice length bounds
-the enumeration count.
+/-- From an aligned cursor at or before the end of the slice, the generated
+loop returns the authored scan's verdict on the remaining nodes, starting at
+the cursor's position. It always returns: every continuation advances the
+position, and the slice length bounds the enumeration count.
 
 Proof: induct on the number of remaining nodes. With none left, the body
 accepts and the scan of the empty suffix accepts. Otherwise the body checks the
@@ -354,8 +354,8 @@ theorem roots_loop_unfold (count : Usize) (cursor : core.slice.iter.Iter Usize) 
   funext transition
   cases transition <;> rfl
 
-/-- From any cursor position, the generated loop returns the authored root
-scan's verdict on the remaining roots, in stored order.
+/-- From a cursor at or before the end of the slice, the generated loop returns
+the authored root scan's verdict on the remaining roots, in stored order.
 
 Proof: induct on the number of remaining roots, as for nodes. The body checks
 the root at the cursor exactly as the root scan checks the suffix's head. -/
@@ -443,9 +443,9 @@ theorem validate_roots_never_allocation (count : Usize) (roots : Slice Usize) :
   have rootReason := ((validate_roots_refuses_iff count roots .Allocation).mp reported).1
   cases rootReason
 
-/-! ## The constructor's calls -/
+/-! ## The admission step's calls -/
 
-/-- Accepted node and root validation, applied as `Theory::new` applies them to
+/-- Accepted node and root validation, applied as `admit` applies them to
 its input vectors, supplies the evaluator's structural premises for those
 vectors: ordered children, bounded roots and atoms inside the universe. When the
 vectors are a theory's stored data, the first two are the `ordered` and

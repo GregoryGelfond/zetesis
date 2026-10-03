@@ -83,11 +83,12 @@ in-universe atoms; `validate_nodes_refuses_iff` shows that a refusal reports the
 error of the first refused node, every earlier node having passed its check.
 `validate_roots_exact` identifies the generated root validator with the authored
 root scan `TheoryAdmission.rootScan`, which `TheoryAdmission.validate_phases`
-identifies as the root clause of `validate`. It accepts exactly when every
-asserted root names a stored node: repeated stored roots and empty roots are
-accepted, and an unstored root is refused wherever it occurs.
+identifies as the root clause of `validate`. This checks root indices, whereas
+the evaluator's `RootScan` checks root truth. It accepts exactly when every root
+index is within the node table. Repeated in-range indices and an empty root list
+are accepted; an out-of-range index is refused wherever it occurs.
 
-`accepted_structure` applies both acceptances exactly as `Theory::new` applies
+`accepted_structure` applies both acceptances exactly as `admit` applies
 the validators to its input vectors. It derives ordered children, bounded roots
 and in-universe atoms for those vectors. Neither validator can report an
 allocation refusal. [Examples](AdmissionValidationExample.lean) check refusal

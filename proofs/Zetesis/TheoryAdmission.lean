@@ -224,9 +224,9 @@ theorem rootScan_exact (count : Nat) (roots : List Nat) :
       split <;> simp_all
     rw [rootScan, checks_succeed, headCheck, inductionHypothesis, List.forall_mem_cons]
 
-/-- A refused root scan reports a root refusal, and some asserted root names no
-stored node. Every root refusal has the same kind, so a refusal does not
-identify which occurrence failed. -/
+/-- The root scan returns a given refusal exactly when it is a root refusal
+and some asserted root is outside the node table. The refusal does not identify
+which occurrence failed. -/
 theorem rootScan_refusal_exact (count : Nat) (roots : List Nat) (reason : Error) :
     rootScan count roots = .error reason ↔
       reason = .root ∧ ∃ asserted ∈ roots, count ≤ asserted := by

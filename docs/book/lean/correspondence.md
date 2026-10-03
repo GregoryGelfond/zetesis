@@ -84,7 +84,8 @@ returned by the actual search. `OwnerChecks` connects generated identity and
 clone operations to owner tokens and immutable-heap consistency. These results
 close individual setup obligations; the public wrapper and the admission
 constructors remain unproved. `AdmissionValidation` proves the node and root
-validators those constructors call; it is described with `TheoryAdmission` below.
+validators called by `admit` for `Theory::new`; it is described with
+`TheoryAdmission` below.
 
 The separate `RuntimeEffects` specification permits changing read observations
 and typed reservation failure. Its embedding preserves existing backend

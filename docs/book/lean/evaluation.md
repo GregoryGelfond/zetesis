@@ -67,16 +67,19 @@ validate_nodes(atoms, nodes) returns the verdict of scan(atoms, 0, nodes)
 validate_roots(count, roots) returns the verdict of rootScan(count, roots)
 ```
 
-`TheoryAdmission.validate_phases` identifies `rootScan` as the root clause of
-`validate`. Both equations hold for every represented slice. The generated
-loops always return, enumeration positions are list positions, and neither
+`TheoryAdmission.validate_phases` identifies `TheoryAdmission.rootScan` as the
+root clause of `validate`. This checks root indices, whereas the evaluator's
+`RootScan` checks root truth. Both equations hold for every represented slice.
+The generated loops always return, enumeration positions are list positions,
+and neither
 validator reports an allocation refusal. Acceptance derives ordered children,
 in-universe atoms and bounded roots; `accepted_structure` states these for the
-vectors that `Theory::new` validates. A node refusal reports the error of the
+vectors that `admit` validates. A node refusal reports the error of the
 first refused node in stored order, every earlier node having passed; this
 follows from the general `scan_refusal_exact`. Root validation accepts exactly
-when every asserted root names a stored node, so repeated stored roots are
-accepted and an unstored root is refused wherever it occurs.
+when every root index is within the node table. Repeated in-range indices and
+an empty root list are accepted; an out-of-range index is refused wherever it
+occurs.
 
 [`AdmittedData`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/AdmittedData.lean)
 proves the generated `admit` itself. It returns the verdict of the authored
@@ -188,8 +191,8 @@ checker's semantic phases, not the public wrapper or other checking routes.
 
 ## Reusing the ASP library
 
-The package imports `ReductEvaluation`, `PackedSubsets` and their dependency
-closures directly from the general library. The same source files compile under
+The package imports `ReductEvaluation`, `PackedSubsets`, `TheoryAdmission` and
+their dependency closures directly from the general library. The same source files compile under
 both the library's Lean 4.33.1 and the extraction package's Lean 4.31.0.
 The bridge is checked in the latter toolchain with its own audit; it does not mix
 object files from different versions or duplicate the semantic definitions.
