@@ -156,4 +156,15 @@ structure reduct.FrozenReduct where
   candidate : theory.Interpretation
   truth : alloc.vec.Vec Bool
 
+/-- [zetesis_ferraris::theory::AdmissionError]
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 42:0-53:1
+    Visibility: public -/
+@[discriminant isize]
+inductive theory.AdmissionError where
+| Limit : theory.AdmissionError
+| Atom : theory.AdmissionError
+| Edge : theory.AdmissionError
+| Root : theory.AdmissionError
+| Allocation : theory.AdmissionError
+
 end ZetesisExtract

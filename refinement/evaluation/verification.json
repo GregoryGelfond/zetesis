@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
-  "checkedOn": "2026-10-02",
-  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
+  "checkedOn": "2026-10-03",
+  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The selected extraction also contains the four private admission validators called by Theory::new; this record claims no property of them. Public allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "8e4ce9e557470991cc98edff9c6cedaf7491d48e5d550b1c72c54f277c755c97",
+  "artifactInventorySha256": "648759f3ca6fea476aa7026c6fd3abc020ccd891ffd1d0a116383ec797991337",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -213,7 +213,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "1b6ef3ed5bc0d549dfd9787ded67830a32310d332b7126c9d25dce8009623f10"
+      "logSha256": "5beb8a5f09ed5fcf7afe98027a1e636517f23cbcfde335842469411a03559c6f"
     },
     {
       "argv": [

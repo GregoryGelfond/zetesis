@@ -2,39 +2,14 @@
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
     "inventory": "source-inputs.sha256",
-    "inventorySha256": "187429a59689dd6d1ebbbbf741467467178e0e5748a2eb987ef53d301087004d",
+    "inventorySha256": "6efa10a6b5a1a542033eaa091860e5cd716f89d1fbedfb0f989511556fdd2195",
     "inventoryFiles": 307,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded source inventory for evaluator, root scan, private frozen query, actual countermodel-search phases and ownership/clone helpers; not every repository or toolchain file.",
+    "scope": "Recorded source inventory for evaluator, root scan, private frozen query, actual countermodel-search phases, ownership/clone helpers and the four private admission validators; not every repository or toolchain file.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "49fdc16aecd05c76795be1e64299276e6b2cc3ee",
-    "extractionSourceState": "Working tree captured at this revision; the source inventory identifies the exact selected bytes.",
-    "workingTreeSourceChanges": {
-      "crates/zetesis-ferraris/Cargo.toml": {
-        "previous": "b6d9b104cd7c755787f03ac61dd986088270e0a657df935075ec6ec819dc4e53",
-        "current": "aa79679df438fd490915c4ab938abdd38089a2602387ab16b75419fe2eac24e3"
-      },
-      "crates/zetesis-ferraris/benches/admission.rs": {
-        "previous": null,
-        "current": "e0b18a1ead841d1bec66df36d03730d97b497e328ee6d804721aa4b150485b7b"
-      },
-      "crates/zetesis-ferraris/src/theory.rs": {
-        "previous": "cbb7b761e1ddf502b207289f8069e5978b983c77d31e557e2d4b3d7309423717",
-        "current": "164756f1d554cc4e45604fac5b0620c65d7b39c234e4f69259ace3bd0e54af45"
-      },
-      "crates/zetesis-ferraris/tests/integration/admission.rs": {
-        "previous": null,
-        "current": "e10b23e3e649e369addb748135a63d4ef7a7dfcb5d0633b796f364732ec394e0"
-      },
-      "crates/zetesis-ferraris/tests/integration/formula_dag.rs": {
-        "previous": "5e913cc7758d456bf6cd6fe569ef0211301d57ea045dc2af16cfd98fd248a629",
-        "current": "80aef4dfee2554c689d4821d818608862e2162d0777c06e06f8518fc3e2eb0bf"
-      },
-      "crates/zetesis-ferraris/tests/integration/main.rs": {
-        "previous": "a4c73dc50bacaafee1680dc1a1d6bacf40a754afab189c68ae581e1b28c39647",
-        "current": "86c6cfc0aee56363db6eb654598e6d5a3c9dd1a865a8976374cc5ce5d2e9c7a5"
-      }
-    }
+    "extractionBaseRevision": "dc3097e50627d1b58da4d975c847d9a3ce67aacf",
+    "extractionSourceState": "Clean checkout of this revision. Its Rust sources equal those of afa75a91c91ddf39f708427e87b7b51243574bd3 apart from a test module appended to crates/zetesis-ferraris/src/theory.rs, which the library extraction does not compile. The source inventory identifies the exact selected bytes.",
+    "workingTreeSourceChanges": {}
   },
   "tools": {
     "charon": {
@@ -70,7 +45,11 @@
       "zetesis_ferraris::oracle::check_subset",
       "zetesis_ferraris::oracle::select_atoms",
       "zetesis_ferraris::oracle::advance_subset",
-      "zetesis_ferraris::reduct"
+      "zetesis_ferraris::reduct",
+      "zetesis_ferraris::theory::validate_node",
+      "zetesis_ferraris::theory::validate_nodes",
+      "zetesis_ferraris::theory::validate_root",
+      "zetesis_ferraris::theory::validate_roots"
     ],
     "include": [
       "zetesis_ferraris",
@@ -87,7 +66,7 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "7fc2bdada8c8a23e6ece5324eb0d7151c2373a8a5a6d20b7f3a8fe660e86126c",
+    "originalLlbcSha256": "f3f88e51e6d86e2e6877ff8bbc6db8a3ced4e2d1847849a1f5c31fee7665a1ad",
     "exclude": [
       "zetesis_ferraris::oracle::check",
       "zetesis_ferraris::oracle::reserve",
@@ -96,7 +75,13 @@
       "zetesis_ferraris::reduct::_::is_satisfied_by",
       "zetesis_ferraris::reduct::_::candidate",
       "zetesis_ferraris::reduct::_::fmt"
-    ]
+    ],
+    "serializationOrder": {
+      "table": "short_names",
+      "observation": "Pinned Charon serializes this table in an order that can differ between runs of the same extraction; repeated runs on 2026-10-03 produced equal sets in different orders.",
+      "unaffected": "All declarations, ordered declarations, item names, files and options compare equal, and the generated Lean is byte-identical across runs.",
+      "comparison": "Compare repeated extractions by those sections and the generated files, not by the bytes of evaluator.source.llbc."
+    }
   },
   "normalization": {
     "serialization": "jq -ca (compact ASCII JSON with final newline)",
@@ -218,7 +203,7 @@
         "trait": "core::fmt::Debug",
         "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
         "derived": true,
-        "excludedMethodId": 185,
+        "excludedMethodId": 189,
         "excludedMethod": "fmt",
         "noSurvivingSemanticReferences": true,
         "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
@@ -235,20 +220,21 @@
           {
             "name": "forward_overflowing",
             "slot": 2,
-            "opaqueFunctionId": 178
+            "opaqueFunctionId": 182
           },
           {
             "name": "backward_overflowing",
             "slot": 6,
-            "opaqueFunctionId": 182
+            "opaqueFunctionId": 186
           }
         ],
         "selection": "Replace the two unused trait and implementation method slots with null; retain indices and all function declarations.",
         "noSurvivingSemanticReferences": true,
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
-      }
+      },
+      "identifierRederivation": "The four added roots receive function IDs 19-22 after advance_subset. Function IDs 11 and 13-17, trait implementation 25, ordered registration 121, trait 9 and implementation 23 are unchanged; the guarded opaque function IDs shift by four (excluded fmt 185 to 189, forward_overflowing 178 to 182, backward_overflowing 182 to 186). Every identity, type, vtable and reference guard is rechecked at the new IDs."
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded unused Debug/Step registration selection and six local debug-name changes permit translation. Against the previous ownership package, generated differences are seven source-coordinate comment lines only; no declarations, operations or external templates change.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded unused Debug/Step registration selection, at re-derived opaque IDs, and six local debug-name changes permit translation. Against the previous package, generated files only add lines: the admission error type and the four validators with their loops and loop bodies. No existing generated line, declaration, operation or external template changes.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true
   },
@@ -277,38 +263,57 @@
     "externalTemplatesInstalled": false,
     "documentedRetainedInputCommandsExit": 0,
     "declarationAndNameRestoreComparison": true,
-    "generatedFilesByteIdenticalToNormalizedTranslation": true
+    "generatedFilesByteIdenticalToNormalizedTranslation": true,
+    "documentedExtractionAndNormalizationCommandsExit": 0
   },
   "trustBoundary": [
     "Published LLBC normalizes destination metadata/local debug names and omits checked unused Debug/Step registrations; it is not byte-exact raw Charon output.",
-    "Generated Lean operations were not edited. The selected executable/type declarations match the prior ownership package exactly apart from seven generated source-coordinate comment lines; the separate Rust admission refactor is outside these selected roots.",
+    "Generated Lean operations were not edited. Against the previous package the generated files only add the admission error type and the four admission validators with their loops; every existing generated line is unchanged.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Existing generated-loop proofs use fixed supplied atomic observations, not changing concurrent Rust observations.",
     "Actual identities/same_instance and Theory clone bodies require external Arc pointer-identity and clone contracts. Generating these calls alone does not establish their runtime meaning.",
-    "Public oracle::check, reserve, Theory/Interpretation admission and FrozenReduct construction/public queries are excluded from this selected extraction. No allocation model or public-wrapper correctness is claimed.",
+    "Public oracle::check, reserve, Theory::new, Interpretation::new and FrozenReduct construction/public queries are excluded from this selected extraction. The four private validators called by Theory::new are selected; no allocation model or public-wrapper correctness is claimed.",
     "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "858092bd6e0efe107f00bca2fae79504387b8da4c2e6d76e4ffe006882ff8929",
-    "evaluator.llbc": "1a356f1ad6d999b21225e39847b6f01572672cbb63e0e7356cb16c861a219701",
-    "Evaluator/Funs.lean": "48719f80cd93fb6212f8c44745db5d76a2795bdd837f4b0efedc5eec75c50cc0",
+    "evaluator.source.llbc": "7c1111dd0fa0a58cf2978c73682731e132a25e10810fc332fe007daef4fb9c4b",
+    "evaluator.llbc": "8c89d4c82b0c1653e111dfaf3d7075907282b59193176cf0aa02c8232744af7c",
+    "Evaluator/Funs.lean": "9c7f24684cc339a365cf7750e4b4738a473f038b44fabcbf248fcddcdc70a2b3",
     "Evaluator/FunsExternal_Template.lean": "2721d13844662b5f7fdb2df021eaadf1a0b8e0f6a04aac72e1ae249585a76e21",
-    "Evaluator/Types.lean": "e1c2038db8d9a269f18afed489d3873794ab6f530d001607fd6569d0b86170ac",
+    "Evaluator/Types.lean": "3fec0c405248f26b23142c171acb87a4c0c17a37e40dadc9d6c6369351bd6a38",
     "Evaluator/TypesExternal_Template.lean": "cdbc58fec3a135c6f90a0b2cb212e4d5a04c2d72605848bf78291c7ca071b454"
   },
   "compatibility": {
-    "previousPackageRevision": "49fdc16aecd05c76795be1e64299276e6b2cc3ee",
-    "previousGeneratedFunsSha256": "139950a07ed685799095f930052a17034e80ec531a1d73343ca5a9d66c184ae9",
-    "previousGeneratedTypesSha256": "3d154415bda00d7b0e6ee0fbc91f0a6273831d02d9300a0dc7e514ddc1f83b23",
-    "comparison": "Whole files after removing only exact generated source-coordinate comment lines; no executable syntax or other prose is removed.",
+    "previousPackageRevision": "afa75a91c91ddf39f708427e87b7b51243574bd3",
+    "previousGeneratedFunsSha256": "48719f80cd93fb6212f8c44745db5d76a2795bdd837f4b0efedc5eec75c50cc0",
+    "previousGeneratedTypesSha256": "e1c2038db8d9a269f18afed489d3873794ab6f530d001607fd6569d0b86170ac",
+    "comparison": "Whole-file line diff against the previous generated files: lines are only added, none removed or changed.",
     "existingGeneratedExecutableDeclarationsUnchanged": true,
     "existingGeneratedTypeDeclarationsUnchanged": true,
-    "sourceCoordinateCommentLinesChanged": 7,
+    "sourceCoordinateCommentLinesChanged": 0,
     "externalFunctionsTemplateHashUnchanged": true,
     "externalTypesTemplateHashUnchanged": true,
-    "addedDefinitions": [],
+    "addedDefinitions": [
+      "theory.AdmissionError",
+      "theory.validate_node",
+      "theory.validate_nodes_loop.body",
+      "theory.validate_nodes_loop",
+      "theory.validate_nodes",
+      "theory.validate_root",
+      "theory.validate_roots_loop.body",
+      "theory.validate_roots_loop",
+      "theory.validate_roots"
+    ],
     "addedExternalFunctions": [],
     "strictExistingPackageCheckExit": 0,
-    "proofReplayScope": "The integrated optional package builds and its authored/shared audits pass with explicit owner identities and immutable-heap contracts. The returning-event model remains a separate specification; actual public allocation/setup and changing-observation correspondence remain unproved. See verification.json for checked scope and logs."
+    "proofReplayScope": "The integrated optional package builds and its authored/shared audits pass against the extended extraction. The returning-event model remains a separate specification; actual public allocation/setup and changing-observation correspondence remain unproved. See verification.json for checked scope and logs.",
+    "generatedLinesAdded": {
+      "Evaluator/Types.lean": 11,
+      "Evaluator/Funs.lean": 140
+    },
+    "generatedLinesRemoved": {
+      "Evaluator/Types.lean": 0,
+      "Evaluator/Funs.lean": 0
+    }
   }
 }

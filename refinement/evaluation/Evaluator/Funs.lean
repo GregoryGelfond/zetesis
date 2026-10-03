@@ -659,4 +659,144 @@ def theory.Theory.Insts.CoreCloneClone.clone
       alloc.alloc.Global.Insts.CoreAllocAllocatorClone self
   ok a
 
+/-- [zetesis_ferraris::theory::validate_node]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 136:0-144:1 -/
+def theory.validate_node
+  (atoms : Std.Usize) (index : Std.Usize) (node : theory.Node) :
+  Result (core.result.Result Unit theory.AdmissionError)
+  := do
+  match node with
+  | theory.Node.Atom atom =>
+    if atom >= atoms
+    then ok (core.result.Result.Err theory.AdmissionError.Atom)
+    else ok (core.result.Result.Ok ())
+  | theory.Node.False => ok (core.result.Result.Ok ())
+  | theory.Node.And a b =>
+    if a >= index
+    then ok (core.result.Result.Err theory.AdmissionError.Edge)
+    else
+      if b >= index
+      then ok (core.result.Result.Err theory.AdmissionError.Edge)
+      else ok (core.result.Result.Ok ())
+  | theory.Node.Or a b =>
+    if a >= index
+    then ok (core.result.Result.Err theory.AdmissionError.Edge)
+    else
+      if b >= index
+      then ok (core.result.Result.Err theory.AdmissionError.Edge)
+      else ok (core.result.Result.Ok ())
+  | theory.Node.Implies a b =>
+    if a >= index
+    then ok (core.result.Result.Err theory.AdmissionError.Edge)
+    else
+      if b >= index
+      then ok (core.result.Result.Err theory.AdmissionError.Edge)
+      else ok (core.result.Result.Ok ())
+
+/-- [zetesis_ferraris::theory::validate_nodes]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 149:4-153:1 -/
+@[rust_loop_body]
+def theory.validate_nodes_loop.body
+  (atoms : Std.Usize)
+  (iter : core.iter.adapters.enumerate.Enumerate (core.slice.iter.Iter
+  theory.Node)) :
+  Result (ControlFlow (core.iter.adapters.enumerate.Enumerate
+    (core.slice.iter.Iter theory.Node)) (core.result.Result Unit
+    theory.AdmissionError))
+  := do
+  let (o, iter1) ←
+    core.iter.adapters.enumerate.IteratorEnumerate.next
+      (core.iter.traits.iterator.IteratorSliceIter theory.Node) iter
+  match o with
+  | none => ok (done (core.result.Result.Ok ()))
+  | some p =>
+    let (index, node) := p
+    let r ← theory.validate_node atoms index node
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ => ok (cont iter1)
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Unit (core.convert.FromSame theory.AdmissionError) residual
+      ok (done r1)
+
+/-- [zetesis_ferraris::theory::validate_nodes]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 149:4-153:1 -/
+@[rust_loop]
+def theory.validate_nodes_loop
+  (iter : core.iter.adapters.enumerate.Enumerate (core.slice.iter.Iter
+  theory.Node)) (atoms : Std.Usize) :
+  Result (core.result.Result Unit theory.AdmissionError)
+  := do
+  loop
+    (fun iter1 => theory.validate_nodes_loop.body atoms iter1)
+    iter
+
+/-- [zetesis_ferraris::theory::validate_nodes]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 148:0-153:1 -/
+def theory.validate_nodes
+  (atoms : Std.Usize) (nodes : Slice theory.Node) :
+  Result (core.result.Result Unit theory.AdmissionError)
+  := do
+  let i ← core.slice.Slice.iter nodes
+  let iter ←
+    core.iter.traits.iterator.Iterator.enumerate.trait_default
+      (core.iter.traits.iterator.IteratorSliceIter theory.Node) i
+  theory.validate_nodes_loop iter atoms
+
+/-- [zetesis_ferraris::theory::validate_root]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 156:0-162:1 -/
+def theory.validate_root
+  (node_count : Std.Usize) (root : Std.Usize) :
+  Result (core.result.Result Unit theory.AdmissionError)
+  := do
+  if root >= node_count
+  then ok (core.result.Result.Err theory.AdmissionError.Root)
+  else ok (core.result.Result.Ok ())
+
+/-- [zetesis_ferraris::theory::validate_roots]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 166:4-170:1 -/
+@[rust_loop_body]
+def theory.validate_roots_loop.body
+  (node_count : Std.Usize) (iter : core.slice.iter.Iter Std.Usize) :
+  Result (ControlFlow (core.slice.iter.Iter Std.Usize) (core.result.Result Unit
+    theory.AdmissionError))
+  := do
+  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
+  match o with
+  | none => ok (done (core.result.Result.Ok ()))
+  | some root =>
+    let r ← theory.validate_root node_count root
+    let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+    match cf with
+    | core.ops.control_flow.ControlFlow.Continue _ => ok (cont iter1)
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      let r1 ←
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          Unit (core.convert.FromSame theory.AdmissionError) residual
+      ok (done r1)
+
+/-- [zetesis_ferraris::theory::validate_roots]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 166:4-170:1 -/
+@[rust_loop]
+def theory.validate_roots_loop
+  (iter : core.slice.iter.Iter Std.Usize) (node_count : Std.Usize) :
+  Result (core.result.Result Unit theory.AdmissionError)
+  := do
+  loop
+    (fun iter1 => theory.validate_roots_loop.body node_count iter1)
+    iter
+
+/-- [zetesis_ferraris::theory::validate_roots]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 165:0-170:1 -/
+def theory.validate_roots
+  (node_count : Std.Usize) (roots : Slice Std.Usize) :
+  Result (core.result.Result Unit theory.AdmissionError)
+  := do
+  let iter ←
+    SharedSlice.Insts.CoreIterTraitsCollectIntoIteratorSharedIter.into_iter
+      roots
+  theory.validate_roots_loop iter node_count
+
 end ZetesisExtract

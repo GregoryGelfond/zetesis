@@ -210,7 +210,8 @@ solver verification.
 ## Extraction identity and reproduction
 
 The generated types and functions come directly from production Rust, including
-the four private subset-search operations. The LLBC destination becomes portable,
+the four private subset-search operations and the four private admission
+validators of `Theory::new`. The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its

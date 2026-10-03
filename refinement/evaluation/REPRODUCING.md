@@ -47,7 +47,8 @@ Install Rust `nightly-2026-08-18`, including `rustc-dev` and `rust-src`. This is
 an extraction toolchain, not a change to the solver's ordinary Rust pin. The
 extractor selects the real private production evaluator, root scan, subset
 query and countermodel-search phases directly.
-It also selects the actual owner check and theory clone. It selects
+It also selects the actual owner check and theory clone, and the four private
+admission validators that `Theory::new` calls before allocation. It selects
 `FrozenReduct::satisfied_by` through the existing reduct module, then
 excludes the other methods. No new Rust wrapper is needed. The extraction runs offline; if dependencies are
 not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
@@ -70,6 +71,10 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --start-from zetesis_ferraris::oracle::select_atoms \
   --start-from zetesis_ferraris::oracle::advance_subset \
   --start-from zetesis_ferraris::reduct \
+  --start-from zetesis_ferraris::theory::validate_node \
+  --start-from zetesis_ferraris::theory::validate_nodes \
+  --start-from zetesis_ferraris::theory::validate_root \
+  --start-from zetesis_ferraris::theory::validate_roots \
   --exclude zetesis_ferraris::oracle::check \
   --exclude zetesis_ferraris::oracle::reserve \
   --include zetesis_ferraris --include zetesis_cpu::cancellation \
@@ -81,13 +86,19 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --exclude 'zetesis_ferraris::reduct::_::is_satisfied_by' \
   --exclude 'zetesis_ferraris::reduct::_::candidate' \
   --exclude 'zetesis_ferraris::reduct::_::fmt' \
-  --dest-file target/replay/evaluator.raw.llbc \
+  --dest-file "$package_dir/target/replay/evaluator.raw.llbc" \
   -- --manifest-path ../../crates/zetesis-ferraris/Cargo.toml --lib --locked --offline
 ```
 
 Use an owned build directory and retire it after retaining source/tool hashes,
 extraction and proof evidence. Source changes require a new extraction and proof
 check; old hashes cannot qualify changed code.
+
+Pinned Charon serializes its `short_names` table in an order that can differ
+between runs of the same extraction. Every declaration, the ordered declaration
+list, item names, files and options are unaffected, and the generated Lean is
+byte-identical. Compare a repeated extraction by those sections and by the
+generated files below, not by the bytes of `evaluator.source.llbc`.
 
 ## Normalize the translation input and compare
 
@@ -135,8 +146,8 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 185
-  and $t.fun_decls[185] == null
+  and $debug.methods[0].skip_binder.id == 189
+  and $t.fun_decls[189] == null
   and $t.ordered_decls[121] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
@@ -167,20 +178,20 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 178)
-  and step_method(6; "backward_overflowing"; 182)
+  and step_method(2; "forward_overflowing"; 182)
+  and step_method(6; "backward_overflowing"; 186)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[178] |= del(.src)
     | .translated.fun_decls[182] |= del(.src)
+    | .translated.fun_decls[186] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 178 or .Fun? == 182
+        .Fun? == 182 or .Fun? == 186
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
@@ -288,12 +299,11 @@ The current extracted `Result`, callback traits and loop interfaces still use
 the fixed-observation model. Connecting the richer effect to generated calls,
 then rechecking that dependency closure, remains necessary.
 
-`Theory::new` now delegates node and root admission to ordered pure validators.
-A separate strict translation of the constructor and these validators succeeds
-when the independently selected `Interpretation::new` export is omitted; every
-function body is retained unchanged. The generic `Interpretation::new` export
-remains unsupported by the pinned translator. This package still excludes both
-admission constructors, and fresh `Arc::new` allocation has no model here.
-Translation alone does not establish constructor invariants or storage guarantees;
-these remain separate from the checked abstract `TheoryAdmission` and
-packed-representation laws.
+`Theory::new` delegates node and root admission to ordered pure validators.
+This package selects the four validators directly as extraction roots, so
+neither constructor, fresh `Arc::new` allocation nor generic `Interpretation::new`
+enters its translation. A separate strict translation of the constructor itself
+succeeds only when the independently selected `Interpretation::new` export is
+omitted; that generic export remains unsupported by the pinned translator, and
+fresh allocation has no model here. Translation alone establishes no constructor
+invariant or storage guarantee.
