@@ -38,7 +38,8 @@ checked artifact hashes and commands, separately from the main semantic library'
 The default build includes the generated evaluator, root scan and private
 `FrozenReduct::satisfied_by` query, their semantic composition, the generated
 admission step, validators, `Theory::new`, and the frozen-reduct producer and
-public query. Allocation and reservation use the explicit supplied operations
+public query, and the generic interpretation constructor and insertion phase.
+Allocation and reservation use the explicit supplied operations
 described below. These use the documented fixed-token external model; the build does not establish its correspondence with
 concurrent Rust execution.
 
@@ -51,8 +52,10 @@ query and countermodel-search phases directly.
 It also selects the actual owner check and theory clone, and the private
 admission step, four validators and `Theory::new` itself. It selects
 `FrozenReduct::{freeze,new,is_satisfied_by,satisfied_by}` through the reduct
-module and retains the actual `oracle::reserve` helper. No new Rust wrapper is
-needed. Extraction runs offline; if dependencies are not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
+module and retains the actual `oracle::reserve` helper. The generic
+`Interpretation::new` delegates its checked packed writes to `insert_atoms`,
+which takes the atom bound, an iterator and a fixed-length mutable word slice. Both are selected
+directly. Extraction runs offline; if dependencies are not cached, first run `cargo fetch --locked --manifest-path ../../Cargo.toml`.
 
 ```sh
 repository_dir="$(git rev-parse --show-toplevel)"
@@ -82,6 +85,7 @@ RUSTFLAGS="--remap-path-prefix=$repository_dir=zetesis" \
   --start-from zetesis_ferraris::reduct::_::freeze \
   --start-from zetesis_ferraris::reduct::_::new \
   --start-from zetesis_ferraris::reduct::_::is_satisfied_by \
+  --start-from zetesis_ferraris::theory::insert_atoms \
   --include zetesis_ferraris \
   --include zetesis_cpu::cancellation \
   --include zetesis_ferraris::reduct::FrozenReduct \
@@ -107,16 +111,14 @@ generated files below, not by the bytes of `evaluator.source.llbc`.
 ## Normalize the translation input and compare
 
 The public source LLBC changes only destination metadata. The translation input
-also renames six local debug names to avoid Lean namespace collisions, removes
-the unused derived `Debug` registration, omits the unused generic
-`Interpretation::new` ordered export, and clears two unused `Step` method slots
+also renames seven local debug names to avoid Lean namespace collisions, removes
+the unused derived `Debug` registration, and clears two unused `Step` method slots
 in the trait and its `usize` implementation. Pinned Charon registers
 `forward_overflowing` and `backward_overflowing`, but the pinned Lean `Step`
 record lacks those fields. Its range iterator calls `forward_checked`.
 The official `-filter-trait-methods` option alone does not resolve this mismatch.
-The independently selected generic `Interpretation::new` export fails in the
-pinned translator; its complete function declaration and closure bodies remain
-in the input. Only its unreferenced ordered export is omitted.
+Both `Theory::new` and generic `Interpretation::new` remain exported, together
+with the fixed-length `insert_atoms` phase. No constructor export is omitted.
 
 The guarded selection below checks identities, the `usize` implementation,
 absence of a vtable and absence of direct or indirect references in surviving
@@ -156,9 +158,9 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 207
-  and $t.fun_decls[207] == null
-  and $t.ordered_decls[144] == {"TraitImpl":{"NonRec":25}}
+  and $debug.methods[0].skip_binder.id == 209
+  and $t.fun_decls[209] == null
+  and $t.ordered_decls[145] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -188,50 +190,51 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 200)
-  and step_method(6; "backward_overflowing"; 204)
+  and step_method(2; "forward_overflowing"; 202)
+  and step_method(6; "backward_overflowing"; 206)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[200] |= del(.src)
-    | .translated.fun_decls[204] |= del(.src)
+    | .translated.fun_decls[202] |= del(.src)
+    | .translated.fun_decls[206] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 200 or .Fun? == 204
+        .Fun? == 202 or .Fun? == 206
+        or .Regular? == 202 or .Regular? == 206
+        or .fun_id? == 202 or .fun_id? == 206
+        or .function_id? == 202 or .function_id? == 206
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
       | length) == 0;
-def interpretation_export_is_unused:
-  .translated as $t |
-  $t.fun_decls[25] as $function |
+def checked_interpretation_constructor:
+  .translated.fun_decls[25] as $function |
   $function.def_id == 25
-  and $function.item_meta.name == [
-    {"Ident":["zetesis_ferraris",0]}, {"Ident":["theory",0]},
-    {"Impl":{"Ty":{"params":{"regions":[],"types":[],"const_generics":[],
-      "trait_clauses":[],"regions_outlive":[],"types_outlive":[],
-      "trait_type_constraints":[]},"skip_binder":{"Deduplicated":4},
-      "kind":"InherentImplBlock"}}}, {"Ident":["new",0]}]
+  and $function.item_meta.name == [{"Ident":["zetesis_ferraris",0]},{"Ident":["theory",0]},{"Impl":{"Ty":{"params":{"regions":[],"types":[],"const_generics":[],"trait_clauses":[],"regions_outlive":[],"types_outlive":[],"trait_type_constraints":[]},"skip_binder":{"Deduplicated":4},"kind":"InherentImplBlock"}}},{"Ident":["new",0]}]
   and $function.src == "Normal"
   and $function.item_meta.is_local == true
   and $function.item_meta.opacity == "Transparent"
   and $function.body.Structured.locals.arg_count == 2
+  and $function.body.Structured.locals.locals[1].index == 1
   and $function.body.Structured.locals.locals[1].name == "theory"
-  and $t.ordered_decls[169] == {"Fun":{"NonRec":25}}
-  and ([$t.ordered_decls[] | select(. == {"Fun":{"NonRec":25}})] | length) == 1
-  and ([[$t.type_decls,
-          ($t.fun_decls | to_entries | map(select(.key != 25) | .value)),
-          $t.global_decls, $t.trait_decls, $t.trait_impls]
-        | walk(if type == "object" then del(.item_meta) else . end)
-        | .. | objects | select(.Fun? == 25 or .Regular? == 25
-            or .fun_id? == 25 or .function_id? == 25)] | length) == 0
-  and ([[$t.trait_decls[], $t.trait_impls[]] | .[] | select(. != null)
-        | .methods[]? | select(. != null) | select(.skip_binder.id? == 25)]
-       | length) == 0;
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":67}
+  and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":25}})] | length) == 1;
+def checked_insertion:
+  .translated.fun_decls[30] as $function |
+  $function.def_id == 30
+  and $function.item_meta.name == [{"Ident":["zetesis_ferraris",0]},{"Ident":["theory",0]},{"Ident":["insert_atoms",0]}]
+  and $function.src == "Normal"
+  and $function.item_meta.is_local == true
+  and $function.item_meta.opacity == "Transparent"
+  and $function.body.Structured.locals.arg_count == 3
+  and $function.body.Structured.locals.locals[1].index == 1
+  and $function.body.Structured.locals.locals[1].name == "atom_count"
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":0}
+  and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":30}})] | length) == 1;
 if checked_argument(11; "identities"; 2;
      {"Value":[67,{"Ref":[{"Body":1},{"Deduplicated":3},"Shared"]}]})
    and checked_argument(13; "evaluate"; 5; {"Deduplicated":67})
@@ -239,21 +242,22 @@ if checked_argument(11; "identities"; 2;
    and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":67})
    and checked_argument(16; "check_subset"; 5; {"Deduplicated":67})
    and checked_argument(17; "select_atoms"; 4; {"Deduplicated":67})
-   and debug_is_unused and step_is_unused and interpretation_export_is_unused
+   and checked_interpretation_constructor and checked_insertion
+   and debug_is_unused and step_is_unused
 then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[13].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[14].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[15].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "program"
+   | .translated.fun_decls[25].body.Structured.locals.locals[1].name = "program"
    | .translated.trait_impls[25] = null
-   | del(.translated.ordered_decls[169])
-   | del(.translated.ordered_decls[144])
+   | del(.translated.ordered_decls[145])
    | .translated.trait_decls[9].methods[2] = null
    | .translated.trait_decls[9].methods[6] = null
    | .translated.trait_impls[23].methods[2] = null
    | .translated.trait_impls[23].methods[6] = null
-else error("unexpected selected function, unused Debug/Interpretation export or Step method") end
+else error("unexpected selected function, unused Debug registration or Step method") end
 ' target/replay/evaluator.source.llbc > target/replay/evaluator.llbc
 
 jq -e --slurpfile source target/replay/evaluator.source.llbc '
@@ -263,11 +267,10 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
  | .translated.fun_decls[15].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
+ | .translated.fun_decls[25].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:144]
-     + [$source[0].translated.ordered_decls[144]] + .translated.ordered_decls[144:])
- | .translated.ordered_decls = (.translated.ordered_decls[:169]
-     + [$source[0].translated.ordered_decls[169]] + .translated.ordered_decls[169:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:145]
+     + [$source[0].translated.ordered_decls[145]] + .translated.ordered_decls[145:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -282,11 +285,10 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.fun_decls[15].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[16].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[17].body.Structured.locals.locals[1].name = "theory"
+ | .translated.fun_decls[25].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:144]
-     + [$source[0].translated.ordered_decls[144]] + .translated.ordered_decls[144:])
- | .translated.ordered_decls = (.translated.ordered_decls[:169]
-     + [$source[0].translated.ordered_decls[169]] + .translated.ordered_decls[169:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:145]
+     + [$source[0].translated.ordered_decls[145]] + .translated.ordered_decls[145:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -301,8 +303,8 @@ cmp Evaluator/Types.lean target/replay/Evaluator/Types.lean
 # Compare Funs.lean after the explicit external bindings below.
 ```
 
-Recheck the selected source hashes, all six precise function/local identities and
-the unused Debug, Interpretation export and Step declarations in `provenance.json` before accepting a
+Recheck the selected source hashes, all seven precise function/local identities and
+the unused Debug and Step declarations in `provenance.json` before accepting a
 repeated extraction. These paths are specific
 to this recorded extraction. Never reuse them silently after a structural change.
 Compiler-platform metadata may differ; generated-definition comparison, source
@@ -312,9 +314,10 @@ identity and explicit review remain separate checks.
 
 Stock Aeneas emits calls to `alloc.sync.Arc.new` and
 `alloc.vec.Vec.try_reserve_exact` without provider parameters. This package adds
-five scoped section binders: `Theory::new` takes `ArcAllocation`, and
+six scoped section binders: `Theory::new` takes `ArcAllocation`, and
 `oracle::reserve`, `FrozenReduct::freeze`, `FrozenReduct::new` and
-`FrozenReduct::is_satisfied_by` take `VectorReservation`. No other declaration
+`FrozenReduct::is_satisfied_by` and `Interpretation::new` take
+`VectorReservation`. No other declaration
 receives either parameter. These are authored changes to the Lean signatures,
 not stock translator output or debug-name normalization. Every executable body
 remains unchanged.
@@ -332,11 +335,11 @@ The proofs concern supplied invocations, including a returning reservation
 refusal; they do not install the separate `RuntimeEffects` event specification.
 The public reference-checker wrapper and its repeated reservations remain open.
 
-Keep the raw generated file, check its identity, insert exactly the five binders,
+Keep the raw generated file, check its identity, insert exactly the six binders,
 and verify that removing them recovers the raw bytes:
 
 ```sh
-printf '%s\n' '8f25613040d5a3af06758645445cac3952dc6f7c68261ff8b1f7ff9e9d844d78  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
+printf '%s\n' 'ed908e268ed6f51d2c2a03b8a753479a4e18720c167d9d876e30eb48b46d97b4  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
 awk '
 function begin_scope(name, provider) {
   if (active != "" || seen[name] != 0) exit 1
@@ -362,14 +365,24 @@ function begin_scope(name, provider) {
     begin_scope("ReductReservation", "VectorReservation")
   if ($0 ~ /^\/-- \[zetesis_ferraris::reduct::.*::is_satisfied_by\]:$/)
     begin_scope("QueryReservation", "VectorReservation")
+  if ($0 ~ /^\/-- \[zetesis_ferraris::theory::\{zetesis_ferraris::theory::Interpretation\}::new\]:$/)
+    begin_scope("InterpretationReservation", "VectorReservation")
+}
+/^end ZetesisExtract$/ {
+  if (active != "") {
+    print "end " active
+    print ""
+    active = ""
+  }
 }
 { print }
 END {
   if (active != "" || seen["TheoryAllocation"] != 1 || seen["StorageReservation"] != 1 ||
-      seen["FreezeReservation"] != 1 || seen["ReductReservation"] != 1 || seen["QueryReservation"] != 1) exit 1
+      seen["FreezeReservation"] != 1 || seen["ReductReservation"] != 1 || seen["QueryReservation"] != 1 ||
+      seen["InterpretationReservation"] != 1) exit 1
 }
 ' target/replay/Evaluator/Funs.lean > target/replay/Funs.bound.lean
-printf '%s\n' '16860a24bd70b81ec43944f23a408deff027fcd5807e5a68b97733a7302e5b38  target/replay/Funs.bound.lean' | shasum -a 256 -c -
+printf '%s\n' 'ff1ef834de52767fa8e6deab2a0b40ab55a3dd292a62dc5761c76c3ff5e1ebe5  target/replay/Funs.bound.lean' | shasum -a 256 -c -
 awk '
 BEGIN {
   provider["TheoryAllocation"] = "ArcAllocation"
@@ -377,6 +390,7 @@ BEGIN {
   provider["FreezeReservation"] = "VectorReservation"
   provider["ReductReservation"] = "VectorReservation"
   provider["QueryReservation"] = "VectorReservation"
+  provider["InterpretationReservation"] = "VectorReservation"
 }
 $1 == "section" && ($2 in provider) {
   if (NF != 2 || active != "" || seen[$2] != 0) exit 1
@@ -403,7 +417,7 @@ cmp Evaluator/Funs.lean target/replay/Funs.bound.lean
 ```
 
 Do not install generated external templates. `PureExternals`, `OwnerExternals`, `AtomicTypes`,
-`AtomicLoad`, `ArcAllocation` and `VectorReservation` supply the concrete, scoped
+`AtomicLoad`, `ArcAllocation`, `VectorReservation` and `UsizeCeiling` supply the concrete, scoped
 models reviewed by these proofs.
 Regeneration does not establish external-model correspondence to Rust.
 The opaque `TryReserveError` token represents no allocator internals.
@@ -446,7 +460,12 @@ admitted data to `Arc::new`. The constructor, admission step and validators are
 now selected directly. `AdmissionValidation` and `AdmittedData` prove the
 validators and admission step; constructor proofs use the explicit allocation
 binding above. Any stored-value or owner conclusion depends on the stated
-contract for that invocation's returned allocation. The generic
-`Interpretation::new` export remains unsupported and omitted, although its full
-LLBC declaration and generated closure bodies are retained. No allocator,
-reference-count or constructor runtime correspondence follows from extraction or the supplied-operation bindings alone.
+contract for that invocation's returned allocation. `Interpretation::new` and
+its insertion loop are now selected directly. The constructor retains reservation
+and zero resizing before iterator conversion, checks each atom before its packed
+write, and clones the theory only after successful insertion. Its trusted
+`usize::div_ceil` binding uses checked scalar conversion and preserves division by
+zero failure. Reservation success alone does not imply an empty returned vector;
+zero initialization requires the explicit sequence-preservation contract.
+No allocator, reference-count or constructor runtime correspondence follows from
+extraction or supplied-operation bindings alone.

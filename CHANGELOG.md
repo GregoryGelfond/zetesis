@@ -23,11 +23,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Lean refinement of formula admission and theory construction. The generated
   checks preserve the first refusal and establish the evaluator's structural
   preconditions. Constructor proofs use explicit Rust allocation and ownership
-  contracts; interpretation construction and complete public membership checking
-  remain separate obligations.
+  contracts; complete public membership checking remains a separate obligation.
 - Lean refinement of frozen-reduct construction and its public satisfaction query.
   Completed calls agree with the Ferraris reduct, preserving ownership checks,
   typed stops and separate work budgets under explicit library contracts.
+- Lean proofs for interpretation construction's phase order, reservation refusal
+  and retained theory. Exact packed contents and arbitrary iterator behavior
+  remain separate obligations.
 
 ### Changed
 
@@ -35,6 +37,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   search in the reference checker, preserving their operations and resource checks.
 - Separate formula admission's checks from the theory's shared allocation,
   preserving their order, refusals and transfer of the supplied vectors.
+- Separate checked atom insertion from interpretation allocation, preserving
+  the public API, input order and first invalid-atom refusal.
 
 ## 0.2.0 — 2026-10-01
 

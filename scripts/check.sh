@@ -57,6 +57,7 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo bench --locked -p zetesis-ferraris --bench frozen_reduct -- --test
     cargo bench --locked -p zetesis-ferraris --bench membership -- --test
     cargo bench --locked -p zetesis-ferraris --bench admission -- --test
+    cargo bench --locked -p zetesis-ferraris --bench interpretation -- --test
 fi
 if [ "$mode" = book ] || [ "$mode" = full ]; then
     # mdBook invokes rustdoc from a temporary directory outside this checkout.

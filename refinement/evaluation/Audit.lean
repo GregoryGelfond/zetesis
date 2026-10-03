@@ -1,3 +1,4 @@
+import InterpretationConstruction
 import OwnedMembership
 import MembershipVerdicts
 import RuntimeEffects
@@ -300,3 +301,15 @@ import FrozenBoundaryExample
 #print axioms FrozenBoundaryExample.foreign_theory_is_refused_first
 
 #print axioms FrozenBoundaryExample.empty_construction_still_polls
+
+#print axioms UsizeCeiling.zero_divisor
+
+#print axioms UsizeCeiling.word_count64
+
+#print axioms InterpretationConstruction.phases_exact
+
+#print axioms InterpretationConstruction.reservation_refused
+
+#print axioms InterpretationConstruction.completed_phases
+
+#print axioms InterpretationConstruction.completed_theory

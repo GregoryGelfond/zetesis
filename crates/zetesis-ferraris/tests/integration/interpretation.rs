@@ -1,10 +1,22 @@
 //! Independent Boolean populations specify ordered membership and packed export.
 
 use proptest::prelude::*;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Theory};
+use zetesis_ferraris::{AdmissionError, AdmissionLimits, Interpretation, Theory};
 
 fn theory(atoms: usize) -> Theory {
     Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap()
+}
+
+#[test]
+fn invalid_atom_leaves_iterator_suffix_unconsumed() {
+    let theory = theory(65);
+    let mut atoms = [0, 64, 65, 32].into_iter();
+    assert_eq!(
+        Interpretation::new(&theory, atoms.by_ref()).unwrap_err(),
+        AdmissionError::Atom
+    );
+    assert_eq!(atoms.next(), Some(32));
+    assert_eq!(atoms.next(), None);
 }
 
 #[test]

@@ -85,7 +85,10 @@ allocates, including its node and root validators, so admitted data supplies the
 ordering and root-bound premises. `TheoryConstruction` derives these from a
 successful generated constructor return under the trusted allocation-value
 contract. Its explicit provider describes one invocation; multiple-allocation
-histories and `Interpretation::new` remain outside this proof.
+histories remain outside this proof. `InterpretationConstruction` connects the
+actual interpretation constructor's reservation, initialization, iterable
+conversion and insertion phases and proves retention of the supplied theory.
+Exact packed contents and padding, and the arbitrary iterator loop, remain open.
 
 `PublicFrozenQuery.constructed_satisfaction` composes actual successful public
 stored-reduct construction and query calls. It derives the mask invariant and
@@ -169,7 +172,9 @@ system or device progress is not obtained from a set-theoretic coverage law.
    storage invariants, preserve program ownership, and connect the public
    wrapper to the proved reference-checker phases. Theory construction and
    stored-reduct construction/query are covered under per-invocation library
-   contracts; interpretation construction and the full membership wrapper remain.
+   contracts. The interpretation constructor's phases are proved; its exact
+   packed contents, padding and arbitrary iterator loop, followed by the full
+   membership wrapper, remain.
    Connect these results to changing allocator and cancellation histories.
    This milestone concerns one candidate of a finite ground formula theory.
 2. **Optimized CPU checking and enumeration.** Connect normal closure and each

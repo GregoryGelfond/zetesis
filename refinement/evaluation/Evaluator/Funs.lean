@@ -121,7 +121,7 @@ def oracle.Work.tick
     ok (r1, self)
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::theory]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 249:4-251:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 263:4-265:5
     Visibility: public -/
 def theory.Interpretation.impl.theory
   (self : theory.Interpretation) : Result theory.Theory := do
@@ -200,7 +200,7 @@ def theory.Theory.atom_count (self : theory.Theory) : Result Std.Usize := do
   ok d.atoms
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::contains]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 255:4-257:5
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 269:4-271:5
     Visibility: public -/
 def theory.Interpretation.contains
   (self : theory.Interpretation) (atom : Std.Usize) : Result Bool := do
@@ -1030,8 +1030,59 @@ def theory.Theory.new
 
 end TheoryAllocation
 
+/-- [zetesis_ferraris::theory::insert_atoms]: loop body 0:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 195:4-202:1 -/
+@[rust_loop_body]
+def theory.insert_atoms_loop.body
+  {T0 : Type} (coreitertraitsiteratorIteratorT0UsizeInst :
+  core.iter.traits.iterator.Iterator T0 Std.Usize) (atom_count : Std.Usize)
+  (iter : T0) (words : Slice Std.U64) :
+  Result (ControlFlow (T0 × (Slice Std.U64)) ((core.result.Result Unit
+    theory.AdmissionError) × (Slice Std.U64)))
+  := do
+  let (o, iter1) ← coreitertraitsiteratorIteratorT0UsizeInst.next iter
+  match o with
+  | none => ok (done (core.result.Result.Ok (), words))
+  | some atom =>
+    if atom >= atom_count
+    then ok (done (core.result.Result.Err theory.AdmissionError.Atom, words))
+    else
+      let i ← atom % 64#usize
+      let i1 ← 1#u64 <<< i
+      let i2 ← atom / 64#usize
+      let i3 ← Slice.index_usize words i2
+      let i4 ← lift (i3 ||| i1)
+      let s ← Slice.update words i2 i4
+      ok (cont (iter1, s))
+
+/-- [zetesis_ferraris::theory::insert_atoms]: loop 0:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 195:4-202:1 -/
+@[rust_loop]
+def theory.insert_atoms_loop
+  {T0 : Type} (coreitertraitsiteratorIteratorT0UsizeInst :
+  core.iter.traits.iterator.Iterator T0 Std.Usize) (iter : T0)
+  (atom_count : Std.Usize) (words : Slice Std.U64) :
+  Result ((core.result.Result Unit theory.AdmissionError) × (Slice Std.U64))
+  := do
+  loop
+    (fun (iter1, words1) => theory.insert_atoms_loop.body
+      coreitertraitsiteratorIteratorT0UsizeInst atom_count iter1 words1)
+    (iter, words)
+
+/-- [zetesis_ferraris::theory::insert_atoms]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 190:0-202:1 -/
+@[reducible]
+def theory.insert_atoms
+  {T0 : Type} (coreitertraitsiteratorIteratorT0UsizeInst :
+  core.iter.traits.iterator.Iterator T0 Std.Usize) (atom_count : Std.Usize)
+  (atoms : T0) (words : Slice Std.U64) :
+  Result ((core.result.Result Unit theory.AdmissionError) × (Slice Std.U64))
+  := do
+  theory.insert_atoms_loop coreitertraitsiteratorIteratorT0UsizeInst atoms
+    atom_count words
+
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_ferraris::theory::AdmissionError> for zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{closure}<T0, Clause0_IntoIter>}::call_once]:
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 211:21-211:51 -/
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 229:21-229:51 -/
 def
   theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError.call_once
   {T0 : Type} {Clause0_IntoIter : Type}
@@ -1044,7 +1095,7 @@ def
   ok theory.AdmissionError.Allocation
 
 /-- Trait implementation: [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_ferraris::theory::AdmissionError> for zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{closure}<T0, Clause0_IntoIter>}]
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 211:21-211:51 -/
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 229:21-229:51 -/
 @[reducible]
 def
   theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError
@@ -1058,5 +1109,55 @@ def
     theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError.call_once
     coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst
 }
+
+section InterpretationReservation
+variable [VectorReservation]
+
+/-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new]:
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 221:4-237:5
+    Visibility: public -/
+def theory.Interpretation.new
+  {T0 : Type} {Clause0_IntoIter : Type}
+  (coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst :
+  core.iter.traits.collect.IntoIterator T0 Std.Usize Clause0_IntoIter)
+  (program : theory.Theory) (atoms : T0) :
+  Result (core.result.Result theory.Interpretation theory.AdmissionError)
+  := do
+  let i ← theory.Theory.atom_count program
+  let count ← core.num.Usize.div_ceil i 64#usize
+  let (r, words) ←
+    alloc.vec.Vec.try_reserve_exact Global (alloc.vec.Vec.new Std.U64) count
+  let r1 ←
+    core.result.Result.map_err
+      (theory.Interpretation.new.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorAdmissionError
+      coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst) r ()
+  let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue _ =>
+    let words1 ← alloc.vec.Vec.resize core.clone.CloneU64 words count 0#u64
+    let iterator ←
+      coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst.into_iter
+        atoms
+    let (s, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut words1)
+    let (r2, s1) ←
+      theory.insert_atoms
+        coreitertraitscollectIntoIteratorT0UsizeClause0_IntoIterInst.iteratorInst
+        i iterator s
+    let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r2
+    match cf1 with
+    | core.ops.control_flow.ControlFlow.Continue _ =>
+      let t ← theory.Theory.Insts.CoreCloneClone.clone program
+      let words2 := deref_mut_back s1
+      ok (core.result.Result.Ok { theory := t, words := words2 })
+    | core.ops.control_flow.ControlFlow.Break residual =>
+      core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+        theory.Interpretation (core.convert.FromSame theory.AdmissionError)
+        residual
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+      theory.Interpretation (core.convert.FromSame theory.AdmissionError)
+      residual
+
+end InterpretationReservation
 
 end ZetesisExtract

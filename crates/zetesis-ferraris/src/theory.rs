@@ -183,6 +183,24 @@ fn validate_roots(node_count: usize, roots: &[usize]) -> Result<(), AdmissionErr
     Ok(())
 }
 
+/// Insert atoms into the fixed-length packed storage prepared by the constructor.
+/// The words cover the declared atom universe. Each atom is checked before its
+/// write; the first invalid atom leaves the remaining iterator unconsumed.
+/// Earlier writes remain local to the constructor, which publishes only success.
+fn insert_atoms(
+    atom_count: usize,
+    atoms: impl Iterator<Item = usize>,
+    words: &mut [u64],
+) -> Result<(), AdmissionError> {
+    for atom in atoms {
+        if atom >= atom_count {
+            return Err(AdmissionError::Atom);
+        }
+        words[atom / 64] |= 1 << (atom % 64);
+    }
+    Ok(())
+}
+
 /// Packed membership in exactly one immutable theory's finite atom universe.
 /// This is an arbitrary truth assignment, with no satisfaction or stability
 /// claim. Cloning copies the packed words and shares the theory handle.
@@ -210,12 +228,8 @@ impl Interpretation {
             .try_reserve_exact(count)
             .map_err(|_| AdmissionError::Allocation)?;
         words.resize(count, 0);
-        for atom in atoms {
-            if atom >= theory.atom_count() {
-                return Err(AdmissionError::Atom);
-            }
-            words[atom / 64] |= 1 << (atom % 64);
-        }
+        let iterator = atoms.into_iter();
+        insert_atoms(theory.atom_count(), iterator, &mut words)?;
         Ok(Self {
             theory: theory.clone(),
             words,

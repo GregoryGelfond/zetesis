@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-03",
-  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The generated admission step called by Theory::new computes the authored validator, including the dimension and padded-count checks, and returns the supplied data unchanged; its node and root validators compute the authored scans for every represented slice, and a node refusal reports the error of the first refused node. Data returned by the admission step supplies the ordered-children and bounded-root premises, which remain premises of the composed theorems. The generated Theory::new wrapper is parameterized by a supplied allocation operation through an audited scoped binder, with its stock body unchanged. A completed constructor return establishes actual admission and allocation; typed refusal is exactly admission refusal, and backend failure or divergence is preserved. An explicit returned-value contract supplies the stored data and structural premises; a separate per-invocation fresh heap transition supports ownership. The generated frozen-reduct constructor and public query take supplied fallible reservation operations through four further audited scoped binders, with their stock bodies unchanged. Actual completed construction establishes candidate retention and the original-truth mask; actual completed public querying checks ownership, polls, reserves and decides Ferraris reduct satisfaction. Their composition needs represented interpretations, ordered nodes and bounded roots, but neither candidate modelhood, a tested-subset premise nor assumed mask agreement. Construction and query have separate supplied providers, limits and fixed observation tokens, and each starts zero counters. A completed freeze charges exactly one work unit per node; private query evaluation and root scanning share the actual returned work. Typed reservation refusal, backend failure and divergence remain distinct from completed verdicts. No default provider, allocation-success assumption or changing allocator history is installed. Interpretation construction, complete public membership allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
+  "scope": "The extracted scalar reference checker is refined under fixed-observation and scalar/sequence models. Generated owner checks and cloning obey explicit immutable-heap contracts. Actual zero initialization establishes the empty packed subset. These operations compose with original evaluation, root checking, atom selection and completed proper-subset search to decide answer-set membership under explicit admission and storage premises. Actual failed roots and returned countermodels exclude membership. Typed interruptions do not establish a Boolean verdict. A separate checked event model permits changing observations and fallible reservation; it is not installed in the extracted checker. The generated admission step called by Theory::new computes the authored validator, including the dimension and padded-count checks, and returns the supplied data unchanged; its node and root validators compute the authored scans for every represented slice, and a node refusal reports the error of the first refused node. Data returned by the admission step supplies the ordered-children and bounded-root premises, which remain premises of the composed theorems. The generated Theory::new wrapper is parameterized by a supplied allocation operation through an audited scoped binder, with its stock body unchanged. A completed constructor return establishes actual admission and allocation; typed refusal is exactly admission refusal, and backend failure or divergence is preserved. An explicit returned-value contract supplies the stored data and structural premises; a separate per-invocation fresh heap transition supports ownership. The generated frozen-reduct constructor and public query take supplied fallible reservation operations through four further audited scoped binders, with their stock bodies unchanged. Actual completed construction establishes candidate retention and the original-truth mask; actual completed public querying checks ownership, polls, reserves and decides Ferraris reduct satisfaction. Their composition needs represented interpretations, ordered nodes and bounded roots, but neither candidate modelhood, a tested-subset premise nor assumed mask agreement. Construction and query have separate supplied providers, limits and fixed observation tokens, and each starts zero counters. A completed freeze charges exactly one work unit per node; private query evaluation and root scanning share the actual returned work. Typed reservation refusal, backend failure and divergence remain distinct from completed verdicts. No default provider, allocation-success assumption or changing allocator history is installed. The actual generic Interpretation::new and its fixed-length scalar-bound insertion helper are now exported directly. The constructor phase equation preserves word counting, fallible reservation, resize, iterable conversion, actual insertion and final shared-theory clone. A completed constructor derives those successful inner calls, exact word count, actual returned slice and retained theory, without assuming iterator correctness or allocation success. The insertion loop's exact packed population, padding, finite iterator consumption/refusal position and termination remain unproved. Zero initialization additionally requires the explicit successful-reservation sequence-preservation contract. Complete public membership allocation/setup, changing runtime observations, grounding, solver enumeration and GPU execution remain outside this proof.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "2b77fb4d2a579c23d8fef039f3e13f0dfc9edb82f7bcdb18b760d4bca0ad90f4",
+  "artifactInventorySha256": "f8eccd681923c3b32dd6922adb4c840a144f7efa5ea4cea742383a98175ba2c2",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -266,7 +266,13 @@
     "PublicFrozenQuery.completed_satisfaction",
     "PublicFrozenQuery.constructed_satisfaction",
     "FrozenBoundaryExample.foreign_theory_is_refused_first",
-    "FrozenBoundaryExample.empty_construction_still_polls"
+    "FrozenBoundaryExample.empty_construction_still_polls",
+    "UsizeCeiling.zero_divisor",
+    "UsizeCeiling.word_count64",
+    "InterpretationConstruction.phases_exact",
+    "InterpretationConstruction.reservation_refused",
+    "InterpretationConstruction.completed_phases",
+    "InterpretationConstruction.completed_theory"
   ],
   "allowedLogicalAxioms": [
     "Classical.choice",
@@ -281,7 +287,7 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "b495103d1b87916e1a1adae29dacd4802fd4936a55a8b128a9688555f23f6010"
+      "logSha256": "94e8216d08727bbf5746aa5dc90368a541b35849d1d6a88c879d856c8d3eea14"
     },
     {
       "argv": [
@@ -294,7 +300,7 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "5ebb35ac844b5d3c3d5cd91a4dcab0c204cf8799523289cd9e8e4f84e90f0bc5"
+      "logSha256": "696135d1a4c0ce743d727d1e2fb03f2aef437b0a0d0c3982f293e93a13271a05"
     },
     {
       "argv": [
@@ -310,8 +316,8 @@
       "logSha256": "bf0d8c0deecd7298dc7ad7908bc9167637e112c0f29395022a021c96eb020dbb"
     }
   ],
-  "theoremAuditCount": 260,
-  "rustOrShaderSourcesChanged": false,
+  "theoremAuditCount": 266,
+  "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
     "inventorySha256": "6b827cde897f947f246ff3c555db6ff073e22fbbdd9396b6acc92f714ffc0d14",
@@ -543,7 +549,7 @@
     "mainLibraryToolchainChanged": false
   },
   "unprovedCorrespondences": [
-    "Interpretation::new construction from an arbitrary generic iterator, including exact packed storage and its fallible setup, and composition of all actual allocation, ownership and setup phases with the complete public oracle::check wrapper.",
+    "The actual generic insertion-loop correspondence for Interpretation::new, including exact packed storage, padding and finite iterator consumption/refusal behavior; zero initialization under the explicit successful-reservation sequence contract; and composition of all allocation, ownership and setup phases with the complete public oracle::check wrapper.",
     "Correct composition of per-invocation providers and explicit library contracts across repeated runtime calls; pure providers alone do not model evolving capacity, fresh allocations or allocator histories.",
     "The separate returning-event specification to generated execution with changing concurrent observations; the current generated-loop proofs use fixed supplied observation tokens.",
     "Source grounding, specialized execution plans, complete solver enumeration and GPU execution."
@@ -552,6 +558,7 @@
     "Rust, standard-library implementations, the allocator, operating system and hardware are trusted to satisfy their stated contracts; their implementations are not proof targets of this package.",
     "Arc value preservation, owner identity and immutable-heap consistency use explicit library contracts. A fresh per-invocation heap transition can establish ownership; no global fresh-allocation provider is assumed.",
     "Reservation capacity and physical allocation behavior are trusted library contracts. The active vector model records a logical sequence and length bound, not capacity; its supplied operation preserves source refusal, backend failure and divergence without assuming success.",
-    "The Rust compiler, Charon/Aeneas translation, audited input selections and scoped dependency parameterization, and the correspondence of active scalar, sequence and observation models to their Rust operations remain trusted boundaries."
+    "The Rust compiler, Charon/Aeneas translation, audited input selections and scoped dependency parameterization, and the correspondence of active scalar, sequence and observation models to their Rust operations remain trusted boundaries.",
+    "The exact active usize::div_ceil binding retains zero-divisor backend failure and checked scalar conversion. Its word-count law covers every represented Usize; correspondence to Rust standard-library arithmetic remains trusted."
   ]
 }

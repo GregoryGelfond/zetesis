@@ -46,8 +46,9 @@ occurrences. Typed stops remain errors. The broader trace relation permits fresh
 control inputs; its traces need not be executions of the fixed-token loop.
 The public reduct query checks owner identity before polling or reservation;
 reservation refusal remains `Stop.Allocation`. Its fresh query budget excludes
-construction work. Interpretation construction, the complete public membership
-wrapper and changing runtime histories remain unproved; physical storage and
+construction work. Exact interpretation contents and padding, the arbitrary
+insertion loop, the complete public membership wrapper and changing runtime
+histories remain unproved; physical storage and
 owner-token correspondence remain trusted library contracts.
 
 `FixedSelection` proves the actual selected-atom loop and entry function. Each
@@ -88,8 +89,9 @@ backend's actual resize operation and exact candidate word length.
 `MembershipVerdicts.returned_witness` identifies the proper-subset reduct model
 returned by the actual search. `OwnerChecks` connects generated identity and
 clone operations to owner tokens and immutable-heap consistency. These results
-close individual setup obligations; interpretation construction and the complete
-public membership wrapper remain unproved. `AdmissionValidation` proves the node and root
+close individual setup obligations; exact interpretation storage and the complete
+public membership wrapper remain unproved. The constructor phase laws below do
+not yet establish its packed contents. `AdmissionValidation` proves the node and root
 validators called by `admit` for `Theory::new`; it is described with
 `TheoryAdmission` below.
 
@@ -239,7 +241,22 @@ It also preserves the exact admission refusal and separates it from allocation
 nonreturn. The wrapper's allocation parameter is an audited binding adaptation;
 its body is unchanged. A per-invocation fresh-heap contract supports ownership,
 without claiming that one pure provider models repeated fresh allocation.
-`Interpretation::new` and public membership composition remain unproved.
+
+`InterpretationConstruction` proves the generated interpretation constructor's
+phase order and retention of the supplied theory. A successful constructor return
+derives successful reservation, resize, iterable conversion and insertion calls;
+its words are exactly the insertion helper's returned slice. Reservation refusal
+precedes iterable conversion, and insertion refusals pass through unchanged.
+The helper takes an atom bound and mutable words while the constructor owns
+allocation and publication. Generic iterable and iterator operations remain
+explicit in the generated code.
+
+`UsizeCeiling.word_count64` connects the modeled standard-library ceiling division
+to the shared packed word count for every host unsigned value. These phase laws
+do not establish the inserted atom set, padding or arbitrary iterator-loop
+correspondence. Initially zero words additionally require successful reservation
+to preserve its empty input vector. The complete public membership wrapper and
+changing allocator histories remain separate obligations.
 
 The [iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),
 [packed-subset](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md),
@@ -1200,7 +1217,7 @@ DAG construction. `FrozenReduct` represents a fixed candidate's reduct.
 The separate generated-code proofs establish its stored-mask invariant through
 actual construction and compose it with the public query under per-invocation
 reservation providers and fixed observations. They do not establish source
-lowering, interpretation construction or the complete public membership wrapper.
+lowering, exact interpretation storage or the complete public membership wrapper.
 
 `FormulaNodes` retains a completed topology-validation prefix across aggregate
 compilations. Its obligation is the inductive one in `DagSharing.WellFormed.snoc`:

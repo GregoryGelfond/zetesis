@@ -64,8 +64,9 @@ separately. Admission and reservation remain outside this composition.
 
 These results establish specific setup obligations without assuming successful
 allocation or equating owner identity with value equality. The theory constructor
-is covered below; interpretation construction and the complete public membership
-wrapper remain separate obligations.
+and interpretation constructor phases are covered below. Exact interpretation
+contents and padding, the arbitrary iterator loop and the complete public
+membership wrapper remain separate obligations.
 
 ## Admission validation
 
@@ -127,7 +128,31 @@ its body is unchanged. It describes one invocation. One pure provider cannot
 model repeated fresh allocations of identical data; their composition requires
 separate invocation/heap correspondence. There is no global provider instance
 or assumption of allocation success. See [reproduction](REPRODUCING.md).
-`Interpretation::new` remains unproved.
+
+## Interpretation construction
+
+[`InterpretationConstruction`](InterpretationConstruction.lean) proves the phases
+of generated `Interpretation::new`, retaining its supplied iterable and iterator
+operations. `phases_exact` follows word counting, reservation, resize, iterable
+conversion, checked insertion and the final theory clone. A reservation refusal
+returns `AdmissionError::Allocation` before conversion or insertion. Insertion
+refusals pass through unchanged; backend failure and divergence remain distinct.
+
+`completed_phases` derives successful internal calls from a successful constructor
+return. Its word count equals the shared 64-bit packed count, and its words are
+exactly the insertion helper's returned slice. `completed_theory` establishes
+retention of the supplied theory, including its owner. The private `insert_atoms`
+helper takes only the atom bound, iterator and mutable word slice; allocation
+and publication stay in the public constructor.
+
+[`UsizeCeiling.word_count64`](UsizeCeiling.lean) establishes the count for every
+host unsigned value under an authored model of Rust's `usize::div_ceil`.
+Correspondence of this external model to the standard library remains trusted.
+The constructor's reservation provider describes one invocation and assumes no
+allocation success. These laws do not yet prove exact atom membership, padding
+or the arbitrary iterator loop. Establishing initially zero words also needs the
+library contract that successful reservation preserves the empty input vector;
+resize retains any existing prefix.
 
 ## Stored reduct queries
 
@@ -192,6 +217,7 @@ construction work. A stop remains an error, not a satisfaction verdict.
 | `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
 | `AdmissionValidation` | The generated node and root validators compute the authored node and root scans, report the first refused node's error, and supply ordered-children and bounded-root premises |
 | `AdmittedData` | The generated admission step computes the authored validator, including the padded-count check, and returns the supplied data unchanged |
+| `UsizeCeiling`, `InterpretationConstruction` | Exact packed word count and actual constructor phase order, reservation refusal and retained theory; packed contents and padding remain separate |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -292,7 +318,8 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-`Interpretation::new`, the complete public membership wrapper,
+the exact packed contents and padding produced by `Interpretation::new`, its
+arbitrary iterator loop, the complete public membership wrapper,
 multiple-allocation runtime histories, source grounding,
 candidate enumeration, optimized checking routes or end-to-end solver
 verification.
@@ -301,25 +328,26 @@ verification.
 
 The generated types and functions come directly from production Rust, including
 the four private subset-search operations, `Theory::new` with its private
-admission step and four validators, and the stored-reduct constructor, public
-query and reservation wrapper. The LLBC destination becomes portable,
+admission step and four validators, `Interpretation::new` and its private
+`insert_atoms` helper, and the stored-reduct constructor, public query and
+reservation wrapper. The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`
 implementation whose formatting method was excluded is removed with its
 ordered registration, after checking for surviving semantic references.
 Two unused range-trait method registrations are omitted from both the trait and
 its implementation to match the pinned backend model, with indices preserved.
-The selected operations do not refer to either method. The unsupported generic
-`Interpretation::new` export is omitted only from the ordered translation list,
-after checking that no retained operation references it; its declaration and
-body remain in the input. Restoring these selections and metadata/name fields
-recovers the parsed raw input.
+The selected operations do not refer to either method. The generic interpretation
+constructor and insertion loop are translated with their iterable and iterator
+arguments intact. Restoring the selections and metadata/name fields recovers the
+parsed raw input.
 
 Scoped section binders supply `ArcAllocation` to generated `Theory::new` and
-`VectorReservation` to `oracle::reserve` and `FrozenReduct::{freeze, new,
-is_satisfied_by}`. No body is rewritten. Removing the five recorded insertions
-restores the exact generated Lean. This dependency parameterization is distinct
-from metadata normalization and remains part of the trusted extraction adaptation.
+`VectorReservation` to `oracle::reserve`, `FrozenReduct::{freeze, new,
+is_satisfied_by}` and `Interpretation::new`. No body is rewritten. Removing the
+recorded insertions restores the exact generated Lean. This dependency
+parameterization is distinct from metadata normalization and remains part of the
+trusted extraction adaptation.
 
 These are audited preprocessing steps, not verified transformations or a claim
 of byte-identical raw extraction. `provenance.json` and the source/artifact

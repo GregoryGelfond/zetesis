@@ -102,8 +102,22 @@ The generated wrapper has an explicit allocation parameter, introduced by a
 checked, reversible binding adaptation; its body is unchanged. This models one
 invocation without assuming allocation succeeds. Freshness is a separate
 per-invocation heap contract. A single pure provider does not model repeated
-fresh allocations of equal data. `Interpretation::new` and complete public
-membership composition remain unproved.
+fresh allocations of equal data.
+
+[`InterpretationConstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/InterpretationConstruction.lean)
+proves the actual interpretation constructor's phase order: word counting,
+reservation, resize, iterable conversion, insertion and final theory clone.
+Reservation refusal precedes conversion and insertion. A successful return
+derives successful internal calls, retains the supplied theory and contains
+exactly the insertion helper's returned words. The supplied generic iterable and
+iterator operations are retained.
+
+[`UsizeCeiling.word_count64`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/UsizeCeiling.lean)
+connects the constructor's modeled `usize::div_ceil` to the shared packed word
+count. Its correspondence to Rust's standard library remains trusted. Exact atom
+membership, zero padding and the arbitrary iterator loop remain unproved.
+Deriving initially zero words also requires successful reservation to preserve
+the empty vector, because resize retains an existing prefix.
 
 ## From evaluation to theory satisfaction
 
@@ -236,9 +250,10 @@ events and preserves embedded backend computations. It is not yet connected to
 the generated checker. Supporting those effects through the extraction backend's
 function and loop interfaces remains necessary.
 
-The calls share stored nodes, roots and numeric atom vocabulary. Interpretation
-construction and composition of allocation and owner checks with the complete
-public membership wrapper remain unproved. The supplied allocation and
+The calls share stored nodes, roots and numeric atom vocabulary. Exact packed
+interpretation contents and padding, the arbitrary insertion loop, and composition
+of allocation and owner checks with the complete public membership wrapper remain
+unproved. The supplied allocation and
 reservation operations describe individual invocations, not changing runtime
 histories. Source grounding, candidate enumeration and optimized checking routes
 are separate obligations. Rust's library, compiler, operating system and hardware

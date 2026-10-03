@@ -138,7 +138,7 @@ structure theory.Data where
 def theory.Theory := alloc.sync.Arc theory.Data
 
 /-- [zetesis_ferraris::theory::Interpretation]
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 190:0-193:1
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 208:0-211:1
     Visibility: public -/
 structure theory.Interpretation where
   theory : theory.Theory
@@ -181,7 +181,7 @@ inductive theory.AdmissionError where
 | Allocation : theory.AdmissionError
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Interpretation}::new::{closure}]
-    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 211:21-211:51 -/
+    Source: 'crates/zetesis-ferraris/src/theory.rs', lines 229:21-229:51 -/
 @[reducible]
 def theory.Interpretation.new.closure (T0 : Type) (Clause0_IntoIter : Type) :=
 Unit
