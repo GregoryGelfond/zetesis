@@ -79,11 +79,11 @@ Typed stops retain their actual state and work and do not establish exhaustion.
 This closes the reference search's semantic composition under the modeled
 primitives. Public allocation, owner checks and buffer construction remain
 outside it, as do changing runtime observations, source grounding, candidate
-enumeration and optimized checking routes. `AdmissionValidation` proves the
-actual node and root validators that `Theory::new` runs, so accepted admission
-checks supply the ordering and root-bound premises; the constructor's dimension
-and padded-count checks, the order in which it runs its checks, its allocation
-and owner, and `Interpretation::new`, are not yet connected. The separate stored-reduct query
+enumeration and optimized checking routes. `AdmissionValidation` and
+`AdmittedData` prove the actual admission step that `Theory::new` runs before it
+allocates, including its node and root validators, so admitted data supplies the
+ordering and root-bound premises. The constructor's wrapper, allocation and
+owner, and `Interpretation::new`, are not yet connected. The separate stored-reduct query
 proof still requires explicit mask agreement; actual original evaluation can
 supply that agreement, but `FrozenReduct::freeze` remains unproved.
 

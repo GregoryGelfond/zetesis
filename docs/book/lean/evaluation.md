@@ -53,10 +53,11 @@ reference counting or allocation.
 
 ## Admission validation
 
-`Theory::new` checks dimensions and the padded word count, then calls two
-private validators before it allocates the shared theory. `validate_nodes`
-checks every node in stored order against the atom universe and the nodes
-before it; `validate_roots` checks that every asserted root names a stored node.
+`Theory::new` runs the private step `admit` before it allocates the shared
+theory. `admit` checks dimensions and the padded word count, then calls two
+private validators. `validate_nodes` checks every node in stored order against
+the atom universe and the nodes before it; `validate_roots` checks that every
+asserted root names a stored node.
 [`AdmissionValidation`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/AdmissionValidation.lean)
 proves their generated code against the authored checks of the general
 library's [`TheoryAdmission`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TheoryAdmission.lean):
@@ -77,14 +78,22 @@ follows from the general `scan_refusal_exact`. Root validation accepts exactly
 when every asserted root names a stored node, so repeated stored roots are
 accepted and an unstored root is refused wherever it occurs.
 
+[`AdmittedData`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/AdmittedData.lean)
+proves the generated `admit` itself. It returns the verdict of the authored
+`validate` with the host's `Usize.max` as the maximum, so Rust's
+`checked_add(63)` is exactly the authored padded-count check. Success returns
+the supplied atom count and vectors unchanged, in their stored order and
+multiplicity, and the admitted atom count has representable 64-bit and 32-bit
+word counts.
+
 The membership and stored-query theorems keep their ordering and root-bound
-premises; these now follow from accepted validation of a theory's stored
-vectors. Connecting them to an actual `Theory::new` call needs further facts.
-Most concern values: the constructor's dimension and padded-count checks, its
-order of dimensions, then nodes, then roots, and storage of exactly the
-validated vectors as the theory's value. One concerns identity: the allocation
-has a fresh owner, which only ownership results use. None of them is proved
-here, nor is `Interpretation::new`.
+premises. `admitted_program_structure` derives both for any theory whose stored
+value is data returned by `admit`. Connecting them to an actual `Theory::new`
+call needs further facts. Most concern values: the constructor's wrapper returns
+`admit`'s refusal unchanged and otherwise passes the admitted data to `Arc::new`,
+which stores it as the theory's value. One concerns identity: the allocation has
+a fresh owner, which only ownership results use. None of them is proved here,
+nor is `Interpretation::new`.
 
 ## From evaluation to theory satisfaction
 

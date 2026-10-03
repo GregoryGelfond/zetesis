@@ -220,12 +220,16 @@ and root validators called by `Theory::new` compute `scan` and `rootScan`
 exactly, for every represented slice. The generated loops always return, and a
 node refusal reports the error of the first refused node. `accepted_structure`
 derives the evaluator's ordered-children and bounded-root premises from both
-acceptances, as applied to the constructor's input vectors. Those premises
-remain premises of the composed membership theorems. Connecting them to an
-actual `Theory::new` call needs the constructor's dimension and padded-count
-checks, its order of dimensions, then nodes, then roots, and the preservation of
-the validated vectors as the stored value; a fresh owner is needed only by
-ownership results. These remain separate
+acceptances, as applied to the constructor's input vectors. `AdmittedData`
+proves the generated admission step that `Theory::new` runs before allocating:
+it computes `validate` with the host's `Usize.max`, including Rust's checked
+padded-count addition, and returns the supplied vectors unchanged.
+`admitted_program_structure` derives the evaluator's premises for any theory
+whose stored value is admitted data. Those premises remain premises of the
+composed membership theorems. Connecting them to an actual `Theory::new` call
+needs its wrapper, which returns the refusal unchanged and otherwise `Arc::new`
+of the admitted data, and `Arc::new`'s storage of that data; a fresh owner is
+needed only by ownership results. These remain separate
 obligations, as does `Interpretation::new`.
 
 The [iterator](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md),

@@ -53,15 +53,17 @@ is an oracle assumption.
 ## Implementation boundary
 
 This is an authored validation algorithm. It models already represented input
-lengths using natural numbers. The refinement package's `AdmissionValidation`
-proves that the generated node and root validators called by `Theory::new`
-compute `scan` and `rootScan` exactly, including their
-iteration over the stored slices. The constructor's dimension checks, its checked
-padded-count arithmetic, its order of dimensions, then nodes, then roots, the
-transfer of its vectors and the allocation of an immutable `Arc` still require
-concrete correspondence. No theory-owner identity
-is created by the Lean result, and the validator does not check interpretation
-storage.
+lengths using natural numbers. The refinement package proves the generated
+admission step that `Theory::new` runs before allocating: `AdmissionValidation`
+shows that its node and root validators compute `scan` and `rootScan` exactly,
+including their iteration over the stored slices, and `AdmittedData` shows that
+the whole step computes `validate` with the host's `Usize.max`, including Rust's
+checked padded-count addition, and returns the supplied vectors unchanged. The
+wrapper, which returns the step's refusal unchanged and otherwise passes the
+admitted data to an immutable `Arc`, that allocation and its owner still require
+concrete correspondence. No theory-owner
+identity is created by the Lean result, and the validator does not check
+interpretation storage.
 
 The node and root predicates are exact for successful validation, and the first
 refused node is identified exactly. Error kinds and check ordering are
