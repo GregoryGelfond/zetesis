@@ -39,8 +39,9 @@ routes.
 
 [`PackedSetup`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/PackedSetup.lean)
 connects the backend's zero-resize operation to the empty-subset invariant.
-Exact candidate word length remains a constructor premise. The resulting
-membership theorem no longer needs an assumed meaning for the initialized words.
+Exact candidate word length remains a premise of this membership composition;
+the constructor results below supply it for completed finite inputs. The theorem
+no longer needs an assumed meaning for the initialized subset words.
 [`MembershipVerdicts`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/MembershipVerdicts.lean)
 also establishes both negative branches: original-root failure and the actual
 proper-subset witness returned by search.
@@ -114,10 +115,28 @@ iterator operations are retained.
 
 [`UsizeCeiling.word_count64`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/UsizeCeiling.lean)
 connects the constructor's modeled `usize::div_ceil` to the shared packed word
-count. Its correspondence to Rust's standard library remains trusted. Exact atom
-membership, zero padding and the arbitrary iterator loop remain unproved.
-Deriving initially zero words also requires successful reservation to preserve
-the empty vector, because resize retains an existing prefix.
+count. Its correspondence to Rust's standard library remains trusted.
+[`SliceInsertion`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/SliceInsertion.lean)
+relates actual checked scalar and slice operations to packed insertion.
+[`InsertionLoop`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/InsertionLoop.lean)
+then proves the actual helper terminates with sufficient word storage and
+`FiniteInput`, a contract consisting only of actual next observations. It writes
+exactly the prefix before the first
+invalid atom, returns `Atom` on that refusal, and preserves word count. Duplicates
+and arbitrary order are permitted.
+
+[`InterpretationStorage.completed_pack`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/InterpretationStorage.lean)
+derives valid atom bounds, retained theory and exact packed contents from a
+successful constructor, using the explicit contract that successful reservation
+preserves its empty input. `packed_queries` supplies exact storage, zero padding
+and actual membership answers. [`VectorInput`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/VectorInput.lean)
+derives the finite contract for the imported owned-vector iterator; the resulting
+`completed_vector` theorem needs no supplied iterator trace or validity premise.
+
+[Boundary examples](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/InsertionBoundaryExample.lean)
+show first-invalid refusal before a diverging tail and completion at the first
+None of a nonfused input. These laws assume neither allocation success nor
+termination of arbitrary iterators. The helper returns no terminal iterator state.
 
 ## From evaluation to theory satisfaction
 
@@ -250,12 +269,12 @@ events and preserves embedded backend computations. It is not yet connected to
 the generated checker. Supporting those effects through the extraction backend's
 function and loop interfaces remains necessary.
 
-The calls share stored nodes, roots and numeric atom vocabulary. Exact packed
-interpretation contents and padding, the arbitrary insertion loop, and composition
-of allocation and owner checks with the complete public membership wrapper remain
-unproved. The supplied allocation and
-reservation operations describe individual invocations, not changing runtime
-histories. Source grounding, candidate enumeration and optimized checking routes
+The calls share stored nodes, roots and numeric atom vocabulary. Composition of
+allocation and owner checks with the complete public membership wrapper remains
+unproved. Finite insertion does not establish termination of unrestricted
+iterators or correspondence to a caller's borrowed iterator state and destruction.
+The supplied allocation and reservation operations describe individual
+invocations, not changing runtime histories. Source grounding, candidate enumeration and optimized checking routes
 are separate obligations. Rust's library, compiler, operating system and hardware
 are trusted. Their contracts do not replace the remaining proofs for zetesis's
 runtime control and GPU operations. The

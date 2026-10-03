@@ -42,8 +42,9 @@ owners or handles every setup failure correctly.
 [`PackedSetup`](PackedSetup.lean) proves that the backend's zero-resize operation
 produces the exact empty packed interpretation needed by subset search. Its
 `initialized_membership` theorem supplies that result to the membership proof.
-Exact candidate word length remains a constructor premise: having enough words
-for reads alone does not establish the required shape.
+Exact candidate word length remains a premise of this composition; the
+constructor proofs below now supply it for completed finite
+inputs. Having enough words for reads alone does not establish the required shape.
 
 [`MembershipVerdicts`](MembershipVerdicts.lean) treats the negative branches.
 An actual original-root failure excludes membership. A completed positive subset
@@ -64,9 +65,8 @@ separately. Admission and reservation remain outside this composition.
 
 These results establish specific setup obligations without assuming successful
 allocation or equating owner identity with value equality. The theory constructor
-and interpretation constructor phases are covered below. Exact interpretation
-contents and padding, the arbitrary iterator loop and the complete public
-membership wrapper remain separate obligations.
+and interpretation constructor are covered below. The complete public
+membership wrapper and changing runtime histories remain separate obligations.
 
 ## Admission validation
 
@@ -148,11 +148,29 @@ and publication stay in the public constructor.
 [`UsizeCeiling.word_count64`](UsizeCeiling.lean) establishes the count for every
 host unsigned value under an authored model of Rust's `usize::div_ceil`.
 Correspondence of this external model to the standard library remains trusted.
-The constructor's reservation provider describes one invocation and assumes no
-allocation success. These laws do not yet prove exact atom membership, padding
-or the arbitrary iterator loop. Establishing initially zero words also needs the
-library contract that successful reservation preserves the empty input vector;
-resize retains any existing prefix.
+[`SliceInsertion`](SliceInsertion.lean) connects the actual checked arithmetic,
+slice read and update to the shared packed insertion operation.
+[`InsertionLoop.insert_exact`](InsertionLoop.lean) proves termination for a
+`FiniteInput` contract consisting only of actual iterator observations, given
+sufficient word storage. The helper inserts exactly the bounded prefix,
+preserving word count, and returns
+`Atom` at the first invalid coordinate. Duplicates and arbitrary input order
+are allowed; behavior after the first None is irrelevant.
+
+[`InterpretationStorage.completed_pack`](InterpretationStorage.lean) derives
+retained theory, valid input bounds and exact packed contents from a successful
+actual constructor with finite observed input. It uses the explicit library contract that successful
+reservation preserves the empty input vector; resize alone would retain an
+existing prefix. `packed_queries` then supplies exact storage, zero padding and
+actual membership answers. [`VectorInput`](VectorInput.lean) derives the finite
+contract from the imported owned-vector iterator, so `completed_vector` needs no
+supplied iterator trace or input-validity premise.
+
+[Boundary examples](InsertionBoundaryExample.lean) prove refusal before a
+diverging tail and completion at the first None of a nonfused input. These laws
+assume neither allocation success nor termination of unrestricted iterators.
+The helper returns no terminal iterator state; correspondence to a Rust caller's
+borrowed state and destruction remains a library/translation boundary.
 
 ## Stored reduct queries
 
@@ -217,7 +235,10 @@ construction work. A stop remains an error, not a satisfaction verdict.
 | `FixedSearch`, `MembershipSearch` | The actual search covers proper subsets, and its completed result composes with original modelhood to decide answer-set membership |
 | `AdmissionValidation` | The generated node and root validators compute the authored node and root scans, report the first refused node's error, and supply ordered-children and bounded-root premises |
 | `AdmittedData` | The generated admission step computes the authored validator, including the padded-count check, and returns the supplied data unchanged |
-| `UsizeCeiling`, `InterpretationConstruction` | Exact packed word count and actual constructor phase order, reservation refusal and retained theory; packed contents and padding remain separate |
+| `UsizeCeiling`, `InterpretationConstruction` | Exact packed word count and actual constructor phase order, reservation refusal and retained theory |
+| `SliceInsertion`, `InsertionLoop` | With covered word storage, actual finite insertion terminates with exact bounded-prefix writes, first-invalid refusal and preserved word count |
+| `VectorInput`, `InterpretationStorage` | Owned-vector observations discharge the input contract; completed construction yields exact packed contents and padding under successful-reservation sequence preservation |
+| `InsertionBoundaryExample` | First-invalid refusal needs no returning tail; the first None ends a nonfused input |
 
 All five node forms retain the source's Boolean short circuits. A stop precedes
 node evaluation and append, although the iterator has already fetched the node.
@@ -318,9 +339,8 @@ machine code and GPU execution remain outside this model.
 The Rust compiler, Charon and Aeneas translations, and the correspondence of
 library models to Rust, remain trusted boundaries. There are no project axioms,
 proof holes or native proof-evaluation shortcuts. The package does not establish
-the exact packed contents and padding produced by `Interpretation::new`, its
-arbitrary iterator loop, the complete public membership wrapper,
-multiple-allocation runtime histories, source grounding,
+termination of unrestricted iterators, the complete public membership wrapper,
+changing allocation or control histories, source grounding,
 candidate enumeration, optimized checking routes or end-to-end solver
 verification.
 

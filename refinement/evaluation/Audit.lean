@@ -1,3 +1,5 @@
+import InterpretationStorage
+import InsertionBoundaryExample
 import InterpretationConstruction
 import OwnedMembership
 import MembershipVerdicts
@@ -313,3 +315,22 @@ import FrozenBoundaryExample
 #print axioms InterpretationConstruction.completed_phases
 
 #print axioms InterpretationConstruction.completed_theory
+
+#print axioms SliceInsertion.word_operations
+#print axioms InsertionLoop.body_exhausted
+#print axioms InsertionLoop.body_refused
+#print axioms InsertionLoop.loop_unfold
+#print axioms InsertionLoop.body_inserted
+#print axioms InsertionLoop.loop_exact
+#print axioms InsertionLoop.insert_exact
+#print axioms InsertionLoop.completed_exact
+#print axioms InsertionLoop.padding_preserved
+#print axioms VectorInput.finite
+#print axioms VectorInput.converted
+#print axioms InterpretationStorage.counted_zero
+#print axioms InterpretationStorage.completed_initialization
+#print axioms InterpretationStorage.packed_queries
+#print axioms InterpretationStorage.completed_pack
+#print axioms InterpretationStorage.completed_vector
+#print axioms InsertionBoundaryExample.invalid_atom_avoids_diverging_tail
+#print axioms InsertionBoundaryExample.first_none_finishes_nonfused_input

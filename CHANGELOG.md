@@ -27,9 +27,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Lean refinement of frozen-reduct construction and its public satisfaction query.
   Completed calls agree with the Ferraris reduct, preserving ownership checks,
   typed stops and separate work budgets under explicit library contracts.
-- Lean proofs for interpretation construction's phase order, reservation refusal
-  and retained theory. Exact packed contents and arbitrary iterator behavior
-  remain separate obligations.
+- Lean refinement of finite interpretation construction: actual insertion keeps
+  exact bounded-prefix writes and first-invalid refusal; completed construction
+  retains its theory and derives exact packed contents and zero padding under an
+  explicit reservation contract. Owned vectors supply the finite-input contract;
+  unrestricted iterator termination and the full public checker remain separate.
 
 ### Changed
 

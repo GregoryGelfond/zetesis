@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
+defaultTargets = ["InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
 
 [leanOptions]
 autoImplicit = false
@@ -216,3 +216,18 @@ name = "UsizeCeiling"
 
 [[lean_lib]]
 name = "InterpretationConstruction"
+
+[[lean_lib]]
+name = "SliceInsertion"
+
+[[lean_lib]]
+name = "InsertionLoop"
+
+[[lean_lib]]
+name = "VectorInput"
+
+[[lean_lib]]
+name = "InterpretationStorage"
+
+[[lean_lib]]
+name = "InsertionBoundaryExample"
