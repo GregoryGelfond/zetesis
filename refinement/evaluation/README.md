@@ -14,7 +14,7 @@ with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
 versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
 
-## Tight-body and atomic-choice recognition
+## Tight recognition and single-root producers
 
 The tight specialization is being connected to the same answer-set definition.
 Its first correspondence is the actual `tight::compile::classify` scan: successful
@@ -40,10 +40,20 @@ recognizer agreement is used. The operation allocates nothing and charges no
 work itself: its callers account for the inspection. Its pure standard-library
 models preserve eager `then_some` and the None-only fallback of `or_else`.
 
-A body class is not a complete tight certificate. Actual producer extraction,
-root coverage, rank validation and the support-checking loop still need their
-implementation proofs. Existing ranked-support laws provide their semantic
-endpoint; they do not supply those unproved premises.
+Ten laws in `TightProducerSemantics`, `TightProducerReads` and
+[`TightProducer`](TightProducer.lean) connect a completed actual single-root
+producer call to an exact original `TightPlans.Producer`. The witness retains the
+head, indexed body, source root and ordinary/choice kind. Facts remain facts;
+reversed choices keep their original orientation. `after_classification` derives
+the body-class premise from the actual completed classifier. Skipped roots are
+falsum or arbitrary default negations; typed refusals retain the source's
+head-before-body order.
+
+These single-root laws do not establish a complete tight certificate. The
+two-pass producer extraction still needs complete asserted-root and occurrence
+coverage; rank validation and the support-checking loop need their implementation
+proofs. Existing ranked-support laws provide their semantic endpoint without
+supplying those unproved premises.
 
 ## Central result
 
@@ -413,9 +423,11 @@ admission step and four validators, `Interpretation::new` and its private
 reservation wrapper, together with public `oracle::check`, `check_interpretation`
 and its decision/accepted-interpretation accessors and consuming conversion.
 The tight-body classifier, its work/reservation helpers and node equality are
-selected with the exact atomic-choice recognizer and its pair helper. Each
-discriminated node is copied to a local value before pattern matching, keeping
-the same reads and short-circuit order while exposing one value to translation.
+selected with the exact atomic-choice recognizer, its pair helper and the
+single-root tight producer. The producer copies its root and head nodes to local
+values before their unchanged matches, as the shared head recognizer does for
+its inspected nodes. These copies preserve reads, short-circuit order and typed
+refusals; they introduce no representation, allocation or API change.
 The LLBC destination becomes portable,
 and local names change from `theory` to `program` to avoid namespace
 collisions; operands retain their local IDs. An unused derived `Debug`

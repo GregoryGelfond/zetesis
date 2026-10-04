@@ -40,6 +40,28 @@ that shape. Complete producer extraction, root coverage and each consumer's
 work accounting remain unproved; this result concerns the shared recognizer.
 See [the recognition contract](evaluation.md#recognizing-atomic-choices).
 
+## Single-root tight producers
+
+The ten laws in `TightProducerSemantics`, `TightProducerReads` and `TightProducer`
+connect the actual `tight::compile::producer` call to an exact original producer.
+[`TightProducer.completed_producer`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/TightProducer.lean)
+retains the root, head, indexed-body formula and ordinary/choice kind. Facts and
+both choice orientations keep their original syntax. `after_classification`
+supplies the class-table correspondence from the actual completed classifier,
+using its explicit successful-reservation sequence contract.
+
+`completed_none` identifies falsum or arbitrary default negation. The refusal
+laws recover an unsupported head before any body-class diagnostic, or an already
+recognized head with an unsupported body. Missing reads and backend nonreturns
+are not converted to typed admission errors. The Rust producer copies its two
+inspected nodes before matching; this preserves its reads and branch order.
+
+These are completed single-root laws, not complete plan extraction. The actual
+two-pass root scan must still establish asserted-root membership, occurrence
+coverage and count/append agreement. That supplies the premises of
+`TightPlans.OriginalProducers`, `Covered` and `TightEvaluation.Represents`;
+rank validation and the optimized membership loop remain separate obligations.
+
 ## Executable finite algorithms
 
 `ReductEvaluation.values_correspond` proves the actual two-fold Lean algorithm

@@ -1,3 +1,4 @@
+import TightProducer
 import AtomicChoice
 import TightClassification
 import TightClassificationLoop
@@ -574,3 +575,13 @@ import FrozenBoundaryExample
 #print axioms AtomicChoice.meaning_negation_iff
 #print axioms AtomicChoice.pair_meaning_iff
 #print axioms AtomicChoice.atom_meaning_iff
+#print axioms TightProducerSemantics.class_meaning
+#print axioms TightProducerSemantics.body_witness
+#print axioms TightProducerReads.opaque_test
+#print axioms TightProducerReads.completed_reads
+#print axioms TightProducer.head_meaning
+#print axioms TightProducer.completed_producer
+#print axioms TightProducer.completed_none
+#print axioms TightProducer.unsupported_root
+#print axioms TightProducer.unsupported_body
+#print axioms TightProducer.after_classification

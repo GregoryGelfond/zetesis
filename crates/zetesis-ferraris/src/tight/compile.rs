@@ -109,13 +109,15 @@ fn producer(
     root: usize,
     classes: &[Body],
 ) -> Result<Option<TightProducer>, TightError> {
-    let (body, head) = match theory.nodes()[root] {
+    let node = theory.nodes()[root];
+    let (body, head) = match node {
         Node::False => return Ok(None),
         Node::Implies(_, b) if theory.nodes()[b] == Node::False => return Ok(None),
         Node::Implies(a, b) => (Some(a), b),
         _ => (None, root),
     };
-    let (head, kind) = match theory.nodes()[head] {
+    let node = theory.nodes()[head];
+    let (head, kind) = match node {
         Node::Atom(atom) => (atom, TightProducerKind::Normal),
         _ => (
             crate::atomic_choice::atom(theory, head).ok_or(TightError::UnsupportedRoot { root })?,

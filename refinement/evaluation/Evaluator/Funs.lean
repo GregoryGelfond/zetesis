@@ -1527,6 +1527,15 @@ def theory.Interpretation.new
 
 end InterpretationReservation
 
+/-- [zetesis_ferraris::tight::compile::{impl core::cmp::PartialEq<zetesis_ferraris::tight::compile::Body> for zetesis_ferraris::tight::compile::Body}::eq]:
+    Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 10:22-10:31
+    Visibility: public -/
+def tight.compile.Body.Insts.CoreCmpPartialEqBody.eq
+  (self : tight.compile.Body) (other : tight.compile.Body) : Result Bool := do
+  let self1 := read_discriminant self
+  let other1 := read_discriminant other
+  ok (self1 = other1)
+
 /-- [zetesis_ferraris::tight::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::reserve::{closure}<T>}::call_once]:
     Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
 def
@@ -1773,5 +1782,398 @@ def tight.compile.classify
     ok (r1, work)
 
 end TightClassificationReservation
+
+/-- [zetesis_ferraris::tight::compile::producer]:
+    Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 107:0-138:1 -/
+def tight.compile.producer
+  (program : theory.Theory) (root : Std.Usize)
+  (classes : Slice tight.compile.Body) :
+  Result (core.result.Result (Option tight.TightProducer) tight.TightError)
+  := do
+  let s ← theory.Theory.nodes program
+  let node ← Slice.index_usize s root
+  match node with
+  | theory.Node.Atom _ =>
+    let node1 ← Slice.index_usize s root
+    match node1 with
+    | theory.Node.Atom atom =>
+      ok (core.result.Result.Ok (some
+        {
+          head := atom,
+          body := none,
+          root,
+          kind := tight.TightProducerKind.Normal
+        }))
+    | theory.Node.False =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.And _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.Or _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.Implies _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+  | theory.Node.False => ok (core.result.Result.Ok none)
+  | theory.Node.And _ _ =>
+    let node1 ← Slice.index_usize s root
+    match node1 with
+    | theory.Node.Atom atom =>
+      ok (core.result.Result.Ok (some
+        {
+          head := atom,
+          body := none,
+          root,
+          kind := tight.TightProducerKind.Normal
+        }))
+    | theory.Node.False =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.And _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.Or _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.Implies _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+  | theory.Node.Or _ _ =>
+    let node1 ← Slice.index_usize s root
+    match node1 with
+    | theory.Node.Atom atom =>
+      ok (core.result.Result.Ok (some
+        {
+          head := atom,
+          body := none,
+          root,
+          kind := tight.TightProducerKind.Normal
+        }))
+    | theory.Node.False =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.And _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.Or _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+    | theory.Node.Implies _ _ =>
+      let o ← atomic_choice.atom program root
+      let r ←
+        core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+      match cf with
+      | core.ops.control_flow.ControlFlow.Continue val =>
+        ok (core.result.Result.Ok (some
+          {
+            head := val,
+            body := none,
+            root,
+            kind := tight.TightProducerKind.Choice
+          }))
+      | core.ops.control_flow.ControlFlow.Break residual =>
+        core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+          (Option tight.TightProducer) (core.convert.FromSame tight.TightError)
+          residual
+  | theory.Node.Implies a b =>
+    let n ← Slice.index_usize s b
+    let b1 ← theory.Node.Insts.CoreCmpPartialEqNode.eq n theory.Node.False
+    if b1
+    then ok (core.result.Result.Ok none)
+    else
+      let node1 ← Slice.index_usize s b
+      match node1 with
+      | theory.Node.Atom atom =>
+        let b2 ← Slice.index_usize classes a
+        let b3 ←
+          tight.compile.Body.Insts.CoreCmpPartialEqBody.eq b2
+            tight.compile.Body.Opaque
+        if b3
+        then
+          ok (core.result.Result.Err (tight.TightError.UnsupportedBody root a))
+        else
+          ok (core.result.Result.Ok (some
+            {
+              head := atom,
+              body := (some a),
+              root,
+              kind := tight.TightProducerKind.Normal
+            }))
+      | theory.Node.False =>
+        let o ← atomic_choice.atom program b
+        let r ←
+          core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let b2 ← Slice.index_usize classes a
+          let b3 ←
+            tight.compile.Body.Insts.CoreCmpPartialEqBody.eq b2
+              tight.compile.Body.Opaque
+          if b3
+          then
+            ok (core.result.Result.Err (tight.TightError.UnsupportedBody root
+              a))
+          else
+            ok (core.result.Result.Ok (some
+              {
+                head := val,
+                body := (some a),
+                root,
+                kind := tight.TightProducerKind.Choice
+              }))
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            (Option tight.TightProducer) (core.convert.FromSame
+            tight.TightError) residual
+      | theory.Node.And _ _ =>
+        let o ← atomic_choice.atom program b
+        let r ←
+          core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let b2 ← Slice.index_usize classes a
+          let b3 ←
+            tight.compile.Body.Insts.CoreCmpPartialEqBody.eq b2
+              tight.compile.Body.Opaque
+          if b3
+          then
+            ok (core.result.Result.Err (tight.TightError.UnsupportedBody root
+              a))
+          else
+            ok (core.result.Result.Ok (some
+              {
+                head := val,
+                body := (some a),
+                root,
+                kind := tight.TightProducerKind.Choice
+              }))
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            (Option tight.TightProducer) (core.convert.FromSame
+            tight.TightError) residual
+      | theory.Node.Or _ _ =>
+        let o ← atomic_choice.atom program b
+        let r ←
+          core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let b2 ← Slice.index_usize classes a
+          let b3 ←
+            tight.compile.Body.Insts.CoreCmpPartialEqBody.eq b2
+              tight.compile.Body.Opaque
+          if b3
+          then
+            ok (core.result.Result.Err (tight.TightError.UnsupportedBody root
+              a))
+          else
+            ok (core.result.Result.Ok (some
+              {
+                head := val,
+                body := (some a),
+                root,
+                kind := tight.TightProducerKind.Choice
+              }))
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            (Option tight.TightProducer) (core.convert.FromSame
+            tight.TightError) residual
+      | theory.Node.Implies _ _ =>
+        let o ← atomic_choice.atom program b
+        let r ←
+          core.option.Option.ok_or o (tight.TightError.UnsupportedRoot root)
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue val =>
+          let b2 ← Slice.index_usize classes a
+          let b3 ←
+            tight.compile.Body.Insts.CoreCmpPartialEqBody.eq b2
+              tight.compile.Body.Opaque
+          if b3
+          then
+            ok (core.result.Result.Err (tight.TightError.UnsupportedBody root
+              a))
+          else
+            ok (core.result.Result.Ok (some
+              {
+                head := val,
+                body := (some a),
+                root,
+                kind := tight.TightProducerKind.Choice
+              }))
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual
+            (Option tight.TightProducer) (core.convert.FromSame
+            tight.TightError) residual
 
 end ZetesisExtract

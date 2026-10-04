@@ -2,17 +2,15 @@
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
     "inventory": "source-inputs.sha256",
-    "inventorySha256": "ec0bcb2baae0624b80eb5877f94748f3e4d358d96f216de1e1624a3fe4a58cdf",
+    "inventorySha256": "e94583893e6482d31ab62eafcca4a66916a5281b302ef836baee899c38c521a9",
     "inventoryFiles": 309,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded crate-source inventory for the owned membership API, public reference checker, evaluator, root scan, frozen operations, countermodel search, ownership/clone, admission and both constructors, fixed-length interpretation insertion, tight body classification and exact atomic-choice atom/pair recognition. Producer extraction, rank checking and complete tight-plan compilation are not selected. The canonical tight-admission benchmark and its manifest registration join the existing inventory; scripts/check.sh remains outside this scope. This is not an inventory of every repository or toolchain file.",
+    "scope": "Recorded 309 crate-source inputs for the existing reference membership, constructor, ownership, classifier and atomic-choice roots, plus the single-root tight producer. The all-root producer extraction loop, rank derivation and complete tight-plan compiler are not selected. This inventory includes the canonical tight-admission benchmark and manifest; scripts/check.sh remains outside its established scope.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "eeff750683cd0d16408d91c242944aababa824f5",
-    "extractionSourceState": "Recorded base revision with the listed source changes. All 309 input hashes were verified before and after mirror extraction and against the retained source checkout; location does not change their identity.",
+    "extractionBaseRevision": "0a726629dea0e2d13269f14d69078ed44b437231",
+    "extractionSourceState": "Recorded checkpoint plus the listed two Copy-node-local source change. All 309 input hashes were checked before and after isolated mirror extraction; this record does not by itself claim primary adoption or performance qualification.",
     "workingTreeSourceChanges": {
-      "crates/zetesis-ferraris/src/atomic_choice.rs": "f98658aacaeb5377cf232bb2b741faace33468a63d50fc6f2d96f6eed96e400e",
-      "crates/zetesis-ferraris/Cargo.toml": "2ffd39dbffa777402e2bf2fc8f50668d792f7877fc15b77c606e2ade08963b00",
-      "crates/zetesis-ferraris/benches/tight_admission.rs": "798e7bb4475c4ce6d0c0b218f0dff5bc20486056d049715bf2caf76dd63a0a5a"
+      "crates/zetesis-ferraris/src/tight/compile.rs": "b4f7f4f25e611cd1af09f703d1877f54120f5def5beb3da2a487c6c722419f80"
     },
     "additionalWorkingTreeHashes": {}
   },
@@ -74,7 +72,8 @@
       "zetesis_ferraris::checked::_::into_interpretation",
       "zetesis_ferraris::tight::compile::classify",
       "zetesis_ferraris::atomic_choice::atom",
-      "zetesis_ferraris::atomic_choice::pair"
+      "zetesis_ferraris::atomic_choice::pair",
+      "zetesis_ferraris::tight::compile::producer"
     ],
     "include": [
       "zetesis_ferraris",
@@ -91,7 +90,7 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "e6af5fc0a48ff076bb40bd8ffc58d646b5ec9655feaa886063594732de62c458",
+    "originalLlbcSha256": "fd9473c16accd8a393ed132ec5fd13ca72b1618d4bd9fd8e1345e576640adab2",
     "exclude": [
       "zetesis_ferraris::reduct::_::candidate",
       "zetesis_ferraris::reduct::_::fmt"
@@ -294,16 +293,32 @@
           "function": "zetesis_ferraris::atomic_choice::pair",
           "oldValue": "theory",
           "newValue": "program"
+        },
+        {
+          "changedPath": [
+            "translated",
+            "fun_decls",
+            44,
+            "body",
+            "Structured",
+            "locals",
+            "locals",
+            1,
+            "name"
+          ],
+          "function": "zetesis_ferraris::tight::compile::producer",
+          "oldValue": "theory",
+          "newValue": "program"
         }
       ],
       "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
       "declarationSelection": {
         "removedTraitImplIndex": 25,
-        "removedOrderedRegistrationIndex": 181,
+        "removedOrderedRegistrationIndex": 182,
         "trait": "core::fmt::Debug",
         "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
         "derived": true,
-        "excludedMethodId": 230,
+        "excludedMethodId": 233,
         "excludedMethod": "fmt",
         "noSurvivingSemanticReferences": true,
         "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
@@ -320,27 +335,27 @@
           {
             "name": "forward_overflowing",
             "slot": 2,
-            "opaqueFunctionId": 223
+            "opaqueFunctionId": 226
           },
           {
             "name": "backward_overflowing",
             "slot": 6,
-            "opaqueFunctionId": 227
+            "opaqueFunctionId": 230
           }
         ],
         "selection": "Replace the two unused trait and implementation method slots with null; retain indices and all function declarations.",
         "noSurvivingSemanticReferences": true,
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
       },
-      "identifierRederivation": "All 31 preceding roots remain; atomic_choice::atom42 and pair43 are added. Both constructors24/25, insertion30, all nine owned APIs32\u201340 and classifier41 remain exported. Eleven local names11,13\u201317,25,31,41\u201343 share the checked Theory reference type77. Debug impl25 is ordered181/fmt230; Step trait9/impl23 retains slots2,6 with opaque functions223,227. Exact names/types, unique exports and surviving semantic-reference guards are rechecked."
+      "identifierRederivation": "All 33 preceding roots remain; producer44 is added. Both constructors24/25, insertion30, all nine owned APIs32\u201340, classifier41 and atomic recognizers42/43 remain exported. Twelve local names11,13\u201317,25,31,41\u201344 share checked Theory reference type78. Debug impl25 is ordered182/fmt233; Step trait9/impl23 retains slots2,6 with opaque functions226,230. Exact identities, unique exports and surviving semantic references are guarded."
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "Guarded compatibility selection and eleven local renames permit strict stock translation. All 79 preceding function blocks and 29 type blocks, including source comments, remain byte-identical. Four function/instance blocks and one closure type are added for actual atomic-choice recognition. The same ten scoped Lean provider binders leave all executable bodies unchanged.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "Guarded compatibility selection and twelve local renames permit strict stock translation. All 83 preceding function blocks and 30 type blocks, including source comments, remain byte-identical. Producer and body-class equality plus two producer types are added. The same ten scoped Lean provider binders leave every executable body unchanged.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true,
     "generatedBindingAdaptation": {
       "file": "Evaluator/Funs.lean",
-      "rawGeneratedSha256": "e4dcb1e07ee6ec08ab842e7c3973e419e312001628a413fd3a948d1d65ef3e64",
-      "adaptedSha256": "dea2c016d1e00cd3b4c214339cd7999ba0965798217ef2b59c7780130f125d85",
+      "rawGeneratedSha256": "47631c85fa3f14b9adac5b0b6f695c43bc7459870ef53c24cdf7675ae09d1853",
+      "adaptedSha256": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
       "blocks": [
         {
           "declaration": "oracle.reserve",
@@ -430,10 +445,11 @@
     "documentedExtractionAndNormalizationCommandsExit": 0,
     "documentedAllocationBindingCommandsExit": 0,
     "documentedExternalBindingCommandsExit": 0,
-    "documentedExtractionArgvMatchesRecordedRun": true
+    "documentedExtractionArgvMatchesRecordedRun": true,
+    "fullRestoreComparisons": true
   },
   "trustBoundary": [
-    "LLBC destination metadata and eleven local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
+    "LLBC destination metadata and twelve local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
     "Stock generated bodies are unmodified. The compiled file adds exactly the recorded ten scoped provider binders; reversing them recovers the exact stock bytes. Their implicit parameters are authored Lean-signature adaptations, audited separately from LLBC normalization.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
     "Original generated-loop proofs use fixed observations. Audited runtime contexts retain the generated call structure and admit changing returning read and reservation observations; RuntimeProjection and RuntimePublicRefusal discharge their completed and refused public calls under the stated handle and library mapping.",
@@ -445,44 +461,40 @@
     "The atomic-choice model additions are concrete pure definitions for two trusted library contracts. Option.or_else preserves fallback failure/divergence and does not invoke it for Some. Generic signatures do not establish arbitrary Rust drop effects; the selected inputs are scalar indices and shared theory data."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "cabcf68f1dc3e94daa7c56c3f1e6bea6ffc12db53503d022b4368fa78f15a462",
-    "evaluator.llbc": "baf10f9e2e1c34e304c282dd6bf564fc67cff35bf0bd0a651f1ab6119c52314f",
-    "Evaluator/Funs.lean": "dea2c016d1e00cd3b4c214339cd7999ba0965798217ef2b59c7780130f125d85",
+    "evaluator.source.llbc": "aba92d649a5a70bc69fdd611381b23485c773f112621dcd58061d7f67cb85159",
+    "evaluator.llbc": "89ad7d0856191695a6b062bb61e9d966f799c9a73ba246736eb368a0803f09e0",
+    "Evaluator/Funs.lean": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
     "Evaluator/FunsExternal_Template.lean": "8c4761314b001b45f769c643303385f7146afc25d51041fac84640b283448c2f",
-    "Evaluator/Types.lean": "1dc41323ac32fa90d16c9d2fa740724301e70f9c7812672f1f377f7eb8a2943d",
+    "Evaluator/Types.lean": "82fa46f6fe78de4f7419164988fbcdc2809c4ba5314c0f413623842a69d3e205",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
   },
   "compatibility": {
-    "previousPackageRevision": "eeff750683cd0d16408d91c242944aababa824f5",
-    "previousGeneratedFunsSha256": "450a4e700f47cc815a72f7f357d35cc886da0acf3c86358e77287bcce8bf5272",
-    "previousGeneratedTypesSha256": "a63734a52078f013513f85da031d24e08627050b6c2a47813f9aa3ad61a696da",
-    "comparison": "Compare exact declaration blocks after reversing the previous ten audited provider scopes. All 79 existing function blocks and 29 type blocks, including source-coordinate comments, remain byte-identical; declaration order may differ.",
+    "previousPackageRevision": "0a726629dea0e2d13269f14d69078ed44b437231",
+    "previousGeneratedFunsSha256": "dea2c016d1e00cd3b4c214339cd7999ba0965798217ef2b59c7780130f125d85",
+    "previousGeneratedTypesSha256": "1dc41323ac32fa90d16c9d2fa740724301e70f9c7812672f1f377f7eb8a2943d",
+    "comparison": "After reversing the preceding ten scoped provider binders, all 83 previous function blocks and 30 type blocks, including source comments, remain byte-identical; declaration order may differ.",
     "existingGeneratedExecutableDeclarationsUnchanged": true,
     "existingGeneratedTypeDeclarationsUnchanged": true,
     "sourceCoordinateCommentLinesChanged": false,
-    "externalFunctionsTemplateHashUnchanged": false,
+    "externalFunctionsTemplateHashUnchanged": true,
     "externalTypesTemplateHashUnchanged": true,
     "addedDefinitions": [
-      "/-- [zetesis_ferraris::atomic_choice::pair]:",
-      "/-- [zetesis_ferraris::atomic_choice::atom::{impl core::ops::function::FnOnce<(), core::option::Option<usize>> for zetesis_ferraris::atomic_choice::atom::{closure}<'_0, '_1, '_2>}::call_once]:",
-      "/-- Trait implementation: [zetesis_ferraris::atomic_choice::atom::{impl core::ops::function::FnOnce<(), core::option::Option<usize>> for zetesis_ferraris::atomic_choice::atom::{closure}<'_0, '_1, '_2>}]",
-      "/-- [zetesis_ferraris::atomic_choice::atom]:",
-      "/-- [zetesis_ferraris::atomic_choice::atom::{closure}]"
+      "/-- [zetesis_ferraris::tight::compile::{impl core::cmp::PartialEq<zetesis_ferraris::tight::compile::Body> for zetesis_ferraris::tight::compile::Body}::eq]:",
+      "/-- [zetesis_ferraris::tight::compile::producer]:",
+      "/-- [zetesis_ferraris::tight::TightProducerKind]",
+      "/-- [zetesis_ferraris::tight::TightProducer]"
     ],
-    "addedExternalTemplateFunctions": [
-      "core.bool.Bool.then_some",
-      "core.option.Option.or_else"
-    ],
+    "addedExternalTemplateFunctions": [],
     "addedExternalTemplateTypes": [],
-    "activeExternalCapabilityAdded": "Two concrete pure standard-library definitions, then_some and or_else, preserve eager argument and lazy fallback behavior. No allocation/control operation or provider is added; no external axiom template is installed.",
-    "proofReplayScope": "This record establishes extraction, exact old-declaration preservation and reversible binding. verification.json separately records proof replay; extraction alone does not establish exact choice recognition, complete tight-plan eligibility or optimized membership correctness.",
+    "activeExternalCapabilityAdded": "None. Existing pure library definitions and the same ten provider scopes are reused.",
+    "proofReplayScope": "The strict package build, exact 490 authored and 224 shared declaration audits, and 22-context/six-negative source checks passed on the fingerprints recorded in verification.json. Ten added laws refine actual single-root typed producer outcomes and compose successful classification. Complete root extraction, rank validation and optimized membership remain outside these results.",
     "previousStockDeclarationBlocks": {
-      "Evaluator/Funs.lean": 79,
-      "Evaluator/Types.lean": 29
+      "Evaluator/Funs.lean": 83,
+      "Evaluator/Types.lean": 30
     },
     "addedStockDeclarationBlocks": {
-      "Evaluator/Funs.lean": 4,
-      "Evaluator/Types.lean": 1
+      "Evaluator/Funs.lean": 2,
+      "Evaluator/Types.lean": 2
     },
     "bindingLinesAdded": 50,
     "pureLibraryBindings": {
@@ -494,18 +506,21 @@
       ],
       "newAxioms": false,
       "contract": "then_some selects its already supplied argument. or_else preserves Some without invoking the callback and invokes it once for None, preserving its complete Result. Selected inputs have no user drop behavior; the generic signatures do not model arbitrary Rust destructors."
-    }
+    },
+    "strictGeneratedOverlayCheckExit": 0,
+    "strictGeneratedOverlayScope": "Only the freshly generated Types and ten-scope-bound Funs were compiled with pinned Lean4.31 against existing dependency objects. Full package and new semantic proof replay are recorded separately when completed.",
+    "strictExistingPackageCheckExit": 0
   },
   "stockGeneratedArtifactsSha256": {
-    "Evaluator/Funs.lean": "e4dcb1e07ee6ec08ab842e7c3973e419e312001628a413fd3a948d1d65ef3e64",
+    "Evaluator/Funs.lean": "47631c85fa3f14b9adac5b0b6f695c43bc7459870ef53c24cdf7675ae09d1853",
     "Evaluator/FunsExternal_Template.lean": "8c4761314b001b45f769c643303385f7146afc25d51041fac84640b283448c2f",
-    "Evaluator/Types.lean": "1dc41323ac32fa90d16c9d2fa740724301e70f9c7812672f1f377f7eb8a2943d",
+    "Evaluator/Types.lean": "82fa46f6fe78de4f7419164988fbcdc2809c4ba5314c0f413623842a69d3e205",
     "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
   },
   "runtimeContextAdaptation": {
     "scope": "Generalize the exact generated public reference checker call graph to returning read and reservation observations; retain imported pure scalar, sequence, iterator and owner operations.",
     "generatedSource": "Evaluator/Funs.lean",
-    "generatedSourceSha256": "dea2c016d1e00cd3b4c214339cd7999ba0965798217ef2b59c7780130f125d85",
+    "generatedSourceSha256": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
     "contexts": {
       "RuntimeContexts.lean": "5531827bcecca535f4ac7432dd9f7536c2c22d718f7a405e724dd670e6f7ab52",
       "CheckerContexts.lean": "7f49af47082471165a89cd23213ecb2c8ad82650e7119b31ce2a7f7a86ac6f98"
@@ -535,7 +550,7 @@
         "exitCode": 0,
         "log": "context-audit.txt",
         "logSha256": "1178da50ac5691e6b2d91004282c048d86c9b796f12da6436751786cf30f2fca",
-        "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
+        "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
       },
       {
         "argv": [
@@ -554,13 +569,14 @@
         "exitCode": 0,
         "log": "context-negative-audit.txt",
         "logSha256": "4a0d1826e6aaab15aff478a344a743dc9cf930377d0e0ae1cc7ce5b5c317275c",
-        "checkedInputFingerprint": "7e7514c67fded19d382c80b44eb2448aa16bfdefc69167f41621612f49c73f92"
+        "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
       }
     ],
     "newRustExtractionPerformed": true,
-    "boundary": "The checked Lean IO source guard and reviewed call-graph/handle mapping are trusted extraction adaptations, not kernel proofs of a compiler or textual parser. Kernel reconstruction laws recover original generated functions, while separate runtime projection/refusal laws establish the eventful result contracts. A fixed-handler reconstruction alone cannot establish effect ordering. The classifier extension adds no runtime context; fresh checks validate the existing 22 against the extended generated file. Atomic-choice recognition adds no runtime context; fresh checks validate the existing 22 against the extended generated file.",
+    "boundary": "The checked Lean IO source guard and reviewed call-graph/handle mapping are trusted extraction adaptations, not kernel proofs of a compiler or textual parser. Kernel reconstruction laws recover original generated functions, while separate runtime projection/refusal laws establish the eventful result contracts. A fixed-handler reconstruction alone cannot establish effect ordering. The classifier extension adds no runtime context; fresh checks validate the existing 22 against the extended generated file. Atomic-choice recognition adds no runtime context; fresh checks validate the existing 22 against the extended generated file. Single-root producer recognition adds no runtime context; fresh checks validate the existing 22 against the extended generated file.",
     "preservedByClassifierExtension": "Every previously selected generated declaration, context, checker and ReferenceEvents definition remains unchanged. The classifier extension introduces no additional returning-event context.",
     "priorSelectedDefinitionsUnchanged": true,
-    "preservedByAtomicChoiceExtension": "Every previously selected generated declaration and every runtime context/checker/composition source remains unchanged. This extension introduces no returning-event context for tight-plan recognition."
+    "preservedByAtomicChoiceExtension": "Every previously selected generated declaration and every runtime context/checker/composition source remains unchanged. This extension introduces no returning-event context for tight-plan recognition.",
+    "preservedByProducerExtension": "The 22 previously selected runtime contexts and their generated source declarations remain unchanged. The producer adds no returning-event context."
   }
 }

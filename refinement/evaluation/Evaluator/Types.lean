@@ -262,4 +262,21 @@ structure tight.Work where
   max : Std.U64
   cancellation : zetesis_cpu.cancellation.Cancellation
 
+/-- [zetesis_ferraris::tight::TightProducerKind]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 128:0-133:1
+    Visibility: public -/
+@[discriminant isize]
+inductive tight.TightProducerKind where
+| Normal : tight.TightProducerKind
+| Choice : tight.TightProducerKind
+
+/-- [zetesis_ferraris::tight::TightProducer]
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 137:0-142:1
+    Visibility: public -/
+structure tight.TightProducer where
+  head : Std.Usize
+  body : Option Std.Usize
+  root : Std.Usize
+  kind : tight.TightProducerKind
+
 end ZetesisExtract

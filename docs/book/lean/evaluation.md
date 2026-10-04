@@ -25,7 +25,7 @@ have an unfrozen positive occurrence.
 
 The implementation proof retains the supplied reservation and control contracts,
 bounded reads and exact work charged by the scan. It does not assume allocation
-success or a correct classifier. Producer extraction, complete root coverage,
+success or a correct classifier. Complete producer extraction and root coverage,
 rank validation and the optimized membership verdict remain separate obligations.
 The classifier's fixed-provider proof does not extend the reference checker's
 runtime-event theorem to the optimized route.
@@ -46,9 +46,20 @@ different atoms and richer equivalent formulas are excluded. The proof derives
 the stored-node witnesses from execution and uses DAG decoding in both directions.
 The operation has no allocation, cancellation read or separate work charge.
 
-The existing choice-reduct laws apply to these recognized shapes. Extracting all
-original producers, validating their ranks and checking their support remain
-separate implementation obligations.
+The existing choice-reduct laws apply to these recognized shapes.
+
+## Recovering an original producer
+
+[`TightProducer.completed_producer`](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/TightProducer.lean)
+connects a completed single-root call to an explicit `TightPlans.Producer` with
+the same original formula, head, indexed body and ordinary/choice kind. Facts
+remain facts; both choice orientations retain their syntax. The proof composes
+the actual stored reads, completed body classification and head recognition.
+
+A skipped root denotes falsum or default negation. Unsupported heads and bodies
+retain their typed refusal and inspection order. These results do not establish
+that the caller has visited every asserted root: complete two-pass extraction,
+rank validation and the support-checking loop remain separate obligations.
 
 ## From the public check to answer-set membership
 
