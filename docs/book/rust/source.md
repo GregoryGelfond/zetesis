@@ -70,7 +70,17 @@ formula failures retain the original owner and expose `site()`,
 resolution through the formula owner. IDs belong to that original program and
 cannot be transferred between owners. Formula owners' `source()` is optional:
 it returns `Some` for single-source input and `None` for this door, even if a
-canonical carrier has parsed coordinates. Bundle input uses `bundle()`. Provenance does not supply the original bytes.
+canonical carrier has parsed coordinates. Bundle input uses `bundle()`.
+Provenance does not supply the original bytes.
+
+For consumers migrating from source-only formula input, keep the distinction
+between a statement site and its optional coordinate. Formula origins now contain
+`ProgramSite`; call `statement_id()` to resolve the original logical statement
+and `location()` only when source coordinates are needed. Grounding observer
+phase callbacks receive `Option<ProgramSite>`. Hybrid constraint verdicts expose
+`site`, and observation errors expose both `site()` and optional `location()`.
+Do not unwrap a formula owner's `source()` unless its input door guarantees a
+single source. Source-only relational owners keep their existing source accessors.
 
 Source admission additionally checks original bytes, parser/raiser diagnostics,
 authored counts and include identity. Canonical input cannot recover syntax or
@@ -231,7 +241,7 @@ membership in the original program on its own.
 For direct composition, `owner.checker(ConstraintCheckLimits { .. })` creates a
 mutable checker borrowing the owner. `check(&model, &cancellation)` requires the
 model's exact atom-catalog owner. It returns `Satisfied` after the required scan
-completes, or `Violated { location }` when an admitted constraint body is true.
+completes, or `Violated { site }` when an admitted constraint body is true.
 Neither result establishes reduct minimality. Wrong-owner, cancellation,
 deadline, allocation and resource failures are typed separately from both
 verdicts; failures preserve cumulative statistics. Equal source bytes do not
@@ -239,7 +249,7 @@ substitute for owner identity.
 
 `check_region(&theory, &region, &cancellation)` requires the exact retained core
 and a region spanning its dense atom catalog. A certainly true constraint body
-returns `Refuted { location }`; otherwise it returns `NotRefuted`, which does
+returns `Refuted { site }`; otherwise it returns `NotRefuted`, which does
 not assert satisfaction. The checker prepares and reuses a typed atom index and
 support-row correspondence on first region use. Region checks select known-held
 positive rows before binding, while retaining rows without a known correspondence.

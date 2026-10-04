@@ -71,10 +71,18 @@ admitted Programs are comparable semantically but cannot exchange applicability
 witnesses. Tuple writers created for the same Program share vocabulary identity
 while retaining independent atom-row scopes and candidate truth.
 
-Formula source preparation admits scalar, constructor, predicate and pattern
-components into one canonical authority. Compiled expressions and patterns retain
-occurrence coordinates and topology; temporary themelios source values remain
-at the admission boundary. Preparation transfers this authority and its accepted
+Formula preparation accepts source text or a canonical logical program. Both
+retain the original canonical `Program` in an `Arc` through preparation and
+materialization. Typed-input failures also retain that owner. Source input
+additionally retains its original bytes; constructed input needs none.
+`ProgramSite` carries an optional original statement identity within that program
+and any real source coordinate as separate evidence. Sharing the supplied
+`Arc` avoids copying the input but keeps its allocation alive. This retention is
+separate from the term authority and its named storage ceilings.
+
+Preparation admits scalar, constructor, predicate and pattern components into
+one canonical authority. Compiled expressions and patterns retain occurrence
+coordinates and topology. Preparation transfers this authority and its accepted
 work/storage receipts into instantiation, which retains the analysis, provenance,
 activated objectives and emitted builder needed by later phases. Its atom builder
 owns the evolving authority; checked AVL indexes store discovery positions and

@@ -96,7 +96,7 @@ impl PreparedFormula {
         &self.preparation.program.analysis
     }
 
-    /// Bounded, pool-free analysis input retaining parsed origins. Its semantic
+    /// Bounded, pool-free analysis input retaining available provenance. Its semantic
     /// status is identified by [`Self::analysis_basis`].
     /// Metadata and subsequently generated support/coherence formulas are separate.
     #[must_use]
@@ -383,7 +383,7 @@ impl PreparedFormulaBundle {
         &self.preparation.program.analysis
     }
 
-    /// Bounded, pool-free combined analysis input retaining parsed origins;
+    /// Bounded, pool-free combined analysis input retaining available provenance;
     /// consult [`Self::analysis_basis`] before interpreting its verdicts.
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {

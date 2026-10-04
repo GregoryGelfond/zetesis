@@ -92,12 +92,11 @@ preserve complete source meaning and the formula/reduct solver; their different
 work and storage costs can change bounded admission.
 
 This example materializes a program using each join strategy and compares the
-complete admitted atoms, formulas and source locations. Repeated `X` requires
+complete admitted atoms, formulas and original statement sites. Repeated `X` requires
 equal route endpoints; the `rail` constant restricts the final column. A work
 observer checks that the table index was prepared, queried and reused.
 
 ```rust
-# extern crate themelios_base;
 # extern crate zetesis_themelios;
 {{#include ../examples/table-grounding.rs:example}}
 ```

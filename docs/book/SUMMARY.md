@@ -23,7 +23,7 @@
 - [Completion, resources, and output](rust/outcomes.md)
 - [Library reference index](rust/libraries.md)
 - [Reusing command workflows](rust/workflows.md)
-- [Preparing source and interpreting analysis](rust/source.md)
+- [Preparing programs and interpreting analysis](rust/source.md)
 - [Interpretations and retained atoms](rust/models.md)
 - [Observations and host measurements](rust/measurements.md)
 - [Working with finite reducts](rust/reducts.md)

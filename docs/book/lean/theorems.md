@@ -121,7 +121,10 @@ follows the argument.
 `FinitePools.value_context_complete` and `local_occurrences_complete` place
 shared finite value expansion below its consumers. A whole-rule product and an
 element-local union have distinct scope meanings; neither may be substituted
-for the other. See the
+for the other. `expanded_occurrence_activity` separately authenticates each
+pool-expanded position and its eligible grounding witnesses. Equal alternatives
+have different occurrence keys, while witnesses of one position share its key;
+the membership-only local law does not establish that counting convention. See the
 [finite-occurrence guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-occurrences.md)
 for the coverage assumptions and concrete cursor obligations.
 

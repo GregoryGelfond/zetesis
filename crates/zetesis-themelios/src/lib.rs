@@ -1,12 +1,17 @@
-//! Faithful source boundaries for zetesis, built on pinned themelios parsing.
+//! Admission of source and canonical logical programs through pinned themelios.
+//! [`admit_program`] borrows a canonical program for strict relational admission;
+//! [`prepare_program_formula`] retains its original program through an `Arc` and
+//! enters the shared formula compiler without rendering or reparsing.
 //! Strict S0 and extended scalar admission compile relational templates without
 //! grounding. The separate formula APIs compute a bounded possible-positive
 //! relation and ground complete joins into normal, conditional-choice, and finite-aggregate Ferraris
 //! formulas. Lifted minimization templates remain separate and score only supplied
 //! verified stable models. No source route invokes a solver or external engine.
 //!
-//! Original source bytes and parsed origins survive every successful boundary;
-//! bundle failures retain the complete source catalog. Independent source,
+//! Source admission retains original bytes and parsed origins on success;
+//! bundle failures retain the complete source catalog. Typed formula input keeps
+//! original statement identity and any actual coordinates, without inventing
+//! source bytes. Independent source,
 //! syntax, scalar expansion, finite substitution, and formula storage limits
 //! refuse rather than return recovered or truncated programs. Finite count/sum
 //! assignment cursors may generate values absent from the source while retaining

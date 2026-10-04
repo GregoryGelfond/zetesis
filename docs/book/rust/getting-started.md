@@ -97,7 +97,11 @@ If the application needs to retain a complete family, use bounded
 evidence instead of returning a `WorldView` for an incomplete collection. See
 [completion and output](outcomes.md).
 
-For normal-rule or multi-file source admission, see [source preparation](source.md).
+For normal-rule or multi-file source admission, see [program preparation](source.md).
+To construct a program as typed values, see the
+[relational example](source.md#admit-an-existing-logical-program) and
+[formula example](source.md#prepare-a-logical-formula-program). Those newer
+admission operations are not part of the `v0.2.0` release used above.
 For objectives, `Session::enumerate` returns all answer sets with scores, while
 `Session::new` selects incumbents; inspect completion before calling an incumbent
 optimal. Continue with [sessions](sessions.md), [costs and shown terms](costs-and-output.md)

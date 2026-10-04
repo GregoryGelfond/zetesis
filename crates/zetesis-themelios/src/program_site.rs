@@ -78,7 +78,7 @@ impl ProgramSite {
         self.statement
     }
 
-    /// Actual parsed coordinate, absent for constructed input.
+    /// Actual parsed coordinate, absent when the input carries no source location.
     #[must_use]
     pub const fn location(self) -> Option<Location> {
         self.location

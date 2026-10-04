@@ -64,7 +64,7 @@ pub enum CountPlanResource {
     Groups,
     /// Captured semantic head occurrences.
     Members,
-    /// Copied source locations.
+    /// Copied original statement sites.
     Origins,
     /// Attempted partitions.
     Attempts,
@@ -102,7 +102,7 @@ pub struct CountPlanStatistics {
     pub groups: usize,
     /// Captured head occurrences.
     pub members: usize,
-    /// Copied source locations.
+    /// Copied original statement sites.
     pub origins: usize,
     /// Attempted complete covers.
     pub attempts: usize,
@@ -115,7 +115,7 @@ pub struct CountPlanStatistics {
     pub storage_bytes: u64,
 }
 
-/// Located optional failure with its accounted work prefix.
+/// Optional failure retaining its original program site and accounted work prefix.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CountPlanFailure {
     kind: CountPlanFailureKind,

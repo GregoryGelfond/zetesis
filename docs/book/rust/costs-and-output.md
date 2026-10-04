@@ -215,7 +215,9 @@ remain independent. Neither account includes allocator overhead or measures RSS.
 Reached undefined arithmetic, cancellation or a resource refusal returns an
 error without a partial observation. An observation error does not invalidate
 an already verified answer set or complete world view.
-Errors retain their typed cause, source location and partial statistics. The
+Errors retain their typed cause, original statement site and partial statistics.
+`site()` preserves the logical subject for resolution through its formula owner;
+`location()` returns a source coordinate only when one exists. The
 fixed diagnostic box is allocated only on refusal and follows the standard
 allocator's failure policy; these limits do not promise recovery from every
 process allocation failure.

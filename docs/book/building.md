@@ -58,7 +58,7 @@ before publishing an update.
 ## Check the Rust examples
 
 The quickstart is included from `crates/zetesis-solve/examples/solve.rs`.
-The session, answer-renderer, resource-sharing, measurement, source-preparation,
+The session, answer-renderer, resource-sharing, measurement, program-preparation,
 objective-selection, reduct and derived-workload examples are included from
 `docs/book/examples`. The code displayed in the chapters is the code tested by
 mdBook. Build their dependencies without requiring a physical GPU through the
@@ -103,6 +103,8 @@ To run one example as an ordinary consumer from the checkout root:
 ```sh
 cargo run --locked -p zetesis-solve --no-default-features --example book-session
 cargo run --locked -p zetesis-solve --no-default-features --example book-source
+cargo run --locked -p zetesis-solve --no-default-features --example book-program
+cargo run --locked -p zetesis-solve --no-default-features --example book-formula-program
 cargo run --locked -p zetesis-solve --example solve --no-default-features
 cargo run --locked -p zetesis-solve --no-default-features --example book-selection
 cargo run --locked -p zetesis-solve --no-default-features --example book-measurements

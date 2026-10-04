@@ -746,8 +746,8 @@ evaluated numeric division or remainder with a zero divisor may omit an instance
 | --- | --- |
 | Empty positive join | Admit silently; there is no instance to evaluate |
 | Defined instances only | Admit silently |
-| Both defined and zero-divisor instances | Admit the defined instances and issue a source-located warning |
-| Zero-divisor instances with no defined instance | Refuse with a source-located arithmetic error |
+| Both defined and zero-divisor instances | Admit the defined instances and retain a typed warning |
+| Zero-divisor instances with no defined instance | Refuse with a typed arithmetic error |
 | Any fatal arithmetic failure | Refuse, even if other instances are defined |
 
 Defined does not mean true. For example,
@@ -757,9 +757,13 @@ still establishes that the family is not entirely undefined. With `d(0..3)`
 instead, the answer also contains `p(1,2)`. With only `d(0)`, admission fails.
 Adding `X != 0` explicitly excludes the bad instance and removes the warning.
 The warning reports omitted source instances and suggests guarding the divisor.
-Successful formula owners retain typed warnings, deduplicated by source span and
-bounded by `FormulaLimits::max_warnings`. The CLI renders them once on its
-diagnostic stream before solving; JSON answer output remains separate.
+Successful formula owners retain typed warnings, deduplicated by `ProgramSite`
+(original statement identity and any real source coordinate) and bounded by
+`FormulaLimits::max_warnings`. Constructed programs retain the statement identity
+without inventing a span; warning `location()` and `diagnostic()` then return
+`None`. For source input, the CLI renders warnings once on its diagnostic stream
+before solving; JSON answer output remains separate. The same distinction between
+logical identity and optional source evidence applies to arithmetic failures.
 
 Local choice and aggregate elements have separate families for each fixed outer
 binding. In `d(0;1). e(0,0). e(1,1).

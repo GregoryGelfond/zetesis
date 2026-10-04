@@ -62,6 +62,15 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Separate checked atom insertion from interpretation allocation, preserving
   the public API, input order and first invalid-atom refusal.
 
+### Compatibility
+
+- Formula owners' `source()` now returns `Option<&Source>`. Canonical-program
+  input retains `original_program()` without source bytes.
+- Formula origins and typed failures separate `ProgramSite` identity from
+  optional source coordinates. Callers reading origins or matching failure
+  fields must handle sites; warning and count-plan location accessors, and
+  warning diagnostics, can be absent for constructed input.
+
 ## 0.2.0 — 2026-10-01
 
 ### Added

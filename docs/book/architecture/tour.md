@@ -41,6 +41,11 @@ ground-rule graph.
 Admission establishes a well-formed input for a particular execution profile.
 It does not establish satisfiability.
 
+A constructed logical program can enter the same compiler without source text:
+`admit_program` handles the relational profile, and `prepare_program_formula`
+handles general formulas. Both preserve the original statement identity. See
+[program preparation](../rust/source.md) for their limits and checked examples.
+
 ```text
 original source
       │ themelios parsing and logical Program

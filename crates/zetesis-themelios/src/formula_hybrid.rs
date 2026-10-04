@@ -1,4 +1,4 @@
-//! Complete source admission with retained producers and streamed constraints.
+//! Complete program admission with retained producers and streamed constraints.
 //!
 //! A core answer is only a proposal for the original program. The constraint
 //! checker establishes satisfaction, never reduct minimality. Every successful
@@ -154,7 +154,8 @@ impl HybridFormula {
         &self.0.compiled.warnings
     }
 
-    /// Human diagnostics against the retained single source or include bundle.
+    /// Render warnings against retained source bytes or an include bundle.
+    /// Logical input instead names the original statement index when available.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
         self.0.source.warning_view(self.warnings())

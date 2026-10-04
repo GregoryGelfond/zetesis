@@ -190,13 +190,14 @@ impl TerminalFormula {
         self.0.extension.deferred.len()
     }
 
-    /// Original source diagnostics established before answer reconstruction.
+    /// Original statement warnings established before answer reconstruction.
     #[must_use]
     pub fn warnings(&self) -> &[crate::FormulaWarning] {
         &self.0.base.warnings
     }
 
-    /// Render source diagnostics against their original source or bundle.
+    /// Render warnings against retained source bytes or an include bundle.
+    /// Logical input instead names the original statement index when available.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
         self.0.source.warning_view(self.warnings())

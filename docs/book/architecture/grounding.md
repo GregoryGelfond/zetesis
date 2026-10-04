@@ -369,7 +369,7 @@ witness. An entirely undefined family refuses admission, while an empty positive
 join is silent. Each local element has a separate family for each fixed outer
 binding. Original objective-element identities keep their pooled fragments
 together without merging distinct elements. Successful owners retain one typed
-warning per source span within the finite warning ceiling.
+warning per original statement site within the finite warning ceiling.
 
 The separate family-evidence traversal is omitted for a restricted class of
 flat constraints: every normalized fragment of the original source occurrence

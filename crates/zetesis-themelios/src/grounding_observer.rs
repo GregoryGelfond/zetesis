@@ -59,8 +59,9 @@ pub trait GroundingObserver {
     ///
     /// Within one grounding attempt, phases are sequential and do not nest.
     /// Rule instantiation emits one
-    /// pair per prepared IR rule; the location identifies original source context,
-    /// but need not be unique after source expansion. Joins, filtering and formula
+    /// pair per prepared IR rule; the site identifies the original statement and
+    /// any actual source coordinate, and may repeat after expansion. Joins,
+    /// filtering and formula
     /// emission remain interleaved inside that phase.
     /// Whole-program phases use `None` rather than claiming one program site.
     fn phase_enter(&self, _phase: GroundingPhase, _site: Option<ProgramSite>) {}

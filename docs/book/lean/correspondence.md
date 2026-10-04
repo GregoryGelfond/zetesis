@@ -391,6 +391,14 @@ The concrete interval analysis and its connection to all possible source
 bindings remain Rust obligations, covered by paired rewritten/unrewritten
 tests; they are not an executable Lean refinement.
 
+The rewrite also needs an unambiguous original statement. The compiler's owner
+map associates a canonical analyzed carrier with its original `StatementId`
+only when each original emits one carrier and distinct originals do not collapse
+to the same carrier. Other constraints remain unchanged.
+This permits the same rewrite for parsed and constructed programs; provenance
+supplies diagnostic evidence, not identity. The owner map and replacement step
+must establish this association before applying the contextual preservation law.
+
 ## Arithmetic families
 
 [`ArithmeticFamilies`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ArithmeticFamilies.lean)
@@ -1210,6 +1218,17 @@ The shared compiler, statement-evidence borrows and resource traversal are Rust
 correspondence obligations; the existing semantic laws do not prove either
 admission implementation or equality of their admitted input sets.
 
+The full formula door, `prepare_program_formula`, borrows the canonical program
+for structural, text and provenance preflight before normalization and analysis.
+It then uses the same formula compiler and grounding routes as source admission.
+The original `Arc<logical::Program>` remains available through preparation,
+grounding and typed-input refusals. A statement `ProgramSite` identifies its position in
+that owner's canonical order and carries a parsed coordinate only when one
+exists. Retaining the right owner, resolving those positions and preserving
+causes through deferred work remain Rust obligations. Neither shared code nor
+retained evidence proves source-to-ground equivalence or makes the source and
+canonical admission boundaries interchangeable.
+
 Source scalar validation and construction share a bounded symbol walk and the
 core borrowed node's text/spelling measures. The validation consumer retains
 logical bounds without constructing an output value; actual capacity admission
@@ -1217,6 +1236,16 @@ belongs to construction. This changes storage work, not the value's mathematical
 identity or the requirement to validate inactive authored expressions. The Rust
 borrowed-view correspondence, traversal and capacity checks remain executable
 obligations; no Lean source-to-value refinement is claimed by this separation.
+
+The public `symbols::term_with` and `symbols::atom_with` exports construct an
+upstream `Symbol` from borrowed core values. Their contract preserves complete
+typed values and atom signs; display selection remains a separate operation.
+Their callbacks bound work and permit interruption before navigation, copying
+and assembly. `TermRef::depth_with` checks each step of an arbitrary ingress
+subtree's allocation-free depth scan, whose worst-case work is quadratic;
+complete ingress roots and canonical terms use cached depth. These conversions,
+first-refusal behavior and cost bounds remain executable obligations. The
+refreshed evaluator extraction does not select the depth API or symbol exporter.
 
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
 relates complete typed tuples to aligned equality-ID columns. Dictionary round

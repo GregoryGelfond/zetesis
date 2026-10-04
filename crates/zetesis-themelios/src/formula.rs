@@ -1,4 +1,4 @@
-//! Opt-in finite source admission into general Ferraris formulas.
+//! Bounded source and canonical program admission into general Ferraris formulas.
 
 use crate::formula_owner::Owner;
 use std::collections::BTreeMap;
@@ -260,6 +260,9 @@ impl fmt::Display for FormulaResource {
 }
 
 /// A typed refusal of finite formula admission; never semantic UNSAT.
+/// Fields named `location` carry a [`ProgramSite`], whose actual source coordinate
+/// is optional. Typed-input failures retain the original program in [`Self::Program`];
+/// use [`Self::cause`] to inspect the underlying refusal without discarding it.
 #[derive(Debug)]
 pub enum FormulaFailure {
     /// A typed-input refusal retaining the caller's original canonical program.
@@ -350,7 +353,7 @@ pub enum FormulaFailure {
     SupportRelation {
         /// Exact core refusal; never an empty relation or semantic UNSAT.
         error: zetesis_core::relation::Failure,
-        /// Source location whose support operation was being performed.
+        /// Original statement site whose support operation was being performed.
         location: ProgramSite,
     },
     /// Source activity disagrees with completed support or previously established
@@ -376,14 +379,14 @@ pub enum FormulaFailure {
         limit: u128,
         /// Count required by the next operation.
         observed: u128,
-        /// Original rule or source span.
+        /// Original statement or whole-program site.
         location: ProgramSite,
     },
     /// A required variable lacks a value or a positive binder in its scope.
     UnsafeVariable {
         /// Dense variable index in the rule or local element scope.
         variable: usize,
-        /// Original rule span.
+        /// Original rule site, with a source coordinate when available.
         location: ProgramSite,
     },
     /// An evaluated positive argument lacks an independently established input.
@@ -391,14 +394,14 @@ pub enum FormulaFailure {
     UnboundArgumentInput {
         /// Dense source variable index in the rule or local element scope.
         variable: usize,
-        /// Original enclosing rule span.
+        /// Original enclosing rule site, with a source coordinate when available.
         location: ProgramSite,
     },
     /// A finite value instruction has no independent producer for an input.
     UnboundValueInput {
         /// Dense input slot in the enclosing rule.
         variable: usize,
-        /// Original enclosing rule span.
+        /// Original enclosing rule site, with a source coordinate when available.
         location: ProgramSite,
     },
     /// Finite value instructions have a cyclic input dependency. This is a
@@ -406,14 +409,14 @@ pub enum FormulaFailure {
     CyclicValueInput {
         /// An input slot in the unscheduled dependency component.
         variable: usize,
-        /// Original enclosing rule span.
+        /// Original enclosing rule site, with a source coordinate when available.
         location: ProgramSite,
     },
     /// A bounded finite aggregate translation was refused.
     Aggregate {
         /// Typed constructor failure with partial accounting.
         error: zetesis_ferraris::AggregateError,
-        /// Original enclosing rule span.
+        /// Original enclosing rule site, with a source coordinate when available.
         location: ProgramSite,
     },
     /// The independent lifted objective admission door rejected construction.
@@ -427,7 +430,7 @@ pub enum FormulaFailure {
     Theory {
         /// Typed formula error.
         error: zetesis_ferraris::AdmissionError,
-        /// Original source span.
+        /// Original statement site, with a source coordinate when available.
         location: ProgramSite,
     },
 }
@@ -657,16 +660,17 @@ pub struct AdmittedFormula {
     metadata: SourceMetadata,
 }
 impl AdmittedFormula {
-    /// Warnings from omitted instances, deduplicated in source-location order.
+    /// Warnings deduplicated by site, ordered by optional coordinate then statement ID.
     /// The retained space is bounded by [`FormulaLimits::max_warnings`].
     #[must_use]
     pub fn warnings(&self) -> &[crate::FormulaWarning] {
         &self.compiled.warnings
     }
 
-    /// Render warnings against the retained original source with themelios's
-    /// human view. Rendering builds one source line index and one diagnostic at
-    /// a time; formatter failures stop rendering. An empty collection is empty.
+    /// Render warnings with themelios's human view when source bytes are retained,
+    /// building one source line index and one diagnostic at a time. Logical input
+    /// instead names the original statement index when available. Formatter
+    /// failures stop rendering; an empty collection is empty.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
         self.source.warning_view(self.warnings())
@@ -679,7 +683,7 @@ impl AdmittedFormula {
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.compiled.analysis
     }
-    /// Bounded, pool-free analysis input retaining parsed origins. Consult
+    /// Bounded, pool-free analysis input retaining available provenance. Consult
     /// [`Self::analysis_basis`] before interpreting its structural verdicts.
     #[must_use]
     pub fn analyzed_program(&self) -> &SourceProgram {
@@ -745,7 +749,7 @@ impl AdmittedFormula {
     pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
     }
-    /// Original bytes and source identity, absent for a constructed input.
+    /// Original bytes and source identity, absent for a logical program input.
     #[must_use]
     pub fn source(&self) -> Option<&Source> {
         self.source.source()
@@ -792,7 +796,7 @@ pub struct AdmittedFormulaBundle {
     metadata: SourceMetadata,
 }
 impl AdmittedFormulaBundle {
-    /// Warnings from omitted instances, deduplicated in source-location order.
+    /// Warnings deduplicated by site, ordered by optional coordinate then statement ID.
     /// The retained space is bounded by [`FormulaLimits::max_warnings`].
     #[must_use]
     pub fn warnings(&self) -> &[crate::FormulaWarning] {
@@ -814,7 +818,7 @@ impl AdmittedFormulaBundle {
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.compiled.analysis
     }
-    /// Bounded, pool-free analysis input retaining parsed origins. Consult
+    /// Bounded, pool-free analysis input retaining available provenance. Consult
     /// [`Self::analysis_basis`] before interpreting its structural verdicts.
     #[must_use]
     pub fn analyzed_program(&self) -> &SourceProgram {
@@ -1095,7 +1099,7 @@ pub(crate) struct Compiled {
 /// original family; a defined but false instance is a witness. An empty positive
 /// join is silent. Each local choice or aggregate element has a separate family
 /// for each fixed outer binding. Successful owners retain typed warnings,
-/// deduplicated by source span and bounded by [`FormulaLimits::max_warnings`].
+/// deduplicated by statement site and bounded by [`FormulaLimits::max_warnings`].
 /// Overflow, nonnumeric arithmetic and invalid exponents remain fatal. Source
 /// evaluation checks independent expression branches and fields after a zero
 /// divisor within each reached phase. An operation depending on an undefined
@@ -1189,7 +1193,15 @@ pub fn admit_program_formula(
 /// program during bounded structural inspection, then uses the same normalization,
 /// analysis and grounding preparation as source admission. Statement identities
 /// refer to this original program, including failures during deferred grounding.
-/// Eager, hybrid and adaptive materialization remain available on the receipt.
+/// Eager, hybrid and adaptive materialization retain their existing capability
+/// restrictions and cumulative budgets. Preparation performs no answer search.
+///
+/// The receipt shares the supplied `Arc` and retains prepared and analyzed
+/// representations alongside it. Structural inspection bounds nodes, depth,
+/// logical text and provenance before normalization copies them; it does not
+/// account for earlier input construction, allocator overhead or process RSS.
+/// [`PreparedFormula::source`] returns `None` for this door even when the input
+/// carries parsed coordinates; provenance does not supply original source bytes.
 ///
 /// # Errors
 /// Retains the original program with structural, capability, preparation and

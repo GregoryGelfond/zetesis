@@ -322,7 +322,7 @@ noncomputable def formula (rows : List (Row K A)) (keys : List K)
     (AggregateReduct.masks keys.length)
 
 /-- Numeric truth uses the complete tuple or occurrence carrier. This does not
-    permit substituting Boolean value identity for source occurrence identity. -/
+    permit substituting Boolean value identity for pool-expanded occurrence identity. -/
 theorem formula_original (M : Atoms A) (rows : List (Row K A))
     (carrier : Carrier rows) (accepts : AggregateReduct.Mask carrier.keys.length → Bool) :
     Satisfies M (formula rows carrier.keys accepts) ↔

@@ -5,12 +5,14 @@ representations. A representation name does not confer a semantic property.
 
 | Concept | Current Rust representation | Lean vocabulary |
 | --- | --- | --- |
-| Source program | `themelios_program::Program`, re-exported as `zetesis_themelios::logical::Program` | Source-template and translation laws use explicit abstract premises |
+| Canonical logical program | `themelios_program::Program`, re-exported as `zetesis_themelios::logical::Program`; constructed directly or raised from source | Source-template and translation laws use explicit abstract premises |
+| Original statement evidence | `zetesis_themelios::ProgramSite` carries an owner-local `StatementId` when available and an optional real `Location` | Identity and provenance do not by themselves establish a translation law |
 | Admitted relational program | `zetesis_core::Program` | `Semantics.Program` |
 | Finite propositional theory | `zetesis_ferraris::Theory` | `Ferraris.Theory` |
 | Interpretation | `zetesis_core::Interpretation` / `Model`; theory-bound `zetesis_ferraris::Interpretation` | `Atoms α` |
 | Candidate gate assignment | `zetesis_core::Seed` | Seed `z` and `Semantics.GateCarrier` |
-| Answer set | Privately constructed `AnswerSet` (`SessionModel` compatibility alias), or a native `StableInterpretation` | `Semantics.Stable` / `Ferraris.Stable` |
+| Checked answer set | Privately constructed `zetesis_solve::AnswerSet` (`SessionModel` compatibility alias), or a native `StableInterpretation` | `Semantics.Stable` / `Ferraris.Stable` |
+| Ground-symbol exchange set | `zetesis_themelios::logical::AnswerSet`, a plain `BTreeSet<Symbol>` used by explicit symbol export | A set representation with no checked membership claim |
 | Complete world view | `WorldView` retains the original subject and all full answers after unrestricted exhaustion | Membership, original-family coverage and complete-capture laws |
 | Positive consequence closure | CPU normal oracle result; static or lazy representation | `Semantics.Gamma`, `Zetesis.Least` |
 | Frozen reduct | `zetesis_ferraris::FrozenReduct` or candidate-gated normal consequences | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
@@ -28,8 +30,8 @@ representations. A representation name does not confer a semantic property.
 | An ongoing solve | `zetesis_solve::Session` owns search and membership execution | Membership and coverage laws describe its semantic obligations |
 | Cooperative cancellation and a deadline | `zetesis_cpu::Cancellation` carries shared cancellation and an optional absolute deadline | Stopped coverage remains distinct from exhaustion |
 
-An ordinary Rust `Model` is an atom collection, not by itself a sealed
-answer-set certificate. Likewise, a `Check` value describing a decision should
+An ordinary Rust `Model` or `logical::AnswerSet` is a collection, not by itself
+a sealed answer-set certificate. Likewise, a `Check` value describing a decision should
 not be attached to another subject; the checked-owner APIs preserve that
 association explicitly.
 
