@@ -2,8 +2,9 @@
 
 use crate::formula_support::Context;
 
+use crate::ProgramSite;
 use themelios_base::source::{Source, SourceId};
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Sign};
 use zetesis_cpu::Cancellation;
@@ -231,16 +232,16 @@ impl Fixture {
     }
 }
 
-fn location(source: &Source, statement: &str) -> Location {
+fn location(source: &Source, statement: &str) -> ProgramSite {
     let start = source.text().find(statement).unwrap();
-    Location {
+    ProgramSite::source(themelios_base::span::Location {
         source: source.id(),
         span: Span::new(
             ByteOffset::new(u32::try_from(start).unwrap()),
             ByteOffset::new(u32::try_from(start + statement.len()).unwrap()),
         )
         .unwrap(),
-    }
+    })
 }
 
 fn holds(theory: &Theory, mask: usize, cancellation: &Cancellation) -> bool {
@@ -308,10 +309,17 @@ fn captured_members_keep_their_meaning_after_catalog_growth() {
     assert!(plan.original_theory().same_instance(&theory));
     assert_eq!(plan.restriction().atom_count(), atom_count);
     for origin in plan.origins() {
-        assert_eq!(origin.source, fixture.source.id());
+        assert_eq!(
+            origin.location().expect("parsed source").source,
+            fixture.source.id()
+        );
         assert!(
-            ["{a;b}1.", "{c;d}1.", "2{a;b;c;d}2."]
-                .contains(&fixture.source.slice(origin.span).unwrap())
+            ["{a;b}1.", "{c;d}1.", "2{a;b;c;d}2."].contains(
+                &fixture
+                    .source
+                    .slice(origin.location().expect("parsed source").span)
+                    .unwrap()
+            )
         );
     }
 

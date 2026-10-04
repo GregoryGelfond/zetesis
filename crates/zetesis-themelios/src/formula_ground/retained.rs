@@ -1,6 +1,6 @@
 //! Retain the real base grounding continuation through theory validation.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use super::{Compiled, Schedule};
 use crate::expansion::Budget;
@@ -41,7 +41,7 @@ impl RetainedGrounding {
         external: usize,
         counters: &Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let added = envelope_bytes(&counters.accounting);
         let total = external as u128 + counters.workspace_bytes() as u128 + added as u128;

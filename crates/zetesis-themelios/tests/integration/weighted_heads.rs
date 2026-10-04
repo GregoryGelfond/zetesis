@@ -261,7 +261,7 @@ fn signed_neutral_weights_supply_no_support() {
 #[test]
 fn original_sources_remain_owned() {
     for &(source, _) in CASES {
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(input(source).source().expect("source input").text(), source);
     }
 }
 

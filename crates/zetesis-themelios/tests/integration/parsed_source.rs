@@ -60,9 +60,15 @@ fn formula_retry_transfers_original_bytes() {
         .into_source()
         .prepare_formula(ExpansionLimits::default(), FormulaLimits::default())
         .unwrap();
-    assert_eq!(prepared.source().text().as_ptr(), address);
+    assert_eq!(
+        prepared.source().expect("source input").text().as_ptr(),
+        address
+    );
     let admitted = prepared.ground().unwrap();
-    assert_eq!(admitted.source().text().as_ptr(), address);
+    assert_eq!(
+        admitted.source().expect("source input").text().as_ptr(),
+        address
+    );
 }
 
 #[test]

@@ -61,7 +61,7 @@ impl<'source> Predicates<'source> {
         predicate: PredicateRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: themelios_base::span::Location,
+        location: crate::ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         for current in &self.0 {
             if current.equals_ref_with(predicate, || counters.work(limits, location))? {
@@ -75,7 +75,7 @@ impl<'source> Predicates<'source> {
         predicate: PredicateRef<'source>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: themelios_base::span::Location,
+        location: crate::ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if self.contains(predicate, limits, counters, location)? {
             return Ok(false);

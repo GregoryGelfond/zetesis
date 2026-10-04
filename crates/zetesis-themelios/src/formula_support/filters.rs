@@ -4,10 +4,10 @@
 use super::{
     Comparisons, Computation, Counters, Coverage, Evaluation, Failures, Join, compare, comparison,
 };
+use crate::ProgramSite;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
-use themelios_base::span::Location;
 use themelios_program::program::Relation;
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::{AssignmentError, CatalogRead, TermKey, TermRef};
@@ -26,7 +26,7 @@ impl Join<'_, '_> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Selection, FormulaFailure> {
         // Frame location and expression scratch are disjoint owners. Lending
         // the current slots never prevents the evaluator from using its scratch.
@@ -129,7 +129,7 @@ pub(super) fn excludes(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let mut excluded = false;
     let mut fatal = None;
@@ -185,7 +185,7 @@ fn pending_check(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     if let Some((left, relation, right)) = comparison(literal) {
         let mut failures = Failures::default();
@@ -264,7 +264,7 @@ fn pending_check(
 fn partial_input(
     binding: &Binding<'_>,
     slot: usize,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<TermKey>, FormulaFailure> {
     binding.slots().key(slot).map_err(|error| match error {
         AssignmentError::Slot { .. } => FormulaFailure::UnsafeVariable {
@@ -280,7 +280,7 @@ fn resolve<'read>(
     key: &TermKey,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<TermRef<'read>, FormulaFailure> {
     counters.work(limits, location)?;
     read.term(key)
@@ -292,7 +292,7 @@ fn number(
     key: &TermKey,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<i32>, FormulaFailure> {
     let value = resolve(read, key, limits, counters, location)?;
     counters.work(limits, location)?;
@@ -309,7 +309,7 @@ fn check(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     if let LiteralIr::Aggregate(aggregate) = literal {
         let mut failures = Failures::default();

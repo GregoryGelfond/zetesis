@@ -197,7 +197,7 @@ fn direct_observers_use_structural_positions_and_score_verified_models() {
     // variable. Keep that fact visible while our explicit clingo binder checks
     // justify this narrowly admitted extension.
     assert!(!input.source_analysis().safety().is_safe());
-    assert_eq!(input.source().text(), source);
+    assert_eq!(input.source().expect("source input").text(), source);
 }
 
 #[test]

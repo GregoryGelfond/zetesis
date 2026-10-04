@@ -20,8 +20,8 @@ use crate::diagnostic::unsupported;
 use crate::expansion::{Budget, check};
 use crate::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ExpansionUsage, ParsedSource, ProfileFeature, SourceFailure, SourceMetadata,
-    compile, fact_expansion, metadata, profile,
+    ExpansionResource, ExpansionUsage, ParsedSource, ProfileFeature, ProgramSite, SourceFailure,
+    SourceMetadata, StatementId, compile, fact_expansion, metadata, profile,
 };
 
 /// Admit a bounded extension of S0: unannotated acyclic scalar `#const`
@@ -101,8 +101,8 @@ fn compile_parsed(
         raised.program(),
         options.core_limits,
         limits,
-        location,
-        source_metadata.finish(location)?,
+        location.into(),
+        source_metadata.finish(location.into())?,
     )
 }
 
@@ -112,7 +112,7 @@ pub(crate) fn compile_owned(
     source: &SourceProgram,
     core_limits: AdmissionLimits,
     limits: ExpansionLimits,
-    location: Location,
+    location: ProgramSite,
     metadata: SourceMetadata,
 ) -> Result<Compilation, ExpansionFailure> {
     let mut budget = Budget::new(limits, core_limits.max_templates);
@@ -132,7 +132,7 @@ pub(crate) fn compile_owned(
             .and_then(|index| template_origins.get(index))
             .and_then(|origins| origins.first())
             .copied()
-            .unwrap_or(location);
+            .map_or(location, ProgramSite::from);
         AdmissionFailure::Core { error, location }
     })?;
     Ok(Compilation {
@@ -162,7 +162,9 @@ pub(crate) fn check_definitions_in(
         };
         let location = parsed.location(constant.syntax().text_range());
         if constant.annotation().is_some() {
-            return Err(ExpansionFailure::ConstantPolicy { location });
+            return Err(ExpansionFailure::ConstantPolicy {
+                location: location.into(),
+            });
         }
         let Some(name) = constant.name() else {
             return Err(unsupported(ProfileFeature::Statement, location).into());
@@ -170,15 +172,15 @@ pub(crate) fn check_definitions_in(
         if let Some(first) = names.insert(name.text().to_owned(), location) {
             return Err(ExpansionFailure::DuplicateConstant {
                 name: name.text().to_owned(),
-                first,
-                duplicate: location,
+                first: first.into(),
+                duplicate: location.into(),
             });
         }
         check(
             ExpansionResource::Constants,
             names.len() as u128,
             limits.max_constants,
-            location,
+            location.into(),
         )?;
     }
     Ok(())
@@ -186,27 +188,45 @@ pub(crate) fn check_definitions_in(
 
 struct Definition<'a> {
     constant: &'a Const,
-    location: Location,
+    location: ProgramSite,
     dependencies: Vec<String>,
 }
 
 pub(crate) fn resolve(
     source: &SourceProgram,
     budget: &mut Budget,
-    fallback: Location,
+    fallback: ProgramSite,
 ) -> Result<BTreeMap<String, Symbol>, ExpansionFailure> {
-    let mut definitions = BTreeMap::new();
-    for carrier in source.statements() {
-        if let Statement::Const(constant) = carrier.get() {
-            definitions.insert(
-                constant.name.as_str().to_owned(),
-                Definition {
-                    constant,
-                    location: origin(carrier, fallback),
-                    dependencies: Vec::new(),
-                },
-            );
+    let mut definitions: BTreeMap<String, Definition<'_>> = BTreeMap::new();
+    for (index, carrier) in source.statements().enumerate() {
+        let Statement::Const(constant) = carrier.get() else {
+            continue;
+        };
+        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
+        if constant.policy.is_some() {
+            return Err(ExpansionFailure::ConstantPolicy { location });
         }
+        // Canonical declarations are identified by their content. Additional
+        // provenance records evidence, not another definition of the name.
+        if let Some(first) = definitions
+            .get(constant.name.as_str())
+            .map(|entry| entry.location)
+        {
+            return Err(ExpansionFailure::DuplicateConstant {
+                name: constant.name.as_str().to_owned(),
+                first,
+                duplicate: location,
+            });
+        }
+        budget.check_constants(definitions.len().saturating_add(1), location)?;
+        definitions.insert(
+            constant.name.as_str().to_owned(),
+            Definition {
+                constant,
+                location,
+                dependencies: Vec::new(),
+            },
+        );
     }
     let names: BTreeSet<_> = definitions.keys().cloned().collect();
     for definition in definitions.values_mut() {
@@ -283,17 +303,17 @@ fn compile_extended(
     source: &SourceProgram,
     constants: &BTreeMap<String, Symbol>,
     budget: &mut Budget,
-    fallback: Location,
+    fallback: ProgramSite,
 ) -> Result<Compiled, ExpansionFailure> {
     let mut compiled = (Vec::new(), Vec::new());
-    for carrier in source.statements() {
+    for (index, carrier) in source.statements().enumerate() {
         if matches!(
             carrier.get(),
             Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
         ) {
             continue;
         }
-        let location = origin(carrier, fallback);
+        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
         let locations = parsed_origins(carrier);
         if kept_as_is(carrier.get(), constants, budget, location)? {
             emit(carrier, locations, budget, location, &mut compiled)?;
@@ -330,7 +350,7 @@ fn emit(
     statement: &WithProvenance<Statement>,
     locations: Vec<Location>,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
     (templates, origins): &mut Compiled,
 ) -> Result<(), ExpansionFailure> {
     if let Some(facts) = fact_expansion::facts(statement, budget, location)? {
@@ -367,7 +387,7 @@ fn kept_as_is(
     statement: &Statement,
     constants: &BTreeMap<String, Symbol>,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, ExpansionFailure> {
     let Statement::Rule(rule) = statement else {
         return Ok(false);
@@ -469,7 +489,7 @@ impl<'a> Leaf<'a> {
 
     /// Charge and validate as [`normalize_node`] does for this term: its unit
     /// of term work first, then a scalar's validation and payload.
-    fn account(self, budget: &mut Budget, location: Location) -> Result<(), ExpansionFailure> {
+    fn account(self, budget: &mut Budget, location: ProgramSite) -> Result<(), ExpansionFailure> {
         budget.charge(ExpansionResource::TermWork, 1, location)?;
         match self {
             Self::Variable => Ok(()),
@@ -487,7 +507,7 @@ fn defined<'a>(symbol: &Symbol, constants: &'a BTreeMap<String, Symbol>) -> Opti
 fn scalar_leaf(
     symbol: &Symbol,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), ExpansionFailure> {
     compile::validate_scalar(symbol, location)?;
     budget.charge(
@@ -509,12 +529,37 @@ pub(crate) fn parsed_origins(carrier: &WithProvenance<Statement>) -> Vec<Locatio
         .collect()
 }
 
-pub(crate) fn origin(carrier: &WithProvenance<Statement>, fallback: Location) -> Location {
+/// Statement evidence retains logical identity independently of parsed spans.
+/// Constructed input contributes its caller-assigned site rather than a fabricated location.
+pub(crate) fn program_sites(
+    carrier: &WithProvenance<Statement>,
+    fallback: ProgramSite,
+) -> Vec<ProgramSite> {
+    let mut sites: Vec<_> = carrier
+        .provenance()
+        .origins()
+        .filter_map(|origin| match origin {
+            Origin::Parsed(location) => Some(fallback.with_location(*location)),
+            Origin::Constructed | Origin::Transformed(_) => None,
+        })
+        .collect();
+    if sites.is_empty() {
+        sites.push(fallback);
+    }
+    sites
+}
+
+/// Attach actual parsed evidence without changing a caller-assigned statement ID.
+pub(crate) fn origin(
+    carrier: &WithProvenance<Statement>,
+    fallback: impl Into<ProgramSite>,
+) -> ProgramSite {
+    let fallback = fallback.into();
     carrier
         .provenance()
         .origins()
         .find_map(|origin| match origin {
-            Origin::Parsed(location) => Some(*location),
+            Origin::Parsed(location) => Some(fallback.with_location(*location)),
             Origin::Constructed | Origin::Transformed(_) => None,
         })
         .unwrap_or(fallback)
@@ -523,7 +568,7 @@ pub(crate) fn origin(carrier: &WithProvenance<Statement>, fallback: Location) ->
 struct Normalizer<'a> {
     constants: &'a BTreeMap<String, Symbol>,
     budget: &'a mut Budget,
-    location: Location,
+    location: ProgramSite,
     failure: Option<ExpansionFailure>,
 }
 
@@ -551,7 +596,7 @@ pub(crate) fn normalize_node(
     term: Term,
     constants: &BTreeMap<String, Symbol>,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Term, ExpansionFailure> {
     budget.charge(ExpansionResource::TermWork, 1, location)?;
     match &term {

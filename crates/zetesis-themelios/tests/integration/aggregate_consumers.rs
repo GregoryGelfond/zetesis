@@ -323,7 +323,7 @@ fn conditionals_consume_aggregate_descendants() {
         ),
     ] {
         assert_eq!(native(&input(source)), native(&input(expanded)));
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(input(source).source().expect("source input").text(), source);
     }
 }
 
@@ -412,9 +412,13 @@ fn mixed_consumers_keep_the_defined_family() {
     let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
         panic!("one zero-divisor warning: {:?}", admitted.warnings());
     };
-    assert_eq!(location.source, SOURCE);
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
     assert_eq!(
-        admitted.source().slice(location.span).unwrap(),
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
         &source[4..]
     );
     let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into(), "q(1)".into()])]);

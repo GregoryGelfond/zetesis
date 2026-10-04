@@ -230,8 +230,15 @@ fn defined_false_guards_complete_the_mixed_family() {
     let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
         panic!("one zero-divisor warning: {:?}", admitted.warnings());
     };
-    assert_eq!(location.source, SOURCE);
-    assert_eq!(admitted.source().slice(location.span).unwrap(), source);
+    assert_eq!(location.location().expect("parsed source").source, SOURCE);
+    assert_eq!(
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
+        source
+    );
     let expected = Models::from([BTreeSet::new()]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);
@@ -246,7 +253,10 @@ fn empty_extremum_bounds_keep_their_logical_order() {
 #[test]
 fn original_sources_remain_owned() {
     for (source, _) in sources() {
-        assert_eq!(input(&source).source().text(), source);
+        assert_eq!(
+            input(&source).source().expect("source input").text(),
+            source
+        );
     }
 }
 
@@ -308,7 +318,14 @@ fn grounding_limits_are_inclusive() {
         );
         let location = error.diagnostics()[0].primary().location;
         assert_eq!(location.source, SOURCE);
-        assert_eq!(input(source).source().slice(location.span).unwrap(), source);
+        assert_eq!(
+            input(source)
+                .source()
+                .expect("source input")
+                .slice(location.span)
+                .unwrap(),
+            source
+        );
         println!("inclusive_{resource:?}={lower}");
     }
 }

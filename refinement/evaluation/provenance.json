@@ -2,15 +2,17 @@
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
     "inventory": "source-inputs.sha256",
-    "inventorySha256": "e94583893e6482d31ab62eafcca4a66916a5281b302ef836baee899c38c521a9",
+    "inventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
     "inventoryFiles": 309,
     "allInventoryBytesStillMatch": true,
     "scope": "Recorded 309 crate-source inputs for the existing reference membership, constructor, ownership, classifier and atomic-choice roots, plus the single-root tight producer. The all-root producer extraction loop, rank derivation and complete tight-plan compiler are not selected. This inventory includes the canonical tight-admission benchmark and manifest; scripts/check.sh remains outside its established scope.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "0a726629dea0e2d13269f14d69078ed44b437231",
-    "extractionSourceState": "Recorded checkpoint plus the listed two Copy-node-local source change. All 309 input hashes were checked before and after isolated mirror extraction; this record does not by itself claim primary adoption or performance qualification.",
+    "extractionBaseRevision": "75f5eaf8d5e038571cae7edbe25b18c2d9eb4685",
+    "extractionSourceState": "Fresh extraction at the recorded revision with the reviewed Cargo.toml and Cargo.lock dependency pin and crates/zetesis-core/src/catalog/view.rs checked-depth API changes. The same 309 paths were checked before and after extraction. The core source inventory changed; complete parsed LLBC agrees after sorting only short_names, and generated Lean remains byte-identical. Frontend admission and the new depth API are outside the selected extracted roots and are not verified by this refinement.",
     "workingTreeSourceChanges": {
-      "crates/zetesis-ferraris/src/tight/compile.rs": "b4f7f4f25e611cd1af09f703d1877f54120f5def5beb3da2a487c6c722419f80"
+      "Cargo.lock": "38761b95f60531423c58000eb4af5ae3d5c48970f899063d75bd8a76dc1518ae",
+      "Cargo.toml": "27bbcdbb25b2913984bde81e88daa0644c892b8e3429eb591ca8765612fe851d",
+      "crates/zetesis-core/src/catalog/view.rs": "9e33aee64cc1b442b6e4bef4017990d61d1d003510be1b01d4a9855248080708"
     },
     "additionalWorkingTreeHashes": {}
   },
@@ -90,14 +92,14 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "fd9473c16accd8a393ed132ec5fd13ca72b1618d4bd9fd8e1345e576640adab2",
+    "originalLlbcSha256": "2658f6dcd471f9be21c66628290c52fc35b0e3ace7ee30b9f79b645541bfb033",
     "exclude": [
       "zetesis_ferraris::reduct::_::candidate",
       "zetesis_ferraris::reduct::_::fmt"
     ],
     "serializationOrder": {
       "table": "short_names",
-      "observation": "Pinned Charon serializes this table in an order that can differ between runs of the same extraction; repeated runs on 2026-10-03 produced equal sets in different orders.",
+      "observation": "The 2026-10-04 pin-and-checked-depth replay has equal complete parsed LLBC after sorting only short_names. No executable declaration, type, source coordinate, item name, ordered declaration or other parsed metadata changed. Raw generated Lean and the ten-scope bound Lean remain byte-identical to the retained translation.",
       "unaffected": "All declarations, ordered declarations, item names, files and options compare equal, and the generated Lean is byte-identical across runs.",
       "comparison": "Compare repeated extractions by those sections and the generated files, not by the bytes of evaluator.source.llbc."
     }
@@ -349,7 +351,7 @@
       },
       "identifierRederivation": "All 33 preceding roots remain; producer44 is added. Both constructors24/25, insertion30, all nine owned APIs32\u201340, classifier41 and atomic recognizers42/43 remain exported. Twelve local names11,13\u201317,25,31,41\u201344 share checked Theory reference type78. Debug impl25 is ordered182/fmt233; Step trait9/impl23 retains slots2,6 with opaque functions226,230. Exact identities, unique exports and surviving semantic references are guarded."
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "Guarded compatibility selection and twelve local renames permit strict stock translation. All 83 preceding function blocks and 30 type blocks, including source comments, remain byte-identical. Producer and body-class equality plus two producer types are added. The same ten scoped Lean provider binders leave every executable body unchanged.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded unused-declaration selection and twelve local debug-name changes permit stock translation. The same ten scoped Lean provider binders preserve every executable body. Pin-and-checked-depth replay changes no generated Lean definition.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true,
     "generatedBindingAdaptation": {
@@ -422,7 +424,7 @@
       "-backend",
       "lean",
       "-dest",
-      "Evaluator",
+      "target/replay/Evaluator",
       "-split-files",
       "-namespace",
       "ZetesisExtract",
@@ -431,7 +433,7 @@
       "-sequential",
       "-warnings-as-errors",
       "-abort-on-error",
-      "evaluator.llbc"
+      "target/replay/evaluator.llbc"
     ],
     "hostPathScanClean": true,
     "newCargoExtractionPerformed": true,
@@ -446,7 +448,9 @@
     "documentedAllocationBindingCommandsExit": 0,
     "documentedExternalBindingCommandsExit": 0,
     "documentedExtractionArgvMatchesRecordedRun": true,
-    "fullRestoreComparisons": true
+    "fullRestoreComparisons": true,
+    "recordedOutputPathConvention": "The private replay output directory is represented as target/replay in the recorded argv; all options and their order match the executed command.",
+    "retainedInputCheckScope": "The candidate source inventory retains the same 309 paths and changes exactly the two reviewed Cargo inputs and core catalog/view.rs. Exact candidate hashes were checked before and after extraction. The shared-semantic and preceding artifact inventories also passed; the preceding source inventory is superseded only by this explicitly reviewed drift."
   },
   "trustBoundary": [
     "LLBC destination metadata and twelve local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
@@ -461,8 +465,8 @@
     "The atomic-choice model additions are concrete pure definitions for two trusted library contracts. Option.or_else preserves fallback failure/divergence and does not invoke it for Some. Generic signatures do not establish arbitrary Rust drop effects; the selected inputs are scalar indices and shared theory data."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "aba92d649a5a70bc69fdd611381b23485c773f112621dcd58061d7f67cb85159",
-    "evaluator.llbc": "89ad7d0856191695a6b062bb61e9d966f799c9a73ba246736eb368a0803f09e0",
+    "evaluator.source.llbc": "31873705fa1cf36adfcc79c14c83a53dc3785561f83f9c77c930f4a80679ab6d",
+    "evaluator.llbc": "d5d822fa983309574c9681efb05bc04dc32d33fd43430a5454a79bafba31a44c",
     "Evaluator/Funs.lean": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
     "Evaluator/FunsExternal_Template.lean": "8c4761314b001b45f769c643303385f7146afc25d51041fac84640b283448c2f",
     "Evaluator/Types.lean": "82fa46f6fe78de4f7419164988fbcdc2809c4ba5314c0f413623842a69d3e205",
@@ -509,7 +513,8 @@
     },
     "strictGeneratedOverlayCheckExit": 0,
     "strictGeneratedOverlayScope": "Only the freshly generated Types and ten-scope-bound Funs were compiled with pinned Lean4.31 against existing dependency objects. Full package and new semantic proof replay are recorded separately when completed.",
-    "strictExistingPackageCheckExit": 0
+    "strictExistingPackageCheckExit": 0,
+    "recordedMilestone": "Historical single-root producer extension. Current pin-and-checked-depth revalidation is recorded separately below."
   },
   "stockGeneratedArtifactsSha256": {
     "Evaluator/Funs.lean": "47631c85fa3f14b9adac5b0b6f695c43bc7459870ef53c24cdf7675ae09d1853",
@@ -577,6 +582,34 @@
     "preservedByClassifierExtension": "Every previously selected generated declaration, context, checker and ReferenceEvents definition remains unchanged. The classifier extension introduces no additional returning-event context.",
     "priorSelectedDefinitionsUnchanged": true,
     "preservedByAtomicChoiceExtension": "Every previously selected generated declaration and every runtime context/checker/composition source remains unchanged. This extension introduces no returning-event context for tight-plan recognition.",
-    "preservedByProducerExtension": "The 22 previously selected runtime contexts and their generated source declarations remain unchanged. The producer adds no returning-event context."
+    "preservedByProducerExtension": "The 22 previously selected runtime contexts and their generated source declarations remain unchanged. The producer adds no returning-event context.",
+    "preservedBySourceRevalidation": "All 22 contexts, their checked source scaffold, imported external models and generated bodies remain unchanged; both source checks passed again under Lean 4.31.0."
+  },
+  "sourceRevalidation": {
+    "checkedOn": "2026-10-04",
+    "sourceBaseRevision": "75f5eaf8d5e038571cae7edbe25b18c2d9eb4685",
+    "themeliosRevision": "dd9a57172b8411ed277833323c52eef591840928",
+    "previousSourceInventorySha256": "e94583893e6482d31ab62eafcca4a66916a5281b302ef836baee899c38c521a9",
+    "sourceInventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
+    "changedSourceInputs": [
+      "Cargo.lock",
+      "Cargo.toml",
+      "crates/zetesis-core/src/catalog/view.rs"
+    ],
+    "sourceInventoryRustInputsChanged": true,
+    "changedRustInput": "crates/zetesis-core/src/catalog/view.rs",
+    "changedRustInputScope": "Checked TermRef::depth_with callback API, its private depth helper and regression tests. These definitions are outside the selected extracted roots.",
+    "freshExtractionExitCode": 0,
+    "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+    "generatedFunsByteIdentical": true,
+    "generatedTypesByteIdentical": true,
+    "externalTemplatesByteIdentical": true,
+    "externalModelsUnchanged": true,
+    "proofSourcesUnchanged": true,
+    "authoredAuditCount": 490,
+    "sharedAuditCount": 224,
+    "checkedContexts": 22,
+    "negativeContextChecks": 6,
+    "boundary": "This refresh preserves the existing evaluator refinement scope. It does not verify the changed depth API, frontend Program admission, pool expansion, typed symbol conversion, complete solving or GPU execution."
   }
 }

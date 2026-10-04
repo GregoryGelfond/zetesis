@@ -31,7 +31,7 @@ impl GroundingObserver for Observer {
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        _: Option<themelios_base::span::Location>,
+        _: Option<crate::ProgramSite>,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {
@@ -241,7 +241,7 @@ fn reverse_postings_preserve_signed_predicate_identity() {
     }
 }
 
-fn selected_rules(plan: &ProducerPlan<'_>, location: themelios_base::span::Location) -> Vec<usize> {
+fn selected_rules(plan: &ProducerPlan<'_>, location: crate::ProgramSite) -> Vec<usize> {
     let mut schedule = plan.schedule();
     let mut selected = Vec::new();
     while let Some(rule) = schedule

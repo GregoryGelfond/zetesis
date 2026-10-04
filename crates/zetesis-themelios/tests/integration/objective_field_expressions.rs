@@ -111,7 +111,8 @@ fn mixed_field_carriers_preserve_complete_scored_answers() {
     assert!(
         input
             .source()
-            .slice(warning.location().span)
+            .expect("source input")
+            .slice(warning.location().expect("parsed source").span)
             .unwrap()
             .contains("#minimize")
     );

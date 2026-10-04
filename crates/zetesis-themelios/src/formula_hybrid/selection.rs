@@ -6,7 +6,7 @@
 //! row absent from the formula catalog remains eligible: scalar filters may
 //! exclude it before it contributes any admitted atom occurrence.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{
     AtomIndex, AtomRow,
@@ -36,7 +36,7 @@ impl<'source> SourceRows<'source> {
         index: &AtomIndex<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut count = 0;
         for _ in support.source_atoms() {
@@ -89,7 +89,7 @@ fn reserve<T>(
     support: &CompletedSupport<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     // Each vector is reserved once before it is filled; no growth overlap or
     // hidden tuple copies. Check allocator slack before retaining the buffer.
@@ -168,7 +168,7 @@ impl RowFilter for Selection<'_, '_> {
         row: Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         // A row position is meaningful only in its original occurrence map.
         // Equal atom or predicate contents cannot establish that correspondence.

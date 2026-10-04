@@ -10,7 +10,7 @@ mod terms;
 use local::{literal_width, select_comparison};
 pub(super) use terms::distribute;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{
     Aggregate, Arguments, Atom, Body, BodyElement, Choice, ChoiceElement, Comparison, Condition,
     DefaultNegation, Disjunction, DisjunctionElement, FunctionAggregate, Guard, HasGuards, Head,
@@ -71,14 +71,14 @@ impl Compiler<'_> {
     pub(super) fn source_rules(
         &mut self,
         statement: &WithProvenance<Statement>,
-        origins: &[Location],
+        origins: &[ProgramSite],
         projection_nodes: &mut u128,
         rules: &mut Vec<RuleIr>,
         analyzed: &mut Vec<WithProvenance<Statement>>,
     ) -> Result<(), FormulaFailure> {
-        // Local atom pooling reconstructs choice element carriers. Boolean
-        // literals and their conditions remain equal, so their exact source
-        // keys are recovered from this same rule before that reconstruction.
+        // Local pooling reconstructs choice element carriers. Retain the
+        // original counted entries so choice compilation expands each local
+        // product once, before assigning occurrence keys.
         let choice_source = match statement.get() {
             Statement::Rule(rule) => match rule.head().get() {
                 Head::Choice(choice) => Some(choice),
@@ -137,7 +137,7 @@ impl<'a> Cursor<'a> {
         limits: &FormulaLimits,
         projection_nodes: &mut u128,
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Self>, FormulaFailure> {
         let mut scan = Footprint {
             nodes: 1,
@@ -207,7 +207,7 @@ impl<'a> Cursor<'a> {
     fn next(
         &mut self,
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<WithProvenance<Statement>>, FormulaFailure> {
         if self.remaining == 0 {
             return Ok(None);

@@ -24,7 +24,7 @@
 
 use std::cmp::Reverse;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::TemplateTerm;
 
 use super::{PatternOccurrence, PositivePattern, Relations, comparison, delta};
@@ -58,7 +58,7 @@ impl<'a> Plan<'a> {
         variables: usize,
         rows: SourceRows<'_, 'a>,
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
         admit: Option<&mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
     ) -> Result<Self, FormulaFailure> {
         let mut space = Workspace {
@@ -162,7 +162,7 @@ pub(super) enum Capacity {
 /// successful allocations contribute to its observed capacity.
 struct Workspace<'a> {
     bytes: u128,
-    location: Option<Location>,
+    location: Option<ProgramSite>,
     admit: Option<&'a mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>>,
 }
 impl Workspace<'_> {
@@ -255,7 +255,7 @@ impl Waiting {
         occurrence: &PatternOccurrence<'_>,
         bound: &[bool],
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if self.decided {
             return Ok(false);
@@ -274,7 +274,7 @@ impl Waiting {
         occurrence: &PatternOccurrence<'_>,
         bound: &[bool],
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if self.decided {
             return Ok(0);
@@ -290,7 +290,7 @@ impl Waiting {
     }
 }
 
-fn work(budget: &mut Budget, amount: u128, location: Location) -> Result<(), FormulaFailure> {
+fn work(budget: &mut Budget, amount: u128, location: ProgramSite) -> Result<(), FormulaFailure> {
     budget
         .charge(ExpansionResource::TermWork, amount, location)
         .map_err(Into::into)
@@ -302,7 +302,7 @@ fn work(budget: &mut Budget, amount: u128, location: Location) -> Result<(), For
 fn each_slot(
     occurrence: &PatternOccurrence<'_>,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
     visit: impl FnMut(usize),
 ) -> Result<(), FormulaFailure> {
     work(budget, 1, location)?;
@@ -323,7 +323,7 @@ fn binds(
     occurrence: &PatternOccurrence<'_>,
     variable: usize,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let mut found = false;
     each_slot(occurrence, budget, location, |slot| {
@@ -336,7 +336,7 @@ fn is_test(
     occurrence: &PatternOccurrence<'_>,
     bound: &[bool],
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let mut all = true;
     each_slot(occurrence, budget, location, |slot| {
@@ -371,7 +371,7 @@ impl Decisions {
         occurrences: &[PatternOccurrence<'_>],
         prefix: &[bool],
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
         admit: &mut dyn FnMut(Capacity) -> Result<(), FormulaFailure>,
     ) -> Result<Self, FormulaFailure> {
         Self::with_space(
@@ -485,7 +485,7 @@ pub(super) fn arrange(
     bound: &mut [bool],
     row_count: impl Fn(&PatternOccurrence<'_>) -> usize,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     arrange_with(
         occurrences,

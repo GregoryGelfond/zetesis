@@ -82,7 +82,7 @@ fn input(source: &str) -> AdmittedFormula {
         FormulaLimits::default(),
     )
     .unwrap_or_else(|error| panic!("{source}: {error}"));
-    assert_eq!(admitted.source().text(), source);
+    assert_eq!(admitted.source().expect("source input").text(), source);
     admitted
 }
 

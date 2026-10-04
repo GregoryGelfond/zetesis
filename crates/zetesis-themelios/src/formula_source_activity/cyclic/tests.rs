@@ -1,18 +1,19 @@
 use super::*;
+use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_support::{Computation, Counters, SupportCatalog};
 use crate::{ExpansionLimits, FormulaLimits};
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use zetesis_test_support::programs::nullary as atom;
 
 fn context<T>(limits: &FormulaLimits, f: impl FnOnce(&mut Context<'_, '_, '_>) -> T) -> T {
     let mut budget = Budget::new(ExpansionLimits::default(), 0);
     let mut counters = Counters::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(0),
         span: Span::empty(ByteOffset::new(0)),
-    };
+    });
     let mut catalog = SupportCatalog::default();
     let (relations, mut append) = catalog.split(limits, &mut counters, location).unwrap();
     let support = Support::indexed(&relations, limits, &counters, location).unwrap();

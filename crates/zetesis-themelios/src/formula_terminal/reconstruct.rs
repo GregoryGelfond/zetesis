@@ -42,12 +42,22 @@ pub enum ReconstructionError {
 }
 
 impl ReconstructionError {
+    fn retain_input(self, owner: &crate::formula_owner::Owner) -> Self {
+        match self {
+            Self::Source(error) => Self::Source(Box::new(owner.retain_failure(*error))),
+            Self::Model(ModelFailure::Stopped(error)) => Self::Model(ModelFailure::Stopped(
+                Box::new(owner.retain_failure(*error)),
+            )),
+            other => other,
+        }
+    }
+
     /// Cancellation or deadline, distinct from resource or structural refusal.
     #[must_use]
     pub fn stop(&self) -> Option<Stop> {
         match self {
             Self::Source(error) | Self::Model(ModelFailure::Stopped(error)) => {
-                if let FormulaFailure::Interrupted { reason, .. } = error.as_ref() {
+                if let FormulaFailure::Interrupted { reason, .. } = error.cause() {
                     Some(*reason)
                 } else {
                     None
@@ -107,7 +117,11 @@ impl<'a> TerminalReconstruction<'a> {
     pub(super) fn new(owner: &'a TerminalFormula) -> Result<Self, ReconstructionError> {
         let prepared = &owner.0.extension;
         if prepared.closed.components.is_none() {
-            return Err(components::missing(prepared.location).into());
+            return Err(owner
+                .0
+                .source
+                .retain_failure(components::missing(prepared.location))
+                .into());
         }
         Ok(Self {
             owner,
@@ -139,6 +153,7 @@ impl<'a> TerminalReconstruction<'a> {
     /// Refuses a foreign owner, cancellation, a resource boundary or invalid
     /// retained structure. Any refusal fuses this cursor. Earlier returned models
     /// remain valid and their capacities are owned by the consuming session.
+    /// Logical source failures retain the original canonical program.
     pub fn reconstruct(
         &mut self,
         model: &Model,
@@ -148,10 +163,12 @@ impl<'a> TerminalReconstruction<'a> {
             return Err(ReconstructionError::Failed);
         }
         self.failed = true;
-        self.attempts = self
-            .attempts
-            .checked_add(1)
-            .ok_or_else(|| super::storage::overflow(self.owner.0.extension.location))?;
+        self.attempts = self.attempts.checked_add(1).ok_or_else(|| {
+            self.owner
+                .0
+                .source
+                .retain_failure(super::storage::overflow(self.owner.0.extension.location))
+        })?;
         let owner = self.owner;
         let result = self
             .accounting
@@ -160,7 +177,7 @@ impl<'a> TerminalReconstruction<'a> {
             self.completed += 1; // bounded by the checked attempts count
             self.failed = false;
         }
-        result
+        result.map_err(|error| error.retain_input(&owner.0.source))
     }
 }
 

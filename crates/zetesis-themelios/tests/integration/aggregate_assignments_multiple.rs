@@ -33,7 +33,7 @@ fn all_function_pairs_correlations_and_recursive_equalities_match_the_finite_red
     for row in cases {
         let source = row[1].as_str().unwrap();
         let admitted = input(source).unwrap_or_else(|error| panic!("{}: {error}", row[0]));
-        assert_eq!(admitted.source().text(), source);
+        assert_eq!(admitted.source().expect("source input").text(), source);
         assert_eq!(exhaustive(&admitted), expected(&row), "{}", row[0]);
         assert_eq!(native(&admitted), expected(&row), "{}", row[0]);
     }
@@ -164,15 +164,28 @@ fn product_limits_refuse_the_whole_source_and_preserve_original_locations() {
         };
         assert_eq!(resource, expected);
         assert!(observed > limit);
-        assert_eq!(location.source, SOURCE);
-        assert_eq!(reference.source().slice(location.span).unwrap(), rule);
+        assert_eq!(location.location().expect("parsed source").source, SOURCE);
+        assert_eq!(
+            reference
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
+            rule
+        );
         assert_eq!(native(&input(&source).unwrap()), native(&reference));
     }
     let origins: BTreeSet<_> = reference
         .formula_origins()
         .iter()
         .flatten()
-        .map(|location| reference.source().slice(location.span).unwrap())
+        .map(|location| {
+            reference
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap()
+        })
         .collect();
     assert!(origins.contains(rule));
     // Keep upstream ASP-Core-2 safety facts intact; the frontend independently
@@ -196,7 +209,7 @@ fn scope_work_is_bounded_and_can_be_retried_without_partial_admission() {
     assert!(matches!(error,
         FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::TermWork, observed, limit, location
-        }) if observed > limit && location.source == SOURCE
+        }) if observed > limit && location.location().expect("parsed source").source == SOURCE
     ));
     assert_eq!(
         native(&input(source).unwrap()),

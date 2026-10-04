@@ -1,21 +1,22 @@
 use super::*;
+use crate::ProgramSite;
 use crate::formula_ir::Operation;
 use crate::formula_support::Counters;
 use crate::formula_support::testing::{Fixture, binding};
 use crate::{ExpansionFailure, FormulaLimits, FormulaResource};
 use themelios_base::{
     source::SourceId,
-    span::{ByteOffset, Location, Span},
+    span::{ByteOffset, Span},
 };
 use themelios_program::term::{BinaryOp, EvalError};
 use zetesis_core::Value;
 use zetesis_core::catalog::{AssignmentError, ReadError};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(81),
         span: Span::empty(ByteOffset::new(0)),
-    }
+    })
 }
 
 fn with_expression(

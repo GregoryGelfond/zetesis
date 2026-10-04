@@ -577,7 +577,10 @@ fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
     assert_eq!(admitted.atoms().len(), 2);
     assert!(!admitted.formula_origins().is_empty());
     for origins in admitted.formula_origins() {
-        let sources: BTreeSet<_> = origins.iter().map(|origin| origin.source).collect();
+        let sources: BTreeSet<_> = origins
+            .iter()
+            .map(|origin| origin.location().expect("parsed source").source)
+            .collect();
         assert_eq!(
             sources.len(),
             2,
@@ -586,10 +589,10 @@ fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
         for origin in origins {
             let text = admitted
                 .bundle()
-                .get(origin.source)
+                .get(origin.location().expect("parsed source").source)
                 .unwrap()
                 .source()
-                .slice(origin.span)
+                .slice(origin.location().expect("parsed source").span)
                 .unwrap();
             assert_eq!(text, rule, "synthetic slots have no fabricated source span");
         }

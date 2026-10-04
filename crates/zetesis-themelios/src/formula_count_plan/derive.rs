@@ -5,7 +5,7 @@
 //! backtracking: an early large group can hide a better later cover. This finite
 //! discovery policy is incomplete; every emitted consequence remains sound.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_ferraris::{Theory, partition};
 
 use super::capture::Group;
@@ -14,11 +14,11 @@ use super::{
 };
 
 pub(super) struct Consequence {
-    pub location: Location,
+    pub location: ProgramSite,
     pub body: usize,
     pub members: Vec<usize>,
     pub lower: usize,
-    pub origins: Vec<Location>,
+    pub origins: Vec<ProgramSite>,
 }
 
 pub(super) fn plan(

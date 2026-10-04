@@ -91,7 +91,7 @@ fn closed_sources_match_independent_complete_models() {
         let p = formula(source);
         assert_eq!(native(&p), wanted, "{source}");
         assert_eq!(exhaustive(&p), wanted, "{source}");
-        assert_eq!(p.source().text(), source);
+        assert_eq!(p.source().expect("source input").text(), source);
     }
 }
 #[test]
@@ -342,8 +342,14 @@ fn compound_payload_admission_refuses_with_original_location() {
     let location = failure.diagnostics()[0].primary().location;
     assert_eq!(location.source, AdmissionOptions::default().source_id);
     let p = formula(source);
-    assert!(p.source().slice(location.span).unwrap().contains("p("));
-    assert_eq!(p.source().text(), source);
+    assert!(
+        p.source()
+            .expect("source input")
+            .slice(location.span)
+            .unwrap()
+            .contains("p(")
+    );
+    assert_eq!(p.source().expect("source input").text(), source);
     assert_eq!(native(&p), expected(&[&["p(f(1,g(2)))"]]));
 }
 

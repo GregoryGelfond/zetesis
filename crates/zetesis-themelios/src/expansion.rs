@@ -2,14 +2,14 @@
 
 use std::fmt;
 
+use crate::ProgramSite;
 use themelios_base::diagnostic::Diagnostic;
-use themelios_base::span::Location;
 use themelios_program::term::EvalError;
 
 use crate::AdmissionFailure;
 
-/// Ceilings for the opt-in source expansion door. Zero never means unlimited.
-/// These bound source normalization, independently of candidate enumeration.
+/// Ceilings for checked source and logical-program expansion. Zero never means
+/// unlimited. These bound normalization, independently of candidate enumeration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ExpansionLimits {
     /// Maximum distinct, unannotated constant definitions.
@@ -21,8 +21,7 @@ pub struct ExpansionLimits {
     pub max_templates: usize,
     /// Maximum intermediate scalar alternatives, emitted fact arguments, and
     /// conservatively counted nodes in finite-pool source alternatives and
-    /// compiled structural patterns. Original Boolean choice rules additionally
-    /// reserve selected syntax nodes before retaining their raised occurrence.
+    /// compiled structural patterns.
     pub max_values: usize,
     /// Maximum scalar payload bytes copied during substitution/fact emission
     /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
@@ -39,12 +38,15 @@ pub struct ExpansionLimits {
     /// Ordinary Boolean choice keys additionally reserve their scalar identity payload.
     /// Finite affine binding analysis reserves expression/coefficient frames,
     /// inequalities and endpoint arrays before allocation.
+    /// Analyzed-statement ownership additionally reserves statement-ID slots and
+    /// named lookup-map payload; it does not copy original statement content.
     /// Ordinary aggregate, choice and conditional scope clones remain
     /// excluded, as do other AST carriers, provenance and allocator overhead.
-    /// Original source storage remains bounded by admission options.
+    /// Original input structure remains bounded separately by admission options.
     pub max_scalar_bytes: usize,
-    /// Maximum original locations reserved for template evidence and independently
-    /// retained Boolean choice rules, including their nested occurrence evidence.
+    /// Maximum retained origin-evidence entries. Formula evidence carries a
+    /// statement identity and an optional real location; source-only relational
+    /// evidence retains its parsed locations.
     pub max_origin_locations: usize,
     /// Maximum original `#defined` and `#show` occurrences before deduplication.
     pub max_metadata_statements: usize,
@@ -78,26 +80,25 @@ pub struct ExpansionUsage {
     pub values: usize,
     /// Charged scalar payload bytes, under `max_scalar_bytes`.
     pub scalar_bytes: usize,
-    /// Charged origin locations, under `max_origin_locations`.
+    /// Charged origin-evidence entries, under `max_origin_locations`.
     pub origin_locations: usize,
 }
 
 /// A resource consumed by source expansion, never a semantic UNSAT verdict.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExpansionResource {
-    /// Constant definitions before canonicalization can merge them.
+    /// Constant declarations; source admission also checks authored repetitions.
     Constants,
     /// Dependency/pool scans, bounded source copies and term-fold steps.
     TermWork,
     /// Emitted core templates.
     Templates,
-    /// Intermediate alternatives, emitted fact arguments, finite-pool source nodes
-    /// and retained Boolean choice syntax nodes.
+    /// Intermediate alternatives, emitted fact arguments and finite-pool nodes.
     Values,
     /// Copied scalar payload, finite-pool positions, term/plan storage and
     /// constructed-value reservations and borrowed structural-capture delta cells.
     ScalarBytes,
-    /// Original locations in emitted templates and Boolean choice occurrence evidence.
+    /// Retained origin-evidence entries in templates and expanded alternatives.
     Origins,
     /// Original declaration/display occurrences, counted before canonicalization.
     MetadataStatements,
@@ -119,36 +120,37 @@ pub enum ExpansionFailure {
         /// Proposed cumulative count, before the allocation or expansion.
         observed: u128,
         /// Original source occurrence associated with the work.
-        location: Location,
+        location: ProgramSite,
     },
-    /// Multiple source definitions are ambiguous in this deliberately narrow
-    /// profile, including textually identical repeated definitions.
+    /// Multiple declarations define the same constant. Source admission rejects
+    /// even textually identical repetitions before canonicalization; canonical
+    /// input counts distinct declarations, independently of their provenance.
     DuplicateConstant {
         /// Constant name.
         name: String,
         /// First original definition.
-        first: Location,
+        first: ProgramSite,
         /// Repeated original definition.
-        duplicate: Location,
+        duplicate: ProgramSite,
     },
     /// Annotated default/override policies need a broader configuration model.
     ConstantPolicy {
         /// Original definition.
-        location: Location,
+        location: ProgramSite,
     },
     /// Constant definitions contain a dependency cycle.
     ConstantCycle {
         /// Active dependency chain followed by its repeated endpoint.
         names: Vec<String>,
         /// Definition that closes the cycle.
-        location: Location,
+        location: ProgramSite,
     },
     /// A scalar operation is non-ground, undefined, or outside checked i32.
     Evaluation {
         /// Dependency's checked evaluator refusal.
         error: EvalError,
         /// Original statement containing the expression.
-        location: Location,
+        location: ProgramSite,
     },
 }
 
@@ -159,6 +161,20 @@ impl From<AdmissionFailure> for ExpansionFailure {
 }
 
 impl ExpansionFailure {
+    /// The logical subject and optional real source evidence of this refusal.
+    /// Duplicate definitions identify the repeated declaration here; both sites
+    /// remain available in the typed variant.
+    #[must_use]
+    pub fn site(&self) -> Option<ProgramSite> {
+        match self {
+            Self::Admission(error) => error.site(),
+            Self::Limit { location, .. }
+            | Self::ConstantPolicy { location }
+            | Self::ConstantCycle { location, .. }
+            | Self::Evaluation { location, .. } => Some(*location),
+            Self::DuplicateConstant { duplicate, .. } => Some(*duplicate),
+        }
+    }
     /// Whether another source profile may handle this refusal. This permits
     /// automatic formula admission after an unsupported profile construct or
     /// scalar evaluation stopped at a variable. Syntax, arithmetic undefinedness,
@@ -176,7 +192,8 @@ impl ExpansionFailure {
         )
     }
 
-    /// Located diagnostic rendering without discarding the typed refusal.
+    /// Render diagnostics for actual source coordinates, without discarding the
+    /// typed refusal or inventing a span for a logical statement.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let location = match self {
@@ -187,11 +204,13 @@ impl ExpansionFailure {
             | Self::Evaluation { location, .. } => *location,
             Self::DuplicateConstant { duplicate, .. } => *duplicate,
         };
-        vec![crate::diagnostic::diagnostic(
-            "source-expansion",
-            self.to_string(),
-            location,
-        )]
+        location
+            .location()
+            .map(|location| {
+                crate::diagnostic::diagnostic("source-expansion", self.to_string(), location)
+            })
+            .into_iter()
+            .collect()
     }
 }
 
@@ -259,6 +278,18 @@ pub(crate) struct Budget {
 }
 
 impl Budget {
+    pub(crate) fn check_constants(
+        &self,
+        count: usize,
+        site: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
+        check(
+            ExpansionResource::Constants,
+            count as u128,
+            self.limits.max_constants,
+            site,
+        )
+    }
     pub(crate) fn new(mut limits: ExpansionLimits, core_templates: usize) -> Self {
         limits.max_templates = limits.max_templates.min(core_templates);
         Self {
@@ -281,7 +312,7 @@ impl Budget {
         &mut self,
         resource: ExpansionResource,
         amount: u128,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), ExpansionFailure> {
         let (used, ceiling) = match resource {
             ExpansionResource::TermWork => (&mut self.work, self.limits.max_term_work),
@@ -333,7 +364,7 @@ pub(crate) fn check(
     resource: ExpansionResource,
     observed: u128,
     ceiling: usize,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), ExpansionFailure> {
     if observed > ceiling as u128 {
         Err(ExpansionFailure::Limit {

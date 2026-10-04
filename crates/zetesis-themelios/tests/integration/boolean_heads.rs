@@ -38,7 +38,10 @@ fn stability_matches_independent_subset_enumeration() {
 #[test]
 fn original_source_text_is_retained() {
     for &(source, _) in CASES {
-        assert_eq!(formula(source).source().text(), source);
+        assert_eq!(
+            formula(source).source().expect("source input").text(),
+            source
+        );
     }
 }
 
@@ -421,7 +424,7 @@ fn duplicate_boolean_heads_retain_original_file_identity() {
         assert_eq!(
             origins
                 .iter()
-                .map(|origin| origin.source)
+                .map(|origin| origin.location().expect("parsed source").source)
                 .collect::<BTreeSet<_>>()
                 .len(),
             2
@@ -430,10 +433,10 @@ fn duplicate_boolean_heads_retain_original_file_identity() {
             assert_eq!(
                 admitted
                     .bundle()
-                    .get(origin.source)
+                    .get(origin.location().expect("parsed source").source)
                     .unwrap()
                     .source()
-                    .slice(origin.span)
+                    .slice(origin.location().expect("parsed source").span)
                     .unwrap(),
                 rule
             );

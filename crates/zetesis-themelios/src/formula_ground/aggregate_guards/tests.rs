@@ -19,11 +19,11 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, Interpretation, Limits, models, models_reduct};
 use zetesis_ferraris::{Node, Theory, append_aggregate};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(19),
         span: Span::empty(ByteOffset::new(0)),
-    }
+    })
 }
 
 fn with_guards<T>(

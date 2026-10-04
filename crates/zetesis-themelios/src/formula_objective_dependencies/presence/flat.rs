@@ -6,6 +6,7 @@ mod carrier;
 pub(super) use carrier::{Carrier, certify as carrier};
 
 use super::Predicates;
+use crate::ProgramSite;
 use crate::formula::ceiling;
 use crate::formula_ir::{AggregateIr, AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{
@@ -14,7 +15,6 @@ use crate::formula_support::{
 };
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 use std::collections::BTreeSet;
-use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation};
 use themelios_program::symbol::Signature;
 use zetesis_core::catalog::{PredicateRef, TermRef};
@@ -31,7 +31,7 @@ struct Context<'a, 'terms, 'source> {
     computation: &'a mut Computation<'terms, 'source>,
     limits: &'a FormulaLimits,
     counters: &'a mut Counters,
-    location: Location,
+    location: ProgramSite,
     entries: usize,
 }
 impl<'source> Context<'_, '_, 'source> {

@@ -94,7 +94,7 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
         if row["native"] == "admit" {
             assert_eq!(row["valid"], true);
             let program = result.unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
-            assert_eq!(program.source().text(), source);
+            assert_eq!(program.source().expect("source input").text(), source);
             let expected = expected(&row);
             assert_eq!(exhaustive(&program), expected, "{}", row["name"]);
             assert_eq!(native(&program), expected, "{}", row["name"]);
@@ -225,7 +225,7 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
             }) => {
                 assert_eq!(limit, u128::from(cap));
                 assert_eq!(observed, limit + 1);
-                assert_eq!(location.source, SOURCE);
+                assert_eq!(location.location().expect("parsed source").source, SOURCE);
             }
             Err(other) => panic!("unexpected resource refusal {other}"),
         }
@@ -276,11 +276,11 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
         .unwrap_err();
         if source.contains("X,Y") {
             assert!(
-                matches!(error, FormulaFailure::Limit { resource: FormulaResource::Variables, limit: 1, observed: 2, location } if location.source == SOURCE)
+                matches!(error, FormulaFailure::Limit { resource: FormulaResource::Variables, limit: 1, observed: 2, location } if location.location().unwrap().source == SOURCE)
             );
         } else {
             assert!(
-                matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: zetesis_themelios::InputLimit::BodyElements, limit: 1, observed: 2, location })) if location.source == SOURCE)
+                matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: zetesis_themelios::InputLimit::BodyElements, limit: 1, observed: 2, location })) if location.location().unwrap().source == SOURCE)
             );
         }
     }
@@ -315,16 +315,16 @@ fn included_conditionals_preserve_original_locations_and_output_selection() {
             .formula_origins()
             .iter()
             .flatten()
-            .any(|location| location.source == rule_id)
+            .any(|location| location.location().expect("parsed source").source == rule_id)
     );
     for location in program.formula_origins().iter().flatten() {
         assert!(
             program
                 .bundle()
-                .get(location.source)
+                .get(location.location().expect("parsed source").source)
                 .unwrap()
                 .source()
-                .slice(location.span)
+                .slice(location.location().expect("parsed source").span)
                 .is_ok()
         );
     }

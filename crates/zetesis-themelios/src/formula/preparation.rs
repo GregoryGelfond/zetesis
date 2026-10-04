@@ -3,10 +3,11 @@
 use std::fmt;
 
 use themelios_base::source::Source;
-use themelios_base::span::Location;
 use themelios_program::program::Program;
 
 use super::{AdmittedFormula, AdmittedFormulaBundle, Compiled, FormulaBundleFailure};
+use crate::ProgramSite;
+use crate::formula_owner::Owner;
 use crate::{FormulaFailure, FormulaLimits, GroundingObserver, SourceBundle, SourceMetadata};
 use crate::{expansion::Budget, formula_ground, formula_ir, grounding_observer};
 
@@ -17,7 +18,7 @@ pub(crate) struct Preparation {
     pub(crate) budget: Budget,
     pub(crate) limits: FormulaLimits,
     pub(crate) options: crate::grounding_options::Execution,
-    pub(crate) location: Location,
+    pub(crate) location: ProgramSite,
 }
 
 impl Preparation {
@@ -27,7 +28,7 @@ impl Preparation {
         accounting: crate::formula_support::Accounting,
         budget: Budget,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Self {
         Self {
             program,
@@ -60,12 +61,12 @@ impl Preparation {
     }
 }
 
-/// A checked source preparation that has not completed possible support or
+/// A checked canonical input that has not completed possible support or
 /// materialized a formula theory. Consuming it resumes the original budgets;
 /// callers cannot replace those budgets at the materialization boundary.
 pub struct PreparedFormula {
     preparation: Preparation,
-    source: Source,
+    source: Owner,
     metadata: SourceMetadata,
 }
 
@@ -79,7 +80,7 @@ impl fmt::Debug for PreparedFormula {
 }
 
 impl PreparedFormula {
-    pub(super) fn new(preparation: Preparation, source: Source, metadata: SourceMetadata) -> Self {
+    pub(super) fn new(preparation: Preparation, source: Owner, metadata: SourceMetadata) -> Self {
         Self {
             preparation,
             source,
@@ -110,10 +111,16 @@ impl PreparedFormula {
         self.preparation.program.analysis_basis
     }
 
-    /// Original bytes and source identity.
+    /// Original canonical program before normalization or analysis projection.
     #[must_use]
-    pub fn source(&self) -> &Source {
-        &self.source
+    pub fn original_program(&self) -> &Program {
+        self.source.program()
+    }
+
+    /// Original bytes and source identity, absent for a logical program input.
+    #[must_use]
+    pub fn source(&self) -> Option<&Source> {
+        self.source.source()
     }
 
     /// Compiled source declarations and display policy.
@@ -155,7 +162,8 @@ impl PreparedFormula {
     /// No solver runs; core answer sets still require the retained constraints.
     ///
     /// # Errors
-    /// Returns a located capability, arithmetic, allocation or resource refusal.
+    /// Returns a typed capability, arithmetic, allocation or resource refusal,
+    /// identifying its original statement when applicable.
     pub fn ground_hybrid(self) -> Result<crate::HybridFormula, FormulaFailure> {
         self.ground_hybrid_with_observer(None)
     }
@@ -169,11 +177,14 @@ impl PreparedFormula {
         self,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<crate::HybridFormula, FormulaFailure> {
-        let (compiled, constraints) = self.preparation.ground_hybrid(observer)?;
+        let (compiled, constraints) = self
+            .preparation
+            .ground_hybrid(observer)
+            .map_err(|error| self.source.retain_failure(error))?;
         Ok(crate::HybridFormula::new(
             compiled,
             constraints,
-            crate::formula_hybrid::SourceOwner::Single(self.source),
+            self.source,
             self.metadata,
         ))
     }
@@ -182,7 +193,7 @@ impl PreparedFormula {
     /// This computes no answer sets and invokes no solver.
     ///
     /// # Errors
-    /// Returns a located grounding, arithmetic or resource refusal. A successful
+    /// Returns a typed grounding, arithmetic or resource refusal. A successful
     /// preparation does not guarantee successful materialization.
     pub fn ground(self) -> Result<AdmittedFormula, FormulaFailure> {
         self.ground_with_observer(None)
@@ -216,7 +227,9 @@ impl PreparedFormula {
     ) -> Result<crate::FormulaMaterialization<AdmittedFormula>, FormulaFailure> {
         use crate::formula_terminal::Materialized;
         Ok(
-            match crate::formula_terminal::materialize(self.preparation, observer)? {
+            match crate::formula_terminal::materialize(self.preparation, observer)
+                .map_err(|error| self.source.retain_failure(error))?
+            {
                 Materialized {
                     compiled,
                     terminal: None,
@@ -231,7 +244,7 @@ impl PreparedFormula {
                 } => crate::FormulaMaterialization::Terminal(crate::TerminalFormula::new(
                     compiled,
                     extension,
-                    crate::formula_hybrid::SourceOwner::Single(self.source),
+                    self.source,
                     self.metadata,
                 )),
             },
@@ -260,7 +273,10 @@ impl PreparedFormula {
             limits,
             cancellation,
         };
-        let compiled = self.preparation.ground(observer, Some(request))?;
+        let compiled = self
+            .preparation
+            .ground(observer, Some(request))
+            .map_err(|error| self.source.retain_failure(error))?;
         Ok(AdmittedFormula {
             compiled,
             source: self.source,
@@ -272,12 +288,15 @@ impl PreparedFormula {
     /// No clock is read by this API; the caller retains its observer on failure.
     ///
     /// # Errors
-    /// Returns the same located failures as [`Self::ground`].
+    /// Returns the same failures as [`Self::ground`].
     pub fn ground_with_observer(
         self,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<AdmittedFormula, FormulaFailure> {
-        let compiled = self.preparation.ground(observer, None)?;
+        let compiled = self
+            .preparation
+            .ground(observer, None)
+            .map_err(|error| self.source.retain_failure(error))?;
         Ok(AdmittedFormula {
             compiled,
             source: self.source,
@@ -291,14 +310,14 @@ impl PreparedFormula {
 /// the original budgets and retains the bundle on any located refusal.
 pub struct PreparedFormulaBundle {
     preparation: Preparation,
-    bundle: SourceBundle,
+    source: Owner,
     metadata: SourceMetadata,
 }
 
 impl fmt::Debug for PreparedFormulaBundle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PreparedFormulaBundle")
-            .field("bundle", &self.bundle)
+            .field("bundle", &self.bundle())
             .field("analyzed_program", self.analyzed_program())
             .finish_non_exhaustive()
     }
@@ -331,7 +350,7 @@ impl PreparedFormulaBundle {
             }) => Ok(crate::FormulaMaterialization::Complete(
                 AdmittedFormulaBundle {
                     compiled,
-                    bundle: self.bundle,
+                    source: self.source,
                     metadata: self.metadata,
                 },
             )),
@@ -339,28 +358,19 @@ impl PreparedFormulaBundle {
                 compiled,
                 terminal: Some(extension),
             }) => Ok(crate::FormulaMaterialization::Terminal(
-                crate::TerminalFormula::new(
-                    compiled,
-                    extension,
-                    crate::formula_hybrid::SourceOwner::Bundle(self.bundle),
-                    self.metadata,
-                ),
+                crate::TerminalFormula::new(compiled, extension, self.source, self.metadata),
             )),
             Err(error) => Err(FormulaBundleFailure {
-                bundle: self.bundle,
+                bundle: self.source.into_bundle(),
                 error: Box::new(error),
             }),
         }
     }
 
-    pub(super) fn new(
-        preparation: Preparation,
-        bundle: SourceBundle,
-        metadata: SourceMetadata,
-    ) -> Self {
+    pub(super) fn new(preparation: Preparation, source: Owner, metadata: SourceMetadata) -> Self {
         Self {
             preparation,
-            bundle,
+            source,
             metadata,
         }
     }
@@ -387,10 +397,17 @@ impl PreparedFormulaBundle {
         self.preparation.program.analysis_basis
     }
 
+    /// Original canonical program before normalization or analysis projection.
+    #[must_use]
+    pub fn original_program(&self) -> &Program {
+        self.source.program()
+    }
+
     /// Original source bytes, identities, paths and include occurrences.
+    /// Bundle admission retains this catalog by construction.
     #[must_use]
     pub fn bundle(&self) -> &SourceBundle {
-        &self.bundle
+        self.source.required_bundle()
     }
 
     /// Global source declarations and display policy.
@@ -447,11 +464,11 @@ impl PreparedFormulaBundle {
             Ok((compiled, constraints)) => Ok(crate::HybridFormula::new(
                 compiled,
                 constraints,
-                crate::formula_hybrid::SourceOwner::Bundle(self.bundle),
+                self.source,
                 self.metadata,
             )),
             Err(error) => Err(FormulaBundleFailure {
-                bundle: self.bundle,
+                bundle: self.source.into_bundle(),
                 error: Box::new(error),
             }),
         }
@@ -476,11 +493,11 @@ impl PreparedFormulaBundle {
         match self.preparation.ground(observer, Some(request)) {
             Ok(compiled) => Ok(AdmittedFormulaBundle {
                 compiled,
-                bundle: self.bundle,
+                source: self.source,
                 metadata: self.metadata,
             }),
             Err(error) => Err(FormulaBundleFailure {
-                bundle: self.bundle,
+                bundle: self.source.into_bundle(),
                 error: Box::new(error),
             }),
         }
@@ -497,11 +514,11 @@ impl PreparedFormulaBundle {
         match self.preparation.ground(observer, None) {
             Ok(compiled) => Ok(AdmittedFormulaBundle {
                 compiled,
-                bundle: self.bundle,
+                source: self.source,
                 metadata: self.metadata,
             }),
             Err(error) => Err(FormulaBundleFailure {
-                bundle: self.bundle,
+                bundle: self.source.into_bundle(),
                 error: Box::new(error),
             }),
         }

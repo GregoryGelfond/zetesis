@@ -2,7 +2,7 @@
 
 use super::{
     AtomAppender, AtomRef, AtomicUsize, CatalogRead, Counters, Failure, FormulaFailure,
-    FormulaLimits, FormulaResource, Location, Memory, Ordering, TermRef, atom_failure,
+    FormulaLimits, FormulaResource, Memory, Ordering, ProgramSite, TermRef, atom_failure,
     atom_interner, ceiling, failure, owner_limits, record_owner_peak, size_of,
 };
 use crate::formula_support::GroundingWork;
@@ -40,7 +40,7 @@ impl<'a> SupportAppend<'a> {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<zetesis_core::catalog::TermKey, FormulaFailure> {
         let outer = self.outer_bytes(workspace);
         self.owner.restart_storage_peak();
@@ -134,7 +134,7 @@ impl<'a> SupportAppend<'a> {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let current = self.owner.storage_bytes() + self.outer_bytes(workspace);
         record_owner_peak(
@@ -177,7 +177,7 @@ impl<'a> SupportAppend<'a> {
         atom: AtomRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let atom = self.discover_ref(atom, 0, limits, counters, location)?;
         self.retain(&atom, 0, limits, counters, location)
@@ -189,7 +189,7 @@ impl<'a> SupportAppend<'a> {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if let Some(checked) = self.selected_order_limits(limits, counters, location)? {
             let workspace = counters.accounting.workspace.bytes();
@@ -221,7 +221,7 @@ impl<'a> SupportAppend<'a> {
         &self,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<atom_interner::Limits>, FormulaFailure> {
         let Some(required) = self.owner.selected_order_storage(self.pending.len()) else {
             return Ok(None);

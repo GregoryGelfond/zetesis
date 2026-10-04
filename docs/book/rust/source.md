@@ -1,18 +1,19 @@
-# Preparing source and interpreting analysis
+# Preparing programs and interpreting analysis
 
-Use `zetesis_themelios::prepare_formula` to prepare input for zetesis's finite
-formula solver and inspect its retained analysis before materialization.
-`zetesis_themelios` is zetesis's source bridge; this workflow does not require
-constructing an upstream parser or logical program. The returned
-`PreparedFormula` owns source, metadata, checked intermediate representation,
-the canonical source authority and retained resource accounting. `ground(self)` consumes that preparation and
-produces an `AdmittedFormula`; it computes no answer sets.
+Use `zetesis_themelios::prepare_formula` for source text or
+`prepare_program_formula` for an existing canonical program. Both prepare input
+for zetesis's finite formula solver and expose retained analysis before
+materialization. The returned `PreparedFormula` owns the original canonical
+program, optional source bytes, metadata, checked intermediate representation,
+the canonical source authority and retained resource accounting. `ground(self)`
+consumes that preparation and produces an `AdmittedFormula`; it computes no answer sets.
 `zetesis_solve::PreparedInput::formula` then borrows that owner for a session.
 
 ```text
-source → prepare_formula → PreparedFormula → ground → AdmittedFormula
-                              │                           │
-                         inspect analysis            borrow in a session
+source       → prepare_formula         ┐
+Arc<Program> → prepare_program_formula ┴→ PreparedFormula → ground → AdmittedFormula
+                                             │                          │
+                                        inspect analysis           borrow in a session
 ```
 
 The preparation can succeed while grounding later refuses arithmetic or a
@@ -30,6 +31,129 @@ same authority. Pattern argument positions remain distinct from term identities,
 so repeated arguments and variable positions retain their meaning. An empty
 support relation may coexist with a nonempty vocabulary. Neither term admission
 nor a compiled pattern asserts an atom's truth.
+
+## Prepare a logical formula program
+
+`prepare_program_formula(Arc<logical::program::Program>, ProgramAdmissionOptions,
+ExpansionLimits, FormulaLimits)` accepts the canonical themelios type reexported
+by `zetesis_themelios::logical`. It inspects the borrowed input, then enters the
+same normalization, scope checking, analysis and preparation used by source
+admission. It never renders or reparses the program. The supported formula
+language includes constants, pools and intervals, choices and disjunctions,
+conditional literals, admitted aggregates, objectives, `#show` and `#project`.
+Binding safety, arithmetic definedness and capability limits remain enforced.
+Named or parameterized parts and unresolved includes remain outside this door.
+
+The result is the same `PreparedFormula`: use `ground()`, `ground_hybrid()` or
+`ground_adaptive()` with their existing capability restrictions and cumulative
+budgets. Eager and hybrid owners supply `PreparedInput::formula` and `::hybrid`.
+Adaptive materialization returns either `Complete` for `::formula` or `Terminal`
+for `::terminal`. Preparation and materialization do not search for
+answers. A failure in a later phase still refuses the original input.
+`admit_program_formula` composes preparation with eager `ground()` when no
+inspection or alternate materialization is needed.
+
+`ProgramAdmissionOptions` bounds canonical structure before copying or rewriting
+it. General formula inspection includes directive and condition structure,
+term/symbol interiors, provenance entries, documentation and transform-tag text.
+The original `Program` stays alive through the supplied `Arc`, alongside the
+prepared and analyzed representations. This shares the input allocation; it does
+not eliminate the retained input's memory cost or bound earlier construction,
+allocator overhead or process RSS.
+
+`original_program()` returns the input before normalization. `ProgramSite`
+contains an optional `StatementId` in that owner's canonical statement order
+and an optional real `Location`; a constructed statement needs no source span.
+Emitted roots, objectives, warnings and delayed work retain these sites. Typed
+formula failures retain the original owner and expose `site()`,
+`original_program()` and `subject()`. Observation errors expose `site()` for
+resolution through the formula owner. IDs belong to that original program and
+cannot be transferred between owners. Formula owners' `source()` is optional:
+it returns `Some` for single-source input and `None` for this door, even if a
+canonical carrier has parsed coordinates. Bundle input uses `bundle()`. Provenance does not supply the original bytes.
+
+Source admission additionally checks original bytes, parser/raiser diagnostics,
+authored counts and include identity. Canonical input cannot recover syntax or
+occurrences already erased during construction. Shared preparation preserves
+these source checks and the canonical program's counted-element semantics.
+This common compiler boundary does not establish a parser-to-Lean or Rust
+implementation proof; the [correspondence account](../lean/correspondence.md)
+states the remaining obligations.
+
+This example builds an exact-one choice with canonical constructors, prepares
+and grounds it, then prints the complete interpretations through a solve session.
+There is no display directive, so the exported atoms are the full answer sets.
+
+```rust
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/formula-program.rs:example}}
+```
+
+Run it with:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-formula-program
+```
+
+## Admit an existing logical program
+
+`zetesis_themelios::admit_program(&program, ProgramAdmissionOptions)` borrows a
+canonical `zetesis_themelios::logical::program::Program` and compiles the strict
+relational (S0) profile. The `logical` reexport is the upstream themelios type,
+so callers can construct or raise the program with its native APIs. Admission
+uses the same rule compiler and strong-negation coherence operation as `admit`,
+without rendering or parsing the program.
+
+This door accepts parameterless base-part rules, relational variables and closed
+data values, default negation, equality/disequality tests and unbounded
+single-atom choices. Equality does not introduce a variable absent from positive
+relational bindings. Unary negation retains the shared compiler's checked
+closed-operand evaluation; general arithmetic terms, generators, aggregates and
+directives remain outside this door; use
+[`prepare_program_formula`](#prepare-a-logical-formula-program) for the general
+formula profile.
+
+`ProgramAdmissionOptions` bounds cumulative logical nodes and UTF-8 name/string
+bytes, nesting depth including symbol interiors, and canonical body elements
+per rule. Its `core_limits` separately governs native template admission.
+The borrowed traversal checks each rule before compilation, uses an iterative
+cursor over term and symbol interiors, and returns a typed `ProgramLimit` on
+refusal. S0 admission borrows statement evidence and does not traverse or count
+its provenance. These ceilings govern admission of an existing value; they do not
+account for its earlier construction or represent a process-memory limit.
+Source admission retains its checks on original bytes and authored syntax,
+including restrictions erased by canonicalization and body occurrences before
+set collection. Those checks cannot be recovered from a logical program.
+
+The returned `AdmittedProgram::program()` supplies the native program for
+`PreparedInput::program`. `template_statements()` borrows the original statement
+carriers in native template order; generated coherence constraints retain both
+introducing statements. `ProgramAdmissionFailure` similarly borrows the actual
+statement or part associated with a refusal and invents no source coordinate.
+`into_program()` releases this evidence borrow and returns the independently
+owned native program. Admission itself performs no grounding or answer search.
+
+This example constructs `p :- not q.` and `q :- not p.` using canonical
+constructors and prints their two canonical `AnswerSet` values. The session
+borrows the admitted native owner without source metadata. `symbols::atom_with`
+exports each full interpretation using the session's cancellation token and a
+4096-byte ceiling per atom. The helper returns the family only after the session
+reports exhausted search; an unfinished outcome is an error.
+
+```rust
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/program.rs:example}}
+```
+
+Run it with:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-program
+```
 
 ## Defer terminal positive definitions
 
@@ -355,8 +479,10 @@ exhaustion refuses admission rather than accepting partial evidence.
 
 Successful formula and bundle owners retain typed `FormulaWarning` values and
 provide `warnings()` and `warning_view()`. Zero-divisor warnings are deduplicated
-by original source span and ordered by source identity and span; they do not
-count attempted rows. `FormulaLimits::max_warnings` defaults to 10,000, and a
+by `ProgramSite` and ordered by optional source coordinate, then statement ID;
+they do not count attempted rows. `site()` retains the logical subject, while
+`location()` and `diagnostic()` return `None` without real source coordinates.
+`FormulaLimits::max_warnings` defaults to 10,000, and a
 new distinct warning beyond that bound produces `FormulaResource::Warnings`.
 The CLI renders retained warnings once after admission. The
 [numeric boundary](../reference/language.md#numeric-boundaries-and-refusal-meaning)
@@ -418,9 +544,11 @@ stop leaves every constraint not yet asked as written, which changes no
 answer set.
 
 The replacement constraints are compiled under the remaining expansion budget.
-Every asked statement carries the written constraint's source location and
-the transformation's tag, so diagnostics and `formula_origins()` still name
-the constraint as written. `keyed_constraints()` on the admitted formula
+Every asked statement retains the original constraint's statement identity and
+any real source coordinates. A parallel owner map preserves that association
+through canonical analysis; ambiguous expansions or content merges leave the
+constraint unchanged. Transformation provenance remains evidence, while
+`formula_origins()` names the original constraint. `keyed_constraints()` on the admitted formula
 counts the constraints asked; the answer sets are the same either way, which
 the contract tests state against the hand-asked program and against clingo.
 A constraint outside the two patterns is left as written, and so is one
@@ -473,8 +601,10 @@ The distinction is observable for the adopted Boolean choice extension:
 must stay distinct in the formula solver's counting family.
 By contrast, `2#count{1:#true;1:#true}2.` has no answer set: both elements name
 the same complete tuple. Ordinary Boolean choices therefore retain a separate
-source-occurrence family while exposing a dependency projection for analysis.
-The explicit tuple aggregate does not require that projection by itself.
+counted occurrence family while exposing a dependency projection for analysis.
+Pool expansion creates a separate Boolean occurrence for each alternative;
+grounding witnesses of one expanded occurrence share its key. The explicit
+tuple aggregate does not require that projection by itself.
 
 The following complete example checks preparation, analysis, materialization,
 original source locations and the resulting families. It also inspects a located
@@ -498,8 +628,9 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-source
 ## Preserve evidence through materialization
 
 `formula_origins()` associates each emitted theory root with retained original
-source locations. Locations identify source spans; they are not a proof of the
-root's meaning. Some generated roots have different evidence needs from written
+`ProgramSite` values. A site identifies an original canonical statement and may
+also carry a real source location. Neither identity nor location is a proof of
+the root's meaning. Some generated roots have different evidence needs from written
 rules, so consumers must not assume that one root always corresponds to one
 written statement. The admitted owner also retains objectives, observations and
 the completed projection domain separately from theory roots. Authored
@@ -509,8 +640,8 @@ the completed projection domain separately from theory roots. Authored
 
 The example checks that emitted root evidence retains the source identity
 supplied in `AdmissionOptions`. It leaves syntax traversal to themelios's API
-documentation. For the internal occurrence catalog, tuple activity and their
-proof obligations, see [source identity in grounding](../architecture/grounding.md#preserving-source-identity).
+documentation. For counted entry identity, pool expansion, tuple activity and
+their proof obligations, see [source identity in grounding](../architecture/grounding.md#preserving-source-identity).
 
 The public implementation declarations are
 [`PreparedFormula`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula/preparation.rs),
@@ -518,14 +649,15 @@ The public implementation declarations are
 
 ## Work and retained space
 
-Preparation traverses and retains bounded source/analysis structure; source
-occurrence retention and pool expansion consume cumulative expansion resources.
-Boolean choice retention charges each selected rule's source span and syntax
-nodes as work, its node bound as Values, and a conservative four locations per
-node as Origins before copying. Raising and metadata diagnostics retain their
-precedence over these copy limits. The original occurrence stream and the
-additional selected-rule copies coexist temporarily; this is not streaming
-admission or a zero-copy guarantee.
+Preparation retains the original canonical program as well as bounded prepared
+and analysis structure. Source syntax limits apply before raising; typed formula
+input has independent logical/provenance inspection limits. Canonical counted
+choice entries need no separate source-location registry or selected-rule copy.
+Source metadata is collected from the original raised occurrence stream before
+equal statements merge; canonical input supplies its retained declarations and
+provenance. Subsequent pool expansion and formula construction consume
+cumulative expansion resources. Raising and metadata admission can fail before
+that work begins; preparation does not promise streaming or zero-copy admission.
 `max_analysis_nodes` bounds visited structure, while `max_analysis_edges` bounds
 head/dependency occurrence products before graph allocation. These are different
 from source-byte limits and do not bound process RSS.

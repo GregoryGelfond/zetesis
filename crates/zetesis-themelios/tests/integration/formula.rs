@@ -360,7 +360,7 @@ fn each_formula_resource_refuses_without_returning_a_partial_theory() {
 fn queens_source_admits_eighty_original_atoms_with_output_metadata() {
     let source = include_str!("../../../../examples/correctness/standalone/n-queens/variant-01.lp");
     let admitted = formula(source);
-    assert_eq!(admitted.source().text(), source);
+    assert_eq!(admitted.source().expect("source input").text(), source);
     assert_eq!(admitted.atoms().len(), 80);
     assert_eq!(admitted.theory().atom_count(), 80);
     assert_eq!(
@@ -420,17 +420,17 @@ fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
         .formula_origins()
         .iter()
         .flatten()
-        .map(|origin| origin.source)
+        .map(|origin| origin.location().expect("parsed source").source)
         .collect();
     assert_eq!(sources.len(), 2);
     for origin in admitted.formula_origins().iter().flatten() {
         assert!(
             admitted
                 .bundle()
-                .get(origin.source)
+                .get(origin.location().expect("parsed source").source)
                 .expect("origin file")
                 .source()
-                .slice(origin.span)
+                .slice(origin.location().expect("parsed source").span)
                 .is_ok()
         );
     }
@@ -449,7 +449,7 @@ fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
     assert!(
         error
             .bundle()
-            .get(location.source)
+            .get(location.location().expect("parsed source").source)
             .expect("retained original file")
             .path()
             .ends_with("data.lp")

@@ -383,13 +383,14 @@ fn pattern_analysis_retains_function_terms() {
 #[test]
 fn captured_rules_retain_source_origins() {
     let admitted = formula("q(f(1)).p(X):-q(f(X)).");
-    assert!(
+    assert!(admitted.formula_origins().iter().flatten().any(|origin| {
         admitted
-            .formula_origins()
-            .iter()
-            .flatten()
-            .any(|origin| admitted.source().slice(origin.span).unwrap() == "p(X):-q(f(X)).")
-    );
+            .source()
+            .expect("source input")
+            .slice(origin.location().expect("parsed source").span)
+            .unwrap()
+            == "p(X):-q(f(X))."
+    }));
 }
 
 #[test]

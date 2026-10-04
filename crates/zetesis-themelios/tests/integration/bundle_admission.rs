@@ -256,7 +256,10 @@ fn cross_file_constant_duplicates_and_cycles_keep_their_source_catalog() {
             first,
             duplicate,
             ..
-        }) => assert_ne!(first.source, duplicate.source),
+        }) => assert_ne!(
+            first.location().unwrap().source,
+            duplicate.location().unwrap().source
+        ),
         other => panic!("duplicate constant: {other}"),
     }
     fixture.write("entry.lp", "#const a=b. #include \"child.lp\".");
@@ -282,7 +285,7 @@ fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_progra
         fixture.write("child.lp", child);
         let error = fixture.admit().expect_err("unsupported original child");
         assert!(
-            matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { location, .. })) if location.source == SourceId::new(1))
+            matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { location, .. })) if location.location().unwrap().source == SourceId::new(1))
         );
         assert_eq!(error.bundle().sources()[1].source().text(), child);
     }
@@ -311,7 +314,7 @@ fn syntax_and_constant_budgets_are_cumulative_across_original_sources() {
     let error = admit_bundle_extended(bundle, options, ExpansionLimits::default())
         .expect_err("cumulative node budget");
     assert!(
-        matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: InputLimit::SyntaxNodes, limit, observed, location })) if *limit == total_nodes - 1 && *observed == total_nodes && location.source == SourceId::new(1))
+        matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: InputLimit::SyntaxNodes, limit, observed, location })) if *limit == total_nodes - 1 && *observed == total_nodes && location.location().unwrap().source == SourceId::new(1))
     );
     let limits = ExpansionLimits {
         max_constants: 1,
@@ -390,7 +393,10 @@ fn correctness_bundles_report_semantic_refusal_after_include_admission() {
                 AdmissionFailure::Profile { feature, location },
             )) => {
                 assert!(
-                    error.bundle().get(location.source).is_some(),
+                    error
+                        .bundle()
+                        .get(location.location().unwrap().source)
+                        .is_some(),
                     "refusal source: {path}"
                 );
                 *features.entry(format!("{feature:?}")).or_default() += 1;

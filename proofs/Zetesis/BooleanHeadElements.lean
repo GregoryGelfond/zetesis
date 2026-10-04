@@ -11,9 +11,10 @@ operand contributes nothing. Neither Boolean operand supplies an atom permission
 The numeric bound remains a candidate constraint, including in arbitrary contexts.
 
 Identity is separate from truth. Explicit aggregates use complete tuple keys.
-Ordinary choices use atom identity for atomic operands and source-element
-occurrence identity for Boolean operands within one activated outer group. Local
-witnesses of one Boolean occurrence share a key; two source occurrences do not.
+Ordinary choices use atom identity for atomic operands and pool-expanded
+occurrence identity for Boolean operands within one activated outer group.
+Grounding witnesses of one expanded occurrence share a key; different expanded
+positions do not, even when their pool values are equal.
 `ChoiceKey` records this distinction without identifying a key with its Boolean
 value. A completed source adapter must supply those identities and finite rows.
 This is the adopted Boolean-choice extension contract; its source grammar is
@@ -65,7 +66,7 @@ theorem operand_frozen (M J : Atoms A) (head : Operand A) :
     rw [operand, BooleanHeads.constant_frozen]
     simp only [Holds, and_self]
 
-/-- Ordinary atomic elements coalesce by atom; Boolean elements by source
+/-- Ordinary atomic elements coalesce by atom; Boolean elements by expanded
     occurrence. O is local to one activated outer group, not a local witness. -/
 inductive ChoiceKey (A : Type u) (O : Type w) where
   | atom : A → ChoiceKey A O
@@ -76,14 +77,14 @@ def choiceKey (occurrence : O) : Operand A → ChoiceKey A O
   | .atom atom => .atom atom
   | .boolean _ => .boolean occurrence
 
-/-- Equal Boolean values at distinct source occurrences remain distinct keys. -/
+/-- Equal Boolean values at distinct expanded occurrences remain distinct keys. -/
 theorem boolean_keys_distinct (first second : O) (different : first ≠ second)
     (left right : Bool) :
     choiceKey first (.boolean left : Operand A) ≠ choiceKey second (.boolean right) := by
   intro same
   exact different (ChoiceKey.boolean.inj same)
 
-/-- All local witnesses of one Boolean source occurrence use its same key. -/
+/-- All grounding witnesses of one expanded Boolean occurrence use its same key. -/
 theorem boolean_witness_key (occurrence : O) (left right : Bool) :
     choiceKey occurrence (.boolean left : Operand A) =
       choiceKey occurrence (.boolean right) := rfl

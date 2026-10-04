@@ -1,9 +1,12 @@
 # zetesis-themelios
 
-This crate admits original ASP source into zetesis through the pinned themelios
-parser and owned program representation. It preserves source text, identities
-and locations, and returns typed logical objects for other libraries to use.
-Admission does not invoke clingo or establish that an answer set exists.
+This crate admits original ASP source and canonical themelios programs into
+zetesis. Source admission preserves authored text, identities and locations;
+typed relational admission borrows the original logical statements. General
+formula preparation retains the original canonical program in an `Arc` and
+uses the same compiler as source preparation. These boundaries return checked
+logical objects for other libraries to use. Admission does not invoke
+clingo or establish that an answer set exists.
 
 Start with the [library guide](../../docs/book/rust/libraries.md) and
 [grounding chapter](../../docs/book/architecture/grounding.md). The
@@ -22,8 +25,11 @@ cargo doc --locked -p zetesis-themelios --no-deps --open
 |---|---|
 | `ParsedSource` | One owned parse with consuming admission attempts; eligible retries retain the original source and parse. |
 | `admit` | Relational templates for the strict normal-rule profile. |
+| `admit_program` | The same relational compiler over a borrowed canonical `logical::program::Program`, with logical structure limits and original statement evidence. |
 | `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata, with the expansion charges each admission accepted under its `ExpansionLimits`. Suitable input for lazy relational solving. |
 | `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from formula materialization. |
+| `prepare_program_formula` | The same general formula preparation from `Arc<logical::program::Program>`, with bounded logical inspection and retained original statement identity. |
+| `admit_program_formula` | Compose typed formula preparation and eager grounding into one `AdmittedFormula`. |
 | `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. Expansion is charged under the same `ExpansionLimits`; the admitted owner retains its usage. |
 
 The strict profile contains normal rules, constraints, singleton unconditioned
@@ -31,12 +37,37 @@ choices, closed logical values, positive/default-negated atoms and
 equality/disequality. Extended admission adds acyclic constants, checked ground
 arithmetic, finite fact pools/intervals, signature or empty `#show`, `#defined`
 and original source bundles. Formula admission provides the broader profile below.
+The typed `admit_program` door accepts the strict relational profile.
+`prepare_program_formula` admits the general formula profile from a canonical
+program without rendering or reparsing it. See the
+[typed formula guide](../../docs/book/rust/source.md#prepare-a-logical-formula-program)
+and [relational example](../../docs/book/rust/source.md#admit-an-existing-logical-program)
+for ownership, limits and session composition.
 
-A prepared formula exposes source evidence and analysis before consuming
+A prepared formula exposes its original program, optional source evidence and
+analysis before consuming
 `ground()` or `ground_with_observer(...)`. Materialization resumes the same
 budgets; preparation can succeed before grounding encounters an unsupported
 dependency, arithmetic failure or resource limit. See [preparation](src/formula.rs)
 and [observer contracts](src/grounding_observer.rs).
+
+`ProgramAdmissionOptions` bounds the typed formula input before normalization,
+including logical nodes, term/symbol depth, bodies, provenance entries and their
+text. The receipt retains the original canonical `Program` alongside prepared
+and analyzed structures; source receipts additionally retain original bytes.
+The typed door shares the supplied `Arc` rather than cloning the entire input.
+That retention has a memory cost: it is separate from named support-storage
+ceilings and is not an RSS limit. `ProgramSite` keeps a statement ID and optional
+real location; the ID refers to `original_program()` even for constructed input.
+Typed formula failures retain the same original owner, and `subject()` resolves
+the offending statement or part. Source and parser checks still run on authored
+text before canonicalization. Formula owners expose source bytes through an
+optional `source()`; logical input returns `None`, even when its provenance has
+parsed coordinates. S0 typed admission instead borrows its original statements
+and does not count their provenance in its structural limits.
+
+These program entry points compose with zetesis's current session APIs. A
+themelios-solve backend adapter remains separate integration work.
 
 An explicit `ground_hybrid()` instead returns an immutable shared `HybridFormula`.
 It completes original support and arithmetic admission, materializes producers
@@ -243,7 +274,9 @@ Ordinary choices and all five function heads admit atomic and Boolean operands
 with `not` and `not not`.
 Default-negated operands retain candidate-frozen truth and supply no positive
 producer support. Ordinary atomic contributions use the sign and complete atom
-as their key; Boolean contributions retain their written source occurrences.
+as their key. Each pool-expanded Boolean occurrence has its own key, including
+equal pool alternatives; grounding witnesses of one expanded occurrence share
+that key.
 Choice-head intervals expand within one group; disjunctive intervals expand
 whole rule instances.
 
@@ -562,7 +595,8 @@ constructing an assigned numeric value still requires the pinned i32 scalar
 range. Empty `#min{}` and `#max{}` return the genuine `#sup` and `#inf` endpoints;
 a nonempty extremum element with no measure is refused.
 
-`evaluate`, `render` and `view` return complete results or a located typed error.
+`evaluate`, `render` and `view` return complete results or a typed error with
+logical scope and any real source coordinates.
 Undefined/overflowing expressions, missing bindings, exceeded limits and
 cancellation do not return a partial observation. Terms deduplicate only within
 the term channel; an equal selected atom and shown term both remain visible.
@@ -683,6 +717,8 @@ separate ceilings. Zero is an actual zero allowance. A failure never returns a
 truncated admitted theory or an UNSAT claim. Logical payload budgets do not
 promise an exact process-memory bound.
 
+Logical failures retain `ProgramSite` identity even without a source span.
+`site()` exposes that scope; `diagnostics()` emits only real source coordinates.
 Syntax failures retain original source and typed themelios diagnostics.
 `SyntaxFailure::source()` and `diagnostics()` support caller-owned views;
 bundle failures retain the source catalog. Located observation errors expose
@@ -760,7 +796,7 @@ excluded, so an explicit empty projection remains admissible with zero projectio
 atoms and bytes. Sorting changes only the map, never term or atom payload.
 
 `FormulaFailure::AtomCatalog` retains a canonical representation/storage cause
-and source location. `FormulaFailure::AtomAllocation` retains an original
+and `ProgramSite`. `FormulaFailure::AtomAllocation` retains an original
 `std::collections::TryReserveError` for index reservations. Caller cancellation,
 work refusal and configured limits remain distinct typed failures.
 

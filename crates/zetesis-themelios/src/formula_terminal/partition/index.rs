@@ -19,7 +19,7 @@ use super::{
     matching, reads,
     workspace::{Context, Scratch},
 };
-use crate::FormulaFailure;
+use crate::{FormulaFailure, ProgramSite};
 
 pub(super) struct Defined<'d> {
     pub all: &'d [&'d WithProvenance<Statement>],
@@ -85,12 +85,17 @@ impl<'d> Defined<'d> {
         Ok(false)
     }
 
-    /// The index range of the definitions carrying `origin`.
+    /// The index range of definitions carrying the site's parsed coordinate.
+    /// Constructed sites have no parsed hint; whole-rule matching remains the
+    /// independent correspondence check for every site.
     pub fn origin(
         &self,
-        origin: Location,
+        origin: ProgramSite,
         context: &mut Context<'_, '_>,
     ) -> Result<std::ops::Range<usize>, FormulaFailure> {
+        let Some(origin) = origin.location() else {
+            return Ok(0..0);
+        };
         let entries = &self.origins.values;
         let start = partition(entries, context, |entry| entry.0 < origin)?;
         let end = partition(entries, context, |entry| entry.0 <= origin)?;

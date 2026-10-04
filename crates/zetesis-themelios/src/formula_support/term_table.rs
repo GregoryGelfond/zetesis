@@ -1,7 +1,7 @@
 //! Sparse term coordinates over one source vocabulary, independent of ASP order.
 
+use crate::ProgramSite;
 use crate::formula_support::Context;
-use themelios_base::span::Location;
 use zetesis_core::catalog::{CatalogRead, TermKey, TermRef};
 
 use super::{Computation, Counters, StorageLease, reserve};
@@ -22,7 +22,7 @@ impl TermTable {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let values = Binding::new(computation, limits, counters, location)?;
         let mut lease = computation.lease();
@@ -39,11 +39,15 @@ impl TermTable {
         &self,
         slot: usize,
         read: CatalogRead<'a>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermRef<'a>, FormulaFailure> {
         self.values.read(slot, read, location)
     }
-    pub(crate) fn key(&self, slot: usize, location: Location) -> Result<TermKey, FormulaFailure> {
+    pub(crate) fn key(
+        &self,
+        slot: usize,
+        location: ProgramSite,
+    ) -> Result<TermKey, FormulaFailure> {
         self.values.key(slot, location)
     }
     pub(crate) fn find(
@@ -52,7 +56,7 @@ impl TermTable {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         self.authenticate(key, computation, limits, counters, location)?;
         self.search(key, limits, counters, location)
@@ -65,7 +69,7 @@ impl TermTable {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.authenticate(key, computation, limits, counters, location)?;
         let at = match self.search(key, limits, counters, location)? {
@@ -104,7 +108,7 @@ impl TermTable {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.values
             .slots()
@@ -126,7 +130,7 @@ impl TermTable {
         key: &TermKey,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Result<usize, usize>, FormulaFailure> {
         let mut start = 0;
         let mut end = self.order.len();
@@ -160,12 +164,13 @@ mod tests {
         ValueNodeRef,
         catalog::{AssignmentError, ReadError},
     };
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: SourceId::new(93),
             span: Span::empty(ByteOffset::new(0)),
-        }
+        })
     }
+
     fn foreign(error: &FormulaFailure) -> bool {
         matches!(
             error,

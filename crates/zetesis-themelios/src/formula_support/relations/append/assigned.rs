@@ -7,7 +7,7 @@ use zetesis_core::PatternRef;
 use zetesis_core::catalog::AssignmentSlice;
 
 use super::{
-    AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Location, Memory, SupportAppend,
+    AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Memory, ProgramSite, SupportAppend,
     atom_failure, atom_interner, failure, owner_limits, record_owner_peak, size_of,
 };
 
@@ -85,7 +85,7 @@ impl SupportAppend<'_> {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<SourceAtom>, FormulaFailure> {
         let value = self.source_at(&atom.scope, atom.position, limits, counters, location)?;
         let outer = self.outer_bytes(workspace);
@@ -111,7 +111,7 @@ impl SupportAppend<'_> {
         position: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomRef<'_>, FormulaFailure> {
         counters.work(limits, location)?;
         if !self.scope.same(scope) {
@@ -128,7 +128,7 @@ impl SupportAppend<'_> {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<SourceAtom, FormulaFailure> {
         let outer = self.outer_bytes(workspace);
         let checked = owner_limits(limits, outer, location)?;
@@ -206,7 +206,7 @@ impl SupportAppend<'_> {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         counters.work(limits, location)?;
         if !self.scope.same(&atom.scope) || atom.position >= self.owner.len() {
@@ -232,7 +232,7 @@ impl SupportAppend<'_> {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let bytes = usize::try_from(self.owner.storage_bytes() + self.outer_bytes(0))
             .map_err(|_| failure(Failure::Overflow, location))?;

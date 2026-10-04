@@ -137,9 +137,21 @@ fn arithmetic_refusals_retain_the_source_rule() {
             panic!("expected evaluated arithmetic refusal: {failure}");
         };
         assert_eq!(error, expected, "{source}");
-        assert_eq!(location.source, source_id);
-        let start = usize::try_from(location.span.start().get()).unwrap();
-        let end = usize::try_from(location.span.end().get()).unwrap();
+        assert_eq!(
+            location.location().expect("parsed source").source,
+            source_id
+        );
+        let start = usize::try_from(
+            location
+                .location()
+                .expect("parsed source")
+                .span
+                .start()
+                .get(),
+        )
+        .unwrap();
+        let end =
+            usize::try_from(location.location().expect("parsed source").span.end().get()).unwrap();
         assert_eq!(
             &source[start..end],
             &source[source.find("p(").unwrap()..],

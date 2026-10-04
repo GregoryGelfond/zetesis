@@ -3,23 +3,25 @@ mod callers;
 mod leaves;
 use super::super::{Evaluation, Expression, Operation};
 use super::RETAINED_CELLS;
+use crate::ProgramSite;
 use crate::formula_support::testing::{Fixture, binding};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use themelios_base::{
     source::SourceId,
-    span::{ByteOffset, Location, Span},
+    span::{ByteOffset, Span},
 };
 use themelios_program::term::{BinaryOp, EvalError};
 use zetesis_core::catalog::TermAssignment;
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode, ValueNodeRef};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(17),
         span: Span::empty(ByteOffset::new(23)),
-    }
+    })
 }
+
 fn evaluate(
     evaluation: &mut Evaluation,
     nodes: Vec<Operation>,

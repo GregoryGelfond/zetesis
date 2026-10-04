@@ -76,7 +76,7 @@ impl<'a> ProjectionValues<'a> {
     /// original leases and cannot be populated by a later cursor.
     pub(super) fn retain_in_rule(
         mut self,
-        location: themelios_base::span::Location,
+        location: crate::ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         self.lease
             .observe(self.bytes() - size_of::<Self>(), location)?;

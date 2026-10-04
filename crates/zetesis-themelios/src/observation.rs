@@ -241,7 +241,7 @@ pub struct Statistics {
     pub peak_term_storage_bytes: u128,
 }
 
-/// Located source failure or runtime refusal with partial accounting.
+/// Logical or source failure, or runtime refusal with partial accounting.
 /// The default human view contains the cause and any known source identity and
 /// byte span. [`Self::retain_source`]
 /// adds an original source excerpt through themelios's canonical plain view;
@@ -252,15 +252,15 @@ pub struct Statistics {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
     kind: Box<ErrorKind>,
-    location: Option<Location>,
+    site: crate::ProgramSite,
     statistics: Statistics,
     source: Option<Box<crate::source_diagnostics::RetainedSource>>,
 }
 impl Error {
-    fn new(kind: ErrorKind, location: Option<Location>, statistics: Statistics) -> Self {
+    fn new(kind: ErrorKind, site: crate::ProgramSite, statistics: Statistics) -> Self {
         Self {
             kind: Box::new(kind),
-            location,
+            site,
             statistics,
             source: None,
         }
@@ -270,10 +270,16 @@ impl Error {
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
-    /// Original directive when one is being compiled/evaluated.
+    /// Real source coordinate of the original directive, when available.
     #[must_use]
     pub fn location(&self) -> Option<Location> {
-        self.location
+        self.site.location()
+    }
+    /// Logical statement identity, even when no parsed source evidence exists.
+    /// Resolve its ID through the formula receipt that owns this observation.
+    #[must_use]
+    pub fn site(&self) -> crate::ProgramSite {
+        self.site
     }
     /// Attach the matching original source for a later human diagnostic.
     ///
@@ -285,7 +291,8 @@ impl Error {
     /// ceilings bound those bytes. No entire include graph is retained.
     pub fn retain_source(&mut self, name: &str, source: &themelios_base::source::Source) {
         if self
-            .location
+            .site
+            .location()
             .is_some_and(|location| location.source == source.id())
         {
             self.source = Some(Box::new(crate::source_diagnostics::RetainedSource {
@@ -308,7 +315,7 @@ impl Error {
     /// Allocates the cause's diagnostic message; unlocated errors return `None`.
     #[must_use]
     pub fn diagnostic(&self) -> Option<themelios_base::diagnostic::Diagnostic> {
-        self.location.map(|location| {
+        self.site.location().map(|location| {
             crate::diagnostic::diagnostic(
                 "observation",
                 format!("observation refused: {:?}", self.kind),
@@ -329,7 +336,7 @@ impl fmt::Display for Error {
             && let Some(diagnostic) = self.diagnostic()
         {
             context.write(f, &diagnostic)?;
-        } else if let Some(location) = self.location {
+        } else if let Some(location) = self.site.location() {
             write!(
                 f,
                 " at source {}, bytes {}..{}",
@@ -455,6 +462,7 @@ pub(crate) struct Directive {
     term: Template,
     query: Query,
     origins: Vec<Location>,
+    site: crate::ProgramSite,
 }
 
 /// Prepare an output selection for repeated answers over one catalog's
@@ -491,8 +499,9 @@ pub fn prepare_selection<'a>(
     }
 }
 
-/// Immutable display templates with original source evidence. No solver or
-/// candidate carrier is retained; the query is meaningful for any supplied model.
+/// Immutable display templates with logical identity and any original source
+/// evidence. No solver or candidate carrier is retained; the query is meaningful
+/// for any supplied model.
 #[derive(Clone, Debug, Default)]
 pub struct ObservationProgram {
     data: Option<Arc<ObservationData>>,
@@ -540,11 +549,11 @@ impl ObservationProgram {
     /// Constants and observation safety are checked; logical execution is not admitted.
     ///
     /// # Errors
-    /// Returns the same located refusals as [`crate::SourceMetadata::compile`].
+    /// Returns the same typed refusals as [`crate::SourceMetadata::compile`].
     pub fn compile(
         program: &themelios_program::program::Program,
         limits: crate::MetadataLimits,
-        fallback: Location,
+        fallback: impl Into<crate::ProgramSite>,
     ) -> Result<Self, crate::MetadataError> {
         crate::SourceMetadata::compile(program, limits, fallback)
             .map(crate::SourceMetadata::into_observations)
@@ -555,17 +564,27 @@ impl ObservationProgram {
     pub fn is_empty(&self) -> bool {
         self.data.is_none()
     }
-    /// Original locations per distinct source template, in compilation order.
+    /// Real parsed locations per distinct template, in compilation order.
+    /// Constructed templates have an empty slice; [`Self::sites`] retains identity.
     pub fn origins(&self) -> impl Iterator<Item = &[Location]> {
         self.data
             .iter()
             .flat_map(|data| data.directives.iter())
             .map(|directive| directive.origins.as_slice())
     }
+    /// Statement identities per directive, in compilation order. IDs belong to
+    /// the original canonical program supplied to compilation or formula preparation.
+    pub fn sites(&self) -> impl Iterator<Item = crate::ProgramSite> + '_ {
+        self.data
+            .iter()
+            .flat_map(|data| data.directives.iter())
+            .map(|directive| directive.site)
+    }
     /// Evaluate the distinct term channel over a supplied complete model.
     ///
     /// # Errors
-    /// Returns a located evaluation, support, limit or control error without a partial term set.
+    /// Returns a typed evaluation, support, limit or control error without a
+    /// partial term set. Source coordinates are present only when available.
     pub fn evaluate(
         &self,
         model: &Model,

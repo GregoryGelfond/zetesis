@@ -24,7 +24,7 @@ use zetesis_core::{Sign, TemplateTerm as Term};
 use zetesis_domain::{Analysis, Domain};
 
 use super::super::evaluation::Evaluation;
-use super::{Counters, Event, FormulaFailure, FormulaLimits, Location, Support};
+use super::{Counters, Event, FormulaFailure, FormulaLimits, ProgramSite, Support};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr, RuleIr};
@@ -176,7 +176,7 @@ impl Candidates {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut count = 0_usize;
         for selected in &symbols {
@@ -311,7 +311,7 @@ fn meet<'p>(
     source: &BTreeSet<&'p Symbol>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     let Some(values) = target else {
         let mut values = Vec::new();
@@ -360,7 +360,7 @@ fn excludes(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let left = evaluation.expression(
         comparison.left,
@@ -607,7 +607,7 @@ impl<'a, 'source> Guards<'a, 'source> {
         row: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         counters.record(Event::DomainGuardRow);
         for restriction in &self.restrictions {
@@ -760,7 +760,7 @@ fn argument<'a, 'p>(
     column: usize,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<&'a BTreeSet<&'p Symbol>>, FormulaFailure> {
     for (signature, index, argument) in analysis.arguments() {
         counters.charge_work(
@@ -799,7 +799,7 @@ fn compare_work(
     right: &Symbol,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     counters.charge_work(
         1 + atomic_bytes(left) as u128 + atomic_bytes(right) as u128,
@@ -808,6 +808,6 @@ fn compare_work(
     )
 }
 
-fn failure(error: Failure, location: Location) -> FormulaFailure {
+fn failure(error: Failure, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation { error, location }
 }

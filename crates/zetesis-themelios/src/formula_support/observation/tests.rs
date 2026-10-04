@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
+use crate::ProgramSite;
 use crate::test_support::location;
-use themelios_base::span::Location;
 
 use super::*;
 use crate::formula::Preparation;
@@ -24,7 +24,7 @@ impl GroundingObserver for Observer {
     fn phase_exit(
         &self,
         _: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {

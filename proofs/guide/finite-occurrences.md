@@ -14,14 +14,36 @@ body occurrence produces complete rules. `original_in_context`,
 meaning under explicit complete coverage. They do not flatten multiple
 disjunctive rules into one larger head.
 
-Inside a choice, aggregate or objective element, `localOccurrences` instead
-retains the original element identity while emitting its local rows. The
-`local_occurrences_complete` law gives both directions of this coverage.
-`local_activity_complete` then characterizes whether any emitted row activates
-a complete key. Choice eligibility, aggregate measurement and objective scoring
-have different subsequent operations; this common coverage result does not
-identify those operations. Original Boolean choice occurrence keys remain
-distinct from ordinary atom keys and complete aggregate/objective tuples.
+Inside a choice, aggregate or objective group, pool alternatives stay in the
+same group. The generic `localOccurrences` construction retains the identity
+supplied to its emitter; `local_occurrences_complete` proves row membership and
+`local_activity_complete` proves existential activity. Neither membership law
+chooses which rows share a counted key. In particular, these laws do not justify
+merging Boolean pool alternatives under their original written-element key.
+
+`expandedOccurrences` gives each position in the complete pool-expanded list a
+key before emitting its grounding witnesses. Equal values at different positions
+retain different keys. `expanded_occurrence_activity` proves that key `i` is
+active exactly when the alternative at position `i` has an active witness.
+Several witnesses of one expanded occurrence therefore activate one key. The
+predicate can be original row truth or frozen `M/J` row truth; the signed-head
+activity laws separately establish those meanings.
+
+For `{ #true : p(1;1) } = 2. p(1).`, the repeated pool value produces two
+expanded Boolean occurrences. Both are active in `{p(1)}`, satisfying the bound.
+By comparison, `d(1..2). 2 { #true : d(X) } 2.` has two grounding witnesses of
+one expanded occurrence and is inconsistent. The checked example in
+[`FinitePools.lean`](../Zetesis/FinitePools.lean) computes four witness rows from
+two equal alternatives and two equal witnesses per alternative; there are
+exactly two distinct occurrence keys.
+
+The Rust choice compiler assigns `HeadElementKey::Occurrence` separately to
+each literal/condition pool product alternative, before local variable bindings.
+`HeadKey::Occurrence` carries it through grounding. `LocalFamily` still identifies
+the original element for arithmetic definedness and warning handling; it does
+not determine Boolean counting. All these identities are local to their choice
+group. Provenance remains diagnostic evidence. Source-product completeness,
+correct key assignment and the Rust lowering remain correspondence obligations.
 
 Universal conditionals use a different quantifier order:
 `ConsequentAlternatives.original_semantics` and `frozen_semantics` place an

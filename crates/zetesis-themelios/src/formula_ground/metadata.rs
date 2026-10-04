@@ -2,7 +2,7 @@
 //!
 //! Each atom owns two chain headers and a reference to its first source entry. Entries live
 //! in shared append arenas: producers retain insertion order and origins retain
-//! full `Location` order without duplicates. Links never cross arena owners.
+//! full `ProgramSite` order without duplicates. Links never cross arena owners.
 //! This removes per-atom staging allocations, at the cost of one link per entry.
 //! The arena remains live while the public root-owned origin vectors are built.
 
@@ -10,7 +10,7 @@ use std::cmp::Ordering;
 use std::iter::FusedIterator;
 use std::num::NonZeroUsize;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use crate::expansion::Budget;
 use crate::formula_support::Counters;
@@ -43,7 +43,7 @@ struct Atom {
 pub(super) struct Metadata {
     atoms: Vec<Atom>,
     producers: Vec<Entry<usize>>,
-    origins: Vec<Entry<Location>>,
+    origins: Vec<Entry<ProgramSite>>,
 }
 
 impl Metadata {
@@ -52,7 +52,7 @@ impl Metadata {
     /// relocations, origin searches/inserts and final evidence copies are extra.
     pub(super) fn atom(
         &mut self,
-        location: Location,
+        location: ProgramSite,
         counters: &mut Counters,
         limits: &FormulaLimits,
     ) -> Result<(), FormulaFailure> {
@@ -76,7 +76,7 @@ impl Metadata {
         Ok(())
     }
 
-    pub(super) fn location(&self, atom: usize) -> Location {
+    pub(super) fn location(&self, atom: usize) -> ProgramSite {
         self.origins[self.atoms[atom].first_origin.get() - 1].value
     }
 
@@ -86,7 +86,7 @@ impl Metadata {
         antecedent: usize,
         counters: &mut Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         counters.charge_work(growth(&self.producers), limits, location)?;
         reserve(&mut self.producers, 1, location)?;
@@ -105,7 +105,7 @@ impl Metadata {
     pub(super) fn origin(
         &mut self,
         atom: usize,
-        location: Location,
+        location: ProgramSite,
         budget: &mut Budget,
         counters: &mut Counters,
         limits: &FormulaLimits,
@@ -140,7 +140,7 @@ impl Metadata {
         Ok(())
     }
 
-    fn find_origin(&self, atom: usize, location: Location) -> Position {
+    fn find_origin(&self, atom: usize, location: ProgramSite) -> Position {
         let chain = self.atoms[atom].origins;
         let last = chain.last.expect("every atom retains its first origin");
         match location.cmp(&self.origins[last.get() - 1].value) {
@@ -188,7 +188,7 @@ impl Metadata {
     pub(super) fn origins(
         &self,
         atom: usize,
-    ) -> impl ExactSizeIterator<Item = Location> + FusedIterator + '_ {
+    ) -> impl ExactSizeIterator<Item = ProgramSite> + FusedIterator + '_ {
         Values::new(&self.origins, self.atoms[atom].origins)
     }
 
@@ -199,7 +199,7 @@ impl Metadata {
         atom: usize,
         counters: &mut Counters,
         limits: &FormulaLimits,
-    ) -> Result<Vec<Location>, FormulaFailure> {
+    ) -> Result<Vec<ProgramSite>, FormulaFailure> {
         let origins = self.origins(atom);
         let location = self.location(atom);
         counters.charge_work(origins.len() as u128 * 2, limits, location)?;
@@ -267,7 +267,7 @@ fn growth<T>(entries: &Vec<T>) -> u128 {
 fn reserve<T>(
     entries: &mut Vec<T>,
     additional: usize,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     entries
         .try_reserve(additional)

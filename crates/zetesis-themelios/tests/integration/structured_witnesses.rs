@@ -487,14 +487,15 @@ fn witness_nodes_obey_the_value_ceiling() {
 fn compiled_witnesses_retain_source_provenance() {
     let source = "p(f(1)).q:-p(f(X)):#true.";
     let admitted = formula(source);
-    assert_eq!(admitted.source().text(), source);
-    assert!(
+    assert_eq!(admitted.source().expect("source input").text(), source);
+    assert!(admitted.formula_origins().iter().flatten().any(|location| {
         admitted
-            .formula_origins()
-            .iter()
-            .flatten()
-            .any(|location| admitted.source().slice(location.span).unwrap() == "q:-p(f(X)):#true.")
-    );
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap()
+            == "q:-p(f(X)):#true."
+    }));
 }
 
 // Admission is monotone in each isolated resource ceiling. Each iteration halves

@@ -2,9 +2,9 @@
 
 use std::cell::Cell;
 
-use themelios_base::span::Location;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
@@ -123,7 +123,7 @@ impl GroundingObserver for SupportObservation {
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {
@@ -189,8 +189,17 @@ fn negative_delta_retains_duplicate_source_origins() {
         .iter()
         .flatten()
         .filter_map(|location| {
-            let start = usize::try_from(location.span.start().get()).unwrap();
-            let end = usize::try_from(location.span.end().get()).unwrap();
+            let start = usize::try_from(
+                location
+                    .location()
+                    .expect("parsed source")
+                    .span
+                    .start()
+                    .get(),
+            )
+            .unwrap();
+            let end = usize::try_from(location.location().expect("parsed source").span.end().get())
+                .unwrap();
             (&source[start..end] == authored).then_some(start)
         })
         .collect();

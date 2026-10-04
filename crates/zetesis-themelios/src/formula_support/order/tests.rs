@@ -1,5 +1,6 @@
+use crate::ProgramSite;
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{AtomPattern, Predicate, Sign, Term};
 
@@ -10,11 +11,11 @@ use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::testing::Fixture;
 use crate::formula_support::{PatternOccurrence, PositivePattern};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(37),
         span: Span::empty(ByteOffset::new(12)),
-    }
+    })
 }
 
 fn atom(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {

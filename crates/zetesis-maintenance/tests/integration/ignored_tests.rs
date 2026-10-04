@@ -474,7 +474,7 @@ fn a_selection_entry_naming_no_test_is_refused() {
 }
 
 const SCRIPT: &str = "oracle_test() {\n    cargo test \"$@\"\n}\n\
-    oracle_test --locked --no-fail-fast -p example --test alpha --test beta -- --ignored --nocapture\n";
+    oracle_test --locked --no-fail-fast -p example --test alpha --test beta -- --ignored --show-output\n";
 
 #[test]
 fn a_campaign_names_its_package_and_its_targets() {
@@ -536,7 +536,7 @@ fn a_harness_option_the_gate_does_not_use_is_refused() {
 
 #[test]
 fn a_campaign_without_ignored_runs_no_comparison() {
-    let script = "oracle_test --locked -p example --test alpha -- --nocapture\n";
+    let script = "oracle_test --locked -p example --test alpha -- --show-output\n";
     let found = campaigns(script).unwrap();
     assert!(!found[0].ignored);
     assert!(!found[0].runs("example", "alpha", "any_test"));
@@ -781,6 +781,21 @@ fn the_harness_output_names_the_tests_that_ran() {
     assert_eq!(
         ran(output),
         std::collections::BTreeSet::from(["alpha::first", "alpha::second"])
+    );
+}
+
+#[test]
+fn captured_reference_output_keeps_complete_harness_records() {
+    let output = "running 1 test\ntest alpha::first ... ok\n\n\
+        successes:\n\n---- alpha::first stdout ----\n\
+        reference_json: {\"exit\":30,\"stdout\":\"raw reference output\"}\n\n\
+        successes:\n    alpha::first\n\n\
+        test result: ok. 1 passed; 0 failed; 0 ignored\n";
+    let gate = campaigns(ALPHA).unwrap();
+    check_runs(&gate, &[comparison("alpha::first")], &[output.into()]).unwrap();
+    assert_eq!(
+        ran(output),
+        std::collections::BTreeSet::from(["alpha::first"])
     );
 }
 

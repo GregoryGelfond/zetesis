@@ -9,6 +9,8 @@ use themelios_program::raise::LowerError;
 use themelios_syntax::diagnostic::SyntaxError;
 use zetesis_core::{AdmissionError, ConstructionError};
 
+use crate::ProgramSite;
+
 /// A physical resource counted before template admission.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum InputLimit {
@@ -33,7 +35,7 @@ impl fmt::Display for InputLimit {
     }
 }
 
-/// A construct excluded by the source admission operation that reports it.
+/// A construct excluded by the admission operation that reports it.
 ///
 /// Relational and formula admission share these feature names. The enclosing
 /// operation identifies the profile; this value does not imply an S0 refusal.
@@ -173,8 +175,8 @@ impl fmt::Display for SyntaxFailure {
 
 impl std::error::Error for SyntaxFailure {}
 
-/// A typed admission refusal. Every arm either carries a source location or
-/// retains the dependency's complete located diagnostic values.
+/// A typed admission refusal. Logical failures retain their program subject and
+/// any real source evidence; parser failures retain complete located diagnostics.
 #[derive(Debug)]
 pub enum AdmissionFailure {
     /// A source or traversal ceiling was exceeded; this is not semantic UNSAT.
@@ -185,8 +187,8 @@ pub enum AdmissionFailure {
         limit: usize,
         /// Count observed when admission stopped.
         observed: usize,
-        /// Source position associated with the refusal.
-        location: Location,
+        /// Logical or source scope associated with the refusal.
+        location: ProgramSite,
     },
     /// The source model's own coordinate ceiling was exceeded.
     Source {
@@ -199,12 +201,12 @@ pub enum AdmissionFailure {
     Syntax(SyntaxFailure),
     /// Every diagnostic returned by the best-effort raiser.
     Raise(Vec<LowerError>),
-    /// A form excluded by the source profile.
+    /// A form excluded by the selected admission profile.
     Profile {
-        /// The excluded source construct.
+        /// The excluded construct.
         feature: ProfileFeature,
-        /// Its source position.
-        location: Location,
+        /// Logical subject and any real source position.
+        location: ProgramSite,
     },
     /// A finite numeric endpoint excluded by the extremum representation guard.
     /// This is a zetesis admission policy, not a parser or resource failure.
@@ -212,33 +214,50 @@ pub enum AdmissionFailure {
         /// The evaluated endpoint, either `i32::MIN` or `i32::MAX`.
         value: i32,
         /// Source position of the guarded extremum expression.
-        location: Location,
+        location: ProgramSite,
     },
     /// A core atom or predicate constructor refused its checked shape.
     Construction {
         /// The typed core refusal.
         error: ConstructionError,
         /// Source of the value being constructed.
-        location: Location,
+        location: ProgramSite,
     },
     /// Canonical source metadata could not be admitted or published.
     Metadata {
         /// Typed canonical identity, allocation or storage refusal.
         error: crate::MetadataStorageError,
-        /// Original declaration or compilation fallback location.
-        location: Location,
+        /// Original declaration identity and any real source evidence.
+        location: ProgramSite,
     },
     /// The normalized program failed the independent core admission door.
     Core {
         /// The typed core refusal.
         error: AdmissionError,
         /// The affected rule, or the full source for program-wide failures.
-        location: Location,
+        location: ProgramSite,
     },
 }
 
 impl AdmissionFailure {
+    /// Logical or source scope carried by this typed refusal. Parser and raiser
+    /// diagnostic collections can describe several sites and have no single site.
+    #[must_use]
+    pub fn site(&self) -> Option<ProgramSite> {
+        match self {
+            Self::Source { location, .. } => Some((*location).into()),
+            Self::Limit { location, .. }
+            | Self::Profile { location, .. }
+            | Self::ExtremumEndpoint { location, .. }
+            | Self::Construction { location, .. }
+            | Self::Metadata { location, .. }
+            | Self::Core { location, .. } => Some(*location),
+            Self::Syntax(_) | Self::Raise(_) => None,
+        }
+    }
     /// Derive source diagnostics without discarding typed refusal data.
+    /// An unlocated logical refusal returns no source diagnostic; [`Self::site`]
+    /// still exposes its program scope.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         match self {
@@ -249,29 +268,25 @@ impl AdmissionFailure {
                 .collect(),
             Self::Raise(errors) => errors.iter().map(ToDiagnostic::to_diagnostic).collect(),
             Self::Limit { location, .. } => {
-                vec![diagnostic("input-limit", self.to_string(), *location)]
+                site_diagnostics("input-limit", self.to_string(), *location)
             }
             Self::Source { location, .. } => {
                 vec![diagnostic("source-limit", self.to_string(), *location)]
             }
             Self::Profile { location, .. } => {
-                vec![diagnostic(
-                    "unsupported-profile",
-                    self.to_string(),
-                    *location,
-                )]
+                site_diagnostics("unsupported-profile", self.to_string(), *location)
             }
             Self::ExtremumEndpoint { location, .. } => {
-                vec![diagnostic("extremum-endpoint", self.to_string(), *location)]
+                site_diagnostics("extremum-endpoint", self.to_string(), *location)
             }
             Self::Construction { location, .. } => {
-                vec![diagnostic("invalid-shape", self.to_string(), *location)]
+                site_diagnostics("invalid-shape", self.to_string(), *location)
             }
             Self::Metadata { location, .. } => {
-                vec![diagnostic("metadata-storage", self.to_string(), *location)]
+                site_diagnostics("metadata-storage", self.to_string(), *location)
             }
             Self::Core { location, .. } => {
-                vec![diagnostic("core-admission", self.to_string(), *location)]
+                site_diagnostics("core-admission", self.to_string(), *location)
             }
         }
     }
@@ -334,6 +349,19 @@ pub(crate) fn diagnostic(name: &'static str, message: String, location: Location
     .expect("every typed refusal renders a nonempty diagnostic message")
 }
 
-pub(crate) fn unsupported(feature: ProfileFeature, location: Location) -> AdmissionFailure {
-    AdmissionFailure::Profile { feature, location }
+pub(crate) fn unsupported(
+    feature: ProfileFeature,
+    location: impl Into<ProgramSite>,
+) -> AdmissionFailure {
+    AdmissionFailure::Profile {
+        feature,
+        location: location.into(),
+    }
+}
+
+fn site_diagnostics(name: &'static str, message: String, site: ProgramSite) -> Vec<Diagnostic> {
+    site.location()
+        .map(|location| diagnostic(name, message, location))
+        .into_iter()
+        .collect()
 }

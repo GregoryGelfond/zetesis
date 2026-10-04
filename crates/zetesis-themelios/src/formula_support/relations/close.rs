@@ -1,6 +1,6 @@
 //! Consume completed support into indexed storage without retaining its truth views.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::{
     TemplateComponents,
     atom_interner::{self, ClosedCatalog},
@@ -29,7 +29,7 @@ impl ClosedSource {
         source_peak: u128,
         external: u128,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, SourceCloseFailure> {
         let mut closed = Self {
             storage,
@@ -39,10 +39,7 @@ impl ClosedSource {
         let retained = closed.storage_bytes();
         let total = external
             .checked_add(retained)
-            .ok_or_else(|| SourceCloseFailure {
-                failure: overflow(location),
-                peak_bytes: source_peak,
-            })?;
+            .ok_or_else(|| SourceCloseFailure::new(overflow(location), source_peak))?;
         closed.close_peak = closed.close_peak.max(retained);
         ceiling(
             FormulaResource::SupportBytes,
@@ -50,10 +47,7 @@ impl ClosedSource {
             limits.max_support_bytes as u128,
             location,
         )
-        .map_err(|failure| SourceCloseFailure {
-            failure,
-            peak_bytes: closed.close_peak,
-        })?;
+        .map_err(|failure| SourceCloseFailure::new(failure, closed.close_peak))?;
         Ok(closed)
     }
 
@@ -78,12 +72,20 @@ impl ClosedSource {
 /// receipt; the cumulative counter guard still preserves accepted work.
 #[derive(Debug)]
 pub(crate) struct SourceCloseFailure {
-    failure: FormulaFailure,
+    failure: Box<FormulaFailure>,
     peak_bytes: u128,
 }
 impl SourceCloseFailure {
+    // The uncommon failure owns its cause off the successful close path.
+    fn new(failure: FormulaFailure, peak_bytes: u128) -> Self {
+        Self {
+            failure: Box::new(failure),
+            peak_bytes,
+        }
+    }
+
     pub(crate) fn into_parts(self) -> (FormulaFailure, u128) {
-        (self.failure, self.peak_bytes)
+        (*self.failure, self.peak_bytes)
     }
 }
 
@@ -112,15 +114,11 @@ impl SupportCatalog {
             counters,
             location,
         } = work;
-        let source_bytes = self.bytes(location).map_err(|failure| SourceCloseFailure {
-            failure,
-            // No allocation has occurred. The canonical owner is still readable.
-            peak_bytes: self.owner.storage_bytes(),
+        let source_bytes = self.bytes(location).map_err(|failure| {
+            // No storage close has occurred. The canonical owner is still readable.
+            SourceCloseFailure::new(failure, self.owner.storage_bytes())
         })? as u128;
-        let refuse = |failure| SourceCloseFailure {
-            failure,
-            peak_bytes: source_bytes,
-        };
+        let refuse = |failure| SourceCloseFailure::new(failure, source_bytes);
         counters.work(limits, location).map_err(refuse)?;
         let metadata = source_bytes - self.owner.storage_bytes();
         let external = external_bytes
@@ -163,25 +161,16 @@ impl SupportCatalog {
             .max(source_bytes);
         let total_peak = external
             .checked_add(source_peak)
-            .ok_or_else(|| SourceCloseFailure {
-                failure: overflow(location),
-                peak_bytes: source_peak,
-            })?;
+            .ok_or_else(|| SourceCloseFailure::new(overflow(location), source_peak))?;
         counters.record(Event::SupportPeakBytes(total_peak));
-        let storage = storage.map_err(|failure| SourceCloseFailure {
-            failure,
-            peak_bytes: source_peak,
-        })?;
+        let storage = storage.map_err(|failure| SourceCloseFailure::new(failure, source_peak))?;
         ceiling(
             FormulaResource::SupportBytes,
             total_peak,
             limits.max_support_bytes as u128,
             location,
         )
-        .map_err(|failure| SourceCloseFailure {
-            failure,
-            peak_bytes: source_peak,
-        })?;
+        .map_err(|failure| SourceCloseFailure::new(failure, source_peak))?;
         // Retire support-only metadata before admitting the returned envelope.
         // Components move unchanged; canonical payload is never recopied.
         let components = self.components;
@@ -196,7 +185,7 @@ impl SupportCatalog {
     }
 }
 
-fn overflow(location: Location) -> FormulaFailure {
+fn overflow(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation {
         error: zetesis_core::relation::Failure::Overflow,
         location,

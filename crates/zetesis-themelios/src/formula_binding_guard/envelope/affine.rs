@@ -8,7 +8,7 @@
 //! still uses checked source arithmetic. Unsupported operations yield no binding
 //! evidence; finite-width exhaustion has its own located limit.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::ValueNodeRef;
 
@@ -29,7 +29,7 @@ pub(super) struct Reader<'a, 'source> {
     pub counters: &'a mut crate::formula_support::Counters,
     pub variables: usize,
     pub budget: &'a mut Budget,
-    pub location: Location,
+    pub location: ProgramSite,
 }
 
 impl Reader<'_, '_> {
@@ -168,7 +168,7 @@ impl Reader<'_, '_> {
     }
 }
 
-pub(super) fn coefficient(value: i128, location: Location) -> Result<i64, FormulaFailure> {
+pub(super) fn coefficient(value: i128, location: ProgramSite) -> Result<i64, FormulaFailure> {
     i64::try_from(value).map_err(|_| {
         let magnitude = if value < 0 {
             value.unsigned_abs() - 1

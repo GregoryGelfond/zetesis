@@ -340,8 +340,8 @@ fn compile_bundle(
         &source,
         options.core_limits,
         limits,
-        location,
-        source_metadata.finish(location)?,
+        location.into(),
+        source_metadata.finish(location.into())?,
     )?)
 }
 

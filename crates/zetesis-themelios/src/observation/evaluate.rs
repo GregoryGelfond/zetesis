@@ -294,7 +294,7 @@ pub(super) fn terms(
         )?;
         let mut result = output::Terms::new(ctx.terms.read());
         for directive in program.directives {
-            ctx.work.location = directive.origins.first().copied();
+            ctx.work.site = directive.site;
             visit(
                 &directive.query,
                 &atoms,
@@ -329,7 +329,7 @@ pub(super) fn evaluate(
         cancellation,
         statistics: Statistics::default(),
         local_bytes: 0,
-        location: None,
+        site: crate::ProgramSite::program(),
     };
     let symbols = terms(program, model, &mut work)?;
     Ok(Evaluation {

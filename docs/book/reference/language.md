@@ -220,8 +220,9 @@ head, body or guard occurrence chooses independently and the product emits
 complete rules. Thus `q :- p(1;2).` supplies the two rules `q :- p(1).` and
 `q :- p(2).`; it does not require both body atoms. Pool alternatives inside a
 choice, aggregate or optimization element remain in that same group. Complete
-atom or tuple keys still coalesce by the group's established semantics. Boolean
-choice contributions retain their original source occurrence keys.
+atom or tuple keys still coalesce by the group's established semantics. Each
+pool-expanded Boolean choice occurrence instead receives a distinct key, even
+when two alternatives have equal values.
 
 A local conditional condition has its own environment for every pool selection.
 Universal body conditions contribute separate conjuncts; conditional head
@@ -293,9 +294,9 @@ activity through its truth and its own condition. It introduces no atom and
 supplies no support for atoms in that condition. Thus `1{#true;a}1.` has only
 the empty answer set, while `1{#false;a}1.` has only `{a}`.
 
-For ordinary Boolean choices, zetesis adopts a source-occurrence counting
-contract: each written Boolean element has its own key within an activated
-outer group. All eligible local witnesses of that one element share its key.
+For ordinary Boolean choices, each pool-expanded element has its own key within
+an activated outer group. All eligible grounding witnesses of that expanded
+element share its key. Equal pool alternatives still produce distinct keys.
 For example, `2{#true;#true}2.` has the empty answer set, but
 `d(1..2).2{#true:d(X)}2.` has no answer set: the two `d(X)` witnesses activate
 one occurrence. Separate written rules retain separate groups. In particular,
@@ -311,15 +312,15 @@ contributions: `1{a;not a;not not a}1.` has only the empty answer set, and
 `2{a;not not a}2.` has only `{a}`. Repeated occurrences of the same signed atom
 coalesce; repeated Boolean elements retain their separate occurrence keys.
 
-This Boolean counting rule is an adopted language extension. Its intended
-reduct laws and the remaining source-to-implementation correspondence are
-separated in the [Lean proof boundary](../lean/correspondence.md).
-Pool alternatives in one Boolean element also share that element's key.
-Thus `{p(1);p(2)}.1{#true:p(1;2)}1.` admits `{p(1)}`, `{p(2)}` and
-`{p(1),p(2)}` under this contract, like the single element `#true:p(X)`.
-Writing `#true:p(1);#true:p(2)` instead introduces two keys and excludes the
-both-atom answer. Clingo treats this pooled condition like the latter form;
-this specific case is an explicit semantic difference, not a parity claim.
+The Boolean element grammar extends ASP-Core-2. Its reduct laws and the
+remaining source-to-implementation correspondence are separated in the
+[Lean proof boundary](../lean/correspondence.md). Pool counting follows the
+expanded occurrences: `{p(1);p(2)}.1{#true:p(1;2)}1.` admits exactly `{p(1)}`
+and `{p(2)}`, as does the head written with `#true:p(1);#true:p(2)`.
+The both-atom interpretation activates two keys and violates the upper bound.
+Likewise, `{ #true : p(1;1) } = 2. p(1).` has answer set `{p(1)}` because its
+two equal pool alternatives produce two active occurrences. This differs from
+multiple variable bindings of one expanded element, which share its key.
 
 | Aggregate form | Implemented scope | Remaining boundary |
 | --- | --- | --- |
@@ -423,9 +424,9 @@ For ordinary Boolean choices, `analysis_basis()` reports
 `AnalysisBasis::DependencyProjection`. The returned `analyzed_program()` is a
 signature/polarity projection; `source_analysis()` reports structural facts
 about that projection. Its safety and class verdicts are not conclusions about
-the original source semantics. The formula compiler retains the original
-occurrence groups separately and refuses with `FormulaFailure::ChoiceSource`
-if it cannot preserve their source evidence.
+the original source semantics. The formula compiler retains counted choice
+entries and their enclosing groups, assigns Boolean counting identities after
+pool expansion, and preserves statement provenance for diagnostics.
 
 Boolean operands in explicit tuple-keyed aggregate heads do not by themselves
 require that projection. Always inspect `analysis_basis()` before interpreting

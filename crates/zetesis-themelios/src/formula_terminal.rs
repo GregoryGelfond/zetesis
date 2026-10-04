@@ -5,23 +5,23 @@
 //! presence remains distinct from truth: reconstruction reads selected model
 //! rows, never the completed possible-support relation.
 
+mod materialize;
 mod partition;
 mod reconstruct;
 mod storage;
-mod materialize;
 pub(crate) use materialize::{Materialized, materialize};
 
 use std::{fmt, sync::Arc};
-use themelios_base::{source::Source, span::Location};
+use themelios_base::source::Source;
 use themelios_program::program::Program;
 use zetesis_core::AtomCatalog;
 use zetesis_ferraris::Theory;
 
 use crate::formula::Compiled;
-use crate::formula_hybrid::SourceOwner;
 use crate::formula_ir::RuleIr;
+use crate::formula_owner::Owner;
 use crate::formula_support::{AccountingBaseline, ClosedSource};
-use crate::{AnalysisBasis, FormulaLimits, SourceBundle, SourceMetadata};
+use crate::{AnalysisBasis, FormulaLimits, ProgramSite, SourceBundle, SourceMetadata};
 
 pub use reconstruct::{ReconstructionError, ReconstructionStatistics, TerminalReconstruction};
 
@@ -41,7 +41,7 @@ pub(crate) struct Extension {
     closed: ClosedSource,
     baseline: AccountingBaseline,
     limits: FormulaLimits,
-    location: Location,
+    location: ProgramSite,
     // Named noncanonical retained admission storage. Source AST/provenance
     // follows the existing bounded source-copy policy, not a whole-heap claim.
     metadata_bytes: u128,
@@ -50,7 +50,7 @@ pub(crate) struct Extension {
 struct Admitted {
     base: Compiled,
     extension: Extension,
-    source: SourceOwner,
+    source: Owner,
     metadata: SourceMetadata,
 }
 
@@ -77,7 +77,7 @@ impl TerminalFormula {
     pub(crate) fn new(
         base: Compiled,
         extension: Extension,
-        source: SourceOwner,
+        source: Owner,
         metadata: SourceMetadata,
     ) -> Self {
         Self(Arc::new(Admitted {
@@ -160,22 +160,22 @@ impl TerminalFormula {
         &self.0.metadata
     }
 
-    /// Original single source; absent for an include bundle.
+    /// Original canonical program before normalization or analysis projection.
     #[must_use]
-    pub fn source(&self) -> Option<&Source> {
-        match &self.0.source {
-            SourceOwner::Single(source) => Some(source),
-            SourceOwner::Bundle(_) => None,
-        }
+    pub fn original_program(&self) -> &Program {
+        self.0.source.program()
     }
 
-    /// Complete include bundle; absent for a single source.
+    /// Original single source; absent for an include bundle or logical input.
+    #[must_use]
+    pub fn source(&self) -> Option<&Source> {
+        self.0.source.source()
+    }
+
+    /// Complete include bundle; absent for a single source or logical input.
     #[must_use]
     pub fn bundle(&self) -> Option<&SourceBundle> {
-        match &self.0.source {
-            SourceOwner::Bundle(bundle) => Some(bundle),
-            SourceOwner::Single(_) => None,
-        }
+        self.0.source.source_bundle()
     }
 
     /// Source preparation charges, including bounded partition construction.
@@ -199,7 +199,7 @@ impl TerminalFormula {
     /// Render source diagnostics against their original source or bundle.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
-        WarningView(self)
+        self.0.source.warning_view(self.warnings())
     }
 
     /// Start an independent reconstruction history with admission work already
@@ -209,19 +209,5 @@ impl TerminalFormula {
     /// Returns an invalid retained component or resource refusal.
     pub fn reconstruction(&self) -> Result<TerminalReconstruction<'_>, ReconstructionError> {
         TerminalReconstruction::new(self)
-    }
-}
-
-struct WarningView<'a>(&'a TerminalFormula);
-impl fmt::Display for WarningView<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0.0.source {
-            SourceOwner::Single(source) => {
-                crate::formula_warning::source_view(self.0.warnings(), source).fmt(f)
-            }
-            SourceOwner::Bundle(bundle) => {
-                crate::formula_warning::bundle_view(self.0.warnings(), bundle).fmt(f)
-            }
-        }
     }
 }

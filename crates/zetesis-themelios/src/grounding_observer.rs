@@ -2,7 +2,7 @@
 
 mod profile;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 pub(crate) use profile::{Event, Profile, Work};
 pub use profile::{GroundingOutcome, GroundingPhase, GroundingWork};
@@ -62,8 +62,8 @@ pub trait GroundingObserver {
     /// pair per prepared IR rule; the location identifies original source context,
     /// but need not be unique after source expansion. Joins, filtering and formula
     /// emission remain interleaved inside that phase.
-    /// Whole-program phases use `None` rather than claiming one source location.
-    fn phase_enter(&self, _phase: GroundingPhase, _location: Option<Location>) {}
+    /// Whole-program phases use `None` rather than claiming one program site.
+    fn phase_enter(&self, _phase: GroundingPhase, _site: Option<ProgramSite>) {}
 
     /// End a phase with work performed before success, failure or unwind.
     ///
@@ -74,7 +74,7 @@ pub trait GroundingObserver {
     fn phase_exit(
         &self,
         _phase: GroundingPhase,
-        _location: Option<Location>,
+        _site: Option<ProgramSite>,
         _outcome: GroundingOutcome,
         _work: GroundingWork,
     ) {

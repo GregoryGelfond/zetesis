@@ -6,6 +6,15 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- Admission of constructed themelios programs in the strict relational profile,
+  with bounded traversal and errors that identify the original statement.
+- General formula preparation from a canonical themelios program, sharing the
+  source compiler and eager, hybrid and adaptive grounding operations. Errors
+  retain the original statement even when no source text exists.
+- Bounded export of native terms and signed atoms to themelios symbols, without
+  rendering and reparsing.
+- A Lean law separating pool-expanded Boolean occurrences from their grounding
+  witnesses.
 - Lean proofs for executable finite reduct checking, normal-program closure
   and packed interpretation construction and word export. These extend the
   mathematical library; they do not yet verify the complete Rust/GPU solver.
@@ -41,6 +50,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Boolean choice elements now count separately after pool expansion, matching
+  clingo. `{ #true : p(1;1) } = 2. p(1).` therefore has answer set `{p(1)}`.
+  Multiple grounding witnesses of one expanded element still share its key.
+- Updated the reviewed themelios dependency and removed the separate
+  source-location registry used for Boolean choice identity.
 - Separate atom selection, subset advancement, reduct queries and proper-subset
   search in the reference checker, preserving their operations and resource checks.
 - Separate formula admission's checks from the theory's shared allocation,

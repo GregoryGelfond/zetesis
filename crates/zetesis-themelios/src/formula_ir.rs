@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::formula_support::components::{
     Filter, Pattern as AtomPattern, Predicate, Term as CoreTerm,
 };
-use themelios_base::span::Location;
+use crate::{ProgramSite, StatementId};
 use themelios_program::program::{
     Arguments, Body, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
     LiteralInner, Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
@@ -48,7 +48,7 @@ pub(crate) struct Prepared {
     pub projection: Vec<RuleIr>,
     pub project_selection: crate::ProjectSelection,
     pub objectives: Vec<ObjectiveIr>,
-    pub objective_declarations: Vec<Location>,
+    pub objective_declarations: Vec<ProgramSite>,
     /// Extrema tuple carriers selected for an optional numeric-weight precision
     /// refinement after support completion.
     pub objective_extrema: BTreeSet<usize>,
@@ -82,8 +82,8 @@ pub(crate) struct ObjectiveIr {
     pub needs_eligibility_query: bool,
     pub condition: ObjectiveCondition,
     pub variables: usize,
-    pub origins: Vec<Location>,
-    pub location: Location,
+    pub origins: Vec<ProgramSite>,
+    pub location: ProgramSite,
 }
 /// Literal objectives preserve the lifted path; scoped weak bodies own the
 /// existing finite assignment schedule over the same literal sequence.
@@ -132,8 +132,8 @@ pub(crate) struct RuleIr {
     pub body_variables: usize,
     pub bindings: Option<crate::formula_assignment_plan::Plan>,
     pub variables: usize,
-    pub origins: Vec<Location>,
-    pub location: Location,
+    pub origins: Vec<ProgramSite>,
+    pub location: ProgramSite,
 }
 impl RuleIr {
     /// Body-local frames never receive the synthetic head-value suffix.
@@ -241,17 +241,17 @@ impl Element {
     }
 }
 /// Complete tuples have set identity. Ordinary atoms use their sign and grounded atom;
-/// ordinary Boolean elements instead retain every original source occurrence.
+/// Boolean elements identify each pool-expanded entry before local grounding.
 pub(crate) enum HeadElementKey {
     Atom,
-    BooleanOccurrences(Vec<Location>),
+    Occurrence(usize),
     Tuple(Vec<CoreTerm>),
 }
 impl HeadElementKey {
     pub(crate) fn tuple(&self) -> Option<&[CoreTerm]> {
         match self {
             Self::Tuple(terms) => Some(terms),
-            Self::Atom | Self::BooleanOccurrences(_) => None,
+            Self::Atom | Self::Occurrence(_) => None,
         }
     }
 }
@@ -306,7 +306,7 @@ impl Projection {
         view: zetesis_core::TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<zetesis_core::catalog::PredicateRef<'a>, FormulaFailure> {
         match self {
             Self::Arguments { predicate, .. } => predicate.get(view, limits, counters, location),
@@ -359,10 +359,45 @@ pub(crate) enum Operation {
     Constructor(Box<crate::formula_value::Constructor>),
 }
 
-/// Mutable source admission capabilities, borrowed only until the compiled
+/// Logical compilation limits shared by source and canonical-program admission.
+/// Source identity and syntax limits stay at their respective input boundaries.
+#[derive(Clone, Copy)]
+pub(crate) struct CompilationOptions {
+    pub(crate) max_body_elements: usize,
+    pub(crate) core_limits: zetesis_core::AdmissionLimits,
+}
+
+impl From<AdmissionOptions> for CompilationOptions {
+    fn from(options: AdmissionOptions) -> Self {
+        Self {
+            max_body_elements: options.max_body_elements,
+            core_limits: options.core_limits,
+        }
+    }
+}
+
+impl From<crate::BundleAdmissionOptions> for CompilationOptions {
+    fn from(options: crate::BundleAdmissionOptions) -> Self {
+        Self {
+            max_body_elements: options.max_body_elements,
+            core_limits: options.core_limits,
+        }
+    }
+}
+
+impl From<crate::ProgramAdmissionOptions> for CompilationOptions {
+    fn from(options: crate::ProgramAdmissionOptions) -> Self {
+        Self {
+            max_body_elements: options.max_body_elements,
+            core_limits: options.core_limits,
+        }
+    }
+}
+
+/// Mutable logical admission capabilities, borrowed only until the compiled
 /// program is ready to return to its owning preparation receipt.
 pub(crate) struct PreparationContext<'a> {
-    pub(crate) options: AdmissionOptions,
+    pub(crate) options: CompilationOptions,
     pub(crate) budget: &'a mut Budget,
     pub(crate) catalog: &'a mut SupportCatalog,
     pub(crate) work: GroundingWork<'a>,
@@ -373,7 +408,6 @@ impl PreparationContext<'_> {
         self,
         source: &SourceProgram,
         project_selection: crate::ProjectSelection,
-        choices: &crate::formula_choice_source::Catalog,
     ) -> Result<Prepared, FormulaFailure> {
         let Self {
             options,
@@ -401,18 +435,15 @@ impl PreparationContext<'_> {
             dependency_projection: false,
             location: fallback,
         };
-        for carrier in choices.statements(source, fallback) {
-            let carrier = carrier?;
-            if matches!(
-                carrier.get(),
-                Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
-            ) {
-                continue;
-            }
-            compiler.compile(carrier, &constants, &mut parts, fallback)?;
-        }
-        let mut analyzed = SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed));
-        let asked = crate::formula_keys::ask_all(&analyzed, limits, compiler.budget, fallback)?;
+        let emitted_owners = compiler.compile_program(source, &constants, &mut parts, fallback)?;
+        let (mut analyzed, owners) = crate::formula_keys::owners::Owners::collect(
+            std::mem::take(&mut parts.analyzed),
+            emitted_owners,
+            compiler.budget,
+            fallback,
+        )?;
+        let asked =
+            crate::formula_keys::ask_all(&analyzed, &owners, limits, compiler.budget, fallback)?;
         let keyed_constraints = asked.rules.len();
         if keyed_constraints > 0 {
             analyzed = replace_asked(
@@ -420,6 +451,7 @@ impl PreparationContext<'_> {
                 &constants,
                 &mut parts,
                 &analyzed,
+                &owners,
                 asked.rules,
                 fallback,
             )?;
@@ -479,7 +511,7 @@ struct Parts {
     analyzed: Vec<WithProvenance<Statement>>,
     pool_projection_nodes: u128,
     objectives: Vec<ObjectiveIr>,
-    objective_declarations: Vec<Location>,
+    objective_declarations: Vec<ProgramSite>,
 }
 
 /// Replace each written constraint's rules and analyzed statement by those
@@ -493,28 +525,33 @@ fn replace_asked(
     constants: &BTreeMap<String, Symbol>,
     parts: &mut Parts,
     analyzed: &SourceProgram,
-    asked: BTreeMap<Location, (themelios_program::provenance::Provenance, Vec<Rule>)>,
-    fallback: Location,
+    owners: &crate::formula_keys::owners::Owners,
+    asked: BTreeMap<StatementId, (themelios_program::provenance::Provenance, Vec<Rule>)>,
+    fallback: ProgramSite,
 ) -> Result<SourceProgram, FormulaFailure> {
-    parts
-        .rules
-        .retain(|rule| !asked.contains_key(&rule.location));
+    parts.rules.retain(|rule| {
+        rule.location
+            .statement_id()
+            .is_none_or(|owner| !asked.contains_key(&owner))
+    });
     parts.analyzed = analyzed
         .statements()
-        .filter(|carrier| match extended::parsed_origins(carrier)[..] {
-            [origin] => !asked.contains_key(&origin),
-            _ => true,
+        .enumerate()
+        .filter(|(index, _)| {
+            owners
+                .at(*index)
+                .is_none_or(|owner| !asked.contains_key(&owner))
         })
-        .cloned()
+        .map(|(_, carrier)| carrier.clone())
         .collect();
     let tag = themelios_program::provenance::Provenance::from(Origin::Transformed(
         TransformTag::new("zetesis-keyed-constraint"),
     ));
-    for (provenance, rules) in asked.into_values() {
+    for (owner, (provenance, rules)) in asked {
         for rule in rules {
             let carrier =
                 WithProvenance::new(Statement::Rule(rule), provenance.clone().merge(tag.clone()));
-            compiler.compile(&carrier, constants, parts, fallback)?;
+            compiler.compile(&carrier, constants, parts, fallback.with_statement(owner))?;
         }
     }
     Ok(SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed)))
@@ -590,7 +627,7 @@ fn validate_objectives(
 struct Normalizer<'a> {
     constants: &'a BTreeMap<String, Symbol>,
     budget: &'a mut Budget,
-    location: Location,
+    location: ProgramSite,
     failure: Option<ExpansionFailure>,
 }
 
@@ -688,7 +725,7 @@ impl Variables {
             index
         }
     }
-    pub(super) fn safety(&self, location: Location) -> Result<(), FormulaFailure> {
+    pub(super) fn safety(&self, location: ProgramSite) -> Result<(), FormulaFailure> {
         for variable in 0..self.count {
             if !self.safe.contains(&variable) {
                 if self.argument_inputs.contains(&variable) {
@@ -702,7 +739,7 @@ impl Variables {
 }
 
 pub(super) struct Compiler<'a> {
-    pub(super) options: AdmissionOptions,
+    pub(super) options: CompilationOptions,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     pub(super) source: components::Admission<'a>,
@@ -710,9 +747,41 @@ pub(super) struct Compiler<'a> {
     pub(super) domain: domain::Domain,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
-    pub(super) location: Location,
+    pub(super) location: ProgramSite,
 }
 impl Compiler<'_> {
+    /// Compile each original statement and record its emitted analysis family
+    /// before canonical collection can reorder or merge those carriers.
+    fn compile_program(
+        &mut self,
+        source: &SourceProgram,
+        constants: &BTreeMap<String, Symbol>,
+        parts: &mut Parts,
+        fallback: ProgramSite,
+    ) -> Result<Vec<Option<StatementId>>, FormulaFailure> {
+        let mut emitted_owners = Vec::new();
+        for (index, carrier) in source.statements().enumerate() {
+            if matches!(
+                carrier.get(),
+                Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
+            ) {
+                continue;
+            }
+            let owner = StatementId::new(index);
+            let site = fallback.with_statement(owner);
+            let start = parts.analyzed.len();
+            self.compile(carrier, constants, parts, site)?;
+            crate::formula_keys::owners::record(
+                &mut emitted_owners,
+                owner,
+                parts.analyzed.len() - start,
+                self.budget,
+                site,
+            )?;
+        }
+        Ok(emitted_owners)
+    }
+
     /// Compile one statement into the parts: a projection or objective
     /// declaration, expanded facts, or its rules, after normalizing it.
     fn compile(
@@ -720,12 +789,12 @@ impl Compiler<'_> {
         carrier: &WithProvenance<Statement>,
         constants: &BTreeMap<String, Symbol>,
         parts: &mut Parts,
-        fallback: Location,
+        fallback: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.location = extended::origin(carrier, fallback);
         let rewritten = self.normalize_statement(carrier, constants)?;
         let statement = rewritten.statements().next().expect("rewrite keeps a rule");
-        let origins = extended::parsed_origins(carrier);
+        let origins = extended::program_sites(carrier, self.location);
         if self.project_statement(
             statement,
             &origins,
@@ -800,7 +869,7 @@ impl Compiler<'_> {
     fn fact_rule(
         &mut self,
         head: &zetesis_core::AtomPattern,
-        origins: &[Location],
+        origins: &[ProgramSite],
     ) -> Result<RuleIr, FormulaFailure> {
         let head = self.admit_fact_pattern(head)?;
         self.budget.charge(
@@ -821,10 +890,10 @@ impl Compiler<'_> {
     fn objectives(
         &mut self,
         optimize: &Optimize,
-        origins: &[Location],
-        body_origins: &[Location],
+        origins: &[ProgramSite],
+        body_origins: &[ProgramSite],
         objectives: &mut Vec<ObjectiveIr>,
-        declarations: &mut Vec<Location>,
+        declarations: &mut Vec<ProgramSite>,
     ) -> Result<(), FormulaFailure> {
         let polarity = match optimize.direction {
             Direction::Minimize => WeightPolarity::AsWritten,
@@ -843,7 +912,7 @@ impl Compiler<'_> {
                 .origins()
                 .filter_map(|origin| {
                     if let Origin::Parsed(location) = origin {
-                        Some(*location)
+                        Some(self.location.with_location(*location))
                     } else {
                         None
                     }
@@ -891,7 +960,7 @@ impl Compiler<'_> {
     fn objective(
         &mut self,
         element: &OptimizeElement,
-        origins: Vec<Location>,
+        origins: Vec<ProgramSite>,
         polarity: WeightPolarity,
         family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
@@ -1052,7 +1121,7 @@ impl Compiler<'_> {
     pub(super) fn rule(
         &mut self,
         rule: &Rule,
-        origins: Vec<Location>,
+        origins: Vec<ProgramSite>,
         choice_source: Option<&Choice>,
     ) -> Result<RuleIr, FormulaFailure> {
         let mut variables = Variables::default();
@@ -1157,61 +1226,6 @@ impl Compiler<'_> {
             ),
             _ => Ok(Vec::new()),
         }
-    }
-    fn choice_elements(
-        &mut self,
-        choice: &Choice,
-        source: Option<&Choice>,
-        variables: &Variables,
-    ) -> Result<Vec<Element>, FormulaFailure> {
-        let mut elements = Vec::new();
-        // The whole-rule pool rewrite reconstructs a set of local head
-        // alternatives, which can reorder or merge them. Compile the retained
-        // source elements instead: only outer guards were selected by that
-        // rewrite, while each local literal and condition keeps its own product.
-        for (index, element) in source.unwrap_or(choice).elements().enumerate() {
-            let family = LocalFamily(index);
-            let boolean = if matches!(
-                element.get().literal().inner,
-                LiteralInner::True | LiteralInner::False
-            ) {
-                self.dependency_projection = true;
-                Some(self.boolean_occurrences(source.map(|_| element))?)
-            } else {
-                None
-            };
-            for literal in self.literal_alternatives(element.get().literal())? {
-                for alternative in self.condition_alternatives(element.get().condition())? {
-                    let mut local = variables.clone();
-                    self.head_global_literal(&literal, &mut local)?;
-                    let mut condition = self.condition(&alternative, &mut local)?;
-                    let (head, body_variables) =
-                        self.element_head(&literal, &mut local, &mut condition)?;
-                    let key = match &boolean {
-                        None => HeadElementKey::Atom,
-                        Some(origins) => {
-                            self.budget.charge(
-                                ExpansionResource::Origins,
-                                origins.len() as u128,
-                                self.location,
-                            )?;
-                            HeadElementKey::BooleanOccurrences(origins.clone())
-                        }
-                    };
-                    self.variable_limit(&local)?;
-                    local.safety(self.location)?;
-                    elements.push(Element {
-                        family,
-                        key,
-                        head,
-                        condition,
-                        body_variables,
-                        variables: local.count,
-                    });
-                }
-            }
-        }
-        Ok(elements)
     }
     pub(super) fn variable_limit(&self, variables: &Variables) -> Result<(), FormulaFailure> {
         ceiling(
@@ -1537,7 +1551,7 @@ pub(crate) fn check_objectives(
                 FormulaResource::ObjectiveElements,
                 *count as u128 + 1,
                 limits.objective.max_templates as u128,
-                parsed.location(weak.syntax().text_range()),
+                parsed.location(weak.syntax().text_range()).into(),
             )?;
             *count += 1;
             continue;
@@ -1545,7 +1559,7 @@ pub(crate) fn check_objectives(
         let ast::Statement::Optimize(optimize) = statement else {
             continue;
         };
-        let location = parsed.location(optimize.syntax().text_range());
+        let location: ProgramSite = parsed.location(optimize.syntax().text_range()).into();
         if optimize.keyword_token().is_none_or(|token| {
             !matches!(
                 token.kind(),
@@ -1559,7 +1573,7 @@ pub(crate) fn check_objectives(
                 FormulaResource::ObjectiveElements,
                 *count as u128 + 1,
                 limits.objective.max_templates as u128,
-                parsed.location(element.syntax().text_range()),
+                parsed.location(element.syntax().text_range()).into(),
             )?;
             *count += 1;
         }

@@ -7,6 +7,7 @@ mod forwarding;
 mod presence;
 pub(crate) use presence::{Presence, check as check_presence};
 
+use crate::ProgramSite;
 use crate::formula_ir::{HeadIr, LiteralIr, ObjectiveIr, RuleIr};
 use crate::formula_source_activity::signature;
 use crate::formula_support::{Counters, components::Pattern};
@@ -16,7 +17,6 @@ use themelios_analysis::{
     Analysis,
     depend::{DependencyGraph, DependencyKind},
 };
-use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::Signature;
 use zetesis_core::{PatternRef, TemplateComponentsRef, TemplateTerm};
@@ -25,7 +25,7 @@ struct Context<'a, 'source> {
     components: TemplateComponentsRef<'source>,
     limits: &'a FormulaLimits,
     counters: &'a mut Counters,
-    location: Location,
+    location: ProgramSite,
 }
 impl<'source> Context<'_, 'source> {
     fn work(&mut self) -> Result<(), FormulaFailure> {

@@ -1,7 +1,7 @@
 //! Local atom coordinates select one source authority without copying payload.
 
+use crate::ProgramSite;
 use crate::formula_support::Context;
-use themelios_base::span::Location;
 use zetesis_core::catalog::AtomRef;
 
 use super::{Computation, Counters, SourceAtom, SourceScope, StorageLease, reserve};
@@ -23,7 +23,7 @@ impl SourceSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let scope = computation.source_scope(location)?;
         let mut lease = computation.lease();
@@ -46,7 +46,7 @@ impl SourceSelection {
         position: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<SourceAtom, FormulaFailure> {
         counters.work(limits, location)?;
         let position = *self
@@ -64,7 +64,7 @@ impl SourceSelection {
         atom: &SourceAtom,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         self.search(atom, limits, counters, location)
             .map(|found| found.ok().map(|entry| self.inverse[entry].1))
@@ -80,7 +80,7 @@ impl SourceSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(usize, bool), FormulaFailure> {
         // Even an existing coordinate must authenticate the supplied reader.
         computation.source_atom(atom, limits, counters, location)?;
@@ -121,7 +121,7 @@ impl SourceSelection {
         computation: &'read Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomRef<'read>, FormulaFailure> {
         counters.work(limits, location)?;
         let source = self
@@ -139,7 +139,7 @@ impl SourceSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         counters.work(limits, location)?;
         if !self.scope.same(&computation.source_scope(location)?) {
@@ -172,7 +172,7 @@ impl SourceSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         while root < end / 2 {
             let mut child = root * 2 + 1;
@@ -198,7 +198,7 @@ impl SourceSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let left = self.atom(left, computation, limits, counters, location)?;
         let right = self.atom(right, computation, limits, counters, location)?;
@@ -212,7 +212,7 @@ impl SourceSelection {
         atom: &SourceAtom,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Result<usize, usize>, FormulaFailure> {
         counters.work(limits, location)?;
         if !self.scope.same(&atom.scope) {
@@ -244,7 +244,7 @@ impl SourceSelection {
     }
 }
 
-fn owner_failure(location: Location) -> FormulaFailure {
+fn owner_failure(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation {
         error: zetesis_core::relation::Failure::Owner,
         location,

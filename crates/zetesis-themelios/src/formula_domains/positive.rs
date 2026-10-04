@@ -12,7 +12,7 @@
 //! row, so the argument domains stay upper bounds over it, and the guards narrow
 //! a variable's candidates by the comparisons that read it alone.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{
     Arguments, BodyElement, DefaultNegation, Head, Literal, LiteralInner, Statement,
 };
@@ -37,7 +37,7 @@ impl<'source> PositiveSource<'source> {
         components: Option<zetesis_core::TemplateComponentsRef<'_>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Self>, FormulaFailure> {
         applicable(prepared, components, limits, counters, location)
     }
@@ -63,7 +63,7 @@ fn applicable<'source>(
     components: Option<zetesis_core::TemplateComponentsRef<'_>>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<PositiveSource<'source>>, FormulaFailure> {
     counters.work(limits, location)?;
     if prepared.analysis_basis != AnalysisBasis::NormalizedProgram {
@@ -158,7 +158,7 @@ fn source_atom(
     literal: &Literal,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     counters.work(limits, location)?;
     if literal.negation != DefaultNegation::None {
@@ -200,7 +200,7 @@ fn flat(
     variables: usize,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let components =
         components.ok_or_else(|| crate::formula_support::components::missing(location))?;

@@ -4,7 +4,7 @@
 //! Their original body/element provenance is retained on the enclosing normalized
 //! statement and in the frontend's objective evidence, never fabricated on nodes.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{
     Atom, Body, BodyElement, Condition, Direction, Optimize, OptimizeElement, Statement,
 };
@@ -20,7 +20,7 @@ use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 pub(super) fn normalize(
     source: &WithProvenance<Statement>,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<WithProvenance<Statement>>, FormulaFailure> {
     let Statement::WeakConstraint(weak) = source.get() else {
         return Ok(None);
@@ -82,7 +82,7 @@ pub(super) fn normalize(
 pub(super) fn body(
     condition: &Condition,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Body, FormulaFailure> {
     let mut size = CloneSize::default();
     size.visit_condition(condition);

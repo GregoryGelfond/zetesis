@@ -146,7 +146,7 @@ fn assert_unsafe(source: &str) {
     let error = admit(source).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::UnsafeVariable { location, .. }
-            if location.source == SourceId::new(29)),
+            if location.location().expect("parsed source").source == SourceId::new(29)),
         "{source}: {error}"
     );
 }
@@ -186,7 +186,7 @@ fn assert_capacity(source: &str) {
             limit: 64,
             observed: 94,
             location,
-        } if location.source == SourceId::new(29)),
+        } if location.location().expect("parsed source").source == SourceId::new(29)),
         "{source}: {error}"
     );
     let location = error.diagnostics()[0].primary().location;
@@ -211,7 +211,7 @@ fn assert_evaluation(source: &str, expected: &EvalError) {
     assert!(
         matches!(&error, FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { error, location }
-        ) if error == expected && location.source == SourceId::new(29)),
+        ) if error == expected && location.location().expect("parsed source").source == SourceId::new(29)),
         "{source}: {error}"
     );
 }

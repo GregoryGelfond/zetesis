@@ -4,7 +4,7 @@ use crate::formula_support::{Context, GroundingWork};
 
 use std::cmp::Ordering;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{AssignmentError, TermKey};
 
 use super::contribution;
@@ -161,7 +161,7 @@ impl TupleHeads {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let tuples = Binding::new(computation, limits, counters, location)?;
         let mut lease = computation.lease();
@@ -188,7 +188,7 @@ impl TupleHeads {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let mut start = 0;
         let mut end = self.entries.len();

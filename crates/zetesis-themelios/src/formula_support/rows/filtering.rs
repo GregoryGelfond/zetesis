@@ -1,8 +1,9 @@
 use crate::formula_support::testing::Fixture;
 use std::cell::Cell;
 
+use crate::ProgramSite;
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::BinaryOp;
 use zetesis_core::{
@@ -17,11 +18,11 @@ use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};
 use crate::formula_support::{Computation, Counters, Join, Support};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(74),
         span: Span::empty(ByteOffset::new(12)),
-    }
+    })
 }
 
 fn atom(name: &str, values: &[i32]) -> Atom {
@@ -90,7 +91,7 @@ where
         row: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         counters.work(limits, location)?;
         Ok(self.0(row))
@@ -482,7 +483,7 @@ impl RowFilter for RefuseSecond {
         _: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         counters.work(limits, location)?;
         self.0.set(self.0.get() + 1);

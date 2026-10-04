@@ -3,7 +3,7 @@
 use std::mem::size_of;
 use std::ops::Range;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::symbol::Signature;
 use zetesis_core::{
     catalog::{AtomRef, PredicateRef},
@@ -38,7 +38,7 @@ impl<'source> Wake<'source> {
         memory: &mut Memory<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut counts = Vec::<usize>::new();
         memory.add(size_of::<Vec<usize>>())?;
@@ -95,7 +95,7 @@ impl<'source> Wake<'source> {
         memory: &mut Memory<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let words = rules.len().div_ceil(u64::BITS as usize);
         memory.reserve(&mut self.active, words)?;
@@ -117,7 +117,7 @@ impl<'source> Wake<'source> {
         rule: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         counters.work(limits, location)?;
         self.active[rule / u64::BITS as usize] |= 1 << (rule % u64::BITS as usize);
@@ -137,7 +137,7 @@ impl<'source> Wake<'source> {
         mut delta: impl Iterator<Item = AtomRef<'atoms>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         for word in &mut self.active {
             counters.work(limits, location)?;
@@ -183,7 +183,7 @@ fn postings(
     memory: &mut Memory<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Vec<usize>, FormulaFailure> {
     let mut postings = Vec::new();
     memory.reserve(&mut postings, inputs.len())?;
@@ -227,7 +227,7 @@ impl<'a> Schedule<'a> {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         match self {
             Self::All { rules, next } => {

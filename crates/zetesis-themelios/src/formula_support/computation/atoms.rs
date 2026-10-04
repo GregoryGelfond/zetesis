@@ -3,7 +3,7 @@
 use zetesis_core::PatternRef;
 use zetesis_core::catalog::AtomRef;
 
-use super::{Computation, Counters, FormulaFailure, FormulaLimits, Location, Terms};
+use super::{Computation, Counters, FormulaFailure, FormulaLimits, ProgramSite, Terms};
 use crate::formula_binding::Binding;
 use crate::formula_support::GroundingWork;
 use crate::formula_support::relations::{SourceAtom, SourceScope};
@@ -15,7 +15,7 @@ impl Computation<'_, '_> {
         sign: zetesis_core::Sign,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<SourceAtom>, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => append.signed(
@@ -37,7 +37,7 @@ impl Computation<'_, '_> {
         atom: AtomRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<SourceAtom, FormulaFailure> {
         match &mut self.terms {
             Terms::Append(append) => append.discover_ref(
@@ -60,7 +60,7 @@ impl Computation<'_, '_> {
         binding: &Binding<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<SourceAtom, FormulaFailure> {
         let Terms::Append(append) = &mut self.terms else {
             return Err(owner_failure(location));
@@ -80,7 +80,7 @@ impl Computation<'_, '_> {
         atom: &SourceAtom,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         match &mut self.terms {
             Terms::Append(append) => append.retain(
@@ -101,7 +101,7 @@ impl Computation<'_, '_> {
         binding: &Binding<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => append.contains_pattern(
@@ -123,7 +123,10 @@ impl Computation<'_, '_> {
         }
     }
 
-    pub(crate) fn source_scope(&self, location: Location) -> Result<SourceScope, FormulaFailure> {
+    pub(crate) fn source_scope(
+        &self,
+        location: ProgramSite,
+    ) -> Result<SourceScope, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => Ok(append.source_scope()),
             Terms::Frozen(_) => Err(owner_failure(location)),
@@ -135,7 +138,7 @@ impl Computation<'_, '_> {
         atom: &SourceAtom,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomRef<'_>, FormulaFailure> {
         self.source_at(&atom.scope, atom.position, limits, counters, location)
     }
@@ -146,7 +149,7 @@ impl Computation<'_, '_> {
         position: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomRef<'_>, FormulaFailure> {
         match &self.terms {
             Terms::Append(append) => append.source_at(scope, position, limits, counters, location),
@@ -155,7 +158,7 @@ impl Computation<'_, '_> {
     }
 }
 
-fn owner_failure(location: Location) -> FormulaFailure {
+fn owner_failure(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation {
         error: zetesis_core::relation::Failure::Owner,
         location,

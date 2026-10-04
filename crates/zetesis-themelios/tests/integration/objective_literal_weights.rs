@@ -49,7 +49,10 @@ fn literal_weights_preserve_complete_model_records() {
             "{}",
             case.reference.name
         );
-        assert_eq!(input.source().text(), case.reference.source);
+        assert_eq!(
+            input.source().expect("source input").text(),
+            case.reference.source
+        );
     }
 }
 

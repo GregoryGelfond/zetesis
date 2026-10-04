@@ -73,18 +73,22 @@ fn maximizing_source_direction_and_original_provenance_are_retained() {
         FormulaLimits::default(),
     )
     .unwrap();
-    assert_eq!(input.source().text(), source);
+    assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(input.objective_declarations().len(), 1);
     assert!(input.analyzed_program().statements().any(|statement| {
         matches!(statement.get(), Statement::Optimize(objective)
             if objective.direction == Direction::Maximize)
     }));
     let declared = input.objective_declarations()[0];
-    assert_eq!(declared.source, SourceId::new(77));
+    assert_eq!(
+        declared.location().expect("parsed source").source,
+        SourceId::new(77)
+    );
     assert!(
         input
             .source()
-            .slice(declared.span)
+            .expect("source input")
+            .slice(declared.location().expect("parsed source").span)
             .unwrap()
             .starts_with("#maximize")
     );
@@ -93,8 +97,15 @@ fn maximizing_source_direction_and_original_provenance_are_retained() {
         .iter()
         .flatten()
         .map(|location| {
-            assert_eq!(location.source, SourceId::new(77));
-            input.source().slice(location.span).unwrap()
+            assert_eq!(
+                location.location().expect("parsed source").source,
+                SourceId::new(77)
+            );
+            input
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap()
         })
         .collect();
     assert!(fragments.iter().any(|fragment| fragment.contains("s(W)")));

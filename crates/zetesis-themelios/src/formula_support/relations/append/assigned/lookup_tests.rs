@@ -20,7 +20,7 @@ impl GroundingObserver for Observer {
     fn phase_exit(
         &self,
         _: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         _: GroundingOutcome,
         work: crate::GroundingWork,
     ) {

@@ -1,7 +1,7 @@
 //! Boolean head elements measure eligibility without inventing atom support.
 //!
-//! The extension's declared convention gives each Boolean choice occurrence one
-//! identity per outer group; its local witnesses combine eligibility. These
+//! Each pool-expanded Boolean choice occurrence has one identity per outer
+//! group; its local witnesses combine eligibility. These
 //! source/model contracts and the independent reduct evaluator do not prescribe
 //! a physical lowering. Clingo agreement is separate empirical corroboration.
 
@@ -28,6 +28,13 @@ const CASES: &[(&str, &[&[&str]])] = &[
     ("1{#false;a}1.", &[&["a"]]),
     ("0{#false;a}0.", &[&[]]),
     ("2{#true;#true}2.", &[&[]]),
+    ("{#true:p(1;1)}=2.p(1).", &[&["p(1)"]]),
+    ("{#true:p(1;1)}=1.p(1).", &[]),
+    ("{#true:p(1;1),q(1;1)}=4.p(1).q(1).", &[&["p(1)", "q(1)"]]),
+    ("{not #false:p(1;1)}=2.p(1).", &[&["p(1)"]]),
+    ("{not not #true:p(1;1)}=2.p(1).", &[&["p(1)"]]),
+    ("{#true:p(X;X)}=2.p(1..2).", &[&["p(1)", "p(2)"]]),
+    ("{#true:p(X;X)}=4.p(1..2).", &[]),
     ("a.2{#true;#true}2.", &[&["a"]]),
     ("a.2{#true:a;#true:a}2.", &[&["a"]]),
     ("1{#true}1.1{#true}1.", &[&[]]),
@@ -405,7 +412,7 @@ fn bundle_origins_do_not_multiply_activity() {
             .formula_origins()
             .iter()
             .flatten()
-            .map(|origin| origin.source)
+            .map(|origin| origin.location().expect("parsed source").source)
             .collect();
         assert_eq!(sources.len(), 2, "both original files retain provenance");
         for origins in admitted.formula_origins() {
@@ -413,10 +420,10 @@ fn bundle_origins_do_not_multiply_activity() {
                 assert_eq!(
                     admitted
                         .bundle()
-                        .get(origin.source)
+                        .get(origin.location().expect("parsed source").source)
                         .unwrap()
                         .source()
-                        .slice(origin.span)
+                        .slice(origin.location().expect("parsed source").span)
                         .unwrap(),
                     rule
                 );
@@ -466,13 +473,16 @@ fn reordered_bundle_rules_preserve_occurrences() {
         for origin in origins {
             let source = admitted
                 .bundle()
-                .get(origin.source)
+                .get(origin.location().expect("parsed source").source)
                 .unwrap()
                 .source()
-                .slice(origin.span)
+                .slice(origin.location().expect("parsed source").span)
                 .unwrap();
             assert!(rules.contains(&source));
-            source_rules.insert((origin.source, source.to_owned()));
+            source_rules.insert((
+                origin.location().expect("parsed source").source,
+                source.to_owned(),
+            ));
         }
     }
     assert_eq!(

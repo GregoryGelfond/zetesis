@@ -13,7 +13,7 @@ fn prepare(source: &str) -> Preparation {
     crate::formula_support::testing::prepare(source)
 }
 
-fn location(prepared: &Prepared) -> Location {
+fn location(prepared: &Prepared) -> ProgramSite {
     prepared.rules.first().unwrap().location
 }
 

@@ -300,7 +300,7 @@ fn explicit_work_override_bounds_eager_admission() {
         matches!(result, Err(RunError::FormulaAdmission(FormulaFailure::Limit {
         resource: FormulaResource::Work, observed, limit, location,
     })) if observed == low as u128 && limit == (low - 1) as u128
-        && location.source == zetesis_themelios::AdmissionOptions::default().source_id)
+        && location.location().expect("parsed source").source == zetesis_themelios::AdmissionOptions::default().source_id)
     );
 }
 
@@ -331,7 +331,7 @@ fn support_byte_limit_is_inclusive() {
                 assert_eq!(limit, middle as u128);
                 assert!(observed > limit);
                 assert_eq!(
-                    location.source,
+                    location.location().expect("parsed source").source,
                     zetesis_themelios::AdmissionOptions::default().source_id
                 );
                 low = middle + 1;

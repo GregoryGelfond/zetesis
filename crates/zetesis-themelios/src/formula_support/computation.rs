@@ -6,7 +6,7 @@ mod static_components;
 #[cfg(test)]
 mod tests;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::ValueNodeRef;
 use zetesis_core::atom_interner::{AssignedFailure, TermLookup};
 use zetesis_core::catalog::{
@@ -70,7 +70,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         &self,
         lease: &StorageLease,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let storage = self.storage(lease, location)?;
         ceiling(
@@ -91,7 +91,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         header: usize,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.storage(lease, location)?
             .observed(previous, header, limits, counters, location)
@@ -105,7 +105,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         component_peak: u128,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.storage(lease, location)?
             .peak(component_peak, limits, counters, location)
@@ -120,7 +120,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         capacity: super::order::Capacity,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let (bytes, allocated) = match capacity {
             super::order::Capacity::Requested(bytes) => (bytes, false),
@@ -143,7 +143,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         result: Result<T, AssignmentFailure<FormulaFailure>>,
         lease: &StorageLease,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<T, FormulaFailure> {
         self.check_lease(lease, location)?;
         // Successful operations and non-storage refusals require no capacity
@@ -165,7 +165,7 @@ impl<'a, 'source> Computation<'a, 'source> {
     pub(super) fn external_bytes(
         &self,
         lease: &StorageLease,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.check_lease(lease, location)?;
         Ok(self.support.live_bytes() - self.support.workspace().bytes())
@@ -174,7 +174,7 @@ impl<'a, 'source> Computation<'a, 'source> {
     fn storage<'b>(
         &'b self,
         lease: &'b StorageLease,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Scope<'b>, FormulaFailure> {
         let external = self.external_bytes(lease, location)?;
         self.support
@@ -185,7 +185,11 @@ impl<'a, 'source> Computation<'a, 'source> {
             })
     }
 
-    fn check_lease(&self, lease: &StorageLease, location: Location) -> Result<(), FormulaFailure> {
+    fn check_lease(
+        &self,
+        lease: &StorageLease,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
         if self.support.workspace().owns(lease) {
             Ok(())
         } else {
@@ -201,7 +205,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         value: TermRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         match &mut self.terms {
             Terms::Append(append) => append.import(
@@ -289,7 +293,7 @@ impl<'a, 'source> Computation<'a, 'source> {
         value: i32,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         let empty = self.read().assignment();
         self.construct(

@@ -283,9 +283,13 @@ fn mixed_consumers_keep_the_defined_family() {
                 admitted.warnings()
             );
         };
-        assert_eq!(location.source, SOURCE);
+        assert_eq!(location.location().expect("parsed source").source, SOURCE);
         assert_eq!(
-            admitted.source().slice(location.span).unwrap(),
+            admitted
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
             &source[4..]
         );
         let expected = Models::from([BTreeSet::new(), BTreeSet::from(["d".into(), "a".into()])]);
@@ -297,7 +301,7 @@ fn mixed_consumers_keep_the_defined_family() {
 #[test]
 fn original_sources_remain_owned() {
     for &(source, _) in CASES {
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(input(source).source().expect("source input").text(), source);
     }
 }
 

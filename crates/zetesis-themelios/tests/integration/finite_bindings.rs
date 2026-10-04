@@ -121,7 +121,7 @@ fn explicit_finite_instances_match_every_original_and_frozen_world() {
     for (source, specified) in expansions() {
         let generated = input(source);
         let explicit = input(specified);
-        assert_eq!(generated.source().text(), source);
+        assert_eq!(generated.source().expect("source input").text(), source);
         assert_eq!(native(&generated), exhaustive(&explicit), "{source}");
         assert_eq!(exhaustive(&generated), exhaustive(&explicit), "{source}");
         assert_eq!(
@@ -160,8 +160,14 @@ fn explicit_finite_instances_match_every_original_and_frozen_world() {
             }
         }
         for location in generated.formula_origins().iter().flatten() {
-            assert_eq!(location.source, SOURCE);
-            assert!(generated.source().slice(location.span).is_ok());
+            assert_eq!(location.location().expect("parsed source").source, SOURCE);
+            assert!(
+                generated
+                    .source()
+                    .expect("source input")
+                    .slice(location.location().expect("parsed source").span)
+                    .is_ok()
+            );
         }
     }
 }
@@ -257,7 +263,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         )
         .unwrap_err();
         assert!(
-            matches!(error, FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, limit: 2, observed: 3, location } if location.source == SOURCE),
+            matches!(error, FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, limit: 2, observed: 3, location } if location.location().expect("parsed source").source == SOURCE),
             "{error}"
         );
         let program = input_with(
@@ -327,7 +333,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     )
     .unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == (lower - 1) as u128 && observed > limit && location.source == SOURCE)
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == (lower - 1) as u128 && observed > limit && location.location().expect("parsed source").source == SOURCE)
     );
     let program = input_with(
         source,

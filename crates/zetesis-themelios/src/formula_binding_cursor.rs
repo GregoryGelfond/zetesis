@@ -1,8 +1,8 @@
 //! Per-relational-row scalar/range cursors over scoped term metadata.
 
+use crate::ProgramSite;
 use crate::formula_support::{Context, GroundingWork};
 use std::ops::{Range, RangeInclusive};
-use themelios_base::span::Location;
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::TermKey;
 
@@ -226,7 +226,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let other = self.bytes() - self.generators.capacity() * size_of::<Generator<'_>>();
         crate::formula_support::reserve(
@@ -240,7 +240,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         self.generators.push(value);
         Ok(())
     }
-    fn state(&mut self, state: State, location: Location) -> Result<(), FormulaFailure> {
+    fn state(&mut self, state: State, location: ProgramSite) -> Result<(), FormulaFailure> {
         self.value_frames -= usize::from(matches!(self.states[self.depth], State::Values { .. }));
         self.value_frames += usize::from(matches!(state, State::Values { .. }));
         self.states[self.depth] = state;
@@ -249,7 +249,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         self.lease.observe(self.bytes(), location)
     }
 
-    pub(super) fn reject(&mut self, location: Location) -> Result<(), FormulaFailure> {
+    pub(super) fn reject(&mut self, location: ProgramSite) -> Result<(), FormulaFailure> {
         if let Some(depth) = self.failed_initialization.take() {
             self.value_frames -= usize::from(matches!(self.states[depth], State::Values { .. }));
             self.states[depth] = State::Scalar { pending: false };
@@ -268,7 +268,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         while !self.finished {
             counters.work(limits, location)?;
@@ -330,7 +330,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let alternative = match &mut self.states[self.depth] {
             State::Fresh => unreachable!("cursor initialized"),
@@ -407,7 +407,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<State, FormulaFailure> {
         match self.generators[self.depth].literal {
             LiteralIr::Bind { value, .. } => {
@@ -486,7 +486,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         if self.missing_inputs(expression.inputs(), limits, counters, location)? {
             evaluation.source_partial(
@@ -519,7 +519,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         inputs: impl Iterator<Item = usize>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if self.unavailable == 0 {
             return Ok(false);

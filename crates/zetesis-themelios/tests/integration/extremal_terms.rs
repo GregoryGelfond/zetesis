@@ -122,7 +122,7 @@ fn formula_extremal_sources_preserve_complete_models() {
     for &(source, wanted) in ORDINARY.iter().chain(FORMULA) {
         let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(exhaustive(&input), expected(wanted), "{source}");
-        assert_eq!(input.source().text(), source);
+        assert_eq!(input.source().expect("source input").text(), source);
     }
 }
 

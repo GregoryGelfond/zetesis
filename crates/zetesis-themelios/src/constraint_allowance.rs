@@ -5,7 +5,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use crate::{
     ConstraintCheckLimits, ConstraintCheckStatistics, ExpansionFailure, ExpansionResource,
@@ -57,7 +57,7 @@ impl ConstraintAllowance {
         self.0.receipt()
     }
 
-    pub(crate) fn work(&self, amount: u128, location: Location) -> Result<(), FormulaFailure> {
+    pub(crate) fn work(&self, amount: u128, location: ProgramSite) -> Result<(), FormulaFailure> {
         reserve(&self.0.work, amount, u128::from(self.0.limits.max_work)).map_err(|observed| {
             FormulaFailure::Limit {
                 resource: FormulaResource::Work,
@@ -68,7 +68,7 @@ impl ConstraintAllowance {
         })
     }
 
-    pub(crate) fn substitution(&self, location: Location) -> Result<(), FormulaFailure> {
+    pub(crate) fn substitution(&self, location: ProgramSite) -> Result<(), FormulaFailure> {
         reserve(
             &self.0.substitutions,
             1,
@@ -82,7 +82,11 @@ impl ConstraintAllowance {
         })
     }
 
-    pub(crate) fn scalar(&self, amount: u128, location: Location) -> Result<(), ExpansionFailure> {
+    pub(crate) fn scalar(
+        &self,
+        amount: u128,
+        location: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
         reserve(
             &self.0.scalar_bytes,
             amount,

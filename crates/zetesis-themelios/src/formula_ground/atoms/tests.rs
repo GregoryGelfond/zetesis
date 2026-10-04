@@ -5,9 +5,10 @@ mod count_capture;
 use std::collections::BTreeMap;
 use std::error::Error;
 
+use crate::ProgramSite;
 use proptest::prelude::*;
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::catalog::AtomRef;
 use zetesis_core::{Atom, AtomCatalog, Sign, Value, ValueLimits, ValueNode};
 
@@ -16,12 +17,13 @@ use crate::formula_support::{Publication, SourceSelection, testing::Fixture};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 use zetesis_test_support::programs::{signed as atom, unary};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(7),
         span: Span::empty(ByteOffset::new(3)),
-    }
+    })
 }
+
 fn bound() -> (FormulaResource, usize) {
     (FormulaResource::Atoms, 1024)
 }
@@ -208,7 +210,10 @@ fn allocation_diagnostics_retain_the_original_error() {
     );
     let diagnostics = failure.diagnostics();
     assert_eq!(diagnostics.len(), 1);
-    assert_eq!(diagnostics[0].primary().location, location());
+    assert_eq!(
+        diagnostics[0].primary().location,
+        location().location().unwrap()
+    );
 }
 
 #[test]

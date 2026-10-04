@@ -5,11 +5,11 @@ use themelios_base::span::{ByteOffset, Span};
 use super::*;
 use crate::{ExpansionFailure, ExpansionLimits, FormulaResource};
 
-fn location(source: u32, offset: u32) -> Location {
-    Location {
+fn location(source: u32, offset: u32) -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(source),
         span: Span::empty(ByteOffset::new(offset)),
-    }
+    })
 }
 
 fn prepared() -> (Metadata, Counters, FormulaLimits) {
@@ -30,7 +30,7 @@ proptest! {
         let (mut metadata, mut counters, limits) = prepared();
         let mut budget = Budget::new(ExpansionLimits::default(), 0);
         let mut producers = [Vec::new(), Vec::new(), Vec::new()];
-        let mut origins: [Vec<Location>; 3] = std::array::from_fn(|atom| vec![location(u32::try_from(atom).unwrap(), 0)]);
+        let mut origins: [Vec<ProgramSite>; 3] = std::array::from_fn(|atom| vec![location(u32::try_from(atom).unwrap(), 0)]);
         for (atom, antecedent, source, offset) in events {
             let origin = location(source, offset);
             metadata.producer(atom, antecedent, &mut counters, &limits, origin).unwrap();
@@ -125,7 +125,7 @@ impl crate::GroundingObserver for MetadataObserver {
     fn phase_exit(
         &self,
         _phase: crate::GroundingPhase,
-        _location: Option<Location>,
+        _location: Option<ProgramSite>,
         outcome: crate::GroundingOutcome,
         work: crate::GroundingWork,
     ) {
@@ -306,12 +306,15 @@ fn origin_copy_charges_traversal_and_payload() {
 #[test]
 fn failed_capacity_reservation_is_located() {
     let origin = location(3, 4);
-    let mut values = Vec::<Location>::new();
+    let mut values = Vec::<ProgramSite>::new();
     let failure = reserve(&mut values, usize::MAX, origin).unwrap_err();
     assert!(
         matches!(failure, FormulaFailure::MetadataAllocation { location: found, .. } if found == origin)
     );
-    assert_eq!(failure.diagnostics()[0].primary().location, origin);
+    assert_eq!(
+        failure.diagnostics()[0].primary().location,
+        origin.location().unwrap()
+    );
     assert!(std::error::Error::source(&failure).is_some());
     assert!(failure.to_string().starts_with("formula metadata storage:"));
     assert_eq!(values.capacity(), 0);

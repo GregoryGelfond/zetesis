@@ -527,92 +527,92 @@
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 53,
+      "line": 54,
       "name": "Zetesis.BooleanHeadElements.operand_original"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 60,
+      "line": 61,
       "name": "Zetesis.BooleanHeadElements.operand_frozen"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 80,
+      "line": 81,
       "name": "Zetesis.BooleanHeadElements.boolean_keys_distinct"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 87,
+      "line": 88,
       "name": "Zetesis.BooleanHeadElements.boolean_witness_key"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 92,
+      "line": 93,
       "name": "Zetesis.BooleanHeadElements.atom_choice_key"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 114,
+      "line": 115,
       "name": "Zetesis.BooleanHeadElements.activity_original"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 129,
+      "line": 130,
       "name": "Zetesis.BooleanHeadElements.activity_frozen"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 150,
+      "line": 151,
       "name": "Zetesis.BooleanHeadElements.permission_original"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 158,
+      "line": 159,
       "name": "Zetesis.BooleanHeadElements.permission_frozen"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 188,
+      "line": 189,
       "name": "Zetesis.BooleanHeadElements.boolean_permission_frozen"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 211,
+      "line": 212,
       "name": "Zetesis.BooleanHeadElements.remove_boolean_permissions"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 241,
+      "line": 242,
       "name": "Zetesis.BooleanHeadElements.eligibility_original"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 255,
+      "line": 256,
       "name": "Zetesis.BooleanHeadElements.eligibility_frozen"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 269,
+      "line": 270,
       "name": "Zetesis.BooleanHeadElements.permissions_coalesced"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 325,
+      "line": 326,
       "name": "Zetesis.BooleanHeadElements.formula_original"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 344,
+      "line": 345,
       "name": "Zetesis.BooleanHeadElements.coalesced_group_in_context"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 359,
+      "line": 360,
       "name": "Zetesis.BooleanHeadElements.boolean_group_in_context"
     },
     {
       "file": "Zetesis/BooleanHeadElements.lean",
-      "line": 407,
+      "line": 408,
       "name": "Zetesis.BooleanHeadElements.same_rows_in_context"
     },
     {
@@ -2857,58 +2857,63 @@
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 34,
+      "line": 36,
       "name": "Zetesis.FinitePools.product_complete"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 43,
+      "line": 45,
       "name": "Zetesis.FinitePools.empty_occurrence"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 47,
+      "line": 49,
       "name": "Zetesis.FinitePools.duplicate_alternative"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 51,
+      "line": 53,
       "name": "Zetesis.FinitePools.independent_equal_occurrences"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 60,
+      "line": 62,
       "name": "Zetesis.FinitePools.original_in_context"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 67,
+      "line": 69,
       "name": "Zetesis.FinitePools.frozen_in_context"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 75,
+      "line": 77,
       "name": "Zetesis.FinitePools.stable_in_context"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 83,
+      "line": 85,
       "name": "Zetesis.FinitePools.flattening_changes_original_truth"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 99,
+      "line": 101,
       "name": "Zetesis.FinitePools.value_context_complete"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 116,
+      "line": 119,
       "name": "Zetesis.FinitePools.local_occurrences_complete"
     },
     {
       "file": "Zetesis/FinitePools.lean",
-      "line": 126,
+      "line": 129,
       "name": "Zetesis.FinitePools.local_activity_complete"
+    },
+    {
+      "file": "Zetesis/FinitePools.lean",
+      "line": 162,
+      "name": "Zetesis.FinitePools.expanded_occurrence_activity"
     },
     {
       "file": "Zetesis/FiniteTables.lean",
@@ -6072,102 +6077,102 @@
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 61,
+      "line": 62,
       "name": "Zetesis.SignedHeadElements.operand_original"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 74,
+      "line": 75,
       "name": "Zetesis.SignedHeadElements.operand_frozen"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 88,
+      "line": 89,
       "name": "Zetesis.SignedHeadElements.double_negative_differs_from_positive"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 109,
+      "line": 110,
       "name": "Zetesis.SignedHeadElements.atomic_witness_key"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 113,
+      "line": 114,
       "name": "Zetesis.SignedHeadElements.atomic_sign_keys_distinct"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 120,
+      "line": 121,
       "name": "Zetesis.SignedHeadElements.boolean_witness_key"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 125,
+      "line": 126,
       "name": "Zetesis.SignedHeadElements.boolean_occurrence_keys_distinct"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 143,
+      "line": 144,
       "name": "Zetesis.SignedHeadElements.activity_original"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 158,
+      "line": 159,
       "name": "Zetesis.SignedHeadElements.activity_frozen"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 179,
+      "line": 180,
       "name": "Zetesis.SignedHeadElements.permission_original"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 187,
+      "line": 188,
       "name": "Zetesis.SignedHeadElements.signed_permission_frozen"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 213,
+      "line": 214,
       "name": "Zetesis.SignedHeadElements.row_activity_equivalent"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 230,
+      "line": 231,
       "name": "Zetesis.SignedHeadElements.activity_equivalent"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 260,
+      "line": 261,
       "name": "Zetesis.SignedHeadElements.permission_equivalent"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 277,
+      "line": 278,
       "name": "Zetesis.SignedHeadElements.unsigned_atom_rows"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 302,
+      "line": 303,
       "name": "Zetesis.SignedHeadElements.formula_equivalent"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 336,
+      "line": 337,
       "name": "Zetesis.SignedHeadElements.group_equivalent"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 350,
+      "line": 351,
       "name": "Zetesis.SignedHeadElements.group_in_context"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 360,
+      "line": 361,
       "name": "Zetesis.SignedHeadElements.coalesced_group_in_context"
     },
     {
       "file": "Zetesis/SignedHeadElements.lean",
-      "line": 381,
+      "line": 382,
       "name": "Zetesis.SignedHeadElements.nonproducing_group_in_context"
     },
     {
@@ -7947,7 +7952,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "afc1b15fa75c932cd4e9410eb0d55291ae25b2fb71c11d3c96bcad81ccc3859e",
+    "Audit.lean": "51dae2e70158e39835a0d7a0de2601ea45aabdad5ed0cc277c6d1b6dd7a46ad1",
     "Zetesis.lean": "0a997e51795d18a86a90e51ee345ff71c4f01395cc57c3bb8cf8f9a6dd7b0265",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
@@ -7963,7 +7968,7 @@
     "Zetesis/BatchAccounting.lean": "c6ff03ea70ee1eb9afbbba472bfe10c0bd77e231b8623c4157da91fbb5a5c615",
     "Zetesis/BinaryWatch.lean": "c6391510df44d983c95f3c084aaba1336fdf88c47eded51b16e193ccd88110b4",
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",
-    "Zetesis/BooleanHeadElements.lean": "1a8601feb54155f84d1fc9cb784236f7ba19471a3f7a129da203e94cb45f6ef6",
+    "Zetesis/BooleanHeadElements.lean": "d0c5fde8651050afe44a00555af83b3bf5eb426810487750a2e7a80629f98f20",
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
     "Zetesis/Bounds.lean": "4d1e698345c77d7a4a07ceda15f5f550f88923fefcac182053610c1e6bf6fd3a",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
@@ -8010,7 +8015,7 @@
     "Zetesis/FiniteBindings.lean": "5d62b03133f3e8d5843f32b56bbb1694d1dfc5185daccdc8d9f2a560b851ee2c",
     "Zetesis/FiniteClosure.lean": "8be81d23e11d28aa6f01195d3b6e6d08a8a07559875f37fa5127d65d8012c819",
     "Zetesis/FiniteMembership.lean": "ff7fa9c8df33c62b3956e868f6344fbf6b3414ba453759a9e0cfaffb5e607ed0",
-    "Zetesis/FinitePools.lean": "941db3834037593dd92bf6f3cacfc92acd55fa989955a4d64a4369e2d09857a5",
+    "Zetesis/FinitePools.lean": "01be7e9da07048a530b9df7059ea4aed970921085a3a063524243b19c1ed6f43",
     "Zetesis/FiniteTables.lean": "892e5722be539571301797e33d2c42a0cb552bc765081523a7fc06f874cd3177",
     "Zetesis/FiniteValues.lean": "14e3d4f778b607fabdaa2c9153c7341618ab895f73158095efb46ff1d12d5788",
     "Zetesis/FormulaBounds.lean": "9a258d50b67196acca383b5bab85ba96cdbac7838f8b921d5f8f710b88601b36",
@@ -8082,7 +8087,7 @@
     "Zetesis/Search.lean": "1ad1bc923559a3989946681b3f066757c66d8f10cbd269de8c64cd74c9a2250e",
     "Zetesis/SeedSelections.lean": "bc3ab4562897bf6336d6ddab1834c94d9de1d50cd4244d5f5a4f7fc1e3f9d8d5",
     "Zetesis/Semantics.lean": "fe4d59f5da0332897efa90e7b6dd9e5d1b1a4003017f1630799e5e6029f35dc8",
-    "Zetesis/SignedHeadElements.lean": "a4ef203522d79935f0696bf93bd04efa477a17fde6858c3ebf63ba7d216bb3e8",
+    "Zetesis/SignedHeadElements.lean": "98653a0d01452caa8383ad0549be3e720c4ca027944326f3c566474abee26275",
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SingletonHeads.lean": "a07c6c50041c0771175b98fa6d9d2d56ecb4c9c29ad09205acf44f44fcabe147",
     "Zetesis/SourceContributions.lean": "be9baa860c0caafeaba1068e269b8cec5531cce91a5dd694232e98847ee394df",

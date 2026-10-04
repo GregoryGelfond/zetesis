@@ -5,7 +5,7 @@
 //! relational extension contributes nothing. A cursor over a partial support
 //! round may collect evidence but must never finalize it.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::term::BinaryOp;
 
 use super::Counters;
@@ -48,7 +48,7 @@ impl Warnings {
         evidence: Evidence,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if evidence.finish()? {
             self.insert(limits, counters, location)?;
@@ -60,16 +60,15 @@ impl Warnings {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        let key =
-            |location: Location| (location.source, location.span.start(), location.span.end());
+        let key = |site: ProgramSite| (site.location(), site.statement_id());
         let mut low = 0;
         let mut high = self.values.len();
         while low < high {
             counters.work(limits, location)?;
             let middle = low + (high - low) / 2;
-            match key(self.values[middle].location()).cmp(&key(location)) {
+            match key(self.values[middle].site()).cmp(&key(location)) {
                 std::cmp::Ordering::Less => low = middle + 1,
                 std::cmp::Ordering::Equal => return Ok(()),
                 std::cmp::Ordering::Greater => high = middle,

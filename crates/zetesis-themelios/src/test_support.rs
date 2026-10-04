@@ -8,11 +8,11 @@ use themelios_base::span::{ByteOffset, Location, Span};
 use crate::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
 
 /// The empty span at the start of source 0.
-pub(crate) fn location() -> Location {
-    Location {
+pub(crate) fn location() -> crate::ProgramSite {
+    crate::ProgramSite::source(Location {
         source: SourceId::new(0),
         span: Span::empty(ByteOffset::new(0)),
-    }
+    })
 }
 
 /// A grounding observer that keeps the work of the last phase to exit.
@@ -28,7 +28,7 @@ impl GroundingObserver for Observer {
     fn phase_exit(
         &self,
         _: GroundingPhase,
-        _: Option<Location>,
+        _: Option<crate::ProgramSite>,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {

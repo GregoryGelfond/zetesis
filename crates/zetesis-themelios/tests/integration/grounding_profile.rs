@@ -5,8 +5,8 @@ mod lending_rows;
 
 use std::cell::{Cell, RefCell};
 
-use themelios_base::span::Location;
 use zetesis_test_support::repository;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
@@ -16,7 +16,7 @@ use zetesis_themelios::{
 #[derive(Clone, Copy, Debug)]
 struct Record {
     phase: GroundingPhase,
-    location: Option<Location>,
+    location: Option<ProgramSite>,
     outcome: GroundingOutcome,
     work: GroundingWork,
 }
@@ -24,7 +24,7 @@ struct Record {
 #[derive(Default)]
 struct Observer {
     active: Cell<bool>,
-    phase: Cell<Option<(GroundingPhase, Option<Location>)>>,
+    phase: Cell<Option<(GroundingPhase, Option<ProgramSite>)>>,
     records: RefCell<Vec<Record>>,
 }
 
@@ -40,14 +40,14 @@ impl GroundingObserver for Observer {
         assert!(self.active.get());
         true
     }
-    fn phase_enter(&self, phase: GroundingPhase, location: Option<Location>) {
+    fn phase_enter(&self, phase: GroundingPhase, location: Option<ProgramSite>) {
         assert!(self.active.get());
         assert!(self.phase.replace(Some((phase, location))).is_none());
     }
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        location: Option<Location>,
+        location: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {
@@ -432,7 +432,12 @@ fn bundle_rule_locations_identify_retained_sources() {
         .collect();
     assert_eq!(locations.len(), 4);
     for location in locations {
-        assert!(admitted.bundle().get(location.source).is_some());
+        assert!(
+            admitted
+                .bundle()
+                .get(location.location().expect("parsed source").source)
+                .is_some()
+        );
         assert!(
             admitted
                 .formula_origins()

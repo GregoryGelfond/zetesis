@@ -14,7 +14,7 @@ mod tests;
 
 use std::ops::Range;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 
 use super::{Counters, Support};
@@ -162,7 +162,7 @@ impl<'a> Rows<'a> {
         range: Range<usize>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let Some(posting) = posting else {
             return Ok(Self::Interval(range));
@@ -187,7 +187,7 @@ fn lower_bound(
     row: usize,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<usize, FormulaFailure> {
     let mut start = 0;
     let mut end = posting.len();

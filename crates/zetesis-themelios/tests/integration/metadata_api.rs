@@ -7,12 +7,12 @@ use zetesis_themelios::base::span::{ByteOffset, Location, Span};
 use zetesis_themelios::logical::program::{Const, Program, Show, Statement};
 use zetesis_themelios::logical::provenance::WithProvenance;
 use zetesis_themelios::logical::symbol::{Name, Sign as SymbolSign, Signature, Symbol};
-use zetesis_themelios::logical::term::{Term, Variable};
+use zetesis_themelios::logical::term::{BinaryOp, Term, Variable};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, ObservationProgram};
 use zetesis_themelios::{
     AdmissionOptions, AtomSelection, AtomSelectionError, AtomSelectionLimits, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, MetadataError, MetadataFeature, MetadataLimits,
-    MetadataResource, SourceMetadata, admit_formula,
+    MetadataResource, ProgramSite, SourceMetadata, admit_formula,
 };
 
 fn fallback() -> Location {
@@ -22,7 +22,10 @@ fn fallback() -> Location {
     }
 }
 fn program(text: &str) -> (Source, Program) {
-    let source = Source::new(fallback().source, text.into()).unwrap();
+    program_in(fallback().source, text)
+}
+fn program_in(id: SourceId, text: &str) -> (Source, Program) {
+    let source = Source::new(id, text.into()).unwrap();
     let parsed = zetesis_themelios::syntax::parse::parse(
         &source,
         zetesis_themelios::syntax::dialect::Dialect::Clingo,
@@ -267,14 +270,61 @@ fn native_constants_refuse_cycles() {
 }
 
 #[test]
-fn native_constants_refuse_duplicate_origins() {
-    let (_, shared) = program("#const a=1. #const a=1.");
-    assert!(matches!(
-        SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()),
-        Err(MetadataError::Expansion(
-            ExpansionFailure::DuplicateConstant { .. }
-        ))
-    ));
+fn native_constants_accept_one_canonical_declaration_with_multiple_origins() {
+    let (first_source, first) = program("#const a=1.");
+    let (second_source, second) = program_in(SourceId::new(74), "#const a=1.");
+    let shared = Program::of_nodes(first.statements().chain(second.statements()).cloned());
+    assert_eq!(shared.statements().count(), 1);
+    let locations: Vec<_> = shared
+        .statements()
+        .next()
+        .unwrap()
+        .provenance()
+        .origins()
+        .filter_map(|origin| {
+            if let zetesis_themelios::logical::provenance::Origin::Parsed(location) = origin {
+                Some(*location)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(locations.len(), 2);
+    assert_eq!(locations[0].source, first_source.id());
+    assert_eq!(locations[1].source, second_source.id());
+    assert_eq!(
+        first_source.slice(locations[0].span).unwrap(),
+        "#const a=1."
+    );
+    assert_eq!(
+        second_source.slice(locations[1].span).unwrap(),
+        "#const a=1."
+    );
+
+    // A canonical declaration has one value regardless of its evidence count.
+    let query = Program::of_nodes(
+        shared
+            .statements()
+            .cloned()
+            .chain([WithProvenance::constructed(Statement::Show(Show::Term(
+                Symbol::Function {
+                    name: Name::new("a").unwrap(),
+                    arguments: vec![],
+                    sign: SymbolSign::Positive,
+                }
+                .into(),
+            )))]),
+    );
+    let metadata =
+        SourceMetadata::compile(&query, MetadataLimits::default(), ProgramSite::program()).unwrap();
+    assert_eq!(
+        metadata
+            .observations()
+            .evaluate(&model(), Limits::default(), &Cancellation::default())
+            .unwrap()
+            .symbols(),
+        &[Symbol::Number(1)]
+    );
 }
 
 #[test]
@@ -524,7 +574,7 @@ fn canonical_strings_with_nulls_are_located_refusals() {
         SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap_err();
     assert!(matches!(error, MetadataError::Unsupported {
         feature: MetadataFeature::NullText, location
-    } if location == fallback()));
+    } if location.location() == Some(fallback())));
     assert_eq!(error.to_string(), "metadata refuses NullText");
 }
 
@@ -538,6 +588,7 @@ fn native_metadata_refuses_unsupported_expression_shapes() {
             panic!("expected canonical metadata shape refusal: {error}");
         };
         assert_eq!(feature, MetadataFeature::Term, "{source}");
+        let location = location.location().expect("original parsed evidence");
         assert_eq!(original.slice(location.span).unwrap(), source);
         assert_eq!(location.source, original.id());
     }
@@ -580,7 +631,7 @@ fn constructed_tuple_limits_count_the_borrowed_nodes() {
     .unwrap_err();
     assert!(matches!(error, MetadataError::Limit {
         resource: MetadataResource::Nodes, observed: 5, limit: 4, location
-    } if location == fallback()));
+    } if location.location() == Some(fallback())));
     assert_eq!(error.to_string(), "metadata Nodes count 5 exceeds 4");
 }
 
@@ -598,4 +649,100 @@ fn native_metadata_displays_its_underlying_failure() {
         assert!(!message.is_empty());
         assert_eq!(error.to_string(), message, "{source}");
     }
+}
+
+#[test]
+fn constructed_observation_retains_statement_identity_through_evaluation() {
+    let shared = Program::of([
+        Statement::Show(Show::Signature(Signature {
+            name: Name::new("p").unwrap(),
+            arity: 1,
+            sign: SymbolSign::Positive,
+        })),
+        Statement::Show(Show::Term(Term::BinaryOperation {
+            operator: BinaryOp::Div,
+            left: Box::new(Symbol::Number(1).into()),
+            right: Box::new(Symbol::Number(0).into()),
+        })),
+    ]);
+    let index = shared
+        .statements()
+        .position(|entry| matches!(entry.get(), Statement::Show(Show::Term(_))))
+        .unwrap();
+    let metadata =
+        SourceMetadata::compile(&shared, MetadataLimits::default(), ProgramSite::program())
+            .unwrap();
+    assert!(metadata.directives().is_empty());
+    let site = metadata.observations().sites().next().unwrap();
+    assert_eq!(site.statement_id().unwrap().index(), index);
+    assert_eq!(site.location(), None);
+    let error = metadata
+        .observations()
+        .evaluate(&model(), Limits::default(), &Cancellation::default())
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        &ErrorKind::Evaluation(zetesis_themelios::observation::EvaluationError::Undefined)
+    );
+    assert_eq!(error.site(), site);
+    assert_eq!(error.location(), None);
+    assert!(error.diagnostic().is_none());
+}
+
+#[test]
+fn constructed_constant_refusal_identifies_both_canonical_declarations() {
+    let shared = Program::of([1, 2].map(|value| {
+        Statement::Const(Const {
+            name: Name::new("a").unwrap(),
+            value: Symbol::Number(value).into(),
+            policy: None,
+        })
+    }));
+    let error = SourceMetadata::compile(&shared, MetadataLimits::default(), ProgramSite::program())
+        .unwrap_err();
+    let MetadataError::Expansion(ExpansionFailure::DuplicateConstant {
+        first, duplicate, ..
+    }) = error
+    else {
+        panic!("expected duplicate declaration refusal: {error}");
+    };
+    assert_eq!(first.location(), None);
+    assert_eq!(duplicate.location(), None);
+    assert_ne!(first.statement_id(), duplicate.statement_id());
+    for site in [first, duplicate] {
+        assert!(matches!(
+            shared
+                .statements()
+                .nth(site.statement_id().unwrap().index())
+                .unwrap()
+                .get(),
+            Statement::Const(_)
+        ));
+    }
+}
+
+#[test]
+fn constructed_metadata_failure_keeps_subject_without_fabricated_diagnostic() {
+    let shared = Program::of([Statement::Show(Show::Signature(Signature {
+        name: Name::new("p").unwrap(),
+        arity: 1,
+        sign: SymbolSign::Positive,
+    }))]);
+    let limits = MetadataLimits {
+        storage: zetesis_themelios::MetadataStorageLimits { max_bytes: 0 },
+        ..MetadataLimits::default()
+    };
+    let error = SourceMetadata::compile(&shared, limits, ProgramSite::program()).unwrap_err();
+    let MetadataError::Compilation(cause) = error else {
+        panic!("expected metadata compilation refusal: {error}");
+    };
+    assert!(cause.diagnostics().is_empty());
+    let FormulaFailure::Expansion(ExpansionFailure::Admission(
+        zetesis_themelios::AdmissionFailure::Metadata { location, .. },
+    )) = cause
+    else {
+        panic!("expected metadata storage cause: {cause}");
+    };
+    assert_eq!(location.location(), None);
+    assert_eq!(location.statement_id().unwrap().index(), 0);
 }

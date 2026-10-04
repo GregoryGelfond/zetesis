@@ -86,6 +86,7 @@ fn analysis_is_for_the_normalized_projection_with_original_fact_origins() {
         assert_eq!(
             input
                 .source()
+                .expect("source input")
                 .slice(locations[0].span)
                 .expect("original span"),
             "p(1..n)."

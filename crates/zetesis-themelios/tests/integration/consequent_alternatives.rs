@@ -1033,7 +1033,10 @@ fn projected_alternatives_retain_parsed_atom_origins() {
                 })
                 .collect();
             assert_eq!(locations.len(), 1);
-            assert_eq!(locations[0].source, program.source().id());
+            assert_eq!(
+                locations[0].source,
+                program.source().expect("source input").id()
+            );
             alternatives += 1;
         }
     }

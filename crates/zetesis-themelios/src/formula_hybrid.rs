@@ -9,7 +9,7 @@ mod selection;
 use crate::formula_support::{Context, GroundingWork};
 
 use std::{fmt, sync::Arc};
-use themelios_base::{source::Source, span::Location};
+use themelios_base::source::Source;
 use themelios_program::program::{DefaultNegation, Program};
 use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, Model};
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
@@ -19,11 +19,12 @@ use crate::expansion::Budget;
 use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
+use crate::formula_owner::Owner;
 use crate::formula_support::{
     Accounting, CompletedCatalog, CompletedSupport, Counters, PreparedRule, RowFilter,
 };
 use crate::{
-    ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, SourceBundle,
+    ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
     SourceMetadata,
 };
 use selection::{Selection, SourceRows};
@@ -46,23 +47,18 @@ impl fmt::Display for HybridFeature {
     }
 }
 
-pub(crate) enum SourceOwner {
-    Single(Source),
-    Bundle(SourceBundle),
-}
-
 pub(crate) struct Constraints {
     pub(crate) catalog: CompletedCatalog,
     pub(crate) rules: Vec<RuleIr>,
     pub(crate) instances: u64,
     pub(crate) limits: FormulaLimits,
-    pub(crate) location: Location,
+    pub(crate) location: ProgramSite,
 }
 
 struct Admitted {
     compiled: Compiled,
     constraints: Option<Constraints>,
-    source: SourceOwner,
+    source: Owner,
     metadata: SourceMetadata,
 }
 
@@ -89,7 +85,7 @@ impl HybridFormula {
     pub(crate) fn new(
         compiled: Compiled,
         constraints: Constraints,
-        source: SourceOwner,
+        source: Owner,
         metadata: SourceMetadata,
     ) -> Self {
         // An all-eager fallback needs neither support nor the filtered vector's
@@ -122,22 +118,22 @@ impl HybridFormula {
         &self.0.compiled.atoms
     }
 
-    /// Original single source, absent for an admitted bundle.
+    /// Original canonical program before normalization or analysis projection.
     #[must_use]
-    pub fn source(&self) -> Option<&Source> {
-        match &self.0.source {
-            SourceOwner::Single(source) => Some(source),
-            SourceOwner::Bundle(_) => None,
-        }
+    pub fn original_program(&self) -> &Program {
+        self.0.source.program()
     }
 
-    /// Complete original include bundle, absent for a single source.
+    /// Original single source, absent for a bundle or logical program input.
+    #[must_use]
+    pub fn source(&self) -> Option<&Source> {
+        self.0.source.source()
+    }
+
+    /// Complete original include bundle, absent for single source or logical input.
     #[must_use]
     pub fn bundle(&self) -> Option<&SourceBundle> {
-        match &self.0.source {
-            SourceOwner::Bundle(bundle) => Some(bundle),
-            SourceOwner::Single(_) => None,
-        }
+        self.0.source.source_bundle()
     }
 
     /// Original declarations and display policy.
@@ -161,7 +157,7 @@ impl HybridFormula {
     /// Human diagnostics against the retained single source or include bundle.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
-        WarningView(self)
+        self.0.source.warning_view(self.warnings())
     }
 
     /// Empty objective program; authored objective declarations are refused.
@@ -230,6 +226,7 @@ impl HybridFormula {
     ///
     /// # Errors
     /// Returns a typed preparation/resource refusal with accepted charges.
+    /// Logical source failures retain the original canonical program.
     pub fn checker(
         &self,
         limits: ConstraintCheckLimits,
@@ -280,7 +277,9 @@ impl HybridFormula {
                 .catalog
                 .snapshot(&formula_limits, &mut counters, constraints.location)
                 .map_err(|error| ConstraintCheckFailure {
-                    cause: ConstraintCheckCause::Source(Box::new(error)),
+                    cause: ConstraintCheckCause::Source(Box::new(
+                        self.0.source.retain_failure(error),
+                    )),
                     statistics: ConstraintCheckStatistics {
                         work: counters.accounting.work,
                         substitutions: counters.accounting.substitutions,
@@ -315,20 +314,6 @@ fn scalar_budget(limits: ConstraintCheckLimits) -> Budget {
         },
         0,
     )
-}
-
-struct WarningView<'a>(&'a HybridFormula);
-impl fmt::Display for WarningView<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0.0.source {
-            SourceOwner::Single(source) => {
-                crate::formula_warning::source_view(self.0.warnings(), source).fmt(f)
-            }
-            SourceOwner::Bundle(bundle) => {
-                crate::formula_warning::bundle_view(self.0.warnings(), bundle).fmt(f)
-            }
-        }
-    }
 }
 
 /// Cumulative allowances for one checker, independent of source admission and
@@ -380,8 +365,8 @@ pub enum ConstraintVerdict {
     Satisfied,
     /// A complete admitted constraint body is true in this interpretation.
     Violated {
-        /// Original enclosing source rule.
-        location: Location,
+        /// Original enclosing rule and any actual source coordinate.
+        site: ProgramSite,
     },
 }
 
@@ -394,8 +379,8 @@ pub enum ConstraintRegionVerdict {
     NotRefuted,
     /// One admitted body is true in every interpretation between the bounds.
     Refuted {
-        /// Original enclosing source rule.
-        location: Location,
+        /// Original enclosing rule and any actual source coordinate.
+        site: ProgramSite,
     },
 }
 
@@ -418,6 +403,17 @@ pub enum ConstraintCheckCause {
     Stopped(Stop),
     /// Located join/evaluation/allocation/resource refusal.
     Source(Box<FormulaFailure>),
+}
+impl ConstraintCheckCause {
+    fn retain_input(self, owner: &Owner) -> Self {
+        match self {
+            Self::Source(error) => Self::Source(Box::new(owner.retain_failure(*error))),
+            Self::Index(AtomIndexError::Stopped(error)) => Self::Index(AtomIndexError::Stopped(
+                Box::new(owner.retain_failure(*error)),
+            )),
+            other => other,
+        }
+    }
 }
 impl fmt::Display for ConstraintCheckCause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -460,11 +456,11 @@ impl ConstraintCheckFailure {
     pub fn stop(&self) -> Option<Stop> {
         match &self.cause {
             ConstraintCheckCause::Stopped(reason) => Some(*reason),
-            ConstraintCheckCause::Source(error) => match error.as_ref() {
+            ConstraintCheckCause::Source(error) => match error.cause() {
                 FormulaFailure::Interrupted { reason, .. } => Some(*reason),
                 _ => None,
             },
-            ConstraintCheckCause::Index(AtomIndexError::Stopped(error)) => match error.as_ref() {
+            ConstraintCheckCause::Index(AtomIndexError::Stopped(error)) => match error.cause() {
                 FormulaFailure::Interrupted { reason, .. } => Some(*reason),
                 _ => None,
             },
@@ -606,7 +602,7 @@ impl ConstraintChecker<'_> {
     ) -> Result<ConstraintVerdict, ConstraintCheckFailure> {
         self.examine(Candidate::Model(model), cancellation)
             .map(|location| match location {
-                Some(location) => ConstraintVerdict::Violated { location },
+                Some(site) => ConstraintVerdict::Violated { site },
                 None => ConstraintVerdict::Satisfied,
             })
     }
@@ -638,7 +634,7 @@ impl ConstraintChecker<'_> {
     ) -> Result<ConstraintRegionVerdict, ConstraintCheckFailure> {
         self.examine(Candidate::Region(theory, region), cancellation)
             .map(|location| match location {
-                Some(location) => ConstraintRegionVerdict::Refuted { location },
+                Some(site) => ConstraintRegionVerdict::Refuted { site },
                 None => ConstraintRegionVerdict::NotRefuted,
             })
     }
@@ -670,7 +666,7 @@ impl ConstraintChecker<'_> {
         &mut self,
         candidate: Candidate<'_>,
         cancellation: &Cancellation,
-    ) -> Result<Option<Location>, ConstraintCheckFailure> {
+    ) -> Result<Option<ProgramSite>, ConstraintCheckFailure> {
         let result = self.authenticate(candidate).and_then(|()| {
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             let verdict = self
@@ -693,7 +689,7 @@ impl ConstraintChecker<'_> {
             Ok(verdict)
         });
         result.map_err(|cause| ConstraintCheckFailure {
-            cause,
+            cause: cause.retain_input(&self.owner.0.source),
             statistics: self.statistics(),
         })
     }
@@ -703,7 +699,7 @@ impl ConstraintChecker<'_> {
         budget: &mut Budget,
         counters: &mut Counters,
         candidate: Candidate<'_>,
-    ) -> Result<Option<Location>, FormulaFailure> {
+    ) -> Result<Option<ProgramSite>, FormulaFailure> {
         let Some(prepared) = prepared else {
             return Ok(None);
         };

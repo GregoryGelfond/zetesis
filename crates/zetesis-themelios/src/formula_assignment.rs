@@ -2,6 +2,7 @@
 mod sums;
 pub(crate) use sums::sums;
 
+use crate::ProgramSite;
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
@@ -11,7 +12,6 @@ use crate::formula_support::{
     Buffer, Computation, Context, Counters, GroundingWork, Join, Support, TermSelection,
 };
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
-use themelios_base::span::Location;
 use themelios_program::program::AggregateFunction;
 use zetesis_core::catalog::{AssignmentSlice, TermKey, TermRef};
 use zetesis_core::{Value, ValueNodeRef};
@@ -107,7 +107,7 @@ pub(crate) fn tuple(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<TermKey, FormulaFailure> {
     let mut fields = Binding::new(computation, limits, counters, location)?;
     let mut children = Buffer::new(computation, limits, counters, location)?;
@@ -136,7 +136,10 @@ pub(crate) fn tuple(
     )
 }
 
-pub(crate) fn extremum_value(value: TermRef<'_>, location: Location) -> Result<(), FormulaFailure> {
+pub(crate) fn extremum_value(
+    value: TermRef<'_>,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
     if let ValueNodeRef::Number(endpoint @ (i32::MIN | i32::MAX)) = value.descriptor() {
         return Err(crate::AdmissionFailure::ExtremumEndpoint {
             value: endpoint,
@@ -153,7 +156,7 @@ pub(crate) fn extrema_candidates(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Binding<'static>, FormulaFailure> {
     let mut values = TermSelection::new(computation, limits, counters, location)?;
     let empty = match function {
@@ -194,7 +197,7 @@ pub(crate) fn extrema_candidates(
 pub(crate) fn contribution(
     function: AggregateFunction,
     first: Option<TermRef<'_>>,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<i32>, FormulaFailure> {
     match (function, first.map(TermRef::descriptor)) {
         (AggregateFunction::Count, _) => Ok(Some(1)),
@@ -214,7 +217,7 @@ pub(crate) fn candidates(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Binding<'static>, FormulaFailure> {
     if matches!(
         function,

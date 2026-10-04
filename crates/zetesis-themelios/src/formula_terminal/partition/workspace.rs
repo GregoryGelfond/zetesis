@@ -1,6 +1,6 @@
 //! Borrowed component checks and leased metadata for one partition attempt.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::{PatternRef, TemplateComponentsRef};
 
 use crate::formula_support::{
@@ -15,7 +15,7 @@ pub(super) struct Context<'a, 'source> {
     pub components: TemplateComponentsRef<'a>,
     pub limits: &'a FormulaLimits,
     pub counters: &'a mut Counters,
-    pub location: Location,
+    pub location: ProgramSite,
 }
 
 impl<'a> Context<'a, '_> {

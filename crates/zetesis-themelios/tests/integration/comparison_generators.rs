@@ -91,7 +91,7 @@ fn exact_sources_have_complete_models_or_distinct_reviewed_refusals() {
         if row["native"] == "admit" || mixed_arithmetic {
             assert_eq!(row["valid"], true);
             let program = input(source).unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
-            assert_eq!(program.source().text(), source);
+            assert_eq!(program.source().expect("source input").text(), source);
             if mixed_arithmetic {
                 assert_eq!(program.warnings().len(), 1);
             }
@@ -181,7 +181,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
         },
     );
     assert!(
-        matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, limit: 2, observed: 3, location }) if location.source == SOURCE)
+        matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, limit: 2, observed: 3, location }) if location.location().expect("parsed source").source == SOURCE)
     );
     let result = admit_formula(
         source.into(),
@@ -244,7 +244,7 @@ fn interrupted_generator_construction_never_returns_a_partial_program() {
             }) => {
                 assert_eq!(limit, u128::from(cap));
                 assert_eq!(observed, limit + 1);
-                assert_eq!(location.source, SOURCE);
+                assert_eq!(location.location().expect("parsed source").source, SOURCE);
             }
             Err(other) => panic!("unexpected resource result: {other}"),
         }
@@ -287,16 +287,16 @@ fn generated_include_rules_keep_original_identity_and_display_selection() {
             .formula_origins()
             .iter()
             .flatten()
-            .any(|location| location.source == rule_source)
+            .any(|location| location.location().expect("parsed source").source == rule_source)
     );
     for location in program.formula_origins().iter().flatten() {
         assert!(
             program
                 .bundle()
-                .get(location.source)
+                .get(location.location().expect("parsed source").source)
                 .unwrap()
                 .source()
-                .slice(location.span)
+                .slice(location.location().expect("parsed source").span)
                 .is_ok()
         );
     }

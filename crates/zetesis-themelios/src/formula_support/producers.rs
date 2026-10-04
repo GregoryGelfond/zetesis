@@ -16,8 +16,8 @@ use std::cmp::Ordering;
 use std::mem::size_of;
 use std::ops::Range;
 
+use crate::ProgramSite;
 use themelios_analysis::depend::DependencyKind;
-use themelios_base::span::Location;
 use themelios_program::symbol::{Sign, Signature};
 use zetesis_core::{
     catalog::{AtomRef, PredicateRef},
@@ -49,7 +49,7 @@ fn producer_source<'source>(
     components: Option<zetesis_core::TemplateComponentsRef<'_>>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<PositiveSource<'source>>, FormulaFailure> {
     // Keep the existing cheap refusal before inspecting objective-bearing
     // sources. The certificate below also records empty declarations.
@@ -90,7 +90,7 @@ impl<'source> ProducerPlan<'source> {
         catalog: &super::SupportCatalog,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Self>, FormulaFailure> {
         let components = catalog.component_view(limits, counters, location)?;
         let Some(source) = producer_source(prepared, components, limits, counters, location)?
@@ -205,7 +205,7 @@ impl<'source> ProducerPlan<'source> {
         delta: impl Iterator<Item = AtomRef<'atoms>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.wake.advance(delta, limits, counters, location)
     }
@@ -248,7 +248,7 @@ fn graph_nodes<'source>(
     memory: &mut Memory<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Vec<Node<'source>>, FormulaFailure> {
     let graph = prepared.analysis.dependencies();
     let mut count = 0_usize;
@@ -301,7 +301,7 @@ fn find<'source>(
     predicate: PredicateRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<usize, FormulaFailure> {
     let mut start = 0;
     let mut end = count;
@@ -337,7 +337,7 @@ fn validate_dependency(
     edge: (usize, usize),
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     let (head, body) = edge;
     let (Some(head_component), Some(body_component)) =
@@ -372,6 +372,6 @@ fn validate_dependency(
     Err(invalid(Failure::Owner, location))
 }
 
-fn invalid(error: Failure, location: Location) -> FormulaFailure {
+fn invalid(error: Failure, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation { error, location }
 }

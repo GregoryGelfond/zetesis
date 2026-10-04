@@ -7,12 +7,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use stable_models::stable;
-use themelios_base::span::Location;
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
@@ -212,7 +212,7 @@ impl GroundingObserver for InstantiationRows {
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {
@@ -254,7 +254,7 @@ fn a_factored_root_retains_its_source_location() {
     let source = CARTESIAN_SOURCE;
     let admitted = formula(source);
     assert!(admitted.formula_origins().iter().flatten().any(|location| {
-        let span = location.span;
+        let span = location.location().expect("parsed source").span;
         &source[usize::try_from(span.start().get()).unwrap()
             ..usize::try_from(span.end().get()).unwrap()]
             == "h:-a(X),b(Y)."

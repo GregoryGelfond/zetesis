@@ -428,9 +428,14 @@ fn prepared_grounding_preserves_witness_models() {
 fn compiled_checks_retain_original_source() {
     let source = "p(1,2).q:-p(X,X+(1;2)):#true.";
     let admitted = formula(source);
-    assert_eq!(admitted.source().text(), source);
+    assert_eq!(admitted.source().expect("source input").text(), source);
     assert!(admitted.formula_origins().iter().flatten().any(|location| {
-        admitted.source().slice(location.span).unwrap() == "q:-p(X,X+(1;2)):#true."
+        admitted
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap()
+            == "q:-p(X,X+(1;2)):#true."
     }));
 }
 

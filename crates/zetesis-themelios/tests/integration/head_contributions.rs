@@ -129,8 +129,8 @@ fn satisfied_facts_preserve_numeric_permissions() {
 fn original_sources_retain_their_identity() {
     for &(source, _) in CASES {
         let admitted = input(source);
-        assert_eq!(admitted.source().id(), SOURCE);
-        assert_eq!(admitted.source().text(), source);
+        assert_eq!(admitted.source().expect("source input").id(), SOURCE);
+        assert_eq!(admitted.source().expect("source input").text(), source);
     }
 }
 

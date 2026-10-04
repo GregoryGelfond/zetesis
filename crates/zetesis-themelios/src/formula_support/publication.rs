@@ -1,6 +1,6 @@
 //! Final views share one sealed source vocabulary and retain only occurrence maps.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::AtomCatalog;
 
 use super::{CompletedCatalog, Counters, SourceSelection, StorageLease};
@@ -21,7 +21,7 @@ impl<'a> Publication<'a> {
         &self,
         lease: &StorageLease,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if !counters.accounting.workspace.owns(&self.lease)
             || !counters.accounting.workspace.owns(lease)
@@ -39,7 +39,7 @@ impl<'a> Publication<'a> {
     fn current_bytes(
         &self,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<u128, FormulaFailure> {
         self.check_lease(&self.lease, counters, location)?;
         Ok(self.source.catalog.bytes(location)? as u128
@@ -47,7 +47,7 @@ impl<'a> Publication<'a> {
     }
 
     /// Canonical/support storage outside this account's complete workspace.
-    pub(crate) fn source_bytes(&self, location: Location) -> Result<usize, FormulaFailure> {
+    pub(crate) fn source_bytes(&self, location: ProgramSite) -> Result<usize, FormulaFailure> {
         self.source.catalog.bytes(location)
     }
 
@@ -55,7 +55,7 @@ impl<'a> Publication<'a> {
         &self,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let bytes = self.current_bytes(counters, location)?;
         crate::formula::ceiling(
@@ -74,7 +74,7 @@ impl<'a> Publication<'a> {
         extra: u128,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let bytes = self.current_bytes(counters, location)? + extra;
         counters.record(crate::grounding_observer::Event::SupportPeakBytes(bytes));
@@ -93,7 +93,7 @@ impl<'a> Publication<'a> {
         lease: StorageLease,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.check_lease(&lease, counters, location)?;
         self.remaining_bytes(limits, counters, location)?;
@@ -103,7 +103,7 @@ impl<'a> Publication<'a> {
     pub(crate) fn new(
         source: &'a mut CompletedCatalog,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut lease = counters.accounting.workspace.lease();
         lease.observe(size_of::<Self>(), location)?;
@@ -112,7 +112,10 @@ impl<'a> Publication<'a> {
 
     /// Transfer only retained output receipts. This publication coordinator no
     /// longer exists after the move; its caller admits its own fixed envelope.
-    pub(crate) fn into_lease(mut self, location: Location) -> Result<StorageLease, FormulaFailure> {
+    pub(crate) fn into_lease(
+        mut self,
+        location: ProgramSite,
+    ) -> Result<StorageLease, FormulaFailure> {
         self.lease
             .observe(self.lease.bytes() - size_of::<Self>(), location)?;
         Ok(self.lease)
@@ -125,7 +128,7 @@ impl<'a> Publication<'a> {
         selection: SourceSelection,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomCatalog, FormulaFailure> {
         self.check_lease(selection.storage_lease(), counters, location)?;
         let catalog = self.source.catalog.publish_selection(

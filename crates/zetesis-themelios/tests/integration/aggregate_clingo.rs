@@ -309,7 +309,11 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
         };
         assert_eq!(error.kind(), expected);
         assert_eq!(
-            input.source().slice(location.span).expect("original span"),
+            input
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .expect("original span"),
             rule
         );
     }
@@ -340,7 +344,11 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
         (FormulaResource::AggregateElements, 1, 2)
     );
     assert_eq!(
-        input.source().slice(location.span).expect("original span"),
+        input
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .expect("original span"),
         rule
     );
 }

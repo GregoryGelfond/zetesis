@@ -1,54 +1,67 @@
-//! Bounded located warnings retained by successful formula admission.
+//! Bounded warnings retained by successful formula admission.
 
 use std::fmt;
 
 use themelios_base::{
-    diagnostic::{Diagnostic, DiagnosticId, Label, Severity, ToDiagnostic},
+    diagnostic::{Diagnostic, DiagnosticId, Label, Severity},
     source::Source,
     span::Location,
 };
 
-use crate::SourceBundle;
+use crate::{ProgramSite, SourceBundle};
 
-/// A nonfatal source condition observed during successful formula admission.
+const ZERO_DIVISOR: &str =
+    "instances omitted because an evaluated division or remainder had a zero divisor";
+
+/// A nonfatal condition observed during successful formula admission.
 /// Warnings describe omitted instances without retaining substitutions or
 /// counting repeated evaluations during support completion and grounding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaWarning {
-    /// An evaluated division or remainder had a zero divisor in a family that
-    /// also had defined instances. Instances reaching that operation were omitted.
+    /// A zero divisor occurred in a family that also had defined instances.
     ZeroDivisor {
-        /// Original source construct containing the evaluated operation.
-        location: Location,
+        /// Original statement containing the evaluated operation.
+        location: ProgramSite,
     },
 }
 
 impl FormulaWarning {
-    /// Original source location; identities resolve in the admitted owner.
+    /// Original statement identity, resolved in the admitted owner.
     #[must_use]
-    pub const fn location(self) -> Location {
+    pub const fn site(self) -> ProgramSite {
         match self {
             Self::ZeroDivisor { location } => location,
         }
     }
+
+    /// Actual source coordinate, absent for constructed statements.
+    #[must_use]
+    pub const fn location(self) -> Option<Location> {
+        self.site().location()
+    }
+
+    /// A source diagnostic when an actual parsed coordinate is available.
+    /// Returns `None` only when the warning has no source coordinate.
+    #[must_use]
+    pub fn diagnostic(self) -> Option<Diagnostic> {
+        self.location().map(zero_divisor_diagnostic)
+    }
 }
 
-impl ToDiagnostic for FormulaWarning {
-    fn to_diagnostic(&self) -> Diagnostic {
-        let Self::ZeroDivisor { location } = *self;
-        Diagnostic::new(
-            DiagnosticId::new("zetesis", "zero-divisor"),
-            Severity::Warning,
-            "instances omitted because an evaluated division or remainder had a zero divisor"
-                .into(),
-            Label {
-                location,
-                message: None,
-            },
-        )
-        .expect("the zero-divisor warning has a nonempty diagnostic message")
-        .with_help("guard the denominator to exclude zero".into())
-    }
+/// The diagnostic constructor can refuse only an empty headline. This fixed
+/// warning message is nonempty independently of every caller-supplied value.
+fn zero_divisor_diagnostic(location: Location) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticId::new("zetesis", "zero-divisor"),
+        Severity::Warning,
+        ZERO_DIVISOR.into(),
+        Label {
+            location,
+            message: None,
+        },
+    )
+    .expect("the zero-divisor warning has a nonempty diagnostic message")
+    .with_help("guard the denominator to exclude zero".into())
 }
 
 pub(crate) fn source_view<'a>(
@@ -71,11 +84,18 @@ pub(crate) fn bundle_view<'a>(
     }
 }
 
+pub(crate) fn program_view(warnings: &[FormulaWarning]) -> impl fmt::Display + '_ {
+    View {
+        warnings,
+        sources: Sources::Program,
+    }
+}
+
 enum Sources<'a> {
     Single(&'a Source),
     Bundle(&'a SourceBundle),
+    Program,
 }
-
 struct View<'a> {
     warnings: &'a [FormulaWarning],
     sources: Sources<'a>,
@@ -83,22 +103,33 @@ struct View<'a> {
 
 impl fmt::Display for View<'_> {
     fn fmt(&self, output: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.warnings.is_empty() {
-            return Ok(());
-        }
         match &self.sources {
             Sources::Single(source) => crate::source_diagnostics::write_diagnostics(
                 output,
                 "<input>",
                 source,
-                self.warnings.iter().map(ToDiagnostic::to_diagnostic),
+                self.warnings
+                    .iter()
+                    .filter_map(|warning| warning.diagnostic()),
             ),
             Sources::Bundle(bundle) => {
+                for diagnostic in self
+                    .warnings
+                    .iter()
+                    .filter_map(|warning| warning.diagnostic())
+                {
+                    crate::source_diagnostics::write_diagnostic(output, &diagnostic, *bundle)?;
+                }
+                Ok(())
+            }
+            Sources::Program => {
                 for warning in self.warnings {
-                    crate::source_diagnostics::write_diagnostic(
+                    if let Some(statement) = warning.site().statement_id() {
+                        write!(output, "statement {}: ", statement.index())?;
+                    }
+                    writeln!(
                         output,
-                        &warning.to_diagnostic(),
-                        *bundle,
+                        "warning: {ZERO_DIVISOR}; guard the denominator to exclude zero"
                     )?;
                 }
                 Ok(())

@@ -40,7 +40,7 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     fn phase_enter(
         &self,
         phase: crate::GroundingPhase,
-        _location: Option<zetesis_themelios::base::span::Location>,
+        _location: Option<zetesis_themelios::ProgramSite>,
     ) {
         if self.grounding.is_none() {
             return;
@@ -55,7 +55,7 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     fn phase_exit(
         &self,
         phase: crate::GroundingPhase,
-        _location: Option<zetesis_themelios::base::span::Location>,
+        _location: Option<zetesis_themelios::ProgramSite>,
         outcome: crate::GroundingOutcome,
         work: crate::GroundingWork,
     ) {

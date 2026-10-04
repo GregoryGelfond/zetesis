@@ -11,7 +11,7 @@ mod affine;
 
 use std::collections::BTreeSet;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{DefaultNegation, Relation};
 
 use crate::expansion::Budget;
@@ -307,7 +307,7 @@ impl Inequality {
 fn inverse_bound(
     remainder: i128,
     coefficient: i64,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<i128, FormulaFailure> {
     let divisor = i128::from(coefficient);
     if coefficient < 0 {
@@ -356,7 +356,7 @@ fn capacity_failure(error: &FormulaFailure) -> bool {
     )
 }
 
-fn bound_capacity(location: Location) -> FormulaFailure {
+fn bound_capacity(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::Limit {
         resource: FormulaResource::BindingBoundBits,
         limit: u128::from(i128::BITS),
@@ -368,15 +368,16 @@ fn bound_capacity(location: Location) -> FormulaFailure {
 #[cfg(test)]
 mod tests {
     use super::inverse_bound;
+    use crate::ProgramSite;
     use crate::{FormulaFailure, FormulaResource};
     use themelios_base::source::SourceId;
-    use themelios_base::span::{ByteOffset, Location, Span};
+    use themelios_base::span::{ByteOffset, Span};
 
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: SourceId::new(1),
             span: Span::empty(ByteOffset::new(0)),
-        }
+        })
     }
 
     #[test]

@@ -115,8 +115,9 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     oracle_test() {
         oracle_index=$((oracle_index + 1))
         printf '%s\n' cargo test "$@" > "$oracle_records/$oracle_index.argv"
-        # The harness's report of the tests it ran is kept beside the exit
-        # status, for the check of every campaign's run below.
+        # Capture each test's prints until its harness result is complete,
+        # then show all output. This retains raw reference evidence without
+        # interleaving it into the exact test-name records checked below.
         {
             if cargo test "$@"; then
                 printf '%s\n' 0 > "$oracle_records/$oracle_index.exit"
@@ -130,21 +131,21 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
             oracle_first_failure=$oracle_exit
         fi
     }
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture arithmetic_validation:: support_delta:: extremal_terms:: observation_bindings:: objective_rich_cycles:: objective_pools:: conditional_heads:: keyed_constraints:: strong_negation::
-    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration language_consumers::original_sources_retain_declared_reference_results -- --ignored --nocapture
-    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration -- --ignored --nocapture projected_reference::
-    oracle_test --locked --no-fail-fast -p zetesis-validation --test integration -- --ignored --nocapture example_parity:: authored_examples::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture objective_boundaries:: objective_dependency_contracts::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture objective_scopes:: objective_carrier_composition:: objective_language_boundaries::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture head_contributions:: objective_source_completion:: objective_field_expressions:: objective_priority_reporting:: objective_cyclic_producers:: objective_rich_producers:: observation_expressions:: observation_scopes:: observation_families::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture logical_bounds:: objective_priorities:: objective_priority_certificates:: objective_measure_carriers:: finite_chains:: affine_normalization::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture extrema_alias_contracts:: boolean_element_contracts:: signed_element_contracts:: signed_choices::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture program_parts:: conditional_consumers:: weighted_heads:: nonbinding_guards:: extrema_heads:: count_plans:: count_head_activity:: objective_forwarding:: boolean_heads:: evaluated_witnesses:: objective_literal_weights:: objective_extrema_presence::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture aggregate_dependencies:: aggregate_consumers:: choice_consumers:: outer_negative_consumers:: outer_ranges:: negative_count_eligibility:: structured_witnesses::
-    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --nocapture aggregate_clingo::
-    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --nocapture extrema_clingo::
-    oracle_test --locked --no-fail-fast -p zetesis-cli --test integration -- --ignored --nocapture clingo:: extended_clingo:: multiple_inputs:: maximize:: language_value_sessions:: contribution_sessions:: bound_priority_sessions:: finite_carrier_sessions:: count_objective_sessions:: strong_negation::
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --nocapture bundle_admission:: metadata:: formula:: formula_clingo:: aggregate_clingo:: aggregate_assignments_multiple:: aggregate_objective_observers:: extrema_source:: scalar_bindings_clingo:: objective_bounds_adversarial:: factorization_clingo:: comparison_reuse:: disjunction:: sum_profiles:: weak_objectives:: maximize_clingo:: observations:: observations_adversarial:: choice_intervals:: ground_guards:: conditional_body:: comparison_generators:: finite_bindings:: evaluated_heads:: negative_heads:: structural_values:: finite_pools:: true_heads:: count_heads:: value_extrema:: structural_bindings:: finite_values:: consequent_alternatives:: function_patterns:: positive_arguments:: scalar_evaluation::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output arithmetic_validation:: support_delta:: extremal_terms:: observation_bindings:: objective_rich_cycles:: objective_pools:: conditional_heads:: keyed_constraints:: strong_negation::
+    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration language_consumers::original_sources_retain_declared_reference_results -- --ignored --show-output
+    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration -- --ignored --show-output projected_reference::
+    oracle_test --locked --no-fail-fast -p zetesis-validation --test integration -- --ignored --show-output example_parity:: authored_examples::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output objective_boundaries:: objective_dependency_contracts::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output objective_scopes:: objective_carrier_composition:: objective_language_boundaries::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output head_contributions:: objective_source_completion:: objective_field_expressions:: objective_priority_reporting:: objective_cyclic_producers:: objective_rich_producers:: observation_expressions:: observation_scopes:: observation_families::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output logical_bounds:: objective_priorities:: objective_priority_certificates:: objective_measure_carriers:: finite_chains:: affine_normalization::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output extrema_alias_contracts:: boolean_element_contracts:: signed_element_contracts:: signed_choices::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output program_parts:: conditional_consumers:: weighted_heads:: nonbinding_guards:: extrema_heads:: count_plans:: count_head_activity:: objective_forwarding:: boolean_heads:: evaluated_witnesses:: objective_literal_weights:: objective_extrema_presence::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output aggregate_dependencies:: aggregate_consumers:: choice_consumers:: outer_negative_consumers:: outer_ranges:: negative_count_eligibility:: structured_witnesses::
+    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --show-output aggregate_clingo::
+    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test integration -- --ignored --show-output extrema_clingo::
+    oracle_test --locked --no-fail-fast -p zetesis-cli --test integration -- --ignored --show-output clingo:: extended_clingo:: multiple_inputs:: maximize:: language_value_sessions:: contribution_sessions:: bound_priority_sessions:: finite_carrier_sessions:: count_objective_sessions:: strong_negation::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output bundle_admission:: metadata:: formula:: formula_clingo:: aggregate_clingo:: aggregate_assignments_multiple:: aggregate_objective_observers:: extrema_source:: scalar_bindings_clingo:: objective_bounds_adversarial:: factorization_clingo:: comparison_reuse:: disjunction:: sum_profiles:: weak_objectives:: maximize_clingo:: observations:: observations_adversarial:: choice_intervals:: ground_guards:: conditional_body:: comparison_generators:: finite_bindings:: evaluated_heads:: negative_heads:: structural_values:: finite_pools:: true_heads:: count_heads:: value_extrema:: structural_bindings:: finite_values:: consequent_alternatives:: function_patterns:: positive_arguments:: scalar_evaluation::
     # Each campaign ran at least one test, and exactly the ignored tests its
     # filters select among the sources: a filter matching nothing, or a
     # selected test the campaign's features compile out, fails the gate.

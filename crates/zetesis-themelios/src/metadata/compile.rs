@@ -11,7 +11,8 @@ use themelios_program::symbol::Symbol;
 use themelios_program::term::{Term, Variable};
 
 use super::SourceMetadata;
-use crate::{AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure};
+use crate::formula_ir::CompilationOptions;
+use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, ProgramSite, StatementId};
 
 /// Independent input bounds for metadata compilation, before cloning or resolving
 /// constants. These measure the borrowed canonical program, not original syntax.
@@ -90,15 +91,15 @@ pub enum MetadataError {
         limit: usize,
         /// Required count.
         observed: u128,
-        /// Original parsed location, or the caller's diagnostic fallback.
-        location: Location,
+        /// Logical statement identity and any real parsed or caller-supplied source evidence.
+        location: ProgramSite,
     },
     /// A form cannot be interpreted by this metadata-only door.
     Unsupported {
         /// Refused form.
         feature: MetadataFeature,
-        /// Original parsed location, or the caller's diagnostic fallback.
-        location: Location,
+        /// Logical statement identity and any real parsed or caller-supplied source evidence.
+        location: ProgramSite,
     },
     /// Existing checked constant normalization or metadata-occurrence limits refused.
     Expansion(ExpansionFailure),
@@ -124,7 +125,7 @@ impl std::error::Error for MetadataError {}
 
 struct Preflight {
     limits: MetadataLimits,
-    location: Location,
+    location: ProgramSite,
     nodes: usize,
     bytes: usize,
     origins: usize,
@@ -133,7 +134,6 @@ struct Preflight {
 #[derive(Default)]
 struct ParsedOrigins {
     first: Option<Location>,
-    second: Option<Location>,
     count: usize,
 }
 
@@ -177,8 +177,6 @@ impl Preflight {
                 parsed.count += 1;
                 if parsed.first.is_none() {
                     parsed.first = Some(*location);
-                } else if parsed.second.is_none() {
-                    parsed.second = Some(*location);
                 }
             }
         }
@@ -316,10 +314,12 @@ impl SourceMetadata {
     ///
     /// Constants and observations use the same checked resolver/compiler as source
     /// admission, including positive-binding safety and constant-cycle checks.
-    /// Canonical duplicate occurrences are only distinguishable where provenance
-    /// retained them. Original parsed directive origins are preserved; constructed
-    /// directives affect the policy but invent no parsed evidence. `fallback` is
-    /// used only to locate diagnostics when no parsed origin exists.
+    /// Constant uniqueness follows canonical declarations; extra provenance on
+    /// one declaration does not create another. Original parsed directive origins
+    /// are preserved; constructed directives affect the policy but invent no
+    /// parsed evidence. `fallback` supplies optional real source evidence when
+    /// no parsed origin exists; pass [`ProgramSite::program`] for
+    /// source-independent diagnostics.
     ///
     /// # Cost
     /// Input preflight is bounded by statement/node/text/origin ceilings before
@@ -327,46 +327,18 @@ impl SourceMetadata {
     /// expansion and observation limits. No caller-owned program is cloned.
     ///
     /// # Errors
-    /// Returns located input, constant or safe-observation refusal with no partial policy.
+    /// Returns an input, constant or safe-observation refusal with its logical
+    /// statement identity and any real source evidence, without a partial policy.
     pub fn compile(
         program: &Program,
         limits: MetadataLimits,
-        fallback: Location,
+        fallback: impl Into<ProgramSite>,
     ) -> Result<Self, MetadataError> {
+        let fallback = fallback.into();
         validate(program, limits, fallback)?;
         let mut metadata = super::Builder::new(limits.storage);
-        super::collect_profile(program, &mut metadata, true)
+        super::collect_profile_at(program, &mut metadata, true, fallback)
             .map_err(|error| MetadataError::Compilation(error.into()))?;
-        // Parsed occurrence collection intentionally omits Constructed origins.
-        // Apply effective atom policy independently, without manufacturing spans.
-        for carrier in program.statements() {
-            if carrier
-                .provenance()
-                .origins()
-                .any(|origin| matches!(origin, Origin::Parsed(_)))
-            {
-                continue;
-            }
-            match carrier.get() {
-                Statement::Project(Project::Signature(signature)) => {
-                    let location = crate::extended::origin(carrier, fallback);
-                    let predicate = metadata
-                        .signature(signature, location)
-                        .map_err(|error| MetadataError::Compilation(error.into()))?;
-                    metadata.projection.signature(predicate);
-                }
-                Statement::Project(Project::Atom { .. }) => metadata.projection.atom(),
-                Statement::Show(Show::All) => metadata.output.mark_explicit(),
-                Statement::Show(Show::Signature(signature)) => {
-                    let location = crate::extended::origin(carrier, fallback);
-                    let predicate = metadata
-                        .signature(signature, location)
-                        .map_err(|error| MetadataError::Compilation(error.into()))?;
-                    metadata.output.include(predicate);
-                }
-                _ => {}
-            }
-        }
         let mut budget = crate::expansion::Budget::new(limits.expansion, 0);
         if !program.statements().any(|entry| {
             matches!(
@@ -378,14 +350,13 @@ impl SourceMetadata {
                 .map_err(MetadataError::Expansion)?;
         }
         let observations = limits.observations;
-        let options = AdmissionOptions {
+        let options = CompilationOptions {
             max_body_elements: observations.max_body_elements as usize,
             core_limits: zetesis_core::AdmissionLimits {
                 max_variables_per_template: observations.max_variables as usize,
                 max_predicate_arity: observations.max_arity as usize,
                 ..Default::default()
             },
-            ..Default::default()
         };
         metadata
             .compile_observations(program, options, observations, &mut budget, fallback)
@@ -399,7 +370,7 @@ impl SourceMetadata {
 fn validate(
     program: &Program,
     limits: MetadataLimits,
-    fallback: Location,
+    fallback: ProgramSite,
 ) -> Result<(), MetadataError> {
     let mut input = Preflight {
         limits,
@@ -416,7 +387,7 @@ fn validate(
     let mut constants = BTreeMap::new();
     let mut metadata = 0_u128;
     for (index, carrier) in program.statements().enumerate() {
-        input.location = fallback;
+        input.location = fallback.with_statement(StatementId::new(index));
         input.check(
             MetadataResource::Statements,
             index as u128 + 1,
@@ -433,7 +404,9 @@ fn validate(
         }
         input.node(1)?;
         let parsed = input.origins(carrier.provenance().origins())?;
-        input.location = parsed.first.unwrap_or(fallback);
+        input.location = parsed.first.map_or(input.location, |location| {
+            input.location.with_location(location)
+        });
         match carrier.get() {
             Statement::Const(constant) => {
                 if constant.policy.is_some() {
@@ -449,15 +422,12 @@ fn validate(
                     input.location,
                 )
                 .map_err(MetadataError::Expansion)?;
-                if let Some(first) = constants
-                    .insert(constant.name.as_str(), input.location)
-                    .or_else(|| parsed.second.and(parsed.first))
-                {
+                if let Some(first) = constants.insert(constant.name.as_str(), input.location) {
                     return Err(MetadataError::Expansion(
                         ExpansionFailure::DuplicateConstant {
                             name: constant.name.as_str().into(),
                             first,
-                            duplicate: parsed.second.unwrap_or(input.location),
+                            duplicate: input.location,
                         },
                     ));
                 }

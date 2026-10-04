@@ -12,8 +12,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::ProgramSite;
 use crate::formula_support::components::Pattern as AtomPattern;
-use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::{Name, Signature};
 use zetesis_core::catalog::PredicateRef;
@@ -47,7 +47,7 @@ fn ordinary(literals: &[LiteralIr]) -> bool {
     })
 }
 
-fn refusal(location: Location) -> FormulaFailure {
+fn refusal(location: ProgramSite) -> FormulaFailure {
     crate::diagnostic::unsupported(crate::ProfileFeature::ObjectiveSourceEligibility, location)
         .into()
 }
@@ -86,7 +86,7 @@ pub(crate) struct Context<'a, 'terms, 'source> {
     pub limits: &'a FormulaLimits,
     pub budget: &'a mut Budget,
     pub counters: &'a mut Counters,
-    pub location: Location,
+    pub location: ProgramSite,
 }
 
 impl Context<'_, '_, '_> {

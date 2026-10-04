@@ -70,7 +70,7 @@ fn check_profile(
                             resource: InputLimit::BodyElements,
                             limit: options.max_body_elements,
                             observed: index + 1,
-                            location: parsed.location(element.syntax().text_range()),
+                            location: parsed.location(element.syntax().text_range()).into(),
                         });
                     }
                 }
@@ -120,7 +120,7 @@ fn check_profile(
                         resource: InputLimit::BodyElements,
                         limit: options.max_body_elements,
                         observed: index + 1,
-                        location,
+                        location: location.into(),
                     });
                 }
                 if !(matches!(element, ast::BodyElement::Literal(_))
@@ -185,7 +185,7 @@ fn check_traversal(
                             resource,
                             limit,
                             observed,
-                            location,
+                            location: location.into(),
                         });
                     }
                 }
@@ -299,7 +299,7 @@ fn check_weak(
                     resource: InputLimit::BodyElements,
                     limit: options.max_body_elements,
                     observed: index + 1,
-                    location,
+                    location: location.into(),
                 });
             }
             if !matches!(

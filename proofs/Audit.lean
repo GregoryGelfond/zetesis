@@ -582,6 +582,7 @@ import Zetesis
 #print axioms Zetesis.FinitePools.value_context_complete
 #print axioms Zetesis.FinitePools.local_occurrences_complete
 #print axioms Zetesis.FinitePools.local_activity_complete
+#print axioms Zetesis.FinitePools.expanded_occurrence_activity
 #print axioms Zetesis.FiniteTables.indexed_survival_exact
 #print axioms Zetesis.FiniteTables.narrowing_contracts
 #print axioms Zetesis.FiniteTables.narrowing_preserves_rows

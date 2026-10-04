@@ -5,7 +5,7 @@
 //! with long predicate names can otherwise have a large byte footprint. These
 //! are logical admission allowances, not allocator or peak-RSS measurements.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{Arguments, Atom, Body, Program, Rule, Statement};
 use themelios_program::provenance::WithProvenance;
 use themelios_program::symbol::{Name, Sign, Signature, Symbol};
@@ -26,7 +26,7 @@ use crate::{
 pub(crate) fn fact(
     pattern: &AtomPattern,
     source: &WithProvenance<Statement>,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<WithProvenance<Statement>, FormulaFailure> {
     let terms = pattern
         .terms()
@@ -86,7 +86,7 @@ pub(crate) fn analyze(
     program: &Program,
     limits: &FormulaLimits,
     budget: &mut Budget,
-    fallback: Location,
+    fallback: ProgramSite,
 ) -> Result<themelios_analysis::Analysis, FormulaFailure> {
     let mut nodes = 0_u128;
     let mut edges = 0_u128;
@@ -205,7 +205,7 @@ mod tests {
     use super::*;
     use crate::{AdmissionFailure, ExpansionFailure, ExpansionLimits};
 
-    fn input(text: &str) -> (Program, Location) {
+    fn input(text: &str) -> (Program, ProgramSite) {
         let source = Source::new(SourceId::new(9), text.to_owned()).expect("fixture source");
         let parsed = parse(&source, Dialect::Clingo);
         assert!(parsed.diagnostics().is_empty(), "{text}");
@@ -213,10 +213,10 @@ mod tests {
         assert!(raised.diagnostics().is_empty(), "{text}");
         (
             raised.program().clone(),
-            Location {
+            ProgramSite::source(themelios_base::span::Location {
                 source: source.id(),
                 span: source.span(),
-            },
+            }),
         )
     }
 
@@ -249,7 +249,7 @@ mod tests {
                 matches!(error,
                     FormulaFailure::Expansion(ExpansionFailure::Admission(
                         AdmissionFailure::Profile { feature: ProfileFeature::AnalysisPool, location }
-                    )) if location.source == SourceId::new(9)
+                    )) if location.location().expect("parsed source").source == SourceId::new(9)
                 ),
                 "{text}: {error}"
             );

@@ -54,7 +54,10 @@ fn stability_matches_independent_subset_enumeration() {
 #[test]
 fn original_sources_remain_owned() {
     for (source, _) in sources() {
-        assert_eq!(input(&source).source().text(), source);
+        assert_eq!(
+            input(&source).source().expect("source input").text(),
+            source
+        );
     }
 }
 

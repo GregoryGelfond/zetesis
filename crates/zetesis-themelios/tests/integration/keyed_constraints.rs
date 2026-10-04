@@ -163,7 +163,7 @@ fn asked_constraints_keep_the_written_constraint_as_their_origin() {
         .formula_origins()
         .iter()
         .flatten()
-        .map(|origin| origin.span.start().get())
+        .map(|origin| origin.location().expect("parsed source").span.start().get())
         .collect();
     assert!(spans.contains(&u32::try_from(start).unwrap()), "{spans:?}");
 }

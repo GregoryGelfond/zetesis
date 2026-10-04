@@ -5,7 +5,7 @@
 //! constructor or operator. It never evaluates intervals or erases empty ranges:
 //! their endpoint checks and variable safety belong to the binding consumer.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::term::{Term, TermParts};
 use themelios_program::transform::Visit;
 
@@ -16,7 +16,7 @@ use crate::{ExpansionFailure, ExpansionResource};
 pub(crate) fn distribute(
     term: Term,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Term, ExpansionFailure> {
     // Pool-free nodes retain the original normalizer and its charging order.
     let pooled = match &term {
@@ -112,7 +112,7 @@ fn product(
     arguments: &[Term],
     name_bytes: usize,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
     build: impl Fn(Vec<Term>) -> Term,
 ) -> Result<Term, ExpansionFailure> {
     let count = arguments.iter().fold(1_u128, |count, argument| {

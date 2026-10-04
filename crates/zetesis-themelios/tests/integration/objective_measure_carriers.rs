@@ -148,7 +148,8 @@ fn mixed_source_rows_retain_warnings_and_complete_costs() {
     assert!(
         input
             .source()
-            .slice(warning.location().span)
+            .expect("source input")
+            .slice(warning.location().expect("parsed source").span)
             .unwrap()
             .contains("#minimize")
     );
@@ -230,8 +231,17 @@ fn source_products_bound_specialized_objectives() {
         panic!("{error}");
     };
     assert_eq!(*observed, SOURCE_ROWS as u128);
-    let start = usize::try_from(location.span.start().get()).unwrap();
-    let end = usize::try_from(location.span.end().get()).unwrap();
+    let start = usize::try_from(
+        location
+            .location()
+            .expect("parsed source")
+            .span
+            .start()
+            .get(),
+    )
+    .unwrap();
+    let end =
+        usize::try_from(location.location().expect("parsed source").span.end().get()).unwrap();
     assert_eq!(&source[start..end], "#minimize{1@(N+P):n(N),m(P)}.");
     limits.objective.max_templates = SOURCE_ROWS;
     assert!(admit(source, &limits).is_ok());

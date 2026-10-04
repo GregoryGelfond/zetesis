@@ -2,9 +2,9 @@
 
 use crate::formula_support::Context;
 
+use crate::ProgramSite;
 use crate::formula_support::components::{Filter, Pattern as AtomPattern, Term};
 use std::ops::Range;
-use themelios_base::span::Location;
 use zetesis_core::catalog::{AssignmentError, DeclaredPredicate, TermKey};
 use zetesis_core::{FilterRef, PatternRef, TemplateTerm};
 
@@ -39,7 +39,7 @@ impl Components {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         Ok(Self {
             constants: Binding::new(computation, limits, counters, location)?,
@@ -55,7 +55,7 @@ impl Components {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.constant(key, computation, limits, counters, location)?;
         self.scalars += 1;
@@ -67,7 +67,7 @@ impl Components {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let term = computation.static_term(*term, limits, counters, location)?;
         self.term(term, None, computation, limits, counters, location)?;
@@ -81,7 +81,7 @@ impl Components {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let pattern = computation.static_pattern(pattern, limits, counters, location)?;
         counters.work(limits, location)?;
@@ -113,7 +113,7 @@ impl Components {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let filter = computation.static_filter(filter, limits, counters, location)?;
         let (left, right) = filter.terms();
@@ -139,7 +139,7 @@ impl Components {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let key = match term {
             TemplateTerm::Variable(variable) => match binding {
@@ -170,7 +170,7 @@ impl Components {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let slot = self.constants.len();
         self.constants
@@ -190,7 +190,7 @@ impl Components {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let read = computation.read();
         let mut fields = Buffer::new(computation, limits, counters, location)?;

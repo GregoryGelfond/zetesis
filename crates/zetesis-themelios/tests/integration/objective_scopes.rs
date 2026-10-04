@@ -295,15 +295,22 @@ fn scoped_declarations_retain_original_analysis_nodes() {
     assert!(
         input
             .source()
-            .slice(input.objective_declarations()[0].span)
+            .expect("source input")
+            .slice(
+                input.objective_declarations()[0]
+                    .location()
+                    .expect("parsed source")
+                    .span
+            )
             .unwrap()
             .starts_with(":~")
     );
-    assert!(
+    assert!(input.objective_origins().iter().flatten().any(|origin| {
         input
-            .objective_origins()
-            .iter()
-            .flatten()
-            .any(|origin| input.source().slice(origin.span).unwrap() == "#count{1:a}>0")
-    );
+            .source()
+            .expect("source input")
+            .slice(origin.location().expect("parsed source").span)
+            .unwrap()
+            == "#count{1:a}>0"
+    }));
 }

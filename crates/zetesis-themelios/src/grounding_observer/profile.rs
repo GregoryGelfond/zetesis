@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use super::GroundingObserver;
 
@@ -479,7 +479,7 @@ impl<'a> Profile<'a> {
     pub(crate) fn phase<T, E>(
         &self,
         phase: GroundingPhase,
-        location: Option<Location>,
+        location: Option<ProgramSite>,
         action: impl FnOnce() -> Result<T, E>,
     ) -> Result<T, E> {
         let Some(observer) = self.observer else {
@@ -511,7 +511,7 @@ impl<'a> Profile<'a> {
 struct Exit<'a, 'b> {
     profile: &'a Profile<'b>,
     phase: GroundingPhase,
-    location: Option<Location>,
+    location: Option<ProgramSite>,
     outcome: GroundingOutcome,
 }
 
@@ -549,7 +549,7 @@ mod tests {
         fn phase_exit(
             &self,
             _phase: GroundingPhase,
-            _location: Option<Location>,
+            _location: Option<ProgramSite>,
             outcome: GroundingOutcome,
             work: GroundingWork,
         ) {
@@ -624,7 +624,7 @@ mod tests {
         impl GroundingObserver for BoundaryOnly {
             fn enter(&self) {}
             fn exit(&self) {}
-            fn phase_enter(&self, _phase: GroundingPhase, _location: Option<Location>) {
+            fn phase_enter(&self, _phase: GroundingPhase, _location: Option<ProgramSite>) {
                 panic!("detail callbacks require explicit opt-in");
             }
         }

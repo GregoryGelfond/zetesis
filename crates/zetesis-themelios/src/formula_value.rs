@@ -3,7 +3,7 @@
 //! Argument order and repeated occurrences determine expanded logical measures.
 //! No flat child tree or copied text is retained by expression execution.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{AssignmentSlice, Limits as TermLimits, TermKey};
 use zetesis_core::{ConstructionError, ValueError};
 
@@ -21,7 +21,7 @@ impl Constructor {
     pub(super) fn copy(
         &self,
         budget: &mut Budget,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Box<Self>, FormulaFailure> {
         budget.charge(
             ExpansionResource::ScalarBytes,
@@ -40,7 +40,7 @@ impl Constructor {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         // This is the canonical logical ingress policy: expanded nodes/depth
         // and encoded/rendered length plus ID scratch. Actual retained DAG and
@@ -63,7 +63,7 @@ impl Constructor {
         term_limits: TermLimits,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         let descriptor = computation.static_constructor(self.shape, limits, counters, location)?;
         computation
@@ -84,7 +84,7 @@ impl Constructor {
     }
 }
 
-fn failure(error: ValueError, location: Location) -> FormulaFailure {
+fn failure(error: ValueError, location: ProgramSite) -> FormulaFailure {
     AdmissionFailure::Construction {
         error: ConstructionError::Value(error),
         location,

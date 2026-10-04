@@ -1,16 +1,17 @@
 use super::*;
+use crate::ProgramSite;
 use crate::formula_support::Counters;
 use crate::{FormulaLimits, FormulaResource};
 use themelios_base::{
     source::SourceId,
-    span::{ByteOffset, Location, Span},
+    span::{ByteOffset, Span},
 };
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(99),
         span: Span::empty(ByteOffset::new(0)),
-    }
+    })
 }
 
 fn compare<T: Ord>(

@@ -162,21 +162,68 @@ pub(crate) fn view(symbol: &Symbol) -> ValueNodeRef<'_> {
     }
 }
 
+/// A typed refusal to construct a complete upstream symbol.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum BridgeError {
+pub enum BridgeError {
+    /// Output or traversal capacity could not be represented or reserved.
     Allocation,
+    /// A core name or structural shape cannot be represented by themelios.
     InvalidName,
-    Storage { required: u128, limit: u128 },
+    /// Named construction capacities exceeded their inclusive allowance.
+    Storage {
+        /// Capacity required by the next operation, including retained output.
+        required: u128,
+        /// Inclusive construction allowance.
+        limit: u128,
+    },
 }
 
+/// A symbol export refusal or the caller's original control failure.
 #[derive(Debug)]
-pub(crate) enum BridgeFailure<E> {
+pub enum BridgeFailure<E> {
+    /// Symbol construction could not complete within its representation or storage.
     Bridge(BridgeError),
+    /// The caller refused the next operation; its typed cause is unchanged.
     Stopped(E),
 }
 impl<E> From<BridgeError> for BridgeFailure<E> {
     fn from(error: BridgeError) -> Self {
         Self::Bridge(error)
+    }
+}
+
+impl std::fmt::Display for BridgeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Allocation => f.write_str("symbol construction storage could not be reserved"),
+            Self::InvalidName => f.write_str("logical value cannot be represented as a symbol"),
+            Self::Storage { required, limit } => {
+                write!(
+                    f,
+                    "symbol construction requires {required} bytes, allowance is {limit}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for BridgeError {}
+
+impl<E: std::fmt::Display> std::fmt::Display for BridgeFailure<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bridge(error) => error.fmt(f),
+            Self::Stopped(error) => error.fmt(f),
+        }
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for BridgeFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Bridge(error) => Some(error),
+            Self::Stopped(error) => Some(error),
+        }
     }
 }
 
@@ -316,9 +363,77 @@ pub(crate) fn term_symbol_with<E>(
     let mut nodes = value.nodes();
     from_nodes(
         value.expanded_nodes(),
-        value.depth(),
+        value
+            .depth_with(&mut before)
+            .map_err(BridgeFailure::Stopped)?,
         &mut storage,
         |before| nodes.next_with(before),
+        before,
+    )
+}
+
+/// Read one virtual predicate root followed by each borrowed argument's
+/// preorder. The argument cursor only advances after the current term is
+/// exhausted. The existing constructor stack therefore covers the whole atom
+/// and accounts its output and scratch under one unchanged allowance.
+pub(crate) fn atom_symbol_with<E>(
+    atom: zetesis_core::catalog::AtomRef<'_>,
+    max_bytes: u128,
+    mut before: impl FnMut() -> Result<(), E>,
+) -> Result<Symbol, BridgeFailure<E>> {
+    before().map_err(BridgeFailure::Stopped)?;
+    let mut storage = ExportStorage::new(max_bytes)?;
+    let predicate = atom.predicate();
+    before().map_err(BridgeFailure::Stopped)?;
+    let name = predicate.name();
+    before().map_err(BridgeFailure::Stopped)?;
+    let sign = predicate.sign();
+    before().map_err(BridgeFailure::Stopped)?;
+    let mut arguments = atom.arguments().iter();
+    let arity = arguments.len();
+    let mut sizes = arguments.clone();
+    let mut node_count = 1_usize;
+    let mut depth = 1_usize;
+    loop {
+        before().map_err(BridgeFailure::Stopped)?;
+        let Some(value) = sizes.next() else {
+            break;
+        };
+        node_count = node_count
+            .checked_add(value.expanded_nodes())
+            .ok_or(BridgeError::Allocation)?;
+        depth = depth.max(
+            value
+                .depth_with(&mut before)
+                .map_err(BridgeFailure::Stopped)?
+                .checked_add(1)
+                .ok_or(BridgeError::Allocation)?,
+        );
+    }
+    let mut root = Some(ValueNodeRef::Function { name, arity, sign });
+    let mut nodes: Option<zetesis_core::catalog::TermNodes<'_>> = None;
+    from_nodes(
+        node_count,
+        depth,
+        &mut storage,
+        |before| {
+            if let Some(root) = root.take() {
+                before()?;
+                return Ok(Some(root));
+            }
+            loop {
+                if let Some(current) = &mut nodes
+                    && let Some(node) = current.next_with(&mut *before)?
+                {
+                    return Ok(Some(node));
+                }
+                before()?;
+                let Some(value) = arguments.next() else {
+                    return Ok(None);
+                };
+                nodes = Some(value.nodes());
+            }
+        },
         before,
     )
 }

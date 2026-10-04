@@ -1,7 +1,7 @@
 //! One live, fallibly reserved numeric or coordinate buffer.
+use crate::ProgramSite;
 use crate::formula_support::{Computation, Counters, StorageLease, reserve};
 use crate::{FormulaFailure, FormulaLimits};
-use themelios_base::span::Location;
 
 use crate::formula_support::Context;
 pub(crate) struct Buffer<T> {
@@ -13,7 +13,7 @@ impl<T> Buffer<T> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut lease = computation.lease();
         lease.observe(size_of::<Self>(), location)?;
@@ -29,7 +29,7 @@ impl<T> Buffer<T> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.reserve(1, computation, limits, counters, location)?;
         counters.work(limits, location)?;
@@ -44,7 +44,7 @@ impl<T> Buffer<T> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         reserve(
             &mut self.values,
@@ -81,7 +81,7 @@ impl<T: Copy> Buffer<T> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let additional = len.saturating_sub(self.values.len());
         reserve(

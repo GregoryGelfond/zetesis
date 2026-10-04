@@ -1,6 +1,6 @@
 //! Generated-root history is scoped membership metadata, not another value owner.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{
     AssignmentError, AssignmentFailure, CatalogRead, Error, TermKey, TermSet,
 };
@@ -29,7 +29,7 @@ impl Generated {
         max_bytes: usize,
         limits: &FormulaLimits,
         mut before: impl FnMut() -> Result<(), FormulaFailure>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), AssignmentFailure<FormulaFailure>> {
         if self.values.contains_with(key, &mut before)? {
             return Ok(());

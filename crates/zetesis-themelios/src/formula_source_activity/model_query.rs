@@ -1,6 +1,6 @@
 //! Closed model queries retain scoped source coordinates until final publication.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::catalog::Error as CatalogError;
 use zetesis_objective::{
@@ -30,7 +30,7 @@ impl PendingCondition {
         publication: &mut Publication<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Condition, FormulaFailure> {
         let Self {
             atoms,
@@ -217,7 +217,7 @@ impl Query {
     }
 }
 
-fn condition_storage(required: u128, limit: usize, location: Location) -> FormulaFailure {
+fn condition_storage(required: u128, limit: usize, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::ObjectiveCondition {
         error: ConditionError::Storage(CatalogError::Storage { required, limit }),
         location,

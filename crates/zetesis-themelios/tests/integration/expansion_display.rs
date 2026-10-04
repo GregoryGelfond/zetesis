@@ -15,7 +15,8 @@ fn cycle(names: &[&str]) -> ExpansionFailure {
         location: Location {
             source: SourceId::new(3),
             span: Span::empty(ByteOffset::new(0)),
-        },
+        }
+        .into(),
     }
 }
 

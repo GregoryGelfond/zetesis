@@ -22,30 +22,26 @@ fn objective_scopes_share_canonical_predicate_text() {
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut catalog = SupportCatalog::default();
     let mut counters = Counters::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: source.id(),
         span: source.span(),
-    };
+    });
     let mut metadata = crate::metadata::Builder::default();
     crate::metadata::collect_profile(raised.program(), &mut metadata, true).unwrap();
     let metadata = metadata.finish(location).unwrap();
     let prepared = PreparationContext {
-        options: AdmissionOptions::default(),
+        options: AdmissionOptions::default().into(),
         budget: &mut budget,
         catalog: &mut catalog,
         work: GroundingWork::new(&FormulaLimits::default(), &mut counters, location),
     }
-    .prepare(
-        raised.program(),
-        metadata.project_selection().clone(),
-        &crate::formula_choice_source::Catalog::default(),
-    )
+    .prepare(raised.program(), metadata.project_selection().clone())
     .unwrap();
     let limits = FormulaLimits::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: source.id(),
         span: source.span(),
-    };
+    });
     let view = catalog
         .component_view(&limits, &mut counters, location)
         .unwrap()

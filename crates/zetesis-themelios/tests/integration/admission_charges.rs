@@ -102,14 +102,15 @@ fn the_head_allowance_is_charged_once_per_new_atom_not_per_proposal() {
 
 #[test]
 fn binding_frames_are_not_charged_to_the_cumulative_budget() {
-    // Two thousand bindings against fifty. The larger source adds 39 e
-    // facts, but retains the same p atoms. The allowance covers those source
-    // facts; transient frames must not accumulate with repeated bindings.
-    let fewer = minimal_scalar_bytes("d(1..50). e(1..1). p(X) :- d(X), e(Y).");
-    let more = minimal_scalar_bytes("d(1..50). e(1..40). p(X) :- d(X), e(Y).");
+    // Both programs retain exactly the same source facts, analyzed owner
+    // sidecar and p atoms. Only the completed body bindings differ: fifty
+    // against two thousand. Reusing a transient frame must not charge it for
+    // each extra binding; both comparisons also retain the same input slots.
+    let fewer = minimal_scalar_bytes("d(1..50). e(1..40). p(X) :- d(X), e(Y), Y<=1.");
+    let more = minimal_scalar_bytes("d(1..50). e(1..40). p(X) :- d(X), e(Y), Y<=40.");
     assert!(
-        more <= fewer + 40 * 16,
-        "{more} bytes for two thousand bindings against {fewer}"
+        more <= fewer,
+        "{more} bytes for two thousand bindings against {fewer} with the same input carrier"
     );
 }
 

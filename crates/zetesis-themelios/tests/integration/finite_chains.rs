@@ -264,7 +264,7 @@ fn coefficient_capacity_is_a_located_analysis_limit() {
     assert!(
         matches!(result, Err(FormulaFailure::Limit {
         resource: FormulaResource::BindingCoefficientBits, limit: 64, observed: 94, location,
-    }) if location.source == SourceId::new(101)),
+    }) if location.location().expect("parsed source").source == SourceId::new(101)),
         "{result:?}"
     );
 }

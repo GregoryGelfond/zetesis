@@ -1,6 +1,6 @@
 //! Exact guarded consequence view; original nodes remain borrowed semantic data.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_ferraris::{AggregateComparison, AggregateElement, Node, Theory, append_aggregate};
 
 use super::derive::Consequence;
@@ -10,7 +10,7 @@ pub(super) fn restriction(
     original: &Theory,
     consequences: &[Consequence],
     work: &mut Work,
-) -> Result<(Theory, Vec<Location>), Fault> {
+) -> Result<(Theory, Vec<ProgramSite>), Fault> {
     let limit = work.limits.theory;
     if original.atom_count() > limit.max_atoms {
         return Err(Fault::Theory(zetesis_ferraris::AdmissionError::Limit));

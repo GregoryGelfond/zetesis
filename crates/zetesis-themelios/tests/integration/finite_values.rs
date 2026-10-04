@@ -147,8 +147,17 @@ fn construction_admissions(resource: ExpansionResource) {
                 assert_eq!(*reported_limit, limit as u128);
                 assert!(*observed > limit as u128);
                 assert!(*observed <= 1_048_576, "fixture must remain small");
-                assert_eq!(error.diagnostics()[0].primary().location, *location);
-                assert!(expected.source().slice(location.span).is_ok());
+                assert_eq!(
+                    error.diagnostics()[0].primary().location,
+                    location.location().expect("parsed source")
+                );
+                assert!(
+                    expected
+                        .source()
+                        .expect("source input")
+                        .slice(location.location().expect("parsed source").span)
+                        .is_ok()
+                );
                 limit = usize::try_from(*observed).unwrap();
             }
             Err(error) => panic!("{resource:?}/{limit}: {error}"),
@@ -198,10 +207,18 @@ fn open_tuple_chains_refuse_whole_value_targets() {
         else {
             panic!("{text}: {error}");
         };
-        assert_eq!(location.source, source.id());
-        assert_eq!(error.diagnostics()[0].primary().location, *location);
         assert_eq!(
-            source.slice(location.span).unwrap(),
+            location.location().expect("parsed source").source,
+            source.id()
+        );
+        assert_eq!(
+            error.diagnostics()[0].primary().location,
+            location.location().expect("parsed source")
+        );
+        assert_eq!(
+            source
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
             text.strip_prefix("d(1;2).").unwrap()
         );
     }

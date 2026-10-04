@@ -21,7 +21,8 @@ use super::{
     Feature, Operand, Pattern, Query, Relation, Resource, Statistics, Template,
 };
 use crate::expansion::Budget;
-use crate::{AdmissionOptions, FormulaFailure};
+use crate::formula_ir::CompilationOptions;
+use crate::{FormulaFailure, ProgramSite, StatementId};
 
 enum Generated {
     Value(Template),
@@ -40,7 +41,7 @@ struct Compiler<'a> {
     admission: &'a mut crate::metadata::Admission,
     limits: AdmissionLimits,
     constants: &'a BTreeMap<String, Symbol>,
-    location: Location,
+    location: ProgramSite,
     nodes: usize,
     bytes: usize,
     origins: usize,
@@ -55,7 +56,7 @@ struct Compiler<'a> {
 }
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
-        Error::new(kind, Some(self.location), Statistics::default())
+        Error::new(kind, self.location, Statistics::default())
     }
     fn check(&self, resource: Resource, observed: usize, limit: usize) -> Result<(), Error> {
         if observed > limit {
@@ -345,6 +346,7 @@ impl Compiler<'_> {
             term,
             query,
             origins,
+            site: self.location,
         })
     }
 }
@@ -361,10 +363,10 @@ pub(crate) fn has_observations(source: &Program) -> bool {
 pub(crate) fn compile(
     source: &Program,
     admission: &mut crate::metadata::Admission,
-    options: AdmissionOptions,
+    options: CompilationOptions,
     limits: AdmissionLimits,
     budget: &mut Budget,
-    fallback: Location,
+    fallback: ProgramSite,
 ) -> Result<Vec<Directive>, FormulaFailure> {
     let constants = crate::extended::resolve(source, budget, fallback)?;
     let mut compiler = Compiler {
@@ -397,13 +399,14 @@ pub(crate) fn compile(
         capture_pools: false,
     };
     let mut result = Vec::new();
-    for entry in source.statements() {
+    for (index, entry) in source.statements().enumerate() {
         let (term, body) = match entry.get() {
             Statement::Show(Show::Term(term)) => (term, None),
             Statement::Show(Show::TermBody { term, body }) => (term, Some(body.get())),
             _ => continue,
         };
-        compiler.location = crate::extended::origin(entry, fallback);
+        compiler.location =
+            crate::extended::origin(entry, fallback.with_statement(StatementId::new(index)));
         let directive = (|| {
             compiler.check(
                 Resource::Directives,

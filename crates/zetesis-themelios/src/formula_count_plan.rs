@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{AggregateLimits, Theory, partition};
 
@@ -119,7 +119,7 @@ pub struct CountPlanStatistics {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CountPlanFailure {
     kind: CountPlanFailureKind,
-    location: Location,
+    location: ProgramSite,
     statistics: CountPlanStatistics,
 }
 impl CountPlanFailure {
@@ -128,10 +128,15 @@ impl CountPlanFailure {
     pub const fn kind(&self) -> CountPlanFailureKind {
         self.kind
     }
-    /// Original source occurrence at the interrupted boundary.
+    /// Original program statement at the interrupted boundary.
     #[must_use]
-    pub const fn location(&self) -> Location {
+    pub const fn site(&self) -> ProgramSite {
         self.location
+    }
+    /// Actual source coordinate, absent for constructed statements.
+    #[must_use]
+    pub const fn location(&self) -> Option<themelios_base::span::Location> {
+        self.location.location()
     }
     /// Optional work attempted before the failure.
     #[must_use]
@@ -174,7 +179,7 @@ impl std::error::Error for CountPlanFailure {}
 pub struct CountPlan {
     original: Theory,
     restriction: Theory,
-    origins: Vec<Location>,
+    origins: Vec<ProgramSite>,
     statistics: CountPlanStatistics,
 }
 impl CountPlan {
@@ -191,7 +196,7 @@ impl CountPlan {
     }
     /// Source count premises supporting the emitted consequences.
     #[must_use]
-    pub fn origins(&self) -> &[Location] {
+    pub fn origins(&self) -> &[ProgramSite] {
         &self.origins
     }
     /// Completed optional planning accounting.
@@ -248,7 +253,7 @@ struct Work {
     limits: CountPlanLimits,
     cancellation: Cancellation,
     statistics: CountPlanStatistics,
-    location: Location,
+    location: ProgramSite,
 }
 impl Work {
     fn poll(&self) -> Result<(), CountPlanFailureKind> {

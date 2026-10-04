@@ -11,7 +11,7 @@ use zetesis_core::{
     Term,
 };
 
-use crate::{AdmissionFailure, ExpansionResource};
+use crate::{AdmissionFailure, ExpansionResource, ProgramSite};
 
 fn patterns(template: &Template) -> impl Iterator<Item = &AtomPattern> {
     template
@@ -40,8 +40,45 @@ pub(crate) fn append<E: From<AdmissionFailure>>(
     templates: &mut Vec<Template>,
     origins: &mut Vec<Vec<Location>>,
     limits: AdmissionLimits,
-    fallback: Location,
-    mut charge: impl FnMut(ExpansionResource, u128, Location) -> Result<(), E>,
+    fallback: impl Into<ProgramSite>,
+    mut charge: impl FnMut(ExpansionResource, u128, ProgramSite) -> Result<(), E>,
+) -> Result<(), E> {
+    let fallback = fallback.into();
+    append_with(
+        templates,
+        origins,
+        limits,
+        |resource, count, evidence| {
+            charge(
+                resource,
+                count,
+                evidence
+                    .first()
+                    .copied()
+                    .map_or(fallback, ProgramSite::from),
+            )
+        },
+        |error, evidence| {
+            AdmissionFailure::Core {
+                error,
+                location: evidence
+                    .first()
+                    .copied()
+                    .map_or(fallback, ProgramSite::from),
+            }
+            .into()
+        },
+    )
+}
+
+/// The coherence operation is independent of whether evidence is a source span
+/// or a borrowed logical statement. Each generated constraint keeps both origins.
+pub(crate) fn append_with<P: Clone + Ord, E>(
+    templates: &mut Vec<Template>,
+    origins: &mut Vec<Vec<P>>,
+    limits: AdmissionLimits,
+    mut charge: impl FnMut(ExpansionResource, u128, &[P]) -> Result<(), E>,
+    failure: impl Fn(AdmissionError, &[P]) -> E,
 ) -> Result<(), E> {
     // Preserve existing unsigned budgets and avoid a registry allocation on
     // the common unsigned route. Traversal is bounded by the source templates.
@@ -54,9 +91,9 @@ pub(crate) fn append<E: From<AdmissionFailure>>(
     }
     let mut signatures = BTreeMap::new();
     for (index, template) in templates.iter().enumerate() {
-        let location = origins[index].first().copied().unwrap_or(fallback);
+        let origin = &origins[index];
         for pattern in patterns(template) {
-            charge(ExpansionResource::TermWork, 1, location)?;
+            charge(ExpansionResource::TermWork, 1, origin)?;
             signatures.entry(pattern.predicate()).or_insert(index);
         }
     }
@@ -66,11 +103,11 @@ pub(crate) fn append<E: From<AdmissionFailure>>(
         if negative.sign() != Sign::Negative {
             continue;
         }
-        let location = origins[index].first().copied().unwrap_or(fallback);
+        let origin = &origins[index];
         charge(
             ExpansionResource::ScalarBytes,
             negative.name().len() as u128,
-            location,
+            origin,
         )?;
         let positive = Predicate::new(negative.name(), negative.arity())
             .expect("the original predicate has a nonempty name");
@@ -82,23 +119,23 @@ pub(crate) fn append<E: From<AdmissionFailure>>(
             negative.arity(),
             templates.len() + generated.len() + 1,
             limits,
-            location,
-        )?;
-        charge(ExpansionResource::Templates, 1, location)?;
+        )
+        .map_err(|error| failure(error, origin))?;
+        charge(ExpansionResource::Templates, 1, origin)?;
         charge(
             ExpansionResource::TermWork,
             2 * negative.arity() as u128 + 2,
-            location,
+            origin,
         )?;
         charge(
             ExpansionResource::ScalarBytes,
             negative.name().len() as u128,
-            location,
+            origin,
         )?;
         charge(
             ExpansionResource::Origins,
             origins[index].len() as u128 + origins[opposite].len() as u128,
-            location,
+            origin,
         )?;
         let pattern = |predicate: Predicate| {
             AtomPattern::new(
@@ -130,8 +167,7 @@ fn check_core_limits(
     arity: usize,
     count: usize,
     limits: AdmissionLimits,
-    location: Location,
-) -> Result<(), AdmissionFailure> {
+) -> Result<(), AdmissionError> {
     for (resource, actual, limit) in [
         (AdmissionResource::Templates, count, limits.max_templates),
         (
@@ -147,14 +183,11 @@ fn check_core_limits(
         (AdmissionResource::PositiveBody, 2, limits.max_positive_body),
     ] {
         if actual > limit {
-            return Err(AdmissionFailure::Core {
-                error: AdmissionError::LimitExceeded {
-                    resource,
-                    limit,
-                    actual,
-                    template: Some(index),
-                },
-                location,
+            return Err(AdmissionError::LimitExceeded {
+                resource,
+                limit,
+                actual,
+                template: Some(index),
             });
         }
     }

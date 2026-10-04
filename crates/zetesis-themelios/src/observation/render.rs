@@ -204,7 +204,7 @@ pub(super) fn render(
         cancellation,
         statistics: Statistics::default(),
         local_bytes: 0,
-        location: None,
+        site: crate::ProgramSite::program(),
     };
     let symbols = terms(program, model, &mut work)?;
     render_evaluated(model, AtomChannel::Policy(selection), &symbols, work)
@@ -217,7 +217,7 @@ pub(super) fn render_evaluated(
     symbols: &[Symbol],
     mut work: Work<'_>,
 ) -> Result<Rendered, Error> {
-    work.location = None;
+    work.site = crate::ProgramSite::program();
     let mut text = String::new();
     let mut first = true;
     for atom in model.atoms() {

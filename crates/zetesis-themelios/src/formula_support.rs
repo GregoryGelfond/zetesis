@@ -45,9 +45,9 @@ mod rows;
 
 use std::borrow::Cow;
 
+use crate::ProgramSite;
 use components::Pattern as AtomPattern;
 use relations::SupportAppend;
-use themelios_base::span::Location;
 use themelios_program::program::Relation;
 use themelios_program::term::EvalError;
 use zetesis_core::catalog::{Atoms, PredicateRef, TermRef};
@@ -110,7 +110,7 @@ impl CompletedCatalog {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(CompletedSupport<'_>, SupportAppend<'_>), FormulaFailure> {
         let (relations, append) = self.catalog.split(limits, counters, location)?;
         Ok((
@@ -127,7 +127,7 @@ impl CompletedCatalog {
         &self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<CompletedSupport<'_>, FormulaFailure> {
         self.catalog
             .snapshot(limits, counters, location)
@@ -162,7 +162,7 @@ impl<'source> CompletedSupport<'source> {
         bytes: u128,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::SupportBytes,
@@ -186,7 +186,7 @@ impl<'source> CompletedSupport<'source> {
         strategy: crate::JoinStrategy,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<CompletedQueries<'_>, FormulaFailure> {
         Ok(CompletedQueries {
             lookup_owner: self.lookup_owner,
@@ -208,7 +208,7 @@ impl<'source> CompletedQueries<'source> {
     /// original-source admission. A growing query needs its explicit appender.
     pub(crate) fn computation(
         &self,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Computation<'_, 'source>, FormulaFailure> {
         let owner = self.lookup_owner.ok_or(FormulaFailure::SupportRelation {
             error: zetesis_core::relation::Failure::Owner,
@@ -256,7 +256,7 @@ impl Counters {
     pub fn work(
         &mut self,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.charge_work(1, limits, location)
     }
@@ -264,7 +264,7 @@ impl Counters {
         &mut self,
         amount: u128,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         charge_work(
             &mut self.accounting.work,
@@ -280,7 +280,7 @@ impl Counters {
         value: &zetesis_core::catalog::TermKey,
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if self.accounting.generated_values.is_none() {
             let mut generated =
@@ -336,7 +336,7 @@ impl Counters {
     pub(crate) fn substitution(
         &mut self,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::Substitutions,
@@ -358,7 +358,7 @@ fn charge_work(
     allowance: Option<&crate::ConstraintAllowance>,
     amount: u128,
     limits: &FormulaLimits,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     if let Some(cancellation) = cancellation {
         cancellation
@@ -385,7 +385,7 @@ pub(crate) fn build(
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
-    fallback: Location,
+    fallback: ProgramSite,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     counters.observe_work(Event::SupportConstructionWork, |counters| {
         let plan =
@@ -671,7 +671,7 @@ impl Derivation<'_, '_, '_> {
         &mut self,
         join: &'join mut Join<'_, '_>,
         projected: Option<AtomPattern>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Binding<'join>>, FormulaFailure> {
         self.counters
             .observe_work(Event::SupportJoinWork, |counters| {
@@ -691,7 +691,7 @@ impl Derivation<'_, '_, '_> {
         group: &crate::formula_ir::ChoiceIr,
         binding: &Binding,
         support: &Support<'_>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         crate::formula_head_aggregate::validate_group(
             group,
@@ -721,7 +721,7 @@ impl Derivation<'_, '_, '_> {
         &mut self,
         pattern: AtomPattern,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.counters
             .observe_work(Event::SupportHeadWork, |counters| {
@@ -892,7 +892,7 @@ impl Probe<'_, '_> {
         position: &mut usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         let row = match self {
             Self::Indexed(rows) => {
@@ -1166,7 +1166,7 @@ impl<'a, 'source> Join<'a, 'source> {
         slots: std::ops::Range<usize>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.values
             .truncate(slots.start, limits, counters, location)?;
@@ -1428,7 +1428,7 @@ impl<'a, 'source> Join<'a, 'source> {
         prefix: &Binding,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         for target in self
             .literals
@@ -1478,7 +1478,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let other = self.storage_bytes();
         reserve(
@@ -1560,7 +1560,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let old = self.changes[self.depth].capacity() * size_of::<usize>();
         let other = self.storage_bytes() - old;
@@ -1606,7 +1606,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Buffer<bool>, FormulaFailure> {
         let mut prefix = Buffer::new(computation, limits, counters, location)?;
         for slot in 0..self.values.len() {
@@ -1627,7 +1627,7 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let prefix = self.bound_slots(computation, limits, counters, location)?;
         let mut admit =
@@ -1657,7 +1657,7 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         Ok(self
             .next_selected(
@@ -1676,7 +1676,7 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Row<'_>>, FormulaFailure> {
         let row = self.next_staged(
             Ownership::Lend,
@@ -1697,7 +1697,7 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Row<'static>>, FormulaFailure> {
         let row = self.next_staged(
             Ownership::Own,
@@ -1720,7 +1720,7 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Binding<'_>>, FormulaFailure> {
         let frame = self.next_selected(
             Ownership::Lend,
@@ -2151,7 +2151,7 @@ impl<'a, 'source> Join<'a, 'source> {
         atom: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if let Some(filter) = self.row_filter
             && !filter.permits(atom, limits, counters, location)?
@@ -2253,7 +2253,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if self.coverage == Coverage::Complete {
             return Ok(true);
@@ -2340,7 +2340,7 @@ impl<'a, 'source> Join<'a, 'source> {
         depth: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.values
             .clear_trail(&mut self.changes[depth], limits, counters, location)?;
@@ -2355,7 +2355,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if !self.already_derived(projected, computation, limits, counters, location)? {
             return Ok(false);
@@ -2378,7 +2378,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let Some(head) = projected else {
             return Ok(false);
@@ -2400,7 +2400,7 @@ impl<'a, 'source> Join<'a, 'source> {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Frame, FormulaFailure> {
         counters.substitution(limits, location)?;
         for (variable, slot) in self.slots.iter().enumerate() {
@@ -2440,7 +2440,7 @@ impl<'a, 'source> Join<'a, 'source> {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if self.traversal == Traversal::PendingUndo {
             self.undo_at(self.depth - 1, limits, counters, location)?;
@@ -2466,7 +2466,7 @@ pub(crate) fn expression(
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<zetesis_core::catalog::TermKey, FormulaFailure> {
     Evaluation::default().source_expression(
         expression,
@@ -2484,7 +2484,7 @@ pub(super) fn compare(
     right: TermRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let order = left.compare_terms_with(right, || counters.work(limits, location))?;
     Ok(match relation {
@@ -2497,7 +2497,7 @@ pub(super) fn compare(
     })
 }
 
-pub(super) fn undefined(location: Location) -> FormulaFailure {
+pub(super) fn undefined(location: ProgramSite) -> FormulaFailure {
     ExpansionFailure::Evaluation {
         error: EvalError::Undefined,
         location,

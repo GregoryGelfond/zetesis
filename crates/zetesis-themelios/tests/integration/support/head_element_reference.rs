@@ -14,7 +14,7 @@ use zetesis_reference_support::{canonical, formula};
 
 pub(crate) fn models(source: &str) -> formula::Models {
     let admitted = formula(source);
-    assert_eq!(admitted.source().text(), source);
+    assert_eq!(admitted.source().expect("source input").text(), source);
     let result = formula::native(&admitted);
     assert_eq!(result, formula::exhaustive(&admitted), "{source}");
     result

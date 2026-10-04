@@ -1,7 +1,7 @@
 //! Capture source-established count facts without changing original grounding.
 
+use crate::ProgramSite;
 use crate::formula_head_aggregate::Bijection;
-use themelios_base::span::Location;
 use zetesis_ferraris::{AggregateComparison, Node, Theory};
 
 use super::{
@@ -19,8 +19,8 @@ pub(crate) struct Input<'a> {
     pub nodes: &'a [Node],
     pub atom_count: usize,
     pub bounds: Bounds,
-    pub origins: &'a [Location],
-    pub location: Location,
+    pub origins: &'a [ProgramSite],
+    pub location: ProgramSite,
 }
 
 /// Stack-only interval consequences of the exact source guard evaluations.
@@ -68,8 +68,8 @@ pub(super) struct Group {
     pub upper: usize,
     pub bound_root: usize,
     pub asserted_root: usize,
-    pub origins: Vec<Location>,
-    pub location: Location,
+    pub origins: Vec<ProgramSite>,
+    pub location: ProgramSite,
 }
 
 pub(crate) struct Collector {
@@ -78,7 +78,7 @@ pub(crate) struct Collector {
     failure: Option<CountPlanFailure>,
 }
 impl Collector {
-    pub(crate) fn new(request: Request<'_>, location: Location) -> Self {
+    pub(crate) fn new(request: Request<'_>, location: ProgramSite) -> Self {
         Self {
             work: Work {
                 limits: request.limits,

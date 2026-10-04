@@ -12,18 +12,18 @@ use themelios_program::provenance::{Origin, WithProvenance};
 use themelios_program::term::Term;
 
 use super::{Compiler, LiteralIr, ObjectiveCondition, ObjectiveFamily, ObjectiveIr, Variables};
+use crate::ProgramSite;
 use crate::{ExpansionResource, FormulaFailure};
 use std::collections::BTreeSet;
-use themelios_base::span::Location;
 use zetesis_objective::WeightPolarity;
 
 impl Compiler<'_> {
     pub(super) fn objective_statement(
         &mut self,
         statement: &WithProvenance<Statement>,
-        origins: &[Location],
+        origins: &[ProgramSite],
         objectives: &mut Vec<ObjectiveIr>,
-        declarations: &mut Vec<Location>,
+        declarations: &mut Vec<ProgramSite>,
         projection_nodes: &mut u128,
     ) -> Result<Option<Vec<WithProvenance<Statement>>>, FormulaFailure> {
         if let Statement::WeakConstraint(weak) = statement.get()
@@ -39,7 +39,7 @@ impl Compiler<'_> {
             self.objectives(
                 optimize,
                 origins,
-                &crate::extended::parsed_origins(statement),
+                &crate::extended::program_sites(statement, self.location),
                 objectives,
                 declarations,
             )?;
@@ -53,9 +53,9 @@ impl Compiler<'_> {
     pub(super) fn weak_objective(
         &mut self,
         weak: &WeakConstraint,
-        origins: &[Location],
+        origins: &[ProgramSite],
         objectives: &mut Vec<ObjectiveIr>,
-        declarations: &mut Vec<Location>,
+        declarations: &mut Vec<ProgramSite>,
     ) -> Result<(), FormulaFailure> {
         let body_origins = || {
             weak.body().provenance().origins().chain(
@@ -87,7 +87,7 @@ impl Compiler<'_> {
                 .flat_map(|element| element.provenance().origins()),
         ) {
             if let Origin::Parsed(location) = origin {
-                evidence.push(*location);
+                evidence.push(self.location.with_location(*location));
             }
         }
         evidence.sort_unstable();
@@ -129,7 +129,7 @@ impl Compiler<'_> {
     pub(super) fn scoped_element(
         &mut self,
         element: &OptimizeElement,
-        origins: Vec<Location>,
+        origins: Vec<ProgramSite>,
         polarity: WeightPolarity,
         family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
@@ -167,7 +167,7 @@ impl Compiler<'_> {
         source: &Body,
         weight: &Weight,
         terms: impl Iterator<Item = &'source Term>,
-        origins: Vec<Location>,
+        origins: Vec<ProgramSite>,
         polarity: WeightPolarity,
         family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {
@@ -202,7 +202,7 @@ impl Compiler<'_> {
         source: &Body,
         source_weight: &Weight,
         terms: impl Iterator<Item = &'source Term>,
-        origins: Vec<Location>,
+        origins: Vec<ProgramSite>,
         polarity: WeightPolarity,
         family: ObjectiveFamily,
     ) -> Result<ObjectiveIr, FormulaFailure> {

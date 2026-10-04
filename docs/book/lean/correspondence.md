@@ -1199,6 +1199,17 @@ implementation obligations.
 
 ## Representation and source laws
 
+The typed relational `admit_program` door and source `admit` door share
+[`compile::checked_statement`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/compile.rs)
+and the strong-negation coherence operation. Their entry checks have different
+inputs: source admission checks authored syntax before raising, while typed
+admission bounds the borrowed canonical rule, term and symbol structure. A
+logical program cannot recover an erased empty program section or the original
+multiplicity of set-valued body syntax. The source checks remain in place.
+The shared compiler, statement-evidence borrows and resource traversal are Rust
+correspondence obligations; the existing semantic laws do not prove either
+admission implementation or equality of their admitted input sets.
+
 Source scalar validation and construction share a bounded symbol walk and the
 core borrowed node's text/spelling measures. The validation consumer retains
 logical bounds without constructing an output value; actual capacity admission
@@ -1496,15 +1507,32 @@ The checker accepts exactly the least original model. This application still
 depends on the complete root partition and retained-owner correspondence above.
 
 The head-element laws assume a correctly identified activity family. Explicit
-aggregate elements use complete tuple keys; ordinary Boolean choices use original
-source occurrences, with local witnesses coalesced within an occurrence. Ordinary
-atomic choices distinguish their default-negation sign as well as their atom.
-The Rust
-source adapter receives original occurrences from themelios before program-set
-collection and checks their Boolean element locations against the original
-syntax. It retains complete source identities and separate enclosing-rule
-scopes. Tests cover duplicate rules, separate files and finite interpretations;
-proving this adapter implements the Lean family remains a separate obligation.
+aggregate elements use complete tuple keys; ordinary atomic choices distinguish
+default-negation sign and complete atom. Ordinary Boolean choices instead use
+pool-expanded occurrence keys. Each alternative of one written element has its
+own key, including repeated equal alternatives. Grounding witnesses of one
+expanded occurrence share that key. Thus `{ #true : p(1;1) } = 2. p(1).` has
+answer set `{p(1)}`; the two pool occurrences count separately.
+
+The Rust compiler reads themelios's counted entries and public `Identity`
+classification. For a by-occurrence entry, `HeadElementKey::Occurrence` is
+assigned separately to each literal/condition pool product alternative, before
+local grounding; `HeadKey::Occurrence` retains it. `LocalFamily` separately
+retains the original entry for arithmetic definedness and warning handling.
+Keys are local to one choice group, and provenance locates evidence without
+determining counting identity.
+
+[`FinitePools.expanded_occurrence_activity`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FinitePools.lean)
+authenticates each key by its position in the expanded list and characterizes
+its activity by the existence of a grounding witness.
+[`SignedHeadElements.boolean_witness_key` and `boolean_occurrence_keys_distinct`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SignedHeadElements.lean)
+then describe the required key equality and separation. The original and frozen
+activity laws apply to these rows under their stated coverage premises.
+`FinitePools.local_occurrences_complete` and `local_activity_complete` remain
+valid membership laws, but do not establish the multiplicity of counted pool
+alternatives or justify keeping one Boolean key for a whole written element.
+The Rust source-product enumeration, key assignment, complete witness coverage
+and enclosing group scopes remain correspondence obligations.
 
 The shared Rust
 [`HeadLiteral`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir.rs)

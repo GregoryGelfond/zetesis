@@ -578,10 +578,12 @@ fn oracle_campaigns_continue_after_independent_failures() {
             .collect();
         assert_eq!(campaigns.len(), CAMPAIGNS);
         assert!(campaigns.iter().all(|line| line.contains("--no-fail-fast")));
+        assert!(campaigns.iter().all(|line| line.contains("--show-output")));
+        assert!(campaigns.iter().all(|line| !line.contains("--nocapture")));
         assert!(campaigns[0].contains(" conditional_heads:: "));
         assert!(
             campaigns[2]
-                .contains("--test integration -- --ignored --nocapture projected_reference::")
+                .contains("--test integration -- --ignored --show-output projected_reference::")
         );
         let records: Vec<_> = fs::read_dir(fixture.root().join("target/oracle-checks"))
             .unwrap()

@@ -51,12 +51,18 @@ fn original_weak_declarations_and_body_spans_survive_owned_normalization() {
         FormulaLimits::default(),
     )
     .expect("weak objective");
-    assert_eq!(input.source().text(), source);
+    assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(input.objective_declarations().len(), 1);
     assert!(
         input
             .source()
-            .slice(input.objective_declarations()[0].span)
+            .expect("source input")
+            .slice(
+                input.objective_declarations()[0]
+                    .location()
+                    .expect("parsed source")
+                    .span
+            )
             .expect("declaration span")
             .starts_with(":~")
     );
@@ -65,10 +71,14 @@ fn original_weak_declarations_and_body_spans_survive_owned_normalization() {
         .iter()
         .flatten()
         .map(|location| {
-            assert_eq!(location.source, SourceId::new(77));
+            assert_eq!(
+                location.location().expect("parsed source").source,
+                SourceId::new(77)
+            );
             input
                 .source()
-                .slice(location.span)
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
                 .expect("original byte span")
         })
         .collect();
@@ -186,16 +196,16 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
     let sources: BTreeSet<_> = input
         .objective_declarations()
         .iter()
-        .map(|location| location.source)
+        .map(|location| location.location().expect("parsed source").source)
         .collect();
     assert_eq!(sources.len(), 2);
     for location in input.objective_origins().iter().flatten() {
         input
             .bundle()
-            .get(location.source)
+            .get(location.location().expect("parsed source").source)
             .expect("original source")
             .source()
-            .slice(location.span)
+            .slice(location.location().expect("parsed source").span)
             .expect("original span");
     }
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();

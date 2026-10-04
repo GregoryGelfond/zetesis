@@ -430,7 +430,7 @@ fn numeric_endpoints_retain_the_zetesis_boundary() {
                 assert!(matches!(error,
                     FormulaFailure::Expansion(ExpansionFailure::Admission(
                         AdmissionFailure::ExtremumEndpoint { value, location }
-                    )) if value == expected && location.source == SOURCE
+                    )) if value == expected && location.location().expect("parsed source").source == SOURCE
                 ));
             }
         }
@@ -520,7 +520,10 @@ fn undefined_generated_values_refuse_the_whole_source() {
 #[test]
 fn original_sources_remain_owned() {
     for (source, _) in sources() {
-        assert_eq!(input(&source).source().text(), source);
+        assert_eq!(
+            input(&source).source().expect("source input").text(),
+            source
+        );
     }
 }
 

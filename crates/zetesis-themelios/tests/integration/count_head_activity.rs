@@ -158,7 +158,10 @@ fn optional_planning_declines_nonbijective_groups() {
         assert_eq!(ordinary.theory().nodes(), planned.theory().nodes());
         assert_eq!(ordinary.theory().roots(), planned.theory().roots());
         assert_eq!(ordinary.formula_origins(), planned.formula_origins());
-        assert_eq!(ordinary.source().text(), planned.source().text());
+        assert_eq!(
+            ordinary.source().expect("source input").text(),
+            planned.source().expect("source input").text()
+        );
         assert_eq!(native(&ordinary), native(&planned));
     }
 }
@@ -226,7 +229,10 @@ fn tuple_limits_count_distinct_complete_keys() {
 #[test]
 fn original_sources_remain_owned() {
     for &(source, _) in CASES {
-        assert_eq!(formula(source).source().text(), source);
+        assert_eq!(
+            formula(source).source().expect("source input").text(),
+            source
+        );
     }
 }
 

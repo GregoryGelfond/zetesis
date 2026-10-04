@@ -25,7 +25,7 @@ pub(crate) fn check(fixture: &str, source: &str) {
         .map(|record| (oracle::atoms(&record[0]), oracle::costs(&record[1])))
         .collect();
     let input = reference::admit(source, &FormulaLimits::default()).unwrap();
-    assert_eq!(input.source().text(), source);
+    assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(reference::exhaustive(&input), expected, "{}", row["name"]);
     assert_eq!(
         serde_json::to_value(input.objectives().priorities()).unwrap(),

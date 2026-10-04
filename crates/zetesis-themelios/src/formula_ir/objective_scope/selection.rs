@@ -1,9 +1,9 @@
 //! Select scoped binding from syntax before applying either compiler.
 
+use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::{ExpansionResource, FormulaFailure};
 use std::collections::BTreeSet;
-use themelios_base::span::Location;
 use themelios_program::program::{
     BodyElement, Condition, DefaultNegation, Literal, LiteralInner, WeakConstraint,
 };
@@ -12,7 +12,7 @@ use themelios_program::term::{Term, Variable};
 pub(super) fn scoped(
     weak: &WeakConstraint,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     for element in weak.body().get().elements() {
         budget.charge(ExpansionResource::TermWork, 1, location)?;
@@ -38,7 +38,7 @@ pub(super) fn scoped(
 pub(super) fn condition(
     condition: &Condition,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     literals(
         || {
@@ -54,7 +54,7 @@ pub(super) fn condition(
 fn literals<'a, I: Iterator<Item = &'a Literal>>(
     source: impl Fn() -> I,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let mut bound = BTreeSet::new();
     for literal in source() {

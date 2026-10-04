@@ -598,6 +598,7 @@
 'Zetesis.FinitePools.value_context_complete' depends on axioms: [propext, Quot.sound]
 'Zetesis.FinitePools.local_occurrences_complete' depends on axioms: [propext, Quot.sound]
 'Zetesis.FinitePools.local_activity_complete' depends on axioms: [propext, Quot.sound]
+'Zetesis.FinitePools.expanded_occurrence_activity' depends on axioms: [propext, Quot.sound]
 'Zetesis.FiniteTables.indexed_survival_exact' does not depend on any axioms
 'Zetesis.FiniteTables.narrowing_contracts' does not depend on any axioms
 'Zetesis.FiniteTables.narrowing_preserves_rows' does not depend on any axioms

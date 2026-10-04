@@ -46,15 +46,15 @@ fn foreign_metadata_owners_compare_content_independently_of_admission_order() {
         builder
             .compile_observations(
                 &program,
-                crate::AdmissionOptions::default(),
+                crate::AdmissionOptions::default().into(),
                 crate::observation::AdmissionLimits::default(),
                 &mut crate::expansion::Budget::new(crate::ExpansionLimits::default(), 0),
-                location,
+                location.into(),
             )
             .unwrap();
     }
-    let left = left.finish(location).unwrap();
-    let right = right.finish(location).unwrap();
+    let left = left.finish(location.into()).unwrap();
+    let right = right.finish(location.into()).unwrap();
     assert_eq!(left, right);
     let (different, location) = source("#show shown(f(2),\"text\").");
     let different =
@@ -99,7 +99,7 @@ fn metadata_storage_refusal_keeps_its_typed_cause_and_location() {
     else {
         panic!("typed located metadata refusal: {error:?}")
     };
-    assert_eq!(actual.source, location.source);
+    assert_eq!(actual.location().unwrap().source, location.source);
     let MetadataStorageError::Components(zetesis_core::TemplateCatalogFailure::Storage(
         zetesis_core::catalog::Error::Storage { required, limit },
     )) = error
@@ -108,4 +108,17 @@ fn metadata_storage_refusal_keeps_its_typed_cause_and_location() {
     };
     assert_eq!(limit, 0);
     assert!(required > 0);
+}
+
+#[test]
+fn common_collector_applies_constructed_policy_without_source_evidence() {
+    let (parsed, location) = source("#defined p/1. #show. #show p/1. #project p/1.");
+    let expected = SourceMetadata::compile(&parsed, MetadataLimits::default(), location).unwrap();
+    let constructed = SourceProgram::of(parsed.statements().map(|carrier| carrier.get().clone()));
+    let mut builder = Builder::default();
+    collect_profile(&constructed, &mut builder, true).unwrap();
+    let actual = builder.finish(ProgramSite::program()).unwrap();
+    assert!(actual.directives().is_empty());
+    assert_eq!(actual.atom_selection(), expected.atom_selection());
+    assert_eq!(actual.project_selection(), expected.project_selection());
 }

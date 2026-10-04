@@ -29,7 +29,7 @@ fn exact_sources_match_external_records_and_an_independent_reduct_evaluator() {
     for row in cases {
         let source = row["source"].as_str().unwrap();
         let admitted = input(source).unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
-        assert_eq!(admitted.source().text(), source);
+        assert_eq!(admitted.source().expect("source input").text(), source);
         let expected = expected(&row);
         models += expected.len();
         assert_eq!(exhaustive(&admitted), expected, "{}", row["name"]);
@@ -203,7 +203,7 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
     )
     .unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, location } if observed > limit && location.source == SOURCE)
+        matches!(error, FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, location } if observed > limit && location.location().expect("parsed source").source == SOURCE)
     );
     let admitted = input(source).unwrap();
     assert_eq!(native(&admitted), exhaustive(&admitted));
@@ -212,7 +212,7 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
             .formula_origins()
             .iter()
             .flatten()
-            .all(|location| location.source == SOURCE)
+            .all(|location| location.location().expect("parsed source").source == SOURCE)
     );
 }
 
@@ -248,12 +248,21 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
         .unwrap()
         .id();
     let origins: Vec<_> = admitted.formula_origins().iter().flatten().collect();
-    assert!(origins.iter().any(|location| location.source == rule_id));
+    assert!(
+        origins
+            .iter()
+            .any(|location| location.location().expect("parsed source").source == rule_id)
+    );
     assert!(origins.iter().all(|location| {
         admitted
             .bundle()
-            .get(location.source)
-            .is_some_and(|source| source.source().slice(location.span).is_ok())
+            .get(location.location().expect("parsed source").source)
+            .is_some_and(|source| {
+                source
+                    .source()
+                    .slice(location.location().expect("parsed source").span)
+                    .is_ok()
+            })
     }));
     assert!(
         admitted

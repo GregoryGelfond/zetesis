@@ -1,15 +1,16 @@
+use crate::ProgramSite;
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 
 use super::*;
 use crate::formula_support::testing::Fixture;
 
 fn with_context(values: &[Value], run: impl FnOnce(&[Term], &mut Context<'_, '_, '_>)) {
     let limits = FormulaLimits::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(0),
         span: Span::empty(ByteOffset::new(0)),
-    };
+    });
     let mut fixture = Fixture::default();
     let terms: Vec<_> = fixture.admit(location, |source, counters| {
         values

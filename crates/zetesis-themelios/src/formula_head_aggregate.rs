@@ -9,8 +9,8 @@
 mod validation;
 pub(crate) use validation::{Bijection, validate_group};
 
+use crate::ProgramSite;
 use crate::formula_support::components::Term;
-use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, HasGuards, HeadAggregate};
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::TermRef;
@@ -134,7 +134,7 @@ pub(super) enum Contribution<'a> {
 pub(super) fn contribution(
     measure: HeadMeasure,
     first: Option<TermRef<'_>>,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<Contribution<'_>>, FormulaFailure> {
     if measure == HeadMeasure::Count {
         return Ok(Some(Contribution::Numeric(1)));

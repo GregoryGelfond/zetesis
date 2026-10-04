@@ -50,7 +50,7 @@
 //!
 //! The rewrite reads the analyzed program, where facts are expanded and
 //! constants resolved, once every statement is compiled, and names the
-//! written constraints to replace by their parsed origin; preparation then
+//! written constraints to replace by their original statement ID; preparation then
 //! compiles the asked constraints in their place, so nothing is prepared
 //! twice. The key analysis and its readings of facts run under the key work
 //! ceiling and the preparation's remaining term work, and their steps are
@@ -59,22 +59,16 @@
 //! constraint outside the two patterns, which is left as written.
 //!
 //! The analyzed program may be a dependency projection
-//! ([`crate::AnalysisBasis`]): a statement with a pool that outlives
-//! normalization, such as one inside a condition or an aggregate element,
-//! stands in it as one pool-free copy per alternative, read as several
-//! statements where the program means one. The rewrite is sound over it. A
-//! key is claimed only for a relation with one producer, and every copy of
-//! a projected statement produces what the statement produces, since a pool
-//! never changes an atom's signature and a pooled argument list is unpooled
-//! before the projection, into the elements of its choice or into whole
-//! rules; so a projected statement, of two copies at least, is never a
-//! key's producer, and a projected constraint, several statements under one
-//! origin, is never asked. Copies that coincide come from coinciding
-//! alternatives, which the choice reads as one element.
+//! ([`crate::AnalysisBasis`]): pools retained inside local conditions can produce
+//! several pool-free analysis carriers. Distinct carriers count as multiple
+//! producers and cannot establish a single-producer key. Coincident carriers
+//! collapse to the same producer and condition. Independently, a constraint is
+//! eligible for rewriting only when its original owner emits exactly one unique
+//! analyzed carrier; expanded or merged constraints remain as written.
 
 use std::collections::BTreeMap;
 
-use themelios_base::span::Location;
+use crate::{ProgramSite, StatementId};
 use themelios_program::program::{
     Arguments, Atom, Body, BodyElement, DefaultNegation, Head, Literal, LiteralInner,
     Program as SourceProgram, Relation, Rule, Statement,
@@ -87,6 +81,7 @@ use zetesis_domain::{FactIndex, KeyWork, KeyedRelation, Stop, atom_signature};
 use crate::expansion::Budget;
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
 
+pub(crate) mod owners;
 mod safety;
 
 /// How the key analysis of one preparation ended.
@@ -100,11 +95,10 @@ pub enum KeyAnalysis {
     Stopped(Stop),
 }
 
-/// The constraints asked in place of written ones, by the parsed origin of
-/// the written constraint each set replaces, with that constraint's
-/// provenance; and how the key analysis ended.
+/// The constraints asked in place of original ones, by their statement IDs,
+/// retaining the analyzed carrier's provenance; and how key analysis ended.
 pub(crate) struct Asked {
-    pub rules: BTreeMap<Location, (Provenance, Vec<Rule>)>,
+    pub rules: BTreeMap<StatementId, (Provenance, Vec<Rule>)>,
     pub analysis: KeyAnalysis,
 }
 
@@ -125,12 +119,13 @@ enum Outcome {
 /// the term work.
 pub(crate) fn ask_all(
     analyzed: &SourceProgram,
+    owners: &owners::Owners,
     limits: &FormulaLimits,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Asked, FormulaFailure> {
     let mut work = KeyWork::new(limits.max_key_work.min(budget.remaining_term_work()));
-    let asked = ask_under(analyzed, &mut work, budget, location);
+    let asked = ask_under(analyzed, owners, &mut work, budget, location);
     budget.charge(
         ExpansionResource::TermWork,
         u128::from(work.steps()),
@@ -141,9 +136,10 @@ pub(crate) fn ask_all(
 
 fn ask_under(
     analyzed: &SourceProgram,
+    owners: &owners::Owners,
     work: &mut KeyWork,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Asked, FormulaFailure> {
     let mut asked = Asked {
         rules: BTreeMap::new(),
@@ -169,24 +165,19 @@ fn ask_under(
             return Ok(asked);
         }
     };
-    // The analyzed statement of each source statement, by parsed origin; a
-    // source statement normalized into several is left as written.
-    let mut by_origin: BTreeMap<Location, Vec<&WithProvenance<Statement>>> = BTreeMap::new();
-    for carrier in analyzed.statements() {
+    // Expansion and canonical-content collisions have already cleared their
+    // sidecar ownership. Provenance supplies evidence, never rewrite identity.
+    for (index, statement) in analyzed.statements().enumerate() {
         budget.charge(ExpansionResource::TermWork, 1, location)?;
-        if let [origin] = crate::extended::parsed_origins(carrier)[..] {
-            by_origin.entry(origin).or_default().push(carrier);
-        }
-    }
-    for (origin, statements) in by_origin {
-        let [statement] = statements[..] else {
+        let Some(owner) = owners.at(index) else {
             continue;
         };
-        match ask(statement, &keys, &facts, work, budget, location)? {
+        let site = crate::extended::origin(statement, location.with_statement(owner));
+        match ask(statement, &keys, &facts, work, budget, site)? {
             Outcome::Asked(rules) => {
                 asked
                     .rules
-                    .insert(origin, (statement.provenance().clone(), rules));
+                    .insert(owner, (statement.provenance().clone(), rules));
             }
             Outcome::Written => {}
             Outcome::Stopped(stop) => {
@@ -215,7 +206,7 @@ fn ask(
     facts: &FactIndex<'_>,
     work: &mut KeyWork,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Outcome, FormulaFailure> {
     let Statement::Rule(rule) = statement.get() else {
         return Ok(Outcome::Written);
@@ -320,7 +311,7 @@ fn ask(
 /// resource refusal. Both applicability checks use the same boundary.
 fn applicability_failure(
     failure: safety::Failure,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Outcome, FormulaFailure> {
     match failure {
         safety::Failure::Work(stop) => Ok(Outcome::Stopped(stop)),

@@ -2,7 +2,7 @@
 
 use super::{
     Admission, CatalogRead, Counters, Event, Filter, FilterRef, FormulaFailure, FormulaLimits,
-    FormulaResource, Location, Pattern, PatternRef, Predicate, PredicateRef, StorageLease,
+    FormulaResource, Pattern, PatternRef, Predicate, PredicateRef, ProgramSite, StorageLease,
     TemplateCatalogFailure, TemplateComponentsRef, TemplateTerm, Term, atom_failure, ceiling,
     failure, missing, owner_limits, read_failure, remaining_u128, size_of,
 };
@@ -13,7 +13,7 @@ impl Admission<'_> {
         predicate: PredicateRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Predicate, FormulaFailure> {
         let outer = self.total(location)? as u128 - self.catalog.owner.storage_bytes();
         let checked = owner_limits(limits, outer, location)?;
@@ -45,7 +45,7 @@ impl Admission<'_> {
         arguments: &[Term],
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Pattern, FormulaFailure> {
         let mut terms = Vec::new();
         let mut lease = self.lease();
@@ -127,7 +127,7 @@ impl Admission<'_> {
         right: Term,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Filter, FormulaFailure> {
         self.append(
             limits,
@@ -152,7 +152,7 @@ impl Admission<'_> {
         pattern: Pattern,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<PatternRef<'_>, FormulaFailure> {
         pattern.get(
             self.bound(limits, counters, location)?,
@@ -172,7 +172,7 @@ fn detached<'read>(
     read: CatalogRead<'read>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<TemplateTerm<'read>, FormulaFailure> {
     match term.get(components, limits, counters, location)? {
         TemplateTerm::Variable(variable) => Ok(TemplateTerm::Variable(variable)),
@@ -195,7 +195,7 @@ impl Term {
         view: TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TemplateTerm<'a>, FormulaFailure> {
         match self {
             Self::Variable(variable) => {
@@ -214,7 +214,7 @@ impl Predicate {
         view: TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<PredicateRef<'a>, FormulaFailure> {
         counters.work(limits, location)?;
         view.predicate(self.0).ok_or_else(|| missing(location))
@@ -226,7 +226,7 @@ impl Pattern {
         view: TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<PatternRef<'a>, FormulaFailure> {
         self.get_with(view, location, || counters.work(limits, location))
     }
@@ -234,7 +234,7 @@ impl Pattern {
     pub(crate) fn get_with(
         self,
         view: TemplateComponentsRef<'_>,
-        location: Location,
+        location: ProgramSite,
         before: impl FnOnce() -> Result<(), FormulaFailure>,
     ) -> Result<PatternRef<'_>, FormulaFailure> {
         before()?;
@@ -247,7 +247,7 @@ impl Filter {
         view: TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<FilterRef<'a>, FormulaFailure> {
         counters.work(limits, location)?;
         view.filter(self.0).ok_or_else(|| missing(location))

@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, btree_map::Entry};
 use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::atom_interner::{self, AtomAppender, AtomInterner};
 use zetesis_core::catalog::{AtomRef, Atoms, CatalogRead, PredicateRef, TermRef};
 use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
@@ -85,7 +85,7 @@ impl SupportCatalog {
 
     pub(in crate::formula_support) fn bytes(
         &self,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         usize::try_from(self.owner.storage_bytes())
             .ok()
@@ -111,7 +111,7 @@ impl SupportCatalog {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(Relations<'_>, SupportAppend<'_>), FormulaFailure> {
         debug_assert!(self.pending.is_empty());
         *self.growth.get_mut() = 0;
@@ -155,7 +155,7 @@ impl SupportCatalog {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         counters.observe_work(Event::SupportPublicationWork, |counters| {
             self.publish_rows(limits, counters, location)
@@ -166,7 +166,7 @@ impl SupportCatalog {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         for source in &mut self.rows {
             counters.work(limits, location)?;
@@ -256,7 +256,7 @@ impl SupportCatalog {
         &self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Relations<'_>, FormulaFailure> {
         SnapshotSource {
             sources: &self.rows,
@@ -275,7 +275,7 @@ impl SupportCatalog {
         atom: &Atom,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let (_, mut append) = self.split(limits, counters, location)?;
         append.atom(atom.into(), limits, counters, location)?;
@@ -297,7 +297,7 @@ impl<'a> SnapshotSource<'a> {
         self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Relations<'a>, FormulaFailure> {
         let components = self
             .components
@@ -350,7 +350,7 @@ fn find_catalog(
     predicate: PredicateRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Result<usize, usize>, FormulaFailure> {
     let mut start = 0;
     let mut end = rows.len();
@@ -400,7 +400,7 @@ fn catalog_index(
 pub(crate) fn owner_limits(
     limits: &FormulaLimits,
     outer: u128,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<atom_interner::Limits, FormulaFailure> {
     ceiling(
         FormulaResource::SupportBytes,
@@ -422,7 +422,7 @@ pub(crate) fn atom_failure(
     error: atom_interner::Failure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,
-    location: Location,
+    location: ProgramSite,
 ) -> FormulaFailure {
     match error {
         atom_interner::Failure::Stopped(error) => error,
@@ -526,7 +526,7 @@ fn catalog_failure(
     limits: &FormulaLimits,
     counters: &mut Counters,
     outer_bytes: usize,
-    location: Location,
+    location: ProgramSite,
 ) -> FormulaFailure {
     counters.record(Event::SupportPeakBytes(
         outer_bytes as u128 + error.peak_construction_bytes as u128,
@@ -601,7 +601,7 @@ impl<'source> Relations<'source> {
         predicate: PredicateRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<&RelationRows<'source>>, FormulaFailure> {
         self.find_checked(predicate, || counters.work(limits, location))
     }
@@ -648,7 +648,7 @@ impl<'source> Relations<'source> {
         predicate: impl Into<PredicateRef<'predicate>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<&Relation<'_>>, FormulaFailure> {
         self.find_with(predicate.into(), limits, counters, location)
             .map(|rows| rows.map(|rows| &rows.relation))
@@ -698,7 +698,7 @@ impl<'source> Relations<'source> {
         key: &AtomKey<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let Some(rows) = self.find_with(key.predicate(), limits, counters, location)? else {
             return Ok(false);
@@ -729,7 +729,7 @@ impl<'source> Relations<'source> {
         values: &[Option<Value>],
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
         let rows = self.find_with(pattern.predicate().into(), limits, counters, location)?;
         self.probe_at(
@@ -843,7 +843,7 @@ fn relation_limits(
     }
 }
 
-fn failure(error: Failure, location: Location) -> FormulaFailure {
+fn failure(error: Failure, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation { error, location }
 }
 
@@ -854,7 +854,7 @@ pub(super) fn relation_failure(
     limits: &FormulaLimits,
     base_work: u64,
     outer_bytes: usize,
-    location: Location,
+    location: ProgramSite,
 ) -> FormulaFailure {
     let (resource, base, observed, limit) = match error {
         Failure::Limit {
@@ -898,7 +898,7 @@ pub(super) struct Memory<'limits> {
     pub(super) bytes: usize,
     external_bytes: u128,
     limits: &'limits FormulaLimits,
-    location: Location,
+    location: ProgramSite,
     observed: crate::grounding_observer::Work,
 }
 
@@ -908,7 +908,7 @@ impl<'limits> Memory<'limits> {
         external_bytes: u128,
         limits: &'limits FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Self {
         Self {
             bytes,

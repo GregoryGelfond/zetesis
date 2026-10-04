@@ -1,7 +1,7 @@
 //! Reusable expression metadata charged to one source workspace lease.
 
+use crate::ProgramSite;
 use crate::formula_support::Context as GroundingContext;
-use themelios_base::span::Location;
 use zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, TermAssignment, TermKey};
 
 use super::{Context, Evaluation, Input};
@@ -33,7 +33,7 @@ impl Scratch {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if self.terms.is_none() {
             self.terms = Some(computation.read().assignment());
@@ -186,7 +186,7 @@ impl Scratch {
         Ok(())
     }
 
-    pub(super) fn reset(&mut self, location: Location) {
+    pub(super) fn reset(&mut self, location: ProgramSite) {
         self.integers.clear();
         self.missing.clear();
         if self.integers.capacity() > RETAINED_CELLS {
@@ -228,7 +228,7 @@ fn offset(
 
 pub(super) struct Frame<'a> {
     pub(super) scratch: &'a mut Scratch,
-    pub(super) location: Location,
+    pub(super) location: ProgramSite,
 }
 impl Drop for Frame<'_> {
     fn drop(&mut self) {

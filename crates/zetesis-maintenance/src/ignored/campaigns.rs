@@ -39,7 +39,7 @@ impl Campaign {
 const NEUTRAL: [&str; 3] = ["--locked", "--no-fail-fast", "--no-default-features"];
 
 /// The harness options the gate's campaigns use; neither selects a test.
-const HARNESS: [&str; 2] = ["--ignored", "--nocapture"];
+const HARNESS: [&str; 2] = ["--ignored", "--show-output"];
 
 /// The campaigns of `script`, in script order. A line is a campaign when its
 /// first word is `oracle_test`; its words up to `--` are `cargo test`'s
@@ -51,7 +51,7 @@ const HARNESS: [&str; 2] = ["--ignored", "--nocapture"];
 /// Returns [`Error::Invalid`] describing the first campaign line whose shape the gate
 /// does not use: no package, no test target, two packages or two cargo
 /// filters, an option other than `-p`, `--test` and the neutral ones, such as
-/// `--lib`, or a harness option other than `--ignored` and `--nocapture`,
+/// `--lib`, or a harness option other than `--ignored` and `--show-output`,
 /// such as `--exact`.
 pub fn campaigns(script: &str) -> Result<Vec<Campaign>, Error> {
     let mut found = Vec::new();

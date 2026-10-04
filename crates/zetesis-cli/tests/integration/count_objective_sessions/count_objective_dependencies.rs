@@ -63,7 +63,7 @@ impl Case {
             FormulaLimits::default(),
         )
         .unwrap_or_else(|error| panic!("{}: {error}", self.source));
-        assert_eq!(input.source().text(), self.source);
+        assert_eq!(input.source().expect("source input").text(), self.source);
         input
     }
 

@@ -10,11 +10,11 @@ use crate::ExpansionLimits;
 use crate::formula_source_activity::Context;
 use crate::formula_support::testing::Fixture;
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(17),
         span: Span::empty(ByteOffset::new(3)),
-    }
+    })
 }
 
 fn with_builder<T>(
@@ -215,9 +215,11 @@ fn producer_origins_preserve_atom_associations() {
                     .unwrap();
             builder.atom_ref((&atom).into(), location()).unwrap();
         }
-        let origin = |offset| Location {
-            source: SourceId::new(19),
-            span: Span::empty(ByteOffset::new(offset)),
+        let origin = |offset| {
+            ProgramSite::source(themelios_base::span::Location {
+                source: SourceId::new(19),
+                span: Span::empty(ByteOffset::new(offset)),
+            })
         };
         let rule = |origins| RuleIr {
             head: HeadIr::Normal(None),
@@ -264,10 +266,10 @@ fn owned_root_provenance_transfers_its_storage() {
 
 #[test]
 fn origin_insertion_obeys_the_work_ceiling() {
-    let next = Location {
+    let next = ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(20),
         span: Span::empty(ByteOffset::new(0)),
-    };
+    });
     let rule = RuleIr {
         head: HeadIr::Normal(None),
         body: vec![],

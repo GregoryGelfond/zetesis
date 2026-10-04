@@ -24,8 +24,8 @@ use cache::{Contexts, CoordinateMap};
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use crate::ProgramSite;
 use crate::formula_support::components::{self, Pattern as AtomPattern};
-use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation};
 use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_core::{AtomCatalog, ValueNodeRef};
@@ -68,7 +68,7 @@ impl Schedule<'_> {
         catalog: formula_support::CompletedCatalog,
         instances: u64,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Option<crate::formula_hybrid::Constraints> {
         if !matches!(self, Self::Hybrid) {
             return None;
@@ -199,11 +199,11 @@ struct Instantiation {
     projection: crate::PreparedProjection,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
-    objective_origins: Vec<Vec<Location>>,
+    objective_origins: Vec<Vec<ProgramSite>>,
     analysis_basis: crate::AnalysisBasis,
     analysis: themelios_analysis::Analysis,
     analyzed: themelios_program::program::Program,
-    objective_declarations: Vec<Location>,
+    objective_declarations: Vec<ProgramSite>,
     warnings: Vec<crate::FormulaWarning>,
     constraints: Option<crate::formula_hybrid::Constraints>,
     retained: Option<RetainedState>,
@@ -448,7 +448,7 @@ struct PublishedEmission {
     projection: crate::PreparedProjection,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
-    objective_origins: Vec<Vec<Location>>,
+    objective_origins: Vec<Vec<ProgramSite>>,
     warnings: Warnings,
     streamed_instances: u64,
 }
@@ -458,7 +458,7 @@ impl PendingEmission {
         self,
         catalog: &mut formula_support::CompletedCatalog,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
         retain: bool,
     ) -> Result<PublishedEmission, FormulaFailure> {
         let Self {
@@ -524,7 +524,7 @@ struct Emission<A = AtomCatalog> {
     atoms: A,
     nodes: Vec<Node>,
     roots: Vec<usize>,
-    origins: Vec<Vec<Location>>,
+    origins: Vec<Vec<ProgramSite>>,
     count_plan: Option<crate::formula_count_plan::Collector>,
 }
 
@@ -540,7 +540,7 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     nodes: FormulaNodes,
     node_indices: nodes::Index,
     roots: Vec<usize>,
-    origins: Vec<Vec<Location>>,
+    origins: Vec<Vec<ProgramSite>>,
     pub(super) counters: Counters,
     origin_count: usize,
     aggregate_cache: Contexts<CachedAggregate>,
@@ -721,7 +721,7 @@ impl Builder<'_, '_, '_> {
         counters: &mut Counters,
         purpose: Purpose,
         count_plan: Option<crate::formula_count_plan::Collector>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Builder<'a, 'terms, 'source>, FormulaFailure> {
         let catalog = atoms::Catalog::new(computation, counters, limits, location)?;
         let terms = TermTable::new(computation, limits, counters, location)?;
@@ -763,7 +763,7 @@ impl Builder<'_, '_, '_> {
     /// Admit the canonical constants before any other node in an empty builder.
     /// Each admission retains its ordinary work and purpose-specific ceiling.
     /// On failure the caller still owns the builder and its spent counters.
-    fn initialize(&mut self, location: Location) -> Result<(), FormulaFailure> {
+    fn initialize(&mut self, location: ProgramSite) -> Result<(), FormulaFailure> {
         self.node(Node::False, location)?;
         self.node(Node::Implies(FALSUM, FALSUM), location)?;
         Ok(())
@@ -844,10 +844,14 @@ impl Builder<'_, '_, '_> {
         Ok(())
     }
 
-    pub(super) fn work(&mut self, location: Location) -> Result<(), FormulaFailure> {
+    pub(super) fn work(&mut self, location: ProgramSite) -> Result<(), FormulaFailure> {
         self.counters.work(self.limits, location)
     }
-    pub(super) fn node(&mut self, node: Node, location: Location) -> Result<usize, FormulaFailure> {
+    pub(super) fn node(
+        &mut self,
+        node: Node,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         self.counters.record(Event::NodeLookup);
         let bound = self.node_bound();
@@ -867,7 +871,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         left: usize,
         right: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if left == FALSUM || right == FALSUM {
             Ok(FALSUM)
@@ -883,7 +887,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         left: usize,
         right: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if left == VERUM || right == VERUM {
             Ok(VERUM)
@@ -898,7 +902,7 @@ impl Builder<'_, '_, '_> {
     pub(super) fn neg(
         &mut self,
         formula: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.node(Node::Implies(formula, FALSUM), location)
     }
@@ -908,14 +912,14 @@ impl Builder<'_, '_, '_> {
     fn root_at(
         &mut self,
         formula: usize,
-        evidence: Cow<'_, [Location]>,
-        location: Location,
+        evidence: Cow<'_, [ProgramSite]>,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.admit_root(evidence.len(), location)?;
         self.publish_root(formula, evidence.into_owned());
         Ok(())
     }
-    fn admit_root(&self, origin_count: usize, location: Location) -> Result<(), FormulaFailure> {
+    fn admit_root(&self, origin_count: usize, location: ProgramSite) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::Roots,
             self.roots.len() as u128 + 1,
@@ -932,7 +936,7 @@ impl Builder<'_, '_, '_> {
         Ok(())
     }
     /// Publish only after root/evidence admission and successful evidence preparation.
-    fn publish_root(&mut self, formula: usize, evidence: Vec<Location>) {
+    fn publish_root(&mut self, formula: usize, evidence: Vec<ProgramSite>) {
         self.origin_count += evidence.len();
         self.roots.push(formula);
         self.origins.push(evidence);
@@ -942,7 +946,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         pattern: AtomPattern,
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         let pattern =
@@ -961,7 +965,7 @@ impl Builder<'_, '_, '_> {
     fn atom_ref(
         &mut self,
         atom: zetesis_core::catalog::AtomRef<'_>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         let atom = self
@@ -973,7 +977,7 @@ impl Builder<'_, '_, '_> {
     fn atom_identity(
         &mut self,
         atom: &formula_support::SourceAtom,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.counters.record(Event::AtomLookup);
         if let Some(index) =
@@ -1017,7 +1021,7 @@ impl Builder<'_, '_, '_> {
         literals: &[LiteralIr],
         binding: &Binding,
         support: &Support<'_>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let mut context = crate::formula_source_activity::Context {
             computation: self.computation,
@@ -1039,7 +1043,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         literals: &[LiteralIr],
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
         support: &Support,
     ) -> Result<usize, FormulaFailure> {
         let mut result = VERUM;
@@ -1078,7 +1082,7 @@ impl Builder<'_, '_, '_> {
         projection: &Projection,
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         match projection {
             Projection::Arguments { predicate, terms } => {
@@ -1132,7 +1136,7 @@ impl Builder<'_, '_, '_> {
         terms: &[Option<components::Term>],
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let mut result = FALSUM;
         for atom in support.rows(predicate) {
@@ -1480,7 +1484,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         head: &HeadLiteral,
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(usize, Option<usize>), FormulaFailure> {
         let (mut literal, atom) = match &head.operand {
             HeadOperand::Atom(pattern) => {
@@ -1551,21 +1555,19 @@ impl Builder<'_, '_, '_> {
                 if !group.guards.is_empty() {
                     let selected = self.and(condition, head, rule.location)?;
                     match &element.key {
-                        HeadElementKey::BooleanOccurrences(occurrences) => {
-                            for occurrence in occurrences {
-                                self.work(rule.location)?;
-                                self.budget.charge(
-                                    ExpansionResource::ScalarBytes,
-                                    size_of::<Location>() as u128,
-                                    rule.location,
-                                )?;
-                                self.head_activity(
-                                    &mut result,
-                                    HeadKey::BooleanOccurrence(*occurrence),
-                                    selected,
-                                    rule.location,
-                                )?;
-                            }
+                        HeadElementKey::Occurrence(occurrence) => {
+                            self.work(rule.location)?;
+                            self.budget.charge(
+                                ExpansionResource::ScalarBytes,
+                                size_of::<usize>() as u128,
+                                rule.location,
+                            )?;
+                            self.head_activity(
+                                &mut result,
+                                HeadKey::Occurrence(*occurrence),
+                                selected,
+                                rule.location,
+                            )?;
                         }
                         HeadElementKey::Atom => {
                             self.head_activity(
@@ -1635,7 +1637,7 @@ impl Builder<'_, '_, '_> {
         group: &mut HeadGroup,
         key: HeadKey,
         selected: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let previous = group
             .activity
@@ -1669,7 +1671,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         terms: &[components::Term],
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let tuple = crate::formula_assignment::tuple(
             terms,
@@ -1682,7 +1684,7 @@ impl Builder<'_, '_, '_> {
         self.term(&tuple, location)
     }
 
-    fn term(&mut self, key: &TermKey, location: Location) -> Result<usize, FormulaFailure> {
+    fn term(&mut self, key: &TermKey, location: ProgramSite) -> Result<usize, FormulaFailure> {
         self.terms.insert(
             key,
             None,
@@ -1714,7 +1716,7 @@ impl Builder<'_, '_, '_> {
 
 /// Permission coalesces by head atom; measure activity coalesces independently
 /// by the complete tuple. An ordinary atom choice uses its atom as the implicit
-/// key and default-negation sign; a Boolean choice uses its source occurrence
+/// key and default-negation sign; a Boolean choice uses its counted entry
 /// within this outer group.
 struct HeadGroup {
     eligible: CoordinateMap<usize, usize>,
@@ -1725,7 +1727,7 @@ struct HeadGroup {
 enum HeadKey {
     Tuple(usize),
     Atom(DefaultNegation, usize),
-    BooleanOccurrence(Location),
+    Occurrence(usize),
 }
 
 impl HeadKey {
@@ -1733,11 +1735,11 @@ impl HeadKey {
         &self,
         terms: &TermTable,
         read: zetesis_core::catalog::CatalogRead<'a>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<TermRef<'a>>, FormulaFailure> {
         match self {
             Self::Tuple(tuple) => Ok(terms.value(*tuple, read, location)?.child(0)),
-            Self::Atom(..) | Self::BooleanOccurrence(_) => Ok(None),
+            Self::Atom(..) | Self::Occurrence(_) => Ok(None),
         }
     }
 }
@@ -1762,7 +1764,7 @@ impl HeadContributions {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         if kind.is_some() {
             let mut elements = Buffer::new(computation, limits, counters, location)?;
@@ -1850,7 +1852,7 @@ impl Builder<'_, '_, '_> {
         aggregate: &AggregateIr,
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if let Some(target) = aggregate.binding {
             return self.assignment_aggregate(aggregate, target, assignment, support, location);
@@ -1877,7 +1879,7 @@ impl Builder<'_, '_, '_> {
         key: &Buffer<Option<usize>>,
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if let Some(slot) = self.aggregate_cache.find(
             aggregate.id,
@@ -1930,7 +1932,7 @@ impl Builder<'_, '_, '_> {
         target: usize,
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let key = self.cache_key(target, assignment, location)?;
         let slot = self.cached_aggregate(aggregate, &key, assignment, support, location)?;
@@ -1983,7 +1985,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         function: AggregateFunction,
         elements: &GroundAggregate,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Arc<CoordinateMap<usize, usize>>, FormulaFailure> {
         let values = self.aggregate_candidates(function, elements, location)?;
         ceiling(
@@ -2063,7 +2065,7 @@ impl Builder<'_, '_, '_> {
     fn assignment_guards(
         &mut self,
         values: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Buffer<NumericGuard>, FormulaFailure> {
         let mut guards = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
         guards.reserve(
@@ -2100,7 +2102,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         function: AggregateFunction,
         elements: &GroundAggregate,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Binding<'static>, FormulaFailure> {
         match elements {
             GroundAggregate::Numeric(elements) => crate::formula_assignment::candidates(
@@ -2141,7 +2143,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         target: usize,
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Buffer<Option<usize>>, FormulaFailure> {
         let count = assignment.len() - usize::from(target < assignment.len());
         let mut outer = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
@@ -2175,7 +2177,7 @@ impl Builder<'_, '_, '_> {
         aggregate: &AggregateIr,
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<GroundAggregate, FormulaFailure> {
         let is_extremum = extremum(aggregate.function).is_some();
         let mut grouped = CoordinateMap::<GroundKey, (Measure, usize)>::new(
@@ -2275,7 +2277,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         grouped: CoordinateMap<GroundKey, (Measure, usize)>,
         is_extremum: bool,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<GroundAggregate, FormulaFailure> {
         let grouped = aggregate_order::ordered(
             grouped,
@@ -2345,7 +2347,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         key: &AggregateKey,
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<GroundKey, FormulaFailure> {
         match key {
             AggregateKey::Tuple(terms) => self
@@ -2380,7 +2382,7 @@ impl Builder<'_, '_, '_> {
     fn intern_appended(
         &mut self,
         first: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Vec<usize>, FormulaFailure> {
         let appended = self.nodes.split_off(first);
         let mut canonical = Vec::with_capacity(appended.len());
@@ -2416,7 +2418,7 @@ impl Builder<'_, '_, '_> {
         guards: &[AggregateGuard],
         assignment: &Binding,
         kind: Option<AggregateExtremum>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.aggregate_guards_with_capture(elements, guards, assignment, kind, location, None)
     }
@@ -2426,7 +2428,7 @@ impl Builder<'_, '_, '_> {
         guards: &[AggregateGuard],
         assignment: &Binding,
         kind: Option<AggregateExtremum>,
-        location: Location,
+        location: ProgramSite,
         mut capture: Option<&mut crate::formula_count_plan::Bounds>,
     ) -> Result<usize, FormulaFailure> {
         if guards.len() > 1 && kind.is_none() {
@@ -2526,7 +2528,7 @@ fn numeric_comparison(
     bound: TermRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<NumericComparison, FormulaFailure> {
     if let ValueNodeRef::Number(bound) = bound.descriptor() {
         return Ok(NumericComparison::Threshold(bound));
@@ -2570,7 +2572,7 @@ impl Builder<'_, '_, '_> {
     fn record_aggregate(
         &mut self,
         result: Result<zetesis_ferraris::AggregateBuild, zetesis_ferraris::AggregateError>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<zetesis_ferraris::AggregateBuild, FormulaFailure> {
         self.counters.accounting.work += match &result {
             Ok(build) => build.statistics().work,
@@ -2585,7 +2587,7 @@ impl Builder<'_, '_, '_> {
         kind: AggregateExtremum,
         comparison: AggregateComparison,
         bound: &TermKey,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let read = self.computation.read();
         let bound = read.term(bound).map_err(|error| {

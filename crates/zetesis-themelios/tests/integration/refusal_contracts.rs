@@ -96,7 +96,7 @@ fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
             panic!("expected input ceiling: {error}")
         };
         assert_eq!(*resource, expected);
-        assert_eq!(location.source, SOURCE);
+        assert_eq!(location.location().unwrap().source, SOURCE);
         assert!(observed > limit);
         let text = error.to_string();
         assert!(text.contains(phrase));

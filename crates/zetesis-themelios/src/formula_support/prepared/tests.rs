@@ -1,21 +1,22 @@
 use super::*;
+use crate::ProgramSite;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation};
 use crate::formula_support::testing::budget;
 use crate::formula_support::{CompletedCatalog, build, testing};
 use crate::{ConstraintAllowance, ConstraintCheckLimits, ExpansionLimits, FormulaResource};
 use themelios_base::{
     source::SourceId,
-    span::{ByteOffset, Location, Span},
+    span::{ByteOffset, Span},
 };
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueNodeRef};
 use zetesis_cpu::Cancellation;
 
 fn fixture() -> (CompletedCatalog, RuleIr) {
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(81),
         span: Span::empty(ByteOffset::new(7)),
-    };
+    });
     let mut preparation = testing::prepare("");
     let mut catalog = preparation.catalog;
     for (name, value) in [("p", 1), ("p", 2), ("q", 2)] {
@@ -281,7 +282,7 @@ fn computed_fixture(source: &str) -> (CompletedCatalog, crate::formula_ir::Prepa
 fn values(
     row: &super::super::Row<'_>,
     computation: &Computation<'_, '_>,
-    location: Location,
+    location: ProgramSite,
 ) -> Vec<i32> {
     (0..row.values.len())
         .map(|slot| {

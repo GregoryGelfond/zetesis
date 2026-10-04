@@ -24,7 +24,7 @@ use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Project, Show, Statement};
 use themelios_program::provenance::Origin;
 use themelios_program::provenance::WithProvenance;
-use themelios_program::raise::{Occurrences, StatementOccurrence};
+use themelios_program::raise::Occurrences;
 use themelios_program::symbol::Signature;
 use themelios_syntax::ast;
 use themelios_syntax::parse::Parse;
@@ -36,6 +36,7 @@ use crate::diagnostic::unsupported;
 use crate::expansion::check;
 use crate::{
     AdmissionFailure, ExpansionFailure, ExpansionLimits, ExpansionResource, ProfileFeature,
+    ProgramSite, StatementId,
 };
 
 /// An accepted borrowed metadata directive. Signature payload belongs to the
@@ -238,7 +239,7 @@ impl Builder {
     fn signature(
         &mut self,
         signature: &Signature,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Predicate, AdmissionFailure> {
         let predicate = predicate(signature, location)?;
         self.admission()
@@ -248,10 +249,10 @@ impl Builder {
     pub(crate) fn compile_observations(
         &mut self,
         source: &SourceProgram,
-        options: crate::AdmissionOptions,
+        options: crate::formula_ir::CompilationOptions,
         limits: crate::observation::AdmissionLimits,
         budget: &mut crate::expansion::Budget,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), crate::FormulaFailure> {
         if !crate::observation::compile::has_observations(source) {
             return Ok(());
@@ -264,7 +265,10 @@ impl Builder {
         self.observations = observations;
         Ok(())
     }
-    pub(crate) fn finish(mut self, location: Location) -> Result<SourceMetadata, AdmissionFailure> {
+    pub(crate) fn finish(
+        mut self,
+        location: ProgramSite,
+    ) -> Result<SourceMetadata, AdmissionFailure> {
         self.directives
             .sort_by_key(|entry| (entry.location.source, entry.location.span));
         let vocabulary = self
@@ -327,10 +331,44 @@ pub(crate) fn check_count(
                 ExpansionResource::MetadataStatements,
                 observed,
                 limits.max_metadata_statements,
-                location,
+                location.into(),
             )?;
             *used += 1;
         }
+    }
+    Ok(())
+}
+
+/// Bound canonical metadata and any retained parsed occurrences before collection.
+/// Source admission additionally counts the original syntax before raising.
+pub(crate) fn check_program_count(
+    program: &SourceProgram,
+    limits: ExpansionLimits,
+) -> Result<(), ExpansionFailure> {
+    let mut used = 0_u128;
+    for (index, carrier) in program.statements().enumerate() {
+        if !matches!(
+            carrier.get(),
+            Statement::Defined(_) | Statement::Show(_) | Statement::Project(_)
+        ) {
+            continue;
+        }
+        let site = crate::extended::origin(
+            carrier,
+            ProgramSite::statement(StatementId::new(index), None),
+        );
+        let parsed = carrier
+            .provenance()
+            .origins()
+            .filter(|origin| matches!(origin, Origin::Parsed(_)))
+            .count();
+        used = used.saturating_add(parsed.max(1) as u128);
+        check(
+            ExpansionResource::MetadataStatements,
+            used,
+            limits.max_metadata_statements,
+            site,
+        )?;
     }
     Ok(())
 }
@@ -347,7 +385,23 @@ pub(crate) fn collect_profile(
     metadata: &mut Builder,
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
-    collect_carriers(program.statements(), metadata, formula)
+    collect_profile_at(program, metadata, formula, ProgramSite::program())
+}
+
+pub(crate) fn collect_profile_at(
+    program: &SourceProgram,
+    metadata: &mut Builder,
+    formula: bool,
+    fallback: ProgramSite,
+) -> Result<(), AdmissionFailure> {
+    collect_carriers(
+        program
+            .statements()
+            .enumerate()
+            .map(|(index, carrier)| (carrier, fallback.with_statement(StatementId::new(index)))),
+        metadata,
+        formula,
+    )
 }
 
 /// Original declarations precede occurrence-copy admission. The upstream stream
@@ -363,61 +417,53 @@ pub(crate) fn collect_occurrences(
         occurrences
             .occurrences()
             .iter()
-            .map(StatementOccurrence::statement),
+            .map(|occurrence| (occurrence.statement(), ProgramSite::program())),
         metadata,
         true,
     )
 }
 
 fn collect_carriers<'a>(
-    carriers: impl Iterator<Item = &'a WithProvenance<Statement>>,
+    carriers: impl Iterator<Item = (&'a WithProvenance<Statement>, ProgramSite)>,
     metadata: &mut Builder,
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
-    for carrier in carriers {
-        if !matches!(
-            carrier.get(),
-            Statement::Defined(_) | Statement::Show(_) | Statement::Project(_)
-        ) {
-            continue;
+    for (carrier, site) in carriers {
+        let site = crate::extended::origin(carrier, site);
+        let directive = match carrier.get() {
+            Statement::Defined(defined) => {
+                DirectiveKind::Defined(metadata.signature(&defined.signature, site)?)
+            }
+            Statement::Show(Show::Signature(signature)) => {
+                DirectiveKind::ShowSignature(metadata.signature(signature, site)?)
+            }
+            // themelios names its faithful `#show.` value `Show::All`;
+            // clingo interprets the empty directive as show nothing.
+            Statement::Show(Show::All) => DirectiveKind::ShowEmpty,
+            Statement::Project(Project::Signature(signature)) => {
+                DirectiveKind::ProjectSignature(metadata.signature(signature, site)?)
+            }
+            Statement::Project(Project::Atom { .. }) => DirectiveKind::ProjectAtom,
+            Statement::Show(_) if formula => DirectiveKind::ShowTerm,
+            Statement::Show(_) => return Err(unsupported(ProfileFeature::ShowTerm, site)),
+            _ => continue,
+        };
+        // Effective policy is logical. Parsed evidence is optional and never
+        // controls whether a constructed declaration takes effect.
+        match directive {
+            DirectiveKind::Defined(_) | DirectiveKind::ShowTerm => {}
+            DirectiveKind::ShowSignature(signature) => metadata.output.include(signature),
+            DirectiveKind::ShowEmpty => metadata.output.mark_explicit(),
+            DirectiveKind::ProjectSignature(signature) => metadata.projection.signature(signature),
+            DirectiveKind::ProjectAtom => metadata.projection.atom(),
         }
         for origin in carrier.provenance().origins() {
-            let Origin::Parsed(location) = origin else {
-                continue;
-            };
-            let directive = match carrier.get() {
-                Statement::Defined(defined) => {
-                    DirectiveKind::Defined(metadata.signature(&defined.signature, *location)?)
-                }
-                Statement::Show(Show::Signature(signature)) => {
-                    DirectiveKind::ShowSignature(metadata.signature(signature, *location)?)
-                }
-                // themelios names its faithful `#show.` value `Show::All`;
-                // clingo interprets the empty directive as show nothing.
-                Statement::Show(Show::All) => DirectiveKind::ShowEmpty,
-                Statement::Project(Project::Signature(signature)) => {
-                    DirectiveKind::ProjectSignature(metadata.signature(signature, *location)?)
-                }
-                Statement::Project(Project::Atom { .. }) => DirectiveKind::ProjectAtom,
-                Statement::Show(_) if formula => DirectiveKind::ShowTerm,
-                Statement::Show(_) => return Err(unsupported(ProfileFeature::ShowTerm, *location)),
-                _ => continue,
-            };
-            match &directive {
-                DirectiveKind::Defined(_) | DirectiveKind::ShowTerm => {}
-                DirectiveKind::ShowSignature(signature) => {
-                    metadata.output.include(*signature);
-                }
-                DirectiveKind::ShowEmpty => metadata.output.mark_explicit(),
-                DirectiveKind::ProjectSignature(signature) => {
-                    metadata.projection.signature(*signature);
-                }
-                DirectiveKind::ProjectAtom => metadata.projection.atom(),
+            if let Origin::Parsed(location) = origin {
+                metadata.directives.push(Directive {
+                    kind: directive,
+                    location: *location,
+                });
             }
-            metadata.directives.push(Directive {
-                kind: directive,
-                location: *location,
-            });
         }
     }
     Ok(())
@@ -425,7 +471,7 @@ fn collect_carriers<'a>(
 
 pub(crate) fn predicate(
     signature: &Signature,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<OwnedPredicate, AdmissionFailure> {
     let arity = usize::try_from(signature.arity)
         .expect("supported Rust targets represent u32 arities in usize");

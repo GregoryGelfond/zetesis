@@ -1,10 +1,10 @@
 //! A selected root set and semantic order over one canonical vocabulary.
+use crate::ProgramSite;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_support::{Computation, Counters, StorageLease};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 use std::cmp::Ordering;
-use themelios_base::span::Location;
 use zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, TermKey, TermRef, TermSet};
 
 use crate::formula_support::{Context, GroundingWork};
@@ -18,7 +18,7 @@ impl TermSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let values = Binding::new(computation, limits, counters, location)?;
         let selected = computation.read().term_set();
@@ -121,7 +121,7 @@ impl TermSelection {
         value: &TermKey,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         self.selected
             .contains_with(value, || counters.work(limits, location))
@@ -134,7 +134,7 @@ impl TermSelection {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Binding<'static>, FormulaFailure> {
         let len = self.values.len();
         for root in (0..len / 2).rev() {
@@ -236,7 +236,7 @@ fn tuple_order(
     right: TermRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Ordering, FormulaFailure> {
     let mut column = 0;
     loop {
@@ -266,12 +266,13 @@ mod tests {
     };
     use zetesis_core::ValueNodeRef;
 
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: SourceId::new(71),
             span: Span::empty(ByteOffset::new(0)),
-        }
+        })
     }
+
     fn with_computation<T>(run: impl FnOnce(&mut Computation<'_, '_>, &mut Counters) -> T) -> T {
         let limits = FormulaLimits::default();
         let mut counters = Counters::default();

@@ -1,11 +1,13 @@
 //! Opt-in finite source admission into general Ferraris formulas.
 
+use crate::formula_owner::Owner;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::Arc;
 
+use crate::ProgramSite;
 use themelios_base::diagnostic::Diagnostic;
 use themelios_base::source::Source;
-use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Statement};
 use zetesis_core::AtomCatalog;
 use zetesis_core::catalog::Atoms;
@@ -121,10 +123,10 @@ pub struct FormulaLimits {
     pub max_work: u64,
     /// Complete rounds constructing the possible-positive support relation.
     pub max_support_rounds: u64,
-    /// Original source locations retained in emitted formula-root evidence.
+    /// Original statement sites retained in emitted formula-root evidence.
     pub max_origin_locations: usize,
-    /// Distinct warning locations retained after successful formula admission.
-    /// Repeated evaluations at one source span retain one warning, not row counts.
+    /// Distinct warning sites retained after successful formula admission.
+    /// Repeated evaluations at one statement site retain one warning, not row counts.
     pub max_warnings: usize,
     /// Steps of the key analysis that asks constraints over keyed values, and
     /// of its readings of facts, also bounded by the term work remaining; the
@@ -242,9 +244,9 @@ pub enum FormulaResource {
     Nodes,
     /// Theory roots.
     Roots,
-    /// Retained parsed locations.
+    /// Retained original statement sites.
     Origins,
-    /// Distinct located warnings retained by successful admission.
+    /// Distinct statement warnings retained by successful admission.
     Warnings,
     /// Variables in an outer rule or complete local element scope.
     Variables,
@@ -257,95 +259,105 @@ impl fmt::Display for FormulaResource {
     }
 }
 
-/// A located refusal of finite formula source admission; never semantic UNSAT.
+/// A typed refusal of finite formula admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// A typed-input refusal retaining the caller's original canonical program.
+    Program {
+        /// Original program before normalization or analysis projection.
+        program: Arc<SourceProgram>,
+        /// Typed preparation or later grounding cause.
+        error: Box<FormulaFailure>,
+    },
+    /// Constructed input exceeded a structural bound or excluded a capability.
+    Logical {
+        /// Independent logical-structure cause.
+        error: crate::ProgramFailureKind,
+        /// Canonical part position for a part-wide refusal.
+        part: Option<usize>,
+        /// Original statement when one is responsible.
+        location: ProgramSite,
+    },
     /// Canonical template metadata could not retain its source authority.
     TemplateCatalog {
         /// Exact identity, storage, or incomplete-publication cause.
         error: zetesis_core::TemplateCatalogFailure,
         /// Source occurrence whose component admission failed.
-        location: Location,
+        location: ProgramSite,
     },
     /// An immutable admitted source lacks a term required by its checker.
     UnadmittedTerm {
         /// Source occurrence whose computed value was not admitted.
-        location: Location,
+        location: ProgramSite,
     },
     /// Scoped binding metadata could not be resolved or stored.
     TermAssignment {
         /// Exact authority, prefix, slot or storage cause.
         error: zetesis_core::catalog::AssignmentError,
         /// Source occurrence whose binding operation failed.
-        location: Location,
+        location: ProgramSite,
     },
     /// A catalog-backed original-model objective condition is invalid.
     ObjectiveCondition {
         /// Exact occurrence, backward-reference or canonical-storage cause.
         error: zetesis_objective::ConditionError,
         /// Source occurrence whose query was being constructed.
-        location: Location,
+        location: ProgramSite,
     },
     /// Canonical atom storage or representation could not be admitted.
     AtomCatalog {
         /// Exact canonical refusal, distinct from logical absence.
         error: zetesis_core::catalog::Error,
         /// Source occurrence whose operation required canonical storage.
-        location: Location,
+        location: ProgramSite,
     },
     /// A cancellable streamed-source operation stopped before completion.
     Interrupted {
         /// Cancellation or deadline observed at a charged work boundary.
         reason: zetesis_cpu::Stop,
         /// Original source occurrence whose operation stopped.
-        location: Location,
+        location: ProgramSite,
     },
     /// The explicitly requested hybrid schedule cannot handle this capability.
     HybridUnsupported {
         /// Capability that remains available through eager grounding.
         feature: crate::HybridFeature,
         /// Original source occurrence, or the source for a join policy.
-        location: Location,
+        location: ProgramSite,
     },
     /// Formula construction metadata or final root evidence could not reserve capacity.
     MetadataAllocation {
         /// Original reservation error, independent of configured resource limits.
         error: std::collections::TryReserveError,
         /// Source occurrence whose construction required storage.
-        location: Location,
+        location: ProgramSite,
     },
     /// Formula atom or lookup-index capacity could not be allocated.
     AtomAllocation {
         /// Original reservation error, independent of configured resource limits.
         error: std::collections::TryReserveError,
         /// Source occurrence whose new atom required storage.
-        location: Location,
+        location: ProgramSite,
     },
     /// A finite-table index or row selection failed without publishing a result.
     SupportTable {
         /// Exact cause and completed operation receipts; never semantic UNSAT.
         error: zetesis_cpu::table::Failure,
         /// Original positive source occurrence.
-        location: Location,
+        location: ProgramSite,
     },
     /// A typed relation view refused construction or query resolution.
     SupportRelation {
         /// Exact core refusal; never an empty relation or semantic UNSAT.
         error: zetesis_core::relation::Failure,
         /// Source location whose support operation was being performed.
-        location: Location,
-    },
-    /// Original Boolean choice occurrences could not be preserved through the
-    /// checked statement view. This refuses compilation, never answer sets.
-    ChoiceSource {
-        /// Original enclosing rule, or the source whose identity disagreed.
-        location: Location,
+        location: ProgramSite,
     },
     /// Source activity disagrees with completed support or previously established
     /// information. No projection or objective program is published.
     SourceActivity {
         /// Source occurrence being prepared when the invariant was checked.
-        location: Location,
+        location: ProgramSite,
     },
     /// Located bounded observation compilation failure.
     Observation {
@@ -365,14 +377,14 @@ pub enum FormulaFailure {
         /// Count required by the next operation.
         observed: u128,
         /// Original rule or source span.
-        location: Location,
+        location: ProgramSite,
     },
     /// A required variable lacks a value or a positive binder in its scope.
     UnsafeVariable {
         /// Dense variable index in the rule or local element scope.
         variable: usize,
         /// Original rule span.
-        location: Location,
+        location: ProgramSite,
     },
     /// An evaluated positive argument lacks an independently established input.
     /// This profile does not invert arithmetic to discover source bindings.
@@ -380,14 +392,14 @@ pub enum FormulaFailure {
         /// Dense source variable index in the rule or local element scope.
         variable: usize,
         /// Original enclosing rule span.
-        location: Location,
+        location: ProgramSite,
     },
     /// A finite value instruction has no independent producer for an input.
     UnboundValueInput {
         /// Dense input slot in the enclosing rule.
         variable: usize,
         /// Original enclosing rule span.
-        location: Location,
+        location: ProgramSite,
     },
     /// Finite value instructions have a cyclic input dependency. This is a
     /// native scheduling refusal, not an impossibility claim about ASP recursion.
@@ -395,28 +407,28 @@ pub enum FormulaFailure {
         /// An input slot in the unscheduled dependency component.
         variable: usize,
         /// Original enclosing rule span.
-        location: Location,
+        location: ProgramSite,
     },
     /// A bounded finite aggregate translation was refused.
     Aggregate {
         /// Typed constructor failure with partial accounting.
         error: zetesis_ferraris::AggregateError,
         /// Original enclosing rule span.
-        location: Location,
+        location: ProgramSite,
     },
     /// The independent lifted objective admission door rejected construction.
     Objective {
         /// Typed objective admission error.
         error: zetesis_objective::AdmissionError,
         /// Original objective occurrence.
-        location: Location,
+        location: ProgramSite,
     },
     /// The independent formula-theory admission door rejected construction.
     Theory {
         /// Typed formula error.
         error: zetesis_ferraris::AdmissionError,
         /// Original source span.
-        location: Location,
+        location: ProgramSite,
     },
 }
 impl From<AdmissionFailure> for FormulaFailure {
@@ -430,10 +442,86 @@ impl From<ExpansionFailure> for FormulaFailure {
     }
 }
 impl FormulaFailure {
+    /// The typed cause beneath any retained original-program envelope.
+    #[must_use]
+    pub fn cause(&self) -> &Self {
+        let mut cause = self;
+        while let Self::Program { error, .. } = cause {
+            cause = error;
+        }
+        cause
+    }
+
+    /// Logical or parsed subject carried by this failure.
+    #[must_use]
+    pub fn site(&self) -> Option<ProgramSite> {
+        match self {
+            Self::Program { error, .. } => error.site(),
+            Self::Expansion(error) => error.site(),
+            Self::Include(_) => None,
+            Self::Observation { error } => Some(error.site()),
+            Self::Logical { location, .. }
+            | Self::Interrupted { location, .. }
+            | Self::HybridUnsupported { location, .. }
+            | Self::MetadataAllocation { location, .. }
+            | Self::AtomAllocation { location, .. }
+            | Self::AtomCatalog { location, .. }
+            | Self::TermAssignment { location, .. }
+            | Self::UnadmittedTerm { location }
+            | Self::ObjectiveCondition { location, .. }
+            | Self::TemplateCatalog { location, .. }
+            | Self::SupportRelation { location, .. }
+            | Self::SupportTable { location, .. }
+            | Self::SourceActivity { location }
+            | Self::Limit { location, .. }
+            | Self::UnsafeVariable { location, .. }
+            | Self::UnboundArgumentInput { location, .. }
+            | Self::UnboundValueInput { location, .. }
+            | Self::CyclicValueInput { location, .. }
+            | Self::Theory { location, .. }
+            | Self::Objective { location, .. }
+            | Self::Aggregate { location, .. } => Some(*location),
+        }
+    }
+
+    /// Original canonical input retained by a typed-input failure.
+    #[must_use]
+    pub fn original_program(&self) -> Option<&SourceProgram> {
+        match self {
+            Self::Program { program, .. } => Some(program),
+            _ => None,
+        }
+    }
+
+    /// Resolve a typed-input refusal to the caller's original logical object.
+    #[must_use]
+    pub fn subject(&self) -> Option<crate::ProgramSubject<'_>> {
+        let Self::Program { program, error } = self else {
+            return None;
+        };
+        if let Some(statement) = error.site().and_then(ProgramSite::statement_id) {
+            return program
+                .statements()
+                .nth(statement.index())
+                .map(crate::ProgramSubject::Statement);
+        }
+        if let Self::Logical {
+            part: Some(index), ..
+        } = error.as_ref()
+        {
+            return program
+                .parts()
+                .nth(*index)
+                .map(|part| crate::ProgramSubject::Part(part.key()));
+        }
+        Some(crate::ProgramSubject::Program)
+    }
+
     /// Located diagnostics; bundle identities resolve through its retained catalog.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         match self {
+            Self::Program { error, .. } => error.diagnostics(),
             Self::Expansion(error) => error.diagnostics(),
             Self::Include(error) => error.diagnostics(),
             Self::Observation { error } => error
@@ -447,7 +535,8 @@ impl FormulaFailure {
                     )
                 })
                 .collect(),
-            Self::Interrupted { location, .. }
+            Self::Logical { location, .. }
+            | Self::Interrupted { location, .. }
             | Self::HybridUnsupported { location, .. }
             | Self::MetadataAllocation { location, .. }
             | Self::AtomAllocation { location, .. }
@@ -458,7 +547,6 @@ impl FormulaFailure {
             | Self::TemplateCatalog { location, .. }
             | Self::SupportRelation { location, .. }
             | Self::SupportTable { location, .. }
-            | Self::ChoiceSource { location }
             | Self::SourceActivity { location }
             | Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
@@ -467,17 +555,21 @@ impl FormulaFailure {
             | Self::CyclicValueInput { location, .. }
             | Self::Theory { location, .. }
             | Self::Objective { location, .. }
-            | Self::Aggregate { location, .. } => vec![crate::diagnostic::diagnostic(
-                "formula-admission",
-                self.to_string(),
-                *location,
-            )],
+            | Self::Aggregate { location, .. } => location
+                .location()
+                .map(|location| {
+                    crate::diagnostic::diagnostic("formula-admission", self.to_string(), location)
+                })
+                .into_iter()
+                .collect(),
         }
     }
 }
 impl fmt::Display for FormulaFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Program { error, .. } => error.fmt(f),
+            Self::Logical { error, .. } => error.fmt(f),
             Self::Interrupted { reason, .. } => reason.fmt(f),
             Self::HybridUnsupported { feature, .. } => {
                 write!(f, "hybrid grounding does not support {feature}")
@@ -495,9 +587,6 @@ impl fmt::Display for FormulaFailure {
             Self::TemplateCatalog { error, .. } => error.fmt(f),
             Self::SupportRelation { error, .. } => error.fmt(f),
             Self::SupportTable { error, .. } => error.fmt(f),
-            Self::ChoiceSource { .. } => {
-                f.write_str("Boolean choice source occurrences could not be preserved")
-            }
             Self::SourceActivity { .. } => f.write_str(
                 "source activity disagrees with completed support or established information",
             ),
@@ -537,6 +626,8 @@ impl fmt::Display for FormulaFailure {
 impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Program { error, .. } => Some(error.as_ref()),
+            Self::Logical { error, .. } => Some(error),
             Self::Interrupted { reason, .. } => Some(reason),
             Self::AtomCatalog { error, .. } => Some(error),
             Self::TermAssignment { error, .. } => Some(error),
@@ -558,11 +649,11 @@ impl std::error::Error for FormulaFailure {
     }
 }
 
-/// A bounded finite formula theory with original single-source evidence.
+/// A bounded finite formula theory retaining its original canonical input.
 #[derive(Debug)]
 pub struct AdmittedFormula {
     compiled: Compiled,
-    source: Source,
+    source: Owner,
     metadata: SourceMetadata,
 }
 impl AdmittedFormula {
@@ -578,7 +669,7 @@ impl AdmittedFormula {
     /// a time; formatter failures stop rendering. An empty collection is empty.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
-        crate::formula_warning::source_view(self.warnings(), &self.source)
+        self.source.warning_view(self.warnings())
     }
 
     /// Structural facts about [`Self::analyzed_program`]. Consult
@@ -648,16 +739,21 @@ impl AdmittedFormula {
     pub fn atom_catalog(&self) -> &AtomCatalog {
         &self.compiled.atoms
     }
-    /// Parsed origins per emitted theory root, preserving merged source evidence.
+    /// Original statement sites per theory root, preserving merged source evidence.
     /// Necessary support guards collect producer origins and the first atom occurrence.
     #[must_use]
-    pub fn formula_origins(&self) -> &[Vec<Location>] {
+    pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
     }
-    /// Original bytes and source identity.
+    /// Original bytes and source identity, absent for a constructed input.
     #[must_use]
-    pub fn source(&self) -> &Source {
-        &self.source
+    pub fn source(&self) -> Option<&Source> {
+        self.source.source()
+    }
+    /// Original canonical input before normalization or analysis projection.
+    #[must_use]
+    pub fn original_program(&self) -> &SourceProgram {
+        self.source.program()
     }
     /// Lifted objectives evaluated only after stable-model membership is verified.
     #[must_use]
@@ -666,12 +762,12 @@ impl AdmittedFormula {
     }
     /// Original objective element origins, parallel to active objective templates.
     #[must_use]
-    pub fn objective_origins(&self) -> &[Vec<Location>] {
+    pub fn objective_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.objective_origins
     }
     /// Every original objective declaration, including statically unreachable ones.
     #[must_use]
-    pub fn objective_declarations(&self) -> &[Location] {
+    pub fn objective_declarations(&self) -> &[ProgramSite] {
         &self.compiled.objective_declarations
     }
     /// Declarations and presentation selection; never a model projection.
@@ -692,7 +788,7 @@ impl AdmittedFormula {
 #[derive(Debug)]
 pub struct AdmittedFormulaBundle {
     compiled: Compiled,
-    bundle: SourceBundle,
+    source: Owner,
     metadata: SourceMetadata,
 }
 impl AdmittedFormulaBundle {
@@ -708,7 +804,7 @@ impl AdmittedFormulaBundle {
     /// one diagnostic at a time; formatter failures stop rendering.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
-        crate::formula_warning::bundle_view(self.warnings(), &self.bundle)
+        self.source.warning_view(self.warnings())
     }
 
     /// Structural facts about [`Self::analyzed_program`]. Consult
@@ -777,15 +873,21 @@ impl AdmittedFormulaBundle {
     pub fn atom_catalog(&self) -> &AtomCatalog {
         &self.compiled.atoms
     }
-    /// Parsed origins per theory root, resolvable in the retained catalog.
+    /// Original statement sites per theory root, with parsed evidence when available.
     #[must_use]
-    pub fn formula_origins(&self) -> &[Vec<Location>] {
+    pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
     }
     /// Every original file, source identity, and include occurrence.
+    /// Bundle admission retains this catalog by construction.
     #[must_use]
     pub fn bundle(&self) -> &SourceBundle {
-        &self.bundle
+        self.source.required_bundle()
+    }
+    /// Original canonical input before normalization or analysis projection.
+    #[must_use]
+    pub fn original_program(&self) -> &SourceProgram {
+        self.source.program()
     }
     /// Lifted objectives evaluated only after stable-model membership is verified.
     #[must_use]
@@ -794,12 +896,12 @@ impl AdmittedFormulaBundle {
     }
     /// Original objective element origins, parallel to active objective templates.
     #[must_use]
-    pub fn objective_origins(&self) -> &[Vec<Location>] {
+    pub fn objective_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.objective_origins
     }
     /// Every original objective declaration, including statically unreachable ones.
     #[must_use]
-    pub fn objective_declarations(&self) -> &[Location] {
+    pub fn objective_declarations(&self) -> &[ProgramSite] {
         &self.compiled.objective_declarations
     }
     /// Global declaration and display metadata.
@@ -872,10 +974,10 @@ pub(crate) struct Compiled {
     pub theory: Theory,
     pub count_plan: crate::formula_count_plan::Outcome,
     pub atoms: AtomCatalog,
-    pub origins: Vec<Vec<Location>>,
+    pub origins: Vec<Vec<ProgramSite>>,
     pub objectives: zetesis_objective::ObjectiveProgram,
-    pub objective_origins: Vec<Vec<Location>>,
-    pub objective_declarations: Vec<Location>,
+    pub objective_origins: Vec<Vec<ProgramSite>>,
+    pub objective_declarations: Vec<ProgramSite>,
     pub keyed_constraints: usize,
     pub key_analysis: crate::KeyAnalysis,
     pub expansion: crate::ExpansionUsage,
@@ -914,7 +1016,7 @@ pub(crate) struct Compiled {
 ///
 /// Eligibility remains a formula even for recursive conditions. Duplicate
 /// grounded head atoms combine permission by disjunction. Ordinary choices
-/// count distinct signed atoms and original Boolean source occurrences; local
+/// count distinct signed atoms and pool-expanded Boolean occurrences; local
 /// eligibility witnesses for each key combine by disjunction. Function heads
 /// measure distinct complete tuples selected by any eligible signed operand.
 /// All five measures permit either tuple/atom alias direction. Only unsigned
@@ -1067,15 +1169,103 @@ pub fn prepare_formula(
         .map_err(SourceFailure::into_error)
 }
 
+/// Admit a canonical logical program into a complete finite formula theory.
+/// This composes [`prepare_program_formula`] with [`PreparedFormula::ground`].
+///
+/// # Errors
+/// Retains the original program alongside any preparation or grounding failure.
+pub fn admit_program_formula(
+    program: Arc<SourceProgram>,
+    options: crate::ProgramAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+) -> Result<AdmittedFormula, FormulaFailure> {
+    prepare_program_formula(program, options, expansion, limits)?.ground()
+}
+
+/// Prepare a canonical logical program through the general formula pipeline.
+///
+/// This door never renders or reparses its input. It borrows the shared original
+/// program during bounded structural inspection, then uses the same normalization,
+/// analysis and grounding preparation as source admission. Statement identities
+/// refer to this original program, including failures during deferred grounding.
+/// Eager, hybrid and adaptive materialization remain available on the receipt.
+///
+/// # Errors
+/// Retains the original program with structural, capability, preparation and
+/// arithmetic failures. An absent source coordinate is never fabricated.
+pub fn prepare_program_formula(
+    program: Arc<SourceProgram>,
+    options: crate::ProgramAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+) -> Result<PreparedFormula, FormulaFailure> {
+    let owner = Owner::logical(program);
+    let prepare = || {
+        crate::formula_program_check::check(owner.program(), options)
+            .map_err(|error| logical_failure(owner.program(), error))?;
+        crate::formula_program_check::check_objectives(owner.program(), &limits)?;
+        metadata::check_program_count(owner.program(), expansion)?;
+        let mut metadata = metadata::Builder::new(limits.metadata_storage);
+        metadata::collect_profile(owner.program(), &mut metadata, true)?;
+        let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
+        prepare(
+            owner.program(),
+            options.into(),
+            budget,
+            &limits,
+            ProgramSite::program(),
+            metadata,
+        )
+    };
+    match prepare() {
+        Ok((preparation, metadata)) => Ok(PreparedFormula::new(preparation, owner, metadata)),
+        Err(error) => Err(owner.retain_failure(error)),
+    }
+}
+
+fn logical_failure(
+    program: &SourceProgram,
+    error: crate::ProgramAdmissionFailure<'_>,
+) -> FormulaFailure {
+    let (part, location) = match error.subject {
+        crate::ProgramSubject::Program => (None, ProgramSite::program()),
+        crate::ProgramSubject::Part(key) => (
+            program
+                .parts()
+                .position(|part| std::ptr::eq(part.key(), key)),
+            ProgramSite::program(),
+        ),
+        crate::ProgramSubject::Statement(statement) => {
+            let index = program
+                .statements()
+                .position(|carrier| std::ptr::eq(carrier, statement))
+                .expect("structural inspection borrows an original statement");
+            (
+                None,
+                extended::origin(
+                    statement,
+                    ProgramSite::statement(crate::StatementId::new(index), None),
+                ),
+            )
+        }
+    };
+    FormulaFailure::Logical {
+        error: error.kind,
+        part,
+        location,
+    }
+}
+
 pub(crate) fn prepare_parsed(
     source: ParsedSource,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
 ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
     match prepare_source(&source, expansion, limits) {
-        Ok((preparation, metadata)) => Ok(PreparedFormula::new(
+        Ok((preparation, metadata, program)) => Ok(PreparedFormula::new(
             preparation,
-            source.into_source(),
+            Owner::single(program, source.into_source()),
             metadata,
         )),
         Err(error) => Err(SourceFailure::new(source, error)),
@@ -1086,7 +1276,7 @@ fn prepare_source(
     source: &ParsedSource,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
-) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
+) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
     let parsed = source.parsed();
     let options = source.options();
     profile::check_formula(parsed, options, false)?;
@@ -1094,17 +1284,15 @@ fn prepare_source(
     metadata::check_count(parsed, expansion, &mut 0)?;
     formula_ir::check_objectives(parsed, limits, &mut 0)?;
     let mut metadata = metadata::Builder::new(limits.metadata_storage);
-    let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
-    let mut choices = crate::formula_choice_source::Catalog::default();
-    let raised =
-        crate::formula_choice_source::raise(parsed, &mut metadata, &mut budget, &mut choices)?;
-    let location = Location {
+    let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
+    let raised = Arc::new(crate::formula_raise::raise(parsed, &mut metadata)?);
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: source.source().id(),
         span: source.source().span(),
-    };
-    prepare(
-        &raised, &choices, options, budget, limits, location, metadata,
-    )
+    });
+    let (preparation, metadata) =
+        prepare(&raised, options.into(), budget, limits, location, metadata)?;
+    Ok((preparation, metadata, raised))
 }
 
 /// Admit the same finite formula profile across original include graphs.
@@ -1152,9 +1340,11 @@ pub fn prepare_bundle_formula(
     limits: FormulaLimits,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
     match prepare_bundle(&bundle, options, expansion, &limits) {
-        Ok((preparation, metadata)) => {
-            Ok(PreparedFormulaBundle::new(preparation, bundle, metadata))
-        }
+        Ok((preparation, metadata, program)) => Ok(PreparedFormulaBundle::new(
+            preparation,
+            Owner::bundle(program, bundle),
+            metadata,
+        )),
         Err(error) => Err(FormulaBundleFailure {
             bundle,
             error: Box::new(error),
@@ -1167,7 +1357,7 @@ fn prepare_bundle(
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
-) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
+) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
     bundle_admission::check_include_identity(bundle)
         .map_err(|error| FormulaFailure::Include(Box::new(error)))?;
     let mut definitions = BTreeMap::new();
@@ -1176,8 +1366,7 @@ fn prepare_bundle(
     let mut metadata = metadata::Builder::new(limits.metadata_storage);
     let mut statements = Vec::new();
     let mut visited = 0;
-    let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
-    let mut choices = crate::formula_choice_source::Catalog::default();
+    let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     for source in bundle.sources() {
         let local = AdmissionOptions {
             source_id: source.id(),
@@ -1191,12 +1380,7 @@ fn prepare_bundle(
         extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
         metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
         formula_ir::check_objectives(source.parsed(), limits, &mut objective_count)?;
-        let raised = crate::formula_choice_source::raise(
-            source.parsed(),
-            &mut metadata,
-            &mut budget,
-            &mut choices,
-        )?;
+        let raised = crate::formula_raise::raise(source.parsed(), &mut metadata)?;
         statements.extend(
             raised
                 .statements()
@@ -1207,34 +1391,22 @@ fn prepare_bundle(
     let entry = bundle
         .get(bundle.entry())
         .expect("loaded bundle has its entry");
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: entry.id(),
         span: entry.source().span(),
-    };
-    let local = AdmissionOptions {
-        source_id: entry.id(),
-        core_limits: options.core_limits,
-        max_body_elements: options.max_body_elements,
-        ..AdmissionOptions::default()
-    };
-    prepare(
-        &SourceProgram::of_nodes(statements),
-        &choices,
-        local,
-        budget,
-        limits,
-        location,
-        metadata,
-    )
+    });
+    let program = Arc::new(SourceProgram::of_nodes(statements));
+    let (preparation, metadata) =
+        prepare(&program, options.into(), budget, limits, location, metadata)?;
+    Ok((preparation, metadata, program))
 }
 
 fn prepare(
     source: &SourceProgram,
-    choices: &crate::formula_choice_source::Catalog,
-    options: AdmissionOptions,
+    options: formula_ir::CompilationOptions,
     mut budget: crate::expansion::Budget,
     limits: &FormulaLimits,
-    location: Location,
+    location: ProgramSite,
     mut metadata: metadata::Builder,
 ) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
     metadata.compile_observations(source, options, limits.observation, &mut budget, location)?;
@@ -1247,7 +1419,7 @@ fn prepare(
         catalog: &mut catalog,
         work: crate::formula_support::GroundingWork::new(limits, &mut counters, location),
     }
-    .prepare(source, metadata.project_selection().clone(), choices)?;
+    .prepare(source, metadata.project_selection().clone())?;
     let accounting = counters.into_accounting();
     Ok((
         Preparation::new(prepared, catalog, accounting, budget, limits, location),
@@ -1259,7 +1431,7 @@ pub(crate) fn ceiling(
     resource: FormulaResource,
     observed: u128,
     limit: u128,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     if observed > limit {
         Err(FormulaFailure::Limit {

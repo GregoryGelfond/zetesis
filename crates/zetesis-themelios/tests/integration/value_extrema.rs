@@ -103,7 +103,7 @@ fn complete_values_preserve_source_models_and_original_reduct_minimality() {
             FormulaLimits::default(),
         )
         .unwrap_or_else(|error| panic!("{}: {source}: {error}", row["name"]));
-        assert_eq!(input.source().text(), source);
+        assert_eq!(input.source().expect("source input").text(), source);
         assert_eq!(native(&input), models(&row["models"]), "{}", row["name"]);
         assert_eq!(
             exhaustive(&input),

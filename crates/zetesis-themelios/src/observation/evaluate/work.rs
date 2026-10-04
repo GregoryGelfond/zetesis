@@ -1,7 +1,7 @@
 //! One resource and cancellation account shared by evaluation and rendering.
 //! This account retains neither a query program nor a term authority.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use super::{Cancellation, ConstructionLimits, Error, ErrorKind, Limits, Resource, Statistics};
 
@@ -10,13 +10,13 @@ pub(in crate::observation) struct Work<'a> {
     pub construction: ConstructionLimits,
     pub cancellation: &'a Cancellation,
     pub statistics: Statistics,
-    pub location: Option<Location>,
+    pub site: ProgramSite,
     pub local_bytes: u128,
 }
 
 impl Work<'_> {
     pub fn error(&self, kind: ErrorKind) -> Error {
-        Error::new(kind, self.location, self.statistics)
+        Error::new(kind, self.site, self.statistics)
     }
 
     pub fn check(&self, resource: Resource, observed: u128, limit: u128) -> Result<(), Error> {

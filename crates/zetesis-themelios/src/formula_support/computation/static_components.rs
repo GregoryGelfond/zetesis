@@ -1,7 +1,8 @@
 //! Static components borrow the committed prefix, not the mutable append lane.
 
 use super::{
-    Computation, Counters, FormulaFailure, FormulaLimits, Location, TermKey, TermRef, ValueNodeRef,
+    Computation, Counters, FormulaFailure, FormulaLimits, ProgramSite, TermKey, TermRef,
+    ValueNodeRef,
 };
 use crate::formula_support::components::{
     self, Constructor, Filter, Pattern, Predicate, Scalar, Term,
@@ -15,7 +16,7 @@ impl<'source> Computation<'_, 'source> {
         predicate: Predicate,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<PredicateRef<'source>, FormulaFailure> {
         predicate.get(
             self.static_components(location)?,
@@ -30,7 +31,7 @@ impl<'source> Computation<'_, 'source> {
         pattern: Pattern,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<PatternRef<'source>, FormulaFailure> {
         pattern.get(
             self.static_components(location)?,
@@ -45,7 +46,7 @@ impl<'source> Computation<'_, 'source> {
         filter: Filter,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<FilterRef<'source>, FormulaFailure> {
         filter.get(
             self.static_components(location)?,
@@ -60,7 +61,7 @@ impl<'source> Computation<'_, 'source> {
         term: Term,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TemplateTerm<'source>, FormulaFailure> {
         term.get(
             self.static_components(location)?,
@@ -72,7 +73,7 @@ impl<'source> Computation<'_, 'source> {
 
     pub(crate) fn static_components(
         &self,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TemplateComponentsRef<'source>, FormulaFailure> {
         self.support
             .components()
@@ -84,7 +85,7 @@ impl<'source> Computation<'_, 'source> {
         scalar: Scalar,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermRef<'source>, FormulaFailure> {
         scalar.get(
             self.static_components(location)?,
@@ -99,7 +100,7 @@ impl<'source> Computation<'_, 'source> {
         scalar: Scalar,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         let value = self.static_scalar(scalar, limits, counters, location)?;
         counters.work(limits, location)?;
@@ -113,7 +114,7 @@ impl<'source> Computation<'_, 'source> {
         constructor: Constructor,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<ValueNodeRef<'source>, FormulaFailure> {
         constructor.get(
             self.static_components(location)?,

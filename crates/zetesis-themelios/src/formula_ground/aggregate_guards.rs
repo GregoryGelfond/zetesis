@@ -6,12 +6,12 @@ mod tests;
 use super::{
     Builder, NumericComparison, VERUM, aggregate_comparison, boolean, numeric_comparison, remap,
 };
+use crate::ProgramSite;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::AggregateGuard;
 use crate::formula_support::{self, Buffer, StorageLease};
 use crate::{FormulaFailure, FormulaResource};
-use themelios_base::span::Location;
 use zetesis_ferraris::{
     AggregateElement, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard as NumericGuard,
 };
@@ -28,7 +28,7 @@ impl Builder<'_, '_, '_> {
     pub(super) fn nonnegative_elements(
         &mut self,
         elements: &[AggregateElement],
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         for element in elements {
             self.work(location)?;
@@ -44,7 +44,7 @@ impl Builder<'_, '_, '_> {
         elements: &[AggregateElement],
         guards: &[AggregateGuard],
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
         mut capture: Option<&mut crate::formula_count_plan::Bounds>,
     ) -> Result<usize, FormulaFailure> {
         let (evaluated, numeric) = self.evaluate_numeric_guards(guards, assignment, location)?;
@@ -90,7 +90,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         guards: &[AggregateGuard],
         assignment: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(Buffer<NumericComparison>, Buffer<NumericGuard>), FormulaFailure> {
         let mut evaluated =
             Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
@@ -148,7 +148,7 @@ impl Builder<'_, '_, '_> {
         elements: &[AggregateElement],
         guards: &[NumericGuard],
         max_guards: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<GuardFamily, FormulaFailure> {
         let mut storage = self.computation.lease();
         let header = size_of::<Vec<usize>>();

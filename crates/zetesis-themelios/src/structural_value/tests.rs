@@ -131,7 +131,7 @@ fn validation_retains_nested_nul_refusal() {
         crate::compile::scalar(&symbol, location).unwrap_err(),
     ] {
         assert!(
-            matches!(error, crate::AdmissionFailure::Profile { feature: crate::ProfileFeature::NulString, location: actual } if actual == location)
+            matches!(error, crate::AdmissionFailure::Profile { feature: crate::ProfileFeature::NulString, location: actual } if actual.location() == Some(location))
         );
     }
 }

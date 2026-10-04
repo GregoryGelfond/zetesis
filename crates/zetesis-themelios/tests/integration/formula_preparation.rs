@@ -23,7 +23,7 @@ fn preparation_exposes_analysis_without_support_completion() {
         },
     )
     .unwrap();
-    assert_eq!(input.source().text(), source);
+    assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(
         input.source_analysis(),
         &zetesis_themelios::analysis::Analysis::of(input.analyzed_program())
@@ -154,7 +154,10 @@ fn grounding_resumes_the_expansion_budget() {
     assert_eq!(resource, ExpansionResource::ScalarBytes);
     assert_eq!(limit, (exact_bytes - 1) as u128);
     assert_eq!(observed, exact_bytes as u128);
-    assert_eq!(location.source, AdmissionOptions::default().source_id);
+    assert_eq!(
+        location.location().expect("parsed source").source,
+        AdmissionOptions::default().source_id
+    );
     let exact = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -364,10 +367,10 @@ fn bundle_preparation_preserves_all_original_sources() {
         assert!(
             actual
                 .bundle()
-                .get(location.source)
+                .get(location.location().expect("parsed source").source)
                 .unwrap()
                 .source()
-                .slice(location.span)
+                .slice(location.location().expect("parsed source").span)
                 .is_ok()
         );
     }
@@ -399,10 +402,10 @@ fn bundle_grounding_refusals_retain_source_evidence() {
     assert!(
         error
             .bundle()
-            .get(location.source)
+            .get(location.location().expect("parsed source").source)
             .unwrap()
             .source()
-            .slice(location.span)
+            .slice(location.location().expect("parsed source").span)
             .is_ok()
     );
 }
@@ -631,15 +634,18 @@ fn duplicate_definitions_precede_later_metadata_refusal() {
     else {
         panic!("{error}");
     };
-    assert_ne!(first.source, duplicate.source);
+    assert_ne!(
+        first.location().expect("parsed source").source,
+        duplicate.location().expect("parsed source").source
+    );
     for location in [first, duplicate] {
         assert_eq!(
             error
                 .bundle()
-                .get(location.source)
+                .get(location.location().expect("parsed source").source)
                 .unwrap()
                 .source()
-                .slice(location.span)
+                .slice(location.location().expect("parsed source").span)
                 .unwrap(),
             "#const same=1."
         );

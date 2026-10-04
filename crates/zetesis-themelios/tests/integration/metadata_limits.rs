@@ -113,8 +113,16 @@ fn every_incomplete_input_budget_refuses_the_policy() {
                     assert_eq!(actual, resource);
                     assert_eq!(actual_limit, limit);
                     assert!(observed > limit as u128);
-                    assert_eq!(location.source, source.id());
-                    assert!(!source.slice(location.span).unwrap().is_empty());
+                    assert_eq!(
+                        location.location().expect("parsed source").source,
+                        source.id()
+                    );
+                    assert!(
+                        !source
+                            .slice(location.location().expect("parsed source").span)
+                            .unwrap()
+                            .is_empty()
+                    );
                 }
                 Err(error) => panic!("{resource:?}/{limit}: {error}"),
             }

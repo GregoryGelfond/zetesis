@@ -5,7 +5,7 @@
 //! creates its sole `Row`/`Binding` view after mutation has stopped. The token
 //! owns no second copy of current slots and never escapes the join module.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use super::{Computation, Counters, Join, Row};
 use crate::expansion::Budget;
@@ -27,7 +27,7 @@ pub(crate) trait RowFilter {
         row: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure>;
 }
 
@@ -48,7 +48,7 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Row<'_>>, FormulaFailure> {
         self.join
             .next_row(computation, limits, budget, counters, location)

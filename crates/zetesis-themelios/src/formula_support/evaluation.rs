@@ -6,7 +6,7 @@
 //! Independent source branches still run after a zero divisor. Reusable scratch
 //! retains bounded empty metadata, never an owned Value or copied child tree.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::term::{BinaryOp, EvalError};
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::{AssignmentError, TermKey};
@@ -37,7 +37,7 @@ impl Evaluation {
         self.zero_divisor
     }
 
-    pub(crate) fn zero_divisor_failure(&mut self, location: Location) -> FormulaFailure {
+    pub(crate) fn zero_divisor_failure(&mut self, location: ProgramSite) -> FormulaFailure {
         self.zero_divisor = true;
         super::undefined(location)
     }
@@ -49,7 +49,7 @@ impl Evaluation {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         self.evaluate(
             expression,
@@ -68,7 +68,7 @@ impl Evaluation {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         self.evaluate(
             expression,
@@ -88,7 +88,7 @@ impl Evaluation {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         self.evaluate(
             expression,
@@ -107,7 +107,7 @@ impl Evaluation {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<[TermKey; N], FormulaFailure> {
         let mut failures = Failures::default();
         let mut values: [Option<TermKey>; N] = std::array::from_fn(|_| None);
@@ -133,7 +133,7 @@ impl Evaluation {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let mut equal = left.len() == right.len();
         let mut failures = Failures::default();
@@ -174,7 +174,7 @@ impl Evaluation {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         self.zero_divisor = false;
         counters.record(Event::ExpressionEvaluation);
@@ -311,7 +311,7 @@ struct Context<'c, 'owner, 'source, V: Fn(usize) -> Input> {
     computation: &'c mut Computation<'owner, 'source>,
     limits: &'c FormulaLimits,
     counters: &'c mut Counters,
-    location: Location,
+    location: ProgramSite,
     zero_divisor: &'c mut bool,
 }
 impl<V: Fn(usize) -> Input> Context<'_, '_, '_, V> {
@@ -554,6 +554,6 @@ fn numeric_slot<V: Fn(usize) -> Input>(
     context.numeric(&key)
 }
 
-fn scope(error: zetesis_core::catalog::ReadError, location: Location) -> FormulaFailure {
+fn scope(error: zetesis_core::catalog::ReadError, location: ProgramSite) -> FormulaFailure {
     crate::formula_binding::assignment(AssignmentError::Read(error), location)
 }

@@ -5,9 +5,10 @@
 //! The ordinary probe, full scan and column filter retain distinct work
 //! populations. No equality selection discharges matching or arithmetic.
 
+use crate::ProgramSite;
 use crate::formula_support::Context;
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::{DefaultNegation, Relation as Comparison};
 use themelios_program::term::BinaryOp;
 use zetesis_core::relation::Limits;
@@ -27,11 +28,11 @@ enum Route {
     Columns,
 }
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(0),
         span: Span::empty(ByteOffset::new(0)),
-    }
+    })
 }
 
 fn support(rows: Vec<Vec<Value>>) -> SupportCatalog {

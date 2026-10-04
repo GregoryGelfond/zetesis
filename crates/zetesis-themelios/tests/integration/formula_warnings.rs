@@ -3,10 +3,7 @@
 use std::fs;
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
-use zetesis_themelios::base::{
-    diagnostic::{Severity, ToDiagnostic},
-    source::SourceId,
-};
+use zetesis_themelios::base::{diagnostic::Severity, source::SourceId};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, SourceBundle,
@@ -31,24 +28,38 @@ fn warnings_retain_their_original_locations() {
     let [warning @ FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
         panic!("one typed zero-divisor warning: {:?}", admitted.warnings());
     };
-    assert_eq!(location.source, SourceId::new(7));
-    assert_eq!(warning.location(), *location);
+    assert_eq!(
+        location.location().expect("parsed source").source,
+        SourceId::new(7)
+    );
+    assert_eq!(warning.site(), *location);
+    assert_eq!(
+        warning.location().expect("parsed source"),
+        location.location().expect("parsed source")
+    );
     assert!(
         admitted
             .source()
-            .slice(location.span)
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
             .unwrap()
             .contains("1/X")
     );
-    let diagnostic = warning.to_diagnostic();
-    assert_eq!(diagnostic.primary().location, *location);
+    let diagnostic = warning.diagnostic().expect("parsed source diagnostic");
+    assert_eq!(
+        diagnostic.primary().location,
+        location.location().expect("parsed source")
+    );
 }
 
 #[test]
 fn omitted_instances_produce_warning_diagnostics() {
     let admitted = admit(SOURCE, &FormulaLimits::default()).unwrap();
     assert_eq!(
-        admitted.warnings()[0].to_diagnostic().severity(),
+        admitted.warnings()[0]
+            .diagnostic()
+            .expect("parsed source diagnostic")
+            .severity(),
         Severity::Warning
     );
     let rendered = admitted.warning_view().to_string();
@@ -105,7 +116,10 @@ fn distinct_warning_locations_follow_source_order() {
     let [first, second] = admitted.warnings() else {
         panic!("two warning locations: {:?}", admitted.warnings());
     };
-    assert!(first.location().span.start() < second.location().span.start());
+    assert!(
+        first.location().expect("parsed source").span.start()
+            < second.location().expect("parsed source").span.start()
+    );
 }
 
 #[test]
@@ -157,7 +171,13 @@ fn bundle_warning_view_uses_retained_original_bytes() {
     )
     .unwrap();
     assert_eq!(admitted.warnings().len(), 1);
-    assert_eq!(admitted.warnings()[0].location().source, source_id);
+    assert_eq!(
+        admitted.warnings()[0]
+            .location()
+            .expect("parsed source")
+            .source,
+        source_id
+    );
     let rendered = admitted.warning_view().to_string();
     assert!(rendered.contains("child.lp:2:"), "{rendered}");
     assert!(rendered.contains("2 | p(X) :- d(X), 1/X=1."), "{rendered}");

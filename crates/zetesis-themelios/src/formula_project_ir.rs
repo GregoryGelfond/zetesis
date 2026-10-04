@@ -2,7 +2,7 @@
 //! logical producers. Their temporary dependency projections are discarded;
 //! declarations contribute no statements to the retained source analysis.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{
     DefaultNegation, Literal, LiteralInner, Project, Rule, Statement,
 };
@@ -15,7 +15,7 @@ impl Compiler<'_> {
     pub(super) fn project_statement(
         &mut self,
         statement: &WithProvenance<Statement>,
-        origins: &[Location],
+        origins: &[ProgramSite],
         projection_nodes: &mut u128,
         declarations: &mut Vec<RuleIr>,
     ) -> Result<bool, FormulaFailure> {

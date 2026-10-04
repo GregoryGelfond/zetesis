@@ -7,7 +7,7 @@ use crate::formula_support::{Context, GroundingWork};
 
 use std::cmp::Ordering;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{AssignmentError, Error};
 
 use crate::formula::ceiling;
@@ -48,7 +48,7 @@ impl<K: Copy + Ord, V: Copy> CoordinateMap<K, V> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut lease = computation.lease();
         lease.observe(size_of::<Self>(), location)?;
@@ -81,7 +81,7 @@ impl<K: Copy + Ord, V: Copy> CoordinateMap<K, V> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         reserve(
             &mut self.entries,
@@ -98,7 +98,7 @@ impl<K: Copy + Ord, V: Copy> CoordinateMap<K, V> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<V>, FormulaFailure> {
         computation.allowance(&self.lease, limits, location)?;
         Ok(self
@@ -152,7 +152,7 @@ impl<K: Copy + Ord, V: Copy> CoordinateMap<K, V> {
         key: &K,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Result<usize, usize>, FormulaFailure> {
         let mut start = 0;
         let mut end = self.entries.len();
@@ -195,7 +195,7 @@ impl<V> Contexts<V> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut lease = computation.lease();
         lease.observe(size_of::<Self>(), location)?;
@@ -236,7 +236,7 @@ impl<V> Contexts<V> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         computation.allowance(&self.lease, limits, location)?;
         Ok(self
@@ -298,7 +298,7 @@ impl<V> Contexts<V> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let [rows, outer, order] = self.capacities(additional, computation, limits, location)?;
         let header = self.storage_without(
@@ -356,7 +356,7 @@ impl<V> Contexts<V> {
         additional: usize,
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<[usize; 3], FormulaFailure> {
         let rows = self
             .rows
@@ -420,7 +420,11 @@ impl<V> Contexts<V> {
             + order as u128 * size_of::<usize>() as u128
     }
 
-    fn storage_without(&self, replaced: u128, location: Location) -> Result<usize, FormulaFailure> {
+    fn storage_without(
+        &self,
+        replaced: u128,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
         let bytes = Self::storage_bytes([
             self.rows.capacity(),
             self.outer.capacity(),
@@ -435,7 +439,7 @@ impl<V> Contexts<V> {
         probe: &[Option<usize>],
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Result<usize, usize>, FormulaFailure> {
         let mut start = 0;
         let mut end = self.order.len();
@@ -468,7 +472,7 @@ fn compare_outer(
     right: &[Option<usize>],
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Ordering, FormulaFailure> {
     let mut at = 0;
     while at < left.len().min(right.len()) {
@@ -492,7 +496,7 @@ fn key_bytes(rows: usize, outer: usize, order: usize) -> u128 {
 fn check_key_bytes(
     bytes: u128,
     limits: &FormulaLimits,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     ceiling(
         FormulaResource::AggregateCacheKeys,
@@ -502,7 +506,7 @@ fn check_key_bytes(
     )
 }
 
-fn overflow(location: Location) -> FormulaFailure {
+fn overflow(location: ProgramSite) -> FormulaFailure {
     crate::formula_binding::assignment(AssignmentError::Storage(Error::Overflow), location)
 }
 

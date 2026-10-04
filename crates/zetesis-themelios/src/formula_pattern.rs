@@ -4,7 +4,7 @@
 //! Nested variables expose subvalues; anonymous nodes neither equate occurrences
 //! nor introduce named slots. Plans and matching traverse flat preorder storage.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{
     BindingView, ConstructionError, PatternRef, TemplateTerm, ValueError, ValueNodeRef,
@@ -212,7 +212,7 @@ pub(super) fn reserve<T>(
     buffer: &mut Vec<T>,
     additional: usize,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     let required = buffer
         .len()
@@ -234,7 +234,7 @@ pub(super) fn push<T>(
     buffer: &mut Vec<T>,
     value: T,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     if buffer.len() == buffer.capacity() {
         let additional = buffer.len().max(1);
@@ -243,7 +243,7 @@ pub(super) fn push<T>(
     buffer.push(value);
     Ok(())
 }
-fn allocation(location: Location) -> FormulaFailure {
+fn allocation(location: ProgramSite) -> FormulaFailure {
     AdmissionFailure::Construction {
         error: ConstructionError::Value(ValueError::Allocation),
         location,
@@ -261,12 +261,13 @@ mod tests {
     use themelios_base::span::{ByteOffset, Span};
     use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: themelios_base::source::SourceId::new(0),
             span: Span::new(ByteOffset::new(0), ByteOffset::new(1)).unwrap(),
-        }
+        })
     }
+
     fn fixture(root: ValueNodeRef<'_>) -> (Fixture, PatternAtom, Predicate) {
         let predicate = Predicate::new("q", 1).unwrap();
         let value = Value::from_nodes(

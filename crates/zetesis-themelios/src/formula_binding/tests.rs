@@ -1,18 +1,19 @@
 use super::Binding;
+use crate::ProgramSite;
 use crate::formula_support::Context;
 use crate::formula_support::testing::{Fixture, binding};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_base::{
     source::SourceId,
-    span::{ByteOffset, Location, Span},
+    span::{ByteOffset, Span},
 };
 use zetesis_core::{Value, ValueNodeRef};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(37),
         span: Span::empty(ByteOffset::new(12)),
-    }
+    })
 }
 
 #[test]

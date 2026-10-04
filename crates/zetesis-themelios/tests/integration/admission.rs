@@ -158,9 +158,14 @@ fn raw_choice_shape_is_checked_before_set_canonicalization() {
             panic!("{text}: {error}");
         };
         assert_eq!(actual, feature, "{text}");
-        assert_eq!(location.source, source_id);
         assert_eq!(
-            source.slice(location.span).unwrap(),
+            location.location().expect("parsed source").source,
+            source_id
+        );
+        assert_eq!(
+            source
+                .slice(location.location().expect("parsed source").span)
+                .unwrap(),
             text.strip_suffix('.').unwrap(),
             "the original complete choice head must be located: {text}"
         );
@@ -242,6 +247,9 @@ fn relational_refusals_preserve_the_profile_diagnostic() {
             panic!("{text}: {error}");
         };
         assert_eq!(*actual, feature, "{text}");
+        let location = location
+            .location()
+            .expect("source profile retains its parsed span");
         assert_eq!(location.source, source_id);
         assert_eq!(source.slice(location.span).unwrap(), highlighted, "{text}");
         let expected = format!("source profile does not admit {description}");
@@ -253,7 +261,7 @@ fn relational_refusals_preserve_the_profile_diagnostic() {
         };
         assert_eq!(diagnostic.severity(), Severity::Error);
         assert_eq!(diagnostic.message(), expected);
-        assert_eq!(diagnostic.primary().location, *location);
+        assert_eq!(diagnostic.primary().location, location);
     }
 }
 
@@ -411,7 +419,7 @@ fn syntax_node_and_depth_limits_refuse_with_locations() {
                 resource, location, ..
             }) => {
                 assert_eq!(resource, expected);
-                assert_eq!(location.source, options.source_id);
+                assert_eq!(location.location().unwrap().source, options.source_id);
             }
             other => panic!("expected traversal refusal: {other:?}"),
         }

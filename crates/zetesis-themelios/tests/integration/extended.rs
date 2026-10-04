@@ -511,7 +511,12 @@ fn limit_failure(text: &str, limits: ExpansionLimits) -> (ExpansionResource, u12
             limit,
             observed,
             location,
-        }) => (resource, limit, observed, location.span),
+        }) => (
+            resource,
+            limit,
+            observed,
+            location.location().expect("source expansion location").span,
+        ),
         other => panic!("{text}: expected a limit refusal, got {other:?}"),
     }
 }

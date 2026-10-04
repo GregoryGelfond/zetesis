@@ -6,6 +6,13 @@ syntax, logical terms, program structure and source provenance.
 relational templates or a finite formula theory. It also retains objective and
 observation data associated with that representation.
 
+Text and canonical logical input meet at the same formula preparation compiler.
+`prepare_formula` parses and raises checked source; `prepare_program_formula`
+accepts `Arc<Program>` after bounded logical inspection. Both retain the original
+canonical program, prepare the same scoped IR, and expose eager, hybrid and
+adaptive materialization through `PreparedFormula`. The schedules keep their
+existing applicability and cumulative budgets; none performs answer search.
+
 Successful parsing is only the first boundary. Profile admission, binding
 safety, arithmetic evaluation and resource limits can still fail. A frontend
 syntax diagnostic, an unsupported zetesis construct, and an exceeded resource
@@ -18,26 +25,38 @@ identities must survive materialization.
 
 ## Preserving source identity
 
-Zetesis's private
-[`Catalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_choice_source.rs)
-checks that each retained Boolean choice family corresponds to an original
-enclosing rule and its written element occurrences. A single themelios
-`raise_occurrences` call supplies source-ordered statements, part keys,
-diagnostics and original provenance. Zetesis retains the affected occurrences
-before collecting that owner into themelios's ordinary program set. It neither
-lexes source nor reparses statement fragments. The original syntax supplies
-bounded node counts and an independent check of the Boolean element locations.
-In particular, merging two whole rules must not combine their separate counting
-groups. This source preservation supports subsequent lowering; successful
-correspondence checking does not prove the lowering's answer-set semantics.
+`ProgramSite` carries an original canonical `StatementId` and optional real
+source coordinates. IDs are assigned before normalization and remain tied to the
+retained original program through generated rules, objectives and delayed work.
+Constructed statements have identity without invented spans. Parsed coordinates
+remain diagnostic evidence, including merged source occurrences. Keyed-constraint
+rewriting uses this explicit statement association through canonical analysis
+merges; ambiguous multi-statement projections remain written.
 
-Raising diagnostics precede metadata collection and occurrence-copy admission.
-Only selected rule spans and nodes consume the catalog's copy-work allowance;
-unrelated source bytes are not recopied for each selected rule. The upstream
-occurrence owner is materialized, and retained Boolean variants coexist with it
-until program collection. Source and syntax limits bound that initial owner;
-expansion Values and Origins bound the additional retained variants. These
-logical limits exclude allocator overhead and are not process-memory measurements.
+themelios's canonical choice collections preserve multiplicity through their
+public `Identity` classification: repeated atomic elements merge by content,
+while Boolean entries remain distinct. The formula compiler consumes those
+counted entries directly. Provenance identifies original source evidence; it
+does not determine counting identity or require a fabricated span for a
+constructed value.
+
+Each Boolean literal/condition pool product alternative receives a distinct
+occurrence key before grounding. Grounding witnesses of that expanded occurrence
+share its key. Separate enclosing rule groups remain separate. The original
+written-element family is retained independently for arithmetic definedness and
+warning handling, so changing a counting key cannot suppress required validation.
+The [finite-occurrence laws](../lean/correspondence.md#representation-and-source-laws)
+state the mathematical key and activity contract; Rust expansion and lowering
+remain separate correspondence obligations.
+
+Source and syntax limits still apply before raising and canonicalization. Typed
+formula inspection bounds logical structure and retained provenance before
+normalization. Both receipts retain the original canonical program in addition
+to prepared/analysis structures; source receipts also retain original bytes.
+Sharing the caller's `Arc` avoids copying that input but keeps its entire
+allocation alive through preparation, grounding and retained typed failures.
+Expansion budgets bound subsequent retained work. These logical limits exclude
+allocator overhead and are not process-memory measurements.
 
 At the formula boundary, tuple activity and atom permission remain independent.
 For `{a}.1#count{1:#true:a;1:b}1.`, `a` activates the shared tuple through its

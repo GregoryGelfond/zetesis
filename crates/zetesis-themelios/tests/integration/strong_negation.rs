@@ -424,7 +424,7 @@ fn signed_anonymous_projection_has_the_declared_model_view() {
         let original =
             zetesis_reference_support::admit(&format!("{atom}."), &FormulaLimits::default())
                 .unwrap();
-        assert_eq!(admitted.source().text(), source);
+        assert_eq!(admitted.source().expect("source input").text(), source);
         assert_eq!(admitted.atoms(), original.atoms());
         assert_eq!(admitted.theory().nodes(), original.theory().nodes());
         assert_eq!(admitted.theory().roots(), original.theory().roots());
@@ -459,7 +459,13 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
         .iter()
         .filter(|origins| origins.len() >= 2)
         .flatten()
-        .map(|location| admitted.source().slice(location.span).unwrap())
+        .map(|location| {
+            admitted
+                .source()
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
+                .unwrap()
+        })
         .collect();
     assert_eq!(origins, BTreeSet::from(["p.", "-p."]));
     let roots = admitted.theory().roots().len();
@@ -519,7 +525,7 @@ fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() 
         .filter(|origins| {
             origins
                 .iter()
-                .map(|location| location.source)
+                .map(|location| location.location().expect("parsed source").source)
                 .collect::<BTreeSet<_>>()
                 .len()
                 == 2
@@ -535,10 +541,10 @@ fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() 
             .map(|origin| {
                 input
                     .bundle()
-                    .get(origin.source)
+                    .get(origin.location().expect("parsed source").source)
                     .unwrap()
                     .source()
-                    .slice(origin.span)
+                    .slice(origin.location().expect("parsed source").span)
                     .unwrap()
             })
             .collect();

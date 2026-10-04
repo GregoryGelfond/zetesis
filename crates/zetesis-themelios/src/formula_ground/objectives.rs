@@ -13,7 +13,7 @@ use crate::formula_binding::Binding;
 use components::Components;
 use rows::Rows;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_objective::{AdmissionError, ObjectiveElement, ObjectiveProgram};
@@ -138,7 +138,7 @@ pub(super) fn prepare<'source>(
 pub(super) struct PendingProgram {
     rows: Rows,
     templates: Vec<PendingElement>,
-    origins: Vec<Vec<Location>>,
+    origins: Vec<Vec<ProgramSite>>,
 }
 struct PendingElement {
     row: usize,
@@ -153,8 +153,8 @@ impl PendingProgram {
         publication: &mut Publication<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
-    ) -> Result<(ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
+        location: ProgramSite,
+    ) -> Result<(ObjectiveProgram, Vec<Vec<ProgramSite>>), FormulaFailure> {
         if self.templates.is_empty() {
             return Ok((ObjectiveProgram::none(), self.origins));
         }
@@ -188,7 +188,7 @@ struct Preparation<'a, 'terms, 'source> {
     budget: &'a mut Budget,
     counters: &'a mut Counters,
     templates: Vec<PendingElement>,
-    origins: Vec<Vec<Location>>,
+    origins: Vec<Vec<ProgramSite>>,
     eligibility: Option<&'a SourceEligibility>,
     warnings: &'a mut Warnings,
     evaluation: Evaluation,
@@ -542,7 +542,7 @@ impl<'source> Preparation<'_, '_, 'source> {
         &mut self,
         field: &ObjectiveField,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
         fields: &mut Fields,
     ) -> Result<Option<TermKey>, FormulaFailure> {
         self.counters.work(self.limits, location)?;
@@ -561,7 +561,7 @@ impl<'source> Preparation<'_, '_, 'source> {
         &mut self,
         expression: &crate::formula_ir::Expression,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
         fields: &mut Fields,
     ) -> Result<Option<TermKey>, FormulaFailure> {
         let result = self.evaluation.source_expression(
@@ -669,7 +669,7 @@ impl<'source> Preparation<'_, '_, 'source> {
         &mut self,
         field: &ObjectiveField,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         self.counters.work(self.limits, location)?;
         match field {
@@ -688,7 +688,7 @@ impl<'source> Preparation<'_, '_, 'source> {
         &mut self,
         term: &crate::formula_support::components::Term,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         match term {
             crate::formula_support::components::Term::Variable(slot) => {
@@ -699,7 +699,7 @@ impl<'source> Preparation<'_, '_, 'source> {
                 .static_key(*value, self.limits, self.counters, location),
         }
     }
-    fn value(&self, key: &TermKey, location: Location) -> Result<TermRef<'_>, FormulaFailure> {
+    fn value(&self, key: &TermKey, location: ProgramSite) -> Result<TermRef<'_>, FormulaFailure> {
         self.computation.read().term(key).map_err(|error| {
             crate::formula_binding::assignment(
                 zetesis_core::catalog::AssignmentError::Read(error),
@@ -707,14 +707,14 @@ impl<'source> Preparation<'_, '_, 'source> {
             )
         })
     }
-    fn number(&self, key: &TermKey, location: Location) -> Result<Option<i32>, FormulaFailure> {
+    fn number(&self, key: &TermKey, location: ProgramSite) -> Result<Option<i32>, FormulaFailure> {
         Ok(match self.value(key, location)?.descriptor() {
             ValueNodeRef::Number(number) => Some(number),
             _ => None,
         })
     }
 
-    fn capacity(&self, location: Location) -> Result<(), FormulaFailure> {
+    fn capacity(&self, location: ProgramSite) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::ObjectiveElements,
             self.templates.len() as u128 + 1,
@@ -748,7 +748,7 @@ impl<'source> Preparation<'_, '_, 'source> {
     }
 }
 
-fn reserved<T>(count: usize, location: Location) -> Result<Vec<T>, FormulaFailure> {
+fn reserved<T>(count: usize, location: ProgramSite) -> Result<Vec<T>, FormulaFailure> {
     let mut result = Vec::new();
     result
         .try_reserve_exact(count)
@@ -756,7 +756,7 @@ fn reserved<T>(count: usize, location: Location) -> Result<Vec<T>, FormulaFailur
     Ok(result)
 }
 
-fn allocation(location: Location) -> FormulaFailure {
+fn allocation(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::Objective {
         error: AdmissionError::Allocation,
         location,

@@ -1,46 +1,55 @@
-//! Original Boolean source occurrences become ordinary choice contribution keys.
-//!
-//! Choice elements compile from the retained original source. Its checked
-//! provenance supplies each parsed occurrence before local pool expansion.
+//! Choice keys distinguish counted entries after local pool expansion.
 
-use crate::formula_ir::Compiler;
-use crate::{ExpansionResource, FormulaFailure};
-use themelios_base::span::Location;
-use themelios_program::program::ChoiceElement;
-use themelios_program::provenance::{Origin, WithProvenance};
+use themelios_program::program::{Choice, Identity};
+
+use crate::FormulaFailure;
+use crate::formula_ir::{Compiler, Element, HeadElementKey, LocalFamily, Variables};
 
 impl Compiler<'_> {
-    /// Retain each parsed occurrence within the original rule's source span.
-    /// A generated carrier without that original source cannot supply the key.
-    pub(super) fn boolean_occurrences(
+    pub(super) fn choice_elements(
         &mut self,
-        source: Option<&WithProvenance<ChoiceElement>>,
-    ) -> Result<Vec<Location>, FormulaFailure> {
-        let failure = || FormulaFailure::ChoiceSource {
-            location: self.location,
-        };
-        let source = source.ok_or_else(failure)?;
-        let mut occurrences = Vec::new();
-        for origin in source.provenance().origins() {
-            self.budget
-                .charge(ExpansionResource::TermWork, 1, self.location)?;
-            if let Origin::Parsed(location) = origin {
-                if location.source != self.location.source
-                    || !self.location.span.contains_span(location.span)
-                {
-                    return Err(failure());
+        choice: &Choice,
+        source: Option<&Choice>,
+        variables: &Variables,
+    ) -> Result<Vec<Element>, FormulaFailure> {
+        let mut elements = Vec::new();
+        // The whole-rule pool rewrite reconstructs local head alternatives.
+        // Compile each original counted entry's local product independently.
+        // Every product alternative receives its occurrence key before local
+        // variable substitutions; equal alternatives remain distinct entries.
+        for (index, element) in source.unwrap_or(choice).elements().enumerate() {
+            let family = LocalFamily(index);
+            let identity = element.get().identity();
+            if identity == Identity::ByOccurrence {
+                self.dependency_projection = true;
+            }
+            for literal in self.literal_alternatives(element.get().literal())? {
+                for alternative in self.condition_alternatives(element.get().condition())? {
+                    let mut local = variables.clone();
+                    self.head_global_literal(&literal, &mut local)?;
+                    let mut condition = self.condition(&alternative, &mut local)?;
+                    let (head, body_variables) =
+                        self.element_head(&literal, &mut local, &mut condition)?;
+                    let key = match identity {
+                        Identity::ByContent => HeadElementKey::Atom,
+                        Identity::ByOccurrence => HeadElementKey::Occurrence(elements.len()),
+                    };
+                    self.variable_limit(&local)?;
+                    local.safety(self.location)?;
+                    elements.push(Element {
+                        family,
+                        key,
+                        head,
+                        condition,
+                        body_variables,
+                        variables: local.count,
+                    });
                 }
-                self.budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    std::mem::size_of::<Location>() as u128,
-                    self.location,
-                )?;
-                occurrences.push(*location);
             }
         }
-        if occurrences.is_empty() {
-            return Err(failure());
-        }
-        Ok(occurrences)
+        Ok(elements)
     }
 }
+
+#[cfg(test)]
+mod tests;

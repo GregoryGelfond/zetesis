@@ -1,19 +1,21 @@
 //! Head membership preserves full identity without establishing body validity.
+use crate::ProgramSite;
 use std::collections::BTreeSet;
 use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::{ByteOffset, Span};
 use zetesis_core::{Atom, AtomPattern as InputPattern, Predicate, Sign, Term, Value};
 
 use super::*;
 use crate::ExpansionLimits;
 use crate::formula_support::Context;
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(3),
         span: Span::empty(ByteOffset::new(7)),
-    }
+    })
 }
+
 fn pattern(sign: Sign) -> InputPattern {
     InputPattern::new(
         Predicate::with_sign("p", 2, sign).unwrap(),

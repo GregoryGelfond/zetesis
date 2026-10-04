@@ -46,12 +46,18 @@ fn membership_matches_independent_subset_enumeration() {
 fn original_occurrences_keep_their_source() {
     let source = "{q}.a:q;b.";
     let admitted = formula(source);
-    assert_eq!(admitted.source().text(), source);
+    assert_eq!(admitted.source().expect("source input").text(), source);
     assert!(!admitted.formula_origins().is_empty());
     for origins in admitted.formula_origins() {
         assert!(!origins.is_empty());
         for origin in origins {
-            assert!(admitted.source().slice(origin.span).is_ok());
+            assert!(
+                admitted
+                    .source()
+                    .expect("source input")
+                    .slice(origin.location().expect("parsed source").span)
+                    .is_ok()
+            );
         }
     }
 }

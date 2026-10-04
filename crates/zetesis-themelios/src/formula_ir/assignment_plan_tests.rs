@@ -35,10 +35,10 @@ fn with_compiler<R>(limits: ExpansionLimits, work: impl FnOnce(&mut Compiler<'_>
     let source = Source::new(SourceId::new(113), String::new()).unwrap();
     let mut budget = Budget::new(limits, 100);
     let formula_limits = FormulaLimits::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: source.id(),
         span: source.span(),
-    };
+    });
     let mut catalog = SupportCatalog::default();
     let mut counters = Counters::default();
     let admission = catalog
@@ -46,7 +46,7 @@ fn with_compiler<R>(limits: ExpansionLimits, work: impl FnOnce(&mut Compiler<'_>
         .unwrap();
     let domain = domain::Domain::new(&admission, &formula_limits, &counters, location).unwrap();
     let mut compiler = Compiler {
-        options: AdmissionOptions::default(),
+        options: AdmissionOptions::default().into(),
         limits: &formula_limits,
         budget: &mut budget,
         source: admission,
@@ -54,10 +54,10 @@ fn with_compiler<R>(limits: ExpansionLimits, work: impl FnOnce(&mut Compiler<'_>
         domain,
         next_aggregate: 0,
         dependency_projection: false,
-        location: Location {
+        location: ProgramSite::source(themelios_base::span::Location {
             source: source.id(),
             span: source.span(),
-        },
+        }),
     };
     work(&mut compiler)
 }
@@ -593,7 +593,10 @@ fn nonbinding_element_reads_obey_the_work_ceiling() {
     else {
         panic!("expected the located element-read work refusal: {failure}")
     };
-    assert_eq!(location.source, SourceId::new(113));
+    assert_eq!(
+        location.location().expect("parsed source").source,
+        SourceId::new(113)
+    );
 }
 
 #[test]
@@ -639,24 +642,20 @@ fn multiple_aggregates_require_conservative_eligibility() {
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut catalog = SupportCatalog::default();
     let mut counters = Counters::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: source.id(),
         span: source.span(),
-    };
+    });
     let mut metadata = crate::metadata::Builder::default();
     crate::metadata::collect_profile(raised.program(), &mut metadata, true).unwrap();
     let metadata = metadata.finish(location).unwrap();
     let mut prepared = PreparationContext {
-        options: AdmissionOptions::default(),
+        options: AdmissionOptions::default().into(),
         budget: &mut budget,
         catalog: &mut catalog,
         work: GroundingWork::new(&FormulaLimits::default(), &mut counters, location),
     }
-    .prepare(
-        raised.program(),
-        metadata.project_selection().clone(),
-        &crate::formula_choice_source::Catalog::default(),
-    )
+    .prepare(raised.program(), metadata.project_selection().clone())
     .unwrap();
     assert_eq!(prepared.objectives.len(), 1);
     assert!(prepared.objectives[0].needs_eligibility_query);
@@ -674,10 +673,10 @@ fn multiple_aggregates_require_conservative_eligibility() {
     }
     prepared.objectives[0].needs_eligibility_query = false;
     let limits = FormulaLimits::default();
-    let location = Location {
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: source.id(),
         span: source.span(),
-    };
+    });
     let admission = catalog
         .component_admission(&limits, &mut counters, location)
         .unwrap();

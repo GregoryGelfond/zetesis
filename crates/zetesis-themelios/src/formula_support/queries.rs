@@ -11,7 +11,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 use std::mem::size_of;
 use std::ops::{Deref, Range};
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 use zetesis_cpu::table::{self, Cause, Domain, Resource, Selection, Table};
@@ -61,7 +61,11 @@ impl<'source> Support<'source> {
     pub(super) fn live_bytes(&self) -> usize {
         self.live.get() + self.append_bytes() + self.workspace.bytes()
     }
-    fn bytes_with_append(&self, base: usize, location: Location) -> Result<usize, FormulaFailure> {
+    fn bytes_with_append(
+        &self,
+        base: usize,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
         base.checked_add(self.append_bytes())
             .and_then(|bytes| bytes.checked_add(self.workspace.bytes()))
             .ok_or_else(|| allocation(Cause::Overflow, location))
@@ -75,7 +79,7 @@ impl<'source> Support<'source> {
         relations: &'source Relations<'source>,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         Self::completed(relations, JoinStrategy::Indexed, limits, counters, location)
     }
@@ -85,7 +89,7 @@ impl<'source> Support<'source> {
         strategy: JoinStrategy,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let bytes = relations
             .bytes
@@ -116,7 +120,7 @@ impl<'source> Support<'source> {
         key: &AtomKey<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         let scoped = self.indexed_limits(limits, counters, location)?;
         self.relations
@@ -131,7 +135,7 @@ impl<'source> Support<'source> {
         pattern: PatternRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<&'source RelationRows<'source>>, FormulaFailure> {
         Self::admit(self.live_bytes(), limits, counters, location)?;
         self.relations
@@ -145,7 +149,7 @@ impl<'source> Support<'source> {
         values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
         let rows = self.resolve(pattern, limits, counters, location)?;
         self.probe_at(rows, pattern, values, limits, counters, location)
@@ -158,7 +162,7 @@ impl<'source> Support<'source> {
         values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<&'source [usize]>, FormulaFailure> {
         Self::admit(self.live_bytes(), limits, counters, location)?;
         counters.record(Event::IndexedProbe);
@@ -175,7 +179,7 @@ impl<'source> Support<'source> {
         &self,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<FormulaLimits, FormulaFailure> {
         Self::admit(self.live_bytes(), limits, counters, location)?;
         let mut scoped = *limits;
@@ -212,7 +216,7 @@ impl<'source> Support<'source> {
         values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
         let rows = if self.table_strategy && matches!(pattern, PositivePattern::Flat(_)) {
             self.resolve(pattern.atom(), limits, counters, location)?
@@ -229,7 +233,7 @@ impl<'source> Support<'source> {
         values: BindingView<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Rows<'_, 'source>>, FormulaFailure> {
         if !self.table_strategy {
             return Ok(None);
@@ -342,7 +346,7 @@ impl<'source> Support<'source> {
         limits: &FormulaLimits,
         counters: &Counters,
         outer: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<table::Limits, FormulaFailure> {
         Self::admit(self.live_bytes(), limits, counters, location)?;
         Ok(table::Limits {
@@ -436,7 +440,7 @@ impl<'source> Support<'source> {
         bytes: usize,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::SupportBytes,
@@ -453,7 +457,7 @@ impl<'source> Support<'source> {
         tables: &mut Vec<Table<'source, 'source>>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if tables.len() < tables.capacity() {
             return Ok(());
@@ -629,7 +633,7 @@ fn find_table(
     scope: &[usize],
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<usize>, FormulaFailure> {
     let mut found = None;
     for (index, table) in tables.iter().enumerate() {
@@ -675,7 +679,7 @@ impl Rows<'_, '_> {
         from: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         self.selection
             .next_row_with(from, || counters.work(limits, location))
@@ -690,7 +694,7 @@ impl Drop for Rows<'_, '_> {
 struct Scratch<'a, 'source> {
     support: &'a Support<'source>,
     limits: &'a FormulaLimits,
-    location: Location,
+    location: ProgramSite,
     bytes: usize,
 }
 impl<'a, 'source> Scratch<'a, 'source> {
@@ -698,7 +702,7 @@ impl<'a, 'source> Scratch<'a, 'source> {
         support: &'a Support<'source>,
         limits: &'a FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let bytes = 2 * size_of::<Vec<usize>>() + size_of::<Self>();
         let total = support
@@ -779,7 +783,7 @@ impl Drop for Scratch<'_, '_> {
     }
 }
 
-fn allocation(cause: Cause, location: Location) -> FormulaFailure {
+fn allocation(cause: Cause, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportTable {
         error: table::Failure {
             cause,

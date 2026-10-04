@@ -1,4 +1,5 @@
 use super::Accounting;
+use crate::ProgramSite;
 use crate::formula_support::{Computation, Support, SupportCatalog};
 use crate::test_support::location;
 use crate::{
@@ -6,7 +7,6 @@ use crate::{
     GroundingPhase, GroundingWork,
 };
 use std::cell::RefCell;
-use themelios_base::span::Location;
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -220,7 +220,7 @@ impl GroundingObserver for PhaseObserver {
     fn phase_exit(
         &self,
         _: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {

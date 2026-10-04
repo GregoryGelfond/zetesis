@@ -61,7 +61,7 @@ impl ParsedSource {
                 resource: InputLimit::SourceBytes,
                 limit: options.max_source_bytes,
                 observed: text.len(),
-                location: start,
+                location: start.into(),
             });
         }
         let source =
@@ -140,62 +140,102 @@ impl ParsedSource {
 }
 
 /// A profile refusal retaining its exact parsed source for inspection or reuse.
-/// The refusal boxes the original parsed owner once, without copying its bytes
-/// or tree. Retained space includes that owner and the typed error. No
+/// One allocation retains the original parsed owner and typed error together,
+/// without copying source bytes or the syntax tree. The public wrapper holds
+/// only that owner handle. Retained space includes the source and cause. No
 /// partial compiled program or preparation is retained as a successful result.
-#[derive(Debug)]
 pub struct SourceFailure<E> {
-    source: Box<ParsedSource>,
+    retained: Box<RetainedFailure<E>>,
+}
+
+struct RetainedFailure<E> {
+    source: ParsedSource,
     error: E,
 }
 
 impl<E> SourceFailure<E> {
     pub(crate) fn new(source: ParsedSource, error: E) -> Self {
         Self {
-            source: Box::new(source),
-            error,
+            retained: Box::new(RetainedFailure { source, error }),
         }
     }
 
     /// The original source and syntax owner; no clone or reparse occurs.
     #[must_use]
     pub fn source(&self) -> &ParsedSource {
-        &self.source
+        &self.retained.source
     }
 
     /// The unchanged typed refusal from the attempted profile.
     #[must_use]
     pub fn error(&self) -> &E {
-        &self.error
+        &self.retained.error
     }
 
     /// Recover the source owner, discarding the refusal.
     #[must_use]
     pub fn into_source(self) -> ParsedSource {
-        *self.source
+        self.retained.source
     }
 
     /// Recover the refusal, discarding the source and syntax tree.
     #[must_use]
     pub fn into_error(self) -> E {
-        self.error
+        self.retained.error
     }
 
     /// Recover both original owners without cloning either.
     #[must_use]
     pub fn into_parts(self) -> (ParsedSource, E) {
-        (*self.source, self.error)
+        (self.retained.source, self.retained.error)
+    }
+}
+
+impl<E: fmt::Debug> fmt::Debug for SourceFailure<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SourceFailure")
+            .field("source", &self.retained.source)
+            .field("error", &self.retained.error)
+            .finish()
     }
 }
 
 impl<E: fmt::Display> fmt::Display for SourceFailure<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.error.fmt(formatter)
+        self.retained.error.fmt(formatter)
     }
 }
 
 impl<E: std::error::Error + 'static> std::error::Error for SourceFailure<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.error)
+        Some(&self.retained.error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refusal_recovery_transfers_original_owners() {
+        struct Cause(Box<u8>);
+
+        let source = ParsedSource::new("p.".into(), AdmissionOptions::default()).unwrap();
+        let source_bytes = source.source().text().as_ptr();
+        let error = Cause(Box::new(7));
+        let error_payload = std::ptr::from_ref(error.0.as_ref());
+        let failure = SourceFailure::new(source, error);
+        assert_eq!(failure.source().source().text().as_ptr(), source_bytes);
+        assert_eq!(
+            std::ptr::from_ref(failure.error().0.as_ref()),
+            error_payload
+        );
+        let (source, error) = failure.into_parts();
+        assert_eq!(source.source().text().as_ptr(), source_bytes);
+        assert_eq!(std::ptr::from_ref(error.0.as_ref()), error_payload);
+        let error = SourceFailure::new(source, error).into_error();
+        assert_eq!(std::ptr::from_ref(error.0.as_ref()), error_payload);
+        assert_eq!(*error.0, 7);
     }
 }

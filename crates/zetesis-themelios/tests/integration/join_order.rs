@@ -6,7 +6,7 @@
 use std::cell::Cell;
 use std::fmt::Write as _;
 
-use themelios_base::span::Location;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingObserver, GroundingOutcome,
     GroundingPhase, GroundingWork, admit_formula_with_grounding_observer,
@@ -35,7 +35,7 @@ impl GroundingObserver for JoinRows {
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {

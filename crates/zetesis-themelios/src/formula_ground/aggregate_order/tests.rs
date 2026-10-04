@@ -1,19 +1,19 @@
 use super::*;
+use crate::ProgramSite;
 use crate::formula_support::Counters;
 use crate::formula_support::testing::Fixture;
 use crate::{FormulaLimits, FormulaResource};
-use themelios_base::span::Location;
 use themelios_base::{
     source::SourceId,
     span::{ByteOffset, Span},
 };
 use zetesis_core::{Atom, Predicate, Value, ValueLimits, ValueNode};
 
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(98),
         span: Span::empty(ByteOffset::new(0)),
-    }
+    })
 }
 
 struct Contributions {

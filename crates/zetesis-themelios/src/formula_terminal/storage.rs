@@ -1,6 +1,6 @@
 //! Reconstruction composes existing owner receipts with one leased workspace.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::atom_interner::{AtomInterner, Failure, Limits};
 use zetesis_core::catalog::Error;
 
@@ -13,7 +13,7 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 pub(super) struct Work<'a> {
     pub(super) limits: &'a FormulaLimits,
     pub(super) counters: &'a mut Counters,
-    pub(super) location: Location,
+    pub(super) location: ProgramSite,
     /// All retained owners except this writer and the leased workspace.
     pub(super) external: u128,
 }
@@ -152,7 +152,7 @@ impl Work<'_> {
     }
 }
 
-pub(super) fn overflow(location: Location) -> FormulaFailure {
+pub(super) fn overflow(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::AtomCatalog {
         error: Error::Overflow,
         location,

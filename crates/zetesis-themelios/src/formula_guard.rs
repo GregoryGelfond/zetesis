@@ -8,7 +8,7 @@
 
 use crate::formula_binding::Binding;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{Comparison, DefaultNegation, Relation};
 use themelios_program::term::Term;
 use zetesis_core::ValueNodeRef;
@@ -63,7 +63,7 @@ impl Guard {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         self.evaluate_in(
             assignment,
@@ -82,7 +82,7 @@ impl Guard {
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         counters.work(limits, location)?;
         let (negation, comparisons) = match self {
@@ -161,7 +161,7 @@ fn resolve<'read>(
     key: &TermKey,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<TermRef<'read>, FormulaFailure> {
     counters.work(limits, location)?;
     read.term(key)

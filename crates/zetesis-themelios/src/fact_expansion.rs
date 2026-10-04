@@ -2,7 +2,7 @@
 
 use std::ops::RangeInclusive;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::{DefaultNegation, Head, LiteralInner, Statement};
 use themelios_program::provenance::WithProvenance;
 use themelios_program::symbol::Symbol;
@@ -16,7 +16,7 @@ use crate::{AdmissionFailure, ExpansionFailure, ExpansionResource, ProfileFeatur
 pub(crate) fn facts(
     carrier: &WithProvenance<Statement>,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<Vec<Template>>, ExpansionFailure> {
     let Statement::Rule(rule) = carrier.get() else {
         return Ok(None);
@@ -102,7 +102,7 @@ pub(crate) fn facts(
     Ok(Some(facts))
 }
 
-fn size(term: &SourceTerm, location: Location) -> Result<u128, ExpansionFailure> {
+fn size(term: &SourceTerm, location: ProgramSite) -> Result<u128, ExpansionFailure> {
     let mut pending = vec![term];
     let mut size = 0_u128;
     while let Some(term) = pending.pop() {
@@ -134,7 +134,7 @@ fn size(term: &SourceTerm, location: Location) -> Result<u128, ExpansionFailure>
 fn values(
     term: &SourceTerm,
     budget: &mut Budget,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Vec<Value>, ExpansionFailure> {
     let mut pending = vec![term];
     let mut values = Vec::new();
@@ -160,7 +160,7 @@ fn values(
 fn interval(
     lower: &SourceTerm,
     upper: &SourceTerm,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Option<RangeInclusive<i32>>, ExpansionFailure> {
     // Validate both endpoints before classifying an empty range. A nonnumeric
     // value cannot hide an unbound variable or an unsupported endpoint form.
@@ -169,7 +169,7 @@ fn interval(
     Ok(crate::integer_range::inclusive(lower, upper))
 }
 
-fn endpoint(term: &SourceTerm, location: Location) -> Result<Option<i32>, ExpansionFailure> {
+fn endpoint(term: &SourceTerm, location: ProgramSite) -> Result<Option<i32>, ExpansionFailure> {
     match term {
         SourceTerm::Symbolic(symbol) => {
             compile::validate_scalar(symbol, location)?;

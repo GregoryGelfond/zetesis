@@ -52,7 +52,12 @@ const CASES: &[(&str, &str)] = &[
     ),
     ("(0..1){p}1.", "0{p}1.1{p}1."),
     ("1#count{f(1..2):p}1.", "1#count{f(1):p;f(2):p}1."),
-    (BOOLEAN_OCCURRENCE_POOL, "{p(1);p(2)}.:-not p(1),not p(2)."),
+    (
+        BOOLEAN_OCCURRENCE_POOL,
+        "{p(1);p(2)}.:-not p(1),not p(2).:-p(1),p(2).",
+    ),
+    ("{#true:p(1;1)}=2.p(1).", "2{#true:p(1);#true:p(1)}2.p(1)."),
+    ("{#true:p(1;1)}=1.p(1).", "1{#true:p(1);#true:p(1)}1.p(1)."),
     (
         "{p(1);p(2)}.1{#true:p(X),X=1..2}1.",
         "{p(1);p(2)}.:-not p(1),not p(2).",
@@ -236,7 +241,7 @@ fn complete_models_and_every_frozen_pair_match_handwritten_expansions() {
                 );
             }
         }
-        assert_eq!(original.source().text(), source);
+        assert_eq!(original.source().expect("source input").text(), source);
     }
 }
 
@@ -353,7 +358,7 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
-            if actual == resource && !location.span.is_empty()),
+            if actual == resource && !location.location().expect("parsed source").span.is_empty()),
             "{error}"
         );
         assert_eq!(
@@ -399,7 +404,7 @@ fn entirely_undefined_conditional_ranges_remain_errors() {
     .unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { location, .. })
-        if !location.span.is_empty()),
+        if !location.location().expect("parsed source").span.is_empty()),
         "{source}: {error}"
     );
 }
@@ -458,7 +463,7 @@ fn local_value_owners_respect_each_expansion_ceiling() {
                 limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
-                if actual == resource && !location.span.is_empty()),
+                if actual == resource && !location.location().expect("parsed source").span.is_empty()),
                 "{source}: {error}"
             );
             let accepted = limited(source, configured(exact), &FormulaLimits::default()).unwrap();
@@ -507,31 +512,7 @@ fn pool_cases_match_declared_clingo_families() {
             })
             .collect();
         let native = native(&formula(source));
-        if source == BOOLEAN_OCCURRENCE_POOL {
-            // The adopted Boolean-choice extension retains one written key
-            // across pool alternatives. Clingo splits this pool into two
-            // contributions, unlike its one-element variable/interval forms.
-            // Check both complete families explicitly; neither is a parity claim.
-            assert_eq!(
-                native,
-                Models::from([
-                    BTreeSet::from(["p(1)".into()]),
-                    BTreeSet::from(["p(2)".into()]),
-                    BTreeSet::from(["p(1)".into(), "p(2)".into()]),
-                ]),
-                "adopted one-occurrence semantics: {source}"
-            );
-            assert_eq!(
-                models,
-                Models::from([
-                    BTreeSet::from(["p(1)".into()]),
-                    BTreeSet::from(["p(2)".into()]),
-                ]),
-                "clingo pool expansion: {source}"
-            );
-        } else {
-            assert_eq!(native, models, "{source}");
-        }
+        assert_eq!(native, models, "{source}");
     }
 }
 
@@ -563,15 +544,18 @@ fn include_origins_survive_duplicate_rules_and_choice_groups() {
         .unwrap();
         assert!(!admitted.formula_origins().is_empty());
         for origins in admitted.formula_origins() {
-            let sources: BTreeSet<_> = origins.iter().map(|origin| origin.source).collect();
+            let sources: BTreeSet<_> = origins
+                .iter()
+                .map(|origin| origin.location().expect("parsed source").source)
+                .collect();
             assert_eq!(sources.len(), 2);
             for origin in origins {
                 let original = admitted
                     .bundle()
-                    .get(origin.source)
+                    .get(origin.location().expect("parsed source").source)
                     .unwrap()
                     .source()
-                    .slice(origin.span)
+                    .slice(origin.location().expect("parsed source").span)
                     .unwrap();
                 assert_eq!(original, rule);
             }
@@ -793,7 +777,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
         assert!(
             matches!(error, FormulaFailure::Limit {
             resource: FormulaResource::AnalysisNodes, observed, location, ..
-        } if observed == exact as u128 && !location.span.is_empty()),
+        } if observed == exact as u128 && !location.location().expect("parsed source").span.is_empty()),
             "{error}"
         );
         assert_eq!(

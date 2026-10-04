@@ -29,6 +29,12 @@ mod source_diagnostics;
 mod parsed_source;
 mod profile;
 mod compile;
+mod program_admission;
+mod program_limits;
+mod program_site;
+pub use program_site::{ProgramSite, StatementId};
+mod formula_program_check;
+mod formula_owner;
 mod coherence;
 mod bundle;
 mod bundle_admission;
@@ -39,7 +45,7 @@ mod integer_range;
 mod metadata;
 mod formula;
 mod formula_warning;
-mod formula_choice_source;
+mod formula_raise;
 mod formula_ir;
 mod formula_project_ir;
 mod formula_value;
@@ -78,8 +84,13 @@ mod formula_pattern_ir;
 mod formula_weak;
 pub mod objective_bound;
 pub mod observation;
+pub mod symbols;
 
 pub use parsed_source::{ParsedSource, SourceFailure};
+pub use program_admission::{
+    AdmittedProgram, CompilationFailure, ProgramAdmissionFailure, ProgramAdmissionOptions,
+    ProgramFailureKind, ProgramLimit, ProgramResource, ProgramSubject, admit_program,
+};
 /// Canonical shared frontend tiers, including all vocabulary exposed by this crate.
 pub use themelios_analysis as analysis;
 /// Canonical source identities, spans, diagnostics and source catalogs.
@@ -109,7 +120,8 @@ pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
     FormulaLimits, FormulaResource, PreparedFormula, PreparedFormulaBundle, admit_bundle_formula,
     admit_bundle_formula_with_grounding_observer, admit_formula,
-    admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
+    admit_formula_with_grounding_observer, admit_program_formula, prepare_bundle_formula,
+    prepare_formula, prepare_program_formula,
 };
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
@@ -264,7 +276,10 @@ pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, Admiss
             .and_then(|origins| origins.first())
             .copied()
             .unwrap_or(source_location);
-        AdmissionFailure::Core { error, location }
+        AdmissionFailure::Core {
+            error,
+            location: location.into(),
+        }
     })?;
     Ok(Admitted {
         program,

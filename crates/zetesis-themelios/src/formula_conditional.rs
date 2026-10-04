@@ -2,7 +2,7 @@
 
 use crate::formula_binding::Binding;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 use zetesis_ferraris::Node;
 
@@ -37,7 +37,7 @@ impl Builder<'_, '_, '_> {
         conditional: &ConditionalIr,
         assignment: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let mut result = VERUM;
         let mut bindings = Join::new(
@@ -97,7 +97,7 @@ impl Builder<'_, '_, '_> {
         alternatives: &[Alternative],
         binding: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<ConsequentInstance, FormulaFailure> {
         let mut disjunction = FALSUM;
         let mut evidence = Evidence::default();
@@ -147,7 +147,7 @@ impl Builder<'_, '_, '_> {
         alternatives: &[GuardAlternative],
         binding: &Binding,
         support: &Support,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<ConsequentInstance, FormulaFailure> {
         let mut value = false;
         let mut evidence = Evidence::default();

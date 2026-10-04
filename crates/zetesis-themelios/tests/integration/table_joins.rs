@@ -2,7 +2,7 @@
 
 use std::cell::Cell;
 
-use themelios_base::span::Location;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, GroundingObserver, GroundingOptions, GroundingOutcome, GroundingPhase,
@@ -23,7 +23,7 @@ impl GroundingObserver for Observation {
     fn phase_exit(
         &self,
         _: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {

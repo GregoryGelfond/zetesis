@@ -76,14 +76,14 @@ impl<'a> ResolvedTerm<'a> {
         }
     }
 
-    fn depth(self) -> usize {
-        match self {
+    fn depth_with<E>(self, before: &mut impl FnMut() -> Result<(), E>) -> Result<usize, E> {
+        Ok(match self {
             Self::Canonical(term) => term.depth(),
             Self::Derived(term) => term.depth(),
             Self::Ingress(Value::Structured(value)) => value.depth(),
             Self::Ingress(_) => 1,
-            Self::Nodes(nodes) => flat_depth(nodes),
-        }
+            Self::Nodes(nodes) => return flat_depth_with(nodes, before),
+        })
     }
 
     fn flat_node(self, index: usize) -> Option<ValueNodeRef<'a>> {
@@ -367,9 +367,26 @@ impl<'a> TermRef<'a> {
     /// Root-inclusive logical depth. Canonical terms and complete ingress values
     /// use cached depth. A borrowed ingress subtree uses an allocation-free
     /// interval scan, with quadratic worst-case work in its expanded nodes.
+    /// Use [`Self::depth_with`] for a caller-controlled work bound.
     #[must_use]
     pub fn depth(self) -> usize {
-        self.read().depth()
+        match self.depth_with(|| Ok::<_, Infallible>(())) {
+            Ok(depth) => depth,
+            Err(never) => match never {},
+        }
+    }
+
+    /// Measure root-inclusive logical depth with an explicit work boundary.
+    /// Canonical terms and complete ingress values charge one cached-depth read.
+    /// A borrowed ingress subtree checks before each interval-scan step, using
+    /// constant scratch and quadratic worst-case work in its expanded nodes.
+    /// No payload is copied or allocated.
+    ///
+    /// # Errors
+    /// Returns the caller's first refusal before the next read or scan step.
+    pub fn depth_with<E>(self, mut before: impl FnMut() -> Result<(), E>) -> Result<usize, E> {
+        before()?;
+        self.read().depth_with(&mut before)
     }
 
     /// Portable typed encoding length, including this term's root tag. Canonical
@@ -1380,14 +1397,20 @@ fn subtree_end(nodes: &[ValueNode], start: usize) -> usize {
 // A backwards scan skips complete preceding sibling trees until their parent
 // has an unused child position. Following parents scans disjoint earlier spans,
 // so each node's depth takes at most a linear scan of its prefix.
-fn flat_depth(nodes: &[ValueNode]) -> usize {
+fn flat_depth_with<E>(
+    nodes: &[ValueNode],
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<usize, E> {
     let mut maximum = 1;
     for position in 1..nodes.len() {
+        before()?;
         let mut ancestor = position;
         let mut depth = 1;
         while ancestor != 0 {
+            before()?;
             let mut siblings = 0;
             for candidate in (0..ancestor).rev() {
+                before()?;
                 let children = compare::arity(nodes[candidate].view());
                 if children > siblings {
                     ancestor = candidate;
@@ -1399,7 +1422,7 @@ fn flat_depth(nodes: &[ValueNode]) -> usize {
         }
         maximum = maximum.max(depth);
     }
-    maximum
+    Ok(maximum)
 }
 
 fn ceiling(resource: ValueResource, observed: u128, limit: usize) -> Result<(), ValueError> {
@@ -1446,9 +1469,9 @@ fn copy_node(
 }
 
 #[cfg(test)]
-mod equality_tests;
-#[cfg(test)]
 mod atom_equality_tests;
+#[cfg(test)]
+mod equality_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1870,6 +1893,62 @@ mod tests {
             );
             assert_eq!(accepted, cutoff);
         }
+    }
+
+    #[test]
+    fn cached_depth_charges_one_read() {
+        let atom = atom();
+        let (snapshot, id) = snapshot(&atom, false);
+        let canonical = AtomRef::new(&snapshot, id).unwrap();
+        for (term, expected) in [
+            (canonical.values().at(3).unwrap(), 3),
+            (canonical.values().at(3).unwrap().child(0).unwrap(), 2),
+            (TermRef::from(&atom.values()[3]), 3),
+            (TermRef::from(&atom.values()[0]), 1),
+        ] {
+            let mut calls = 0;
+            assert_eq!(
+                term.depth_with(|| {
+                    calls += 1;
+                    Ok::<_, Infallible>(())
+                }),
+                Ok(expected)
+            );
+            assert_eq!(calls, 1);
+            assert_eq!(term.depth_with(|| Err("cancelled")), Err("cancelled"));
+        }
+    }
+
+    #[test]
+    fn ingress_subtree_depth_preserves_every_refusal() {
+        let mut nodes = vec![ValueNode::Tuple { arity: 1 }; 9];
+        nodes.push(ValueNode::Number(7));
+        let value = Value::from_nodes(nodes, ValueLimits::default()).unwrap();
+        let subtree = TermRef::from(&value).child(0).unwrap();
+        let mut permits = 0;
+        assert_eq!(
+            subtree.depth_with(|| {
+                permits += 1;
+                Ok::<_, usize>(())
+            }),
+            Ok(9)
+        );
+        assert!(permits > subtree.expanded_nodes());
+        for cutoff in 0..permits {
+            let mut accepted = 0;
+            assert_eq!(
+                subtree.depth_with(|| {
+                    if accepted == cutoff {
+                        return Err(cutoff);
+                    }
+                    accepted += 1;
+                    Ok(())
+                }),
+                Err(cutoff)
+            );
+            assert_eq!(accepted, cutoff);
+        }
+        assert_eq!(subtree.depth(), 9);
     }
 
     #[test]

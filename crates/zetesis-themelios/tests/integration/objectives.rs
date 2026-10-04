@@ -136,7 +136,7 @@ fn task_allocation_graphs_have_complete_optimal_contracts() {
             assert!(
                 admitted
                     .bundle()
-                    .get(origin.source)
+                    .get(origin.location().expect("parsed source").source)
                     .expect("original objective source")
                     .path()
                     .ends_with("encodings/task-allocation/variant-01.lp")
@@ -208,7 +208,8 @@ fn merged_objective_templates_keep_every_original_declaration_span() {
         assert_eq!(
             admitted
                 .source()
-                .slice(location.span)
+                .expect("source input")
+                .slice(location.location().expect("parsed source").span)
                 .expect("original declaration"),
             "#minimize{1:a}."
         );

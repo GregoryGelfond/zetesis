@@ -12,9 +12,9 @@ The [source API guide](../rust/source.md) describes the public entry points;
 ## Follow the owned objects
 
 ```text
-original source catalog
-  → parsed and raised themelios program
-  → bounded normalization and scope analysis
+original source catalog → parsed and raised themelios program ┐
+canonical Arc<Program> → bounded logical inspection           ┴
+  → shared bounded normalization and scope analysis
   → prepared rules, objective/projection declarations and dependency plans
   → completed possible-positive support
   → complete bindings and original formula instances
@@ -22,7 +22,9 @@ original source catalog
 ```
 
 The arrows describe dependencies, not independent copies of every intermediate
-object. Source identities and parsed origins remain available after preparation.
+object. An immutable original program owner survives normalization and grounding;
+source input additionally retains its original catalog. Statement IDs and any
+real parsed origins remain available after preparation.
 Both the source-expansion budget and accepted formula-work charges continue
 across preparation and grounding. Materialization resumes the retained accounting
 under its configured ceilings.
@@ -57,8 +59,8 @@ positive witnesses. Table membership never replaces a source atom with truth.
 
 The workspace charges cumulative preparation/query work and simultaneous named
 snapshot, index, scratch and mask capacities to the existing source limits.
-Refused capacity, allocation and work remain located grounding failures; a
-failed table operation is not an indexed fallback or an empty program. These
+Refused capacity, allocation and work retain logical scope and any real source
+coordinates; a failed table operation is not an indexed fallback or an empty program. These
 objects are not a process-memory ceiling. The source builder remains sequential:
 an immutable index can serve independent callers, but selecting this strategy
 launches neither Rayon grounding nor a GPU kernel. See the
@@ -80,7 +82,8 @@ those instructions rather than interpreting the plan as new program semantics.
 | Classical negation | `coherence` | Distinct signed predicates and consistency constraints |
 | Semantic value conversion | `structural_value`, `scalar_arithmetic`, `formula_value` | Typed closed values and checked arithmetic; no atom support |
 | Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |
-| Source occurrences and alternatives | `formula_choice_source`, `formula_pool` | Original Boolean choice occurrences and bounded pool alternatives |
+| Canonical input inspection | `program_limits`, `formula_program_check` | Bounded borrowed traversal before relational compilation or formula normalization |
+| Counted occurrences and alternatives | `formula_ir`, `formula_pool` | Canonical counted entries, bounded pool alternatives and expanded Boolean identities |
 | Upstream analysis | `formula_analysis`, `formula_conditional_projection` | Bounded pool-free input and an explicit analysis basis |
 | Value and pattern lowering | `formula_value_ir`, `formula_range_ir`, `formula_pattern_ir`, `formula_projection_ir` | Shared bounded value/range fold, structural captures and anonymous negative projection |
 | Scalar bindings | `formula_binding_ir`, `formula_binding_guard`, `formula_binding_plan` | Safe producers, finite envelopes and dependency order; original guards remain |
@@ -101,7 +104,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Observation and metadata | `metadata`, `observation` | Source directives and views of a supplied full model |
 | Objective bounds | `objective_bound` | Optional score bounds with their own admission and work limits |
 | Measurement | `grounding_observer` | Injected phase/work observations, separate from semantic completion |
-| Public composition | `lib` | Exports, strict admission and retained source evidence |
+| Public composition | `lib`, `formula`, `formula_owner`, `program_site` | Source/logical admission, retained original program and explicit statement identity |
 
 Nested modules follow their owning module's directory: for example,
 `formula_ir::objective_scope` is stored in `formula_ir/objective_scope.rs`.
@@ -152,5 +155,6 @@ public.
 
 When adding a construct, identify its source scope, readiness rule, complete-row
 validation, possible-support contribution and original formula separately.
-Then identify its source locations, bounded scratch and retained output. A change
-in one stage must not silently transfer an obligation to the next.
+Then identify its original statement identity, any source locations, bounded
+scratch and retained output. A change in one stage must not silently transfer
+an obligation to the next.

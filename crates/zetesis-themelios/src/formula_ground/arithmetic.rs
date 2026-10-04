@@ -14,7 +14,7 @@ mod constant_divisors;
 
 use crate::formula_support::{Context, GroundingWork};
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
@@ -37,7 +37,7 @@ struct Frame<'a, 'source> {
     body: &'a [LiteralIr],
     body_variables: usize,
     continuation: Continue<'a>,
-    location: Location,
+    location: ProgramSite,
     root: bool,
 }
 
@@ -47,7 +47,7 @@ struct Task<'a, 'source> {
     frame: Option<Frame<'a, 'source>>,
     evidence: Evidence,
     destination: Option<usize>,
-    location: Location,
+    location: ProgramSite,
 }
 
 struct Scan<'a, 'source, 'context, 'compute> {
@@ -84,7 +84,7 @@ pub(super) fn prepare<'a, 'source>(
             affected.push(rule.location);
         }
     }
-    let mut families: Vec<(Location, Evidence)> = Vec::new();
+    let mut families: Vec<(ProgramSite, Evidence)> = Vec::new();
     for rule in prepared.rules.iter().chain(&prepared.projection) {
         counters.charge_work(affected.len() as u128, limits, rule.location)?;
         if !affected.contains(&rule.location) {
@@ -188,7 +188,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         Ok(index)
     }
 
-    fn group(&mut self, location: Location) -> Result<usize, FormulaFailure> {
+    fn group(&mut self, location: ProgramSite) -> Result<usize, FormulaFailure> {
         self.task(Task {
             frame: None,
             evidence: Evidence::default(),
@@ -223,7 +223,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         binding: &Binding,
         variables: usize,
         continuation: Continue<'a>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.local_fragment(body, binding, variables, continuation, location, None)
     }
@@ -234,7 +234,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         binding: &Binding,
         variables: usize,
         continuation: Continue<'a>,
-        location: Location,
+        location: ProgramSite,
         destination: Option<usize>,
     ) -> Result<(), FormulaFailure> {
         let mut join = Join::new(
@@ -319,7 +319,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         &mut self,
         body: &'a [LiteralIr],
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         for literals in body.chunk_by(|left, right| {
             matches!(
@@ -377,7 +377,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         &mut self,
         projection: &'a Projection,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if let Projection::Witnesses {
             bindings,
@@ -401,7 +401,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         &mut self,
         continuation: Continue<'a>,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
         destination: usize,
     ) -> Result<(), FormulaFailure> {
         match continuation {
@@ -458,7 +458,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
         &mut self,
         head: &'a HeadIr,
         binding: &Binding,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         match head {
             HeadIr::Choice(choice) => {
@@ -521,7 +521,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
     }
 }
 
-fn allocation(location: Location) -> FormulaFailure {
+fn allocation(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::SupportRelation {
         error: zetesis_core::relation::Failure::Allocation,
         location,
@@ -559,7 +559,7 @@ struct SyntaxScan<'a, 'context> {
     pending: Vec<Syntax<'a>>,
     limits: &'context FormulaLimits,
     counters: &'context mut Counters,
-    location: Location,
+    location: ProgramSite,
 }
 
 impl<'a> SyntaxScan<'a, '_> {

@@ -1,7 +1,7 @@
 //! Checked output occurrence publication from the completed source authority.
 
 use super::{
-    Counters, Event, FormulaFailure, FormulaLimits, FormulaResource, Location, SourceScope,
+    Counters, Event, FormulaFailure, FormulaLimits, FormulaResource, ProgramSite, SourceScope,
     SupportCatalog, atom_failure, owner_limits,
 };
 use zetesis_core::AtomCatalog;
@@ -14,7 +14,7 @@ impl SupportCatalog {
         workspace: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomCatalog, FormulaFailure> {
         counters.work(limits, location)?;
         if !self.scope.same(scope) {

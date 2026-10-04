@@ -1,6 +1,6 @@
 //! Scoped assignments retain only canonical IDs and explicit absence.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{
     AssignmentError, AssignmentFailure, AssignmentSlice, CatalogRead, TermAssignment, TermKey,
     TermRef,
@@ -32,7 +32,7 @@ impl Binding<'static> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let values = computation.read().assignment();
         let mut lease = computation.lease();
@@ -50,7 +50,7 @@ impl Binding<'static> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut result = Self::new(computation, limits, counters, location)?;
         result.change_storage(
@@ -79,7 +79,7 @@ impl Binding<'static> {
         variable: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if variable >= self.len() {
             return Ok(());
@@ -96,7 +96,7 @@ impl Binding<'static> {
         trail: &mut Vec<usize>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         for &slot in trail.iter() {
             counters.work(limits, location)?;
@@ -118,7 +118,7 @@ impl Binding<'static> {
         right: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.owned()
             .swap_with(left, right, || counters.work(limits, location))
@@ -131,7 +131,7 @@ impl Binding<'static> {
         value: &TermKey,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.owned()
             .set_with(variable, value, || counters.work(limits, location))
@@ -144,7 +144,7 @@ impl Binding<'static> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if end <= self.len() {
             return Ok(());
@@ -163,7 +163,7 @@ impl Binding<'static> {
         end: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.owned()
             .truncate_with(end, || counters.work(limits, location))
@@ -183,7 +183,7 @@ impl Binding<'static> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
         operation: impl FnOnce(
             &mut TermAssignment,
             usize,
@@ -240,7 +240,7 @@ impl Binding<'_> {
     pub(crate) fn is_bound(
         &self,
         variable: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         self.slots()
             .is_bound(variable)
@@ -250,7 +250,7 @@ impl Binding<'_> {
     pub(crate) fn key(
         &self,
         variable: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         self.slots()
             .key(variable)
@@ -267,7 +267,7 @@ impl Binding<'_> {
         &self,
         variable: usize,
         read: CatalogRead<'read>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermRef<'read>, FormulaFailure> {
         let key = self.key(variable, location)?;
         read.term(&key)
@@ -279,7 +279,7 @@ impl Binding<'_> {
         read: CatalogRead<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<BindingView<'a>, FormulaFailure> {
         self.slots()
             .bind_with(read, || counters.work(limits, location))
@@ -290,7 +290,7 @@ impl Binding<'_> {
         &self,
         term: TemplateTerm<'read>,
         read: CatalogRead<'read>,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermRef<'read>, FormulaFailure> {
         match term {
             TemplateTerm::Constant(value) => Ok(value),
@@ -303,7 +303,7 @@ impl Binding<'_> {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Binding<'static>, FormulaFailure> {
         Binding::copy_slots(self.slots(), computation, limits, counters, location)
     }
@@ -326,13 +326,13 @@ fn add_header(
     }
 }
 
-pub(crate) fn assignment(error: AssignmentError, location: Location) -> FormulaFailure {
+pub(crate) fn assignment(error: AssignmentError, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::TermAssignment { error, location }
 }
 
 pub(crate) fn failure(
     error: AssignmentFailure<FormulaFailure>,
-    location: Location,
+    location: ProgramSite,
 ) -> FormulaFailure {
     match error {
         AssignmentFailure::Assignment(error) => assignment(error, location),

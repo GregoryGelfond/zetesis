@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::fmt::Write;
 
-use themelios_base::span::Location;
+use zetesis_themelios::ProgramSite;
 
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
@@ -49,7 +49,7 @@ impl GroundingObserver for JoinVisits {
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         outcome: GroundingOutcome,
         work: GroundingWork,
     ) {
@@ -157,12 +157,21 @@ fn selective_join_work_limit_is_inclusive() {
     };
     assert_eq!(limit, u128::from(low - 1));
     assert_eq!(observed, u128::from(low));
-    assert_eq!(location.source, AdmissionOptions::default().source_id);
+    assert_eq!(
+        location.location().expect("parsed source").source,
+        AdmissionOptions::default().source_id
+    );
     // The last charged operation publishes the shared atom catalog after all
     // rules and support guards. Its evidence belongs to the complete source,
     // rather than whichever rule happened to run last.
     assert_eq!(
-        &source[location.span.start().get() as usize..location.span.end().get() as usize],
+        &source[location
+            .location()
+            .expect("parsed source")
+            .span
+            .start()
+            .get() as usize
+            ..location.location().expect("parsed source").span.end().get() as usize],
         source,
     );
     println!("complete_work={low}");

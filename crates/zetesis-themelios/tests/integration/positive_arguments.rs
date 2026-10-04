@@ -385,13 +385,14 @@ fn analysis_retains_source_arithmetic() {
 #[test]
 fn captured_rules_retain_source_origins() {
     let admitted = formula("d(1).p(2).q(X):-p(X+1),d(X).");
-    assert!(
+    assert!(admitted.formula_origins().iter().flatten().any(|origin| {
         admitted
-            .formula_origins()
-            .iter()
-            .flatten()
-            .any(|origin| admitted.source().slice(origin.span).unwrap() == "q(X):-p(X+1),d(X).")
-    );
+            .source()
+            .expect("source input")
+            .slice(origin.location().expect("parsed source").span)
+            .unwrap()
+            == "q(X):-p(X+1),d(X)."
+    }));
 }
 
 #[test]

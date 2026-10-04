@@ -264,7 +264,7 @@ fn check_native(case: &Case, selected: &Family, expected: &Family) {
         FormulaLimits::default(),
     )
     .unwrap();
-    assert_eq!(owner.source().text(), case.source);
+    assert_eq!(owner.source().expect("source input").text(), case.source);
     assert!(owner.projection().is_explicit());
     // Explicit fixture export feeds the bounded renderer used by the external
     // oracle comparison. This fixed-domain model makes no answer-set claim.

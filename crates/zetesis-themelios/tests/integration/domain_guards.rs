@@ -3,8 +3,8 @@
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
 
-use themelios_base::span::Location;
 use zetesis_domain::Status;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver,
@@ -40,7 +40,7 @@ impl GroundingObserver for Observation {
     fn phase_exit(
         &self,
         phase: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {

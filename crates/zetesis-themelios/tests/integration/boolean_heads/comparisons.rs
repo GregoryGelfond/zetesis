@@ -70,11 +70,12 @@ fn defined_head_rows_preserve_undefined_family_evidence() {
 fn comparison_constraints_retain_authored_origins() {
     let source = "{p(1);p(2)}.X=1:-p(X).";
     let admitted = formula(source);
-    assert_eq!(admitted.source().text(), source);
+    assert_eq!(admitted.source().expect("source input").text(), source);
     assert!(admitted.formula_origins().iter().flatten().any(|origin| {
         admitted
             .source()
-            .slice(origin.span)
+            .expect("source input")
+            .slice(origin.location().expect("parsed source").span)
             .is_ok_and(|text| text.contains("X=1:-p(X)"))
     }));
 }

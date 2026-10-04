@@ -408,7 +408,7 @@ fn generated_instances_preserve_every_duplicate_source_origin() {
             assert_eq!(
                 origins
                     .iter()
-                    .map(|origin| origin.source)
+                    .map(|origin| origin.location().expect("parsed source").source)
                     .collect::<BTreeSet<_>>()
                     .len(),
                 2
@@ -417,10 +417,10 @@ fn generated_instances_preserve_every_duplicate_source_origin() {
                 assert_eq!(
                     admitted
                         .bundle()
-                        .get(origin.source)
+                        .get(origin.location().expect("parsed source").source)
                         .unwrap()
                         .source()
-                        .slice(origin.span)
+                        .slice(origin.location().expect("parsed source").span)
                         .unwrap(),
                     rule
                 );

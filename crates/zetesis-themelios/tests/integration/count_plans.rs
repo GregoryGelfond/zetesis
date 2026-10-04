@@ -102,7 +102,10 @@ fn optional_planning_preserves_original_formula_bytes() {
             planned.formula_origins(),
             "{source}"
         );
-        assert_eq!(baseline.source().text(), planned.source().text());
+        assert_eq!(
+            baseline.source().expect("source input").text(),
+            planned.source().expect("source input").text()
+        );
     }
 }
 
@@ -333,7 +336,10 @@ fn optional_ceilings_are_inclusive() {
             panic!("{resource:?}");
         };
         assert_eq!(error.kind(), Fault::Limit(resource), "{resource:?}");
-        assert_eq!(error.location().source, refused.source().id());
+        assert_eq!(
+            error.location().expect("parsed source").source,
+            refused.source().expect("source input").id()
+        );
         assert_eq!(native(&refused), native(&baseline));
     }
 }
@@ -476,13 +482,13 @@ fn bundle_plans_retain_resolvable_premise_origins() {
     for origin in plan.origins() {
         let text = input
             .bundle()
-            .get(origin.source)
+            .get(origin.location().expect("parsed source").source)
             .unwrap()
             .source()
-            .slice(origin.span)
+            .slice(origin.location().expect("parsed source").span)
             .unwrap();
         assert!(!text.is_empty());
-        sources.insert(origin.source);
+        sources.insert(origin.location().expect("parsed source").source);
     }
     assert_eq!(sources.len(), 2);
     assert_eq!(plan.consequence_count(), 2);
@@ -587,7 +593,7 @@ fn source_order_preserves_partition_models() {
         let input = admitted(&source, true);
         assert!(matches!(input.count_plan(), CountPlanStatus::Ready(_)));
         assert_eq!(native(&input), baseline);
-        assert_eq!(input.source().text(), source);
+        assert_eq!(input.source().expect("source input").text(), source);
     }
 }
 
@@ -674,13 +680,13 @@ fn stopped_bundle_planning_keeps_original_sources() {
             zetesis_themelios::CountPlanResource::Groups
         )
     );
-    let origin = error.location();
+    let origin = error.site();
     let text = input
         .bundle()
-        .get(origin.source)
+        .get(origin.location().expect("parsed source").source)
         .unwrap()
         .source()
-        .slice(origin.span)
+        .slice(origin.location().expect("parsed source").span)
         .unwrap();
     assert!(text.contains('{'));
     assert_eq!(input.bundle().sources().len(), 2);
@@ -734,7 +740,10 @@ fn count_plans_preserve_the_queens_families() {
     for (variant, source) in (1..).zip(QUEENS) {
         let ordinary = admitted(source, false);
         let planned = admitted(source, true);
-        assert_eq!(planned.source().text(), ordinary.source().text());
+        assert_eq!(
+            planned.source().expect("source input").text(),
+            ordinary.source().expect("source input").text()
+        );
         assert_eq!(planned.atoms(), ordinary.atoms());
         assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
         assert_eq!(planned.theory().roots(), ordinary.theory().roots());

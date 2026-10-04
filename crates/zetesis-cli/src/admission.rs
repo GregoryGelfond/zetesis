@@ -56,7 +56,13 @@ impl FormulaInput {
 
     fn retain_source(&self, failure: PublicationFailure) -> PublicationFailure {
         match self {
-            Self::Source(owner) => source_failure(failure, "<input>", owner.source()),
+            Self::Source(owner) => {
+                if let Some(source) = owner.source() {
+                    source_failure(failure, "<input>", source)
+                } else {
+                    failure
+                }
+            }
             Self::Bundle(owner) => bundle_failure(failure, owner.bundle()),
             Self::Hybrid(owner) => {
                 if let Some(bundle) = owner.bundle() {

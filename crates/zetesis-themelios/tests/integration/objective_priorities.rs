@@ -113,7 +113,12 @@ fn specialization_retains_objective_origins() {
     assert_eq!(input.objective_origins().len(), 2);
     assert_eq!(input.objective_origins()[0], input.objective_origins()[1]);
     assert!(input.objective_origins()[0].iter().any(|location| {
-        input.source().slice(location.span).unwrap() == "#minimize{1@X:p(X)}."
+        input
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap()
+            == "#minimize{1@X:p(X)}."
     }));
 }
 
@@ -135,9 +140,16 @@ fn specialization_limits_are_inclusive() {
     limits.objective.max_templates = 2;
     let input = admit(source, &limits).unwrap();
     assert_eq!(input.objectives().templates().len(), 2);
-    assert_eq!(location.source, input.source().id());
     assert_eq!(
-        input.source().slice(location.span).unwrap(),
+        location.location().expect("parsed source").source,
+        input.source().expect("source input").id()
+    );
+    assert_eq!(
+        input
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap(),
         "#minimize{1@X:p(X)}."
     );
 }

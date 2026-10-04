@@ -10,7 +10,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, ReadError};
 
 use crate::formula::ceiling;
@@ -89,7 +89,7 @@ impl Scope<'_> {
     pub(crate) fn allowance(
         &self,
         limits: &crate::FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let outside = self.outside();
         ceiling(
@@ -109,7 +109,7 @@ impl Scope<'_> {
         header: usize,
         limits: &crate::FormulaLimits,
         counters: &super::Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let overlap = if self.lease.bytes() > previous {
             previous.saturating_sub(header)
@@ -129,7 +129,7 @@ impl Scope<'_> {
         component_peak: u128,
         limits: &crate::FormulaLimits,
         counters: &super::Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let peak = self.outside().checked_add(component_peak).ok_or_else(|| {
             crate::formula_binding::assignment(AssignmentError::Storage(Error::Overflow), location)
@@ -147,7 +147,7 @@ impl Scope<'_> {
         &self,
         result: Result<T, AssignmentFailure<FormulaFailure>>,
         limits: &crate::FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<T, FormulaFailure> {
         result.map_err(|error| match error {
             AssignmentFailure::Assignment(AssignmentError::Storage(Error::Storage {
@@ -182,7 +182,7 @@ impl StorageLease {
     pub(crate) fn transfer_to(
         mut self,
         recipient: &mut Self,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if !recipient.workspace.owns(&self) {
             return Err(crate::formula_binding::assignment(
@@ -212,7 +212,7 @@ impl StorageLease {
     pub(crate) fn observe(
         &mut self,
         bytes: usize,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if bytes == self.bytes {
             return Ok(());

@@ -180,7 +180,7 @@ impl ModelView<'_> {
                 cancellation,
                 statistics: self.terms.statistics(),
                 local_bytes: 0,
-                location: None,
+                site: crate::ProgramSite::program(),
             },
         )
     }

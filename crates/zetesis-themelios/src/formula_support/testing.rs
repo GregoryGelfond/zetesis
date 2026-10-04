@@ -1,9 +1,9 @@
 //! Source tests share a real canonical owner and execution workspace.
 use super::{CompletedCatalog, Computation, Counters, Support, SupportCatalog};
+use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::{ExpansionLimits, FormulaLimits};
-use themelios_base::span::Location;
 use zetesis_core::Value;
 
 #[derive(Default)]
@@ -14,7 +14,7 @@ pub(crate) struct Fixture {
 impl Fixture {
     pub(crate) fn from_atoms(
         atoms: impl IntoIterator<Item = zetesis_core::Atom>,
-        location: Location,
+        location: ProgramSite,
     ) -> Self {
         let mut fixture = Self::default();
         for atom in atoms {
@@ -33,7 +33,7 @@ impl Fixture {
 
     /// Complete the empty source through the production fixed-point builder.
     /// Earlier identity-only discoveries remain canonical without becoming facts.
-    pub(crate) fn finish(self, location: Location) -> (CompletedCatalog, Counters) {
+    pub(crate) fn finish(self, location: ProgramSite) -> (CompletedCatalog, Counters) {
         let Self {
             mut owner,
             mut counters,
@@ -57,7 +57,7 @@ impl Fixture {
     /// Admit source metadata before any query lends the immutable prefix.
     pub(crate) fn admit<T>(
         &mut self,
-        location: Location,
+        location: ProgramSite,
         action: impl FnOnce(&mut super::components::Admission<'_>, &mut Counters) -> T,
     ) -> T {
         let limits = FormulaLimits::default();
@@ -75,7 +75,7 @@ impl Fixture {
     pub(crate) fn scalar(
         &mut self,
         value: &Value,
-        location: Location,
+        location: ProgramSite,
     ) -> super::components::Scalar {
         self.admit(location, |source, counters| {
             source
@@ -87,7 +87,7 @@ impl Fixture {
     pub(crate) fn constructor(
         &mut self,
         descriptor: zetesis_core::ValueNodeRef<'_>,
-        location: Location,
+        location: ProgramSite,
     ) -> super::components::Constructor {
         self.admit(location, |source, counters| {
             source
@@ -100,14 +100,14 @@ impl Fixture {
     pub(crate) fn pattern(
         &mut self,
         pattern: &zetesis_core::AtomPattern,
-        location: Location,
+        location: ProgramSite,
     ) -> super::components::Pattern {
         admit_pattern(&mut self.owner, pattern, &mut self.counters, location)
     }
 
     pub(crate) fn with<T>(
         &mut self,
-        location: Location,
+        location: ProgramSite,
         run: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Counters) -> T,
     ) -> T {
         let limits = FormulaLimits::default();
@@ -125,7 +125,7 @@ pub(crate) fn admit_pattern(
     catalog: &mut SupportCatalog,
     pattern: &zetesis_core::AtomPattern,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> super::components::Pattern {
     let limits = FormulaLimits::default();
     let mut source = catalog
@@ -157,7 +157,7 @@ pub(crate) fn binding(
     values: &[Option<Value>],
     computation: &mut Computation<'_, '_>,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Binding<'static> {
     let limits = FormulaLimits::default();
     let mut binding = Binding::new(computation, &limits, counters, location).unwrap();
@@ -236,25 +236,22 @@ fn prepare_into(
     catalog: &mut SupportCatalog,
     counters: &mut Counters,
     budget: &mut crate::expansion::Budget,
-) -> (crate::formula_ir::Prepared, Location) {
+) -> (crate::formula_ir::Prepared, ProgramSite) {
     let parsed = crate::ParsedSource::new(text.into(), crate::AdmissionOptions::default()).unwrap();
-    let mut choices = crate::formula_choice_source::Catalog::default();
     let mut metadata = crate::metadata::Builder::default();
-    let raised =
-        crate::formula_choice_source::raise(parsed.parsed(), &mut metadata, budget, &mut choices)
-            .unwrap();
-    let location = Location {
+    let raised = crate::formula_raise::raise(parsed.parsed(), &mut metadata).unwrap();
+    let location = ProgramSite::source(themelios_base::span::Location {
         source: parsed.source().id(),
         span: parsed.source().span(),
-    };
+    });
     let metadata = metadata.finish(location).unwrap();
     let prepared = crate::formula_ir::PreparationContext {
-        options: crate::AdmissionOptions::default(),
+        options: crate::AdmissionOptions::default().into(),
         budget,
         catalog,
         work: super::GroundingWork::new(&FormulaLimits::default(), counters, location),
     }
-    .prepare(&raised, metadata.project_selection().clone(), &choices)
+    .prepare(&raised, metadata.project_selection().clone())
     .unwrap();
     (prepared, location)
 }

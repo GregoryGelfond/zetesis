@@ -8,7 +8,7 @@ mod patterns;
 
 use std::mem::size_of;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{
     AssignmentFailure, CatalogRead, Error, PredicateRef, ReadError, TermKey, TermRef,
 };
@@ -57,7 +57,7 @@ impl SupportCatalog {
         &self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<TemplateComponentsRef<'_>>, FormulaFailure> {
         self.components
             .as_ref()
@@ -73,7 +73,7 @@ impl SupportCatalog {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Admission<'_>, FormulaFailure> {
         counters.work(limits, location)?;
         let workspace = counters.accounting.workspace.clone();
@@ -105,7 +105,7 @@ impl Admission<'_> {
         self.workspace.lease()
     }
 
-    fn total(&self, location: Location) -> Result<usize, FormulaFailure> {
+    fn total(&self, location: ProgramSite) -> Result<usize, FormulaFailure> {
         self.catalog
             .bytes(location)?
             .checked_add(self.workspace.bytes())
@@ -116,7 +116,7 @@ impl Admission<'_> {
         &self,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let total = self.total(location)?;
         counters.record(Event::SupportPeakBytes(total as u128));
@@ -133,7 +133,7 @@ impl Admission<'_> {
     pub(crate) fn external_bytes(
         &self,
         lease: &StorageLease,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if !self.workspace.owns(lease) {
             return Err(read_failure(ReadError::ForeignCatalog, location));
@@ -144,7 +144,7 @@ impl Admission<'_> {
     fn storage<'a>(
         &'a self,
         lease: &'a StorageLease,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Scope<'a>, FormulaFailure> {
         let external = self.external_bytes(lease, location)?;
         self.workspace
@@ -156,7 +156,7 @@ impl Admission<'_> {
         &self,
         lease: &StorageLease,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.storage(lease, location)?.allowance(limits, location)
     }
@@ -168,7 +168,7 @@ impl Admission<'_> {
         header: usize,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.storage(lease, location)?
             .observed(previous, header, limits, counters, location)
@@ -179,7 +179,7 @@ impl Admission<'_> {
         result: Result<T, AssignmentFailure<FormulaFailure>>,
         lease: &StorageLease,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<T, FormulaFailure> {
         self.storage(lease, location)?
             .result(result, limits, location)
@@ -190,7 +190,7 @@ impl Admission<'_> {
         value: TermRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermKey, FormulaFailure> {
         let outer = self.total(location)? as u128 - self.catalog.owner.storage_bytes();
         let checked = owner_limits(limits, outer, location)?;
@@ -216,7 +216,7 @@ impl Admission<'_> {
         outer: u128,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let peak = outer + self.catalog.owner.storage_peak_bytes();
         counters.record(Event::SupportPeakBytes(peak));
@@ -232,7 +232,7 @@ impl Admission<'_> {
         &mut self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
         operation: impl FnOnce(
             &mut TemplateComponents,
             CatalogRead<'_>,
@@ -272,7 +272,7 @@ impl Admission<'_> {
         key: &TermKey,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Scalar, FormulaFailure> {
         self.append(
             limits,
@@ -297,7 +297,7 @@ impl Admission<'_> {
         value: TermRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Scalar, FormulaFailure> {
         let key = self.import(value, limits, counters, location)?;
         self.scalar_key(&key, limits, counters, location)
@@ -307,7 +307,7 @@ impl Admission<'_> {
         &self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TemplateComponentsRef<'_>, FormulaFailure> {
         self.catalog
             .components
@@ -323,7 +323,7 @@ impl Admission<'_> {
         &self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TemplateComponentsRef<'_>, FormulaFailure> {
         self.bound(limits, counters, location)
     }
@@ -333,7 +333,7 @@ impl Admission<'_> {
         scalar: Scalar,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermRef<'_>, FormulaFailure> {
         let view = self.bound(limits, counters, location)?;
         scalar.get(view, limits, counters, location)
@@ -344,7 +344,7 @@ impl Admission<'_> {
         descriptor: ValueNodeRef<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Constructor, FormulaFailure> {
         let outer = self.total(location)? as u128 - self.catalog.owner.storage_bytes();
         let checked = owner_limits(limits, outer, location)?;
@@ -376,7 +376,7 @@ impl Admission<'_> {
         constructor: Constructor,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<Constructor>, FormulaFailure> {
         let bound = self.bound(limits, counters, location)?;
         counters.work(limits, location)?;
@@ -415,7 +415,7 @@ impl Admission<'_> {
         self,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let outer = self.total(location)? as u128 - self.catalog.owner.storage_bytes();
         let checked = owner_limits(limits, outer, location)?;
@@ -445,7 +445,7 @@ impl Scalar {
         view: TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TermRef<'a>, FormulaFailure> {
         counters.work(limits, location)?;
         match view.term(self.0) {
@@ -460,26 +460,26 @@ impl Constructor {
         view: TemplateComponentsRef<'a>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<ValueNodeRef<'a>, FormulaFailure> {
         counters.work(limits, location)?;
         view.constructor(self.0).ok_or_else(|| missing(location))
     }
 }
 
-pub(crate) fn missing(location: Location) -> FormulaFailure {
+pub(crate) fn missing(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::TemplateCatalog {
         error: TemplateCatalogFailure::Incomplete,
         location,
     }
 }
-fn read_failure(error: ReadError, location: Location) -> FormulaFailure {
+fn read_failure(error: ReadError, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::TemplateCatalog {
         error: TemplateCatalogFailure::Read(error),
         location,
     }
 }
-fn storage_overflow(location: Location) -> FormulaFailure {
+fn storage_overflow(location: ProgramSite) -> FormulaFailure {
     FormulaFailure::TemplateCatalog {
         error: TemplateCatalogFailure::Storage(Error::Overflow),
         location,
@@ -488,14 +488,14 @@ fn storage_overflow(location: Location) -> FormulaFailure {
 fn remaining(
     outer: usize,
     limits: &FormulaLimits,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<usize, FormulaFailure> {
     remaining_u128(outer as u128, limits, location)
 }
 fn remaining_u128(
     outer: u128,
     limits: &FormulaLimits,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<usize, FormulaFailure> {
     ceiling(
         FormulaResource::SupportBytes,
@@ -513,7 +513,7 @@ pub(crate) fn failure(
     error: TemplateCatalogFailure<FormulaFailure>,
     limits: &FormulaLimits,
     outer: u128,
-    location: Location,
+    location: ProgramSite,
 ) -> FormulaFailure {
     match error {
         TemplateCatalogFailure::Stopped(error) => error,

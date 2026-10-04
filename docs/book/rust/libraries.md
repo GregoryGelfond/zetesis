@@ -4,7 +4,7 @@ Start with [Getting started with the library](getting-started.md) for dependency
 setup and the complete
 [solve example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/examples/solve.rs).
 From a checkout, run `cargo run -p zetesis-solve --example solve --no-default-features`.
-The usual path is to prepare source with
+The usual path is to prepare source or a canonical logical program with
 `zetesis_themelios`, pass the admitted owner to `zetesis_solve::Session`, consume
 `AnswerSet` values, and inspect the final outcome. Use the tables below when you
 need a specific capability rather than a complete solve.
@@ -14,6 +14,8 @@ need a specific capability rather than a complete solve.
 | Task | Public library entry points | Guide |
 | --- | --- | --- |
 | Admit ASP source | `zetesis_themelios::{admit, admit_extended, prepare_formula, admit_formula}` and bundle counterparts | [Source preparation](source.md) |
+| Prepare or admit a logical formula program | `zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}` | [Typed formula preparation](source.md#prepare-a-logical-formula-program) |
+| Admit a logical program under S0 | `zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}` | [Typed program admission](source.md#admit-an-existing-logical-program) |
 | Solve admitted input | `zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}` | [Sessions](sessions.md) |
 | Collect a complete family | `WorldView::collect`, `SessionBuilder::collect`, `WorldViewLimits` | [Completion and output](outcomes.md) |
 | Inspect an answer or interpretation | `AnswerSet`, `zetesis_core::{Interpretation, Model}`, `catalog::{AtomRef, TermRef}` | [Interpretations and atoms](models.md) |
@@ -22,9 +24,9 @@ need a specific capability rather than a complete solve.
 | Publish answers through a custom view | `zetesis_cli::{publish_prepared, PublicationConfig, AnswerRenderer}` | [Answer presentation](outcomes.md#replace-answer-presentation) |
 | Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_bench`, `zetesis_presentation` | [Command workflows](workflows.md) |
 
-`zetesis-themelios` is zetesis's source-admission crate. The underlying themelios
-libraries provide parsing, logical-program construction and analysis; their
-standalone APIs belong to the themelios manual. A session consumes prepared input
+`zetesis-themelios` admits source text and canonical logical programs. The
+underlying themelios libraries provide parsing, logical-program construction
+and analysis; their standalone APIs belong to the themelios manual. A session consumes prepared input
 and does not parse source or choose another admission profile after a refusal.
 
 ## Logical values, candidates and relations
@@ -115,9 +117,9 @@ The current API does not offer a general ASPIF importer, a custom theory
 propagator or a themelios-solve backend implementation. The documented admitted
 inputs and session APIs define the supported integration points.
 
-When themelios-solve becomes available, the intended direction is to adopt its
-applicable programmatic interaction abstractions through a shared public layer
-or adapter. That integration is future work, not a shipped API. Zetesis's current
+A themelios-solve adapter is intended to connect its applicable programmatic
+interaction abstractions to a shared public layer. That integration remains
+future work alongside the shipped typed program admission APIs. Zetesis's current
 library remains usable independently. Any adapter must preserve typed
 `AnswerSet` and `WorldView` outcomes, incomplete-result evidence, and zetesis's
 ownership of reduct checking and backend execution. The aim is convenient Rust

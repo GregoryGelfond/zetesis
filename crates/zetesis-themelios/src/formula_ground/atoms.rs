@@ -3,7 +3,7 @@
 //! First emission fixes a local dense coordinate. Source identity discovery and
 //! support membership are separate; only sparse integer maps live in this owner.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::Sign;
 use zetesis_core::catalog::AtomRef;
 
@@ -17,7 +17,7 @@ impl Catalog {
         computation: &Computation<'_, '_>,
         counters: &Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         SourceSelection::new(computation, limits, counters, location).map(Self)
     }
@@ -31,7 +31,7 @@ impl Catalog {
         local: usize,
         counters: &mut Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<SourceAtom, FormulaFailure> {
         self.0.source(local, limits, counters, location)
     }
@@ -42,7 +42,7 @@ impl Catalog {
         computation: &'read Computation<'_, '_>,
         counters: &mut Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<AtomRef<'read>, FormulaFailure> {
         self.0.atom(id, computation, limits, counters, location)
     }
@@ -52,7 +52,7 @@ impl Catalog {
         atom: &SourceAtom,
         counters: &mut Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         self.0.position(atom, limits, counters, location)
     }
@@ -64,7 +64,7 @@ impl Catalog {
         computation: &Computation<'_, '_>,
         counters: &mut Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<(usize, bool), FormulaFailure> {
         self.0
             .insert(atom, bound, computation, limits, counters, location)
@@ -77,7 +77,7 @@ impl Catalog {
         computation: &Computation<'_, '_>,
         counters: &mut Counters,
         limits: &FormulaLimits,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
         let source = self.0.source(local, limits, counters, location)?;
         let Some(other) = computation.signed(&source, sign, limits, counters, location)? else {

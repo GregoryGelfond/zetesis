@@ -1,17 +1,17 @@
 use super::*;
+use crate::ProgramSite;
 use crate::formula_ir::HeadIr;
 use crate::formula_support::testing::{Fixture, binding, budget, numbers, with_completed_source};
 use crate::formula_support::{Counters, Coverage};
 use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
 use crate::{FormulaLimits, FormulaResource, GroundingPhase, GroundingWork};
-use themelios_base::span::Location;
 use zetesis_core::catalog::{AssignmentError, ReadError};
 use zetesis_core::{Value, ValueLimits};
 
 fn with_join(
     source: &str,
-    run: impl FnOnce(&mut Join<'_, '_>, &mut Computation<'_, '_>, &mut Counters, Location),
+    run: impl FnOnce(&mut Join<'_, '_>, &mut Computation<'_, '_>, &mut Counters, ProgramSite),
 ) {
     with_completed_source(source, |program, support, computation, counters| {
         let rule = program
@@ -35,7 +35,7 @@ fn collect(
     join: &mut Join<'_, '_>,
     computation: &mut Computation<'_, '_>,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> (Vec<Vec<Value>>, GroundingWork) {
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));

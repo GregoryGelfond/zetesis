@@ -61,13 +61,16 @@ fn moved_preparation_preserves_source_identity_through_both_public_doors() {
         // The owner, its generated history and the original scoped key cross the
         // boundary together; the final reader must accept that original key.
         std::thread::spawn(move || {
+            let original = std::ptr::from_ref(prepared.original_program());
             let catalog = if hybrid {
                 let result = prepared.ground_hybrid().unwrap();
                 assert_eq!(result.source().unwrap().text(), SOURCE);
+                assert_eq!(std::ptr::from_ref(result.original_program()), original);
                 result.atom_catalog().clone()
             } else {
                 let result = prepared.ground().unwrap();
-                assert_eq!(result.source().text(), SOURCE);
+                assert_eq!(result.source().expect("source input").text(), SOURCE);
+                assert_eq!(std::ptr::from_ref(result.original_program()), original);
                 result.atom_catalog().clone()
             };
             assert_eq!(

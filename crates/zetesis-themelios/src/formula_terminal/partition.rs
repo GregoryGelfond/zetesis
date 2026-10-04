@@ -10,9 +10,9 @@ mod reads;
 mod selection;
 mod source;
 mod symbols;
-mod workspace;
 #[cfg(test)]
 mod tests;
+mod workspace;
 
 use themelios_program::program::Program;
 use zetesis_domain::terminal;
@@ -20,7 +20,7 @@ use zetesis_domain::terminal;
 use crate::formula::Preparation;
 use crate::formula_ir::{LiteralIr, RuleIr};
 use crate::formula_support::{Counters, StorageLease};
-use crate::{AnalysisBasis, FormulaFailure};
+use crate::{AnalysisBasis, FormulaFailure, ProgramSite};
 use workspace::{Context, Scratch};
 
 pub(super) struct OriginalAnalysis {
@@ -51,8 +51,7 @@ pub(super) fn deferred_bytes(rules: &Vec<RuleIr>) -> u128 {
             .iter()
             .map(|rule| {
                 rule.body.capacity() as u128 * size_of::<LiteralIr>() as u128
-                    + rule.origins.capacity() as u128
-                        * size_of::<themelios_base::span::Location>() as u128
+                    + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128
             })
             .sum::<u128>()
 }
@@ -183,8 +182,7 @@ fn prepare(
         if *selected_rule != 0 {
             count += 1;
             nested_bytes += rule.body.capacity() as u128 * size_of::<LiteralIr>() as u128
-                + rule.origins.capacity() as u128
-                    * size_of::<themelios_base::span::Location>() as u128;
+                + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128;
         }
     }
     base.reserve(selected.values.len() - count, &mut context)?;

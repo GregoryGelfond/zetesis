@@ -94,7 +94,11 @@ fn invalid_alternatives_refuse_the_complete_evaluation() {
         assert_eq!(error.kind(), &ErrorKind::Evaluation(cause), "{expression}");
         let location = error.location().expect("authored show directive");
         assert_eq!(
-            input.source().slice(location.span).unwrap(),
+            input
+                .source()
+                .expect("source input")
+                .slice(location.span)
+                .unwrap(),
             format!("#show {expression}."),
         );
     }

@@ -1,4 +1,5 @@
 use super::{Frame, Ownership};
+use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::testing::Fixture;
@@ -7,19 +8,20 @@ use crate::formula_support::{Computation, Counters, Join, Traversal};
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_base::{
     source::SourceId,
-    span::{ByteOffset, Location, Span},
+    span::{ByteOffset, Span},
 };
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNodeRef};
 use zetesis_test_support::programs::atom;
 
 use crate::formula_support::Context;
-fn location() -> Location {
-    Location {
+fn location() -> ProgramSite {
+    ProgramSite::source(themelios_base::span::Location {
         source: SourceId::new(73),
         span: Span::empty(ByteOffset::new(9)),
-    }
+    })
 }
+
 fn pattern(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
     LiteralIr::Atom(
         DefaultNegation::None,

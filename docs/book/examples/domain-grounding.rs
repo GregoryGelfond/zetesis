@@ -3,8 +3,8 @@
 // ANCHOR: example
 use std::cell::Cell;
 
-use themelios_base::span::Location;
 use zetesis_domain::{Domain, Status};
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionLimits,
     FormulaFailure, FormulaLimits, GroundingObserver, GroundingOutcome, GroundingPhase,
@@ -49,7 +49,7 @@ impl GroundingObserver for Observation {
     fn phase_exit(
         &self,
         _: GroundingPhase,
-        _: Option<Location>,
+        _: Option<ProgramSite>,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {

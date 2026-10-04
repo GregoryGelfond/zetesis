@@ -1,6 +1,6 @@
 //! Distinct explicitly admitted roots, independent of canonical DAG population.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, TermKey, TermSet};
 
 use crate::formula::ceiling;
@@ -16,7 +16,7 @@ impl Domain {
         source: &Admission<'_>,
         limits: &FormulaLimits,
         counters: &Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut lease = source.lease();
         lease.observe(size_of::<Self>(), location)?;
@@ -34,7 +34,7 @@ impl Domain {
         maximum: usize,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
         if self
             .roots
@@ -93,11 +93,11 @@ mod tests {
     };
     use zetesis_core::{Value, ValueLimits, ValueNode};
 
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: SourceId::new(17),
             span: Span::empty(ByteOffset::new(0)),
-        }
+        })
     }
 
     #[test]

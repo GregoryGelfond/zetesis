@@ -126,16 +126,21 @@ fn projected_analysis_keeps_parsed_objective_evidence() {
     let declarations = input.objective_declarations();
     assert_eq!(declarations.len(), 1);
     assert_eq!(
-        input.source().slice(declarations[0].span).unwrap(),
+        input
+            .source()
+            .expect("source input")
+            .slice(declarations[0].location().expect("parsed source").span)
+            .unwrap(),
         ":~p(X;X+1):d(X).[1]"
     );
-    assert!(
+    assert!(input.objective_origins().iter().flatten().any(|location| {
         input
-            .objective_origins()
-            .iter()
-            .flatten()
-            .any(|location| { input.source().slice(location.span).unwrap() == "p(X;X+1):d(X)" })
-    );
+            .source()
+            .expect("source input")
+            .slice(location.location().expect("parsed source").span)
+            .unwrap()
+            == "p(X;X+1):d(X)"
+    }));
 }
 
 #[test]
@@ -286,7 +291,7 @@ fn finite_objective_occurrences_preserve_complete_scored_families() {
         let actual = reference::exhaustive(&original);
         assert!(!actual.is_empty(), "nonempty finite family: {source}");
         assert_eq!(actual, reference::exhaustive(&expanded), "{source}");
-        assert_eq!(original.source().text(), source);
+        assert_eq!(original.source().expect("source input").text(), source);
     }
 }
 
@@ -347,7 +352,7 @@ fn projected_source_payload_has_independent_limits() {
         assert!(
             matches!(failure, FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: actual, location, ..
-        }) if actual == resource && !location.span.is_empty()),
+        }) if actual == resource && !location.location().expect("parsed source").span.is_empty()),
             "{failure}"
         );
     }

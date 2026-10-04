@@ -12,7 +12,7 @@ pub(super) fn work(cancellation: &Cancellation) -> Work<'_> {
         construction: ConstructionLimits::default(),
         cancellation,
         statistics: Statistics::default(),
-        location: None,
+        site: crate::ProgramSite::program(),
         local_bytes: 0,
     }
 }

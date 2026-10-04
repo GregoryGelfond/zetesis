@@ -282,10 +282,13 @@ fn source_attachment_preserves_the_library_refusal() {
             location.span.end().get(),
         )
     );
-    error.retain_source("input.lp", admitted.source());
+    error.retain_source("input.lp", admitted.source().expect("source input"));
     assert_eq!(error.kind(), original.kind());
     assert_eq!(error.location(), original.location());
     assert_eq!(error.statistics(), original.statistics());
     assert_eq!(error.diagnostic(), original.diagnostic());
-    assert_eq!(error.diagnostic_source(), Some(admitted.source()));
+    assert_eq!(
+        error.diagnostic_source(),
+        Some(admitted.source().expect("source input"))
+    );
 }

@@ -353,10 +353,10 @@ fn duplicate_included_patterns_retain_original_spans() {
             .filter(|origin| {
                 admitted
                     .bundle()
-                    .get(origin.source)
+                    .get(origin.location().expect("parsed source").source)
                     .unwrap()
                     .source()
-                    .slice(origin.span)
+                    .slice(origin.location().expect("parsed source").span)
                     .unwrap()
                     == "p(X):-q((X,_))."
             })
@@ -367,7 +367,7 @@ fn duplicate_included_patterns_retain_original_spans() {
             assert_eq!(
                 matching
                     .iter()
-                    .map(|origin| origin.source)
+                    .map(|origin| origin.location().expect("parsed source").source)
                     .collect::<BTreeSet<_>>()
                     .len(),
                 2

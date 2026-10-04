@@ -2,7 +2,7 @@
 
 use super::Counters;
 use crate::FormulaLimits;
-use themelios_base::span::Location;
+use crate::ProgramSite;
 
 /// Borrow one grounding operation's limits, accounting and diagnostic location.
 /// Cancellation, shared allowance and observation remain in the same `Counters`;
@@ -11,13 +11,13 @@ use themelios_base::span::Location;
 pub(crate) struct GroundingWork<'a> {
     pub(crate) limits: &'a FormulaLimits,
     pub(crate) counters: &'a mut Counters,
-    pub(crate) location: Location,
+    pub(crate) location: ProgramSite,
 }
 impl<'a> GroundingWork<'a> {
     pub(crate) fn new(
         limits: &'a FormulaLimits,
         counters: &'a mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Self {
         Self {
             limits,
@@ -39,7 +39,7 @@ impl<'a, C> Context<'a, C> {
         computation: C,
         limits: &'a FormulaLimits,
         counters: &'a mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Self {
         Self {
             computation,

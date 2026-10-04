@@ -127,7 +127,7 @@ fn aggregate_local_variables_do_not_bind_globals_and_flat_tuple_filters_are_exac
 fn aggregate_limits_and_original_rule_evidence_are_independent() {
     let source = "{a;b}. q :- #count{1:a;2:b}>=1.";
     let input = formula(source);
-    assert_eq!(input.source().text(), source);
+    assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(input.formula_origins().len(), input.theory().roots().len());
     assert!(
         input
@@ -188,7 +188,7 @@ fn all_queens_encodings_exhaust_the_same_ninety_two_boards() {
         let source =
             std::fs::read_to_string(root.join(variant)).expect("correctness example source");
         let input = formula(&source);
-        assert_eq!(input.source().text(), source);
+        assert_eq!(input.source().expect("source input").text(), source);
         let models = models(&input);
         assert_eq!(models.len(), 92, "{variant}");
         let mut boards = BTreeSet::new();
@@ -256,8 +256,10 @@ fn shared_choice_guards_preserve_prefix_origins() {
     assert_eq!(expected_origins.len(), 24);
     assert_eq!(prefix_origins(&input), expected_origins);
     assert!(input.formula_origins().iter().flatten().any(|origin| {
-        let start = usize::try_from(origin.span.start().get()).unwrap();
-        let end = usize::try_from(origin.span.end().get()).unwrap();
+        let start =
+            usize::try_from(origin.location().expect("parsed source").span.start().get()).unwrap();
+        let end =
+            usize::try_from(origin.location().expect("parsed source").span.end().get()).unwrap();
         source.get(start..end) == Some("1{a;b;c}1.")
     }));
 }

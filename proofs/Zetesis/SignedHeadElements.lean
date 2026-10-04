@@ -8,10 +8,11 @@ Both `not` and `not not` freeze operand truth in candidate M; neither supplies
 positive atom permission. Eligibility remains a recursively reduced formula.
 The original and frozen laws below hold for arbitrary M and J.
 
-Ordinary atoms coalesce by (sign, atom), while Boolean operands retain source
-occurrence keys independently of sign. Explicit aggregates retain complete tuple
-keys. This extends the Boolean-choice convention in `BooleanHeadElements`, not
-clingo's internal representation. Exact source identity is a separate obligation.
+Ordinary atoms coalesce by (sign, atom), while Boolean operands retain
+pool-expanded occurrence keys independently of sign. Grounding witnesses share
+that expanded identity. Explicit aggregates retain complete tuple keys. This
+extends the element grammar in `BooleanHeadElements`; exact source expansion
+and occurrence assignment remain separate obligations.
 
 A semantic embedding moves default-negated operands into eligibility with a true
 Boolean head. It preserves activity and permission and reuses the finite aggregate
@@ -121,7 +122,7 @@ theorem boolean_witness_key (occurrence : O) (left right : Sign) (a b : Bool) :
     choiceKey occurrence (⟨left, .boolean a⟩ : Operand A) =
       choiceKey occurrence ⟨right, .boolean b⟩ := rfl
 
-/-- Separate source occurrences remain separate Boolean contributions. -/
+/-- Separate expanded occurrences remain separate Boolean contributions. -/
 theorem boolean_occurrence_keys_distinct (first second : O) (different : first ≠ second)
     (left right : Sign) (a b : Bool) :
     choiceKey first (⟨left, .boolean a⟩ : Operand A) ≠

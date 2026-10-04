@@ -1,9 +1,9 @@
 //! Merge sorted subset-sum runs under the caller's shared storage allowance.
+use crate::ProgramSite;
 use crate::formula::ceiling;
 use crate::formula_support::Buffer;
 use crate::formula_support::{Computation, Counters};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
-use themelios_base::span::Location;
 use themelios_program::term::EvalError;
 
 pub(crate) type Numbers = Buffer<i32>;
@@ -13,7 +13,7 @@ pub(crate) fn sums(
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<Numbers, FormulaFailure> {
     ceiling(
         FormulaResource::AssignmentValues,
@@ -74,12 +74,13 @@ mod tests {
         source::SourceId,
         span::{ByteOffset, Span},
     };
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: SourceId::new(89),
             span: Span::empty(ByteOffset::new(0)),
-        }
+        })
     }
+
     #[test]
     fn merged_runs_equal_all_distinct_subset_sums() {
         for weights in [vec![2, -3, 2, 0], vec![-5, 9, 4], Vec::new()] {

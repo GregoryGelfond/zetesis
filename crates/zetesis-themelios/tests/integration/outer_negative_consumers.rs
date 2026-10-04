@@ -187,7 +187,7 @@ fn conditionals_consume_completed_outer_values() {
         ),
     ] {
         assert_eq!(native(&input(source)), native(&input(expanded)));
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(input(source).source().expect("source input").text(), source);
     }
 }
 
@@ -225,7 +225,7 @@ fn false_gates_cannot_hide_undefined_arguments() {
 #[test]
 fn original_sources_remain_owned() {
     for &(source, _) in CASES {
-        assert_eq!(input(source).source().text(), source);
+        assert_eq!(input(source).source().expect("source input").text(), source);
     }
 }
 

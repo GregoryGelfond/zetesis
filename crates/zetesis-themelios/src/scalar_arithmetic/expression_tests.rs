@@ -9,11 +9,11 @@ use crate::formula_ir::{Expression, Operation};
 use crate::formula_support::{Evaluation, testing::Fixture};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 
-fn location() -> Location {
-    Location {
+fn location() -> crate::ProgramSite {
+    crate::ProgramSite::source(Location {
         source: SourceId::new(17),
         span: Span::empty(ByteOffset::new(23)),
-    }
+    })
 }
 fn evaluate(
     plan: impl FnOnce(&mut Fixture) -> Vec<Operation>,

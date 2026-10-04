@@ -10,7 +10,7 @@ use super::{Definitions, Partition, partition};
 use crate::expansion::Budget;
 use crate::formula_ir::{HeadIr, HeadLiteral, HeadOperand, LiteralIr, PreparationContext, RuleIr};
 use crate::formula_support::{Counters, GroundingWork, SupportCatalog, components};
-use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource};
+use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource, ProgramSite};
 
 mod policy;
 
@@ -21,10 +21,10 @@ fn prepare(text: &str) -> crate::formula::Preparation {
     assert!(parsed.diagnostics().is_empty());
     let raised = themelios_program::raise::raise(&parsed);
     assert!(raised.diagnostics().is_empty());
-    let location = Location {
+    let location = ProgramSite::source(Location {
         source: source.id(),
         span: source.span(),
-    };
+    });
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 10_000);
     let mut catalog = SupportCatalog::default();
@@ -33,16 +33,12 @@ fn prepare(text: &str) -> crate::formula::Preparation {
     crate::metadata::collect_profile(raised.program(), &mut metadata, true).unwrap();
     let metadata = metadata.finish(location).unwrap();
     let program = PreparationContext {
-        options: AdmissionOptions::default(),
+        options: AdmissionOptions::default().into(),
         budget: &mut budget,
         catalog: &mut catalog,
         work: GroundingWork::new(&limits, &mut counters, location),
     }
-    .prepare(
-        raised.program(),
-        metadata.project_selection().clone(),
-        &crate::formula_choice_source::Catalog::default(),
-    )
+    .prepare(raised.program(), metadata.project_selection().clone())
     .unwrap();
     crate::formula::Preparation {
         catalog,

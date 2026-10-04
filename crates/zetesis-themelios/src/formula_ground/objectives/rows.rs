@@ -2,7 +2,7 @@
 
 use crate::formula_support::{Context, GroundingWork};
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::catalog::CatalogRead;
 use zetesis_core::{
     AtomCatalog, FilterRef, PatternRef, TemplateCatalog, TemplateCatalogFailure,
@@ -21,7 +21,7 @@ impl Rows {
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut lease = computation.lease();
         let allowance = computation.allowance(&lease, limits, location)?;
@@ -99,7 +99,7 @@ impl Rows {
         publication: &mut Publication<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<TemplateCatalog, FormulaFailure> {
         let Self {
             selection,
@@ -137,7 +137,7 @@ impl Rows {
         Ok(catalog)
     }
 }
-fn failure(error: TemplateCatalogFailure<FormulaFailure>, location: Location) -> FormulaFailure {
+fn failure(error: TemplateCatalogFailure<FormulaFailure>, location: ProgramSite) -> FormulaFailure {
     let error = match error {
         TemplateCatalogFailure::Stopped(error) => return error,
         TemplateCatalogFailure::Read(error) => TemplateCatalogFailure::Read(error),
@@ -150,7 +150,7 @@ fn failure(error: TemplateCatalogFailure<FormulaFailure>, location: Location) ->
 fn metadata_bytes(
     bytes: u128,
     limits: &FormulaLimits,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<usize, FormulaFailure> {
     usize::try_from(bytes).map_err(|_| FormulaFailure::Limit {
         resource: FormulaResource::SupportBytes,

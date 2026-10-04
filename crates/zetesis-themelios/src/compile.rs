@@ -12,20 +12,28 @@ use themelios_program::symbol::{Sign, Symbol};
 use themelios_program::term::{Term as SourceTerm, UnaryOp, Variable};
 use zetesis_core::{AtomPattern, Filter, Predicate, Template, Term, Value};
 
-use crate::diagnostic::unsupported;
-use crate::{AdmissionFailure, ProfileFeature};
+use crate::program_admission::CompilationFailure;
+use crate::{AdmissionFailure, ProfileFeature, ProgramSite, StatementId};
+
+fn unsupported(feature: ProfileFeature) -> CompilationFailure {
+    CompilationFailure::Profile(feature)
+}
 
 type CompiledProgram = (Vec<Template>, Vec<Vec<Location>>);
 
 pub(crate) fn program(
     source: &SourceProgram,
-    fallback: Location,
+    fallback: impl Into<ProgramSite>,
 ) -> Result<CompiledProgram, AdmissionFailure> {
+    let fallback = fallback.into();
     let mut templates = Vec::new();
     let mut origins = Vec::new();
     for part in source.parts() {
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
-            return Err(unsupported(ProfileFeature::ProgramPart, fallback));
+            return Err(crate::diagnostic::unsupported(
+                ProfileFeature::ProgramPart,
+                fallback,
+            ));
         }
         for carrier in part.statements() {
             let locations: Vec<_> = carrier
@@ -36,7 +44,10 @@ pub(crate) fn program(
                     Origin::Constructed | Origin::Transformed(_) => None,
                 })
                 .collect();
-            let location = locations.first().copied().unwrap_or(fallback);
+            let location = fallback.with_statement(StatementId::new(templates.len()));
+            let location = locations
+                .first()
+                .map_or(location, |origin| location.with_location(*origin));
             templates.push(statement(carrier, location)?);
             origins.push(locations);
         }
@@ -47,12 +58,16 @@ pub(crate) fn program(
 /// Compile the rule one statement must be; `location` locates its refusal.
 pub(crate) fn statement(
     carrier: &WithProvenance<Statement>,
-    location: Location,
+    location: impl Into<ProgramSite>,
 ) -> Result<Template, AdmissionFailure> {
-    let Statement::Rule(source_rule) = carrier.get() else {
-        return Err(unsupported(ProfileFeature::Statement, location));
+    checked_statement(carrier.get()).map_err(|error| error.at(location))
+}
+
+pub(crate) fn checked_statement(source: &Statement) -> Result<Template, CompilationFailure> {
+    let Statement::Rule(source_rule) = source else {
+        return Err(unsupported(ProfileFeature::Statement));
     };
-    rule(source_rule, location)
+    rule(source_rule)
 }
 
 #[derive(Default)]
@@ -82,16 +97,16 @@ impl Variables {
     }
 }
 
-fn rule(source: &Rule, location: Location) -> Result<Template, AdmissionFailure> {
+fn rule(source: &Rule) -> Result<Template, CompilationFailure> {
     let mut variables = Variables::default();
-    let (head, choice) = head(source.head().get(), &mut variables, location)?;
+    let (head, choice) = head(source.head().get(), &mut variables)?;
     let mut positive = Vec::new();
     let mut gate_true = Vec::new();
     let mut gate_false = Vec::new();
     let mut filters = Vec::new();
     for element in source.body().get().elements() {
         let BodyElement::Literal(literal) = element.get() else {
-            return Err(unsupported(ProfileFeature::BodyElement, location));
+            return Err(unsupported(ProfileFeature::BodyElement));
         };
         match &literal.inner {
             LiteralInner::Atom(value) => {
@@ -103,9 +118,9 @@ fn rule(source: &Rule, location: Location) -> Result<Template, AdmissionFailure>
                 {
                     // A negative anonymous position tests the complete witness
                     // projection. It is not an unbound relational gate variable.
-                    return Err(unsupported(ProfileFeature::AnonymousProjection, location));
+                    return Err(unsupported(ProfileFeature::AnonymousProjection));
                 }
-                let pattern = atom(value.get(), &mut variables, location)?;
+                let pattern = atom(value.get(), &mut variables)?;
                 match literal.negation {
                     DefaultNegation::None => positive.push(pattern),
                     DefaultNegation::Not => gate_false.push(pattern),
@@ -114,30 +129,30 @@ fn rule(source: &Rule, location: Location) -> Result<Template, AdmissionFailure>
             }
             LiteralInner::Comparison(value) => {
                 if literal.negation != DefaultNegation::None {
-                    return Err(unsupported(ProfileFeature::NegatedComparison, location));
+                    return Err(unsupported(ProfileFeature::NegatedComparison));
                 }
                 let comparison = value.get();
                 let mut steps = comparison.steps();
                 let (relation, right) = steps.next().expect("a comparison has at least one step");
                 if steps.next().is_some() {
-                    return Err(unsupported(ProfileFeature::ComparisonChain, location));
+                    return Err(unsupported(ProfileFeature::ComparisonChain));
                 }
-                let left = term(comparison.first(), &mut variables, location)?;
-                let right = term(right, &mut variables, location)?;
+                let left = term(comparison.first(), &mut variables)?;
+                let right = term(right, &mut variables)?;
                 let filter = match relation {
                     Relation::Eq => Filter::Eq(left, right),
                     Relation::Neq => Filter::Neq(left, right),
-                    _ => return Err(unsupported(ProfileFeature::ComparisonRelation, location)),
+                    _ => return Err(unsupported(ProfileFeature::ComparisonRelation)),
                 };
                 filters.push(filter);
             }
             LiteralInner::True | LiteralInner::False => {
-                return Err(unsupported(ProfileFeature::BooleanLiteral, location));
+                return Err(unsupported(ProfileFeature::BooleanLiteral));
             }
         }
     }
     if needs_binding_analysis(&positive, &filters) {
-        return Err(unsupported(ProfileFeature::ScalarBinding, location));
+        return Err(unsupported(ProfileFeature::ScalarBinding));
     }
     if choice {
         gate_true.push(
@@ -169,78 +184,64 @@ fn needs_binding_analysis(positive: &[AtomPattern], filters: &[Filter]) -> bool 
 fn head(
     source: &Head,
     variables: &mut Variables,
-    location: Location,
-) -> Result<(Option<AtomPattern>, bool), AdmissionFailure> {
+) -> Result<(Option<AtomPattern>, bool), CompilationFailure> {
     match source {
         Head::Falsum => Ok((None, false)),
-        Head::Literal(literal) => Ok((Some(head_atom(literal, variables, location)?), false)),
+        Head::Literal(literal) => Ok((Some(head_atom(literal, variables)?), false)),
         Head::Choice(choice) => {
             if choice.left_guard().is_some() || choice.right_guard().is_some() {
-                return Err(unsupported(ProfileFeature::BoundedChoice, location));
+                return Err(unsupported(ProfileFeature::BoundedChoice));
             }
             let mut elements = choice.elements();
             let Some(element) = elements.next() else {
-                return Err(unsupported(ProfileFeature::ChoiceCardinality, location));
+                return Err(unsupported(ProfileFeature::ChoiceCardinality));
             };
             if elements.next().is_some() {
-                return Err(unsupported(ProfileFeature::ChoiceCardinality, location));
+                return Err(unsupported(ProfileFeature::ChoiceCardinality));
             }
             if !element.get().condition().is_empty() {
-                return Err(unsupported(ProfileFeature::ConditionalChoice, location));
+                return Err(unsupported(ProfileFeature::ConditionalChoice));
             }
-            Ok((
-                Some(head_atom(element.get().literal(), variables, location)?),
-                true,
-            ))
+            Ok((Some(head_atom(element.get().literal(), variables)?), true))
         }
-        _ => Err(unsupported(ProfileFeature::Head, location)),
+        _ => Err(unsupported(ProfileFeature::Head)),
     }
 }
 
 fn head_atom(
     literal: &Literal,
     variables: &mut Variables,
-    location: Location,
-) -> Result<AtomPattern, AdmissionFailure> {
+) -> Result<AtomPattern, CompilationFailure> {
     if literal.negation != DefaultNegation::None {
-        return Err(unsupported(ProfileFeature::NegatedHead, location));
+        return Err(unsupported(ProfileFeature::NegatedHead));
     }
     let LiteralInner::Atom(source) = &literal.inner else {
-        return Err(unsupported(ProfileFeature::BooleanLiteral, location));
+        return Err(unsupported(ProfileFeature::BooleanLiteral));
     };
-    atom(source.get(), variables, location)
+    atom(source.get(), variables)
 }
 
-fn atom(
-    source: &Atom,
-    variables: &mut Variables,
-    location: Location,
-) -> Result<AtomPattern, AdmissionFailure> {
+fn atom(source: &Atom, variables: &mut Variables) -> Result<AtomPattern, CompilationFailure> {
     let Arguments::Single(arguments) = &source.arguments else {
-        return Err(unsupported(ProfileFeature::PooledArguments, location));
+        return Err(unsupported(ProfileFeature::PooledArguments));
     };
     let predicate = Predicate::with_sign(
         source.name.as_str(),
         arguments.len(),
         crate::coherence::core_sign(source.sign),
     )
-    .map_err(|error| AdmissionFailure::Construction { error, location })?;
+    .map_err(CompilationFailure::Construction)?;
     let terms = arguments
         .iter()
-        .map(|argument| term(argument, variables, location))
+        .map(|argument| term(argument, variables))
         .collect::<Result<Vec<_>, _>>()?;
-    AtomPattern::new(predicate, terms)
-        .map_err(|error| AdmissionFailure::Construction { error, location })
+    AtomPattern::new(predicate, terms).map_err(CompilationFailure::Construction)
 }
 
-fn term(
-    source: &SourceTerm,
-    variables: &mut Variables,
-    location: Location,
-) -> Result<Term, AdmissionFailure> {
+fn term(source: &SourceTerm, variables: &mut Variables) -> Result<Term, CompilationFailure> {
     match source {
         SourceTerm::Variable(variable) => Ok(Term::Variable(variables.slot(variable))),
-        SourceTerm::Symbolic(value) => scalar(value, location).map(Term::Constant),
+        SourceTerm::Symbolic(value) => checked_scalar(value).map(Term::Constant),
         SourceTerm::Function { .. } | SourceTerm::Tuple(_) => {
             // Strict S0 accepts closed data, not new arithmetic or generators.
             if source.subterms().any(|node| {
@@ -249,12 +250,12 @@ fn term(
                     SourceTerm::Symbolic(_) | SourceTerm::Function { .. } | SourceTerm::Tuple(_)
                 )
             }) {
-                return Err(unsupported(ProfileFeature::Term, location));
+                return Err(unsupported(ProfileFeature::Term));
             }
             let value = source
                 .evaluate()
-                .map_err(|_| unsupported(ProfileFeature::Term, location))?;
-            scalar(&value, location).map(Term::Constant)
+                .map_err(|_| unsupported(ProfileFeature::Term))?;
+            checked_scalar(&value).map(Term::Constant)
         }
         SourceTerm::UnaryOperation {
             operator: UnaryOp::Negate,
@@ -262,42 +263,47 @@ fn term(
         } => {
             let value = argument
                 .evaluate()
-                .map_err(|_| unsupported(ProfileFeature::Term, location))?;
+                .map_err(|_| unsupported(ProfileFeature::Term))?;
             match value.into_parts() {
                 themelios_program::symbol::SymbolParts::Number(number) => number
                     .checked_neg()
                     .map(|number| Term::Constant(Value::Number(number)))
-                    .ok_or_else(|| unsupported(ProfileFeature::NumericOverflow, location)),
+                    .ok_or_else(|| unsupported(ProfileFeature::NumericOverflow)),
                 themelios_program::symbol::SymbolParts::Function {
                     name,
                     arguments,
                     sign,
-                } => scalar(
-                    &Symbol::Function {
-                        name,
-                        arguments,
-                        sign: match sign {
-                            Sign::Positive => Sign::Negative,
-                            Sign::Negative => Sign::Positive,
-                        },
+                } => checked_scalar(&Symbol::Function {
+                    name,
+                    arguments,
+                    sign: match sign {
+                        Sign::Positive => Sign::Negative,
+                        Sign::Negative => Sign::Positive,
                     },
-                    location,
-                )
+                })
                 .map(Term::Constant),
-                _ => Err(unsupported(ProfileFeature::Term, location)),
+                _ => Err(unsupported(ProfileFeature::Term)),
             }
         }
-        _ => Err(unsupported(ProfileFeature::Term, location)),
+        _ => Err(unsupported(ProfileFeature::Term)),
     }
 }
 
-pub(crate) fn scalar(source: &Symbol, location: Location) -> Result<Value, AdmissionFailure> {
-    Ok(match classify(source, location)? {
+pub(crate) fn scalar(
+    source: &Symbol,
+    location: impl Into<ProgramSite>,
+) -> Result<Value, AdmissionFailure> {
+    checked_scalar(source).map_err(|error| error.at(location))
+}
+
+fn checked_scalar(source: &Symbol) -> Result<Value, CompilationFailure> {
+    Ok(match classify(source)? {
         Scalar::Number(number) => Value::Number(number),
         Scalar::String(text) => Value::String(text.into()),
         Scalar::Symbol(name) => Value::Symbol(name.into()),
-        Scalar::Structural(symbol) => crate::structural_value::from_symbol(symbol)
-            .map_err(|error| value_failure(error, location))?,
+        Scalar::Structural(symbol) => {
+            crate::structural_value::from_symbol(symbol).map_err(value_failure)?
+        }
         Scalar::Infimum => Value::Infimum,
         Scalar::Supremum => Value::Supremum,
     })
@@ -307,10 +313,14 @@ pub(crate) fn scalar(source: &Symbol, location: Location) -> Result<Value, Admis
 /// typed structure checks are shared with conversion. Logical node/depth/text
 /// bounds remain active; actual construction capacity is checked only when a
 /// value is constructed. No authored arithmetic evaluation is skipped.
-pub(crate) fn validate_scalar(source: &Symbol, location: Location) -> Result<(), AdmissionFailure> {
-    if let Scalar::Structural(symbol) = classify(source, location)? {
+pub(crate) fn validate_scalar(
+    source: &Symbol,
+    location: impl Into<ProgramSite>,
+) -> Result<(), AdmissionFailure> {
+    let location = location.into();
+    if let Scalar::Structural(symbol) = classify(source).map_err(|error| error.at(location))? {
         crate::structural_value::validate_symbol(symbol)
-            .map_err(|error| value_failure(error, location))?;
+            .map_err(|error| value_failure(error).at(location))?;
     }
     Ok(())
 }
@@ -324,14 +334,14 @@ enum Scalar<'a> {
     Supremum,
 }
 
-fn classify(source: &Symbol, location: Location) -> Result<Scalar<'_>, AdmissionFailure> {
+fn classify(source: &Symbol) -> Result<Scalar<'_>, CompilationFailure> {
     match source {
         Symbol::Number(number) => Ok(Scalar::Number(*number)),
         Symbol::String(text) => {
             // clingo's string symbol cannot preserve an embedded NUL; refuse
             // this otherwise parseable value instead of silently truncating it.
             if text.contains('\0') {
-                return Err(unsupported(ProfileFeature::NulString, location));
+                return Err(unsupported(ProfileFeature::NulString));
             }
             Ok(Scalar::String(text))
         }
@@ -343,7 +353,7 @@ fn classify(source: &Symbol, location: Location) -> Result<Scalar<'_>, Admission
         Symbol::Function { .. } | Symbol::Tuple(_) => {
             for child in source.subsymbols() {
                 if matches!(child, Symbol::String(text) if text.contains('\0')) {
-                    return Err(unsupported(ProfileFeature::NulString, location));
+                    return Err(unsupported(ProfileFeature::NulString));
                 }
             }
             Ok(Scalar::Structural(source))
@@ -353,9 +363,6 @@ fn classify(source: &Symbol, location: Location) -> Result<Scalar<'_>, Admission
     }
 }
 
-fn value_failure(error: zetesis_core::ValueError, location: Location) -> AdmissionFailure {
-    AdmissionFailure::Construction {
-        error: zetesis_core::ConstructionError::Value(error),
-        location,
-    }
+fn value_failure(error: zetesis_core::ValueError) -> CompilationFailure {
+    CompilationFailure::Construction(zetesis_core::ConstructionError::Value(error))
 }

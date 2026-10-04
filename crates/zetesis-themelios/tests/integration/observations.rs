@@ -262,6 +262,7 @@ fn metadata_preserves_the_original_formula_and_source_identity() {
             assert!(
                 observed
                     .source()
+                    .expect("source input")
                     .slice(location.span)
                     .unwrap()
                     .starts_with("#show")

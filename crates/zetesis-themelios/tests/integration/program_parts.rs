@@ -119,7 +119,7 @@ fn preparation_retains_original_base_sections() {
         FormulaLimits::default(),
     )
     .unwrap();
-    assert_eq!(prepared.source().text(), source);
+    assert_eq!(prepared.source().expect("source input").text(), source);
     assert!(
         prepared
             .analyzed_program()
@@ -129,7 +129,11 @@ fn preparation_retains_original_base_sections() {
     let admitted = prepared.ground().unwrap();
     for origins in admitted.formula_origins() {
         for origin in origins {
-            let original = admitted.source().slice(origin.span).unwrap();
+            let original = admitted
+                .source()
+                .expect("source input")
+                .slice(origin.location().expect("parsed source").span)
+                .unwrap();
             assert!(matches!(original, "p." | "q :- p."), "{original}");
         }
     }
@@ -147,7 +151,14 @@ fn base_delimiters_preserve_objective_templates() {
         admitted
             .objective_declarations()
             .iter()
-            .map(|location| admitted.source().slice(location.span).unwrap().to_owned())
+            .map(|location| {
+                admitted
+                    .source()
+                    .expect("source input")
+                    .slice(location.location().expect("parsed source").span)
+                    .unwrap()
+                    .to_owned()
+            })
             .collect::<Vec<_>>()
     };
     assert_eq!(declarations(&explicit), declarations(&implicit));
@@ -172,9 +183,17 @@ fn nonbase_parts_remain_located_refusals() {
                 panic!("expected a program-part refusal: {error}");
             };
             assert_eq!(feature, ProfileFeature::ProgramPart);
-            assert_eq!(location.source, SourceId::new(61));
+            assert_eq!(
+                location.location().expect("parsed source").source,
+                SourceId::new(61)
+            );
             let parsed = themelios_base::source::Source::new(SourceId::new(61), source).unwrap();
-            assert_eq!(parsed.slice(location.span).unwrap(), delimiter);
+            assert_eq!(
+                parsed
+                    .slice(location.location().expect("parsed source").span)
+                    .unwrap(),
+                delimiter
+            );
         }
     }
 }

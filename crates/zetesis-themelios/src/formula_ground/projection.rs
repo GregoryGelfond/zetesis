@@ -4,7 +4,7 @@
 //! rejects statically absent literals; optional conditions are not tested for
 //! joint satisfiability and are never reevaluated against a selected answer.
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_core::AtomCatalog;
 use zetesis_core::catalog::PredicateRef;
 
@@ -30,7 +30,7 @@ impl PendingProjection {
         publication: &mut Publication<'_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
-        location: Location,
+        location: ProgramSite,
     ) -> Result<PreparedProjection, FormulaFailure> {
         let Some(selection) = self.atoms else {
             return Ok(PreparedProjection::default());
@@ -65,7 +65,7 @@ pub(super) fn prepare(
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
-    location: Location,
+    location: ProgramSite,
 ) -> Result<PendingProjection, FormulaFailure> {
     if !prepared.project_selection.is_explicit() {
         return Ok(PendingProjection { atoms: None });

@@ -13,7 +13,7 @@ use std::hash::{BuildHasher, BuildHasherDefault};
 
 use crate::word_hash::WordHasher;
 
-use themelios_base::span::Location;
+use crate::ProgramSite;
 use zetesis_ferraris::{FormulaNodes, Node};
 
 use crate::formula::ceiling;
@@ -27,7 +27,7 @@ pub(super) fn intern<S: BuildHasher>(
     nodes: &mut FormulaNodes,
     node: Node,
     bound: (FormulaResource, usize),
-    location: Location,
+    location: ProgramSite,
 ) -> Result<(usize, bool), FormulaFailure> {
     let key = key(node);
     if let Some(&id) = index.get(&key) {
@@ -69,12 +69,13 @@ mod tests {
         }
         fn write(&mut self, _: &[u8]) {}
     }
-    fn location() -> Location {
-        Location {
+    fn location() -> ProgramSite {
+        ProgramSite::source(themelios_base::span::Location {
             source: SourceId::new(4),
             span: Span::empty(ByteOffset::new(2)),
-        }
+        })
     }
+
     fn sequence() -> [Node; 6] {
         [
             Node::False,
