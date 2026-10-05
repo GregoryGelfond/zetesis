@@ -62,6 +62,7 @@ mod sessions;
 mod shared_cpu;
 mod stage_timing;
 mod statistics_views;
+mod statistics_writes;
 mod stats;
 mod strong_negation;
 mod structural_values;

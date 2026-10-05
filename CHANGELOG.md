@@ -4,6 +4,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Both `--stats` views, records (`--json --stats`) and human (`--stats`), are
+  rendered whole and written to standard error at once, instead of one write
+  per fragment. The report's text and its position among other diagnostics are
+  unchanged.
+
 ### Security
 
 - On macOS, the host-memory reading behind the default resource allowance runs

@@ -734,16 +734,21 @@ fn report_progress_statistics(
         if !options.stats {
             return result;
         }
-        let emitted = match options.statistics_view {
+        // The report is rendered whole, then written once at this point: its
+        // fragments would otherwise each be a write on unbuffered stderr. Order
+        // relative to other diagnostics is unchanged, and a write failure
+        // surfaces at this one write.
+        let mut report = Vec::new();
+        let rendered = match options.statistics_view {
             crate::StatisticsView::Records => crate::statistics::write_progress(
-                diagnostics,
+                &mut report,
                 options,
                 result.as_ref(),
                 timings.driver_elapsed,
             )
-            .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
-            .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
-            .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding)),
+            .and_then(|()| crate::stage_timing::write(&mut report, &timings.stages))
+            .and_then(|()| crate::phase_timing::write(&mut report, &timings))
+            .and_then(|()| crate::grounding_timing::write(&mut report, &timings.grounding)),
             crate::StatisticsView::Human => {
                 let view = crate::PublicationView {
                     result: result.as_ref(),
@@ -757,9 +762,10 @@ fn report_progress_statistics(
                     failed: view.failure().is_some(),
                 };
                 let layout = diagnostics.layout();
-                writeln!(diagnostics).and_then(|()| statistics.write_human(diagnostics, layout))
+                writeln!(report).and_then(|()| statistics.write_human(&mut report, layout))
             }
         };
+        let emitted = rendered.and_then(|()| diagnostics.write_all(&report));
         if let Err(error) = emitted {
             return Err(match result {
                 Ok(progress) => progress.fail(RunError::Output(error)),
