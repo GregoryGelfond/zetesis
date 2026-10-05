@@ -228,10 +228,12 @@ JSON renderer additionally retains a bounded document atom table; each invocatio
 starts fresh indices. Structural equality decides each atom's index, so equal
 atoms of independent owners share one; once a canonical atom has been found, the
 table answers its later occurrences from the same owner by owner-scoped identity
-instead of hashing the atom's structure. Identities are kept for the catalog of
-the record being encoded: a record from another catalog, such as each answer
-with reconstructed terminal definitions, starts the identity cache afresh, so
-its cost does not grow with the number of answers. A refused record withdraws
+instead of hashing the atom's structure. Identities are kept for the atom owner
+of the record being encoded, so answers published as separate catalogs by one
+writer, such as one closure worker's, keep them; a record of another owner, such
+as each answer with reconstructed terminal definitions, starts the identity
+cache afresh, so its cost does not grow with the number of answers. The public
+`AtomTable::index` lookup is structural and records no identity. A refused record withdraws
 the atoms it entered together with their identities. Custom renderers own their encoding
 limits and any copies they retain. The controller retains no complete family
 for presentation, although objective selection still uses the solver's

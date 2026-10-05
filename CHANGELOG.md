@@ -6,6 +6,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- `AtomCatalog::same_atom_owner` says whether two catalogs' atoms share one
+  atom owner, as one writer's published selections do; `same_owner` remains
+  the catalog-allocation identity.
 - `zetesis-ferraris` narrowing accepts a `NarrowingQuota` through
   `narrow_known_reserved` and `narrow_frozen_known_reserved`, which reserve
   work permits in batches of at most `NARROWING_BATCH` and refund the unspent
@@ -14,9 +17,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
-- `--json` output of runs whose answers come from separate catalogs, such as
-  answers with reconstructed terminal definitions, no longer slows
+- `--json` output of runs whose answers each bring their own atom owner, such
+  as answers with reconstructed terminal definitions, no longer slows
   quadratically with the number of answers.
+- `AtomTable::index` is a structural lookup and no longer records atom
+  identities; the record encoder's own lookup keeps the identity cache.
 - Both `--stats` views, records (`--json --stats`) and human (`--stats`), are
   rendered whole and written to standard error at once, instead of one write
   per fragment. The report's text and its position among other diagnostics are

@@ -28,9 +28,9 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// its atoms by index, so a document spells each atom once. The table is
 /// bounded by a ceiling on distinct atoms; every entry refers to its atom in
 /// the model that spelled it, sharing that model's catalog rather than
-/// copying the atom. Structural equality decides an atom's index; a
-/// canonical atom found once is afterwards answered by its owner-scoped
-/// identity, at most once per distinct atom and owner.
+/// copying the atom. Structural equality decides an atom's index; while
+/// records are encoded, a canonical atom found once is afterwards answered by
+/// its owner-scoped identity.
 #[derive(Debug)]
 pub struct AtomTable {
     /// Placed by the crate's fixed word hash. The program's author spells
@@ -41,21 +41,20 @@ pub struct AtomTable {
     /// 1.16 of the cell time on the series' large-model cells, hashing
     /// every atom of every model on the way out (the observations record).
     indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
-    /// Indices of canonical atoms already found or entered, by owner-scoped
-    /// identity, so a repeated atom costs an identity hash rather than a
-    /// structural one. An atom of an owner not yet seen is found structurally.
-    /// Identities are recorded only while a record is encoded, and only for
-    /// the record's own catalog: a record's atoms all come from its model's
-    /// one catalog, and a record of another catalog empties the cache, so it
-    /// holds one owner. Runs whose models share one catalog keep their
-    /// identities across records; runs whose every answer has its own
-    /// catalog, such as reconstructed terminal definitions, would otherwise
-    /// add an owner per record to the map's linear owner scan.
+    /// Indices of canonical atoms already found or entered by the record
+    /// encoder, by owner-scoped identity, so a repeated atom costs an identity
+    /// hash rather than a structural one. Only the encoder's lookup records
+    /// identities, and only for the atom owner of the record being encoded: a
+    /// record's atoms all come from its model's one catalog and so one owner,
+    /// and a record of another owner empties the cache, so it holds one owner.
+    /// Runs whose answers share an owner, one catalog or one writer's
+    /// selections, keep their identities across records; runs whose every
+    /// answer has its own owner, such as reconstructed terminal definitions,
+    /// would otherwise add an owner per record to the map's linear owner scan.
     identities: AtomIdentityMap<usize>,
-    /// The catalog of the record being, or last, encoded.
+    /// The catalog of the last record begun, kept until the next begins: at
+    /// most one catalog beyond those the entries retain.
     catalog: Option<AtomCatalog>,
-    /// Whether a record is being encoded: only then are identities used.
-    recording: bool,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
@@ -102,7 +101,6 @@ impl AtomTable {
             indices: HashMap::default(),
             identities: AtomIdentityMap::default(),
             catalog: None,
-            recording: false,
             deferred: None,
             max_atoms,
         }
@@ -121,26 +119,26 @@ impl AtomTable {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    /// The atom's index when the document has spelled it. The first
-    /// record's atoms are indexed on the first lookup after it, so a document
-    /// of one record never indexes at all. Within a record, a canonical atom
-    /// found once is answered by its identity afterwards; outside a record the
-    /// lookup is structural and records no identity.
+    /// The atom's index when the document has spelled it, by structural
+    /// lookup; no identity is recorded. The first record's atoms are indexed on
+    /// the first lookup after it, so a document of one record never indexes at
+    /// all.
     ///
     /// # Errors
     /// Returns [`Error::Allocation`] when the deferred record cannot be indexed.
     pub fn index<'a>(&mut self, atom: impl Into<AtomRef<'a>>) -> Result<Option<usize>, Error> {
         self.flush()?;
-        let atom = atom.into();
-        if self.recording
-            && let Some(index) = self.identities.get(atom)
-        {
+        Ok(self.indices.get(&atom.into()).copied())
+    }
+    /// The record encoder's lookup of an atom of the record begun last: as
+    /// [`Self::index`], answering a canonical atom found once by its identity
+    /// afterwards.
+    pub(super) fn find(&mut self, atom: AtomRef<'_>) -> Result<Option<usize>, Error> {
+        if let Some(index) = self.identities.get(atom) {
             return Ok(Some(index));
         }
-        let index = self.indices.get(&atom).copied();
-        if self.recording
-            && let Some(index) = index
-        {
+        let index = self.index(atom)?;
+        if let Some(index) = index {
             let _ = self.identities.insert(atom, index);
         }
         Ok(index)
@@ -174,29 +172,24 @@ impl AtomTable {
         }
         Ok(())
     }
-    /// Enter the atom at `position` of `model`, which the document is about
-    /// to spell, at the next index.
-    ///
-    /// # Errors
-    /// Returns [`Error::Table`] at the ceiling and [`Error::Allocation`] when
-    /// the entry cannot be retained; the table is unchanged either way.
     /// Start encoding a record whose atoms come from `catalog`. A record of
-    /// another catalog than the last empties the identity cache.
+    /// another atom owner than the last empties the identity cache.
     pub(super) fn begin_record(&mut self, catalog: &AtomCatalog) {
         if !self
             .catalog
             .as_ref()
-            .is_some_and(|last| last.same_owner(catalog))
+            .is_some_and(|last| last.same_atom_owner(catalog))
         {
             self.identities = AtomIdentityMap::default();
-            self.catalog = Some(catalog.clone());
         }
-        self.recording = true;
+        self.catalog = Some(catalog.clone());
     }
-    /// The record has been encoded or refused.
-    pub(super) fn end_record(&mut self) {
-        self.recording = false;
-    }
+    /// Enter the atom at `position` of `model`, the record begun last, which
+    /// the document is about to spell, at the next index.
+    ///
+    /// # Errors
+    /// Returns [`Error::Table`] at the ceiling and [`Error::Allocation`] when
+    /// the entry cannot be retained; the table is unchanged either way.
     pub(super) fn enter(&mut self, model: &Model, position: usize) -> Result<usize, Error> {
         self.flush()?;
         let index = self.indices.len();
@@ -215,9 +208,7 @@ impl AtomTable {
             .atoms()
             .at(position)
             .expect("an entered position belongs to its model");
-        if self.recording {
-            let _ = self.identities.insert(atom, index);
-        }
+        let _ = self.identities.insert(atom, index);
         Ok(index)
     }
     /// Withdraw what a refused record gave the table, so it is as it was
@@ -309,30 +300,35 @@ impl std::error::Error for Failure {}
 #[cfg(test)]
 mod tests {
     use hashbrown::HashMap;
+    use std::convert::Infallible;
     use std::hash::BuildHasherDefault;
+    use zetesis_core::catalog::interner::{AtomInterner, Limits};
     use zetesis_core::{AtomCatalog, Model, Sign};
     use zetesis_test_support::programs::signed_numbered as atom;
 
-    /// Index every atom of `model` as `ModelView::encode_record` does: look
-    /// it up, and enter it when the table has not spelled it.
+    /// Index every atom of `model` as `ModelView::encode_record` does: defer
+    /// the document's first record whole, else look each atom up and enter
+    /// it when the table has not spelled it.
     fn record(table: &mut super::AtomTable, model: &Model) -> Vec<usize> {
         table.begin_record(model.catalog());
-        let indices = (0..model.atoms().len())
+        if table.is_empty() {
+            table.defer(model).unwrap();
+            return (0..model.atoms().len()).collect();
+        }
+        (0..model.atoms().len())
             .map(|position| {
                 let atom = model.atoms().at(position).unwrap();
-                match table.index(atom).unwrap() {
+                match table.find(atom).unwrap() {
                     Some(index) => index,
                     None => table.enter(model, position).unwrap(),
                 }
             })
-            .collect();
-        table.end_record();
-        indices
+            .collect()
     }
 
-    /// Records whose models each have their own catalog, as reconstructed
+    /// Records whose models each have their own atom owner, as reconstructed
     /// answers do, sharing `q(0)` and each adding its own `p(n)`.
-    fn separate_catalogs(records: i32) -> Vec<Model> {
+    fn separate_owners(records: i32) -> Vec<Model> {
         (0..records)
             .map(|n| {
                 Model::new([
@@ -344,22 +340,49 @@ mod tests {
             .collect()
     }
 
+    /// One writer's selections: distinct catalogs of one atom owner, as the
+    /// lazy closure publishes each answer of a worker's workspace.
+    fn one_owner_selections(selections: &[&[usize]]) -> Vec<Model> {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let mut owner = AtomInterner::new();
+        for number in [2, 1, 3] {
+            owner
+                .entry_atom_with(&atom("p", Sign::Positive, &[number]), limits, || {
+                    Ok::<_, Infallible>(())
+                })
+                .unwrap()
+                .insert_with(limits, || Ok::<_, Infallible>(()))
+                .unwrap();
+        }
+        selections
+            .iter()
+            .map(|positions| {
+                let catalog = owner
+                    .publish_selection_with(positions, limits, || Ok::<_, Infallible>(()))
+                    .unwrap();
+                Model::from_positions(&catalog, 0..positions.len()).unwrap()
+            })
+            .collect()
+    }
+
     #[test]
-    fn separate_catalogs_keep_one_owner_in_the_identity_cache() {
+    fn separate_owners_keep_one_owner_in_the_identity_cache() {
         let mut table = super::AtomTable::new(1 << 20);
-        for model in separate_catalogs(200) {
+        // The first record is deferred and records nothing; the third is the
+        // first whose predecessor's owner already had identities recorded.
+        for model in separate_owners(3) {
             record(&mut table, &model);
         }
-        // One record's atoms: the identities of earlier catalogs are gone.
+        // One record's atoms: the identities of earlier owners are gone.
         assert!(table.identities.len() <= 2, "{}", table.identities.len());
     }
 
     #[test]
-    fn indices_match_a_structural_numbering_across_catalogs() {
+    fn indices_match_a_structural_numbering_across_owners() {
         let mut table = super::AtomTable::new(1 << 20);
         let mut reference: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
-        for (n, model) in separate_catalogs(200).iter().enumerate() {
+        for (n, model) in separate_owners(8).iter().enumerate() {
             let indices = record(&mut table, model);
             // Model order is canonical: `p(n)` precedes `q(0)`.
             for (spelled, index) in [format!("p({n})"), "q(0)".to_owned()]
@@ -379,27 +402,48 @@ mod tests {
             atom("p", Sign::Positive, &[1]),
         ])
         .unwrap();
-        let first = Model::from_positions(&catalog, [0, 1]).unwrap();
-        let second = Model::from_positions(&catalog, [0, 1]).unwrap();
+        let models: Vec<_> = (0..3)
+            .map(|_| Model::from_positions(&catalog, [0, 1]).unwrap())
+            .collect();
         let mut table = super::AtomTable::new(16);
-        record(&mut table, &first);
+        // The first record is deferred; the second records both identities.
+        record(&mut table, &models[0]);
+        record(&mut table, &models[1]);
         let known = table.identities.len();
         assert_eq!(known, 2);
-        record(&mut table, &second);
+        record(&mut table, &models[2]);
         assert_eq!(table.identities.len(), known);
     }
 
     #[test]
-    fn a_lookup_outside_a_record_records_no_identity() {
-        let model = Model::new([atom("q", Sign::Positive, &[0])]).unwrap();
+    fn selections_of_one_owner_keep_their_identities_across_records() {
+        // Every record is its own catalog of the one owner.
+        let models = one_owner_selections(&[&[0], &[0, 1], &[0, 1, 2]]);
         let mut table = super::AtomTable::new(16);
-        table.begin_record(model.catalog());
-        table.enter(&model, 0).unwrap();
-        table.end_record();
+        record(&mut table, &models[0]);
+        record(&mut table, &models[1]);
+        table.begin_record(models[2].catalog());
+        // The next selection's repeated atoms are answered by the identities
+        // the previous one recorded.
+        for position in 0..2 {
+            let atom = models[2].atoms().at(position).unwrap();
+            assert_eq!(table.identities.get(atom), table.index(atom).unwrap());
+            assert!(table.identities.get(atom).is_some());
+        }
+    }
+
+    #[test]
+    fn the_public_index_records_no_identity() {
+        let catalog = AtomCatalog::new(vec![atom("q", Sign::Positive, &[0])]).unwrap();
+        let model = Model::from_positions(&catalog, [0]).unwrap();
+        let mut table = super::AtomTable::new(16);
+        record(&mut table, &model);
+        // An equal atom of another owner is a structural hit whose identity
+        // the table has not recorded; the public lookup leaves it so.
         let other = Model::new([atom("q", Sign::Positive, &[0])]).unwrap();
-        let before = table.identities.len();
-        assert_eq!(table.index(other.atoms().at(0).unwrap()).unwrap(), Some(0));
-        assert_eq!(table.identities.len(), before);
+        let other = other.atoms().at(0).unwrap();
+        assert_eq!(table.index(other).unwrap(), Some(0));
+        assert_eq!(table.identities.get(other), None);
     }
 
     /// The table places the atoms by the crate's fixed word hash, the

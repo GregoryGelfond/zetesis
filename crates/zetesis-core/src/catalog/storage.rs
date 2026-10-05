@@ -302,6 +302,9 @@ pub(crate) struct Snapshot {
 }
 
 impl Snapshot {
+    pub(super) fn same_atom_owner(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.atom_owner, &other.atom_owner)
+    }
     pub(super) fn shares_snapshot(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.atom_owner, &other.atom_owner) && Arc::ptr_eq(&self.data, &other.data)
     }

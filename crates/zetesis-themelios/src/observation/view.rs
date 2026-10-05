@@ -297,7 +297,6 @@ impl ModelView<'_> {
         let mut deferred = false;
         table.begin_record(self.model.catalog());
         let result = self.encode_record_into(&mut out, table, &mut added, &mut deferred);
-        table.end_record();
         let statistics = super::json::Statistics {
             work: out.work,
             buffered_bytes: out.text.len(),
@@ -342,7 +341,7 @@ impl ModelView<'_> {
             *deferred = true;
         } else {
             for (position, atom) in self.model.atoms().iter().enumerate() {
-                let index = if let Some(index) = table.index(atom)? {
+                let index = if let Some(index) = table.find(atom)? {
                     index
                 } else {
                     if !added.is_empty() {
