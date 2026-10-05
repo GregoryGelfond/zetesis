@@ -6,6 +6,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- `--json` output of runs whose answers come from separate catalogs, such as
+  answers with reconstructed terminal definitions, no longer slows
+  quadratically with the number of answers.
 - Both `--stats` views, records (`--json --stats`) and human (`--stats`), are
   rendered whole and written to standard error at once, instead of one write
   per fragment. The report's text and its position among other diagnostics are

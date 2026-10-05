@@ -295,7 +295,9 @@ impl ModelView<'_> {
         // lookup is one hash probe; a refused record withdraws its entries.
         let mut added = Vec::new();
         let mut deferred = false;
+        table.begin_record(self.model.catalog());
         let result = self.encode_record_into(&mut out, table, &mut added, &mut deferred);
+        table.end_record();
         let statistics = super::json::Statistics {
             work: out.work,
             buffered_bytes: out.text.len(),

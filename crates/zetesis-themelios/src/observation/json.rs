@@ -13,7 +13,7 @@ use hashbrown::HashMap;
 use std::fmt;
 
 use zetesis_core::{
-    Model,
+    AtomCatalog, Model,
     catalog::{AtomIdentityMap, AtomRef},
 };
 
@@ -44,7 +44,18 @@ pub struct AtomTable {
     /// Indices of canonical atoms already found or entered, by owner-scoped
     /// identity, so a repeated atom costs an identity hash rather than a
     /// structural one. An atom of an owner not yet seen is found structurally.
+    /// Identities are recorded only while a record is encoded, and only for
+    /// the record's own catalog: a record's atoms all come from its model's
+    /// one catalog, and a record of another catalog empties the cache, so it
+    /// holds one owner. Runs whose models share one catalog keep their
+    /// identities across records; runs whose every answer has its own
+    /// catalog, such as reconstructed terminal definitions, would otherwise
+    /// add an owner per record to the map's linear owner scan.
     identities: AtomIdentityMap<usize>,
+    /// The catalog of the record being, or last, encoded.
+    catalog: Option<AtomCatalog>,
+    /// Whether a record is being encoded: only then are identities used.
+    recording: bool,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
@@ -90,6 +101,8 @@ impl AtomTable {
         Self {
             indices: HashMap::default(),
             identities: AtomIdentityMap::default(),
+            catalog: None,
+            recording: false,
             deferred: None,
             max_atoms,
         }
@@ -110,19 +123,24 @@ impl AtomTable {
     }
     /// The atom's index when the document has spelled it. The first
     /// record's atoms are indexed on the first lookup after it, so a document
-    /// of one record never indexes at all. A canonical atom found once is
-    /// answered by its identity afterwards.
+    /// of one record never indexes at all. Within a record, a canonical atom
+    /// found once is answered by its identity afterwards; outside a record the
+    /// lookup is structural and records no identity.
     ///
     /// # Errors
     /// Returns [`Error::Allocation`] when the deferred record cannot be indexed.
     pub fn index<'a>(&mut self, atom: impl Into<AtomRef<'a>>) -> Result<Option<usize>, Error> {
         self.flush()?;
         let atom = atom.into();
-        if let Some(index) = self.identities.get(atom) {
+        if self.recording
+            && let Some(index) = self.identities.get(atom)
+        {
             return Ok(Some(index));
         }
         let index = self.indices.get(&atom).copied();
-        if let Some(index) = index {
+        if self.recording
+            && let Some(index) = index
+        {
             let _ = self.identities.insert(atom, index);
         }
         Ok(index)
@@ -162,6 +180,23 @@ impl AtomTable {
     /// # Errors
     /// Returns [`Error::Table`] at the ceiling and [`Error::Allocation`] when
     /// the entry cannot be retained; the table is unchanged either way.
+    /// Start encoding a record whose atoms come from `catalog`. A record of
+    /// another catalog than the last empties the identity cache.
+    pub(super) fn begin_record(&mut self, catalog: &AtomCatalog) {
+        if !self
+            .catalog
+            .as_ref()
+            .is_some_and(|last| last.same_owner(catalog))
+        {
+            self.identities = AtomIdentityMap::default();
+            self.catalog = Some(catalog.clone());
+        }
+        self.recording = true;
+    }
+    /// The record has been encoded or refused.
+    pub(super) fn end_record(&mut self) {
+        self.recording = false;
+    }
     pub(super) fn enter(&mut self, model: &Model, position: usize) -> Result<usize, Error> {
         self.flush()?;
         let index = self.indices.len();
@@ -180,7 +215,9 @@ impl AtomTable {
             .atoms()
             .at(position)
             .expect("an entered position belongs to its model");
-        let _ = self.identities.insert(atom, index);
+        if self.recording {
+            let _ = self.identities.insert(atom, index);
+        }
         Ok(index)
     }
     /// Withdraw what a refused record gave the table, so it is as it was
@@ -273,6 +310,97 @@ impl std::error::Error for Failure {}
 mod tests {
     use hashbrown::HashMap;
     use std::hash::BuildHasherDefault;
+    use zetesis_core::{AtomCatalog, Model, Sign};
+    use zetesis_test_support::programs::signed_numbered as atom;
+
+    /// Index every atom of `model` as `ModelView::encode_record` does: look
+    /// it up, and enter it when the table has not spelled it.
+    fn record(table: &mut super::AtomTable, model: &Model) -> Vec<usize> {
+        table.begin_record(model.catalog());
+        let indices = (0..model.atoms().len())
+            .map(|position| {
+                let atom = model.atoms().at(position).unwrap();
+                match table.index(atom).unwrap() {
+                    Some(index) => index,
+                    None => table.enter(model, position).unwrap(),
+                }
+            })
+            .collect();
+        table.end_record();
+        indices
+    }
+
+    /// Records whose models each have their own catalog, as reconstructed
+    /// answers do, sharing `q(0)` and each adding its own `p(n)`.
+    fn separate_catalogs(records: i32) -> Vec<Model> {
+        (0..records)
+            .map(|n| {
+                Model::new([
+                    atom("q", Sign::Positive, &[0]),
+                    atom("p", Sign::Positive, &[n]),
+                ])
+                .unwrap()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn separate_catalogs_keep_one_owner_in_the_identity_cache() {
+        let mut table = super::AtomTable::new(1 << 20);
+        for model in separate_catalogs(200) {
+            record(&mut table, &model);
+        }
+        // One record's atoms: the identities of earlier catalogs are gone.
+        assert!(table.identities.len() <= 2, "{}", table.identities.len());
+    }
+
+    #[test]
+    fn indices_match_a_structural_numbering_across_catalogs() {
+        let mut table = super::AtomTable::new(1 << 20);
+        let mut reference: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for (n, model) in separate_catalogs(200).iter().enumerate() {
+            let indices = record(&mut table, model);
+            // Model order is canonical: `p(n)` precedes `q(0)`.
+            for (spelled, index) in [format!("p({n})"), "q(0)".to_owned()]
+                .into_iter()
+                .zip(indices)
+            {
+                let next = reference.len();
+                assert_eq!(*reference.entry(spelled).or_insert(next), index);
+            }
+        }
+    }
+
+    #[test]
+    fn one_catalog_keeps_its_identities_across_records() {
+        let catalog = AtomCatalog::new(vec![
+            atom("q", Sign::Positive, &[0]),
+            atom("p", Sign::Positive, &[1]),
+        ])
+        .unwrap();
+        let first = Model::from_positions(&catalog, [0, 1]).unwrap();
+        let second = Model::from_positions(&catalog, [0, 1]).unwrap();
+        let mut table = super::AtomTable::new(16);
+        record(&mut table, &first);
+        let known = table.identities.len();
+        assert_eq!(known, 2);
+        record(&mut table, &second);
+        assert_eq!(table.identities.len(), known);
+    }
+
+    #[test]
+    fn a_lookup_outside_a_record_records_no_identity() {
+        let model = Model::new([atom("q", Sign::Positive, &[0])]).unwrap();
+        let mut table = super::AtomTable::new(16);
+        table.begin_record(model.catalog());
+        table.enter(&model, 0).unwrap();
+        table.end_record();
+        let other = Model::new([atom("q", Sign::Positive, &[0])]).unwrap();
+        let before = table.identities.len();
+        assert_eq!(table.index(other.atoms().at(0).unwrap()).unwrap(), Some(0));
+        assert_eq!(table.identities.len(), before);
+    }
 
     /// The table places the atoms by the crate's fixed word hash, the
     /// placement an author could drive into collisions being bounded by the
