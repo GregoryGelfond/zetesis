@@ -22,6 +22,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   quadratically with the number of answers.
 - `AtomTable::index` is a structural lookup and no longer records atom
   identities; the record encoder's own lookup keeps the identity cache.
+- Region narrowing knowledge chooses its counter width once per value and is
+  16 bytes smaller on 64-bit hosts. The producer route's frontier
+  `retained_bytes` and `peak_retained_bytes` in `--stats` are lower by that
+  much for each retained knowledge; counter payloads are unchanged.
 - Both `--stats` views, records (`--json --stats`) and human (`--stats`), are
   rendered whole and written to standard error at once, instead of one write
   per fragment. The report's text and its position among other diagnostics are

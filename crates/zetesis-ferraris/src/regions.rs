@@ -461,6 +461,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 ///
 /// A value is linear in the theory: a bit pair over the nodes and one over
 /// the atoms, two counters per chain, a count per atom and the worklists.
+/// Its counters have one width, chosen when the root value is made.
 /// A split that offers one child to another worker clones it, so the
 /// clone is the split's cost. A knowledge belongs to the narrower that
 /// made it and to the region it was closed for: narrowing a region with a
