@@ -5,7 +5,7 @@
     pub oracle: <a class="enum" href="enum.Oracle.html" title="enum zetesis_solve::Oracle">Oracle</a>,
     pub search: <a class="enum" href="enum.SearchMethod.html" title="enum zetesis_solve::SearchMethod">SearchMethod</a>,
     pub stats: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.bool.html">bool</a>,
-    pub constraints: ConstraintCheckLimits,
+    pub constraints: <a class="struct" href="../zetesis_themelios/formula_hybrid/struct.ConstraintCheckLimits.html" title="struct zetesis_themelios::formula_hybrid::ConstraintCheckLimits">ConstraintCheckLimits</a>,
     pub models: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.usize.html">usize</a>,
     pub max_search_work: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.u64.html">u64</a>,
     pub max_search_decisions: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.u64.html">u64</a>,
@@ -53,7 +53,7 @@ formulas propagated on the GPU and their residual search exact on the CPU.</p>
 </div><span id="structfield.oracle" class="structfield section-header"><a href="#structfield.oracle" class="anchor field">§</a><code>oracle: <a class="enum" href="enum.Oracle.html" title="enum zetesis_solve::Oracle">Oracle</a></code></span><div class="docblock"><p>Exact membership policy; prepared formula inputs retain their original theory.</p>
 </div><span id="structfield.search" class="structfield section-header"><a href="#structfield.search" class="anchor field">§</a><code>search: <a class="enum" href="enum.SearchMethod.html" title="enum zetesis_solve::SearchMethod">SearchMethod</a></code></span><div class="docblock"><p>How the formula route proposes candidates and queries the reduct.</p>
 </div><span id="structfield.stats" class="structfield section-header"><a href="#structfield.stats" class="anchor field">§</a><code>stats: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.bool.html">bool</a></code></span><div class="docblock"><p>Enable optional host timing; semantic/resource counters remain independent.</p>
-</div><span id="structfield.constraints" class="structfield section-header"><a href="#structfield.constraints" class="anchor field">§</a><code>constraints: ConstraintCheckLimits</code></span><div class="docblock"><p>Cumulative streamed-constraint limits for a hybrid formula session.
+</div><span id="structfield.constraints" class="structfield section-header"><a href="#structfield.constraints" class="anchor field">§</a><code>constraints: <a class="struct" href="../zetesis_themelios/formula_hybrid/struct.ConstraintCheckLimits.html" title="struct zetesis_themelios::formula_hybrid::ConstraintCheckLimits">ConstraintCheckLimits</a></code></span><div class="docblock"><p>Cumulative streamed-constraint limits for a hybrid formula session.
 Independent of core candidate/reduct work; eager sessions do not use them.
 The default substitution ceiling matches the ordinary session allowance.</p>
 </div><span id="structfield.models" class="structfield section-header"><a href="#structfield.models" class="anchor field">§</a><code>models: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.usize.html">usize</a></code></span><div class="docblock"><p>Maximum yielded models or retained optimum ties; zero requests all.</p>

@@ -74,8 +74,8 @@ repairs an invalidated device; driver retirement can occur later.
 Clears the last batch and submission receipts.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.propagate_batch" class="method"><a class="src rightside" href="../src/zetesis_wgpu/formula/device.rs.html#206-213">Source</a><h4 class="code-header">pub fn <a href="#method.propagate_batch" class="fn">propagate_batch</a>(
     &amp;mut self,
-    theory: &amp;Theory,
-    candidates: &amp;[Interpretation],
+    theory: &amp;<a class="struct" href="../zetesis_ferraris/theory/struct.Theory.html" title="struct zetesis_ferraris::theory::Theory">Theory</a>,
+    candidates: &amp;[<a class="struct" href="../zetesis_ferraris/theory/struct.Interpretation.html" title="struct zetesis_ferraris::theory::Interpretation">Interpretation</a>],
     limits: <a class="struct" href="struct.FormulaLimits.html" title="struct zetesis_wgpu::FormulaLimits">FormulaLimits</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="struct.FormulaCheck.html" title="struct zetesis_wgpu::FormulaCheck">FormulaCheck</a>&gt;, <a class="struct" href="struct.GpuError.html" title="struct zetesis_wgpu::GpuError">GpuError</a>&gt;</h4></section></summary><div class="docblock"><p>Evaluate original roots, freeze M, and cooperatively narrow the proper-
 subset query. Results retain input order and no partial batch is returned.
@@ -97,8 +97,8 @@ excluded from authored byte limits. A propagation limit is an explicit
 residual, never a proof of stability.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.propagate_batch_with_cancellation" class="method"><a class="src rightside" href="../src/zetesis_wgpu/formula/device.rs.html#225-275">Source</a><h4 class="code-header">pub fn <a href="#method.propagate_batch_with_cancellation" class="fn">propagate_batch_with_cancellation</a>(
     &amp;mut self,
-    theory: &amp;Theory,
-    candidates: &amp;[Interpretation],
+    theory: &amp;<a class="struct" href="../zetesis_ferraris/theory/struct.Theory.html" title="struct zetesis_ferraris::theory::Theory">Theory</a>,
+    candidates: &amp;[<a class="struct" href="../zetesis_ferraris/theory/struct.Interpretation.html" title="struct zetesis_ferraris::theory::Interpretation">Interpretation</a>],
     limits: <a class="struct" href="struct.FormulaLimits.html" title="struct zetesis_wgpu::FormulaLimits">FormulaLimits</a>,
     cancellation: &amp;<a class="struct" href="../zetesis_cpu/cancellation/struct.Cancellation.html" title="struct zetesis_cpu::cancellation::Cancellation">Cancellation</a>,
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="struct.FormulaCheck.html" title="struct zetesis_wgpu::FormulaCheck">FormulaCheck</a>&gt;, <a class="struct" href="struct.GpuError.html" title="struct zetesis_wgpu::GpuError">GpuError</a>&gt;</h4></section></summary><div class="docblock"><p>Propagate with cooperative caller cancellation and deadline observation.
