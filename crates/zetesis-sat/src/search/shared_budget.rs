@@ -202,6 +202,28 @@ impl WorkLease<'_> {
         Ok(())
     }
 
+    /// Take between one and `wanted` permits from the current grant,
+    /// refilling it first when it is spent.
+    pub(crate) fn take_up_to(&self, wanted: u64) -> Result<u64, Incomplete> {
+        if self.remaining.get() == 0 {
+            self.refill()?;
+        }
+        let taken = self.remaining.get().min(wanted);
+        self.remaining.set(self.remaining.get() - taken);
+        Ok(taken)
+    }
+
+    /// Return permits taken by [`Self::take_up_to`] and not spent to the
+    /// current grant, from which they came.
+    pub(crate) fn give_back(&self, unspent: u64) {
+        let remaining = self.remaining.get() + unspent;
+        debug_assert!(
+            remaining <= self.granted.get(),
+            "permits return to their own grant"
+        );
+        self.remaining.set(remaining);
+    }
+
     fn refill(&self) -> Result<(), Incomplete> {
         debug_assert_eq!(self.remaining.get(), 0);
         loop {

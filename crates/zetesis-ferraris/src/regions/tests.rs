@@ -20,6 +20,7 @@ fn compact_mut(knowledge: &mut Knowledge) -> &mut Known<u32> {
 mod chain_links;
 mod counters;
 mod copy_costs;
+mod metering;
 
 fn shared_occurrences() -> crate::Theory {
     use crate::Node::{Atom, Implies, Or};

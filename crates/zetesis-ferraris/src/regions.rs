@@ -131,7 +131,7 @@ pub fn producers(
     })
 }
 
-fn extract(theory: &Theory, work: &mut Work) -> Result<Option<Producers>, Stop> {
+fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, Stop> {
     let nodes = theory.nodes();
     let mut ordinary = Vec::with_capacity(nodes.len());
     for node in nodes {
@@ -223,35 +223,98 @@ pub struct NarrowingAttempt<E = Stop> {
     pub statistics: NarrowingStatistics,
 }
 
-struct Work<F = fn() -> Result<(), Stop>> {
+/// A caller-owned allowance for one narrowing's charged reads, granted in
+/// batches. The narrowing asks for at most [`NARROWING_BATCH`] permits at a
+/// time, spends them one per charged read, and returns the unspent rest when
+/// it ends, whatever its outcome; so the permits it keeps are exactly the
+/// reads it made.
+pub trait NarrowingQuota {
+    /// Grant between one and `wanted` permits, or refuse. A quota that polls
+    /// cancellation or a deadline does so here, so control is observed at
+    /// least once every [`NARROWING_BATCH`] charged reads. A refusal stops
+    /// the narrowing before the read that asked; a grant of zero is a refusal.
+    ///
+    /// # Errors
+    /// The stop that refuses the permits.
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop>;
+    /// Take back permits granted to this narrowing and not spent.
+    fn refund(&mut self, unspent: u64);
+}
+
+/// The most charged reads a narrowing asks its [`NarrowingQuota`] for at once,
+/// and so the most reads between two consultations of it.
+pub const NARROWING_BATCH: u64 = 256;
+
+/// The narrowing's charged reads: a fixed ceiling, or permits granted by a
+/// quota in batches and spent locally.
+struct Work<'q> {
     spent: u64,
     ceiling: u64,
-    charge: F,
+    available: u64,
+    quota: Option<&'q mut dyn NarrowingQuota>,
 }
-impl Work {
+impl Work<'static> {
     fn new(ceiling: u64) -> Self {
         Self {
             spent: 0,
             ceiling,
-            charge: || Ok(()),
+            available: 0,
+            quota: None,
         }
     }
 }
-impl<E: From<Stop>, F: FnMut() -> Result<(), E>> Work<F> {
-    fn metered(charge: F) -> Self {
+impl<'q> Work<'q> {
+    fn reserved(quota: &'q mut dyn NarrowingQuota) -> Self {
         Self {
             spent: 0,
             ceiling: u64::MAX,
-            charge,
+            available: 0,
+            quota: Some(quota),
         }
     }
-    fn tick(&mut self) -> Result<(), E> {
+    #[inline]
+    fn tick(&mut self) -> Result<(), Stop> {
         if self.spent >= self.ceiling {
-            return Err(Stop::WorkLimit.into());
+            return Err(Stop::WorkLimit);
         }
-        (self.charge)()?;
+        if let Some(quota) = &mut self.quota {
+            if self.available == 0 {
+                self.available = quota.reserve(NARROWING_BATCH)?;
+                if self.available == 0 {
+                    return Err(Stop::WorkLimit);
+                }
+            }
+            self.available -= 1;
+        }
         self.spent += 1;
         Ok(())
+    }
+    /// Return the unspent permits to the quota.
+    fn settle(&mut self) {
+        if let Some(quota) = &mut self.quota {
+            quota.refund(std::mem::take(&mut self.available));
+        }
+    }
+}
+
+/// A caller's per-read charge as a quota: one permit per call, and the
+/// caller's own refusal kept to be returned unchanged.
+struct PerRead<F, E> {
+    charge: F,
+    failure: Option<E>,
+}
+impl<E, F: FnMut() -> Result<(), E>> NarrowingQuota for PerRead<F, E> {
+    fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
+        match (self.charge)() {
+            Ok(()) => Ok(1),
+            Err(error) => {
+                self.failure = Some(error);
+                Err(Stop::WorkLimit)
+            }
+        }
+    }
+    fn refund(&mut self, unspent: u64) {
+        debug_assert_eq!(unspent, 0, "a per-read permit is spent as it is granted");
     }
 }
 
@@ -643,13 +706,23 @@ impl Narrower {
             producers,
             frozen: None,
         };
-        self.narrow_with(
+        let mut quota = PerRead {
+            charge,
+            failure: None,
+        };
+        let attempt = self.narrow_with(
             subject,
             region,
             knowledge,
-            Work::metered(charge),
+            Work::reserved(&mut quota),
             cancellation,
-        )
+        );
+        NarrowingAttempt {
+            result: attempt
+                .result
+                .map_err(|stop| quota.failure.take().unwrap_or_else(|| E::from(stop))),
+            statistics: attempt.statistics,
+        }
     }
 
     /// Narrow a region of the theory's frozen reduct under a candidate from
@@ -707,25 +780,92 @@ impl Narrower {
             producers: None,
             frozen: Some(truth),
         };
+        let mut quota = PerRead {
+            charge,
+            failure: None,
+        };
+        let attempt = self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            Work::reserved(&mut quota),
+            cancellation,
+        );
+        NarrowingAttempt {
+            result: attempt
+                .result
+                .map_err(|stop| quota.failure.take().unwrap_or_else(|| E::from(stop))),
+            statistics: attempt.statistics,
+        }
+    }
+
+    /// Narrow original candidates with work granted in batches by `quota`
+    /// (see [`NarrowingQuota`]): the same closure, decisions, receipt and
+    /// refusal point as [`Self::narrow_known_metered`] with a per-read charge
+    /// of the same allowance, consulting the quota at most once every
+    /// [`NARROWING_BATCH`] charged reads and refunding the unspent permits on
+    /// every outcome. This operation polls `cancellation` before any mutation.
+    /// The preconditions of [`Self::narrow_known`] apply, and a failed
+    /// attempt's region and knowledge must be abandoned.
+    pub fn narrow_known_reserved(
+        &self,
+        theory: &Theory,
+        producers: Option<&Producers>,
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        cancellation: &Cancellation,
+        quota: &mut dyn NarrowingQuota,
+    ) -> NarrowingAttempt {
+        let subject = Subject {
+            theory,
+            producers,
+            frozen: None,
+        };
         self.narrow_with(
             subject,
             region,
             knowledge,
-            Work::metered(charge),
+            Work::reserved(quota),
             cancellation,
         )
     }
 
-    fn narrow_with<E: From<Stop>>(
+    /// Narrow a frozen reduct with work granted in batches by `quota`, as
+    /// [`Self::narrow_known_reserved`] does for original candidates. The
+    /// preconditions of [`Self::narrow_frozen_known`] apply.
+    pub fn narrow_frozen_known_reserved(
+        &self,
+        theory: &Theory,
+        truth: &[bool],
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        cancellation: &Cancellation,
+        quota: &mut dyn NarrowingQuota,
+    ) -> NarrowingAttempt {
+        let subject = Subject {
+            theory,
+            producers: None,
+            frozen: Some(truth),
+        };
+        self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            Work::reserved(quota),
+            cancellation,
+        )
+    }
+
+    fn narrow_with(
         &self,
         subject: Subject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
-        mut work: Work<impl FnMut() -> Result<(), E>>,
+        mut work: Work<'_>,
         cancellation: &Cancellation,
-    ) -> NarrowingAttempt<E> {
+    ) -> NarrowingAttempt {
         let mut statistics = NarrowingStatistics::default();
-        let result = cancellation.poll().map_err(E::from).and_then(|()| {
+        let result = cancellation.poll().and_then(|()| {
             // One choice of width per narrowing; the closure runs on it.
             match &mut knowledge.width {
                 Width::Compact(known) => {
@@ -736,20 +876,21 @@ impl Narrower {
                 }
             }
         });
+        work.settle();
         statistics.work = work.spent;
         NarrowingAttempt { result, statistics }
     }
 
     /// The closure, the region's new decisions and the split choice, at the
     /// knowledge's counter width.
-    fn narrow_known_width<C: Count, E: From<Stop>>(
+    fn narrow_known_width<C: Count>(
         &self,
         subject: Subject<'_>,
         region: &mut Region,
         known: &mut Known<C>,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
+        work: &mut Work<'_>,
         statistics: &mut NarrowingStatistics,
-    ) -> Result<Narrowing, E> {
+    ) -> Result<Narrowing, Stop> {
         if known.close(subject, self, region, work, statistics)? == Step::Contradiction {
             return Ok(Narrowing::Refuted);
         }
@@ -781,11 +922,11 @@ impl Narrower {
 /// This chooses the split, as the clause search branches on the variable
 /// with the most unresolved occurrences. The counts are kept as parents
 /// become known, so the ranking is one read per open atom.
-fn most_constrained<C: Count, E: From<Stop>>(
+fn most_constrained<C: Count>(
     region: &Region,
     known: &Known<C>,
-    work: &mut Work<impl FnMut() -> Result<(), E>>,
-) -> Result<Option<usize>, E> {
+    work: &mut Work<'_>,
+) -> Result<Option<usize>, Stop> {
     let mut best: Option<(usize, usize)> = None;
     for atom in region.open() {
         work.tick()?;
@@ -953,14 +1094,14 @@ impl<C: Count> Known<C> {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Each event on the worklist follows a new bit, or is one of
     /// the initial seeds, so the events are bounded by the bits.
-    fn close<E: From<Stop>>(
+    fn close(
         &mut self,
         subject: Subject<'_>,
         index: &Narrower,
         region: &Region,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
+        work: &mut Work<'_>,
         statistics: &mut NarrowingStatistics,
-    ) -> Result<Step, E> {
+    ) -> Result<Step, Stop> {
         let Subject {
             theory,
             producers,
@@ -1024,14 +1165,14 @@ impl<C: Count> Known<C> {
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
     /// parent under the mask likewise.
-    fn revisit<E: From<Stop>>(
+    fn revisit(
         &mut self,
         subject: Subject<'_>,
         index: &Narrower,
         node: usize,
         value: bool,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
-    ) -> Result<Step, E> {
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
         work.tick()?;
         let Subject {
             theory,
@@ -1244,13 +1385,13 @@ impl<C: Count> Known<C> {
     /// `sole_support_forces`). A producer can support its atom when its
     /// body is not known to fail and, unless it is a choice, no other of
     /// its heads is known to hold.
-    fn recheck<E: From<Stop>>(
+    fn recheck(
         &mut self,
         index: &Narrower,
         producers: &Producers,
         atom: usize,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
-    ) -> Result<Step, E> {
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
         if bit(&self.atom_never, atom) {
             return Ok(Step::Unchanged);
         }

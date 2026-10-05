@@ -1116,10 +1116,16 @@ bounded-stop contract.
 The Lean laws do not prove the scheduler's progress or Rust memory ordering.
 
 Original and frozen `Narrower` operations expose metered entry points returning
-an independent `NarrowingAttempt` receipt. The injected SAT budget acquires a
-local or shared permit before each charged read, so the shared ceiling bounds
-execution itself. A refused acquisition prevents that read; all earlier reads
-remain in the attempt and joined region counters even on a stop. The local
+an independent `NarrowingAttempt` receipt. Narrowing reserves permits from
+the injected SAT budget through a `NarrowingQuota`, at most `NARROWING_BATCH`
+(256) at a time, and spends one before each charged read, so the shared
+ceiling bounds execution itself. Cancellation and deadlines are polled at each
+reservation, so at most `NARROWING_BATCH` charged reads apart. A budget grants
+what remains when fewer permits than requested do, so a refused reservation
+prevents the same read per-read charging would; all earlier reads remain in the
+attempt and joined region counters even on a stop. Unspent permits are refunded
+when narrowing returns, so the receipt and the shared ledger count exactly the
+reads made. The local
 `RegionLimits` APIs wrap the same closure. Preservation of semantic narrowing
 still depends on `FormulaBounds` and `FerrarisMask`; permit conservation does
 not prove the reading rules or knowledge ownership. Prefix tests for original

@@ -190,9 +190,15 @@ a caller-owned quota. They request a permit before each charged read and return
 `NarrowingAttempt { result, statistics }`, preserving the quota's typed refusal
 and the admitted work prefix. Entry control is checked even when no read is
 needed; the quota may additionally poll control at every read. The existing
-`RegionLimits` methods retain their local-ceiling API. SAT injects its search
-budget into the metered methods, so parallel workers acquire shared permits
-before candidate or frozen-reduct reads and retain their receipts after failure.
+`RegionLimits` methods retain their local-ceiling API.
+`narrow_known_reserved` and `narrow_frozen_known_reserved` take a
+`NarrowingQuota` instead: they reserve permits in batches of at most
+`NARROWING_BATCH`, spend one per charged read, and refund the unspent rest when
+narrowing returns. A quota that grants what remains stops narrowing at the same
+read as per-read charging and records the same work. SAT injects its search
+budget into the reserved methods, so parallel workers hold shared permits
+before candidate or frozen-reduct reads, poll control once per batch, and
+retain their receipts after failure.
 Failed knowledge still must be abandoned. The [metering regressions](tests/integration/region_work.rs)
 exercise every prefix of original and frozen narrowing and cancellation.
 The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs) compare

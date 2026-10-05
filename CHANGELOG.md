@@ -4,6 +4,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- `zetesis-ferraris` narrowing accepts a `NarrowingQuota` through
+  `narrow_known_reserved` and `narrow_frozen_known_reserved`, which reserve
+  work permits in batches of at most `NARROWING_BATCH` and refund the unspent
+  ones. A stop happens at the same read as with per-read charging, and the
+  receipt counts the same work. The per-read `*_metered` entry points remain.
+
 ### Changed
 
 - `--json` output of runs whose answers come from separate catalogs, such as

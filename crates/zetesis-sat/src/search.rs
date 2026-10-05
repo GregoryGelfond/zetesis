@@ -89,6 +89,22 @@ impl<Q: Quota> Budget<'_, Q> {
         self.statistics.decisions += 1;
         Ok(())
     }
+    /// Grant between one and `wanted` permits to an operation that spends
+    /// them one per read: control is polled once for the batch, and the
+    /// granted permits count as spent until [`Self::refund`] returns the rest.
+    pub(crate) fn reserve_up_to(&mut self, wanted: u64) -> Result<u64, Incomplete> {
+        self.cancellation.poll()?;
+        let granted =
+            self.quota
+                .reserve_up_to(self.statistics.work, self.limits.max_work, wanted)?;
+        self.statistics.work += granted;
+        Ok(granted)
+    }
+    /// Return permits granted by [`Self::reserve_up_to`] and not spent.
+    pub(crate) fn refund(&mut self, unspent: u64) {
+        self.quota.refund(unspent);
+        self.statistics.work -= unspent;
+    }
     /// The work left before the ceiling, for an operation that charges its
     /// own work and reports it afterwards through [`Self::charge`].
     pub(crate) fn remaining_work(&self) -> u64 {

@@ -12,6 +12,13 @@ pub(crate) trait Quota {
     /// Reserve `amount` units of work at once, for an operation that counts
     /// its own work and reports it afterwards.
     fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete>;
+    /// Grant between one and `wanted` permits to an operation that spends
+    /// them one per read and returns the unspent rest through [`Self::refund`];
+    /// a grant never passes the ceiling, so the operation is refused at the
+    /// read [`Self::work`] would refuse.
+    fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete>;
+    /// Take back permits granted by [`Self::reserve_up_to`] and not spent.
+    fn refund(&self, unspent: u64);
 }
 
 /// Ordinary queries have no shared pointer or per-operation execution-mode test.
@@ -41,6 +48,16 @@ impl Quota for LocalQuota {
             Ok(())
         }
     }
+
+    fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete> {
+        match ceiling.saturating_sub(spent).min(wanted) {
+            0 => Err(Incomplete::WorkLimit),
+            granted => Ok(granted),
+        }
+    }
+
+    // The ledger is the budget's own count, which the caller lowers.
+    fn refund(&self, _unspent: u64) {}
 }
 
 /// Completion preflights a complete logical workspace before query allocation.
@@ -60,6 +77,14 @@ impl<Q: Quota> Quota for BoundedQuota<Q> {
     fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete> {
         self.0.charge(spent, ceiling, amount)
     }
+
+    fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete> {
+        self.0.reserve_up_to(spent, ceiling, wanted)
+    }
+
+    fn refund(&self, unspent: u64) {
+        self.0.refund(unspent);
+    }
 }
 
 // Worker counters start at zero and measure deltas; the shared budget is seeded
@@ -75,6 +100,14 @@ impl Quota for WorkLease<'_> {
 
     fn charge(&self, _spent: u64, _ceiling: u64, amount: u64) -> Result<(), Incomplete> {
         self.take(amount)
+    }
+
+    fn reserve_up_to(&self, _spent: u64, _ceiling: u64, wanted: u64) -> Result<u64, Incomplete> {
+        self.take_up_to(wanted)
+    }
+
+    fn refund(&self, unspent: u64) {
+        self.give_back(unspent);
     }
 }
 

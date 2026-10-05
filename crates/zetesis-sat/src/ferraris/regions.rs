@@ -24,12 +24,13 @@ use std::sync::Arc;
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
-    Interpretation, Knowledge, Narrower, NarrowingAttempt, Producers, RegionLimits, Theory,
+    Interpretation, Knowledge, Narrower, NarrowingAttempt, NarrowingQuota, Producers, RegionLimits,
+    Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
-use crate::Incomplete;
 use crate::search::{Budget, Quota};
+use crate::{Cancellation, Incomplete};
 
 /// How classical candidates are proposed to the reduct.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -409,8 +410,9 @@ impl RegionSearch {
 /// an atom, or one refutes it, each from what the region already knows
 /// under it. Each narrowing runs to its own fixed point, so the joint fixed
 /// point is reached when a full round changes nothing. Every charged read
-/// acquires its budget permit first, and even a failed narrowing contributes
-/// its admitted prefix to the counts.
+/// spends a budget permit reserved in batches of at most `NARROWING_BATCH`,
+/// unspent permits are refunded, and even a failed narrowing contributes its
+/// admitted prefix to the counts.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     theory: (&Theory, &Narrower),
     producers: Option<&Producers>,
@@ -432,32 +434,28 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         {
             let producers = if index == 0 { producers } else { None };
             let known = knowledge.permanent(index, narrower)?;
-            let cancellation = budget.cancellation;
-            let attempt = narrower.narrow_known_metered(
-                formulas,
-                producers,
-                region,
-                known,
-                cancellation,
-                || budget.tick().map_err(NarrowingStop),
-            );
-            match account(attempt, counts)? {
+            let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
+                narrower.narrow_known_reserved(
+                    formulas,
+                    producers,
+                    region,
+                    known,
+                    cancellation,
+                    quota,
+                )
+            });
+            match account(&attempt, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
                 Narrowing::Fixed { changed: moved } => round |= moved,
             }
         }
         if let Some(bound) = &restrictions.bound {
             let (formulas, narrower) = bound.index.as_ref();
-            let cancellation = budget.cancellation;
-            let attempt = narrower.narrow_known_metered(
-                formulas,
-                None,
-                region,
-                knowledge.bound(bound)?,
-                cancellation,
-                || budget.tick().map_err(NarrowingStop),
-            );
-            match account(attempt, counts)? {
+            let known = knowledge.bound(bound)?;
+            let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
+                narrower.narrow_known_reserved(formulas, None, region, known, cancellation, quota)
+            });
+            match account(&attempt, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
                 Narrowing::Fixed { changed: moved } => round |= moved,
             }
@@ -495,16 +493,17 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     }
     for (theory, narrower) in restrictions.iter() {
         let mut knowledge = narrower.knowledge();
-        let cancellation = budget.cancellation;
-        let attempt = narrower.narrow_known_metered(
-            theory,
-            None,
-            &mut region,
-            &mut knowledge,
-            cancellation,
-            || budget.tick().map_err(NarrowingStop),
-        );
-        if account(attempt, counts)? == Narrowing::Refuted {
+        let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
+            narrower.narrow_known_reserved(
+                theory,
+                None,
+                &mut region,
+                &mut knowledge,
+                cancellation,
+                quota,
+            )
+        });
+        if account(&attempt, counts)? == Narrowing::Refuted {
             return Ok(false);
         }
     }
@@ -525,20 +524,54 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     Ok(true)
 }
 
-/// Keep the search-level work refusal distinct from a verification refusal,
-/// while preserving any error supplied by the injected budget unchanged.
-struct NarrowingStop(Incomplete);
+/// The budget as a narrowing's quota: permits granted in batches through
+/// [`Budget::reserve_up_to`], control polled once per batch, and the
+/// budget's own refusal kept to be returned unchanged.
+struct BudgetQuota<'b, 'a, Q: Quota> {
+    budget: &'b mut Budget<'a, Q>,
+    failure: Option<Incomplete>,
+}
 
-impl From<Stop> for NarrowingStop {
-    fn from(stop: Stop) -> Self {
-        Self(stopped(stop))
+impl<'b, 'a, Q: Quota> BudgetQuota<'b, 'a, Q> {
+    /// Run one narrowing on the budget, returning its receipt with the
+    /// budget's refusal, or the narrowing's own stop, as the failure.
+    fn narrow(
+        budget: &'b mut Budget<'a, Q>,
+        run: impl FnOnce(&Cancellation, &mut dyn NarrowingQuota) -> NarrowingAttempt,
+    ) -> NarrowingAttempt<Incomplete> {
+        let cancellation = budget.cancellation;
+        let mut quota = Self {
+            budget,
+            failure: None,
+        };
+        let attempt = run(cancellation, &mut quota);
+        NarrowingAttempt {
+            result: attempt
+                .result
+                .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop))),
+            statistics: attempt.statistics,
+        }
+    }
+}
+
+impl<Q: Quota> NarrowingQuota for BudgetQuota<'_, '_, Q> {
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
+        self.budget.reserve_up_to(wanted).map_err(|failure| {
+            self.failure = Some(failure);
+            Stop::WorkLimit
+        })
+    }
+
+    fn refund(&mut self, unspent: u64) {
+        self.budget.refund(unspent);
     }
 }
 
 /// Publish every admitted narrowing prefix before returning its result. Work
-/// has already passed through the local or shared budget before each read.
+/// has passed through the local or shared budget, batch by batch, before
+/// each read.
 fn account(
-    attempt: NarrowingAttempt<NarrowingStop>,
+    attempt: &NarrowingAttempt<Incomplete>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let charges = attempt.statistics;
@@ -546,7 +579,7 @@ fn account(
     counts.held += charges.held;
     counts.cut += charges.cut;
     counts.work += charges.work;
-    attempt.result.map_err(|error| error.0)
+    attempt.result
 }
 
 pub(crate) fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
@@ -656,16 +689,10 @@ fn narrow_frozen<Q: Quota>(
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let cancellation = budget.cancellation;
-    let attempt = narrower.narrow_frozen_known_metered(
-        theory,
-        truth,
-        region,
-        knowledge,
-        cancellation,
-        || budget.tick().map_err(NarrowingStop),
-    );
-    account(attempt, counts)
+    let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
+        narrower.narrow_frozen_known_reserved(theory, truth, region, knowledge, cancellation, quota)
+    });
+    account(&attempt, counts)
 }
 
 #[cfg(test)]

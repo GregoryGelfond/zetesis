@@ -298,3 +298,12 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
         }
     }
 }
+
+#[test]
+fn local_batched_grants_stop_at_the_ceiling() {
+    use super::Quota as _;
+    let quota = LocalQuota;
+    assert_eq!(quota.reserve_up_to(0, 10, 256), Ok(10));
+    assert_eq!(quota.reserve_up_to(7, 10, 2), Ok(2));
+    assert_eq!(quota.reserve_up_to(10, 10, 1), Err(Incomplete::WorkLimit));
+}
