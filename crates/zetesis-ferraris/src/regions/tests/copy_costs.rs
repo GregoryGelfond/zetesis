@@ -14,7 +14,8 @@ use zetesis_cpu::{
 
 use crate::{AdmissionLimits, Narrower, Node, Region, RegionLimits, Theory};
 
-use super::{Counters, Knowledge, counters::native};
+use super::super::{Width, counters::Count};
+use super::{Knowledge, Known, counters::native};
 
 const FREE_ATOMS: usize = 8;
 
@@ -33,7 +34,13 @@ impl Arrays {
     }
 
     fn knowledge(knowledge: &Knowledge) -> Self {
-        let known = &knowledge.known;
+        match &knowledge.width {
+            Width::Compact(known) => Self::known(knowledge, known),
+            Width::Native(known) => Self::known(knowledge, known),
+        }
+    }
+
+    fn known<C: Count>(knowledge: &Knowledge, known: &Known<C>) -> Self {
         let mut arrays = Self::default();
         for words in [
             &known.sure,
@@ -45,10 +52,7 @@ impl Arrays {
             arrays.add::<u64>(words.len(), words.len());
         }
         for counters in [&known.sure_operands, &known.never_operands, &known.unknown] {
-            match counters {
-                Counters::Compact(values) => arrays.add::<u32>(values.len(), values.len()),
-                Counters::Native(values) => arrays.add::<usize>(values.len(), values.len()),
-            }
+            arrays.add::<C>(counters.len(), counters.len());
         }
         arrays.add::<usize>(known.learned.len(), known.learned.capacity());
         arrays.add::<usize>(known.heads.len(), known.heads.capacity());

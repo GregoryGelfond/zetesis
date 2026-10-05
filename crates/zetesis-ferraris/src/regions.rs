@@ -50,7 +50,7 @@ use crate::{Node, Theory};
 mod adjacency;
 mod counters;
 use adjacency::Adjacency;
-use counters::Counters;
+use counters::{Count, Counters, compact_fits};
 
 /// The work ceiling of one narrowing, and of producer extraction. Every
 /// propagation event reads at least one node, so the work bounds the
@@ -407,7 +407,15 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// from its parent and by narrowing with the narrower that made it.
 #[derive(Clone, Debug)]
 pub struct Knowledge {
-    known: Known,
+    width: Width,
+}
+
+/// The knowledge at the counter width chosen when it was created: the
+/// closure runs on one concrete width, chosen once.
+#[derive(Clone, Debug)]
+enum Width {
+    Compact(Known<u32>),
+    Native(Known<usize>),
 }
 
 impl Knowledge {
@@ -417,7 +425,19 @@ impl Knowledge {
     /// temporary clones.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
-        let known = &self.known;
+        size_of::<Self>() as u128
+            + match &self.width {
+                Width::Compact(known) => known.retained_bytes(),
+                Width::Native(known) => known.retained_bytes(),
+            }
+    }
+}
+
+impl<C: Count> Known<C> {
+    /// Payload and capacities owned by this closure state; the enclosing
+    /// [`Knowledge`] header is counted by its owner.
+    fn retained_bytes(&self) -> u128 {
+        let known = self;
         let flag_words = [
             known.sure.len(),
             known.never.len(),
@@ -426,8 +446,7 @@ impl Knowledge {
         ];
         let indices = [known.learned.capacity(), known.heads.capacity()];
         let counters = [&known.sure_operands, &known.never_operands, &known.unknown];
-        size_of::<Self>() as u128
-            + flag_words.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<u64>() as u128
+        flag_words.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<u64>() as u128
             + indices.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<usize>() as u128
             + counters
                 .into_iter()
@@ -536,15 +555,24 @@ impl Narrower {
         // occurrence in this same incidence stream. Its total bounds all
         // three counter arrays; no theory-size or language cap is imposed.
         let incidences = self.parents.entry_count();
-        let mut unknown = Counters::zeros(self.atom_nodes.len(), incidences);
+        Knowledge {
+            width: if compact_fits(incidences) {
+                Width::Compact(self.root_known())
+            } else {
+                Width::Native(self.root_known())
+            },
+        }
+    }
+
+    /// The root's closure state at one counter width.
+    fn root_known<C: Count>(&self) -> Known<C> {
+        let mut unknown = Counters::zeros(self.atom_nodes.len());
         for (atom, nodes) in self.atom_nodes.iter().enumerate() {
             for &node in nodes {
                 unknown.add(atom, self.parents[node].len());
             }
         }
-        Knowledge {
-            known: Known::empty(self.parents.len(), self.chains.len(), incidences, unknown),
-        }
+        Known::empty(self.parents.len(), self.chains.len(), unknown)
     }
 
     /// Narrow the region to the fixed point of the closure's rules from
@@ -697,37 +725,54 @@ impl Narrower {
         cancellation: &Cancellation,
     ) -> NarrowingAttempt<E> {
         let mut statistics = NarrowingStatistics::default();
-        let result = (|| {
-            cancellation.poll().map_err(E::from)?;
-            let known = &mut knowledge.known;
-            if known.close(subject, self, region, &mut work, &mut statistics)?
-                == Step::Contradiction
-            {
-                return Ok(Narrowing::Refuted);
+        let result = cancellation.poll().map_err(E::from).and_then(|()| {
+            // One choice of width per narrowing; the closure runs on it.
+            match &mut knowledge.width {
+                Width::Compact(known) => {
+                    self.narrow_known_width(subject, region, known, &mut work, &mut statistics)
+                }
+                Width::Native(known) => {
+                    self.narrow_known_width(subject, region, known, &mut work, &mut statistics)
+                }
             }
-            // The atoms this closure learned decide the region; the region's own
-            // decisions, the split's and those made here, are then all seen.
-            let mut changed = false;
-            for atom in known.learned.drain(..) {
-                let was_open = region.is_open(atom);
-                let decided = if bit(&known.atom_sure, atom) {
-                    statistics.held += u64::from(was_open);
-                    region.hold(atom)
-                } else {
-                    statistics.cut += u64::from(was_open);
-                    region.cut(atom)
-                };
-                debug_assert!(decided, "a learned atom agrees with the region");
-                changed |= was_open;
-            }
-            region.snapshot_decided(&mut known.seen);
-            if let Some(atom) = most_constrained(region, known, &mut work)? {
-                region.prefer(atom);
-            }
-            Ok(Narrowing::Fixed { changed })
-        })();
+        });
         statistics.work = work.spent;
         NarrowingAttempt { result, statistics }
+    }
+
+    /// The closure, the region's new decisions and the split choice, at the
+    /// knowledge's counter width.
+    fn narrow_known_width<C: Count, E: From<Stop>>(
+        &self,
+        subject: Subject<'_>,
+        region: &mut Region,
+        known: &mut Known<C>,
+        work: &mut Work<impl FnMut() -> Result<(), E>>,
+        statistics: &mut NarrowingStatistics,
+    ) -> Result<Narrowing, E> {
+        if known.close(subject, self, region, work, statistics)? == Step::Contradiction {
+            return Ok(Narrowing::Refuted);
+        }
+        // The atoms this closure learned decide the region; the region's own
+        // decisions, the split's and those made here, are then all seen.
+        let mut changed = false;
+        for atom in known.learned.drain(..) {
+            let was_open = region.is_open(atom);
+            let decided = if bit(&known.atom_sure, atom) {
+                statistics.held += u64::from(was_open);
+                region.hold(atom)
+            } else {
+                statistics.cut += u64::from(was_open);
+                region.cut(atom)
+            };
+            debug_assert!(decided, "a learned atom agrees with the region");
+            changed |= was_open;
+        }
+        region.snapshot_decided(&mut known.seen);
+        if let Some(atom) = most_constrained(region, known, work)? {
+            region.prefer(atom);
+        }
+        Ok(Narrowing::Fixed { changed })
     }
 }
 
@@ -736,9 +781,9 @@ impl Narrower {
 /// This chooses the split, as the clause search branches on the variable
 /// with the most unresolved occurrences. The counts are kept as parents
 /// become known, so the ranking is one read per open atom.
-fn most_constrained<E: From<Stop>>(
+fn most_constrained<C: Count, E: From<Stop>>(
     region: &Region,
-    known: &Known,
+    known: &Known<C>,
     work: &mut Work<impl FnMut() -> Result<(), E>>,
 ) -> Result<Option<usize>, E> {
     let mut best: Option<(usize, usize)> = None;
@@ -765,19 +810,19 @@ fn most_constrained<E: From<Stop>>(
 /// dependent producers are read, a chain learning from an operand by one
 /// counter step.
 #[derive(Clone, Debug)]
-struct Known {
+struct Known<C> {
     sure: Box<[u64]>,
     never: Box<[u64]>,
     atom_sure: Box<[u64]>,
     atom_never: Box<[u64]>,
     /// Per chain, the operands known to hold.
-    sure_operands: Counters,
+    sure_operands: Counters<C>,
     /// Per chain, the operands known to fail.
-    never_operands: Counters,
+    never_operands: Counters<C>,
     /// Per atom, the parents of its nodes not yet known: the split ranking.
     /// A parent is counted once here and taken off once when it is
     /// revisited, so the count never goes below zero.
-    unknown: Counters,
+    unknown: Counters<C>,
     /// The atoms this closure decided, not yet told to the region.
     learned: Vec<usize>,
     /// Nodes that learned something, with what, and have not been revisited.
@@ -835,16 +880,16 @@ fn learn(known: &mut [u64], opposite: &[u64], index: usize) -> Step {
     }
 }
 
-impl Known {
-    fn empty(nodes: usize, chains: usize, incidences: usize, unknown: Counters) -> Self {
+impl<C: Count> Known<C> {
+    fn empty(nodes: usize, chains: usize, unknown: Counters<C>) -> Self {
         let seen = vec![0u64; unknown.len().div_ceil(64)].into_boxed_slice();
         Self {
             sure: vec![0; flag_words(nodes)].into_boxed_slice(),
             never: vec![0; flag_words(nodes)].into_boxed_slice(),
             atom_sure: vec![0; flag_words(unknown.len())].into_boxed_slice(),
             atom_never: vec![0; flag_words(unknown.len())].into_boxed_slice(),
-            sure_operands: Counters::zeros(chains, incidences),
-            never_operands: Counters::zeros(chains, incidences),
+            sure_operands: Counters::zeros(chains),
+            never_operands: Counters::zeros(chains),
             unknown,
             learned: Vec::new(),
             nodes: Vec::new(),
