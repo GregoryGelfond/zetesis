@@ -74,6 +74,7 @@ pub(crate) fn after_cleanup(
 }
 
 /// A typed reason why model enumeration could not establish complete coverage.
+/// Implements [`std::error::Error`], preserving any underlying typed cause.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interruption {
     /// Cancellation stopped preparation before an executor began checking candidates.
@@ -111,10 +112,101 @@ impl fmt::Display for Interruption {
     }
 }
 
+impl std::error::Error for Interruption {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Preparation(error)
+            | Self::Oracle(error)
+            | Self::Constraint(error)
+            | Self::Reconstruction(error)
+            | Self::ModelConstruction(crate::ModelConstructionStop::Control(error)) => Some(error),
+            Self::Countermodel(error) => Some(error),
+            Self::Objective(error) => Some(error),
+            Self::PreparedObjective(error) => Some(error),
+            Self::Incumbent(error) => Some(error),
+            // These resource records are the cause itself, without a nested Error.
+            Self::ModelConstruction(
+                crate::ModelConstructionStop::Work { .. }
+                | crate::ModelConstructionStop::Bytes { .. },
+            ) => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Completion, Interruption, SearchState};
+    use std::error::Error;
     use zetesis_cpu::Stop;
+
+    #[test]
+    fn interruption_retains_its_public_type_when_boxed() {
+        let reason = Interruption::Oracle(Stop::WorkLimit);
+        let error: Box<dyn Error + Send + Sync> = Box::new(reason);
+        assert_eq!(error.downcast_ref::<Interruption>(), Some(&reason));
+    }
+
+    #[test]
+    fn direct_control_stages_expose_the_original_stop() {
+        for reason in [
+            Interruption::Preparation(Stop::Cancelled),
+            Interruption::Oracle(Stop::Cancelled),
+            Interruption::Constraint(Stop::Cancelled),
+            Interruption::Reconstruction(Stop::Cancelled),
+            Interruption::ModelConstruction(crate::ModelConstructionStop::Control(Stop::Cancelled)),
+        ] {
+            assert_eq!(
+                reason
+                    .source()
+                    .and_then(|source| source.downcast_ref::<Stop>()),
+                Some(&Stop::Cancelled),
+            );
+        }
+    }
+
+    #[test]
+    fn countermodel_interruption_preserves_the_nested_error_chain() {
+        let native = zetesis_sat::Incomplete::Verification(Stop::Deadline);
+        let reason = Interruption::Countermodel(native);
+        let source = reason.source().expect("the native countermodel cause");
+        assert_eq!(
+            source.downcast_ref::<zetesis_sat::Incomplete>(),
+            Some(&native)
+        );
+        assert_eq!(
+            source
+                .source()
+                .and_then(|source| source.downcast_ref::<Stop>()),
+            Some(&Stop::Deadline),
+        );
+    }
+
+    #[test]
+    fn incumbent_interruption_exposes_the_retention_refusal() {
+        let reason = Interruption::Incumbent(crate::OptimizationStop::Bytes);
+        assert_eq!(
+            reason
+                .source()
+                .and_then(|source| source.downcast_ref::<crate::OptimizationStop>()),
+            Some(&crate::OptimizationStop::Bytes),
+        );
+    }
+
+    #[test]
+    fn model_construction_limits_have_no_fabricated_source() {
+        for reason in [
+            Interruption::ModelConstruction(crate::ModelConstructionStop::Work {
+                observed: 8,
+                limit: 7,
+            }),
+            Interruption::ModelConstruction(crate::ModelConstructionStop::Bytes {
+                required: 8,
+                limit: 7,
+            }),
+        ] {
+            assert!(reason.source().is_none());
+        }
+    }
 
     #[test]
     fn compatibility_views_derive_from_one_search_state() {

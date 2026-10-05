@@ -17,9 +17,12 @@ pub(crate) fn materialize(
     preparation: Preparation,
     observer: Option<&dyn GroundingObserver>,
 ) -> Result<Materialized, FormulaFailure> {
+    let cancellation = preparation.budget.cancellation().cloned();
+    let location = preparation.location;
     crate::grounding_observer::observe(observer, || {
+        crate::formula::poll_control(cancellation.as_ref(), location)?;
         let Partition { base, terminal } = partition::partition(preparation)?;
-        match terminal {
+        let materialized = match terminal {
             None => {
                 crate::formula_ground::ground(base, observer, None).map(|compiled| Materialized {
                     compiled,
@@ -27,7 +30,9 @@ pub(crate) fn materialize(
                 })
             }
             Some(definitions) => admit_terminal(base, definitions, observer),
-        }
+        }?;
+        crate::formula::poll_control(cancellation.as_ref(), location)?;
+        Ok(materialized)
     })
 }
 
@@ -57,7 +62,8 @@ fn admit_terminal(
         budget,
         mut output_storage,
     } = retained;
-    let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default());
+    let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default())
+        .with_cancellation(budget.cancellation());
     let closed = catalog
         .into_closed(0, GroundingWork::new(&limits, &mut counters, location))
         .map_err(|failure| {

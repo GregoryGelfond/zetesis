@@ -7,6 +7,10 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::Instant;
 
+mod slot;
+
+pub use slot::{CancellationRun, CancellationSlot, CancellationSlotError};
+
 /// Shared cancellation and an optional immutable deadline. Clones observe the
 /// same flags. A deadline is observed the way cancellation is: a timer thread
 /// sets an expiry flag when the deadline passes, and a poll reads flags only,
@@ -16,6 +20,7 @@ use std::time::Instant;
 pub struct Cancellation {
     cancelled: Arc<AtomicBool>,
     deadline: Option<Arc<DeadlineOwner>>,
+    slot: Option<slot::Membership>,
 }
 
 impl Cancellation {
@@ -37,13 +42,17 @@ impl Cancellation {
     }
 
     /// Observe cancellation and the deadline at a bounded work boundary.
-    /// At most two relaxed loads; no clock is read.
+    /// Ordinary handles read at most two relaxed flags; a handle from a
+    /// [`CancellationSlot`] additionally reads its run's membership. No clock
+    /// is read. A retired or superseded run reports cancellation.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
-        if self.cancelled.load(Ordering::Relaxed) {
+        if self.cancelled.load(Ordering::Relaxed)
+            || matches!(self.slot.as_ref(), Some(membership) if membership.is_cancelled())
+        {
             Err(Stop::Cancelled)
         } else if self
             .deadline

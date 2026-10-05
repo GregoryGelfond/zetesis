@@ -40,7 +40,7 @@ pub(crate) fn facts(
     for arguments in atom.alternatives() {
         let sizes = arguments
             .iter()
-            .map(|term| size(term, location))
+            .map(|term| size(term, budget, location))
             .collect::<Result<Vec<_>, _>>()?;
         // Every argument is validated even if another has an empty interval.
         let count = sizes
@@ -75,6 +75,7 @@ pub(crate) fn facts(
             .collect::<Result<Vec<_>, _>>()?;
         let mut cursor = vec![0; arguments.len()];
         for _ in 0..count {
+            budget.poll(location)?;
             let mut terms = Vec::with_capacity(arguments.len());
             for (values, index) in alternatives.iter().zip(&cursor) {
                 let value = &values[*index];
@@ -102,10 +103,15 @@ pub(crate) fn facts(
     Ok(Some(facts))
 }
 
-fn size(term: &SourceTerm, location: ProgramSite) -> Result<u128, ExpansionFailure> {
+fn size(
+    term: &SourceTerm,
+    budget: &Budget,
+    location: ProgramSite,
+) -> Result<u128, ExpansionFailure> {
     let mut pending = vec![term];
     let mut size = 0_u128;
     while let Some(term) = pending.pop() {
+        budget.poll(location)?;
         match term {
             SourceTerm::Pool(items) => pending.extend(items),
             SourceTerm::Interval { lower, upper } => {
@@ -139,11 +145,19 @@ fn values(
     let mut pending = vec![term];
     let mut values = Vec::new();
     while let Some(term) = pending.pop() {
+        budget.poll(location)?;
         match term {
             SourceTerm::Pool(items) => pending.extend(items.iter().rev()),
             SourceTerm::Interval { lower, upper } => {
                 if let Some(range) = interval(lower, upper, location)? {
-                    values.extend(range.map(Value::Number));
+                    if budget.cancellation().is_some() {
+                        for number in range {
+                            budget.poll(location)?;
+                            values.push(Value::Number(number));
+                        }
+                    } else {
+                        values.extend(range.map(Value::Number));
+                    }
                 }
             }
             SourceTerm::Symbolic(symbol) => {
@@ -195,3 +209,6 @@ fn value_bytes(value: &Value) -> u128 {
         Value::String(value) | Value::Symbol(value) => value.len() as u128,
     }
 }
+
+#[cfg(test)]
+mod tests;

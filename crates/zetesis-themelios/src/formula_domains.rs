@@ -76,8 +76,8 @@ pub(crate) fn analyze<'source>(
         profile.domain_analysis(DomainObservation::Inapplicable);
         return Ok(None);
     };
-    // This API has no caller Cancellation. Logical populations and remaining work
-    // bound the uninterruptible call; no cancellation/deadline is invented.
+    // Domain analysis has no internal control hook. Its logical populations and
+    // remaining work bound this cooperative interval; poll before and after it.
     counters.charge_work(0, limits, location)?;
     options.max_work = options
         .max_work

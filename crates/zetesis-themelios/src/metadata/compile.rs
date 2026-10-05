@@ -351,6 +351,7 @@ impl SourceMetadata {
         }
         let observations = limits.observations;
         let options = CompilationOptions {
+            purpose: crate::FormulaPurpose::Ordinary,
             max_body_elements: observations.max_body_elements as usize,
             core_limits: zetesis_core::AdmissionLimits {
                 max_variables_per_template: observations.max_variables as usize,

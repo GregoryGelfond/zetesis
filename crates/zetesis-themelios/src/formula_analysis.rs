@@ -156,7 +156,10 @@ pub(crate) fn analyze(
     // narrower than our separately checked source profile. Source admission's
     // own scope/binder checks precede this helper and remain authoritative.
     // Neither a favorable verdict nor Unknown disables grounding ceilings.
-    Ok(themelios_analysis::Analysis::of(program))
+    budget.poll(fallback)?;
+    let analysis = themelios_analysis::Analysis::of(program);
+    budget.poll(fallback)?;
+    Ok(analysis)
 }
 
 fn signature_sizes(signatures: impl Iterator<Item = Signature>) -> (u128, u128) {

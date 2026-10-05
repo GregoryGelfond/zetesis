@@ -20,10 +20,14 @@ concurrent atomic semantics, timer behavior or eventual cancellation response.
 namespace EvaluatorControl
 
 /-- The reason observed at this single poll. A cancellation observation wins
-before the optional deadline is consulted. An absent deadline cannot expire. -/
+before the optional slot comparison and deadline are consulted. A mismatching
+slot word also cancels; absent controls perform no corresponding read. -/
 def observation (control : zetesis_cpu.cancellation.Cancellation) :
     Option zetesis_cpu.cancellation.Stop :=
   if control.cancelled.value.nextRead then some .Cancelled
+  else if (control.slot.map
+      (fun member => member.state.value.nextRead != member.active)).getD false
+    then some .Cancelled
   else if (control.deadline.map
       (fun owner => owner.value.deadline.value.expired.nextRead)).getD false
     then some .Deadline else none
@@ -37,14 +41,17 @@ theorem poll_exact (control : zetesis_cpu.cancellation.Cancellation) :
         | some reason => core.result.Result.Err reason
         | none => core.result.Result.Ok ()) := by
   cases cancelled : control.cancelled.value.nextRead <;>
-    cases deadline : control.deadline <;>
+    cases membership : control.slot <;> cases deadline : control.deadline <;>
     simp [zetesis_cpu.cancellation.Cancellation.poll, observation,
       alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref,
       core.sync.atomic.AtomicBoolAlign1U8.load,
+      core.sync.atomic.AtomicU64Align8U64.load,
+      zetesis_cpu.cancellation.slot.Membership.is_cancelled,
       core.option.Option.as_ref, core.option.Option.is_some_and,
       zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool.call_once,
-      cancelled, deadline]
-  split <;> rfl
+      cancelled, membership, deadline] <;>
+    split <;> simp_all
+  all_goals split <;> rfl
 
 /-- A control stop is returned before any work-limit test or counter update.
 The entire work record is preserved, even if its counter has reached its limit. -/

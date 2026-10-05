@@ -407,6 +407,7 @@ import FrozenBoundaryExample
 #print axioms SubjectMembership.completed_subject
 #print axioms SubjectMembership.completed_stable
 
+#print axioms RuntimeContexts.membership_reconstruct
 #print axioms RuntimeContexts.deadline_reconstruct
 #print axioms RuntimeContexts.option_reconstruct
 #print axioms RuntimeContexts.poll_reconstruct
@@ -431,7 +432,7 @@ import FrozenBoundaryExample
 #print axioms CheckerContexts.check_reconstruct
 #print axioms CheckerContexts.checkInterpretation_reconstruct
 #print axioms ContextEvents.lift_result
-#print axioms ContextEvents.poll_without_deadline
+#print axioms ContextEvents.poll_reads
 #print axioms ContextEvents.two_polls_observe_change
 #print axioms ContextEvents.tick_cancelled
 #print axioms ContextEvents.exhausted_body
@@ -441,10 +442,13 @@ import FrozenBoundaryExample
 #print axioms RuntimeRuns.bind_inv
 #print axioms RuntimeRuns.embed_iff
 #print axioms RuntimeRuns.embedded_bind_inv
+#print axioms ControlReads.receipt_of_run
+#print axioms ControlReads.run_of_receipt
+#print axioms ControlReads.completed_iff
+#print axioms ControlReads.nonempty
 #print axioms RuntimeLoop.completed_calls
 #print axioms RuntimeLoop.completed_loop
 #print axioms RuntimeLoop.completed_post
-#print axioms TickProjection.poll_with_deadline
 #print axioms TickProjection.tick_factors
 #print axioms TickProjection.completed_poll
 #print axioms TickProjection.completed_tick

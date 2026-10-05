@@ -30,7 +30,8 @@ def candidate : theory.Interpretation := {
 both configurations have no deadline. -/
 def control (cancelled : Bool) : zetesis_cpu.cancellation.Cancellation := {
   cancelled := { owner := 1, value := { nextRead := cancelled } }
-  deadline := none }
+  deadline := none
+  slot := none }
 
 /-- Two units admit both nodes, starting from no charged work. -/
 def initial : EvaluationTrace.State := {

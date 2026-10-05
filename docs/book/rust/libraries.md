@@ -1,33 +1,43 @@
 # Library reference index
 
 Start with [Getting started with the library](getting-started.md) for dependency
-setup and the complete
-[solve example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/examples/solve.rs).
-From a checkout, run `cargo run -p zetesis-solve --example solve --no-default-features`.
-The usual path is to prepare source or a canonical logical program with
-`zetesis_themelios`, pass the admitted owner to `zetesis_solve::Session`, consume
-`AnswerSet` values, and inspect the final outcome. Use the tables below when you
-need a specific capability rather than a complete solve.
+setup, then [Programs, answers and queries](agent.md) for the public `zetesis` API.
+For direct control of native preparation and execution, the complete
+[session example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/examples/solve.rs)
+prepares source through `zetesis_themelios`, consumes checked answers from a
+`zetesis_solve::Session`, and inspects its final outcome. From a checkout, run
+`cargo run -p zetesis-solve --example solve --no-default-features`.
+Use the tables below to find a specific capability.
 
 ## Applications and source programs
 
 | Task | Public library entry points | Guide |
 | --- | --- | --- |
+| Construct canonical ASP and use upstream solve/query vocabulary | `zetesis::{Program, Symbol, program, syntax, analysis, solve, query, prelude}` | [Facade](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis/README.md) |
+| Solve and query a canonical knowledge base | `zetesis::{Solver, Config}`, `zetesis::solve::agent::Agent`, `zetesis::query::AgentReading` | [Programs, answers and queries](agent.md) |
 | Admit ASP source | `zetesis_themelios::{admit, admit_extended, prepare_formula, admit_formula}` and bundle counterparts | [Source preparation](source.md) |
 | Prepare or admit a logical formula program | `zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}` | [Typed formula preparation](source.md#prepare-a-logical-formula-program) |
-| Admit a logical program under S0 | `zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}` | [Typed program admission](source.md#admit-an-existing-logical-program) |
+| Prepare an owned logical relational program | `zetesis_themelios::{prepare_program_relational, ProgramRelationalOptions, PreparedRelational}` | [Owned relational preparation](source.md#admit-an-existing-logical-program) |
+| Admit a logical program under S0 | `zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}` | [Typed program admission](source.md#borrow-the-strict-relational-input) |
 | Solve admitted input | `zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}` | [Sessions](sessions.md) |
-| Collect a complete family | `WorldView::collect`, `SessionBuilder::collect`, `WorldViewLimits` | [Completion and output](outcomes.md) |
+| Collect a complete native family | `zetesis_solve::WorldView::collect`, `SessionBuilder::collect`, `WorldViewLimits` | [Completion and output](outcomes.md) |
 | Inspect an answer or interpretation | `AnswerSet`, `zetesis_core::{Interpretation, Model}`, `catalog::{AtomRef, TermRef}` | [Interpretations and atoms](models.md) |
 | Evaluate costs and source displays | `zetesis_objective`, admitted-owner observation APIs | [Costs and shown terms](costs-and-output.md) |
 | Observe execution without parsing statistics text | `ExecutionObserver`, `SolveMeasurements`, `SemanticOutcome` | [Observations and measurements](measurements.md) |
 | Publish answers through a custom view | `zetesis_cli::{publish_prepared, PublicationConfig, AnswerRenderer}` | [Answer presentation](outcomes.md#replace-answer-presentation) |
 | Reuse test, benchmark and presentation workflows | `zetesis_validation`, `zetesis_bench`, `zetesis_presentation` | [Command workflows](workflows.md) |
 
-`zetesis-themelios` admits source text and canonical logical programs. The
-underlying themelios libraries provide parsing, logical-program construction
-and analysis; their standalone APIs belong to the themelios manual. A session consumes prepared input
-and does not parse source or choose another admission profile after a refusal.
+The `zetesis` facade re-exports canonical themelios types and forwards all nine
+construction macros through its own runtime, including under a Cargo rename.
+Its `Solver` supplies the native CPU backend through `zetesis-engine`. The solve
+and query modules expose the upstream contracts and readings. Construction does
+not establish native engine support; each grounding route retains its admission
+limits.
+
+`zetesis-themelios` admits source text and canonical logical programs. A native
+session consumes prepared input and does not parse source or choose another
+admission profile after a refusal. The upstream construction and analysis APIs
+retain the contracts documented in the themelios manual.
 
 ## Logical values, candidates and relations
 
@@ -113,15 +123,17 @@ operation's ownership, cost, limits and errors. The
 [solver source](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/lib.rs)
 is also available online.
 
-The current API does not offer a general ASPIF importer, a custom theory
-propagator or a themelios-solve backend implementation. The documented admitted
-inputs and session APIs define the supported integration points.
+`zetesis::Solver` implements `zetesis::solve::contract::Backend` through the
+CPU adapter in `zetesis-engine`. It connects canonical programs to complete
+unscored enumeration and the agent/query APIs. The [adapter guide](agent.md)
+records its supported capabilities. A general ASPIF importer and custom theory
+propagation remain unsupported; native sessions provide GPU execution,
+objectives and direct control of prepared input.
 
-A themelios-solve adapter is intended to connect its applicable programmatic
-interaction abstractions to a shared public layer. That integration remains
-future work alongside the shipped typed program admission APIs. Zetesis's current
-library remains usable independently. Any adapter must preserve typed
-`AnswerSet` and `WorldView` outcomes, incomplete-result evidence, and zetesis's
-ownership of reduct checking and backend execution. The aim is convenient Rust
-interaction without requiring callers to reproduce a C-style handle protocol;
-future signatures and capabilities are not specified here.
+The two world-view types retain different contracts.
+`zetesis::query::WorldView` is a nonempty live stream over a consistent result;
+it may still be incomplete. Its materialized `Snapshot` is complete and nonempty.
+`zetesis_solve::WorldView` retains the complete original family and can be empty
+to establish inconsistency. The adapter exports full typed answers and preserves
+incomplete-result evidence; query snapshots require a complete, nonempty family.
+The native solver remains responsible for reduct checking and execution.

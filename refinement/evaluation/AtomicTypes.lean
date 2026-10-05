@@ -6,13 +6,13 @@ import Aeneas
 An `Atomic` token supplies a fixed read value. It has no address, mutable contents
 or modification order and does not represent a Rust shared-memory object.
 
-The production body polls at most once, loading cancellation at most once and
-deadline at most once. Independent body invocations may receive fresh tokens.
+The production body polls at most once, loading local cancellation at most
+once, the optional slot word at most once, and deadline at most once. Independent body invocations may receive fresh tokens.
 `FixedLoop` instead follows the generated loop's returned-control threading;
 repeated reads of a token return the same value. Its mathematical loop theorem
 does not establish correspondence with changing runtime observations.
 
-`Align1` is an unobserved type marker, not a claim about physical alignment.
+`Align1` and `Align8` are unobserved type markers, not claims about physical alignment.
 The load operation is defined separately because its Ordering type is generated
 in `Evaluator.Types`. No external-type axiom is introduced here.
 -/
@@ -21,6 +21,11 @@ in `Evaluator.Types`. No external-type axiom is introduced here.
     No layout, allocation or alignment property is represented. -/
 @[rust_type "core::sync::atomic::private::Align1"]
 structure core.sync.atomic.private.Align1 (_T : Type) where
+
+/-- The signature marker for the extracted U64 atomic load. As with Align1,
+    no physical layout or alignment property is represented. -/
+@[rust_type "core::sync::atomic::private::Align8"]
+structure core.sync.atomic.private.Align8 (_T : Type) where
 
 /-- An explicitly supplied observation, repeated if the token is reused.
     The Rust-shaped name preserves the generated source; this is not a model of

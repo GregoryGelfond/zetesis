@@ -7,7 +7,7 @@ open ZetesisExtract
 /-!
 # Restricted monadic contexts for returning effects
 
-The four contexts below generalize exact generated definitions. Only their
+The five contexts below generalize exact generated definitions. Only their
 result monad and named effect call sites change; pure operations remain imported
 backend calls. ContextAudit checks exact headers, call counts, body text and
 reversal separately from the kernel reconstruction laws. This audited source
@@ -17,6 +17,16 @@ correspondence requires additional returning-event projection laws.
 namespace RuntimeContexts
 
 variable {M : Type → Type} [Monad M] [MonadLiftT Result M]
+
+def membershipContext
+  (readWord : core.sync.atomic.Atomic U64 (core.sync.atomic.private.Align8 U64) →
+    core.sync.atomic.Ordering → M U64)
+  (self : zetesis_cpu.cancellation.slot.Membership) : M Bool := do
+  let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self.state
+  let i ←
+    readWord a
+      core.sync.atomic.Ordering.Relaxed
+  ok (i != self.active)
 
 def deadlineContext
   (read : core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1 U8) →
@@ -34,6 +44,7 @@ def deadlineContext
 def pollContext
   (read : core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1 U8) →
     core.sync.atomic.Ordering → M Bool)
+  (slotCancelled : zetesis_cpu.cancellation.slot.Membership → M Bool)
   (deadline : Option (alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner) → M Bool)
   (self : zetesis_cpu.cancellation.Cancellation) :
   M (core.result.Result Unit zetesis_cpu.cancellation.Stop)
@@ -45,12 +56,26 @@ def pollContext
   if b
   then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
   else
-    let o ← core.option.Option.as_ref self.deadline
+    let o ← core.option.Option.as_ref self.slot
     let b1 ←
-      deadline o
+      match o with
+      | none => ok false
+      | some membership =>
+        do
+        let b2 ←
+          slotCancelled membership
+        if b2
+        then ok true
+        else ok false
     if b1
-    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
-    else ok (core.result.Result.Ok ())
+    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
+    else
+      let o1 ← core.option.Option.as_ref self.deadline
+      let b2 ←
+        deadline o1
+      if b2
+      then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
+      else ok (core.result.Result.Ok ())
 
 def tickContext
   (poll : zetesis_cpu.cancellation.Cancellation →
@@ -174,6 +199,12 @@ def deadlineOption
   | none => pure false
   | some owner => deadlineContext read () owner
 
+/-- Filling the word-read hole recovers the actual generated membership body,
+including its inequality with the captured active word. -/
+theorem membership_reconstruct (member : zetesis_cpu.cancellation.slot.Membership) :
+    membershipContext (M := Result) core.sync.atomic.AtomicU64Align8U64.load member =
+      zetesis_cpu.cancellation.slot.Membership.is_cancelled member := by rfl
+
 /-- Replacing the one read hole by the active load reconstructs the actual
 generated deadline callback without simplifying that load. -/
 theorem deadline_reconstruct (closure : zetesis_cpu.cancellation.Cancellation.poll.closure)
@@ -195,9 +226,18 @@ theorem option_reconstruct
 No assumption about a poll's result is used. -/
 theorem poll_reconstruct (control : zetesis_cpu.cancellation.Cancellation) :
     pollContext (M := Result) core.sync.atomic.AtomicBoolAlign1U8.load
+      zetesis_cpu.cancellation.slot.Membership.is_cancelled
       (fun value => core.option.Option.is_some_and
         zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool
-        value ()) control = zetesis_cpu.cancellation.Cancellation.poll control := by rfl
+        value ()) control = zetesis_cpu.cancellation.Cancellation.poll control := by
+  cases cancelled : control.cancelled.value.nextRead <;>
+    cases configured : control.slot <;>
+    simp [pollContext, zetesis_cpu.cancellation.Cancellation.poll,
+      zetesis_cpu.cancellation.slot.Membership.is_cancelled,
+      alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref,
+      core.sync.atomic.AtomicBoolAlign1U8.load, core.sync.atomic.AtomicU64Align8U64.load,
+      core.option.Option.as_ref, liftM, monadLift_self, cancelled, configured]
+  all_goals split <;> simp_all
 
 /-- Filling the single poll hole with the actual poll recovers the generated
 tick without unfolding that poll. The work-limit comparison stays after it. -/

@@ -33,15 +33,18 @@ inductive ReservationResponse (required : Nat) where
       (bounded : capacity ≤ Usize.max)
   | rejected (reason : ReservationError)
 
-/-- Requests preserve the observed object and ordering for reads, or the current
-logical length and requested additional capacity for reservations. -/
+/-- Reads preserve the observed object, scalar type and ordering. Boolean and
+U64 requests have separate response types; a word is never reduced to an assumed
+cancellation verdict. Reservations retain length and requested capacity. -/
 inductive Request where
   | read (object : Nat) (ordering : ZetesisExtract.core.sync.atomic.Ordering)
+  | readU64 (object : Nat) (ordering : ZetesisExtract.core.sync.atomic.Ordering)
   | reserve (length additional : Nat)
   | fail (error : Aeneas.Std.Error)
 
 abbrev Response : Request → Type
   | .read _ _ => Bool
+  | .readU64 _ _ => U64
   | .reserve length additional => ReservationResponse (length + additional)
   | .fail _ => PEmpty
 
@@ -198,6 +201,15 @@ def load (cell : Atomic) (ordering : ZetesisExtract.core.sync.atomic.Ordering) :
     Computation Bool :=
   match ordering with
   | .Relaxed => .vis (.read cell.object .Relaxed) .ret
+  | _ => .vis (.fail .undef) PEmpty.elim
+
+/-- A word read returns the observed U64 itself. The polling context compares it
+with the token's captured active word; this model supplies no comparison verdict.
+The object key belongs to the U64 request space, distinct from Boolean reads. -/
+def loadU64 (cell : Atomic) (ordering : ZetesisExtract.core.sync.atomic.Ordering) :
+    Computation U64 :=
+  match ordering with
+  | .Relaxed => .vis (.readU64 cell.object .Relaxed) .ret
   | _ => .vis (.fail .undef) PEmpty.elim
 
 /-- The existing vector is preserved logically on either reservation outcome.

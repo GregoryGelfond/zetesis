@@ -29,8 +29,21 @@ def alloc.alloc.Global.Insts.CoreAllocAllocatorClone :
   cloneCloneInst := core.core.clone.CloneGlobal
 }
 
+/-- [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::is_cancelled]:
+    Source: 'crates/zetesis-cpu/src/cancellation/slot.rs', lines 207:4-207:45
+    Name pattern: [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::is_cancelled] -/
+@[rust_fun
+  "zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::is_cancelled"]
+def zetesis_cpu.cancellation.slot.Membership.is_cancelled
+  (self : zetesis_cpu.cancellation.slot.Membership) : Result Bool := do
+  let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self.state
+  let i ←
+    core.sync.atomic.AtomicU64Align8U64.load a
+      core.sync.atomic.Ordering.Relaxed
+  ok (i != self.active)
+
 /-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{impl core::ops::function::FnOnce<(&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}}::call_once]:
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 51:25-51:32
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 60:25-60:32
     Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>}::call_once] -/
 @[rust_fun
   "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>}::call_once"]
@@ -47,7 +60,7 @@ def
     core.sync.atomic.Ordering.Relaxed
 
 /-- Trait implementation: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{impl core::ops::function::FnOnce<(&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}}]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 51:25-51:32
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 60:25-60:32
     Name pattern: [core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>] -/
 @[reducible, rust_trait_impl
   "core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>"]
@@ -60,7 +73,7 @@ def
 }
 
 /-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll]:
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 45:4-45:42
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 52:4-52:42
     Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll]
     Visibility: public -/
 @[rust_fun
@@ -76,14 +89,28 @@ def zetesis_cpu.cancellation.Cancellation.poll
   if b
   then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
   else
-    let o ← core.option.Option.as_ref self.deadline
+    let o ← core.option.Option.as_ref self.slot
     let b1 ←
-      core.option.Option.is_some_and
-        zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool
-        o ()
+      match o with
+      | none => ok false
+      | some membership =>
+        do
+        let b2 ←
+          zetesis_cpu.cancellation.slot.Membership.is_cancelled membership
+        if b2
+        then ok true
+        else ok false
     if b1
-    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
-    else ok (core.result.Result.Ok ())
+    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
+    else
+      let o1 ← core.option.Option.as_ref self.deadline
+      let b2 ←
+        core.option.Option.is_some_and
+          zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool
+          o1 ()
+      if b2
+      then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
+      else ok (core.result.Result.Ok ())
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::Theory}::nodes]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 107:4-109:5

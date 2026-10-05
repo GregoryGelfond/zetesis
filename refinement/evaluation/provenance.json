@@ -2,19 +2,23 @@
   "schema": "zetesis.refinement.evaluation.v1",
   "source": {
     "inventory": "source-inputs.sha256",
-    "inventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
-    "inventoryFiles": 309,
+    "inventorySha256": "9fd7f6322e986b927472b550d6852deaa44755dea58c019268e9e10a34ba359f",
+    "inventoryFiles": 311,
     "allInventoryBytesStillMatch": true,
-    "scope": "Recorded 309 crate-source inputs for the existing reference membership, constructor, ownership, classifier and atomic-choice roots, plus the single-root tight producer. The all-root producer extraction loop, rank derivation and complete tight-plan compiler are not selected. This inventory includes the canonical tight-admission benchmark and manifest; scripts/check.sh remains outside its established scope.",
+    "scope": "Recorded core, CPU and Ferraris crate-source inputs, workspace manifests and Rust toolchain. The selected roots cover reference membership, constructors, ownership, tight-body classification, atomic-choice recognition and the single-root tight producer. Membership polling additionally selects the optional cancellation-slot membership read and comparison. Slot lifecycle operations, the all-root producer loop, rank derivation and complete tight-plan compiler are not selected. Hashing a crate input does not prove all of its functions.",
     "sha256CheckExit": 0,
-    "extractionBaseRevision": "75f5eaf8d5e038571cae7edbe25b18c2d9eb4685",
-    "extractionSourceState": "Fresh extraction at the recorded revision with the reviewed Cargo.toml and Cargo.lock dependency pin and crates/zetesis-core/src/catalog/view.rs checked-depth API changes. The same 309 paths were checked before and after extraction. The core source inventory changed; complete parsed LLBC agrees after sorting only short_names, and generated Lean remains byte-identical. Frontend admission and the new depth API are outside the selected extracted roots and are not verified by this refinement.",
+    "extractionBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+    "extractionSourceState": "The retained extraction includes the cancellation-slot poll integration. The current workspace release version is 0.3.0. Only Cargo.toml and Cargo.lock change in the declared source inventory for this replay, and their parsed differences are limited to the workspace version and matching local package versions. Fresh extraction and translation match the retained selected LLBC and generated Lean under the documented serialization normalization; all selected Rust, crate manifests, external dependency records, proof, external-model and semantic-source bytes are unchanged. The adapter, frontend admission and core depth APIs remain outside the selected roots.",
     "workingTreeSourceChanges": {
-      "Cargo.lock": "38761b95f60531423c58000eb4af5ae3d5c48970f899063d75bd8a76dc1518ae",
-      "Cargo.toml": "27bbcdbb25b2913984bde81e88daa0644c892b8e3429eb591ca8765612fe851d",
-      "crates/zetesis-core/src/catalog/view.rs": "9e33aee64cc1b442b6e4bef4017990d61d1d003510be1b01d4a9855248080708"
+      "Cargo.lock": "14a6de4360829798bfada595c8f68f252e8ea0272228d8a8110c356f12a47754",
+      "Cargo.toml": "573b97beeefd8c4c6def298a728e5d2f97e1c134cee54d4f8c158b91a76b7bab",
+      "crates/zetesis-cpu/src/cancellation.rs": "d82fd1156ceaf8b4a5b0e0789e189fe82fae8d3eef7b037040b9072561e52a77",
+      "crates/zetesis-cpu/src/lib.rs": "7dd44eb1262722ddd9473482c62b52d068f4388ee7773e83cfd66f9868a1ec3f"
     },
-    "additionalWorkingTreeHashes": {}
+    "additionalWorkingTreeHashes": {
+      "crates/zetesis-cpu/src/cancellation/slot.rs": "c8126e90c1e17b4feef74d3b6347a2e3992d8923d645c61d351a46b679196f8a",
+      "crates/zetesis-cpu/src/cancellation/slot/tests.rs": "421771a21a7b5c66e6c108414db8ccd91f8c0626974a226ba05e9f47af6113b4"
+    }
   },
   "tools": {
     "charon": {
@@ -92,16 +96,15 @@
       "--offline"
     ],
     "borrowAndTypeCheckingSkipped": false,
-    "originalLlbcSha256": "2658f6dcd471f9be21c66628290c52fc35b0e3ace7ee30b9f79b645541bfb033",
+    "originalLlbcSha256": "743c99067fa6be3945cdec5c6a2d07735d9bf193b5340724f5e5592e7a50a166",
     "exclude": [
       "zetesis_ferraris::reduct::_::candidate",
       "zetesis_ferraris::reduct::_::fmt"
     ],
     "serializationOrder": {
       "table": "short_names",
-      "observation": "The 2026-10-04 pin-and-checked-depth replay has equal complete parsed LLBC after sorting only short_names. No executable declaration, type, source coordinate, item name, ordered declaration or other parsed metadata changed. Raw generated Lean and the ten-scope bound Lean remain byte-identical to the retained translation.",
-      "unaffected": "All declarations, ordered declarations, item names, files and options compare equal, and the generated Lean is byte-identical across runs.",
-      "comparison": "Compare repeated extractions by those sections and the generated files, not by the bytes of evaluator.source.llbc."
+      "observation": "Pinned Charon can reorder this table between repeated extractions of the same source. No equality with the preceding pre-slot extraction is claimed.",
+      "comparison": "For repeated extraction of this recorded source, compare complete parsed output after sorting only short_names and normalizing destination metadata, then compare stock generated files. Changed declarations or other metadata require explicit review."
     }
   },
   "normalization": {
@@ -316,11 +319,11 @@
       "reason": "Avoid generated Lean parameters shadowing the theory namespace. Variable uses remain numeric Local indices.",
       "declarationSelection": {
         "removedTraitImplIndex": 25,
-        "removedOrderedRegistrationIndex": 182,
+        "removedOrderedRegistrationIndex": 186,
         "trait": "core::fmt::Debug",
         "implementingType": "zetesis_ferraris::reduct::FrozenReduct",
         "derived": true,
-        "excludedMethodId": 233,
+        "excludedMethodId": 234,
         "excludedMethod": "fmt",
         "noSurvivingSemanticReferences": true,
         "reason": "The module start includes the unused derived Debug implementation. Pinned Charon excludes its fmt method but cannot exclude the trait implementation. Aeneas otherwise fails when exporting that dangling implementation. Only this unused declaration and its ordered registration are removed; all function bodies are retained."
@@ -337,27 +340,27 @@
           {
             "name": "forward_overflowing",
             "slot": 2,
-            "opaqueFunctionId": 226
+            "opaqueFunctionId": 227
           },
           {
             "name": "backward_overflowing",
             "slot": 6,
-            "opaqueFunctionId": 230
+            "opaqueFunctionId": 231
           }
         ],
         "selection": "Replace the two unused trait and implementation method slots with null; retain indices and all function declarations.",
         "noSurvivingSemanticReferences": true,
         "reason": "Pinned Charon registers these Rust Step methods, but the pinned Lean Step record has no corresponding fields. The selected range operation uses forward_checked. No called operation or backend model changes."
       },
-      "identifierRederivation": "All 33 preceding roots remain; producer44 is added. Both constructors24/25, insertion30, all nine owned APIs32\u201340, classifier41 and atomic recognizers42/43 remain exported. Twelve local names11,13\u201317,25,31,41\u201344 share checked Theory reference type78. Debug impl25 is ordered182/fmt233; Step trait9/impl23 retains slots2,6 with opaque functions226,230. Exact identities, unique exports and surviving semantic references are guarded."
+      "identifierRederivation": "All 34 selected roots remain. Constructors 24/25, insertion 30, all nine owned APIs 32\u201340, classifier 41, atomic recognizers 42/43 and producer 44 remain exported. Twelve local-name guards 11, 13\u201317, 25, 31 and 41\u201344 use Theory reference type 84. Debug implementation 25 is ordered 186 with fmt 234; Step trait 9 and implementation 23 retain slots 2 and 6 with opaque functions 227 and 231. Exact identities, unique exports and surviving semantic references are guarded."
     },
-    "generatedChangeFromUnnormalizedDirectTranslation": "The same guarded unused-declaration selection and twelve local debug-name changes permit stock translation. The same ten scoped Lean provider binders preserve every executable body. Pin-and-checked-depth replay changes no generated Lean definition.",
+    "generatedChangeFromUnnormalizedDirectTranslation": "The guarded unused-declaration selection and twelve local debug-name changes permit stock translation of the fresh slot extraction. Ten scoped Lean provider binders change only the documented signatures; removing those binders restores the fresh stock generated Funs byte-for-byte. This is a comparison with fresh generation, not with the preceding package.",
     "executableStatementTreesUnchanged": true,
     "allFunctionDeclarationsUnchangedExceptRecordedLocalDebugNames": true,
     "generatedBindingAdaptation": {
       "file": "Evaluator/Funs.lean",
-      "rawGeneratedSha256": "47631c85fa3f14b9adac5b0b6f695c43bc7459870ef53c24cdf7675ae09d1853",
-      "adaptedSha256": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
+      "rawGeneratedSha256": "0458fcc66af558ee72201e634ef7ea57a8e0e3c3b0d10fe589e0709ec8c27bfc",
+      "adaptedSha256": "0bf0cdaa5fea0df9609b672803a662642bcd842ec8c1714351a190cf443b2ad1",
       "blocks": [
         {
           "declaration": "oracle.reserve",
@@ -411,9 +414,10 @@
         }
       ],
       "reversalRestoresExactRawBytes": true,
-      "signatureChange": "Theory.new takes the existing implicit ArcAllocation provider. Only oracle.reserve, oracle.check, checked.check_interpretation, FrozenReduct.freeze, FrozenReduct.new, FrozenReduct.is_satisfied_by, Interpretation.new, tight.reserve and tight.compile.classify take VectorReservation. These are authored changes to Lean signatures; all executable bodies are unchanged.",
+      "signatureChange": "Theory.new takes ArcAllocation. Only oracle.reserve, oracle.check, checked.check_interpretation, FrozenReduct.freeze, FrozenReduct.new, FrozenReduct.is_satisfied_by, Interpretation.new, tight.reserve and tight.compile.classify take VectorReservation. These are authored Lean-signature adaptations of the fresh generation; none changes its executable bodies.",
       "providerBoundary": "Neither provider has a global instance or success assumption. Returning reservation refusal, backend failure and divergence remain distinct. Needed value/sequence/owner/capacity contracts are explicit; repeated identical pure calls do not model changing allocator outcomes or fresh histories."
-    }
+    },
+    "comparisonBasis": "Fresh source LLBC versus the normalization of that same source; no unchanged-body comparison with the preceding pre-slot package."
   },
   "replay": {
     "jqVersion": "jq-1.8.2",
@@ -442,99 +446,74 @@
     "generatedFilesByteIdenticalToNormalizedTranslation": false,
     "stockGeneratedFilesByteIdenticalToNormalizedTranslation": true,
     "allocationBinderReversalRestoresStockOutput": true,
-    "documentedExtractionArgvComparison": "Parsed shell arguments match the recorded successful extraction in order and value after substituting only the Charon executable, output LLBC path and checkout-relative Cargo manifest path.",
-    "documentedRetainedInputCommandsExit": 0,
-    "documentedExtractionAndNormalizationCommandsExit": 0,
-    "documentedAllocationBindingCommandsExit": 0,
-    "documentedExternalBindingCommandsExit": 0,
+    "documentedExtractionArgvComparison": "Parsed extraction arguments match the executed command in order and value after substituting only the output LLBC path. The Charon binary is separately identified by its digest.",
     "documentedExtractionArgvMatchesRecordedRun": true,
     "fullRestoreComparisons": true,
-    "recordedOutputPathConvention": "The private replay output directory is represented as target/replay in the recorded argv; all options and their order match the executed command.",
-    "retainedInputCheckScope": "The candidate source inventory retains the same 309 paths and changes exactly the two reviewed Cargo inputs and core catalog/view.rs. Exact candidate hashes were checked before and after extraction. The shared-semantic and preceding artifact inventories also passed; the preceding source inventory is superseded only by this explicitly reviewed drift."
+    "recordedOutputPathConvention": "The private extraction and translation output directories are represented as target/replay in reproduction commands. This producer path mapping does not alter generated content or retained command outputs.",
+    "retainedInputCheckScope": "All 311 declared source inputs match the current checkout. The release-version replay changes only the two root Cargo inputs; the other 309 inputs and all 18 imported semantic sources retain their preceding hashes. Local package versions advance from 0.2.0 to 0.3.0; all external dependency records and dependency relationships are unchanged. The original extraction and normalization record remains the provenance of the retained byte-identical generated artifacts; sourceRevalidation records the independent repeated extraction. An inventory is not a theorem about every recorded function."
   },
   "trustBoundary": [
     "LLBC destination metadata and twelve local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
     "Stock generated bodies are unmodified. The compiled file adds exactly the recorded ten scoped provider binders; reversing them recovers the exact stock bytes. Their implicit parameters are authored Lean-signature adaptations, audited separately from LLBC normalization.",
     "Extraction and external models remain trusted correspondence boundaries; no correctness theorem for Charon or Aeneas is claimed.",
-    "Original generated-loop proofs use fixed observations. Audited runtime contexts retain the generated call structure and admit changing returning read and reservation observations; RuntimeProjection and RuntimePublicRefusal discharge their completed and refused public calls under the stated handle and library mapping.",
+    "Generated fixed-observation proofs and audited runtime contexts use the fresh optional-slot poll. Runtime contexts retain the generated call structure and admit independently returning Bool/U64 reads and reservations. Projection and refusal laws establish the recorded finite public-call contracts under the explicit library and handle mapping.",
     "Owner checks use identity and immutable-heap contracts. Allocation and reservation use explicit supplied operations with no success assumption; returning reservation refusal is distinct from backend failure. Required value, owner, sequence or capacity contracts belong to the consuming theorem.",
     "The providers are pure per-invocation interpretations, not evolving allocator histories. The active Vec model has no capacity field. Allocator, destructor and reference-count implementations remain trusted. Per-call constructor contracts and the returning-event public checker compose without assuming a deterministic allocator across calls.",
     "The public oracle::check and owned checked::check_interpretation wrappers are selected directly. Owned acceptance/accessor/move operations retain their actual bodies; derived Clone and Debug are not selected. Generated-call proof scope is recorded separately in verification.json. Selection and dependency binding alone do not establish runtime correspondence; the separately source-checked contexts and kernel runtime proofs provide the recorded finite-call correspondence.",
     "Source inventory and artifact hashes establish provenance, not end-to-end solver correctness.",
-    "Returning-event keys preserve cancellation/deadline object and field identity. The ghost-clear control representative changes only unused fixed-model bits, not Rust tokens or their observed responses. Observations are overapproximated; physical address, atomic memory-model and scheduler implementation proofs are outside this package.",
+    "Returning-event keys preserve local cancellation, slot and deadline owner/field identity. The optional slot read uses the actual U64 comparison with the captured active word. The ghost-clear representative changes only unused fixed observations. Responses are overapproximated; physical addresses, atomic memory-model implementations, CAS lifecycle, generation allocation/retirement and scheduler/timer behavior remain outside this package.",
     "The atomic-choice model additions are concrete pure definitions for two trusted library contracts. Option.or_else preserves fallback failure/divergence and does not invoke it for Some. Generic signatures do not establish arbitrary Rust drop effects; the selected inputs are scalar indices and shared theory data."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "31873705fa1cf36adfcc79c14c83a53dc3785561f83f9c77c930f4a80679ab6d",
-    "evaluator.llbc": "d5d822fa983309574c9681efb05bc04dc32d33fd43430a5454a79bafba31a44c",
-    "Evaluator/Funs.lean": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
-    "Evaluator/FunsExternal_Template.lean": "8c4761314b001b45f769c643303385f7146afc25d51041fac84640b283448c2f",
-    "Evaluator/Types.lean": "82fa46f6fe78de4f7419164988fbcdc2809c4ba5314c0f413623842a69d3e205",
-    "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
+    "evaluator.source.llbc": "e327140540b00d641ca0466b385927c35ce58a4b7293e2cc8de1e60b6349277f",
+    "evaluator.llbc": "6d1c05513aa90e5b31a4d9420da0da7584485a0f3b5e3cbd8205886d167a32d1",
+    "Evaluator/Funs.lean": "0bf0cdaa5fea0df9609b672803a662642bcd842ec8c1714351a190cf443b2ad1",
+    "Evaluator/FunsExternal_Template.lean": "3482465f2a1a92abb817d7ed817ec8e9deb46c773ec0e4199d56665d917ef381",
+    "Evaluator/Types.lean": "e6283fa35725fc00bb7f50440f505ae50a2cdff8a7a42f6620974cc26afbf554",
+    "Evaluator/TypesExternal_Template.lean": "dff2f133217a820db00ff39cd93ba89693c8986d83b91eb4f70fd5bfa8f27ad2"
   },
   "compatibility": {
-    "previousPackageRevision": "0a726629dea0e2d13269f14d69078ed44b437231",
-    "previousGeneratedFunsSha256": "dea2c016d1e00cd3b4c214339cd7999ba0965798217ef2b59c7780130f125d85",
-    "previousGeneratedTypesSha256": "1dc41323ac32fa90d16c9d2fa740724301e70f9c7812672f1f377f7eb8a2943d",
-    "comparison": "After reversing the preceding ten scoped provider binders, all 83 previous function blocks and 30 type blocks, including source comments, remain byte-identical; declaration order may differ.",
-    "existingGeneratedExecutableDeclarationsUnchanged": true,
-    "existingGeneratedTypeDeclarationsUnchanged": true,
-    "sourceCoordinateCommentLinesChanged": false,
-    "externalFunctionsTemplateHashUnchanged": true,
-    "externalTypesTemplateHashUnchanged": true,
-    "addedDefinitions": [
-      "/-- [zetesis_ferraris::tight::compile::{impl core::cmp::PartialEq<zetesis_ferraris::tight::compile::Body> for zetesis_ferraris::tight::compile::Body}::eq]:",
-      "/-- [zetesis_ferraris::tight::compile::producer]:",
-      "/-- [zetesis_ferraris::tight::TightProducerKind]",
-      "/-- [zetesis_ferraris::tight::TightProducer]"
-    ],
-    "addedExternalTemplateFunctions": [],
-    "addedExternalTemplateTypes": [],
-    "activeExternalCapabilityAdded": "None. Existing pure library definitions and the same ten provider scopes are reused.",
-    "proofReplayScope": "The strict package build, exact 490 authored and 224 shared declaration audits, and 22-context/six-negative source checks passed on the fingerprints recorded in verification.json. Ten added laws refine actual single-root typed producer outcomes and compose successful classification. Complete root extraction, rank validation and optimized membership remain outside these results.",
-    "previousStockDeclarationBlocks": {
-      "Evaluator/Funs.lean": 83,
-      "Evaluator/Types.lean": 30
-    },
-    "addedStockDeclarationBlocks": {
-      "Evaluator/Funs.lean": 2,
-      "Evaluator/Types.lean": 2
-    },
+    "previousPackageRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+    "previousGeneratedFunsSha256": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
+    "previousGeneratedTypesSha256": "82fa46f6fe78de4f7419164988fbcdc2809c4ba5314c0f413623842a69d3e205",
+    "comparison": "The fresh generation adds slot Membership and its is_cancelled function and changes Cancellation and Cancellation::poll. Source-coordinate comments and generated external templates also change. AtomicTypes and AtomicLoad supply the newly reached aligned U64 atomic representation/load contract. The control effect model and its proofs are migrated; no unchanged-generated-body or unchanged-proof claim is made.",
+    "activeExternalCapabilityAdded": "A concrete fixed-observation Relaxed U64 atomic load and its phantom Align8 marker. The event interpretation requests an actual U64 value and executes the extracted inequality against the captured active word; it does not assume a cancellation verdict.",
     "bindingLinesAdded": 50,
-    "pureLibraryBindings": {
-      "file": "PureExternals.lean",
-      "sha256": "275a5166bc96187d6d30585bb02fd5a2d8e92008504b4739de42b49cd666dc74",
-      "definitions": [
-        "core.bool.Bool.then_some",
-        "core.option.Option.or_else"
-      ],
-      "newAxioms": false,
-      "contract": "then_some selects its already supplied argument. or_else preserves Some without invoking the callback and invokes it once for None, preserving its complete Result. Selected inputs have no user drop behavior; the generic signatures do not model arbitrary Rust destructors."
-    },
-    "strictGeneratedOverlayCheckExit": 0,
-    "strictGeneratedOverlayScope": "Only the freshly generated Types and ten-scope-bound Funs were compiled with pinned Lean4.31 against existing dependency objects. Full package and new semantic proof replay are recorded separately when completed.",
-    "strictExistingPackageCheckExit": 0,
-    "recordedMilestone": "Historical single-root producer extension. Current pin-and-checked-depth revalidation is recorded separately below."
+    "newLogicalAxioms": false,
+    "proofReplayScope": "The maintained package build, 494 authored and 224 shared declaration audits, and 23-context/nine-negative source checks pass on the recorded input fingerprint. Six declarations are added to the audit and two specialized poll laws are replaced; the shared semantic sources are unchanged. CAS transitions, generation opening/retirement, no-wrap behavior, timers and eventual cancellation are not proved.",
+    "addedAuditedDeclarations": [
+      "ContextEvents.poll_reads",
+      "ControlReads.completed_iff",
+      "ControlReads.nonempty",
+      "ControlReads.receipt_of_run",
+      "ControlReads.run_of_receipt",
+      "RuntimeContexts.membership_reconstruct"
+    ],
+    "replacedAuditedDeclarations": [
+      "ContextEvents.poll_without_deadline",
+      "TickProjection.poll_with_deadline"
+    ],
+    "strictExistingPackageCheckExit": 0
   },
   "stockGeneratedArtifactsSha256": {
-    "Evaluator/Funs.lean": "47631c85fa3f14b9adac5b0b6f695c43bc7459870ef53c24cdf7675ae09d1853",
-    "Evaluator/FunsExternal_Template.lean": "8c4761314b001b45f769c643303385f7146afc25d51041fac84640b283448c2f",
-    "Evaluator/Types.lean": "82fa46f6fe78de4f7419164988fbcdc2809c4ba5314c0f413623842a69d3e205",
-    "Evaluator/TypesExternal_Template.lean": "be1955e2986aa2fc38620c97e69833adbc04e823fd7019b49e220a56ad2fd7b0"
+    "Evaluator/Funs.lean": "0458fcc66af558ee72201e634ef7ea57a8e0e3c3b0d10fe589e0709ec8c27bfc",
+    "Evaluator/FunsExternal_Template.lean": "3482465f2a1a92abb817d7ed817ec8e9deb46c773ec0e4199d56665d917ef381",
+    "Evaluator/Types.lean": "e6283fa35725fc00bb7f50440f505ae50a2cdff8a7a42f6620974cc26afbf554",
+    "Evaluator/TypesExternal_Template.lean": "dff2f133217a820db00ff39cd93ba89693c8986d83b91eb4f70fd5bfa8f27ad2"
   },
   "runtimeContextAdaptation": {
     "scope": "Generalize the exact generated public reference checker call graph to returning read and reservation observations; retain imported pure scalar, sequence, iterator and owner operations.",
     "generatedSource": "Evaluator/Funs.lean",
-    "generatedSourceSha256": "742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee",
+    "generatedSourceSha256": "0bf0cdaa5fea0df9609b672803a662642bcd842ec8c1714351a190cf443b2ad1",
     "contexts": {
-      "RuntimeContexts.lean": "5531827bcecca535f4ac7432dd9f7536c2c22d718f7a405e724dd670e6f7ab52",
+      "RuntimeContexts.lean": "2672bbd61dbfbda4947346fb00be3cb3c88aca97052cc70581cde7bc53d03291",
       "CheckerContexts.lean": "7f49af47082471165a89cd23213ecb2c8ad82650e7119b31ce2a7f7a86ac6f98"
     },
     "checker": {
       "source": "ContextAudit.lean",
-      "sha256": "b652a79bf1d24d56b8312689d8309425d8136e5cc89637a58ed4c26662ce8c14",
-      "checkedContexts": 22,
-      "negativeChecks": 6
+      "sha256": "d37e8d93094b9e0559aa2ae6e2f73ec111fccdd902d24966825e761ff5a93188",
+      "checkedContexts": 23,
+      "negativeChecks": 9
     },
     "runtimeComposition": "ReferenceEvents.lean",
     "runtimeCompositionSha256": "8d9e9e59513c36f8f8f7ebfede98fd002b1bfa9b43d5b9937a3a5e58965d50ed",
@@ -554,8 +533,8 @@
         ],
         "exitCode": 0,
         "log": "context-audit.txt",
-        "logSha256": "1178da50ac5691e6b2d91004282c048d86c9b796f12da6436751786cf30f2fca",
-        "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+        "logSha256": "4eca5c58ecfbdfc32401b668fa6798b48b6b2224594f6ba07e382fbcb9a7cdf0",
+        "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
       },
       {
         "argv": [
@@ -573,43 +552,132 @@
         ],
         "exitCode": 0,
         "log": "context-negative-audit.txt",
-        "logSha256": "4a0d1826e6aaab15aff478a344a743dc9cf930377d0e0ae1cc7ce5b5c317275c",
-        "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+        "logSha256": "559388ac49e4389c6732e174c2c5475c17693b80b34817e0149605b22c752796",
+        "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
       }
     ],
     "newRustExtractionPerformed": true,
-    "boundary": "The checked Lean IO source guard and reviewed call-graph/handle mapping are trusted extraction adaptations, not kernel proofs of a compiler or textual parser. Kernel reconstruction laws recover original generated functions, while separate runtime projection/refusal laws establish the eventful result contracts. A fixed-handler reconstruction alone cannot establish effect ordering. The classifier extension adds no runtime context; fresh checks validate the existing 22 against the extended generated file. Atomic-choice recognition adds no runtime context; fresh checks validate the existing 22 against the extended generated file. Single-root producer recognition adds no runtime context; fresh checks validate the existing 22 against the extended generated file.",
-    "preservedByClassifierExtension": "Every previously selected generated declaration, context, checker and ReferenceEvents definition remains unchanged. The classifier extension introduces no additional returning-event context.",
-    "priorSelectedDefinitionsUnchanged": true,
-    "preservedByAtomicChoiceExtension": "Every previously selected generated declaration and every runtime context/checker/composition source remains unchanged. This extension introduces no returning-event context for tight-plan recognition.",
-    "preservedByProducerExtension": "The 22 previously selected runtime contexts and their generated source declarations remain unchanged. The producer adds no returning-event context.",
-    "preservedBySourceRevalidation": "All 22 contexts, their checked source scaffold, imported external models and generated bodies remain unchanged; both source checks passed again under Lean 4.31.0."
+    "boundary": "The checked Lean IO source guard and reviewed call-graph/handle mapping are trusted extraction adaptations, not kernel proofs of a compiler or textual parser. Exact header/body/call-count/reversal checks cover five control/evaluator and eighteen checker contexts, including the new membership context. Kernel reconstruction laws recover the generated functions. Separate runtime projection/refusal laws establish finite eventful result contracts. Fixed-handler reconstruction alone does not establish effect ordering.",
+    "controlReadMigration": "Poll first reads local Boolean cancellation, then an optional U64 slot word, then optional Boolean expiry. The membership context retains the actual observed-word inequality. ControlReads receipts and ContextEvents.poll_reads derive exact completed read histories. The ghost-clear representative preserves handles, slot presence and captured active word while changing only unused fixed observations; it does not mutate a Rust token."
   },
   "sourceRevalidation": {
     "checkedOn": "2026-10-04",
-    "sourceBaseRevision": "75f5eaf8d5e038571cae7edbe25b18c2d9eb4685",
-    "themeliosRevision": "dd9a57172b8411ed277833323c52eef591840928",
-    "previousSourceInventorySha256": "e94583893e6482d31ab62eafcca4a66916a5281b302ef836baee899c38c521a9",
-    "sourceInventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
+    "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+    "themeliosRevision": "3339a8abed1e00f21e42c2b3ed2677c16248eda5",
+    "previousSourceInventorySha256": "ab9112a410841cb9bf2921c862fc36f45fe45353e26d2078d3b0a5b474297d44",
+    "sourceInventorySha256": "9fd7f6322e986b927472b550d6852deaa44755dea58c019268e9e10a34ba359f",
     "changedSourceInputs": [
       "Cargo.lock",
-      "Cargo.toml",
-      "crates/zetesis-core/src/catalog/view.rs"
+      "Cargo.toml"
     ],
-    "sourceInventoryRustInputsChanged": true,
-    "changedRustInput": "crates/zetesis-core/src/catalog/view.rs",
-    "changedRustInputScope": "Checked TermRef::depth_with callback API, its private depth helper and regression tests. These definitions are outside the selected extracted roots.",
+    "addedSourceInputs": [],
+    "sourceInventoryRustInputsChanged": false,
+    "previousWorkspaceVersion": "0.2.0",
+    "workspaceVersion": "0.3.0",
+    "localPackageVersionsChanged": 22,
+    "externalDependencyRecordsUnchanged": true,
+    "change": "The approved workspace release version changes from 0.2.0 to 0.3.0, with matching versions for 22 local packages in Cargo.lock. All other parsed workspace manifest settings, lockfile records, selected crate manifests and selected Rust source bytes are unchanged.",
     "freshExtractionExitCode": 0,
+    "freshRawLlbcSha256": "71a581c4cbc58b392abfd3dd28a176552186c92cbb886d7995c19288747cd7bc",
     "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+    "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
     "generatedFunsByteIdentical": true,
     "generatedTypesByteIdentical": true,
     "externalTemplatesByteIdentical": true,
     "externalModelsUnchanged": true,
     "proofSourcesUnchanged": true,
-    "authoredAuditCount": 490,
-    "sharedAuditCount": 224,
-    "checkedContexts": 22,
-    "negativeContextChecks": 6,
-    "boundary": "This refresh preserves the existing evaluator refinement scope. It does not verify the changed depth API, frontend Program admission, pool expansion, typed symbol conversion, complete solving or GPU execution."
-  }
+    "retainedGeneratedArtifactsUnchanged": true,
+    "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+    "proofChecksRepeated": false,
+    "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+    "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+  },
+  "previousSourceRevalidations": [
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "00773f6160500611fdd7ecb9bd518d75793d9d8e",
+      "previousSourceInventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
+      "sourceInventorySha256": "7f1a2ec703eb20af77f722f6679dcb24fda2e29c33162ed88649e84c319f9214",
+      "changedSourceInputs": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "crates/zetesis-cpu/src/cancellation.rs",
+        "crates/zetesis-cpu/src/lib.rs"
+      ],
+      "addedSourceInputs": [
+        "crates/zetesis-cpu/src/cancellation/slot.rs",
+        "crates/zetesis-cpu/src/cancellation/slot/tests.rs"
+      ],
+      "sourceInventoryRustInputsChanged": true,
+      "freshExtractionExitCode": 0,
+      "fullParsedLlbcEqualAfterShortNamesOrdering": false,
+      "generatedFunsByteIdentical": false,
+      "generatedTypesByteIdentical": false,
+      "externalTemplatesByteIdentical": false,
+      "externalModelsUnchanged": false,
+      "proofSourcesUnchanged": false,
+      "comparisonBasis": "The preceding maintained pre-slot extraction. Fresh normalization instead preserves its own raw executable statement trees, and reversing the ten provider scopes restores its own stock translation.",
+      "authoredAuditCount": 494,
+      "sharedAuditCount": 224,
+      "checkedContexts": 23,
+      "negativeContextChecks": 9,
+      "boundary": "This migration proves the selected actual poll/read correspondence with optional U64 slot membership checking. It does not prove slot opening, CAS transitions, generation wrap avoidance, retirement, timer or eventual-response behavior; frontend/native Backend integration, grounding, complete enumeration and GPU execution remain outside this selected evaluator proof."
+    },
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "00773f6160500611fdd7ecb9bd518d75793d9d8e",
+      "previousSourceInventorySha256": "7f1a2ec703eb20af77f722f6679dcb24fda2e29c33162ed88649e84c319f9214",
+      "sourceInventorySha256": "83aaae9cc36d942da0de39d96c7088a7818fc6c06c033e2dd22840fbe3ed9dcd",
+      "changedSourceInputs": [
+        "Cargo.lock"
+      ],
+      "addedSourceInputs": [],
+      "sourceInventoryRustInputsChanged": false,
+      "change": "The zetesis-solve examples add zetesis as a development dependency; selected production inputs and dependency versions are unchanged.",
+      "freshExtractionExitCode": 0,
+      "freshRawLlbcSha256": "e365fc009a886e16e9be0a15706f0d715e8c2613f72fc68575c170aa7d83b539",
+      "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+      "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
+      "generatedFunsByteIdentical": true,
+      "generatedTypesByteIdentical": true,
+      "externalTemplatesByteIdentical": true,
+      "externalModelsUnchanged": true,
+      "proofSourcesUnchanged": true,
+      "retainedGeneratedArtifactsUnchanged": true,
+      "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+      "proofChecksRepeated": false,
+      "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+      "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+    },
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "3339a8abed1e00f21e42c2b3ed2677c16248eda5",
+      "previousSourceInventorySha256": "83aaae9cc36d942da0de39d96c7088a7818fc6c06c033e2dd22840fbe3ed9dcd",
+      "sourceInventorySha256": "ab9112a410841cb9bf2921c862fc36f45fe45353e26d2078d3b0a5b474297d44",
+      "changedSourceInputs": [
+        "Cargo.lock",
+        "Cargo.toml"
+      ],
+      "addedSourceInputs": [],
+      "sourceInventoryRustInputsChanged": false,
+      "change": "The themelios pin and higher-layer adapter dependencies change. Selected core, CPU and Ferraris Rust sources, manifests and resolved production dependency records are unchanged.",
+      "freshExtractionExitCode": 0,
+      "freshRawLlbcSha256": "dade52ad6f4b66d90bcef6e861bd0398eed8b86d3ba6887de6319e72d5c85dac",
+      "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+      "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
+      "generatedFunsByteIdentical": true,
+      "generatedTypesByteIdentical": true,
+      "externalTemplatesByteIdentical": true,
+      "externalModelsUnchanged": true,
+      "proofSourcesUnchanged": true,
+      "retainedGeneratedArtifactsUnchanged": true,
+      "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+      "proofChecksRepeated": false,
+      "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+      "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+    }
+  ]
 }

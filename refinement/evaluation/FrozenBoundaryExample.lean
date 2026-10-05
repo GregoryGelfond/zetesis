@@ -33,7 +33,8 @@ def noBudget : oracle.Limits := { max_work := 0#u64, max_subsets := 0#u64 }
 /-- The fixed cancellation observation is already true, with no deadline. -/
 def cancelled : zetesis_cpu.cancellation.Cancellation := {
   cancelled := { owner := 2, value := { nextRead := true } }
-  deadline := none }
+  deadline := none
+  slot := none }
 
 /-- Equal theory contents do not override a different owner. The actual public
 query returns WrongProgram despite cancellation and a reservation provider that

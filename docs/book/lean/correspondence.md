@@ -172,21 +172,28 @@ while preserving embedded backend success, failure and divergence. Audited
 `RuntimeContexts` and `CheckerContexts` generalize named calls in the generated
 bodies; reconstruction laws restore the exact original operations. `ReferenceEvents`
 supplies one eventful checker from those contexts. The generated backend's own
-result type is unchanged.
+result type is unchanged. `ContextEvents.poll_reads` connects the actual polling
+context to `ControlReads`: local cancellation precedes an optional U64 slot read,
+whose actual value is compared with the captured active word, and then optional
+expiry. Exact receipts retain mismatching words and require a matching word for
+success. No comparison verdict is assumed.
 
 `RuntimeProjection` derives the same generated public result from a successful
 finite event execution. `RuntimeMembership` then proves answer-set equivalence,
 actual negative evidence, and retention of a constructed subject through its
 accepted-result conversion. No inner oracle, successful allocation or always-clear
-read history is assumed. Only unused fixed-model bits are cleared for comparison;
-owner handles and configured deadlines are retained.
+read history is assumed. The comparison representative clears unused fixed
+Boolean observations and sets the unused fixed slot observation to its captured
+active word. It retains owner handles, slot presence, captured word and configured
+deadlines, and changes neither Rust state nor runtime responses.
 
 `RuntimePublicRefusal` identifies the actual reached operation and cause of a
-public typed stop. The proof preserves cancellation-before-expiry-before-quota
-precedence and reservation refusal. Supporting loop receipts retain executed
+public typed stop. The proof preserves local-cancellation, slot-cancellation, expiry and quota
+precedence, together with reservation refusal. Supporting loop receipts retain executed
 prefixes and partial state. A refused tick charges no new work. The public error contains no membership
 verdict or partial statistics. These finite-run laws make no fairness or eventual
-response claim. Rust/std/Arc/allocator/OS/hardware contracts, immutable handle
+response claim. Slot generation allocation, compare-and-swap and window retirement
+remain Rust obligations. Rust/std/Arc/allocator/OS/hardware contracts, immutable handle
 mapping, extraction and source-context adaptation remain trusted boundaries;
 source grounding, candidate enumeration, optimized routes and devices remain
 separate proof obligations.
@@ -476,11 +483,22 @@ failure.
 The builder changes request composition; it does not change candidate coverage,
 the frozen reduct or the point at which a checked result is committed.
 
-`SessionBuilder::collect` consumes a fresh request, selects the unrestricted
-original family and retains each checked answer once. `WorldViews` requires
-original-answer coverage, completed accounting and complete capture; its prefix
-law applies to interruptions and retention refusals. A selected optimum or the
-remaining suffix of an already consumed session cannot replace that family.
+`zetesis_solve::SessionBuilder::collect` consumes a fresh request, selects the
+unrestricted original family and retains each checked answer once in a native
+`zetesis_solve::WorldView`. Its empty family establishes inconsistency.
+`WorldViews` requires original-answer coverage, completed accounting and complete
+capture; its prefix law applies to interruptions and retention refusals. A
+selected optimum or the remaining suffix of an already consumed session cannot
+replace that family.
+
+The facade re-exports the upstream `zetesis::query::WorldView`, a nonempty live
+stream that may still be incomplete. Its materialized `Snapshot` is complete
+and nonempty. These are the original upstream types; type identity supplies no
+proof connecting their construction or readings to the native complete family.
+`zetesis-engine` implements that backend contract using native CPU sessions.
+Its preservation of full answer sets, display policy and completion evidence is
+covered by executable conformance tests. A Lean correspondence for the adapter
+and query readings remains to be established.
 
 `ProjectedAnswers.covered_key_image` identifies the key image represented by a
 selected family. `selected_property_survives` preserves answer-set membership
@@ -489,8 +507,9 @@ answers. These laws assume a fixed key and complete representative coverage.
 `retain_covers` and `retain_unique` establish the coverage and uniqueness
 invariants for one exact identity decision over an already consumed prefix.
 They do not prove source `#project` compilation, concrete history lookup,
-allocation, cancellation or receipt updates. `WorldView` collection retains
-full identity and does not use projected representatives as a complete family.
+allocation, cancellation or receipt updates. Native `zetesis_solve::WorldView`
+collection retains full identity and does not use projected representatives as
+a complete family.
 
 A shared `GpuFormulaProfile` retains one exact compiled pipeline, context and
 gate projection. Each oracle starts with fresh residency, epochs and execution
@@ -1206,6 +1225,21 @@ candidates. Rust ownership, resource compliance and transport identities remain
 implementation obligations.
 
 ## Representation and source laws
+
+The `zetesis` facade's construction macros generate the canonical themelios
+constructors, and its modules re-export the original upstream types. These
+exports add no admission or lowering step. Macro translation, source admission
+and concrete lowering remain executable correspondence obligations; re-exporting
+a type does not establish them.
+
+The `zetesis-engine` adapter connects these values to native CPU sessions. Its
+remaining correspondence obligations include preserving the program at `lower`,
+enumerating the full unscored family, exporting every atom, keeping display
+selection separate, and mapping a completed or interrupted run to its actual
+conclusion. Named-part refusal retains the exact canonical part key, without a
+fabricated statement or span. Executable conformance tests exercise this
+boundary; they are not an end-to-end Lean proof. The existing scalar-checker
+refinement does not establish adapter or query-layer correctness.
 
 The typed relational `admit_program` door and source `admit` door share
 [`compile::checked_statement`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/compile.rs)

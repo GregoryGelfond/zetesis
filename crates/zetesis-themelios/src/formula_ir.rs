@@ -365,6 +365,7 @@ pub(crate) enum Operation {
 pub(crate) struct CompilationOptions {
     pub(crate) max_body_elements: usize,
     pub(crate) core_limits: zetesis_core::AdmissionLimits,
+    pub(crate) purpose: crate::FormulaPurpose,
 }
 
 impl From<AdmissionOptions> for CompilationOptions {
@@ -372,6 +373,7 @@ impl From<AdmissionOptions> for CompilationOptions {
         Self {
             max_body_elements: options.max_body_elements,
             core_limits: options.core_limits,
+            purpose: crate::FormulaPurpose::Ordinary,
         }
     }
 }
@@ -381,6 +383,7 @@ impl From<crate::BundleAdmissionOptions> for CompilationOptions {
         Self {
             max_body_elements: options.max_body_elements,
             core_limits: options.core_limits,
+            purpose: crate::FormulaPurpose::Ordinary,
         }
     }
 }
@@ -390,6 +393,7 @@ impl From<crate::ProgramAdmissionOptions> for CompilationOptions {
         Self {
             max_body_elements: options.max_body_elements,
             core_limits: options.core_limits,
+            purpose: crate::FormulaPurpose::Ordinary,
         }
     }
 }
@@ -761,6 +765,11 @@ impl Compiler<'_> {
     ) -> Result<Vec<Option<StatementId>>, FormulaFailure> {
         let mut emitted_owners = Vec::new();
         for (index, carrier) in source.statements().enumerate() {
+            self.budget
+                .poll(fallback.with_statement(StatementId::new(index)))?;
+            if !self.options.purpose.includes(carrier.get()) {
+                continue;
+            }
             if matches!(
                 carrier.get(),
                 Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)

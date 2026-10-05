@@ -38,9 +38,9 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     esac
     cargo fmt --all -- --check
     cargo test --locked --workspace --all-features --no-fail-fast
-    cargo test --locked -p zetesis-cli -p zetesis-solve --no-default-features --no-fail-fast
+    cargo test --locked -p zetesis-cli -p zetesis-solve -p zetesis-engine -p zetesis --no-default-features --no-fail-fast
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-    cargo clippy --locked -p zetesis-cli -p zetesis-solve --no-default-features --all-targets -- -D warnings
+    cargo clippy --locked -p zetesis-cli -p zetesis-solve -p zetesis-engine -p zetesis --no-default-features --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
     # The maintained standalone packages are independent Cargo workspaces.
     # Main-workspace checks cannot select them implicitly.
@@ -77,10 +77,10 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
     (
         # Only this freshly created view is removed; Cargo artifacts are retained.
         trap 'rm -rf -- "$book_view/libraries"' 0
-        cargo build --locked -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target --message-format=json-render-diagnostics > "$book_view/artifacts.jsonl"
+        cargo build --locked -p zetesis -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target --message-format=json-render-diagnostics > "$book_view/artifacts.jsonl"
         scripts/maintenance.sh book-libraries --messages "$book_view/artifacts.jsonl" \
             --build-directory target --destination "$book_view/libraries" \
-            --crate zetesis_cli --crate zetesis_solve --crate zetesis_validation
+            --crate zetesis --crate zetesis_cli --crate zetesis_solve --crate zetesis_validation
         mdbook test --library-path "$book_view/libraries"
     )
 fi

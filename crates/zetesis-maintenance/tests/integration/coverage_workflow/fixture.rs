@@ -236,6 +236,10 @@ impl Fixture {
                 "zetesis-cli",
                 "--package",
                 "zetesis-solve",
+                "--package",
+                "zetesis-engine",
+                "--package",
+                "zetesis",
                 "--no-default-features",
                 "--locked",
                 "--no-report",
@@ -262,6 +266,10 @@ impl Fixture {
                     "zetesis-cli",
                     "--package",
                     "zetesis-solve",
+                    "--package",
+                    "zetesis-engine",
+                    "--package",
+                    "zetesis",
                     "--locked",
                     "--ignore-filename-regex",
                     SUPPORT_SOURCES,
@@ -297,7 +305,7 @@ impl Fixture {
         assert_eq!(metadata["profiles_merged"], false);
         assert_eq!(
             metadata["supplemental"],
-            "--package zetesis-cli --package zetesis-solve --no-default-features"
+            "--package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis --no-default-features"
         );
         assert_eq!(metadata["floor_profiles"], json!(["workspace", "cli-cpu"]));
         assert_eq!(
@@ -390,6 +398,10 @@ fn report(profile: &str, directory: &Path, html: bool) -> Value {
             "zetesis-cli",
             "--package",
             "zetesis-solve",
+            "--package",
+            "zetesis-engine",
+            "--package",
+            "zetesis",
         ]));
     }
     args.extend(strings(&[

@@ -20,8 +20,12 @@ use crate::{
 };
 
 mod preparation;
+mod program;
 pub(crate) use preparation::Preparation;
 pub use preparation::{PreparedFormula, PreparedFormulaBundle};
+pub use program::{
+    FormulaPurpose, ProgramFormulaOptions, prepare_program_formula_with, validate_program_formula,
+};
 
 const DEFAULT_OBJECTIVE_PRESENCE_ENTRIES: usize = 16_384;
 
@@ -259,7 +263,8 @@ impl fmt::Display for FormulaResource {
     }
 }
 
-/// A typed refusal of finite formula admission; never semantic UNSAT.
+/// A typed refusal of canonical preparation or finite formula admission;
+/// never semantic UNSAT.
 /// Fields named `location` carry a [`ProgramSite`], whose actual source coordinate
 /// is optional. Typed-input failures retain the original program in [`Self::Program`];
 /// use [`Self::cause`] to inspect the underlying refusal without discarding it.
@@ -453,6 +458,31 @@ impl FormulaFailure {
             cause = error;
         }
         cause
+    }
+
+    /// Shared cancellation or deadline that stopped this operation, when any.
+    /// Resource ceilings and malformed input are never control conclusions.
+    #[must_use]
+    pub fn interruption(&self) -> Option<zetesis_cpu::Stop> {
+        let reason = match self.cause() {
+            Self::Interrupted { reason, .. }
+            | Self::Expansion(ExpansionFailure::Interrupted { reason, .. }) => Some(*reason),
+            Self::Observation { error } => match error.kind() {
+                crate::observation::ErrorKind::Stopped(reason) => Some(*reason),
+                _ => None,
+            },
+            Self::Aggregate { error, .. } => match error.kind() {
+                zetesis_ferraris::AggregateErrorKind::Control(reason) => Some(reason),
+                _ => None,
+            },
+            _ => None,
+        };
+        reason.filter(|reason| {
+            matches!(
+                reason,
+                zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline
+            )
+        })
     }
 
     /// Logical or parsed subject carried by this failure.
@@ -1212,31 +1242,18 @@ pub fn prepare_program_formula(
     expansion: ExpansionLimits,
     limits: FormulaLimits,
 ) -> Result<PreparedFormula, FormulaFailure> {
-    let owner = Owner::logical(program);
-    let prepare = || {
-        crate::formula_program_check::check(owner.program(), options)
-            .map_err(|error| logical_failure(owner.program(), error))?;
-        crate::formula_program_check::check_objectives(owner.program(), &limits)?;
-        metadata::check_program_count(owner.program(), expansion)?;
-        let mut metadata = metadata::Builder::new(limits.metadata_storage);
-        metadata::collect_profile(owner.program(), &mut metadata, true)?;
-        let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
-        prepare(
-            owner.program(),
-            options.into(),
-            budget,
-            &limits,
-            ProgramSite::program(),
-            metadata,
-        )
-    };
-    match prepare() {
-        Ok((preparation, metadata)) => Ok(PreparedFormula::new(preparation, owner, metadata)),
-        Err(error) => Err(owner.retain_failure(error)),
-    }
+    prepare_program_formula_with(
+        program,
+        ProgramFormulaOptions {
+            admission: options,
+            expansion,
+            formula: limits,
+            ..ProgramFormulaOptions::default()
+        },
+    )
 }
 
-fn logical_failure(
+pub(crate) fn logical_failure(
     program: &SourceProgram,
     error: crate::ProgramAdmissionFailure<'_>,
 ) -> FormulaFailure {
@@ -1424,7 +1441,8 @@ fn prepare(
     metadata.compile_observations(source, options, limits.observation, &mut budget, location)?;
     let metadata = metadata.finish(location)?;
     let mut catalog = crate::formula_support::SupportCatalog::default();
-    let mut counters = crate::formula_support::Counters::default();
+    let mut counters =
+        crate::formula_support::Counters::default().with_cancellation(budget.cancellation());
     let prepared = formula_ir::PreparationContext {
         options,
         budget: &mut budget,
@@ -1437,6 +1455,18 @@ fn prepare(
         Preparation::new(prepared, catalog, accounting, budget, limits, location),
         metadata,
     ))
+}
+
+pub(crate) fn poll_control(
+    cancellation: Option<&zetesis_cpu::Cancellation>,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    if let Some(cancellation) = cancellation {
+        cancellation
+            .poll()
+            .map_err(|reason| FormulaFailure::Interrupted { reason, location })?;
+    }
+    Ok(())
 }
 
 pub(crate) fn ceiling(

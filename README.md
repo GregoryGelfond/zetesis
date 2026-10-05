@@ -3,10 +3,10 @@
 ζήτησις, *inquiry* — an answer-set solver in Rust.
 
 [![CI](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml)
-[![Source release: v0.2.0](https://img.shields.io/badge/source-v0.2.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.2.0)
+[![Source release: v0.3.0](https://img.shields.io/badge/source-v0.3.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.3.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 92.23% (portable)](https://img.shields.io/badge/coverage-92.23%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
+[![Line coverage: 92.17% (portable)](https://img.shields.io/badge/coverage-92.17%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/validation.html#coverage)
 
 **[Read the zetesis Book](https://gregorygelfond.github.io/zetesis/book/)**
 
@@ -15,8 +15,8 @@ to logic programs and checks them against the program's reduct. It supports
 lazy grounding, parallel CPU execution and optional GPU computation.
 
 zetesis uses [themelios](https://github.com/GregoryGelfond/themelios) for parsing,
-program representation and analysis. Integration with themelios-solve is planned
-as its user-facing Rust API.
+program representation and analysis. Its construction, solve and query APIs are
+available through the [zetesis Rust library](https://gregorygelfond.github.io/zetesis/book/rust/agent.html).
 
 ## Install and run
 

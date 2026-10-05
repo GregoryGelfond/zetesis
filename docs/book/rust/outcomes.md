@@ -3,6 +3,13 @@
 Keep three questions separate: what has been proved about the program, how much
 search has completed, and what an external consumer received.
 
+This chapter uses the native `zetesis_solve::WorldView`: a complete original
+family, possibly empty when the program is inconsistent. The facade's upstream
+`zetesis::query::WorldView` is a nonempty live stream. Its materialized
+`Snapshot` guarantees a complete, nonempty family. These types have distinct
+contracts, as described in
+the [library reference](libraries.md#api-reference).
+
 | Evidence | What it establishes | What it does not establish |
 | --- | --- | --- |
 | Verified model | Completed membership for the original subject | Exhaustive enumeration or optimality |
@@ -43,6 +50,12 @@ observed before candidate checking starts. It does not attribute work to a
 closure oracle, countermodel search or device that was never entered. JSON
 uses the interruption kind `preparation`, with `cancelled` or `deadline` as
 its control code.
+
+`Interruption` implements `std::error::Error`. Error wrappers can retain it as a
+typed cause; callers can downcast to `Interruption` and follow `source()` to the
+underlying stop or resource error. Model-construction work and byte limits carry
+their evidence directly and have no nested source. Display text is for people,
+not a substitute for these typed distinctions.
 
 JSON interruption `kind` and `code` classify the outcome for machine consumers.
 `detail` is its human-readable explanation and may change as diagnostics improve;
@@ -175,6 +188,11 @@ yielded answer. Both `HumanRenderer` and
 selected original atoms, evaluated terms and optional priority/cost pairs remain
 separate. An empty displayed projection never changes answer identity.
 
+Library consumers can borrow evaluated `#show` terms with
+`observation::Evaluation::symbols()` or take ownership with `into_symbols()`.
+The latter moves the existing vector without copying terms or allocating new
+storage. Read `statistics()` first if the evaluation's work receipt is needed.
+
 `publish_prepared` accepts an admitted owner and `PublicationConfig`, containing
 ordinary `SolveConfig` and observation limits. It needs no argument parser,
 global stream or complete `WorldView` buffer. `run_with_renderer` and
@@ -288,6 +306,19 @@ flag and retires then or when the last clone drops. Polling reads shared flags
 without reading the clock. An already-started bounded static compilation is not
 preemptible; session setup polls before it and subsequent work polls again. A
 deadline is therefore not a hard process-kill guarantee.
+
+For a reusable interrupt handle across separate runs, `CancellationSlot::open`
+returns a `CancellationRun` guard. Keep the guard until that run ends and clone
+its `cancellation()` token for preparation or workers. Each opening gets a fresh
+identity. Opening again, clearing the slot or dropping the guard stops the old
+tokens; an old guard cannot stop a newer run. Cancelling an idle slot has no
+effect on a later run.
+
+A slot cancellation makes at most one atomic update, without allocating or
+waiting. Tokens from a slot add one atomic membership read to ordinary polling.
+Deadlines retain their existing timer and retirement costs. Slot identities never
+wrap: exhausting them returns `CancellationSlotError::GenerationExhausted`
+without changing the current run.
 
 For Rust consumers migrating from the previous API, `Cancellation` replaces
 `Control`, and operations named `with_control` or ending in `_with_control` now

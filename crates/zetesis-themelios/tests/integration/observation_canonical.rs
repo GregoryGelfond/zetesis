@@ -105,3 +105,34 @@ fn every_observation_work_cutoff_refuses_complete_output() {
         assert!(error.statistics().work <= cutoff);
     }
 }
+
+#[test]
+fn consuming_observations_transfers_the_canonical_values() {
+    use zetesis_themelios::logical::{Name, Sign, Symbol};
+
+    let input = source("#show f(7). #show \"seven\".");
+    let evaluation = input
+        .metadata()
+        .observations()
+        .evaluate(
+            &Model::default(),
+            Limits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    let storage = evaluation.symbols().as_ptr();
+    let symbols = evaluation.into_symbols();
+    assert_eq!(symbols.as_ptr(), storage);
+    let expected = [
+        Symbol::function(Name::new("f").unwrap(), [Symbol::Number(7)], Sign::Positive),
+        Symbol::String("seven".into()),
+    ]
+    .into_iter()
+    .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        symbols
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
+        expected
+    );
+}

@@ -151,7 +151,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
     Ok(json!({
         "mode":request.mode.label(),"committed_floor":request.floor,
         "rustc":request.observation.rustc.trim(),"cargo_llvm_cov":version,"cargo_llvm_cov_observation":cargo_version,"llvm_tools":tools(request.observation)?,
-        "primary":"workspace --all-features","supplemental":"--package zetesis-cli --package zetesis-solve --no-default-features",
+        "primary":"workspace --all-features","supplemental":"--package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis --no-default-features",
         "floor_profiles":["workspace","cli-cpu"],
         "default_filename_filters":"cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
         "project_added_filename_filters":[request.filter],"profiles_merged":false,

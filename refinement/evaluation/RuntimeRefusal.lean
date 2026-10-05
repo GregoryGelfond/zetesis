@@ -7,9 +7,9 @@ open ZetesisExtract RuntimeEffects
 # Causes of returning-event control and work refusals
 
 These receipts characterize the reads that actually produced a typed stop in
-the source-checked poll and tick contexts. Cancellation is read first; only a
-clear cancellation reaches an optional deadline, and only clear controls reach
-the work limit. A refused tick retains every work field and charges no unit.
+the source-checked poll and tick contexts. Local cancellation is read first, then
+optional slot membership, then optional expiry. Only clear controls reach the
+work limit. A refused tick retains every work field and charges no unit.
 No stored-token observation, successful poll or allocation premise is assumed.
 Backend failure, divergence and nonreturning requests remain outside finite Runs.
 -/
@@ -18,83 +18,34 @@ namespace RuntimeRefusal
 /-- Exactly the reads made by a poll that observes no control stop. -/
 def clearReads (control : zetesis_cpu.cancellation.Cancellation) : List Event :=
   ⟨.read (ContextEvents.cancelObject control) .Relaxed, false⟩ ::
-    match control.deadline with
-    | none => []
-    | some owner => [⟨.read (2 * owner.value.deadline.owner + 1) .Relaxed, false⟩]
+    (ControlReads.matchingSlot (ContextEvents.slotRead control) ++
+      ControlReads.clearDeadline (ContextEvents.deadlineRead control))
 
-/-- A control stop records its actual source-ordered reads. Cancellation stops
-before any deadline read; expiry requires both a present deadline and a preceding
-clear cancellation read. Neither case includes a work-limit test. -/
-inductive PollRefusal (control : zetesis_cpu.cancellation.Cancellation) :
-    List Event → zetesis_cpu.cancellation.Stop → Prop where
-  | cancelled : PollRefusal control
-      [⟨.read (ContextEvents.cancelObject control) .Relaxed, true⟩] .Cancelled
-  | expired (owner : alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner)
-      (present : control.deadline = some owner) :
-      PollRefusal control
-        [⟨.read (ContextEvents.cancelObject control) .Relaxed, false⟩,
-         ⟨.read (2 * owner.value.deadline.owner + 1) .Relaxed, true⟩] .Deadline
+/-- A refusal receipt retains the actual local bit or mismatching U64 response,
+or the expiry bit reached after clear cancellation checks. Its result index
+excludes the success constructor of the shared exact receipt relation. -/
+abbrev PollRefusal (control : zetesis_cpu.cancellation.Cancellation)
+    (events : List Event) (reason : zetesis_cpu.cancellation.Stop) : Prop :=
+  ControlReads.Receipt (ContextEvents.cancelObject control)
+    (ContextEvents.slotRead control) (ContextEvents.deadlineRead control) events (.Err reason)
 
-/-- A stopped event poll determines the precise read receipt and stop cause.
-Proof: invert cancellation first; only its false branch can invert a deadline
-read. A clear final response contradicts the supplied typed refusal. -/
+/-- A stopped source-checked event poll determines the exact response sequence
+and cause. The normal-form receipt is derived by inverting the executed reads. -/
 theorem poll_refused (control : zetesis_cpu.cancellation.Cancellation)
     (events : List Event) (reason : zetesis_cpu.cancellation.Stop)
     (run : Runs (ContextEvents.poll control) events (.Err reason)) :
     PollRefusal control events reason := by
-  cases present : control.deadline with
-  | none =>
-    rw [ContextEvents.poll_without_deadline control present] at run
-    obtain ⟨cancelled, tail, consumed, continued⟩ := RuntimeRuns.observed_inv _ _ _ _ run
-    cases cancelled with
-    | false =>
-      have impossible := (RuntimeRuns.returned_inv _ _ _ continued).1
-      contradiction
-    | true =>
-      obtain ⟨same, finished⟩ := RuntimeRuns.returned_inv _ _ _ continued
-      have stopped : reason = .Cancelled := (core.result.Result.Err.inj same).symm
-      subst reason
-      simpa only [consumed, finished] using (PollRefusal.cancelled (control := control))
-  | some owner =>
-    rw [TickProjection.poll_with_deadline control owner present] at run
-    obtain ⟨cancelled, tail, consumed, continued⟩ := RuntimeRuns.observed_inv _ _ _ _ run
-    cases cancelled with
-    | true =>
-      obtain ⟨same, finished⟩ := RuntimeRuns.returned_inv _ _ _ continued
-      have stopped : reason = .Cancelled := (core.result.Result.Err.inj same).symm
-      subst reason
-      simpa only [consumed, finished] using (PollRefusal.cancelled (control := control))
-    | false =>
-      obtain ⟨expired, rest, readExpiry, finished⟩ := RuntimeRuns.observed_inv _ _ _ _ continued
-      cases expired with
-      | false =>
-        have impossible := (RuntimeRuns.returned_inv _ _ _ finished).1
-        contradiction
-      | true =>
-        obtain ⟨same, ended⟩ := RuntimeRuns.returned_inv _ _ _ finished
-        have stopped : reason = .Deadline := (core.result.Result.Err.inj same).symm
-        subst reason
-        simpa only [consumed, readExpiry, ended] using PollRefusal.expired owner present
+  rw [ContextEvents.poll_reads] at run
+  exact ControlReads.receipt_of_run _ _ _ events (.Err reason) run
 
-/-- Each refusal receipt is realized by the actual event poll. Combined with
-`poll_refused`, this gives exact causes rather than a merely necessary test. -/
+/-- Each refusal receipt is realized by the source-checked event poll. Together
+with `poll_refused`, this characterizes exact causes without a supplied verdict. -/
 theorem poll_receipt_runs (control : zetesis_cpu.cancellation.Cancellation)
     (events : List Event) (reason : zetesis_cpu.cancellation.Stop)
     (receipt : PollRefusal control events reason) :
     Runs (ContextEvents.poll control) events (.Err reason) := by
-  cases receipt with
-  | cancelled =>
-    cases present : control.deadline with
-    | none =>
-      rw [ContextEvents.poll_without_deadline control present]
-      exact .observed (.read (ContextEvents.cancelObject control) .Relaxed) true _ _ _ (.returned _)
-    | some owner =>
-      rw [TickProjection.poll_with_deadline control owner present]
-      exact .observed (.read (ContextEvents.cancelObject control) .Relaxed) true _ _ _ (.returned _)
-  | expired owner present =>
-    rw [TickProjection.poll_with_deadline control owner present]
-    refine .observed (.read (ContextEvents.cancelObject control) .Relaxed) false _ _ _ ?_
-    exact .observed (.read (2 * owner.value.deadline.owner + 1) .Relaxed) true _ _ _ (.returned _)
+  rw [ContextEvents.poll_reads]
+  exact ControlReads.run_of_receipt _ _ _ events (.Err reason) receipt
 
 /-- A tick stops either at a control read, before testing its limit, or at its
 work ceiling after exactly the clear-control reads. -/

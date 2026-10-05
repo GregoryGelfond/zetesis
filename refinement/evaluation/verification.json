@@ -1,11 +1,11 @@
 {
   "schema": "zetesis.refinement.evaluation.check.v1",
   "checkedOn": "2026-10-04",
-  "scope": "Completed public scalar reference checks decide Ferraris answer-set membership for one candidate of a finite ground formula theory. Finite typed-refused calls retain their actual reached cause and publish no verdict. Both results use explicit Rust/library contracts and audited extraction/context adaptation. Actual successful Theory::new and owned-vector Interpretation::new calls establish ordered nodes, bounded roots, exact packed storage and retained ownership. Finite generic insertion additionally preserves bounded-prefix writes and first-invalid refusal; unrestricted iterator termination is not claimed. The eventful public checker composes 22 source-checked contexts with imported pure scalar, sequence, iterator and owner operations. Cancellation/deadline reads retain logical object/field identity and consume independent responses; each reservation has its own grant or rejection. Successful runs project to the actual fixed generated checker with the same verdict, statistics and witness; all inner phase contracts are discharged by concrete proofs. Stable is equivalent to answer-set membership, NotModel carries an actual false asserted root, and NonMinimal carries an actual program-owned proper-subset reduct model. Constructed subject checks and consuming accepted-result conversion retain the exact candidate. Public typed refusals recover an actual terminal phase and its reached leaf cause, preserving source order and the returned Stop. Internal loop receipts retain actual reached states and histories, including earlier charged work. No stopped call publishes a decision or establishes exhaustive failure. Stored-reduct construction and public satisfaction queries retain their earlier per-invocation fixed-provider contracts; the runtime event correspondence here covers the public membership checker call graph. Backend failure, divergence and unanswered observations are not typed source returns. There is no unconditional termination/fairness theorem. Source grounding, optimized routes, full solver enumeration, parallel schedules and GPU execution remain outside this milestone. The additional optimized-route slice proves the actual tight-body classifier against exact formula recognition. Successful entry calls derive the full ordered class sequence, one charged unit per classified node and preserved work/control fields. Its loop constructively yields a typed outcome from ordered storage and a valid counter; entry success derives initialized storage from the reached reservation under explicit successful sequence preservation. These classifier laws use fixed providers and observations, not a new returning-event correspondence. They do not establish complete tight-plan certification or optimized membership. The shared atomic-choice recognizer is additionally proved against exact stored syntax: under ordered DAG links and a bounded head, actual recognition returns the atom exactly for either orientation of its atom/default-negation disjunction. Distinct node occurrences may name the same atom. Rust copies each discriminated node to one value local before matching, preserving reads and branch order; the existing Option/Bool operations have explicit pure standard-library models. This does not establish producer coverage, rank validation or complete optimized membership. The actual single-root tight producer now has derived source-branch receipts for its typed outcomes. With ordered DAG links and an exact complete class table, a returned producer has the original formula, head, optional body, kind and source-root identity. Successful classifier composition establishes the class-table premise under its explicit conditional empty-reservation contract. None and unsupported-root/body outcomes retain their actual structural witnesses; the results do not assert totality or atom-universe admission. The helper charges no work itself. Complete asserted-root occurrence coverage, rank validation and optimized membership remain open.",
+  "scope": "Completed public scalar reference checks decide Ferraris answer-set membership for one candidate of a finite ground formula theory. Finite typed-refused calls retain their actual reached cause and publish no verdict. Both results use explicit Rust/library contracts and audited extraction/context adaptation. Actual successful Theory::new and owned-vector Interpretation::new calls establish ordered nodes, bounded roots, exact packed storage and retained ownership. Finite generic insertion additionally preserves bounded-prefix writes and first-invalid refusal; unrestricted iterator termination is not claimed. The eventful public checker composes 23 source-checked contexts with imported pure scalar, sequence, iterator and owner operations. Cancellation, optional slot membership and deadline reads retain logical object/field identity and consume independently typed Boolean or U64 responses; each reservation has its own grant or rejection. Successful runs project to the actual fixed generated checker with the same verdict, statistics and witness; all inner phase contracts are discharged by concrete proofs. Stable is equivalent to answer-set membership, NotModel carries an actual false asserted root, and NonMinimal carries an actual program-owned proper-subset reduct model. Constructed subject checks and consuming accepted-result conversion retain the exact candidate. Public typed refusals recover an actual terminal phase and its reached leaf cause, preserving source order and the returned Stop. Internal loop receipts retain actual reached states and histories, including earlier charged work. No stopped call publishes a decision or establishes exhaustive failure. Stored-reduct construction and public satisfaction queries retain their earlier per-invocation fixed-provider contracts; the runtime event correspondence here covers the public membership checker call graph. Backend failure, divergence and unanswered observations are not typed source returns. There is no unconditional termination/fairness theorem. Source grounding, optimized routes, full solver enumeration, parallel schedules and GPU execution remain outside this milestone. The additional optimized-route slice proves the actual tight-body classifier against exact formula recognition. Successful entry calls derive the full ordered class sequence, one charged unit per classified node and preserved work/control fields. Its loop constructively yields a typed outcome from ordered storage and a valid counter; entry success derives initialized storage from the reached reservation under explicit successful sequence preservation. These classifier laws use fixed providers and observations, not a new returning-event correspondence. They do not establish complete tight-plan certification or optimized membership. The shared atomic-choice recognizer is additionally proved against exact stored syntax: under ordered DAG links and a bounded head, actual recognition returns the atom exactly for either orientation of its atom/default-negation disjunction. Distinct node occurrences may name the same atom. Rust copies each discriminated node to one value local before matching, preserving reads and branch order; the existing Option/Bool operations have explicit pure standard-library models. This does not establish producer coverage, rank validation or complete optimized membership. The actual single-root tight producer now has derived source-branch receipts for its typed outcomes. With ordered DAG links and an exact complete class table, a returned producer has the original formula, head, optional body, kind and source-root identity. Successful classifier composition establishes the class-table premise under its explicit conditional empty-reservation contract. None and unsupported-root/body outcomes retain their actual structural witnesses; the results do not assert totality or atom-universe admission. The helper charges no work itself. Complete asserted-root occurrence coverage, rank validation and optimized membership remain open. The actual optional slot membership comparison is included: local cancellation is read first, a mismatching slot word cancels before expiry, and clear controls precede quotas. Exact read receipts derive outcomes from returned observations. Slot CAS/lifecycle and eventual response are not proved.",
   "leanVersion": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
   "leanExecutableSha256": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
   "artifactInventory": "artifacts.sha256",
-  "artifactInventorySha256": "2facb2ed6c37bce2e8d1f274dcb7bc186729aead32d3122c39f6f31b9ba555ed",
+  "artifactInventorySha256": "8144800e6920658172c05c4c6bb6eb27521090c58e795564b44bf306fe39a724",
   "declarations": [
     "Membership.mask_bit",
     "SubsetQuery.completed_admission",
@@ -321,6 +321,7 @@
     "SubjectMembership.completed_subject_phases",
     "SubjectMembership.completed_subject",
     "SubjectMembership.completed_stable",
+    "RuntimeContexts.membership_reconstruct",
     "RuntimeContexts.deadline_reconstruct",
     "RuntimeContexts.option_reconstruct",
     "RuntimeContexts.poll_reconstruct",
@@ -345,7 +346,7 @@
     "CheckerContexts.check_reconstruct",
     "CheckerContexts.checkInterpretation_reconstruct",
     "ContextEvents.lift_result",
-    "ContextEvents.poll_without_deadline",
+    "ContextEvents.poll_reads",
     "ContextEvents.two_polls_observe_change",
     "ContextEvents.tick_cancelled",
     "ContextEvents.exhausted_body",
@@ -355,10 +356,13 @@
     "RuntimeRuns.bind_inv",
     "RuntimeRuns.embed_iff",
     "RuntimeRuns.embedded_bind_inv",
+    "ControlReads.receipt_of_run",
+    "ControlReads.run_of_receipt",
+    "ControlReads.completed_iff",
+    "ControlReads.nonempty",
     "RuntimeLoop.completed_calls",
     "RuntimeLoop.completed_loop",
     "RuntimeLoop.completed_post",
-    "TickProjection.poll_with_deadline",
     "TickProjection.tick_factors",
     "TickProjection.completed_poll",
     "TickProjection.completed_tick",
@@ -511,8 +515,8 @@
       ],
       "exitCode": 0,
       "log": "build.txt",
-      "logSha256": "cd86336ec6811bb64920bfb8a636eb1791dc9995bf7ef1460ce0bf756d40b58d",
-      "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+      "logSha256": "484a2d2d466046822601fd35ee68cdfb96af655d8820cdeb7e96297924908b21",
+      "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
     },
     {
       "argv": [
@@ -525,8 +529,8 @@
       ],
       "exitCode": 0,
       "log": "axiom-audit.txt",
-      "logSha256": "145738e9a4a64d1eea46b993dc87b3740f0402b6131cea4cc9cf84b25ad00d17",
-      "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+      "logSha256": "12b98250875c0c7e504e85d6f5fa6ed6b2e9ff70266bb6ca7d7963afe888fa18",
+      "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
     },
     {
       "argv": [
@@ -540,7 +544,7 @@
       "exitCode": 0,
       "log": "shared-axiom-audit.txt",
       "logSha256": "8ffe99995c550c5e37a2c76a56bc0baf2de855a41f8ca91a84f16b690ab280f4",
-      "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+      "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
     },
     {
       "argv": [
@@ -557,8 +561,8 @@
       ],
       "exitCode": 0,
       "log": "context-audit.txt",
-      "logSha256": "1178da50ac5691e6b2d91004282c048d86c9b796f12da6436751786cf30f2fca",
-      "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+      "logSha256": "4eca5c58ecfbdfc32401b668fa6798b48b6b2224594f6ba07e382fbcb9a7cdf0",
+      "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
     },
     {
       "argv": [
@@ -576,11 +580,11 @@
       ],
       "exitCode": 0,
       "log": "context-negative-audit.txt",
-      "logSha256": "4a0d1826e6aaab15aff478a344a743dc9cf930377d0e0ae1cc7ce5b5c317275c",
-      "checkedInputFingerprint": "49c6ff257d57c6588d7bbadb2f9a7ac21daf23aadee06f7081e86fc6d2bd9ce0"
+      "logSha256": "559388ac49e4389c6732e174c2c5475c17693b80b34817e0149605b22c752796",
+      "checkedInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4"
     }
   ],
-  "theoremAuditCount": 490,
+  "theoremAuditCount": 494,
   "rustOrShaderSourcesChanged": true,
   "sharedSemanticSources": {
     "inventory": "semantic-inputs.sha256",
@@ -821,42 +825,137 @@
     "Source grounding; specialized plan construction beyond tight-body classification, exact atomic-choice recognition and single-root typed producer outcomes, including complete asserted-root occurrence/order coverage and rank validation; optimized membership decisions, complete solver enumeration, parallel schedules and GPU execution.",
     "Correspondence of arbitrary custom iterator effects, borrowed iterator-state updates and destruction beyond the trusted standard-library model; no unrestricted iterator termination or universal runtime liveness is claimed.",
     "Changing runtime histories for the separate public stored-reduct constructor/query API beyond its stated per-invocation fixed-provider contracts. The membership checker runtime call graph is covered here.",
-    "Runtime changing-observation correspondence for the tight classifier; current classifier proofs use fixed-provider operations and explicit valid work/sequence contracts."
+    "Runtime changing-observation correspondence for the tight classifier; current classifier proofs use fixed-provider operations and explicit valid work/sequence contracts.",
+    "Cancellation-slot generation allocation, no-wrap opening, CAS transitions, active-window retirement, timer behavior and eventual cancellation response. The selected membership read and actual comparison are proved; slot lifecycle and a native Backend implementation are separate obligations."
   ],
   "trustedRuntimeContracts": [
     "Rust, standard-library implementations, the allocator, operating system and hardware satisfy their stated contracts; their implementations are not proof targets.",
     "Arc preserves supplied values, live owner identity and immutable-heap consistency. Constructor contracts are per invocation; they do not assert allocation success or a global fresh-allocation provider.",
     "Successful reservation preserves the logical sequence and grants sufficient machine-bounded capacity. Rejection is a returning source error. The active vector model records sequences and lengths, not physical capacity or allocator internals.",
-    "The Rust compiler, Charon/Aeneas, audited LLBC normalization, scoped provider bindings and source-context adaptation are trusted translation boundaries. ContextAudit checks exact scaffolds, headers, ordered bodies, call counts and reversal for 22 contexts, with six negative controls; its correctness as a text checker is not a kernel theorem.",
+    "The Rust compiler, Charon/Aeneas, audited LLBC normalization, scoped provider bindings and source-context adaptation are trusted translation boundaries. ContextAudit checks exact scaffolds, headers, ordered bodies, call counts and reversal for 23 contexts, with nine negative controls; its correctness as a text checker is not a kernel theorem.",
     "Imported scalar, sequence, iterator and ownership operations correspond to the Rust operations. The owned-vector iterator supplies the finite input contract; usize::div_ceil retains its checked arithmetic and zero-divisor failure.",
-    "Returning read keys correspond to immutable live owner/field handles with the used Relaxed ordering. Changing responses are allowed. A ghost-clear representative affects only unused fixed-model bits and leaves eventful polling unchanged; it does not clear a Rust cancellation token.",
+    "Returning Bool and U64 read keys correspond to immutable live owner/field handles with the used Relaxed ordering. Changing responses are allowed. The optional membership step compares the returned U64 with its captured active word. A ghost-clear representative changes only unused fixed observations, preserving slot presence, active word and read handles; it does not clear or otherwise mutate a Rust cancellation token.",
     "Constructor operations have their own supplied allocation/reservation contracts. Checking consumes a separate runtime history. Successful calls justify the fixed logical projection; that projection is not a premise that physical allocations always succeed."
   ],
   "sourceRevalidation": {
     "checkedOn": "2026-10-04",
-    "sourceBaseRevision": "75f5eaf8d5e038571cae7edbe25b18c2d9eb4685",
-    "themeliosRevision": "dd9a57172b8411ed277833323c52eef591840928",
-    "previousSourceInventorySha256": "e94583893e6482d31ab62eafcca4a66916a5281b302ef836baee899c38c521a9",
-    "sourceInventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
+    "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+    "themeliosRevision": "3339a8abed1e00f21e42c2b3ed2677c16248eda5",
+    "previousSourceInventorySha256": "ab9112a410841cb9bf2921c862fc36f45fe45353e26d2078d3b0a5b474297d44",
+    "sourceInventorySha256": "9fd7f6322e986b927472b550d6852deaa44755dea58c019268e9e10a34ba359f",
     "changedSourceInputs": [
       "Cargo.lock",
-      "Cargo.toml",
-      "crates/zetesis-core/src/catalog/view.rs"
+      "Cargo.toml"
     ],
-    "sourceInventoryRustInputsChanged": true,
-    "changedRustInput": "crates/zetesis-core/src/catalog/view.rs",
-    "changedRustInputScope": "Checked TermRef::depth_with callback API, its private depth helper and regression tests. These definitions are outside the selected extracted roots.",
+    "addedSourceInputs": [],
+    "sourceInventoryRustInputsChanged": false,
+    "previousWorkspaceVersion": "0.2.0",
+    "workspaceVersion": "0.3.0",
+    "localPackageVersionsChanged": 22,
+    "externalDependencyRecordsUnchanged": true,
+    "change": "The approved workspace release version changes from 0.2.0 to 0.3.0, with matching versions for 22 local packages in Cargo.lock. All other parsed workspace manifest settings, lockfile records, selected crate manifests and selected Rust source bytes are unchanged.",
     "freshExtractionExitCode": 0,
+    "freshRawLlbcSha256": "71a581c4cbc58b392abfd3dd28a176552186c92cbb886d7995c19288747cd7bc",
     "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+    "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
     "generatedFunsByteIdentical": true,
     "generatedTypesByteIdentical": true,
     "externalTemplatesByteIdentical": true,
     "externalModelsUnchanged": true,
     "proofSourcesUnchanged": true,
-    "authoredAuditCount": 490,
-    "sharedAuditCount": 224,
-    "checkedContexts": 22,
-    "negativeContextChecks": 6,
-    "boundary": "This refresh preserves the existing evaluator refinement scope. It does not verify the changed depth API, frontend Program admission, pool expansion, typed symbol conversion, complete solving or GPU execution."
-  }
+    "retainedGeneratedArtifactsUnchanged": true,
+    "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+    "proofChecksRepeated": false,
+    "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+    "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+  },
+  "checkedInputFingerprintScheme": "SHA-256 of compact JSON with sorted path keys mapping every package/Evaluator Lean source, lakefile.toml, lake-manifest.json, lean-toolchain and the 18 imported semantic source paths to their SHA-256 digests. Paths are repository-relative. All five commands checked the same unchanged snapshot.",
+  "previousSourceRevalidations": [
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "00773f6160500611fdd7ecb9bd518d75793d9d8e",
+      "previousSourceInventorySha256": "14a41225764191a9dcea76647cb496fbd0cf1bfe231b03bc794f2bf812bdf298",
+      "sourceInventorySha256": "7f1a2ec703eb20af77f722f6679dcb24fda2e29c33162ed88649e84c319f9214",
+      "changedSourceInputs": [
+        "Cargo.lock",
+        "Cargo.toml",
+        "crates/zetesis-cpu/src/cancellation.rs",
+        "crates/zetesis-cpu/src/lib.rs"
+      ],
+      "addedSourceInputs": [
+        "crates/zetesis-cpu/src/cancellation/slot.rs",
+        "crates/zetesis-cpu/src/cancellation/slot/tests.rs"
+      ],
+      "sourceInventoryRustInputsChanged": true,
+      "freshExtractionExitCode": 0,
+      "fullParsedLlbcEqualAfterShortNamesOrdering": false,
+      "generatedFunsByteIdentical": false,
+      "generatedTypesByteIdentical": false,
+      "externalTemplatesByteIdentical": false,
+      "externalModelsUnchanged": false,
+      "proofSourcesUnchanged": false,
+      "comparisonBasis": "The preceding maintained pre-slot extraction. Fresh normalization instead preserves its own raw executable statement trees, and reversing the ten provider scopes restores its own stock translation.",
+      "authoredAuditCount": 494,
+      "sharedAuditCount": 224,
+      "checkedContexts": 23,
+      "negativeContextChecks": 9,
+      "boundary": "This migration proves the selected actual poll/read correspondence with optional U64 slot membership checking. It does not prove slot opening, CAS transitions, generation wrap avoidance, retirement, timer or eventual-response behavior; frontend/native Backend integration, grounding, complete enumeration and GPU execution remain outside this selected evaluator proof."
+    },
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "00773f6160500611fdd7ecb9bd518d75793d9d8e",
+      "previousSourceInventorySha256": "7f1a2ec703eb20af77f722f6679dcb24fda2e29c33162ed88649e84c319f9214",
+      "sourceInventorySha256": "83aaae9cc36d942da0de39d96c7088a7818fc6c06c033e2dd22840fbe3ed9dcd",
+      "changedSourceInputs": [
+        "Cargo.lock"
+      ],
+      "addedSourceInputs": [],
+      "sourceInventoryRustInputsChanged": false,
+      "change": "The zetesis-solve examples add zetesis as a development dependency; selected production inputs and dependency versions are unchanged.",
+      "freshExtractionExitCode": 0,
+      "freshRawLlbcSha256": "e365fc009a886e16e9be0a15706f0d715e8c2613f72fc68575c170aa7d83b539",
+      "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+      "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
+      "generatedFunsByteIdentical": true,
+      "generatedTypesByteIdentical": true,
+      "externalTemplatesByteIdentical": true,
+      "externalModelsUnchanged": true,
+      "proofSourcesUnchanged": true,
+      "retainedGeneratedArtifactsUnchanged": true,
+      "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+      "proofChecksRepeated": false,
+      "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+      "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+    },
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "3339a8abed1e00f21e42c2b3ed2677c16248eda5",
+      "previousSourceInventorySha256": "83aaae9cc36d942da0de39d96c7088a7818fc6c06c033e2dd22840fbe3ed9dcd",
+      "sourceInventorySha256": "ab9112a410841cb9bf2921c862fc36f45fe45353e26d2078d3b0a5b474297d44",
+      "changedSourceInputs": [
+        "Cargo.lock",
+        "Cargo.toml"
+      ],
+      "addedSourceInputs": [],
+      "sourceInventoryRustInputsChanged": false,
+      "change": "The themelios pin and higher-layer adapter dependencies change. Selected core, CPU and Ferraris Rust sources, manifests and resolved production dependency records are unchanged.",
+      "freshExtractionExitCode": 0,
+      "freshRawLlbcSha256": "dade52ad6f4b66d90bcef6e861bd0398eed8b86d3ba6887de6319e72d5c85dac",
+      "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+      "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
+      "generatedFunsByteIdentical": true,
+      "generatedTypesByteIdentical": true,
+      "externalTemplatesByteIdentical": true,
+      "externalModelsUnchanged": true,
+      "proofSourcesUnchanged": true,
+      "retainedGeneratedArtifactsUnchanged": true,
+      "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+      "proofChecksRepeated": false,
+      "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+      "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+    }
+  ]
 }

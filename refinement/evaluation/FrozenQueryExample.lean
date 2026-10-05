@@ -22,7 +22,7 @@ def truth (value : Bool) : alloc.vec.Vec Bool :=
 no deadline and a nonzero subset count make the retained fields explicit. -/
 def work (limit charged : U64) : oracle.Work := {
   limits := { max_work := limit, max_subsets := 7#u64 }
-  cancellation := { cancelled := { owner := 1, value := { nextRead := false } }, deadline := none }
+  cancellation := { cancelled := { owner := 1, value := { nextRead := false } }, deadline := none, slot := none }
   statistics := { work := charged, subsets := 5#u64 } }
 
 /-- On a single admitted leaf, the actual evaluator performs one successful

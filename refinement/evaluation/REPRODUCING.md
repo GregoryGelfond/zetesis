@@ -184,9 +184,9 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 233
-  and $t.fun_decls[233] == null
-  and $t.ordered_decls[182] == {"TraitImpl":{"NonRec":25}}
+  and $debug.methods[0].skip_binder.id == 234
+  and $t.fun_decls[234] == null
+  and $t.ordered_decls[186] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -216,23 +216,23 @@ def step_is_unused:
   and $t.item_names[1].value[2].Impl.Ty.params.const_generics[0].ty ==
     {"Value":[0,{"Scalar":{"Integer":{"Unsigned":"Usize"}}}]}
   and $t.trait_impls[23].vtable == null
-  and step_method(2; "forward_overflowing"; 226)
-  and step_method(6; "backward_overflowing"; 230)
+  and step_method(2; "forward_overflowing"; 227)
+  and step_method(6; "backward_overflowing"; 231)
   and ((.translated.trait_decls[9].methods[2] = null
     | .translated.trait_decls[9].methods[6] = null
     | .translated.trait_impls[23].methods[2] = null
     | .translated.trait_impls[23].methods[6] = null
-    | .translated.fun_decls[226] |= del(.src)
-    | .translated.fun_decls[230] |= del(.src)
+    | .translated.fun_decls[227] |= del(.src)
+    | .translated.fun_decls[231] |= del(.src)
     | [.translated.type_decls, .translated.fun_decls,
        .translated.global_decls, .translated.trait_decls,
        .translated.trait_impls]
     | walk(if type == "object" then del(.item_meta) else . end)
     | [.. | objects | select(
-        .Fun? == 226 or .Fun? == 230
-        or .Regular? == 226 or .Regular? == 230
-        or .fun_id? == 226 or .fun_id? == 230
-        or .function_id? == 226 or .function_id? == 230
+        .Fun? == 227 or .Fun? == 231
+        or .Regular? == 227 or .Regular? == 231
+        or .fun_id? == 227 or .fun_id? == 231
+        or .function_id? == 227 or .function_id? == 231
         or .TraitMethod? == [9,2] or .TraitMethod? == [9,6]
         or (.trait_ref?.id? == 9 and (.item_id? == 2 or .item_id? == 6))
         or (.impl_ref?.id? == 23 and (.item_id? == 2 or .item_id? == 6)))])
@@ -247,7 +247,7 @@ def checked_interpretation_constructor:
   and $function.body.Structured.locals.arg_count == 2
   and $function.body.Structured.locals.locals[1].index == 1
   and $function.body.Structured.locals.locals[1].name == "theory"
-  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":78}
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":84}
   and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":25}})] | length) == 1;
 def checked_insertion:
   .translated.fun_decls[30] as $function |
@@ -273,7 +273,7 @@ def checked_classifier:
   and $function.body.Structured.locals.arg_count == 2
   and $function.body.Structured.locals.locals[1].index == 1
   and $function.body.Structured.locals.locals[1].name == "theory"
-  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":78}
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":84}
   and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":41}})] | length) == 1;
 def checked_choice($id; $method; $arguments):
   .translated.fun_decls[$id] as $function |
@@ -287,7 +287,7 @@ def checked_choice($id; $method; $arguments):
   and $function.body.Structured.locals.arg_count == $arguments
   and $function.body.Structured.locals.locals[1].index == 1
   and $function.body.Structured.locals.locals[1].name == "theory"
-  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":78}
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":84}
   and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":$id}})] | length) == 1;
 def checked_producer:
   .translated.fun_decls[44] as $function |
@@ -301,7 +301,7 @@ def checked_producer:
   and $function.body.Structured.locals.arg_count == 3
   and $function.body.Structured.locals.locals[1].index == 1
   and $function.body.Structured.locals.locals[1].name == "theory"
-  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":78}
+  and $function.body.Structured.locals.locals[1].ty == {"Deduplicated":84}
   and ([.translated.ordered_decls[] | select(. == {"Fun":{"NonRec":44}})] | length) == 1;
 def checked_owned_exports:
   .translated as $t |
@@ -683,13 +683,13 @@ def checked_owned_exports:
     and $function.body.Structured.locals.arg_count == $expected.arguments
     and ([$t.ordered_decls[] | select(. == {"Fun":{"NonRec":$expected.id}})] | length) == 1);
 if checked_argument(11; "identities"; 2;
-     {"Value":[78,{"Ref":[{"Body":1},{"Deduplicated":3},"Shared"]}]})
-   and checked_argument(13; "evaluate"; 5; {"Deduplicated":78})
-   and checked_argument(14; "failed_root"; 3; {"Deduplicated":78})
-   and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":78})
-   and checked_argument(16; "check_subset"; 5; {"Deduplicated":78})
-   and checked_argument(17; "select_atoms"; 4; {"Deduplicated":78})
-   and checked_argument(31; "check"; 4; {"Deduplicated":78})
+     {"Value":[84,{"Ref":[{"Body":1},{"Deduplicated":3},"Shared"]}]})
+   and checked_argument(13; "evaluate"; 5; {"Deduplicated":84})
+   and checked_argument(14; "failed_root"; 3; {"Deduplicated":84})
+   and checked_argument(15; "find_countermodel"; 6; {"Deduplicated":84})
+   and checked_argument(16; "check_subset"; 5; {"Deduplicated":84})
+   and checked_argument(17; "select_atoms"; 4; {"Deduplicated":84})
+   and checked_argument(31; "check"; 4; {"Deduplicated":84})
    and checked_interpretation_constructor and checked_insertion and checked_owned_exports
    and checked_classifier and checked_producer
    and checked_choice(42; "atom"; 2) and checked_choice(43; "pair"; 3)
@@ -707,7 +707,7 @@ then .translated.fun_decls[11].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[43].body.Structured.locals.locals[1].name = "program"
    | .translated.fun_decls[44].body.Structured.locals.locals[1].name = "program"
    | .translated.trait_impls[25] = null
-   | del(.translated.ordered_decls[182])
+   | del(.translated.ordered_decls[186])
    | .translated.trait_decls[9].methods[2] = null
    | .translated.trait_decls[9].methods[6] = null
    | .translated.trait_impls[23].methods[2] = null
@@ -729,8 +729,8 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc '
  | .translated.fun_decls[43].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[44].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:182]
-     + [$source[0].translated.ordered_decls[182]] + .translated.ordered_decls[182:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:186]
+     + [$source[0].translated.ordered_decls[186]] + .translated.ordered_decls[186:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -752,8 +752,8 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.fun_decls[43].body.Structured.locals.locals[1].name = "theory"
  | .translated.fun_decls[44].body.Structured.locals.locals[1].name = "theory"
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:182]
-     + [$source[0].translated.ordered_decls[182]] + .translated.ordered_decls[182:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:186]
+     + [$source[0].translated.ordered_decls[186]] + .translated.ordered_decls[186:])
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
@@ -809,7 +809,7 @@ Keep the raw generated file, check its identity, insert exactly the ten binders,
 and verify that removing them recovers the raw bytes:
 
 ```sh
-printf '%s\n' '47631c85fa3f14b9adac5b0b6f695c43bc7459870ef53c24cdf7675ae09d1853  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
+printf '%s\n' '0458fcc66af558ee72201e634ef7ea57a8e0e3c3b0d10fe589e0709ec8c27bfc  target/replay/Evaluator/Funs.lean' | shasum -a 256 -c -
 awk '
 function begin_scope(name, provider) {
   if (active != "" || seen[name] != 0) exit 1
@@ -861,7 +861,7 @@ END {
       seen["TightStorageReservation"] != 1 || seen["TightClassificationReservation"] != 1) exit 1
 }
 ' target/replay/Evaluator/Funs.lean > target/replay/Funs.bound.lean
-printf '%s\n' '742491cc2d1fcb6d7eabc20c1079fcde27de6b7db5105b271c3b766f1080c6ee  target/replay/Funs.bound.lean' | shasum -a 256 -c -
+printf '%s\n' '0bf0cdaa5fea0df9609b672803a662642bcd842ec8c1714351a190cf443b2ad1  target/replay/Funs.bound.lean' | shasum -a 256 -c -
 awk '
 BEGIN {
   provider["TheoryAllocation"] = "ArcAllocation"
@@ -927,18 +927,16 @@ acceptance, verdict/statistics, checked-subject, stable conversion and stable
 subject/theory accessors, three directly used `Check` accessors and the two
 checked/stable record types are selected too. The retained classifier contains the actual `tight::compile::classify` body/loop,
 `tight::reserve`, tight work admission, the used `Node` equality and the associated
-error conversion. The atomic-choice extension preserves all 79 preceding function blocks
-and 29 type blocks. It adds the two recognizers, their fallback closure and its
-dictionary, and the closure type. Two newly reached pure standard-library
+error conversion. Atomic-choice recognition includes its two recognizers,
+fallback closure and dictionary, and closure type. Two newly reached pure standard-library
 operations, `Bool::then_some` and `Option::or_else`, use authored definitions in
 `PureExternals`: the former receives an already evaluated value; the latter
 invokes its fallback only for None and preserves its complete result. The
 generic signatures do not model arbitrary destructor effects; the selected
 values and captures are scalar indices and shared theory data.
-The single-root producer extension preserves all 83 preceding function blocks
-and 30 type blocks, including source comments. It adds `producer`, the existing
-derived equality operation for body classes, and the two producer data types.
-Both external templates and all ten supplied-provider scopes are unchanged.
+Single-root producer extraction includes `producer`, the derived equality
+operation for body classes and the producer data types. All ten supplied-provider
+scopes retain their declared operations.
 Extraction and this declaration comparison do not themselves prove producer
 coverage, rank correctness or an optimized membership decision.
 The existing returning-event contexts still cover the reference checker only;
@@ -957,8 +955,17 @@ heap consistency connects a successful owner comparison to equal stored theory
 data. Allocator internals and reference counting remain trusted library
 implementations; runtime correspondence is distinct from generated-call proofs.
 
-`RuntimeEffects` supplies returning read and reservation events. The extracted
-`Result` retains its fixed-observation model. The source-checked contexts and
+The selected `Cancellation::poll` includes the actual optional Membership call.
+Its body loads a U64 and compares it with the captured active word. The Rust
+`matches!` guard keeps this as a direct call, avoiding the pinned translator's
+unsupported bound-region function-item argument. This factoring preserves the
+local-cancellation, slot-cancellation and expiry order. No slot opening, pulling,
+compare-and-swap or retirement operation is selected by this proof boundary.
+`AtomicTypes` supplies a phantom Align8 marker; `AtomicLoad` returns the supplied
+U64 for the selected Relaxed ordering. No generated external axiom is installed.
+
+`RuntimeEffects` supplies separately typed Boolean and U64 read responses and
+reservation events. The extracted `Result` retains its fixed-observation model. The source-checked contexts and
 projection/refusal laws below connect that generated call graph to finite
 runtime executions without changing the extracted backend.
 
@@ -996,8 +1003,8 @@ lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 lake env lean -DautoImplicit=false -DwarningAsError=true SharedAudit.lean
 ```
 
-`ContextAudit` checks four control/evaluator contexts and eighteen checker
-contexts. For each of these 22 definitions it requires the reviewed header,
+`ContextAudit` checks five control/evaluator contexts and eighteen checker
+contexts. For each of these 23 definitions it requires the reviewed header,
 complete body, exact call counts and reversal to the corresponding generated
 body. It also checks the imports, namespace, monad parameters and contiguous
 order of the context definitions. An extra declaration or instance inside that
@@ -1006,10 +1013,11 @@ operations and generalize its result monad; scalar, sequence, iterator and
 ownership operations remain the imported backend calls. The public checker
 retains four ordered reservation call sites.
 
-The first `ContextAudit` command reports all 22 context checks. The second repeats the checks
-and requires rejection of six changed inputs: an extra poll across a blank
-line, a deadline read moved before cancellation, a changed cancellation branch,
-a missing context, a changed namespace scaffold and a duplicated reservation.
+The first `ContextAudit` command reports all 23 context checks. The second
+requires rejection of nine changed inputs: an extra poll across a blank line,
+deadline or membership reads moved before local cancellation, a changed local
+cancellation branch, omitted membership, a changed word comparison, a missing
+context, a changed namespace scaffold and a duplicated reservation.
 These tests exercise the checker without modifying any retained source file.
 Both invocations must exit successfully; passing the Lean proof build alone
 does not replace the source checks.
@@ -1024,6 +1032,12 @@ checker result from a successful finite event execution; they do not assume
 successful inner evaluators, a correct membership verdict or always-successful
 allocation. Existing checker semantics then gives answer-set membership and
 the concrete evidence carried by either negative verdict.
+
+`ContextEvents.poll_reads` proves equality with the explicit control-read normal
+form in `ControlReads`. Successful polling requires a clear local bit, a matching
+slot word when present, and a clear expiry bit when present. Refused receipts keep
+the actual mismatching U64 and source read order. Neither a membership-comparison
+verdict nor a successful poll is supplied as an assumption.
 
 `RuntimePublicRefusal.classified` recovers the terminal source phase, its
 unchanged reason and the exact terminal leaf suffix. Loop refusal laws retain the actual reached state and event prefix before

@@ -1,0 +1,5 @@
+error: expected `,`, `;`, or `)`, found a number
+ --> tests/fixtures/invalid-macro.rs:4:26
+  |
+4 |     let _ = z::fact!(p(1 2));
+  |                          ^

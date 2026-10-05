@@ -41,6 +41,8 @@ gpu = ["dep:zetesis-wgpu", "zetesis-solve/gpu"]
 [[bin]]
 name = "zetesis"
 path = "src/main.rs"
+# The executable has no public Rust API and shares the facade library's name.
+doc = false
 
 [[example]]
 name = "book-answer-renderer"

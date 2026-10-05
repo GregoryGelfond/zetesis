@@ -104,6 +104,18 @@ impl<'a> PreparedInput<'a> {
             projection: None,
         }
     }
+    /// Borrow a canonical relational preparation with its original display
+    /// metadata. The owner keeps the program and metadata together; this borrow
+    /// performs no parsing, expansion or grounding. Lazy and eager sessions use
+    /// the same admitted relational program.
+    #[must_use]
+    pub fn relational(owner: &'a zetesis_themelios::PreparedRelational) -> Self {
+        Self {
+            input: Prepared::Relational(owner.program()),
+            metadata: Some(owner.metadata()),
+            projection: None,
+        }
+    }
     /// Reuse an admitted normal program and its source metadata.
     #[must_use]
     pub fn admitted(owner: &'a Admitted) -> Self {

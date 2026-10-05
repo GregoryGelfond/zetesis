@@ -1,5 +1,10 @@
 # Getting started with the library
 
+For the single-dependency API, start with
+[programs, answers and queries](agent.md). It combines program construction,
+the native solver and themelios's agent/query APIs under `zetesis`.
+The session example below uses the native session API.
+
 The complete [solve example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/examples/solve.rs)
 prepares an ASP program, streams typed answer sets on the CPU, displays them and
 checks that enumeration completed. Run it from a zetesis checkout:
@@ -16,12 +21,12 @@ facts. `#show run/1` changes only the displayed channel, not those typed answers
 ## Set up a Rust application
 
 The packages are not published on crates.io. Use their paths in a pinned local
-checkout. These commands select the official `v0.2.0` source release and create
+checkout. These commands select the official `v0.3.0` source release and create
 sibling repository and application directories:
 
 ```sh
 git clone https://github.com/GregoryGelfond/zetesis.git
-git -C zetesis switch --detach v0.2.0
+git -C zetesis switch --detach v0.3.0
 git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app
@@ -100,8 +105,7 @@ evidence instead of returning a `WorldView` for an incomplete collection. See
 For normal-rule or multi-file source admission, see [program preparation](source.md).
 To construct a program as typed values, see the
 [relational example](source.md#admit-an-existing-logical-program) and
-[formula example](source.md#prepare-a-logical-formula-program). Those newer
-admission operations are not part of the `v0.2.0` release used above.
+[formula example](source.md#prepare-a-logical-formula-program).
 For objectives, `Session::enumerate` returns all answer sets with scores, while
 `Session::new` selects incumbents; inspect completion before calling an incumbent
 optimal. Continue with [sessions](sessions.md), [costs and shown terms](costs-and-output.md)

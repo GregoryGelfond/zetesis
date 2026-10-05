@@ -35,7 +35,7 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.
 The documentation site contains the manual under `book/` and the Rust API
 reference under `doc/`. Keep them together: the manual's API links are relative
 to that layout. The site's root page redirects to `book/`; `doc/index.html`
-redirects to `zetesis_solve/index.html`, the library entry point.
+redirects to `zetesis/index.html`, the library entry point.
 
 Before publishing, run the book check above and build the API reference with
 warnings treated as errors:
@@ -98,13 +98,20 @@ The same files are registered as Cargo examples, so workspace formatting and
 all-target Clippy checks apply to them. zetesis-maintenance's authored-source
 inventory includes `docs/book/examples` as a maintained source root.
 
+The [program-construction examples](rust/source.md) pair macros with typed
+constructors. Each pair uses one preparation and enumeration function; both
+versions have Cargo tests for their complete answer sets. The relational pair
+also checks the conditional `#show` terms. The book displays both construction
+forms and includes their shared execution code once.
+
 To run one example as an ordinary consumer from the checkout root:
 
 ```sh
 cargo run --locked -p zetesis-solve --no-default-features --example book-session
 cargo run --locked -p zetesis-solve --no-default-features --example book-source
-cargo run --locked -p zetesis-solve --no-default-features --example book-program
-cargo run --locked -p zetesis-solve --no-default-features --example book-formula-program
+cargo run --locked -p zetesis --example book-program
+cargo run --locked -p zetesis --example book-program-macro
+cargo run --locked -p zetesis --example book-formula-program
 cargo run --locked -p zetesis-solve --example solve --no-default-features
 cargo run --locked -p zetesis-solve --no-default-features --example book-selection
 cargo run --locked -p zetesis-solve --no-default-features --example book-measurements

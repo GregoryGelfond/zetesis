@@ -99,6 +99,7 @@ pub(crate) fn ground_hybrid(
     preparation: crate::formula::Preparation,
     observer: Option<&dyn crate::GroundingObserver>,
 ) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
+    preparation.budget.poll(preparation.location)?;
     if let Some(&location) = preparation.program.objective_declarations.first() {
         return Err(FormulaFailure::HybridUnsupported {
             feature: crate::HybridFeature::Objectives,
@@ -134,6 +135,8 @@ fn ground_with_schedule(
 ) -> Result<Grounded, FormulaFailure> {
     use crate::GroundingPhase;
 
+    let cancellation = preparation.budget.cancellation().cloned();
+    crate::formula::poll_control(cancellation.as_ref(), preparation.location)?;
     let profile = Profile::new(observer);
     let keyed_constraints = preparation.program.keyed_constraints;
     let key_analysis = preparation.program.key_analysis;
@@ -168,6 +171,7 @@ fn ground_with_schedule(
         crate::formula_count_plan::Outcome::NotRequested,
         |collector| collector.finish(&theory),
     );
+    crate::formula::poll_control(cancellation.as_ref(), location)?;
     Ok(Grounded {
         compiled: Compiled {
             warnings,
@@ -227,7 +231,8 @@ fn instantiate(
     } = preparation;
     let limits = &limits;
     let budget = &mut expansion_budget;
-    let mut counters = Counters::resume(accounting, profile.work());
+    let mut counters =
+        Counters::resume(accounting, profile.work()).with_cancellation(budget.cancellation());
     let (mut catalog, domains) = complete_support(
         &prepared,
         source_catalog,
@@ -2497,18 +2502,12 @@ impl Builder<'_, '_, '_> {
             if let Some(capture) = capture.as_deref_mut() {
                 capture.guard(aggregate_comparison(guard.relation), bound);
             }
-            let limits = self.aggregate_limits();
-            let first = self.nodes.len();
-            let compiled = self.nodes.append_aggregate(
+            let root = self.numeric_root(
                 elements.slice(),
                 aggregate_comparison(guard.relation),
-                i64::from(bound),
-                limits,
-                &zetesis_cpu::Cancellation::default(),
-            );
-            let build = self.record_aggregate(compiled, location)?;
-            let canonical = self.intern_appended(first, location)?;
-            let root = remap(build.root(), first, &canonical);
+                bound,
+                location,
+            )?;
             result = self.and(result, root, location)?;
         }
         Ok(result)
@@ -2581,6 +2580,28 @@ impl Builder<'_, '_, '_> {
         result.map_err(|error| FormulaFailure::Aggregate { error, location })
     }
 
+    fn numeric_root(
+        &mut self,
+        elements: &[AggregateElement],
+        comparison: AggregateComparison,
+        bound: i32,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        let limits = self.aggregate_limits();
+        let first = self.nodes.len();
+        let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
+        let compiled = self.nodes.append_aggregate(
+            elements,
+            comparison,
+            i64::from(bound),
+            limits,
+            &cancellation,
+        );
+        let build = self.record_aggregate(compiled, location)?;
+        let canonical = self.intern_appended(first, location)?;
+        Ok(remap(build.root(), first, &canonical))
+    }
+
     fn extremum_root(
         &mut self,
         elements: &[ExtremumElement],
@@ -2606,13 +2627,14 @@ impl Builder<'_, '_, '_> {
                 .expect("retained extrema name admitted source terms"),
             condition: element.condition,
         });
+        let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
         let result = self.nodes.append_value_extremum_refs(
             values,
             kind,
             comparison,
             bound,
             limits,
-            &zetesis_cpu::Cancellation::default(),
+            &cancellation,
         );
         let build = self.record_aggregate(result, location)?;
         let canonical = self.intern_appended(first, location)?;

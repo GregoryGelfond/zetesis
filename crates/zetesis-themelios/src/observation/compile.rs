@@ -38,6 +38,7 @@ impl Generated {
 }
 
 struct Compiler<'a> {
+    cancellation: Option<zetesis_cpu::Cancellation>,
     admission: &'a mut crate::metadata::Admission,
     limits: AdmissionLimits,
     constants: &'a BTreeMap<String, Symbol>,
@@ -59,6 +60,11 @@ impl Compiler<'_> {
         Error::new(kind, self.location, Statistics::default())
     }
     fn check(&self, resource: Resource, observed: usize, limit: usize) -> Result<(), Error> {
+        if let Some(cancellation) = &self.cancellation {
+            cancellation
+                .poll()
+                .map_err(|reason| self.error(ErrorKind::Stopped(reason)))?;
+        }
         if observed > limit {
             return Err(self.error(ErrorKind::Limit {
                 resource,
@@ -370,6 +376,7 @@ pub(crate) fn compile(
 ) -> Result<Vec<Directive>, FormulaFailure> {
     let constants = crate::extended::resolve(source, budget, fallback)?;
     let mut compiler = Compiler {
+        cancellation: budget.cancellation().cloned(),
         admission,
         limits: AdmissionLimits {
             max_depth: limits.max_depth.min(64),

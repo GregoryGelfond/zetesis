@@ -16,7 +16,9 @@ use themelios_program::{
 };
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{AggregateErrorKind, Interpretation, Limits, models, models_reduct};
+use zetesis_ferraris::{
+    AggregateErrorKind, AggregateExtremum, Interpretation, Limits, models, models_reduct,
+};
 use zetesis_ferraris::{Node, Theory, append_aggregate};
 
 fn location() -> ProgramSite {
@@ -588,6 +590,104 @@ fn logical_guard_families_need_no_threshold_budget() {
                     .unwrap(),
                 VERUM
             );
+        },
+    );
+}
+
+#[test]
+fn guard_family_uses_preparation_control() {
+    with_guards(
+        &FormulaLimits::default(),
+        [1, 2],
+        &[(Relation::Ge, Value::Number(1))],
+        |builder, elements, _, _| {
+            let GroundAggregate::Numeric(elements) = elements else {
+                panic!("the numeric family uses native aggregate compilation");
+            };
+            let cancellation = Cancellation::default();
+            builder.counters =
+                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            let before = builder.nodes.to_vec();
+            cancellation.cancel();
+            let guards = numeric(&[(Relation::Ge, Value::Number(1))]);
+            let Err(error) =
+                builder.append_guard_family(elements.slice(), &guards, guards.len(), location())
+            else {
+                panic!("the aggregate transaction observes the shared token");
+            };
+            assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+            assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
+                if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+            assert_eq!(&*builder.nodes, before);
+        },
+    );
+}
+
+#[test]
+fn signed_aggregate_uses_the_preparation_token() {
+    with_guards(
+        &FormulaLimits::default(),
+        [-1, 2],
+        &sample(),
+        |builder, elements, _, _| {
+            let GroundAggregate::Numeric(elements) = elements else {
+                panic!("signed contributions use numeric compilation");
+            };
+            let cancellation = Cancellation::default();
+            builder.counters =
+                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            let before = builder.nodes.to_vec();
+            cancellation.cancel();
+            let error = builder
+                .numeric_root(
+                    elements.slice(),
+                    aggregate_comparison(Relation::Ge),
+                    1,
+                    location(),
+                )
+                .unwrap_err();
+            assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
+                if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+            assert_eq!(&*builder.nodes, before);
+        },
+    );
+}
+
+#[test]
+fn extrema_use_the_preparation_token() {
+    with_guards(
+        &FormulaLimits::default(),
+        [1, 2],
+        &[(Relation::Ge, Value::Number(1))],
+        |builder, _, guards, binding| {
+            let bound = crate::formula_support::expression(
+                &guards[0].bound,
+                binding,
+                builder.computation,
+                builder.limits,
+                &mut builder.counters,
+                location(),
+            )
+            .unwrap();
+            let cancellation = Cancellation::default();
+            builder.counters =
+                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            let before = builder.nodes.to_vec();
+            cancellation.cancel();
+            for kind in [AggregateExtremum::Min, AggregateExtremum::Max] {
+                let error = builder
+                    .extremum_root(
+                        &[],
+                        kind,
+                        aggregate_comparison(Relation::Ge),
+                        &bound,
+                        location(),
+                    )
+                    .unwrap_err();
+                assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
+                    if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+                assert_eq!(&*builder.nodes, before);
+            }
         },
     );
 }

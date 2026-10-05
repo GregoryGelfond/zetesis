@@ -72,7 +72,8 @@ inner calls are not assumed. Boolean workspaces are cleared before use.
 
 [`RuntimePublicRefusal`](RuntimePublicRefusal.lean) traces a public typed stop to
 its reached source operation and cause. Owner and reservation refusals retain
-source order. Cancellation precedes deadline expiry; clear controls precede
+source order. Local cancellation and then optional slot cancellation precede
+deadline expiry; clear controls precede
 work or candidate-limit tests. Refused ticks charge no new work. Loop receipts
 retain executed prefixes and partial state, while the public error carries no
 membership verdict or partial statistics.
@@ -283,7 +284,7 @@ construction work. A stop remains an error, not a satisfaction verdict.
 | --- | --- |
 | `Membership` | The extracted packed query returns its declared atom's bit |
 | `Iteration` | Actual slice/vector operations respect finite bounds |
-| `Control` | Poll precedence and bounded work increments |
+| `Control`, `ControlReads` | Exact local/slot/deadline precedence, read receipts and bounded work increments |
 | `Step`, `Progress` | Exact node value, masked append and position alignment |
 | `Setup` | Actual entry operations produce a zero cursor and empty output |
 | `Specification` | A finite truth fold and its prefix laws |
@@ -377,12 +378,21 @@ records the supplied-operation and source-context adaptations.
 
 ## Observations and trusted contracts
 
-The extracted backend's atomic model reads a fixed bit. The event interpretation
-instead requests a fresh response at each reached read, keeping the same owner
-and field identity. Only the Relaxed loads used by this code are modeled.
-`RuntimeControl.representative` clears unused fixed-model bits for comparison;
-it changes no handle or configured deadline and does not clear a Rust token or
-require future observations to remain false.
+The extracted backend's atomic model reads a supplied fixed Boolean or U64.
+The event interpretation instead requests a fresh response at each reached read,
+keeping the same owner and field identity. Only the Relaxed loads used by this
+code are modeled. Local cancellation is read first, optional slot membership
+second, and optional expiry last. The generated membership operation compares
+the observed U64 with the token's captured active word.
+
+[`ControlReads`](ControlReads.lean) characterizes both successful and refused
+read sequences. `ContextEvents.poll_reads` derives that normal form from the
+source-checked contexts. A mismatching slot receipt retains the actual observed
+word and stops before expiry; success requires a matching word when present.
+`RuntimeControl.representative` clears unused fixed Boolean observations and
+sets the fixed slot observation to its captured active word. It preserves slot
+presence, captured word, owner handles and deadline configuration. This ghost
+choice changes no Rust token and constrains no runtime response.
 
 [`RuntimeEffects`](RuntimeEffects.lean) preserves embedded backend success,
 failure and divergence. A reservation response supplies capacity evidence or a
@@ -403,8 +413,9 @@ Rust, its standard library, `Arc`, allocator, OS and hardware are trusted to
 satisfy their contracts. The immutable handle/field mapping, heap consistency,
 physical capacity and library-model correspondence are explicit assumptions.
 The compiler, Charon, Aeneas and audited extraction/context adaptations are also
-trusted. These proofs do not verify reference counting, destruction, timers or
-the platform memory model. No allocation-success or fairness assumption is
+trusted. These proofs do not verify slot generation allocation, compare-and-swap,
+window retirement, reference counting, destruction, timers or the platform
+memory model. No allocation-success or fairness assumption is
 introduced, and there are no project axioms, proof holes or native proof shortcuts.
 
 The covered boundary is a finite completed or refused scalar reference check of
@@ -424,7 +435,9 @@ reservation wrapper, together with public `oracle::check`, `check_interpretation
 and its decision/accepted-interpretation accessors and consuming conversion.
 The tight-body classifier, its work/reservation helpers and node equality are
 selected with the exact atomic-choice recognizer, its pair helper and the
-single-root tight producer. The producer copies its root and head nodes to local
+single-root tight producer. The selected `Cancellation::poll` reaches the actual
+`Membership::is_cancelled` word read and comparison. Slot opening, pulling and
+retirement are outside this extraction. The producer copies its root and head nodes to local
 values before their unchanged matches, as the shared head recognizer does for
 its inspected nodes. These copies preserve reads, short-circuit order and typed
 refusals; they introduce no representation, allocation or API change.

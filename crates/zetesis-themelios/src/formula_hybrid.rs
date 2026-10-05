@@ -457,14 +457,8 @@ impl ConstraintCheckFailure {
     pub fn stop(&self) -> Option<Stop> {
         match &self.cause {
             ConstraintCheckCause::Stopped(reason) => Some(*reason),
-            ConstraintCheckCause::Source(error) => match error.cause() {
-                FormulaFailure::Interrupted { reason, .. } => Some(*reason),
-                _ => None,
-            },
-            ConstraintCheckCause::Index(AtomIndexError::Stopped(error)) => match error.cause() {
-                FormulaFailure::Interrupted { reason, .. } => Some(*reason),
-                _ => None,
-            },
+            ConstraintCheckCause::Source(error)
+            | ConstraintCheckCause::Index(AtomIndexError::Stopped(error)) => error.interruption(),
             ConstraintCheckCause::WrongProgram
             | ConstraintCheckCause::WrongRegionSize { .. }
             | ConstraintCheckCause::Index(_) => None,

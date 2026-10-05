@@ -229,6 +229,18 @@ pub(crate) struct Counters {
     observed: Work,
 }
 impl Counters {
+    pub(crate) fn with_cancellation(
+        mut self,
+        cancellation: Option<&zetesis_cpu::Cancellation>,
+    ) -> Self {
+        self.cancellation = cancellation.cloned();
+        self
+    }
+
+    pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
+        self.cancellation.as_ref()
+    }
+
     pub(crate) fn with_allowance(
         allowance: crate::ConstraintAllowance,
         cancellation: &zetesis_cpu::Cancellation,

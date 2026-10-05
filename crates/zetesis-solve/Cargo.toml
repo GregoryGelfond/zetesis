@@ -42,16 +42,6 @@ path = "../../docs/book/examples/session.rs"
 test = true
 
 [[example]]
-name = "book-program"
-path = "../../docs/book/examples/program.rs"
-test = true
-
-[[example]]
-name = "book-formula-program"
-path = "../../docs/book/examples/formula-program.rs"
-test = true
-
-[[example]]
 name = "book-source"
 path = "../../docs/book/examples/source.rs"
 

@@ -39,8 +39,17 @@ inductive core.sync.atomic.Ordering where
 | AcqRel : core.sync.atomic.Ordering
 | SeqCst : core.sync.atomic.Ordering
 
+/-- [zetesis_cpu::cancellation::slot::Membership]
+    Source: 'crates/zetesis-cpu/src/cancellation/slot.rs', lines 201:0-201:28
+    Name pattern: [zetesis_cpu::cancellation::slot::Membership] -/
+@[rust_type "zetesis_cpu::cancellation::slot::Membership"]
+structure zetesis_cpu.cancellation.slot.Membership where
+  state : alloc.sync.Arc (core.sync.atomic.Atomic Std.U64
+    (core.sync.atomic.private.Align8 Std.U64))
+  active : Std.U64
+
 /-- [zetesis_cpu::cancellation::Deadline]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 62:0-62:15
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 71:0-71:15
     Name pattern: [zetesis_cpu::cancellation::Deadline] -/
 @[rust_type "zetesis_cpu::cancellation::Deadline"]
 structure zetesis_cpu.cancellation.Deadline where
@@ -51,14 +60,14 @@ structure zetesis_cpu.cancellation.Deadline where
   wake : std.sync.poison.condvar.Condvar
 
 /-- [zetesis_cpu::cancellation::DeadlineOwner]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 73:0-73:20
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 82:0-82:20
     Name pattern: [zetesis_cpu::cancellation::DeadlineOwner] -/
 @[rust_type "zetesis_cpu::cancellation::DeadlineOwner"]
 structure zetesis_cpu.cancellation.DeadlineOwner where
   deadline : alloc.sync.Arc zetesis_cpu.cancellation.Deadline
 
 /-- [zetesis_cpu::cancellation::Cancellation]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 16:0-16:23
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 20:0-20:23
     Name pattern: [zetesis_cpu::cancellation::Cancellation]
     Visibility: public -/
 @[rust_type "zetesis_cpu::cancellation::Cancellation"]
@@ -66,9 +75,10 @@ structure zetesis_cpu.cancellation.Cancellation where
   cancelled : alloc.sync.Arc (core.sync.atomic.Atomic Bool
     (core.sync.atomic.private.Align1 Std.U8))
   deadline : Option (alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner)
+  slot : Option zetesis_cpu.cancellation.slot.Membership
 
 /-- [zetesis_cpu::cancellation::Stop]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 134:0-134:13
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 143:0-143:13
     Name pattern: [zetesis_cpu::cancellation::Stop]
     Visibility: public -/
 @[discriminant isize, rust_type "zetesis_cpu::cancellation::Stop"]
@@ -86,7 +96,7 @@ inductive zetesis_cpu.cancellation.Stop where
 | InvalidProgram : zetesis_cpu.cancellation.Stop
 
 /-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 51:25-51:32
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 60:25-60:32
     Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure] -/
 @[reducible, rust_type
   "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure"]

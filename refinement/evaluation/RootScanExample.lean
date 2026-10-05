@@ -24,7 +24,7 @@ def emptyProgram : theory.Theory := {
 /-- Both cancellation and an exhausted work allowance would refuse a tick. -/
 def refusedWork : oracle.Work := {
   limits := { max_work := 0#u64, max_subsets := 0#u64 }
-  cancellation := { cancelled := { owner := 1, value := { nextRead := true } }, deadline := none }
+  cancellation := { cancelled := { owner := 1, value := { nextRead := true } }, deadline := none, slot := none }
   statistics := { work := 0#u64, subsets := 7#u64 } }
 
 /-- The actual entry function returns no failed root on empty roots, retaining
@@ -61,7 +61,7 @@ def cursor (position : Nat) : core.slice.iter.Iter Usize := {
 counter is unrelated to root visits and must remain seven. -/
 def clearWork (charged : U64) : oracle.Work := {
   limits := { max_work := 3#u64, max_subsets := 0#u64 }
-  cancellation := { cancelled := { owner := 1, value := { nextRead := false } }, deadline := none }
+  cancellation := { cancelled := { owner := 1, value := { nextRead := false } }, deadline := none, slot := none }
   statistics := { work := charged, subsets := 7#u64 } }
 
 /-- Two occurrences of true root two consume two ticks; false root three consumes

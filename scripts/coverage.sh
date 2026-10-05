@@ -170,14 +170,15 @@ run_profile() {
         set --
     else
         cargo +1.97.1 llvm-cov "$@" --locked --no-report
-        set -- --package zetesis-cli --package zetesis-solve
+        set -- --package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis
     fi
     write_report "$report_dir" "$@"
 }
 
 run_profile workspace --all-features
-# Keep this artifact name; the CPU population includes the extracted solver.
-run_profile cli-cpu --package zetesis-cli --package zetesis-solve --no-default-features
+# Keep this artifact name; the CPU population includes the solver, its Rust
+# backend and public facade as well as the CLI.
+run_profile cli-cpu --package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis --no-default-features
 
 export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-workspace"
 if [ "$mode" = gate ]; then
@@ -193,7 +194,7 @@ if [ "$mode" = gate ]; then
     printf 'workspace\t%s\n' "$workspace_floor_exit" >> "$coverage_dir/floors.tsv"
     export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-cli-cpu"
     cpu_floor_exit=0
-    if cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --locked \
+    if cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis --locked \
         --ignore-filename-regex "$support_sources" --fail-under-lines "$floor"; then
         :
     else

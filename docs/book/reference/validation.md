@@ -192,7 +192,7 @@ construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
 [static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs).
-The [coverage snapshot](coverage-120fadfb.md) describes the tests qualified on its
+The [coverage snapshot](coverage-0.3.0.md) describes the tests qualified on its
 stated source; today's required selection does not update it.
 
 Coverage always has two separately instrumented populations:
@@ -200,9 +200,11 @@ Coverage always has two separately instrumented populations:
 | Population | Report directory |
 | --- | --- |
 | Workspace, portable tests; also the named physical tests with `--metal` or `--vulkan` | `target/coverage/workspace` |
-| CPU-only `zetesis-solve` and `zetesis-cli` | `target/coverage/cli-cpu` |
+| CPU-only `zetesis-solve`, `zetesis-engine`, `zetesis` and `zetesis-cli` | `target/coverage/cli-cpu` |
 
-The historical directory name `cli-cpu` includes both crates. A portable-only
+The historical directory name `cli-cpu` includes all four crates. The public
+Rust backend and facade therefore receive the same independent CPU-only check
+as the native solver and command-line interface. A portable-only
 workspace report and a combined Metal report have different test populations;
 their instrumented lines may differ too. Compare like populations on the same
 source. Neither replaces the CPU-only check.
@@ -238,7 +240,7 @@ The README badge reports workspace line coverage from the most recently
 qualified source identified by the snapshot below. It is a recorded local
 measurement, not a live hosted-CI status. A release version does not change the
 source identity or test population of that measurement.
-The [coverage and Metal qualification record](coverage-120fadfb.md) holds that snapshot:
+The [coverage and Metal qualification record](coverage-0.3.0.md) holds that snapshot:
 its exact counts, source identities, qualification scope and the commands
 that reproduce it at the revisions it measured.
 

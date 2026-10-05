@@ -44,7 +44,7 @@ pub struct ExpansionLimits {
     /// excluded, as do other AST carriers, provenance and allocator overhead.
     /// Original input structure remains bounded separately by admission options.
     pub max_scalar_bytes: usize,
-    /// Maximum retained origin-evidence entries. Formula evidence carries a
+    /// Maximum retained origin-evidence entries. Canonical-program evidence carries a
     /// statement identity and an optional real location; source-only relational
     /// evidence retains its parsed locations.
     pub max_origin_locations: usize,
@@ -109,6 +109,13 @@ pub enum ExpansionResource {
 /// behavior for undefined instances.
 #[derive(Debug)]
 pub enum ExpansionFailure {
+    /// Shared cancellation or deadline observed before the next expansion step.
+    Interrupted {
+        /// The control signal; separate from configured resource ceilings.
+        reason: zetesis_cpu::Stop,
+        /// Original statement or whole-program site at the stopped boundary.
+        location: ProgramSite,
+    },
     /// The existing source or core boundary refused its stage.
     Admission(AdmissionFailure),
     /// A checked source-expansion ceiling was exceeded.
@@ -168,7 +175,8 @@ impl ExpansionFailure {
     pub fn site(&self) -> Option<ProgramSite> {
         match self {
             Self::Admission(error) => error.site(),
-            Self::Limit { location, .. }
+            Self::Interrupted { location, .. }
+            | Self::Limit { location, .. }
             | Self::ConstantPolicy { location }
             | Self::ConstantCycle { location, .. }
             | Self::Evaluation { location, .. } => Some(*location),
@@ -198,7 +206,8 @@ impl ExpansionFailure {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let location = match self {
             Self::Admission(error) => return error.diagnostics(),
-            Self::Limit { location, .. }
+            Self::Interrupted { location, .. }
+            | Self::Limit { location, .. }
             | Self::ConstantPolicy { location }
             | Self::ConstantCycle { location, .. }
             | Self::Evaluation { location, .. } => *location,
@@ -218,6 +227,7 @@ impl fmt::Display for ExpansionFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Admission(error) => error.fmt(f),
+            Self::Interrupted { reason, .. } => reason.fmt(f),
             Self::Limit {
                 resource,
                 limit,
@@ -256,6 +266,7 @@ impl std::error::Error for ExpansionFailure {
         match self {
             Self::Admission(error) => Some(error),
             Self::Evaluation { error, .. } => Some(error),
+            Self::Interrupted { reason, .. } => Some(reason),
             _ => None,
         }
     }
@@ -275,14 +286,50 @@ pub(crate) struct Budget {
     scalar_bytes: u128,
     origins: u128,
     allowance: Option<crate::ConstraintAllowance>,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 }
 
 impl Budget {
+    pub(crate) fn with_cancellation(
+        mut self,
+        cancellation: Option<zetesis_cpu::Cancellation>,
+    ) -> Self {
+        self.cancellation = cancellation;
+        self
+    }
+
+    pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
+        self.cancellation.as_ref()
+    }
+
+    pub(crate) fn poll(&self, location: ProgramSite) -> Result<(), ExpansionFailure> {
+        if let Some(cancellation) = &self.cancellation {
+            cancellation
+                .poll()
+                .map_err(|reason| ExpansionFailure::Interrupted { reason, location })?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_metadata(
+        &self,
+        count: u128,
+        location: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
+        self.poll(location)?;
+        check(
+            ExpansionResource::MetadataStatements,
+            count,
+            self.limits.max_metadata_statements,
+            location,
+        )
+    }
     pub(crate) fn check_constants(
         &self,
         count: usize,
         site: ProgramSite,
     ) -> Result<(), ExpansionFailure> {
+        self.poll(site)?;
         check(
             ExpansionResource::Constants,
             count as u128,
@@ -300,6 +347,7 @@ impl Budget {
             scalar_bytes: 0,
             origins: 0,
             allowance: None,
+            cancellation: None,
         }
     }
 
@@ -314,6 +362,7 @@ impl Budget {
         amount: u128,
         location: ProgramSite,
     ) -> Result<(), ExpansionFailure> {
+        self.poll(location)?;
         let (used, ceiling) = match resource {
             ExpansionResource::TermWork => (&mut self.work, self.limits.max_term_work),
             ExpansionResource::Templates => (&mut self.templates, self.limits.max_templates),

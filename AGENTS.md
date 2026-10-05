@@ -73,7 +73,7 @@ coverage populations and evidence requirements.
 | --- | --- |
 | `scripts/check.sh portable` | Rust tests, formatting, strict lint and docs, benchmark correctness |
 | `scripts/check.sh oracle` | External clingo comparisons |
-| `scripts/check.sh coverage` | Independent workspace and CPU-only solver/CLI coverage floors |
+| `scripts/check.sh coverage` | Independent workspace and CPU-only solver/API/CLI coverage floors |
 | `scripts/check.sh coverage --metal` | Coverage with a backend's reviewed physical tests; `--metal` or `--vulkan` names the backend |
 | `scripts/check.sh hardware` | Physical qualification of the host's device backend: the reviewed exact device tests, answer sets equal to the CPU's; `--metal` or `--vulkan` names the backend |
 | `scripts/check.sh proofs` | Lean build, axiom audit and proof records |

@@ -24,6 +24,7 @@ structure Context where
   cuts : List (String × String × Nat)
   unusedClosure : Bool := false
   originalWrapped : Bool := false
+  inlineDo : Bool := false
 
 private def deadlineName : String :=
   "zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool"
@@ -32,6 +33,11 @@ private def readParameter : String :=
   "(read : core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1 U8) →\n    core.sync.atomic.Ordering → M Bool)"
 
 private def contexts : List Context := [
+  { original := "zetesis_cpu.cancellation.slot.Membership.is_cancelled"
+    name := "membershipContext"
+    parameters := "(readWord : core.sync.atomic.Atomic U64 (core.sync.atomic.private.Align8 U64) →\n    core.sync.atomic.Ordering → M U64)"
+    cuts := [("core.sync.atomic.AtomicU64Align8U64.load", "readWord", 1)]
+    inlineDo := true },
   { original := deadlineName ++ ".call_once"
     name := "deadlineContext"
     parameters := readParameter
@@ -41,10 +47,12 @@ private def contexts : List Context := [
   { original := "zetesis_cpu.cancellation.Cancellation.poll"
     name := "pollContext"
     parameters := readParameter ++
+      "\n  (slotCancelled : zetesis_cpu.cancellation.slot.Membership → M Bool)" ++
       "\n  (deadline : Option (alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner) → M Bool)"
     cuts := [("core.sync.atomic.AtomicBoolAlign1U8.load", "read", 1),
-      ("core.option.Option.is_some_and\n        " ++ deadlineName ++ "\n        o ()",
-        "deadline o", 1)] },
+      ("zetesis_cpu.cancellation.slot.Membership.is_cancelled", "slotCancelled", 1),
+      ("core.option.Option.is_some_and\n          " ++ deadlineName ++ "\n          o1 ()",
+        "deadline o1", 1)] },
   { original := "oracle.Work.tick"
     name := "tickContext"
     parameters := "(poll : zetesis_cpu.cancellation.Cancellation →\n    M (core.result.Result Unit zetesis_cpu.cancellation.Stop))"
@@ -143,7 +151,7 @@ private def searchContexts : List Context := [
     cuts := [("oracle.check", "runCheck", 1)] } ]
 
 private def coreScaffold : String :=
-  "import RuntimeEffects\nimport Control\n\nopen Aeneas Aeneas.Std Result ControlFlow Error\nopen ZetesisExtract\n\n/-!\n# Restricted monadic contexts for returning effects\n\nThe four contexts below generalize exact generated definitions. Only their\nresult monad and named effect call sites change; pure operations remain imported\nbackend calls. ContextAudit checks exact headers, call counts, body text and\nreversal separately from the kernel reconstruction laws. This audited source\ngeneralization is an explicit extraction boundary. Whole-loop runtime\ncorrespondence requires additional returning-event projection laws.\n-/\nnamespace RuntimeContexts\n\nvariable {M : Type → Type} [Monad M] [MonadLiftT Result M]\n\n"
+  "import RuntimeEffects\nimport Control\n\nopen Aeneas Aeneas.Std Result ControlFlow Error\nopen ZetesisExtract\n\n/-!\n# Restricted monadic contexts for returning effects\n\nThe five contexts below generalize exact generated definitions. Only their\nresult monad and named effect call sites change; pure operations remain imported\nbackend calls. ContextAudit checks exact headers, call counts, body text and\nreversal separately from the kernel reconstruction laws. This audited source\ngeneralization is an explicit extraction boundary. Whole-loop runtime\ncorrespondence requires additional returning-event projection laws.\n-/\nnamespace RuntimeContexts\n\nvariable {M : Type → Type} [Monad M] [MonadLiftT Result M]\n\n"
 
 private def searchScaffold : String :=
   "import RuntimeContexts\n\nopen Aeneas Aeneas.Std Result ControlFlow Error\nopen ZetesisExtract\n\n/-!\n# Effect contexts for the reference checker\n\nThese definitions generalize only the listed phase calls in the exact generated\nreference checker. Pure scalar, vector, iterator and ownership calls are retained.\nThe separate source checker requires exact call counts and reversible bodies;\nthe reconstruction laws recover each original generated definition. Neither\ncondition by itself establishes correspondence to changing runtime observations.\n-/\nnamespace CheckerContexts\n\nvariable {M : Type → Type} [Monad M] [MonadLiftT Result M]\n\n"
@@ -185,19 +193,22 @@ private def definition (text name : String) (wrapped : Bool := false) : Except S
       | [] => throw s!"missing next definition boundary after {name}"
   | pieces => throw s!"expected one definition {name}; found {pieces.length - 1}"
 
-private def parts (text : String) : Except String (String × String) := do
-  match text.splitOn "\n  := do\n" with
+private def parts (text : String) (inlineDo : Bool := false) : Except String (String × String) := do
+  let separator := if inlineDo then " := do\n" else "\n  := do\n"
+  match text.splitOn separator with
   | [header, body] => pure (header, body)
   | _ => throw "expected exactly one generated do-body separator"
 
 private def checkContext (source retained : String) (context : Context) : Except String Unit := do
   let original ← definition source context.original context.originalWrapped
   let actual ← definition retained context.name
-  let (header, body) ← parts original
-  let (actualHeader, actualBody) ← parts actual
+  let (header, body) ← parts original context.inlineDo
+  let (actualHeader, actualBody) ← parts actual context.inlineDo
   let renamed ← replaceOnce header (definitionMarker context.original context.originalWrapped)
     ("def " ++ context.name ++ "\n  " ++ context.parameters ++ "\n")
-  let monadic ← replaceOnce renamed ":\n  Result " ":\n  M "
+  let monadic ← if context.inlineDo then
+      replaceOnce renamed ": Result " ": M "
+    else replaceOnce renamed ":\n  Result " ":\n  M "
   let expectedHeader ← if context.unusedClosure then
       replaceOnce monadic "(c :" "(_c :"
     else pure monadic
@@ -217,7 +228,7 @@ private def checkGroup (source retained scaffold : String) (group : List Context
   require (retained.startsWith checkedRegion)
     "context scaffold or contiguous definition region differs"
 
-/-- Check the four primitive contexts, including their exact surrounding imports,
+/-- Check the five primitive contexts, including their exact surrounding imports,
 namespace and instance parameters. No additional declaration may occur in the
 checked region. Proofs following that region are checked by the Lean kernel. -/
 def check (source retained : String) : Except String Unit :=
@@ -242,24 +253,15 @@ def negativeChecks (source retained : String) : Except String Unit := do
     "  let first ← poll self.cancellation\n\n  let r ← poll self.cancellation\n"
   expectRejection source extra "extra poll call"
   let pollDefinition ← definition retained "pollContext"
-  let (pollHeader, _) ← parts pollDefinition
-  let reorderedBody :=
-    "  let o ← core.option.Option.as_ref self.deadline\n" ++
-    "  let b1 ← deadline o\n" ++
-    "  let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self.cancelled\n" ++
-    "  let b ← read a core.sync.atomic.Ordering.Relaxed\n" ++
-    "  if b\n" ++
-    "  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)\n" ++
-    "  else\n" ++
-    "    if b1\n" ++
-    "    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)\n" ++
-    "    else ok (core.result.Result.Ok ())"
-  let reordered ← replaceOnce retained pollDefinition
-    (pollHeader ++ "\n  := do\n" ++ reorderedBody)
+  let deadlineBlock := "      let o1 ← core.option.Option.as_ref self.deadline\n      let b2 ←\n        deadline o1\n"
+  let earlyDeadline := "  let o1 ← core.option.Option.as_ref self.deadline\n  let b2 ←\n    deadline o1\n"
+  let withoutDeadline ← replaceOnce pollDefinition deadlineBlock ""
+  let movedDeadline ← replaceOnce withoutDeadline "\n  := do\n" ("\n  := do\n" ++ earlyDeadline)
+  let reordered ← replaceOnce retained pollDefinition movedDeadline
   expectRejection source reordered "deadline before cancellation"
   let changed ← replaceOnce retained
-    "  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)\n"
-    "  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)\n"
+    "  if b\n  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)\n"
+    "  if b\n  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)\n"
   expectRejection source changed "changed cancellation branch"
   let missing ← replaceOnce retained "def pollContext\n" "def absentContext\n"
   expectRejection source missing "missing poll context"
@@ -267,6 +269,16 @@ def negativeChecks (source retained : String) : Except String Unit := do
   let scaffold ← replaceOnce retained "namespace RuntimeContexts\n"
     "namespace RuntimeContexts\n\nlocal notation \"False\" => True\n"
   expectRejection source scaffold "changed namespace scaffold"
+  let omitted ← replaceOnce retained "          slotCancelled membership\n" "          ok false\n"
+  expectRejection source omitted "omitted membership call"
+  let compared ← replaceOnce retained "  ok (i != self.active)\n" "  ok (i == self.active)\n"
+  expectRejection source compared "changed membership comparison"
+  let slotBlock := "    let o ← core.option.Option.as_ref self.slot\n    let b1 ←\n      match o with\n      | none => ok false\n      | some membership =>\n        do\n        let b2 ←\n          slotCancelled membership\n        if b2\n        then ok true\n        else ok false\n"
+  let earlySlot := "  let o ← core.option.Option.as_ref self.slot\n  let b1 ←\n    match o with\n    | none => ok false\n    | some membership =>\n      do\n      let b2 ←\n        slotCancelled membership\n      if b2\n      then ok true\n      else ok false\n"
+  let withoutSlot ← replaceOnce pollDefinition slotBlock ""
+  let movedSlot ← replaceOnce withoutSlot "\n  := do\n" ("\n  := do\n" ++ earlySlot)
+  let beforeLocal ← replaceOnce retained pollDefinition movedSlot
+  expectRejection source beforeLocal "membership before local cancellation"
 
 /-- A duplicated public-wrapper reservation must be rejected even when the
 other phase calls and source branches remain unchanged. -/
@@ -281,7 +293,7 @@ def negativeSearchCheck (source retained : String) : Except String Unit := do
 end ContextAudit
 
 /-- Run from the refinement package with the generated and context source paths.
-`--self-test` additionally checks six intentionally changed in-memory inputs. -/
+`--self-test` additionally checks nine intentionally changed in-memory inputs. -/
 def main (arguments : List String) : IO UInt32 := do
   let (selfTest, paths) := match arguments with
     | "--self-test" :: rest => (true, rest)
@@ -301,8 +313,8 @@ def main (arguments : List String) : IO UInt32 := do
       match result with
       | .ok () =>
           IO.println (if selfTest then
-            "All context source checks and six negative checks passed."
-            else "All 22 context scaffolds, headers, bodies, call counts and reversals passed.")
+            "All context source checks and nine negative checks passed."
+            else "All 23 context scaffolds, headers, bodies, call counts and reversals passed.")
           pure 0
       | .error message =>
           IO.eprintln message

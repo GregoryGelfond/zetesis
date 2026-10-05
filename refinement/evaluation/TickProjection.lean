@@ -23,28 +23,6 @@ namespace TickProjection
 local instance : MonadLift Result Computation where
   monadLift := RuntimeEffects.embed
 
-/-- With a deadline present, the event poll first reads cancellation. A true
-response stops immediately; only a false response reaches the expiry read.
-This equation follows the retained contexts and preserves their short circuit. -/
-theorem poll_with_deadline (control : zetesis_cpu.cancellation.Cancellation)
-    (owner : alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner)
-    (present : control.deadline = some owner) :
-    ContextEvents.poll control =
-      ITree.vis (E := effects) (.read (ContextEvents.cancelObject control) .Relaxed)
-        (fun cancelled => if cancelled then ITree.ret (.Err .Cancelled)
-          else ITree.vis (.read (2 * owner.value.deadline.owner + 1) .Relaxed)
-            (fun expired => ITree.ret (if expired then .Err .Deadline else .Ok ()))) := by
-  simp [ContextEvents.poll, RuntimeContexts.pollContext, ContextEvents.readAt,
-    RuntimeEffects.load, alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref,
-    core.option.Option.as_ref, ContextEvents.lift_result, RuntimeEffects.embed_ok,
-    ContextEvents.deadline, RuntimeContexts.deadlineContext, present, Bind.bind, Pure.pure]
-  congr 1
-  funext cancelled
-  cases cancelled <;> simp
-  congr 1
-  funext expired
-  cases expired <;> rfl
-
 /-- Isolate the eventful poll from the unchanged backend suffix of the tick.
 The suffix is the same context specialized to the backend monad with that actual
 poll result. Its embedding preserves scalar failure and divergence; it does not
@@ -72,44 +50,18 @@ theorem tick_factors (work : oracle.Work) :
     · rw [RuntimeEffects.embed_bind]
       simp only [RuntimeEffects.embed_ok]
 
-/-- A successful event poll consumes a clear cancellation read and, exactly
-when configured, a clear deadline read. This is derived from the run constructors,
-not assumed as a poll verdict. In particular, every successful poll consumes a
-read even when no deadline exists. -/
+/-- A successful event poll consumes a clear local bit, exactly one matching
+slot word when configured, and exactly one clear expiry bit when configured.
+The source-derived poll equation exposes its actual reads; finite execution then
+determines the receipt without an assumed membership or poll verdict. -/
 theorem completed_poll (control : zetesis_cpu.cancellation.Cancellation)
     (events : List RuntimeEffects.Event)
     (run : Runs (ContextEvents.poll control) events (.Ok ())) :
     events = ⟨.read (ContextEvents.cancelObject control) .Relaxed, false⟩ ::
-      match control.deadline with
-      | none => []
-      | some owner => [⟨.read (2 * owner.value.deadline.owner + 1) .Relaxed, false⟩] := by
-  cases present : control.deadline with
-  | none =>
-    rw [ContextEvents.poll_without_deadline control present] at run
-    obtain ⟨cancelled, tail, consumed, continued⟩ := RuntimeRuns.observed_inv _ _ _ _ run
-    cases cancelled with
-    | false =>
-      have finished : tail = [] := (RuntimeRuns.returned_inv _ _ _ continued).2
-      simpa only [finished] using consumed
-    | true =>
-      have impossible := (RuntimeRuns.returned_inv _ _ _ continued).1
-      contradiction
-  | some owner =>
-    rw [poll_with_deadline control owner present] at run
-    obtain ⟨cancelled, tail, consumed, continued⟩ := RuntimeRuns.observed_inv _ _ _ _ run
-    cases cancelled with
-    | true =>
-      have impossible := (RuntimeRuns.returned_inv _ _ _ continued).1
-      contradiction
-    | false =>
-      obtain ⟨expired, rest, readExpiry, finished⟩ := RuntimeRuns.observed_inv _ _ _ _ continued
-      cases expired with
-      | true =>
-        have impossible := (RuntimeRuns.returned_inv _ _ _ finished).1
-        contradiction
-      | false =>
-        have ended : rest = [] := (RuntimeRuns.returned_inv _ _ _ finished).2
-        simpa only [readExpiry, ended] using consumed
+      (ControlReads.matchingSlot (ContextEvents.slotRead control) ++
+        ControlReads.clearDeadline (ContextEvents.deadlineRead control)) := by
+  rw [ContextEvents.poll_reads] at run
+  exact (ControlReads.completed_iff _ _ _ events).mp run
 
 /-- A successful finite event tick agrees with the actual generated tick when
 its represented input tokens are clear, and consumes at least one read. First
@@ -143,12 +95,7 @@ theorem completed_tick (before after : oracle.Work)
   have generated : oracle.Work.tick before = ok (.Ok (), after) := by
     rw [← actualSuffix]
     exact completed
-  have reads : pollEvents =
-      ⟨.read (ContextEvents.cancelObject before.cancellation) .Relaxed, false⟩ ::
-        match before.cancellation.deadline with
-        | none => []
-        | some owner => [⟨.read (2 * owner.value.deadline.owner + 1) .Relaxed, false⟩] :=
-    completed_poll before.cancellation pollEvents polled
+  have reads := completed_poll before.cancellation pollEvents polled
   have progress : events ≠ [] := by
     rw [consumed, silent, List.append_nil, reads]
     exact List.cons_ne_nil _ _

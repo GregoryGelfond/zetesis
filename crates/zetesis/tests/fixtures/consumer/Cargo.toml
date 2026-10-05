@@ -1,0 +1,17 @@
+[package]
+name = "zetesis-facade-consumer"
+version = "0.0.0"
+description = "A consumer of the zetesis facade alone under a Cargo rename."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+z = { package = "zetesis", path = "../../.." }
+
+[dev-dependencies]
+trybuild = "1"
+
+[lints]
+workspace = true

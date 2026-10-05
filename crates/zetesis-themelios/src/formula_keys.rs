@@ -124,6 +124,8 @@ pub(crate) fn ask_all(
     budget: &mut Budget,
     location: ProgramSite,
 ) -> Result<Asked, FormulaFailure> {
+    // The shared key-work ceiling bounds the analysis between control polls.
+    budget.poll(location)?;
     let mut work = KeyWork::new(limits.max_key_work.min(budget.remaining_term_work()));
     let asked = ask_under(analyzed, owners, &mut work, budget, location);
     budget.charge(

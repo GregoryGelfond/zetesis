@@ -166,12 +166,10 @@ impl Builder<'_, '_, '_> {
             aggregate: self.aggregate_limits(),
             max_guards,
         };
-        let result = self.nodes.append_aggregate_family(
-            elements,
-            guards,
-            limits,
-            &zetesis_cpu::Cancellation::default(),
-        );
+        let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
+        let result = self
+            .nodes
+            .append_aggregate_family(elements, guards, limits, &cancellation);
         let work = match &result {
             Ok(build) => build.statistics().work,
             Err(error) => error.statistics().work,

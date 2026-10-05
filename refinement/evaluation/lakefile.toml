@@ -264,6 +264,9 @@ name = "ContextEvents"
 name = "RuntimeRuns"
 
 [[lean_lib]]
+name = "ControlReads"
+
+[[lean_lib]]
 name = "RuntimeLoop"
 
 [[lean_lib]]

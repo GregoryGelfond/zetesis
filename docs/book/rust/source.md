@@ -32,11 +32,18 @@ so repeated arguments and variable positions retain their meaning. An empty
 support relation may coexist with a nonempty vocabulary. Neither term admission
 nor a compiled pattern asserts an atom's truth.
 
+Construct canonical programs through `zetesis`: macros let you write ASP
+directly, while typed constructors suit larger applications that compose
+programs from data and reusable components. Both produce the same
+`zetesis::Program` accepted by the preparation APIs. Construction does not
+establish solver support; admission still checks the selected language profile.
+
 ## Prepare a logical formula program
 
-`prepare_program_formula(Arc<logical::program::Program>, ProgramAdmissionOptions,
-ExpansionLimits, FormulaLimits)` accepts the canonical themelios type reexported
-by `zetesis_themelios::logical`. It inspects the borrowed input, then enters the
+`prepare_program_formula(Arc<zetesis::Program>, ProgramAdmissionOptions,
+ExpansionLimits, FormulaLimits)` accepts the canonical themelios type exposed
+through `zetesis::Program` and `zetesis::program`. The adapter's
+`zetesis_themelios::logical` reexport names that same type. It inspects the borrowed input, then enters the
 same normalization, scope checking, analysis and preparation used by source
 admission. It never renders or reparses the program. The supported formula
 language includes constants, pools and intervals, choices and disjunctions,
@@ -73,14 +80,8 @@ it returns `Some` for single-source input and `None` for this door, even if a
 canonical carrier has parsed coordinates. Bundle input uses `bundle()`.
 Provenance does not supply the original bytes.
 
-For consumers migrating from source-only formula input, keep the distinction
-between a statement site and its optional coordinate. Formula origins now contain
-`ProgramSite`; call `statement_id()` to resolve the original logical statement
-and `location()` only when source coordinates are needed. Grounding observer
-phase callbacks receive `Option<ProgramSite>`. Hybrid constraint verdicts expose
-`site`, and observation errors expose both `site()` and optional `location()`.
-Do not unwrap a formula owner's `source()` unless its input door guarantees a
-single source. Source-only relational owners keep their existing source accessors.
+For migration from the source-only APIs in `v0.2.0`, see
+[the migration notes](#migrating-from-source-only-apis) below.
 
 Source admission additionally checks original bytes, parser/raiser diagnostics,
 authored counts and include identity. Canonical input cannot recover syntax or
@@ -90,29 +91,167 @@ This common compiler boundary does not establish a parser-to-Lean or Rust
 implementation proof; the [correspondence account](../lean/correspondence.md)
 states the remaining obligations.
 
-This example builds an exact-one choice with canonical constructors, prepares
-and grounds it, then prints the complete interpretations through a solve session.
-There is no display directive, so the exported atoms are the full answer sets.
+These two examples build the same exact-one choice and print its two complete
+answer sets, `{chosen(1)}` and `{chosen(2)}`. With the macro, the program reads
+as ASP:
 
 ```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/formula-program-macro.rs:example}}
+# mod execution {
+{{#rustdoc_include ../examples/shared/formula-program.rs:hidden}}
+# }
+```
+
+The constructors expose the choice elements and bounds for composition in Rust:
+
+```rust
+# extern crate zetesis;
 # extern crate zetesis_cpu;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/formula-program.rs:example}}
+# mod execution {
+{{#rustdoc_include ../examples/shared/formula-program.rs:hidden}}
+# }
 ```
 
-Run it with:
+Both examples use this shared preparation and enumeration function. It prepares
+and grounds the canonical program, then collects the complete interpretations
+through a solve session. There is no display directive, so the exported atoms
+are the full answer sets.
+
+```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+mod execution {
+{{#include ../examples/shared/formula-program.rs:example}}
+}
+```
+
+Run either version with:
 
 ```sh
-cargo run --locked -p zetesis-solve --no-default-features --example book-formula-program
+cargo run --locked -p zetesis --example book-formula-program-macro
+cargo run --locked -p zetesis --example book-formula-program
 ```
+
+## Validate input and control preparation
+
+`validate_program_formula(&program, options)` inspects canonical structure and
+the outer language profile without expanding intervals, evaluating arithmetic
+or grounding rules. It borrows the refused statement or part. Successful
+validation does not establish that later grounding will succeed.
+
+`prepare_program_formula_with(program, ProgramFormulaOptions)` selects the
+declarations to prepare and an optional shared `Cancellation` token. Its default,
+`FormulaPurpose::Ordinary`, retains objectives and `#project`.
+`FormulaPurpose::AnswerSets` prepares unscored enumeration of the full answer
+sets: objective and projection declarations are neither normalized nor
+instantiated. `#show` keeps its display meaning. Structural limits still inspect
+the entire input, and every retained statement identity refers to the original
+program. The ordinary CLI continues to honor objectives and projection.
+
+The preparation token persists into eager, hybrid and adaptive materialization,
+including aggregate and observation compilation. An absolute deadline belongs
+to that token; moving between phases does not restart it or refresh resource
+allowances. Pass the same token into the subsequent `Session` so its deadline
+continues through enumeration. `FormulaFailure::interruption()` distinguishes
+cancellation and deadline expiry from malformed input or exhausted resources.
+Failure returns no
+partial admitted program and retains the original owner for diagnosis.
+
+Polling is cooperative. Upstream analysis and some canonical transformations
+have no internal polling hook; their bounded calls are checked before and after
+execution. This is not a hard real-time deadline. These operations provide
+preparation controls; they do not themselves implement the themelios `Backend`
+run protocol.
 
 ## Admit an existing logical program
 
+For an owned relational input with display metadata, use
+`prepare_program_relational(Arc<Program>, ProgramRelationalOptions)` and lend
+its result through `PreparedInput::relational`. The same admitted program can
+run with `Grounder::Lazy` or `Grounder::Eager`. Preparation expands finite facts
+and compiles templates; lazy execution still performs variable joins during
+candidate checking. This reuses the extended relational compiler, including
+scalar constants, finite fact expansion and signed coherence.
+
+The owner retains the original program, template statement identities and
+compiled `#show` queries together. `FormulaPurpose::AnswerSets` has the same
+meaning here as in formula preparation: objectives and `#project` are excluded
+before evaluation, while structural input limits still apply. Preparation shares
+one expansion allowance and optional cancellation token across normalization and
+observation preparation. Pass that token to the session to preserve the same
+deadline through solving.
+
+This relational profile remains narrower than the formula profile. General
+disjunction, bounded choices and aggregates are explicit refusals; preparation
+does not silently switch them to eager or hybrid execution. Existing Lean closure
+laws apply to the admitted normal program, but do not yet prove this Rust input
+conversion.
+
+These examples construct one optional selection with conditional display terms.
+The macro writes the choice and `#show` directives directly:
+
+```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/relational-program-macro.rs:example}}
+# mod execution {
+{{#rustdoc_include ../examples/shared/relational-program.rs:hidden}}
+# }
+```
+
+The corresponding constructors keep each statement available for composition:
+
+```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/relational-program.rs:example}}
+# mod execution {
+{{#rustdoc_include ../examples/shared/relational-program.rs:hidden}}
+# }
+```
+
+Both use the following native preparation and enumeration function. The same
+cancellation token covers preparation, lazy solving and observation. It returns
+full atoms separately from the conditional `#show` terms and checks both
+exhaustion and the actual closure route. The complete results are an empty
+answer with no shown terms, and `{chosen(1)}` with the shown term `1`.
+
+```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+mod execution {
+{{#include ../examples/shared/relational-program.rs:example}}
+}
+```
+
+Run either version with:
+
+```sh
+cargo run --locked -p zetesis --example book-relational-program-macro
+cargo run --locked -p zetesis --example book-relational-program
+```
+
+### Borrow the strict relational input
+
 `zetesis_themelios::admit_program(&program, ProgramAdmissionOptions)` borrows a
-canonical `zetesis_themelios::logical::program::Program` and compiles the strict
-relational (S0) profile. The `logical` reexport is the upstream themelios type,
-so callers can construct or raise the program with its native APIs. Admission
+canonical `zetesis::Program` and compiles the strict relational (S0) profile.
+The facade and the adapter's `logical` reexport expose the same upstream
+themelios type, so callers can construct or raise the program with its native APIs. Admission
 uses the same rule compiler and strong-negation coherence operation as `admit`,
 without rendering or parsing the program.
 
@@ -145,24 +284,54 @@ statement or part associated with a refusal and invents no source coordinate.
 `into_program()` releases this evidence borrow and returns the independently
 owned native program. Admission itself performs no grounding or answer search.
 
-This example constructs `p :- not q.` and `q :- not p.` using canonical
-constructors and prints their two canonical `AnswerSet` values. The session
-borrows the admitted native owner without source metadata. `symbols::atom_with`
-exports each full interpretation using the session's cancellation token and a
-4096-byte ceiling per atom. The helper returns the family only after the session
-reports exhausted search; an unfinished outcome is an error.
+These examples construct `p :- not q.` and `q :- not p.` and print their two
+canonical answer sets, `{p}` and `{q}`. The macro keeps the rules in ASP form:
 
 ```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+{{#include ../examples/program-macro.rs:example}}
+# mod execution {
+{{#rustdoc_include ../examples/shared/program.rs:hidden}}
+# }
+```
+
+The constructors compose the same rules from atoms and negated bodies:
+
+```rust
+# extern crate zetesis;
 # extern crate zetesis_cpu;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/program.rs:example}}
+# mod execution {
+{{#rustdoc_include ../examples/shared/program.rs:hidden}}
+# }
 ```
 
-Run it with:
+Both use this shared admission and enumeration function. The session borrows
+the admitted native owner without source metadata. `symbols::atom_with` exports
+each full interpretation using the session's cancellation token and a 4096-byte
+ceiling per atom. The helper returns the family only after the session reports
+exhausted search; an unfinished outcome is an error.
+
+```rust
+# extern crate zetesis;
+# extern crate zetesis_cpu;
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+mod execution {
+{{#include ../examples/shared/program.rs:example}}
+}
+```
+
+Run either version with:
 
 ```sh
-cargo run --locked -p zetesis-solve --no-default-features --example book-program
+cargo run --locked -p zetesis --example book-program-macro
+cargo run --locked -p zetesis --example book-program
 ```
 
 ## Defer terminal positive definitions
@@ -706,6 +875,57 @@ passing it does not guarantee that later materialization fits its actual storage
 budget. NUL strings, invalid arithmetic and overflowing arithmetic remain
 refusals even in an inactive rule or unused constant. Complete authored-body
 validation still runs after an earlier false filter.
+
+## Migrating from source-only APIs
+
+Canonical programs need not have source text. The APIs below therefore distinguish
+logical statement identity from optional parsed evidence. These changes require
+updates to Rust consumers of `v0.2.0`; the source-only relational owners keep their
+existing source accessors.
+
+`PreparedFormula::source()` and `AdmittedFormula::source()` now return
+`Option<&Source>`. Previously, a consumer could write:
+
+```text
+println!("{:?}", input.source().id());
+```
+
+Handle the absent source when accepting both input doors:
+
+```rust,no_run
+# extern crate zetesis_themelios;
+# fn inspect(input: &zetesis_themelios::PreparedFormula) {
+if let Some(source) = input.source() {
+    println!("{:?}", source.id());
+}
+# }
+```
+
+Use `original_program()` when the operation needs the logical input rather than
+its text. Parsed coordinates alone do not provide the original source bytes.
+
+| Previous API | Current API |
+| --- | --- |
+| Formula/objective origins contain `Location` | They contain `ProgramSite`; use `statement_id()` and optional `location()` |
+| Admission, expansion, formula and metadata failure fields contain `Location` | Their statement fields contain `ProgramSite`, including constant-definition sites |
+| `GroundingObserver` phase callbacks take `Option<Location>` | They take `Option<ProgramSite>` |
+| Hybrid constraint verdicts expose `location` | They expose `site: ProgramSite` |
+| `FormulaWarning::location()` is mandatory; warnings implement `ToDiagnostic` | `location()` is optional; use `site()` or `diagnostic() -> Option<Diagnostic>` |
+
+Resolve each `StatementId` through the original program retained by its owner.
+Do not transfer IDs between programs or invent locations for constructed input.
+
+Update exhaustive failure matches: `FormulaFailure` adds `Program` and `Logical`
+and removes `ChoiceSource`; `ExpansionFailure` adds `Interrupted`. A typed-input
+formula failure can wrap its cause while retaining the original program. Use
+`cause()` for the underlying failure and `subject()` for its original statement,
+part or program. Resource refusals remain distinct from cancellation and deadlines.
+
+The public themelios types also use a newer shared dependency revision. Prefer
+`zetesis`'s reexports, or align a direct themelios dependency with the workspace
+pin. Values from separate copies of a dependency are distinct Rust types even
+when their names match. The [library reference](libraries.md) identifies the
+canonical reexports.
 
 ## Diagnostic ownership
 

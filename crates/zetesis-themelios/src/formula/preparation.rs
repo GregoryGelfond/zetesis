@@ -146,9 +146,10 @@ impl PreparedFormula {
     /// The analysis borrows this exact normalized source and keeps its logical
     /// population limits separate from support/guard capacity. Its work and all
     /// bridge/guard work consume the original cumulative formula budget.
-    /// Analysis uses bounded infallible collections and has no cancellation or
-    /// deadline polling; this does not strengthen eager materialization's
-    /// existing control/allocation contract. Observers receive its typed outcome.
+    /// Analysis uses bounded infallible collections and has no internal control
+    /// hook. A configured preparation token is polled around that bounded call;
+    /// it does not provide a hard real-time deadline or allocator/RSS bound.
+    /// Observers receive the typed analysis outcome.
     #[must_use]
     pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
         self.preparation.options.domains = limits;
@@ -285,7 +286,8 @@ impl PreparedFormula {
     }
 
     /// Like [`Self::ground`], observing only the actual eager-grounding interval.
-    /// No clock is read by this API; the caller retains its observer on failure.
+    /// The frontend reads no clock; configured control polls shared flags.
+    /// The caller retains its observer on failure.
     ///
     /// # Errors
     /// Returns the same failures as [`Self::ground`].

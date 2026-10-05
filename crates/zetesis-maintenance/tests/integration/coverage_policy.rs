@@ -374,7 +374,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
     assert_eq!(record["profiles_merged"], false);
     assert_eq!(
         record["supplemental"],
-        "--package zetesis-cli --package zetesis-solve --no-default-features"
+        "--package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis --no-default-features"
     );
     assert_eq!(
         record["floor_profiles"],

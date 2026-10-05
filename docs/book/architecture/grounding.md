@@ -13,6 +13,11 @@ canonical program, prepare the same scoped IR, and expose eager, hybrid and
 adaptive materialization through `PreparedFormula`. The schedules keep their
 existing applicability and cumulative budgets; none performs answer search.
 
+The [source API](../rust/source.md#validate-input-and-control-preparation)
+distinguishes validation without grounding, declaration purposes and cooperative
+preparation control. Successful materialization retains the same complete-support
+and reduct obligations.
+
 Successful parsing is only the first boundary. Profile admission, binding
 safety, arithmetic evaluation and resource limits can still fail. A frontend
 syntax diagnostic, an unsupported zetesis construct, and an exceeded resource

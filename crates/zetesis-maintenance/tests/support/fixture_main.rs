@@ -168,6 +168,28 @@ fn physical(arguments: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+fn book_artifacts() -> Result<(), String> {
+    let directory = env::current_dir()
+        .map_err(|error| error.to_string())?
+        .join("target/debug/deps");
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    for name in [
+        "zetesis",
+        "zetesis_cli",
+        "zetesis_solve",
+        "zetesis_validation",
+    ] {
+        let file = directory.join(format!("lib{name}-current.rlib"));
+        fs::write(&file, b"current").map_err(|error| error.to_string())?;
+        println!(
+            "{}",
+            json!({"reason":"compiler-artifact","target":{"name":name,"kind":["lib"]},"filenames":[file],"fresh":true})
+        );
+    }
+    println!("{}", json!({"reason":"build-finished","success":true}));
+    Ok(())
+}
+
 fn cargo(arguments: &[String]) -> Result<(), String> {
     if env::var_os("CHECK_TEST_TRACE").is_some() {
         let failed = variable("CHECK_TEST_ORACLE_FAILURE", "");
@@ -189,19 +211,7 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
             return fail("simulated oracle campaign failure");
         }
         if has(arguments, "--message-format=json-render-diagnostics") {
-            let directory = env::current_dir()
-                .map_err(|error| error.to_string())?
-                .join("target/debug/deps");
-            fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-            for name in ["zetesis_cli", "zetesis_solve", "zetesis_validation"] {
-                let file = directory.join(format!("lib{name}-current.rlib"));
-                fs::write(&file, b"current").map_err(|error| error.to_string())?;
-                println!(
-                    "{}",
-                    json!({"reason":"compiler-artifact","target":{"name":name,"kind":["lib"]},"filenames":[file],"fresh":true})
-                );
-            }
-            println!("{}", json!({"reason":"build-finished","success":true}));
+            book_artifacts()?;
         }
         return Ok(());
     }
@@ -353,6 +363,7 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
                     })
                     .collect::<Result<_, _>>()?;
                 let expected = [
+                    "libzetesis-current.rlib",
                     "libzetesis_cli-current.rlib",
                     "libzetesis_solve-current.rlib",
                     "libzetesis_validation-current.rlib",

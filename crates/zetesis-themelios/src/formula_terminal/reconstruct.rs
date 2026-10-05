@@ -56,13 +56,7 @@ impl ReconstructionError {
     #[must_use]
     pub fn stop(&self) -> Option<Stop> {
         match self {
-            Self::Source(error) | Self::Model(ModelFailure::Stopped(error)) => {
-                if let FormulaFailure::Interrupted { reason, .. } = error.cause() {
-                    Some(*reason)
-                } else {
-                    None
-                }
-            }
+            Self::Source(error) | Self::Model(ModelFailure::Stopped(error)) => error.interruption(),
             Self::ForeignInput
             | Self::Failed
             | Self::Model(ModelFailure::Model(_))

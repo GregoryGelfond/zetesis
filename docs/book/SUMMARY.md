@@ -18,6 +18,7 @@
 # Part II — The Rust library programmer's manual
 
 - [Getting started with the library](rust/getting-started.md)
+- [Programs, answers and queries](rust/agent.md)
 - [Embedding an ordinary solve](rust/sessions.md)
 - [Costs and shown terms](rust/costs-and-output.md)
 - [Completion, resources, and output](rust/outcomes.md)
@@ -64,7 +65,8 @@
 - [Validating an implementation change](reference/validation.md)
   - [Measurement protocols](reference/measurement-protocols.md)
   - [Source revision identities](reference/source-revisions.md)
-  - [Coverage and Metal qualification](reference/coverage-120fadfb.md)
+  - [Coverage and Metal qualification](reference/coverage-0.3.0.md)
+  - [Version 0.2.0 coverage](reference/coverage-120fadfb.md)
   - [Version 0.1.6 coverage](reference/coverage-0.1.6.md)
   - [Version 0.1.5 coverage](reference/coverage-0.1.5.md)
 

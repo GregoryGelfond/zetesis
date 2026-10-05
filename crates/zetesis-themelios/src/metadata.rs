@@ -343,10 +343,15 @@ pub(crate) fn check_count(
 /// Source admission additionally counts the original syntax before raising.
 pub(crate) fn check_program_count(
     program: &SourceProgram,
-    limits: ExpansionLimits,
+    budget: &crate::expansion::Budget,
+    purpose: crate::FormulaPurpose,
 ) -> Result<(), ExpansionFailure> {
     let mut used = 0_u128;
     for (index, carrier) in program.statements().enumerate() {
+        budget.poll(ProgramSite::statement(StatementId::new(index), None))?;
+        if !purpose.includes(carrier.get()) {
+            continue;
+        }
         if !matches!(
             carrier.get(),
             Statement::Defined(_) | Statement::Show(_) | Statement::Project(_)
@@ -363,12 +368,7 @@ pub(crate) fn check_program_count(
             .filter(|origin| matches!(origin, Origin::Parsed(_)))
             .count();
         used = used.saturating_add(parsed.max(1) as u128);
-        check(
-            ExpansionResource::MetadataStatements,
-            used,
-            limits.max_metadata_statements,
-            site,
-        )?;
+        budget.check_metadata(used, site)?;
     }
     Ok(())
 }
@@ -378,6 +378,22 @@ pub(crate) fn collect(
     metadata: &mut Builder,
 ) -> Result<(), AdmissionFailure> {
     collect_profile(program, metadata, false)
+}
+
+pub(crate) fn collect_program_for(
+    program: &SourceProgram,
+    metadata: &mut Builder,
+    purpose: crate::FormulaPurpose,
+    budget: &crate::expansion::Budget,
+) -> Result<(), ExpansionFailure> {
+    for (index, carrier) in program.statements().enumerate() {
+        let site = ProgramSite::statement(StatementId::new(index), None);
+        budget.poll(site)?;
+        if purpose.includes(carrier.get()) {
+            collect_carriers(std::iter::once((carrier, site)), metadata, true)?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn collect_profile(

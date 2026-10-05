@@ -1,5 +1,7 @@
 //! Admission of source and canonical logical programs through pinned themelios.
-//! [`admit_program`] borrows a canonical program for strict relational admission;
+//! [`admit_program`] borrows a canonical program for strict relational admission.
+//! [`prepare_program_relational`] retains an owned canonical program and display
+//! metadata through bounded scalar and fact expansion;
 //! [`prepare_program_formula`] retains its original program through an `Arc` and
 //! enters the shared formula compiler without rendering or reparsing.
 //! Strict S0 and extended scalar admission compile relational templates without
@@ -35,6 +37,7 @@ mod parsed_source;
 mod profile;
 mod compile;
 mod program_admission;
+mod program_relational;
 mod program_limits;
 mod program_site;
 pub use program_site::{ProgramSite, StatementId};
@@ -96,6 +99,9 @@ pub use program_admission::{
     AdmittedProgram, CompilationFailure, ProgramAdmissionFailure, ProgramAdmissionOptions,
     ProgramFailureKind, ProgramLimit, ProgramResource, ProgramSubject, admit_program,
 };
+pub use program_relational::{
+    PreparedRelational, ProgramRelationalOptions, prepare_program_relational,
+};
 /// Canonical shared frontend tiers, including all vocabulary exposed by this crate.
 pub use themelios_analysis as analysis;
 /// Canonical source identities, spans, diagnostics and source catalogs.
@@ -123,10 +129,11 @@ pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource, Expans
 pub use extended::admit_extended;
 pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
-    FormulaLimits, FormulaResource, PreparedFormula, PreparedFormulaBundle, admit_bundle_formula,
-    admit_bundle_formula_with_grounding_observer, admit_formula,
-    admit_formula_with_grounding_observer, admit_program_formula, prepare_bundle_formula,
-    prepare_formula, prepare_program_formula,
+    FormulaLimits, FormulaPurpose, FormulaResource, PreparedFormula, PreparedFormulaBundle,
+    ProgramFormulaOptions, admit_bundle_formula, admit_bundle_formula_with_grounding_observer,
+    admit_formula, admit_formula_with_grounding_observer, admit_program_formula,
+    prepare_bundle_formula, prepare_formula, prepare_program_formula, prepare_program_formula_with,
+    validate_program_formula,
 };
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;

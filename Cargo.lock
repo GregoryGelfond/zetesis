@@ -497,6 +497,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glob"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
 name = "gpu-allocator"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1187,6 +1193,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_spanned"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6662b5879511e06e8999a8a235d848113e942c9124f211511b16466ee2995f26"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1273,6 +1288,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "target-tuple"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "876fef147edbcbddc8ac5cbbba92c7b86519e314e86638596c09673b2ed01e7f"
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1286,6 +1307,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
+]
+
+[[package]]
 name = "text-size"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1294,7 +1324,7 @@ checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
 [[package]]
 name = "themelios-analysis"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=dd9a57172b8411ed277833323c52eef591840928#dd9a57172b8411ed277833323c52eef591840928"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
 dependencies = [
  "themelios-program",
 ]
@@ -1302,21 +1332,51 @@ dependencies = [
 [[package]]
 name = "themelios-base"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=dd9a57172b8411ed277833323c52eef591840928#dd9a57172b8411ed277833323c52eef591840928"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
+
+[[package]]
+name = "themelios-macros"
+version = "0.1.0"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "themelios-program",
+ "themelios-syntax",
+]
 
 [[package]]
 name = "themelios-program"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=dd9a57172b8411ed277833323c52eef591840928#dd9a57172b8411ed277833323c52eef591840928"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
 dependencies = [
  "themelios-base",
  "themelios-syntax",
 ]
 
 [[package]]
+name = "themelios-query"
+version = "0.1.0"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
+dependencies = [
+ "themelios-program",
+ "themelios-solve",
+]
+
+[[package]]
+name = "themelios-solve"
+version = "0.1.0"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
+dependencies = [
+ "themelios-base",
+ "themelios-program",
+ "themelios-syntax",
+]
+
+[[package]]
 name = "themelios-syntax"
 version = "0.1.0"
-source = "git+https://github.com/GregoryGelfond/themelios.git?rev=dd9a57172b8411ed277833323c52eef591840928#dd9a57172b8411ed277833323c52eef591840928"
+source = "git+https://github.com/GregoryGelfond/themelios.git?rev=3339a8abed1e00f21e42c2b3ed2677c16248eda5#3339a8abed1e00f21e42c2b3ed2677c16248eda5"
 dependencies = [
  "rowan",
  "themelios-base",
@@ -1350,6 +1410,60 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.6+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "920602543f0911ab71da12c50d59701da54c196d1a2bf5cb4b75667f137a406a"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_parser",
+ "toml_writer",
+ "winnow",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "1.1.1+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3165f65f62e28e0115a00b2ebdd37eb6f3b641855f9d636d3cd4103767159ad7"
+dependencies = [
+ "serde_core",
+]
+
+[[package]]
+name = "toml_parser"
+version = "1.1.3+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
+dependencies = [
+ "winnow",
+]
+
+[[package]]
+name = "toml_writer"
+version = "1.1.2+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
+
+[[package]]
+name = "trybuild"
+version = "1.0.121"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0cabaa10be1917331a313866bd94526343e03c77bcf69144b62b072ad35d47c"
+dependencies = [
+ "glob",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-tuple",
+ "termcolor",
+ "toml",
 ]
 
 [[package]]
@@ -1759,6 +1873,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "winnow"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+
+[[package]]
 name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1785,8 +1905,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis"
+version = "0.3.0"
+dependencies = [
+ "themelios-analysis",
+ "themelios-base",
+ "themelios-macros",
+ "themelios-program",
+ "themelios-query",
+ "themelios-solve",
+ "themelios-syntax",
+ "zetesis-cpu",
+ "zetesis-engine",
+ "zetesis-solve",
+ "zetesis-themelios",
+]
+
+[[package]]
 name = "zetesis-backend"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "serde",
@@ -1795,7 +1932,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-bench"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "serde_json",
@@ -1808,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "rayon",
@@ -1835,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-clingo-support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1845,7 +1982,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "zetesis-test-support",
@@ -1853,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cpu"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "rayon",
@@ -1863,7 +2000,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-domain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "themelios-base",
@@ -1872,8 +2009,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-engine"
+version = "0.3.0"
+dependencies = [
+ "themelios-base",
+ "themelios-macros",
+ "themelios-program",
+ "themelios-query",
+ "themelios-solve",
+ "themelios-syntax",
+ "zetesis-core",
+ "zetesis-cpu",
+ "zetesis-ferraris",
+ "zetesis-sat",
+ "zetesis-solve",
+ "zetesis-themelios",
+]
+
+[[package]]
+name = "zetesis-facade-consumer"
+version = "0.0.0"
+dependencies = [
+ "trybuild",
+ "zetesis",
+]
+
+[[package]]
 name = "zetesis-ferraris"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "proptest",
@@ -1887,7 +2050,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-maintenance"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "proc-macro2",
@@ -1904,7 +2067,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-objective"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "zetesis-core",
@@ -1914,7 +2077,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-presentation"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "unicode-width",
@@ -1922,7 +2085,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-reference-support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "zetesis-core",
@@ -1935,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-sat"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "rayon",
@@ -1948,7 +2111,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-solve"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "rayon",
  "zetesis-backend",
@@ -1968,11 +2131,11 @@ dependencies = [
 
 [[package]]
 name = "zetesis-telemetry"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "zetesis-test-support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "zetesis-core",
@@ -1980,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-themelios"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hashbrown 0.17.1",
  "proptest",
@@ -2004,7 +2167,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-theory-support"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "zetesis-core",
  "zetesis-cpu",
@@ -2013,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-validation"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "nix",
@@ -2034,7 +2197,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-wgpu"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytemuck",
  "naga",

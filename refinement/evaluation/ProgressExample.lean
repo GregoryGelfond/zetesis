@@ -22,6 +22,7 @@ def cursor : Evaluation.Cursor := { iter := { slice := nodes, i := 0 }, count :=
 def control : zetesis_cpu.cancellation.Cancellation := {
   cancelled := { owner := 1, value := { nextRead := false } }
   deadline := none
+  slot := none
 }
 
 /-- Exactly one work unit is available to this node evaluation. -/

@@ -68,7 +68,8 @@ pub(super) fn partition(mut preparation: Preparation) -> Result<Partition, Formu
     let mut counters = Counters::resume(
         std::mem::take(&mut preparation.accounting),
         crate::grounding_observer::Work::default(),
-    );
+    )
+    .with_cancellation(preparation.budget.cancellation());
     let selected = prepare(&mut preparation, &mut counters)?;
     let Some(mut selected) = selected else {
         preparation.accounting = counters.into_accounting();

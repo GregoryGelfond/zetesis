@@ -1,0 +1,27 @@
+[package]
+name = "zetesis-engine"
+version.workspace = true
+description = "The canonical Rust solve and query backend for zetesis."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+themelios-program.workspace = true
+themelios-solve.workspace = true
+zetesis-core.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
+zetesis-sat.workspace = true
+zetesis-solve = { workspace = true, default-features = false }
+zetesis-themelios.workspace = true
+
+[dev-dependencies]
+themelios-base.workspace = true
+themelios-macros.workspace = true
+themelios-query.workspace = true
+themelios-syntax.workspace = true
+
+[lints]
+workspace = true

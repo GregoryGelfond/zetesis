@@ -122,3 +122,30 @@ fn common_collector_applies_constructed_policy_without_source_evidence() {
     assert_eq!(actual.atom_selection(), expected.atom_selection());
     assert_eq!(actual.project_selection(), expected.project_selection());
 }
+
+#[test]
+fn observation_compilation_polls_preparation_control() {
+    use themelios_program::program::{Program, Show};
+    use zetesis_cpu::{Cancellation, Stop};
+
+    let program = Program::of([Show::Term(7.into())]);
+    let cancellation = Cancellation::default();
+    let mut budget = crate::expansion::Budget::new(crate::ExpansionLimits::default(), 100)
+        .with_cancellation(Some(cancellation.clone()));
+    let mut builder = Builder::default();
+    collect_profile(&program, &mut builder, true).unwrap();
+    cancellation.cancel();
+    let error = builder
+        .compile_observations(
+            &program,
+            crate::ProgramAdmissionOptions::default().into(),
+            crate::observation::AdmissionLimits::default(),
+            &mut budget,
+            ProgramSite::program(),
+        )
+        .unwrap_err();
+    assert_eq!(error.interruption(), Some(Stop::Cancelled));
+    // Constant preparation can observe the stop before directive compilation;
+    // neither boundary publishes partially prepared observations.
+    assert!(builder.observations.is_empty());
+}

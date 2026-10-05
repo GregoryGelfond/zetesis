@@ -661,6 +661,13 @@ impl Evaluation {
     pub fn symbols(&self) -> &[Symbol] {
         &self.symbols
     }
+    /// Transfer the complete distinct term channel without copying symbols or
+    /// reallocating its vector. The evaluation receipt is consumed; read its
+    /// statistics first when the caller needs to retain them. O(1).
+    #[must_use]
+    pub fn into_symbols(self) -> Vec<Symbol> {
+        self.symbols
+    }
     /// Completed work accounting.
     #[must_use]
     pub fn statistics(&self) -> Statistics {

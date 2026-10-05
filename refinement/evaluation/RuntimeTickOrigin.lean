@@ -17,17 +17,8 @@ does not constrain the response or assume the poll succeeded. -/
 theorem poll_nonempty (control : zetesis_cpu.cancellation.Cancellation)
     (events : List Event) (answer : core.result.Result Unit zetesis_cpu.cancellation.Stop)
     (run : Runs (ContextEvents.poll control) events answer) : events ≠ [] := by
-  cases deadline : control.deadline with
-  | none =>
-    rw [ContextEvents.poll_without_deadline control deadline] at run
-    obtain ⟨response, tail, history, _⟩ := RuntimeRuns.observed_inv _ _ _ _ run
-    rw [history]
-    exact List.cons_ne_nil _ _
-  | some owner =>
-    rw [TickProjection.poll_with_deadline control owner deadline] at run
-    obtain ⟨response, tail, history, _⟩ := RuntimeRuns.observed_inv _ _ _ _ run
-    rw [history]
-    exact List.cons_ne_nil _ _
+  rw [ContextEvents.poll_reads] at run
+  exact ControlReads.nonempty _ _ _ events answer run
 
 /-- Every returning tick consumes a read, whether it succeeds, observes a stop,
 or refuses its work allowance. Invert the checked tick's initial poll and retain

@@ -267,7 +267,9 @@ of 58 exact tests, each backend's reviewed selection, checking complete CPU/devi
 answer families and explicit failure boundaries; a change to a device route is qualified on
 every backend the hosts at hand expose, and the record says which. The
 portable report is retained separately; the CPU-only profile independently
-instruments both `zetesis-solve` and `zetesis-cli`. `target/coverage/toolchain.json` records the finite selection, with
+instruments `zetesis-solve`, `zetesis-engine`, the `zetesis` facade and
+`zetesis-cli`. The historical `cli-cpu` directory name is retained.
+`target/coverage/toolchain.json` records the finite selection, with
 per-group logs and status files under `target/coverage/workspace`; the
 hardware gate keeps its logs and status files under `target/hardware`. Neither
 floor changes; every report and floor leaves out the test-support crates'

@@ -20,8 +20,8 @@ use crate::diagnostic::unsupported;
 use crate::expansion::{Budget, check};
 use crate::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ExpansionUsage, ParsedSource, ProfileFeature, ProgramSite, SourceFailure,
-    SourceMetadata, StatementId, compile, fact_expansion, metadata, profile,
+    ExpansionResource, ExpansionUsage, FormulaPurpose, ParsedSource, ProfileFeature, ProgramSite,
+    SourceFailure, SourceMetadata, StatementId, compile, fact_expansion, metadata, profile,
 };
 
 /// Admit a bounded extension of S0: unannotated acyclic scalar `#const`
@@ -116,31 +116,64 @@ pub(crate) fn compile_owned(
     metadata: SourceMetadata,
 ) -> Result<Compilation, ExpansionFailure> {
     let mut budget = Budget::new(limits, core_limits.max_templates);
-    let constants = resolve(source, &mut budget, location)?;
-    let (mut templates, mut template_origins) =
-        compile_extended(source, &constants, &mut budget, location)?;
-    crate::coherence::append(
-        &mut templates,
-        &mut template_origins,
+    let (program, template_origins) = compile_relational(
+        source,
         core_limits,
+        &mut budget,
         location,
-        |resource, count, origin| budget.charge(resource, count, origin),
+        FormulaPurpose::Ordinary,
+        |carrier, _| parsed_origins(carrier),
+        |location| ProgramSite::from(*location),
     )?;
-    let program = Program::new(templates, core_limits).map_err(|error| {
-        let location = error
-            .template_index()
-            .and_then(|index| template_origins.get(index))
-            .and_then(|origins| origins.first())
-            .copied()
-            .map_or(location, ProgramSite::from);
-        AdmissionFailure::Core { error, location }
-    })?;
     Ok(Compilation {
         program,
         template_origins,
         metadata,
         expansion: budget.usage(),
     })
+}
+
+/// Share normalization, fact expansion and signed coherence while retaining the
+/// caller's evidence representation and one cumulative preparation budget.
+pub(crate) fn compile_relational<P: Clone + Ord>(
+    source: &SourceProgram,
+    core_limits: AdmissionLimits,
+    budget: &mut Budget,
+    fallback: ProgramSite,
+    purpose: FormulaPurpose,
+    evidence: impl Fn(&WithProvenance<Statement>, ProgramSite) -> Vec<P>,
+    site: impl Fn(&P) -> ProgramSite,
+) -> Result<(Program, Vec<Vec<P>>), ExpansionFailure> {
+    budget.poll(fallback)?;
+    let constants = resolve(source, budget, fallback)?;
+    let (mut templates, mut origins) =
+        compile_extended(source, &constants, budget, fallback, purpose, evidence)?;
+    budget.poll(fallback)?;
+    crate::coherence::append_with(
+        &mut templates,
+        &mut origins,
+        core_limits,
+        |resource, count, evidence| {
+            budget.charge(resource, count, evidence.first().map_or(fallback, &site))
+        },
+        |error, evidence| {
+            ExpansionFailure::from(AdmissionFailure::Core {
+                error,
+                location: evidence.first().map_or(fallback, &site),
+            })
+        },
+    )?;
+    budget.poll(fallback)?;
+    let program = Program::new(templates, core_limits).map_err(|error| {
+        let location = error
+            .template_index()
+            .and_then(|index| origins.get(index))
+            .and_then(|evidence| evidence.first())
+            .map_or(fallback, site);
+        AdmissionFailure::Core { error, location }
+    })?;
+    budget.poll(fallback)?;
+    Ok((program, origins))
 }
 
 fn check_definitions(
@@ -199,10 +232,11 @@ pub(crate) fn resolve(
 ) -> Result<BTreeMap<String, Symbol>, ExpansionFailure> {
     let mut definitions: BTreeMap<String, Definition<'_>> = BTreeMap::new();
     for (index, carrier) in source.statements().enumerate() {
+        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
+        budget.poll(location)?;
         let Statement::Const(constant) = carrier.get() else {
             continue;
         };
-        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
         if constant.policy.is_some() {
             return Err(ExpansionFailure::ConstantPolicy { location });
         }
@@ -256,6 +290,7 @@ pub(crate) fn resolve(
         let mut stack = vec![(name.clone(), 0)];
         while let Some((name, next)) = stack.last_mut() {
             let definition = &definitions[name];
+            budget.poll(definition.location)?;
             if let Some(dependency) = definition.dependencies.get(*next) {
                 *next += 1;
                 if values.contains_key(dependency) {
@@ -290,7 +325,7 @@ pub(crate) fn resolve(
     Ok(values)
 }
 
-type Compiled = (Vec<zetesis_core::Template>, Vec<Vec<Location>>);
+type Compiled<P> = (Vec<zetesis_core::Template>, Vec<Vec<P>>);
 
 /// Normalize each statement and compile it. A statement whose every term
 /// normalization would return as it is, charged and validated by
@@ -299,22 +334,27 @@ type Compiled = (Vec<zetesis_core::Template>, Vec<Vec<Location>>);
 /// nothing after this point reads, at the cost of copying and rebuilding it.
 /// Every other statement is rebuilt by the rewrite, alone in a program of
 /// its own so that no two statements merge.
-fn compile_extended(
+fn compile_extended<P: Clone>(
     source: &SourceProgram,
     constants: &BTreeMap<String, Symbol>,
     budget: &mut Budget,
     fallback: ProgramSite,
-) -> Result<Compiled, ExpansionFailure> {
+    purpose: FormulaPurpose,
+    evidence: impl Fn(&WithProvenance<Statement>, ProgramSite) -> Vec<P>,
+) -> Result<Compiled<P>, ExpansionFailure> {
     let mut compiled = (Vec::new(), Vec::new());
     for (index, carrier) in source.statements().enumerate() {
-        if matches!(
-            carrier.get(),
-            Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
-        ) {
+        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
+        budget.poll(location)?;
+        if !purpose.includes(carrier.get())
+            || matches!(
+                carrier.get(),
+                Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
+            )
+        {
             continue;
         }
-        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
-        let locations = parsed_origins(carrier);
+        let locations = evidence(carrier, location);
         if kept_as_is(carrier.get(), constants, budget, location)? {
             emit(carrier, locations, budget, location, &mut compiled)?;
             continue;
@@ -329,6 +369,7 @@ fn compile_extended(
         if let Some(failure) = normalizer.failure {
             return Err(failure);
         }
+        budget.poll(location)?;
         let normalized_carrier = rewritten
             .statements()
             .next()
@@ -345,13 +386,13 @@ fn compile_extended(
 }
 
 /// Emit one normalized statement's templates, each with the statement's
-/// parsed origins: its facts, expanded, or the one template of its rule.
-fn emit(
+/// original evidence: its facts, expanded, or the one template of its rule.
+fn emit<P: Clone>(
     statement: &WithProvenance<Statement>,
-    locations: Vec<Location>,
+    locations: Vec<P>,
     budget: &mut Budget,
     location: ProgramSite,
-    (templates, origins): &mut Compiled,
+    (templates, origins): &mut Compiled<P>,
 ) -> Result<(), ExpansionFailure> {
     if let Some(facts) = fact_expansion::facts(statement, budget, location)? {
         budget.charge(

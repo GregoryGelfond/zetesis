@@ -304,9 +304,10 @@ the retained prefix. No partial result is treated as a smaller program.
 `WorldViewFailureParts` without cloning. `into_answer_sets()` remains the explicit
 choice to keep only the answers and discard the other failure evidence.
 
-These are zetesis's collection guarantees. The streaming `Session` remains the
-surface for partial observations. Interoperability with another library's solver
-or query interfaces requires a separate adapter contract.
+These are the native collection guarantees. The streaming `Session` remains the
+surface for partial observations. [`zetesis::Solver`](agent.md) connects native
+execution to the canonical agent and query contracts; their nonempty snapshots
+remain distinct from the native, possibly empty complete family.
 
 ## Reuse and identity
 
@@ -437,6 +438,8 @@ failure reason in favor of a later cleanup stop.
 `PreparedInput::program` borrows a native `zetesis_core::Program` without source
 metadata. It reaches the same relational session as a source-admitted program,
 including lazy execution; it does not first compile a complete ground graph.
+`PreparedInput::relational` borrows the native program and its display metadata
+from one [prepared canonical owner](source.md#admit-an-existing-logical-program).
 
 An execution observer receives typed, borrowed facts about preparation and
 execution choices. It need not parse diagnostics. This example constructs the

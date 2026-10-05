@@ -1,0 +1,71 @@
+[package]
+name = "zetesis"
+version.workspace = true
+description = "Canonical ASP construction, solving contracts and query vocabulary for zetesis."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+zetesis-engine.workspace = true
+themelios-base.workspace = true
+themelios-syntax.workspace = true
+themelios-program.workspace = true
+themelios-analysis.workspace = true
+themelios-macros.workspace = true
+themelios-solve.workspace = true
+themelios-query.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+zetesis-solve.workspace = true
+zetesis-themelios.workspace = true
+zetesis-cpu.workspace = true
+
+[[example]]
+name = "book-agent"
+path = "../../docs/book/examples/agent.rs"
+test = true
+
+[[example]]
+name = "book-agent-constructors"
+path = "../../docs/book/examples/agent-constructors.rs"
+test = true
+
+[[example]]
+name = "book-reasoning"
+path = "../../docs/book/examples/reasoning.rs"
+test = true
+
+[[example]]
+name = "book-program"
+path = "../../docs/book/examples/program.rs"
+test = true
+
+[[example]]
+name = "book-program-macro"
+path = "../../docs/book/examples/program-macro.rs"
+test = true
+
+[[example]]
+name = "book-relational-program"
+path = "../../docs/book/examples/relational-program.rs"
+test = true
+
+[[example]]
+name = "book-relational-program-macro"
+path = "../../docs/book/examples/relational-program-macro.rs"
+test = true
+
+[[example]]
+name = "book-formula-program"
+path = "../../docs/book/examples/formula-program.rs"
+test = true
+
+[[example]]
+name = "book-formula-program-macro"
+path = "../../docs/book/examples/formula-program-macro.rs"
+test = true
