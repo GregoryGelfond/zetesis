@@ -376,10 +376,12 @@ fn read_host_memory() -> Option<u64> {
 
 /// The host's physical memory in bytes, from the system's `sysctl`: the
 /// crate forbids foreign calls, and the system command is the reading
-/// without one.
+/// without one. It runs by its absolute path on the sealed system volume,
+/// never through `PATH`, so the caller's environment cannot substitute
+/// another program or another reading.
 #[cfg(target_os = "macos")]
 fn read_host_memory() -> Option<u64> {
-    let output = std::process::Command::new("sysctl")
+    let output = std::process::Command::new("/usr/sbin/sysctl")
         .args(["-n", "hw.memsize"])
         .output()
         .ok()?;

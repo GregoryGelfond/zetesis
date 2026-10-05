@@ -2,6 +2,14 @@
 
 Notable changes by release. Versions follow Semantic Versioning.
 
+## Unreleased
+
+### Security
+
+- On macOS, the host-memory reading behind the default resource allowance runs
+  `/usr/sbin/sysctl` by its absolute path instead of resolving `sysctl` through
+  `PATH`, so a program earlier on `PATH` can neither run nor change the reading.
+
 ## 0.3.0 — 2026-10-04
 
 ### Added

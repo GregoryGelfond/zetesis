@@ -33,6 +33,7 @@ mod grounder;
 mod grounding_statistics;
 mod help;
 mod host_failure_adapters;
+mod host_memory;
 mod human_output_limits;
 mod hybrid;
 mod json_output;
