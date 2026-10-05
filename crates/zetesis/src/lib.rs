@@ -1,6 +1,6 @@
 //! Construct ASP programs, solve them and query their answer sets.
 //!
-//! [program](mod@program), [`solve`] and [`query`] re-export the pinned themelios crates:
+//! `program`, `solve` and `query` re-export the pinned themelios crates:
 //! their types are the original types, with the same ownership, failures and
 //! operation costs. [`prelude`] gathers their working vocabulary with source
 //! parsing and analysis. [`Solver`] implements [`solve::contract::Backend`] with
