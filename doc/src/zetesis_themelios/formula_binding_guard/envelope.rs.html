@@ -11,7 +11,7 @@
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::collections::BTreeSet;
 <a href=#13 id=13 data-nosnippet>13</a>
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>themelios_program::program::{DefaultNegation, Relation};
 <a href=#16 id=16 data-nosnippet>16</a>
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::expansion::Budget;
@@ -307,7 +307,7 @@
 <a href=#307 id=307 data-nosnippet>307</a></span><span class="kw">fn </span>inverse_bound(
 <a href=#308 id=308 data-nosnippet>308</a>    remainder: i128,
 <a href=#309 id=309 data-nosnippet>309</a>    coefficient: i64,
-<a href=#310 id=310 data-nosnippet>310</a>    location: Location,
+<a href=#310 id=310 data-nosnippet>310</a>    location: ProgramSite,
 <a href=#311 id=311 data-nosnippet>311</a>) -&gt; <span class="prelude-ty">Result</span>&lt;i128, FormulaFailure&gt; {
 <a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>divisor = i128::from(coefficient);
 <a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">if </span>coefficient &lt; <span class="number">0 </span>{
@@ -356,7 +356,7 @@
 <a href=#356 id=356 data-nosnippet>356</a>    )
 <a href=#357 id=357 data-nosnippet>357</a>}
 <a href=#358 id=358 data-nosnippet>358</a>
-<a href=#359 id=359 data-nosnippet>359</a><span class="kw">fn </span>bound_capacity(location: Location) -&gt; FormulaFailure {
+<a href=#359 id=359 data-nosnippet>359</a><span class="kw">fn </span>bound_capacity(location: ProgramSite) -&gt; FormulaFailure {
 <a href=#360 id=360 data-nosnippet>360</a>    FormulaFailure::Limit {
 <a href=#361 id=361 data-nosnippet>361</a>        resource: FormulaResource::BindingBoundBits,
 <a href=#362 id=362 data-nosnippet>362</a>        limit: u128::from(i128::BITS),
@@ -368,47 +368,48 @@
 <a href=#368 id=368 data-nosnippet>368</a><span class="attr">#[cfg(test)]
 <a href=#369 id=369 data-nosnippet>369</a></span><span class="kw">mod </span>tests {
 <a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">use </span><span class="kw">super</span>::inverse_bound;
-<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">use crate</span>::{FormulaFailure, FormulaResource};
-<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">use </span>themelios_base::source::SourceId;
-<a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">use </span>themelios_base::span::{ByteOffset, Location, Span};
-<a href=#374 id=374 data-nosnippet>374</a>
-<a href=#375 id=375 data-nosnippet>375</a>    <span class="kw">fn </span>location() -&gt; Location {
-<a href=#376 id=376 data-nosnippet>376</a>        Location {
-<a href=#377 id=377 data-nosnippet>377</a>            source: SourceId::new(<span class="number">1</span>),
-<a href=#378 id=378 data-nosnippet>378</a>            span: Span::empty(ByteOffset::new(<span class="number">0</span>)),
-<a href=#379 id=379 data-nosnippet>379</a>        }
-<a href=#380 id=380 data-nosnippet>380</a>    }
-<a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>    <span class="attr">#[test]
-<a href=#383 id=383 data-nosnippet>383</a>    </span><span class="kw">fn </span>inverse_bounds_match_integer_inequalities() {
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">for </span>coefficient <span class="kw">in </span>[-<span class="number">7_i64</span>, -<span class="number">3</span>, -<span class="number">1</span>, <span class="number">1</span>, <span class="number">3</span>, <span class="number">7</span>] {
-<a href=#385 id=385 data-nosnippet>385</a>            <span class="kw">for </span>remainder <span class="kw">in </span>-<span class="number">20_i128</span>..=<span class="number">20 </span>{
-<a href=#386 id=386 data-nosnippet>386</a>                <span class="kw">let </span>bound = inverse_bound(remainder, coefficient, location()).unwrap();
-<a href=#387 id=387 data-nosnippet>387</a>                <span class="kw">for </span>value <span class="kw">in </span>-<span class="number">24_i128</span>..=<span class="number">24 </span>{
-<a href=#388 id=388 data-nosnippet>388</a>                    <span class="macro">assert_eq!</span>(
-<a href=#389 id=389 data-nosnippet>389</a>                        i128::from(coefficient) * value &lt;= remainder,
-<a href=#390 id=390 data-nosnippet>390</a>                        <span class="kw">if </span>coefficient &lt; <span class="number">0 </span>{
-<a href=#391 id=391 data-nosnippet>391</a>                            value &gt;= bound
-<a href=#392 id=392 data-nosnippet>392</a>                        } <span class="kw">else </span>{
-<a href=#393 id=393 data-nosnippet>393</a>                            value &lt;= bound
-<a href=#394 id=394 data-nosnippet>394</a>                        }
-<a href=#395 id=395 data-nosnippet>395</a>                    );
-<a href=#396 id=396 data-nosnippet>396</a>                }
-<a href=#397 id=397 data-nosnippet>397</a>            }
-<a href=#398 id=398 data-nosnippet>398</a>        }
-<a href=#399 id=399 data-nosnippet>399</a>    }
-<a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="attr">#[test]
-<a href=#402 id=402 data-nosnippet>402</a>    </span><span class="kw">fn </span>unrepresentable_inverse_bound_reports_capacity() {
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#404 id=404 data-nosnippet>404</a>            inverse_bound(i128::MIN, -<span class="number">1</span>, location()),
-<a href=#405 id=405 data-nosnippet>405</a>            <span class="prelude-val">Err</span>(FormulaFailure::Limit {
-<a href=#406 id=406 data-nosnippet>406</a>                resource: FormulaResource::BindingBoundBits,
-<a href=#407 id=407 data-nosnippet>407</a>                limit: <span class="number">128</span>,
-<a href=#408 id=408 data-nosnippet>408</a>                observed: <span class="number">129</span>,
-<a href=#409 id=409 data-nosnippet>409</a>                ..
-<a href=#410 id=410 data-nosnippet>410</a>            })
-<a href=#411 id=411 data-nosnippet>411</a>        ));
-<a href=#412 id=412 data-nosnippet>412</a>    }
-<a href=#413 id=413 data-nosnippet>413</a>}
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">use crate</span>::{FormulaFailure, FormulaResource};
+<a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">use </span>themelios_base::source::SourceId;
+<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">use </span>themelios_base::span::{ByteOffset, Span};
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">fn </span>location() -&gt; ProgramSite {
+<a href=#377 id=377 data-nosnippet>377</a>        ProgramSite::source(themelios_base::span::Location {
+<a href=#378 id=378 data-nosnippet>378</a>            source: SourceId::new(<span class="number">1</span>),
+<a href=#379 id=379 data-nosnippet>379</a>            span: Span::empty(ByteOffset::new(<span class="number">0</span>)),
+<a href=#380 id=380 data-nosnippet>380</a>        })
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="attr">#[test]
+<a href=#384 id=384 data-nosnippet>384</a>    </span><span class="kw">fn </span>inverse_bounds_match_integer_inequalities() {
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="kw">for </span>coefficient <span class="kw">in </span>[-<span class="number">7_i64</span>, -<span class="number">3</span>, -<span class="number">1</span>, <span class="number">1</span>, <span class="number">3</span>, <span class="number">7</span>] {
+<a href=#386 id=386 data-nosnippet>386</a>            <span class="kw">for </span>remainder <span class="kw">in </span>-<span class="number">20_i128</span>..=<span class="number">20 </span>{
+<a href=#387 id=387 data-nosnippet>387</a>                <span class="kw">let </span>bound = inverse_bound(remainder, coefficient, location()).unwrap();
+<a href=#388 id=388 data-nosnippet>388</a>                <span class="kw">for </span>value <span class="kw">in </span>-<span class="number">24_i128</span>..=<span class="number">24 </span>{
+<a href=#389 id=389 data-nosnippet>389</a>                    <span class="macro">assert_eq!</span>(
+<a href=#390 id=390 data-nosnippet>390</a>                        i128::from(coefficient) * value &lt;= remainder,
+<a href=#391 id=391 data-nosnippet>391</a>                        <span class="kw">if </span>coefficient &lt; <span class="number">0 </span>{
+<a href=#392 id=392 data-nosnippet>392</a>                            value &gt;= bound
+<a href=#393 id=393 data-nosnippet>393</a>                        } <span class="kw">else </span>{
+<a href=#394 id=394 data-nosnippet>394</a>                            value &lt;= bound
+<a href=#395 id=395 data-nosnippet>395</a>                        }
+<a href=#396 id=396 data-nosnippet>396</a>                    );
+<a href=#397 id=397 data-nosnippet>397</a>                }
+<a href=#398 id=398 data-nosnippet>398</a>            }
+<a href=#399 id=399 data-nosnippet>399</a>        }
+<a href=#400 id=400 data-nosnippet>400</a>    }
+<a href=#401 id=401 data-nosnippet>401</a>
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="attr">#[test]
+<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="kw">fn </span>unrepresentable_inverse_bound_reports_capacity() {
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#405 id=405 data-nosnippet>405</a>            inverse_bound(i128::MIN, -<span class="number">1</span>, location()),
+<a href=#406 id=406 data-nosnippet>406</a>            <span class="prelude-val">Err</span>(FormulaFailure::Limit {
+<a href=#407 id=407 data-nosnippet>407</a>                resource: FormulaResource::BindingBoundBits,
+<a href=#408 id=408 data-nosnippet>408</a>                limit: <span class="number">128</span>,
+<a href=#409 id=409 data-nosnippet>409</a>                observed: <span class="number">129</span>,
+<a href=#410 id=410 data-nosnippet>410</a>                ..
+<a href=#411 id=411 data-nosnippet>411</a>            })
+<a href=#412 id=412 data-nosnippet>412</a>        ));
+<a href=#413 id=413 data-nosnippet>413</a>    }
+<a href=#414 id=414 data-nosnippet>414</a>}
 </code></pre></div></section></main></body></html>

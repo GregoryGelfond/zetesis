@@ -76,8 +76,8 @@
 <a href=#76 id=76 data-nosnippet>76</a>        profile.domain_analysis(DomainObservation::Inapplicable);
 <a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
 <a href=#78 id=78 data-nosnippet>78</a>    };
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="comment">// This API has no caller Cancellation. Logical populations and remaining work
-<a href=#80 id=80 data-nosnippet>80</a>    // bound the uninterruptible call; no cancellation/deadline is invented.
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="comment">// Domain analysis has no internal control hook. Its logical populations and
+<a href=#80 id=80 data-nosnippet>80</a>    // remaining work bound this cooperative interval; poll before and after it.
 <a href=#81 id=81 data-nosnippet>81</a>    </span>counters.charge_work(<span class="number">0</span>, limits, location)<span class="question-mark">?</span>;
 <a href=#82 id=82 data-nosnippet>82</a>    options.max_work = options
 <a href=#83 id=83 data-nosnippet>83</a>        .max_work

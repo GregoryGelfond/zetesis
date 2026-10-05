@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -341,7 +341,7 @@ construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs">static shader tests</a>.
-The <a href="coverage-120fadfb.html">coverage snapshot</a> describes the tests qualified on its
+The <a href="coverage-0.3.0.html">coverage snapshot</a> describes the tests qualified on its
 stated source; today’s required selection does not update it.</p>
 <p>Coverage always has two separately instrumented populations:</p>
 <div class="table-wrapper">
@@ -351,11 +351,13 @@ stated source; today’s required selection does not update it.</p>
 </thead>
 <tbody>
 <tr><td>Workspace, portable tests; also the named physical tests with <code>--metal</code> or <code>--vulkan</code></td><td><code>target/coverage/workspace</code></td></tr>
-<tr><td>CPU-only <code>zetesis-solve</code> and <code>zetesis-cli</code></td><td><code>target/coverage/cli-cpu</code></td></tr>
+<tr><td>CPU-only <code>zetesis-solve</code>, <code>zetesis-engine</code>, <code>zetesis</code> and <code>zetesis-cli</code></td><td><code>target/coverage/cli-cpu</code></td></tr>
 </tbody>
 </table>
 </div>
-<p>The historical directory name <code>cli-cpu</code> includes both crates. A portable-only
+<p>The historical directory name <code>cli-cpu</code> includes all four crates. The public
+Rust backend and facade therefore receive the same independent CPU-only check
+as the native solver and command-line interface. A portable-only
 workspace report and a combined Metal report have different test populations;
 their instrumented lines may differ too. Compare like populations on the same
 source. Neither replaces the CPU-only check.</p>
@@ -384,7 +386,7 @@ development records should not be needed to understand a public claim.</p>
 qualified source identified by the snapshot below. It is a recorded local
 measurement, not a live hosted-CI status. A release version does not change the
 source identity or test population of that measurement.
-The <a href="coverage-120fadfb.html">coverage and Metal qualification record</a> holds that snapshot:
+The <a href="coverage-0.3.0.html">coverage and Metal qualification record</a> holds that snapshot:
 its exact counts, source identities, qualification scope and the commands
 that reproduce it at the revisions it measured.</p>
 <p>Update the badge and the snapshot record together only after qualification

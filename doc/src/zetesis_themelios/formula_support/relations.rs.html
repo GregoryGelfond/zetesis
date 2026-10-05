@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>std::mem::size_of;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_core::atom_interner::{<span class="self">self</span>, AtomAppender, AtomInterner};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zetesis_core::catalog::{AtomRef, Atoms, CatalogRead, PredicateRef, TermRef};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::formula_support) <span class="kw">fn </span>bytes(
 <a href=#87 id=87 data-nosnippet>87</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#88 id=88 data-nosnippet>88</a>        location: Location,
+<a href=#88 id=88 data-nosnippet>88</a>        location: ProgramSite,
 <a href=#89 id=89 data-nosnippet>89</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#90 id=90 data-nosnippet>90</a>        usize::try_from(<span class="self">self</span>.owner.storage_bytes())
 <a href=#91 id=91 data-nosnippet>91</a>            .ok()
@@ -111,7 +111,7 @@
 <a href=#111 id=111 data-nosnippet>111</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#112 id=112 data-nosnippet>112</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#113 id=113 data-nosnippet>113</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#114 id=114 data-nosnippet>114</a>        location: Location,
+<a href=#114 id=114 data-nosnippet>114</a>        location: ProgramSite,
 <a href=#115 id=115 data-nosnippet>115</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Relations&lt;<span class="lifetime">'_</span>&gt;, SupportAppend&lt;<span class="lifetime">'_</span>&gt;), FormulaFailure&gt; {
 <a href=#116 id=116 data-nosnippet>116</a>        <span class="macro">debug_assert!</span>(<span class="self">self</span>.pending.is_empty());
 <a href=#117 id=117 data-nosnippet>117</a>        <span class="kw-2">*</span><span class="self">self</span>.growth.get_mut() = <span class="number">0</span>;
@@ -155,7 +155,7 @@
 <a href=#155 id=155 data-nosnippet>155</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#156 id=156 data-nosnippet>156</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#157 id=157 data-nosnippet>157</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#158 id=158 data-nosnippet>158</a>        location: Location,
+<a href=#158 id=158 data-nosnippet>158</a>        location: ProgramSite,
 <a href=#159 id=159 data-nosnippet>159</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#160 id=160 data-nosnippet>160</a>        counters.observe_work(Event::SupportPublicationWork, |counters| {
 <a href=#161 id=161 data-nosnippet>161</a>            <span class="self">self</span>.publish_rows(limits, counters, location)
@@ -166,7 +166,7 @@
 <a href=#166 id=166 data-nosnippet>166</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#167 id=167 data-nosnippet>167</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#168 id=168 data-nosnippet>168</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#169 id=169 data-nosnippet>169</a>        location: Location,
+<a href=#169 id=169 data-nosnippet>169</a>        location: ProgramSite,
 <a href=#170 id=170 data-nosnippet>170</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">for </span>source <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.rows {
 <a href=#172 id=172 data-nosnippet>172</a>            counters.work(limits, location)<span class="question-mark">?</span>;
@@ -256,7 +256,7 @@
 <a href=#256 id=256 data-nosnippet>256</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#257 id=257 data-nosnippet>257</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#258 id=258 data-nosnippet>258</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#259 id=259 data-nosnippet>259</a>        location: Location,
+<a href=#259 id=259 data-nosnippet>259</a>        location: ProgramSite,
 <a href=#260 id=260 data-nosnippet>260</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Relations&lt;<span class="lifetime">'_</span>&gt;, FormulaFailure&gt; {
 <a href=#261 id=261 data-nosnippet>261</a>        SnapshotSource {
 <a href=#262 id=262 data-nosnippet>262</a>            sources: <span class="kw-2">&amp;</span><span class="self">self</span>.rows,
@@ -275,7 +275,7 @@
 <a href=#275 id=275 data-nosnippet>275</a>        atom: <span class="kw-2">&amp;</span>Atom,
 <a href=#276 id=276 data-nosnippet>276</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#277 id=277 data-nosnippet>277</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#278 id=278 data-nosnippet>278</a>        location: Location,
+<a href=#278 id=278 data-nosnippet>278</a>        location: ProgramSite,
 <a href=#279 id=279 data-nosnippet>279</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span>(<span class="kw">_</span>, <span class="kw-2">mut </span>append) = <span class="self">self</span>.split(limits, counters, location)<span class="question-mark">?</span>;
 <a href=#281 id=281 data-nosnippet>281</a>        append.atom(atom.into(), limits, counters, location)<span class="question-mark">?</span>;
@@ -297,7 +297,7 @@
 <a href=#297 id=297 data-nosnippet>297</a>        <span class="self">self</span>,
 <a href=#298 id=298 data-nosnippet>298</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#299 id=299 data-nosnippet>299</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#300 id=300 data-nosnippet>300</a>        location: Location,
+<a href=#300 id=300 data-nosnippet>300</a>        location: ProgramSite,
 <a href=#301 id=301 data-nosnippet>301</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Relations&lt;<span class="lifetime">'a</span>&gt;, FormulaFailure&gt; {
 <a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">let </span>components = <span class="self">self
 <a href=#303 id=303 data-nosnippet>303</a>            </span>.components
@@ -350,7 +350,7 @@
 <a href=#350 id=350 data-nosnippet>350</a>    predicate: PredicateRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#351 id=351 data-nosnippet>351</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#352 id=352 data-nosnippet>352</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#353 id=353 data-nosnippet>353</a>    location: Location,
+<a href=#353 id=353 data-nosnippet>353</a>    location: ProgramSite,
 <a href=#354 id=354 data-nosnippet>354</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Result</span>&lt;usize, usize&gt;, FormulaFailure&gt; {
 <a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">let </span><span class="kw-2">mut </span>start = <span class="number">0</span>;
 <a href=#356 id=356 data-nosnippet>356</a>    <span class="kw">let </span><span class="kw-2">mut </span>end = rows.len();
@@ -400,7 +400,7 @@
 <a href=#400 id=400 data-nosnippet>400</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>owner_limits(
 <a href=#401 id=401 data-nosnippet>401</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#402 id=402 data-nosnippet>402</a>    outer: u128,
-<a href=#403 id=403 data-nosnippet>403</a>    location: Location,
+<a href=#403 id=403 data-nosnippet>403</a>    location: ProgramSite,
 <a href=#404 id=404 data-nosnippet>404</a>) -&gt; <span class="prelude-ty">Result</span>&lt;atom_interner::Limits, FormulaFailure&gt; {
 <a href=#405 id=405 data-nosnippet>405</a>    ceiling(
 <a href=#406 id=406 data-nosnippet>406</a>        FormulaResource::SupportBytes,
@@ -422,7 +422,7 @@
 <a href=#422 id=422 data-nosnippet>422</a>    error: atom_interner::Failure&lt;FormulaFailure&gt;,
 <a href=#423 id=423 data-nosnippet>423</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#424 id=424 data-nosnippet>424</a>    outer: u128,
-<a href=#425 id=425 data-nosnippet>425</a>    location: Location,
+<a href=#425 id=425 data-nosnippet>425</a>    location: ProgramSite,
 <a href=#426 id=426 data-nosnippet>426</a>) -&gt; FormulaFailure {
 <a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">match </span>error {
 <a href=#428 id=428 data-nosnippet>428</a>        atom_interner::Failure::Stopped(error) =&gt; error,
@@ -526,7 +526,7 @@
 <a href=#526 id=526 data-nosnippet>526</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#527 id=527 data-nosnippet>527</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
 <a href=#528 id=528 data-nosnippet>528</a>    outer_bytes: usize,
-<a href=#529 id=529 data-nosnippet>529</a>    location: Location,
+<a href=#529 id=529 data-nosnippet>529</a>    location: ProgramSite,
 <a href=#530 id=530 data-nosnippet>530</a>) -&gt; FormulaFailure {
 <a href=#531 id=531 data-nosnippet>531</a>    counters.record(Event::SupportPeakBytes(
 <a href=#532 id=532 data-nosnippet>532</a>        outer_bytes <span class="kw">as </span>u128 + error.peak_construction_bytes <span class="kw">as </span>u128,
@@ -601,7 +601,7 @@
 <a href=#601 id=601 data-nosnippet>601</a>        predicate: PredicateRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#602 id=602 data-nosnippet>602</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#603 id=603 data-nosnippet>603</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#604 id=604 data-nosnippet>604</a>        location: Location,
+<a href=#604 id=604 data-nosnippet>604</a>        location: ProgramSite,
 <a href=#605 id=605 data-nosnippet>605</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>RelationRows&lt;<span class="lifetime">'source</span>&gt;&gt;, FormulaFailure&gt; {
 <a href=#606 id=606 data-nosnippet>606</a>        <span class="self">self</span>.find_checked(predicate, || counters.work(limits, location))
 <a href=#607 id=607 data-nosnippet>607</a>    }
@@ -648,7 +648,7 @@
 <a href=#648 id=648 data-nosnippet>648</a>        predicate: <span class="kw">impl </span>Into&lt;PredicateRef&lt;<span class="lifetime">'predicate</span>&gt;&gt;,
 <a href=#649 id=649 data-nosnippet>649</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#650 id=650 data-nosnippet>650</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#651 id=651 data-nosnippet>651</a>        location: Location,
+<a href=#651 id=651 data-nosnippet>651</a>        location: ProgramSite,
 <a href=#652 id=652 data-nosnippet>652</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Relation&lt;<span class="lifetime">'_</span>&gt;&gt;, FormulaFailure&gt; {
 <a href=#653 id=653 data-nosnippet>653</a>        <span class="self">self</span>.find_with(predicate.into(), limits, counters, location)
 <a href=#654 id=654 data-nosnippet>654</a>            .map(|rows| rows.map(|rows| <span class="kw-2">&amp;</span>rows.relation))
@@ -698,7 +698,7 @@
 <a href=#698 id=698 data-nosnippet>698</a>        key: <span class="kw-2">&amp;</span>AtomKey&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#699 id=699 data-nosnippet>699</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#700 id=700 data-nosnippet>700</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#701 id=701 data-nosnippet>701</a>        location: Location,
+<a href=#701 id=701 data-nosnippet>701</a>        location: ProgramSite,
 <a href=#702 id=702 data-nosnippet>702</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#703 id=703 data-nosnippet>703</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(rows) = <span class="self">self</span>.find_with(key.predicate(), limits, counters, location)<span class="question-mark">? </span><span class="kw">else </span>{
 <a href=#704 id=704 data-nosnippet>704</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
@@ -729,7 +729,7 @@
 <a href=#729 id=729 data-nosnippet>729</a>        values: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;Value&gt;],
 <a href=#730 id=730 data-nosnippet>730</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#731 id=731 data-nosnippet>731</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#732 id=732 data-nosnippet>732</a>        location: Location,
+<a href=#732 id=732 data-nosnippet>732</a>        location: ProgramSite,
 <a href=#733 id=733 data-nosnippet>733</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[usize]&gt;, FormulaFailure&gt; {
 <a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">let </span>rows = <span class="self">self</span>.find_with(pattern.predicate().into(), limits, counters, location)<span class="question-mark">?</span>;
 <a href=#735 id=735 data-nosnippet>735</a>        <span class="self">self</span>.probe_at(
@@ -843,7 +843,7 @@
 <a href=#843 id=843 data-nosnippet>843</a>    }
 <a href=#844 id=844 data-nosnippet>844</a>}
 <a href=#845 id=845 data-nosnippet>845</a>
-<a href=#846 id=846 data-nosnippet>846</a><span class="kw">fn </span>failure(error: Failure, location: Location) -&gt; FormulaFailure {
+<a href=#846 id=846 data-nosnippet>846</a><span class="kw">fn </span>failure(error: Failure, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#847 id=847 data-nosnippet>847</a>    FormulaFailure::SupportRelation { error, location }
 <a href=#848 id=848 data-nosnippet>848</a>}
 <a href=#849 id=849 data-nosnippet>849</a>
@@ -854,7 +854,7 @@
 <a href=#854 id=854 data-nosnippet>854</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#855 id=855 data-nosnippet>855</a>    base_work: u64,
 <a href=#856 id=856 data-nosnippet>856</a>    outer_bytes: usize,
-<a href=#857 id=857 data-nosnippet>857</a>    location: Location,
+<a href=#857 id=857 data-nosnippet>857</a>    location: ProgramSite,
 <a href=#858 id=858 data-nosnippet>858</a>) -&gt; FormulaFailure {
 <a href=#859 id=859 data-nosnippet>859</a>    <span class="kw">let </span>(resource, base, observed, limit) = <span class="kw">match </span>error {
 <a href=#860 id=860 data-nosnippet>860</a>        Failure::Limit {
@@ -898,7 +898,7 @@
 <a href=#898 id=898 data-nosnippet>898</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) bytes: usize,
 <a href=#899 id=899 data-nosnippet>899</a>    external_bytes: u128,
 <a href=#900 id=900 data-nosnippet>900</a>    limits: <span class="kw-2">&amp;</span><span class="lifetime">'limits </span>FormulaLimits,
-<a href=#901 id=901 data-nosnippet>901</a>    location: Location,
+<a href=#901 id=901 data-nosnippet>901</a>    location: ProgramSite,
 <a href=#902 id=902 data-nosnippet>902</a>    observed: <span class="kw">crate</span>::grounding_observer::Work,
 <a href=#903 id=903 data-nosnippet>903</a>}
 <a href=#904 id=904 data-nosnippet>904</a>
@@ -908,7 +908,7 @@
 <a href=#908 id=908 data-nosnippet>908</a>        external_bytes: u128,
 <a href=#909 id=909 data-nosnippet>909</a>        limits: <span class="kw-2">&amp;</span><span class="lifetime">'limits </span>FormulaLimits,
 <a href=#910 id=910 data-nosnippet>910</a>        counters: <span class="kw-2">&amp;</span>Counters,
-<a href=#911 id=911 data-nosnippet>911</a>        location: Location,
+<a href=#911 id=911 data-nosnippet>911</a>        location: ProgramSite,
 <a href=#912 id=912 data-nosnippet>912</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#913 id=913 data-nosnippet>913</a>        <span class="self">Self </span>{
 <a href=#914 id=914 data-nosnippet>914</a>            bytes,

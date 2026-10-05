@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,6 +196,10 @@ the package with <code>cd proofs &amp;&amp; lake build</code>; <code>lean-toolch
 Lean version. A small consumer file in that directory can be checked with
 <code>lake env lean Consumer.lean</code>. Lean declarations are maintained with the semantic
 changes they describe, not generated from the prose in this book.</p>
+<p>The library has two responsibilities. General ASP definitions and algorithms
+are reusable independently of zetesis. Representation and implementation
+correspondences apply those results to a particular solver. A proof at the
+first boundary does not silently establish the second.</p>
 <p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/README.md#build-and-audit">proof-library guide</a>
 describes the strict axiom audit. After source changes, the maintained
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-maintenance/README.md#capture-current-proof-evidence">capture command</a>
@@ -226,6 +230,13 @@ requires minimality among models of the reduct frozen at <code>M</code>.</p>
 is equivalent to equality with the least closure plus satisfaction of
 constraints. Least-closure checking is justified by the representation; it is
 not assumed in the general definition of an answer set.</p>
+<p><code>FiniteClosure</code> supplies an executable sequential scan after ground filters
+have been discharged. Each inserted head is sound; an unchanged full scan is
+closed. A changing scan adds a new listed head, so the head-list length plus
+one bounds the required scans. <code>closure_exact</code> proves the computed result is
+<code>Gamma</code>, and <code>accepts_exact</code> includes constraints and agreement with the frozen
+seed. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-closure.md">closure guide</a>
+explains the argument and its separate Rust obligations.</p>
 <h2 id="general-formulas"><a class="header" href="#general-formulas">General formulas</a></h2>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Ferraris.lean"><code>Zetesis.Ferraris</code></a>
 defines finite syntax trees, <code>Satisfies</code>, <code>Reduct</code>, <code>Models</code>, <code>MinimalModel</code> and
@@ -246,6 +257,14 @@ correspondence.</p>
 <p>Lean uses <code>Stable</code> to connect with the stable-model literature. The solver-facing
 term <strong>answer set</strong> denotes that same semantic property. Naming an unchecked Rust
 value <code>AnswerSet</code> would not establish the property.</p>
+<p><code>ReductEvaluation</code> computes original truth and then the truth of the frozen
+formula DAG. Its node and root correspondence theorems derive mask correctness
+from the first fold. <code>FiniteMembership.check_iff_answer_set</code> composes that result
+with an explicit enumeration of a finite candidate’s subsets. It proves an
+executable reference membership algorithm against the Ferraris definition;
+neither evaluator agreement nor subset coverage is assumed. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-membership.md">membership guide</a>
+states the finite algorithm and its limits.</p>
 <p>The <a href="normal-rules.html">next chapter</a> proves the connection between the independently
 defined normal-rule and Ferraris answer sets. This bridge is mathematical;
 source grounding and the Rust representation still require their own

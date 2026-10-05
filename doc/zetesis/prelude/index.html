@@ -1,0 +1,666 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The canonical construction, parsing, analysis, solving and reading vocabulary."><title>zetesis::prelude - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module prelude</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../zetesis/index.html">zetesis</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module prelude</a></h2><h3><a href="#modules">Module Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate zetesis</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">zetesis</a></div><h1>Module <span>prelude</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/zetesis/lib.rs.html#61">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The canonical construction, parsing, analysis, solving and reading vocabulary.</p>
+<p><code>Query</code> here is the program tier’s ASP query statement. The epistemic query
+remains [<code>query::Query</code>]. <code>WorldView</code> is the query tier’s
+nonempty live reading; <code>Snapshot</code> retains its complete, nonempty family.
+The native <code>zetesis_solve::WorldView</code> is a separate complete-family type
+whose empty family establishes inconsistency.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="ast/index.html" title="mod zetesis::prelude::ast">ast</a></dt><dd>The typed AST (docs/design/syntax.md §8): cheap wrappers over the red
+cursors, one per node kind, an enum per grammar class, accessors
+mirroring the productions’ slots in the productions’ order —
+syntactic accessors, no semantic opinions. Every wrapper is a view:
+<code>!Send</code>, borrowed from the model, positional in its equality. This
+file holds the wrapper macros, the enums, the traits, and the roots;
+<code>nodes</code> the wrappers, <code>tokens</code> the token wrappers and their values.</dd><dt><a class="mod" href="base/index.html" title="mod zetesis::prelude::base">base</a></dt><dd>Source-text model, spans, line indexing, and the diagnostics model:
+the shared vocabulary of <em>location</em> and <em>report</em> under every tier.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Admitted.html" title="struct zetesis::prelude::Admitted">Admitted</a></dt><dd>A parse the core admitted at Door A (docs/design/solve.md §10.2): its
+statements raised once, in source order, each with its part and provenance
+(docs/design/program.md §8), and the program they collect to. Its only
+constructor is <a href="struct.Admitted.html#method.of" title="associated function zetesis::prelude::Admitted::of"><code>Admitted::of</code></a>, so an <code>Admitted</code> that exists raised cleanly
+— which it certifies, and nothing of a backend’s language, arithmetic, or
+resources.</dd><dt><a class="struct" href="struct.Agent.html" title="struct zetesis::prelude::Agent">Agent</a></dt><dd>A program made active — the same knowledge seen not as an object of study
+but as a reasoner one drives (docs/design/solve.md §6.1). An agent is
+instantiated from a <code>Program</code> that becomes its knowledge base, and it owns
+both that knowledge and the backend that reasons for it: the owned value is
+the authority to drive the engine, dropping it is revocation, and there is
+no ambient engine or global mutable state. Because the knowledge is owned
+rather than borrowed off a stack frame, an agent is <code>'static</code> whenever its
+backend is, and so embeds behind a service boundary without ceremony.</dd><dt><a class="struct" href="struct.Analysis.html" title="struct zetesis::prelude::Analysis">Analysis</a></dt><dd>A model of a program’s structural facts (§1): its construct scan, its predicate
+dependency graph, its safety and finiteness, and its program classes, computed
+once as a pure, total function of a <code>Program</code> and read many ways (§3). Owned
+plain data — <code>Send + Sync + 'static</code> — so it is computed on one thread and read
+on another, kept and compared, without a lifetime (§8). Equality is structural
+and provenance-blind (§8); clone is linear.</dd><dt><a class="struct" href="struct.Annotations.html" title="struct zetesis::prelude::Annotations">Annotations</a></dt><dd>Tool and modeler annotations (§6.2): a documentation string (from a <code>%!</code> doc
+comment, §8), a label, a reference, and a trace directive an explanation tool
+attaches (§2). Each kind is a set, unioned on merge.</dd><dt><a class="struct" href="struct.Assumption.html" title="struct zetesis::prelude::Assumption">Assumption</a></dt><dd>A single assumption (docs/design/solve.md §6.3): one program atom fixed
+true or false for the span of one question — a hypothesis, discharged after
+it, as distinct from a retraction (§6.2), which amends the knowledge base
+and persists. The atom is a function symbol, a predicate or constant under
+its strong sign; <a href="struct.Assumption.html#method.new" title="associated function zetesis::prelude::Assumption::new"><code>Assumption::new</code></a> refuses every other symbol, so an
+assumption over a number, a string, a tuple, <code>#inf</code>, or <code>#sup</code> — none of
+which a program asserts — cannot be constructed. The raw set of assumptions
+is what the literature names, what <code>solve_assuming</code> scopes by, and what
+blame reports (§5.4). Owned plain data.</dd><dt><a class="struct" href="struct.AstChildren.html" title="struct zetesis::prelude::AstChildren">AstChildren</a></dt><dt><a class="struct" href="struct.AstPtr.html" title="struct zetesis::prelude::AstPtr">AstPtr</a></dt><dd>Like [<code>SyntaxNodePtr</code>], but remembers the type of node.</dd><dt><a class="struct" href="struct.Atom.html" title="struct zetesis::prelude::Atom">Atom</a></dt><dd>An atom (grammar §5.2): a strong sign, a predicate name, and an argument list that
+is one tuple or — an argument-list pool <code>p(a; b)</code> — several (§8). The sign is
+<strong>strong</strong> negation (<code>-p</code>); the default negation is the literal’s (§4.6). Its
+argument terms canonicalize, and a one-alternative pool collapses to <code>Single</code>, when
+the atom passes an ingest door (§5.1, §7.2, §9).</dd><dt><a class="struct" href="struct.Attachment.html" title="struct zetesis::prelude::Attachment">Attachment</a></dt><dd>One comment’s attachment: the element it belongs to and how. The
+anchor is a node or a significant token — a comment before <code>,</code> leads
+the comma, which is what keeps it before the comma when a consumer
+re-emits (kallos’s transposition scar, spec §5.1); a comment on the
+line of a rule’s dot trails the rule. A view, not data: the anchor is
+a cursor, which is the shape a formatter holding the tree wants — it
+navigates from the anchor directly — and it lives no longer than the
+tree it reads.</dd><dt><a class="struct" href="struct.BindingPattern.html" title="struct zetesis::prelude::BindingPattern">Binding<wbr>Pattern</a></dt><dd>The input to <a href="struct.Snapshot.html#method.bindings" title="method zetesis::prelude::Snapshot::bindings"><code>Snapshot::bindings</code></a> and the agent’s <code>bindings</code> (docs/design/query.md §2.1,
+§2.5): an open pattern this tier’s partition policy accepts — a well-formed pattern
+(program.md §11.2) with every position named. A <code>BindingPattern</code> that exists is one every
+reading accepts, so <code>bindings</code> never fails on pattern validity and the agent checks the
+pattern before it pays for a solve — the policy made a type, as [<code>Query</code>] is for a ground
+query.</dd><dt><a class="struct" href="struct.Bindings.html" title="struct zetesis::prelude::Bindings">Bindings</a></dt><dd>The three-valued partition of an open pattern’s ground instances over a world
+view (docs/design/query.md §2.5): each instance is <code>yes</code> (present in every
+member), <code>no</code> (its contrary present in every member — refuted, more than merely
+absent), or <code>unknown</code> (mentioned by some member but settled by none). The same
+trichotomy as <a href="enum.Answer.html" title="enum zetesis::prelude::Answer"><code>Answer</code></a>, carried to a pattern’s bindings rather than to a single
+ground query.</dd><dt><a class="struct" href="struct.Body.html" title="struct zetesis::prelude::Body">Body</a></dt><dd>A rule body: a conjunction, hence a set (grammar §5.6). Its one filter axis is the
+<strong>default-negation partition</strong> (the reduct’s B⁺/B⁻, §4.5).</dd><dt><a class="struct" href="struct.BodyAggregateElement.html" title="struct zetesis::prelude::BodyAggregateElement">Body<wbr>Aggregate<wbr>Element</a></dt><dd>A body aggregate element (grammar §5.3): a term tuple under a condition. It <em>tests</em>,
+so it carries no head literal — a <code>FunctionAggregate</code>’s element (§4.7).</dd><dt><a class="struct" href="struct.Capabilities.html" title="struct zetesis::prelude::Capabilities">Capabilities</a></dt><dd>A backend’s declared capabilities (docs/design/solve.md §4.1): the closed
+set of bits and enums a backend answers for itself, read — <code>O(1)</code>, pure —
+before a request is paid for. A request beyond the declaration is a typed
+<a href="struct.Fault.html" title="struct zetesis::prelude::Fault"><code>Fault</code></a>, never a silent degrade; each bit gates the contract method that
+is the sole engine primitive for its witness.</dd><dt><a class="struct" href="struct.Choice.html" title="struct zetesis::prelude::Choice">Choice</a></dt><dd>A choice head (grammar §5.3): two optional guards over counted conditioned literals,
+<code>1 { a; b } 2</code> (§4.4).</dd><dt><a class="struct" href="struct.ChoiceElement.html" title="struct zetesis::prelude::ChoiceElement">Choice<wbr>Element</a></dt><dd>A choice element (grammar §5.3): a literal under an optional condition (§4.4).</dd><dt><a class="struct" href="struct.Classes.html" title="struct zetesis::prelude::Classes">Classes</a></dt><dd>The classes of the literature a program falls in (§6): the recursion classes read
+off the dependency graph (§6.2), the syntactic classes read off its structure
+(§6.3), and the routable projection over them (§6.4). Read once from a program by
+<code>Classes::of</code>; every value it holds is owned plain data, so it is computed on one
+thread and read on another, kept and compared, without a lifetime (§8).</dd><dt><a class="struct" href="struct.Comparison.html" title="struct zetesis::prelude::Comparison">Comparison</a></dt><dd>A comparison chain (grammar §5.2): a first term and <strong>one or more</strong> relation/term
+steps. <code>1 &lt; X &lt; 5</code> is one literal carrying a guard sequence, not a conjunction. The
+at-least-one-step invariant is guarded — the fields are private, so an empty chain,
+which the grammar does not admit, is unrepresentable (§4.6).</dd><dt><a class="struct" href="struct.Component.html" title="struct zetesis::prelude::Component">Component</a></dt><dd>One strongly-connected component (§4): the mutually-recursive predicates, and how
+the recursion within it runs — the facts the recursion classes read (§6). A
+component of the <em>positive</em> graph is a positive cycle by construction.</dd><dt><a class="struct" href="struct.Condition.html" title="struct zetesis::prelude::Condition">Condition</a></dt><dd>A condition (grammar §5.4): the literals after a <code>:</code>, a sequence — present and
+empty when the colon is (<code>p : .</code>). Its literals carry provenance (§6.2).</dd><dt><a class="struct" href="struct.ConditionalLiteral.html" title="struct zetesis::prelude::ConditionalLiteral">Conditional<wbr>Literal</a></dt><dd>A conditional literal (grammar §5.4): a literal under a condition (§4.6).</dd><dt><a class="struct" href="struct.ConsequenceRequest.html" title="struct zetesis::prelude::ConsequenceRequest">Consequence<wbr>Request</a></dt><dd>A cautious or brave consequence request (docs/design/solve.md §5.2): the
+scenario the consequences range over, so the agent’s scoped consequence
+doors (§6.2) range over that scenario’s models, never the unscoped program
+(docs/design/query.md §2.4). Empty — the unscoped program, under
+no assumption — is <code>Default</code>. The mode is the method’s own parameter, not
+carried here a second time.</dd><dt><a class="struct" href="struct.Consequences.html" title="struct zetesis::prelude::Consequences">Consequences</a></dt><dd>Cautious (⋂) or brave (⋃) consequences (docs/design/solve.md §5.2): a set
+of ground symbols carrying the <a href="enum.Mode.html" title="enum zetesis::prelude::Mode"><code>Mode</code></a> that produced it, so a value that
+has travelled still says which question it answers. Not an answer set —
+its own type, for that reason. Built by the <a href="struct.Consequences.html#method.fold" title="associated function zetesis::prelude::Consequences::fold"><code>fold</code></a> or
+by the core’s gate over a <a href="enum.NativeAnswer.html" title="enum zetesis::prelude::NativeAnswer"><code>NativeAnswer</code></a>: a backend reports, and never
+builds one. The set ranges over the model set of the
+question that produced it — all stable models for a solve’s, whose question
+ignores any objective; the optimal set for an optimization’s — and the
+optimal-vs-all marker joins these fields with optimization; non-exhaustive
+leaves it the room.</dd><dt><a class="struct" href="struct.Const.html" title="struct zetesis::prelude::Const">Const</a></dt><dd>A constant directive (grammar §5.9): a name, a value in the constant-term subset, and
+an optional policy. The value is a <code>Term</code>, <strong>not</strong> a pre-evaluated <code>Symbol</code> (§4.8):
+<code>#const x = 1+2.</code> and <code>#const x = 3.</code> are structurally distinct — a consumer that
+wants the denoted symbol calls <code>evaluate</code> (§3.5). The constant-term-subset check is
+the raise’s (grammar §5.9); this value carries the term as written.</dd><dt><a class="struct" href="struct.Constructs.html" title="struct zetesis::prelude::Constructs">Constructs</a></dt><dd>Which constructs a program uses. A set of flags with, for each, the first
+occurrence’s statement so a consumer can point at one (§7). Equality is
+structural and provenance-blind: the witness carrier erases provenance
+(program §6.2), so two programs equal up to provenance yield equal scans.</dd><dt><a class="struct" href="struct.Defined.html" title="struct zetesis::prelude::Defined">Defined</a></dt><dd>A <code>#defined</code> directive (grammar §5.9): a signature.</dd><dt><a class="struct" href="struct.DependencyGraph.html" title="struct zetesis::prelude::DependencyGraph">Dependency<wbr>Graph</a></dt><dd>The predicate dependency graph (§4). Nodes are predicate signatures — <code>p</code> and
+its strong negation <code>-p</code> distinct (grammar §5.2); edges are tagged by
+<code>DependencyKind</code>, one per mode a dependency runs through; and the
+strongly-connected components are decomposed once at construction. Equality is
+structural.</dd><dt><a class="struct" href="struct.Disjunction.html" title="struct zetesis::prelude::Disjunction">Disjunction</a></dt><dd>A disjunctive head (grammar §5.5): a set of conditioned literals, <code>a | b | …</code>.</dd><dt><a class="struct" href="struct.DisjunctionElement.html" title="struct zetesis::prelude::DisjunctionElement">Disjunction<wbr>Element</a></dt><dd>A disjunction element (grammar §5.5): a literal under an optional condition — the
+singleton conditioned head <code>p(X) : q(X)</code> among them (§4.4).</dd><dt><a class="struct" href="struct.Edge.html" title="struct zetesis::prelude::Edge">Edge</a></dt><dd>An <code>#edge</code> directive (grammar §5.9): node pairs under a body (§4.8).</dd><dt><a class="struct" href="struct.EmptyPool.html" title="struct zetesis::prelude::EmptyPool">Empty<wbr>Pool</a></dt><dd>A pool constructed with no alternatives — a malformed value refused at the constructor door
+(§5.1, §7.2). A pool is a disjunction of one or more alternatives; its ≥2 normal form is
+canonicalization’s (§5.1), but the emptiness is a validity invariant a constructor refuses.
+Returned by <a href="enum.Term.html#method.pool" title="associated function zetesis::prelude::Term::pool"><code>Term::pool</code></a> and <a href="struct.Atom.html#method.pooled" title="associated function zetesis::prelude::Atom::pooled"><code>Atom::pooled</code></a>.</dd><dt><a class="struct" href="struct.External.html" title="struct zetesis::prelude::External">External</a></dt><dd>An <code>#external</code> directive (grammar §5.9): an atom under a body, with an optional value
+— carried, never meaningful (grammar §13, §4.8).</dd><dt><a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a></dt><dd>A backend or request fault (docs/design/solve.md §5.4). Reserved for engine
+and request failures: an inconsistent or inconclusive program is a
+<code>Determination</code> value (§5.1), never a fault.</dd><dt><a class="struct" href="struct.FromSymbolError.html" title="struct zetesis::prelude::FromSymbolError">From<wbr>Symbol<wbr>Error</a></dt><dd>The symbol a <code>FromSymbol</code> conversion did not match, the class it expected, and the
+locus of the offending subsymbol (§3.4). The offending symbol is carried by value
+(spec §1.5). <code>#[non_exhaustive]</code>: the shape grows — a richer locus, an added field —
+without breaking a downstream, which reads its fields and builds it through the
+factories below, never a struct literal.</dd><dt><a class="struct" href="struct.FunctionAggregate.html" title="struct zetesis::prelude::FunctionAggregate">Function<wbr>Aggregate</a></dt><dd>A body function aggregate (grammar §5.3): two guards, the function, and body elements
+that <em>test</em> (§4.7). Its elements are a set (§4).</dd><dt><a class="struct" href="struct.GreenNode.html" title="struct zetesis::prelude::GreenNode">Green<wbr>Node</a></dt><dd>Internal node in the immutable tree.
+It has other nodes and tokens as children.</dd><dt><a class="struct" href="struct.GroundOptions.html" title="struct zetesis::prelude::GroundOptions">Ground<wbr>Options</a></dt><dd>The options <code>ground</code> instantiates a set of program parts under
+(docs/design/solve.md §4.1, §6.3). Reserved: carries no parameter yet, so
+the empty options are the ones there are, and <code>Default</code>; a parameter is a
+new field, not a migration.</dd><dt><a class="struct" href="struct.GroundProgram.html" title="struct zetesis::prelude::GroundProgram">Ground<wbr>Program</a></dt><dd>A ground program, as §10.4’s law holds it (docs/design/solve.md §10.4) —
+engine-free data, the machine-IR of §1.1, the anchor through which an
+explanation client attributes answer-set atoms back to source. It holds each
+statement its rules were instantiated from once and whole, with its part and
+its provenance: the program’s statements, or a parse’s occurrences at the
+per-occurrence grain (<a href="enum.Grain.html" title="enum zetesis::prelude::Grain"><code>Grain</code></a>). Each ground rule names its statement
+within it, so a merged statement’s every origin reaches its rules, two
+content-equal statements under different parts stay apart, and no rule
+clones its statement. The part is the statement’s as declared, <code>step(t)</code>;
+the instance a grounding gave it belongs to the fuller observer the reserved
+seams carry (§14). Cost: the statements and their parts’ keys once,
+Θ(program), and one index per rule.</dd><dt><a class="struct" href="struct.GroundRule.html" title="struct zetesis::prelude::GroundRule">Ground<wbr>Rule</a></dt><dd>One ground rule of a <a href="struct.GroundProgram.html" title="struct zetesis::prelude::GroundProgram"><code>GroundProgram</code></a> (§10.4). Its ground head and body
+join with the observer that produces them (§11.1); today it names its
+statement, by position among its program’s.</dd><dt><a class="struct" href="struct.Guard.html" title="struct zetesis::prelude::Guard">Guard</a></dt><dd>A guard (grammar §5.3): a relation and a term. A <code>None</code> relation is the grammar’s
+default (<code>&lt;=</code> on its side), stated as absence because that is what the author wrote
+(§4.7).</dd><dt><a class="struct" href="struct.HeadAggregate.html" title="struct zetesis::prelude::HeadAggregate">Head<wbr>Aggregate</a></dt><dd>A head function aggregate (grammar §5.3): the same two guards and function over head
+elements that <em>derive</em> (§4.4, §4.7); a <code>Head::Aggregate(HeadAggregate)</code>. Two distinct
+concrete types keep the taxonomy regular (§4.7).</dd><dt><a class="struct" href="struct.HeadAggregateElement.html" title="struct zetesis::prelude::HeadAggregateElement">Head<wbr>Aggregate<wbr>Element</a></dt><dd>A head aggregate element (grammar §5.3): a term tuple, the literal it <em>derives</em>, and a
+condition. The literal is what makes it a <em>head</em> element, and it exists only here, so
+a <code>FunctionAggregate</code> cannot hold one (§4.7).</dd><dt><a class="struct" href="struct.Heuristic.html" title="struct zetesis::prelude::Heuristic">Heuristic</a></dt><dd>A <code>#heuristic</code> directive (grammar §5.9): an atom under a body, with a bias, an
+optional priority, and a modifier (§4.8).</dd><dt><a class="struct" href="struct.Include.html" title="struct zetesis::prelude::Include">Include</a></dt><dd>An <code>#include</code> directive (grammar §5.9): its target, parsed and never resolved (§4.8).</dd><dt><a class="struct" href="struct.Incumbent.html" title="struct zetesis::prelude::Incumbent">Incumbent</a></dt><dd>A step of the improving trajectory (docs/design/solve.md §5.2): one model
+the search found and retained, with its levels in the objectives’ own terms
+— one completed result, published only once the backend has retained it.
+Not proven optimal, and never convertible into an [<code>Optimum</code>], so a
+best-found cannot pose as proven (§5.3). No public constructor: its door
+lands with <code>optimize</code>’s, beside <code>Optimum</code>‘s, where the levels’ type is fixed
+for both. Cost: one model conversion at the step it is published.</dd><dt><a class="struct" href="struct.Interrupt.html" title="struct zetesis::prelude::Interrupt">Interrupt</a></dt><dd>The core’s handle that interrupts the agent’s question in flight from
+another thread (docs/design/solve.md §6.2, §6.3), over the backend’s
+<a href="trait.Cancel.html" title="trait zetesis::prelude::Cancel"><code>Cancel</code></a> primitive. The core owns it so it can record a caller’s pull, and
+so attribute a stop to the caller rather than to a deadline. Obtained from
+<a href="struct.Agent.html#method.interrupt" title="method zetesis::prelude::Agent::interrupt"><code>Agent::interrupt</code></a> before a question borrows the agent, and pulled from
+any thread: <code>Send + Sync</code>.</dd><dt><a class="struct" href="struct.LexContext.html" title="struct zetesis::prelude::LexContext">LexContext</a></dt><dd>The lexical context an adjacency stands in: the dialect and the mode
+in force at <code>left</code>.</dd><dt><a class="struct" href="struct.Literal.html" title="struct zetesis::prelude::Literal">Literal</a></dt><dd>A literal (grammar §5.2): a default-negation prefix over an atom, a comparison, or
+a boolean constant (§4.6).</dd><dt><a class="struct" href="struct.Location.html" title="struct zetesis::prelude::Location">Location</a></dt><dd>A span in a named source — the cross-source form (base.md §4.3).
+Fields are public: any (source, span) pair is a valid value;
+validity against a particular text is checked where text is in
+scope. Derived ordering is (source, then span): batch order groups
+by source.</dd><dt><a class="struct" href="struct.LowerError.html" title="struct zetesis::prelude::LowerError">Lower<wbr>Error</a></dt><dd>A located diagnostic the raise emits when a recovered fragment holds a term the
+value cannot represent, or holds text the authority rejects that the set would merge
+into a program it accepts (program §6.3, §8): the offending region, by span, and its
+kind. Owned plain data (<code>Send + Sync + 'static</code>); the kinds the statement and directive
+raise add join the enum later, which is why it is <code>#[non_exhaustive]</code>.</dd><dt><a class="struct" href="struct.Mismatch.html" title="struct zetesis::prelude::Mismatch">Mismatch</a></dt><dd>The first divergence, as a witness: the index in the sequence and
+both sides — a side is <code>None</code> where its sequence ended first. Each
+side carries the token’s kind, its content, and its location in its
+own tree, so a formatter’s <code>--safe</code> mode reports where in the input
+and where in the output the claim broke; the kind says whether the
+element that diverged is a comment or a significant token.</dd><dt><a class="struct" href="struct.Model.html" title="struct zetesis::prelude::Model">Model</a></dt><dd>One model of the program (docs/design/solve.md §5.1) — the unit every
+stream yields and every complete collection holds: its answer set, every
+literal true in it; what the program displays of it by its <code>#show</code>
+directives, which the core derives (<a href="struct.Model.html#method.shown" title="method zetesis::prelude::Model::shown"><code>Model::shown</code></a>); and the theory
+assignment a backend evaluating theory atoms supplies with it (§5.4) — empty
+for a backend that evaluates none. The readings read the answer set and only
+it; the display and the assignment ride beside it, never laundered into
+atoms. Cost: the answer set by value; the display stored only where it
+differs from the answer set; and, for a backend evaluating no theory, an
+empty assignment — so a model of a program without directives carries
+nothing beyond its answer set. Equality compares the display by content.
+The assignment-bearing construction door lands with the theory assignments’
+own constructors, when a theory-evaluating backend is built (§11.1).</dd><dt><a class="struct" href="struct.Models.html" title="struct zetesis::prelude::Models">Models</a></dt><dd>The <code>Consistent</code> payload (docs/design/solve.md §5.2): the live-run-access
+handle the query tier reads — no engine and no backend access. It OWNS the live
+run, from the consuming resolver <code>into_determination</code> (<code>'static</code> when the run
+owns a bare program’s ephemeral engine, §6.4), or BORROWS it, from the
+inspecting <code>determination(&amp;mut self)</code>. It exposes the raw
+material a world view drives (the member stream, <code>is_exhausted</code>, the
+<code>scenario</code>); the <code>Models&lt;'a&gt; → WorldView&lt;'a&gt;</code> transition lives on the query
+side (query.md §2.7), so this carries no world view of its own. Reached only
+from a <code>Consistent</code> reading — the search has, or had, at least one model,
+though its members may already have been streamed away.</dd><dt><a class="struct" href="struct.Name.html" title="struct zetesis::prelude::Name">Name</a></dt><dd>A validated identifier — a function or predicate name (grammar §4.2). The
+invariant “a name is a legal identifier” is guarded at construction, so a
+<code>Symbol</code> or a <code>Term</code> cannot carry a name the grammar would reject (§3.2).</dd><dt><a class="struct" href="struct.NotAVariable.html" title="struct zetesis::prelude::NotAVariable">NotA<wbr>Variable</a></dt><dd>Text that is not the grammar’s <code>VARIABLE</code> class.</dd><dt><a class="struct" href="struct.NotAnIdentifier.html" title="struct zetesis::prelude::NotAnIdentifier">NotAn<wbr>Identifier</a></dt><dd>Text that is not the grammar’s <code>IDENTIFIER</code> class, carrying the offending
+text — a value, not a rendered string (spec §1.5).</dd><dt><a class="struct" href="struct.NotExhausted.html" title="struct zetesis::prelude::NotExhausted">NotExhausted</a></dt><dd>The completeness refusal: a complete collection was asked of a handle that
+cannot yield one (docs/design/solve.md §5.2, §5.3) — its models already
+streamed, its search stopped short of the space at a named truncation, or
+its search faulted, the fault kept as the cause — so a truncation and a
+fault are never laundered into one anonymous refusal.</dd><dt><a class="struct" href="struct.Observation.html" title="struct zetesis::prelude::Observation">Observation</a></dt><dd>A bulk-observed fact set: the statements one <a href="struct.Agent.html#method.observe" title="method zetesis::prelude::Agent::observe"><code>observe</code></a>
+recorded, named as a unit so a later step can <a href="struct.Agent.html#method.forget" title="method zetesis::prelude::Agent::forget"><code>forget</code></a> them
+together (docs/design/solve.md §6.2).</dd><dt><a class="struct" href="struct.Optimize.html" title="struct zetesis::prelude::Optimize">Optimize</a></dt><dd>Optimization by <code>#minimize</code>/<code>#maximize</code> (grammar §5.7). The direction is a tag; the
+maximize-to-minimize desugaring (by negating weights) is the solve tier’s (§4.2), so
+it is kept structural here and <code>i32::MIN</code> never overflows. Its elements are a set.</dd><dt><a class="struct" href="struct.OptimizeElement.html" title="struct zetesis::prelude::OptimizeElement">Optimize<wbr>Element</a></dt><dd>An optimize element (grammar §5.7): a weight at a priority, a term tuple, and a
+condition. The terms canonicalize at the door (§5.1); the weight carries its own.</dd><dt><a class="struct" href="struct.OptimizeRequest.html" title="struct zetesis::prelude::OptimizeRequest">Optimize<wbr>Request</a></dt><dd>The ask <code>optimize</code> serves (docs/design/solve.md §5.3): the proven optimum,
+with the improving trajectory reported iff asked. Empty — the optimum
+alone — is <code>Default</code>.</dd><dt><a class="struct" href="struct.Optimized.html" title="struct zetesis::prelude::Optimized">Optimized</a></dt><dd>The run handle <code>optimize</code> returns (docs/design/solve.md §5.2): the same
+resolution register as <a href="struct.Solved.html" title="struct zetesis::prelude::Solved"><code>Solved</code></a> — <code>determination</code>/<code>into_determination</code>/
+<code>conclusion</code> — specialised with <code>optimum</code>/<code>trajectory</code> in place of the
+plain-enumeration accessors, so <code>optimize</code> is a sibling of <code>solve</code>, not a
+second vocabulary (§6.4). Its optimal answer sets are read through the
+resolved <a href="enum.Determination.html" title="enum zetesis::prelude::Determination"><code>Determination</code></a>’s <code>Consistent</code> models, ranging over the OPTIMAL
+set under the optimum-proven/exhausted gate. It holds the same live run a
+<code>Solved</code> does, borrowing its engine for <code>'a</code>.</dd><dt><a class="struct" href="struct.Parse.html" title="struct zetesis::prelude::Parse">Parse</a></dt><dd>The result of a parse: the green tree, the diagnostics, and the
+facts a consumer needs to interpret both. Owned, <code>Send + Sync</code>,
+cheap to clone (the tree is reference-counted). <code>T</code> is the typed
+root the entry point yields — a view type, <code>!Send</code>, so it is carried
+as <code>PhantomData&lt;fn() -&gt; T&gt;</code>: a phantom that names <code>T</code> without
+inheriting its auto-traits; <code>Clone</code>, <code>PartialEq</code>, <code>Eq</code>, and <code>Debug</code>
+are implemented without a bound on <code>T</code>.</dd><dt><a class="struct" href="struct.Part.html" title="struct zetesis::prelude::Part">Part</a></dt><dd>A part: a keyed set of statements (§4.1).</dd><dt><a class="struct" href="struct.PartKey.html" title="struct zetesis::prelude::PartKey">PartKey</a></dt><dd>A part’s identity: its name and the <strong>spelled</strong> formal parameters (grammar §5.9’s
+<code>#program name(p, q)</code>), not its arity (§4.1). Two parts named <code>step(t)</code> and <code>step(u)</code>
+therefore coexist rather than merge — merging would rename a formal and could capture
+a global constant.</dd><dt><a class="struct" href="struct.Partial.html" title="struct zetesis::prelude::Partial">Partial</a></dt><dd>The <code>Inconclusive</code> payload (docs/design/solve.md §5.1): how the search
+stopped short of deciding. Non-exhaustive, so it may come to carry more of
+what the search established; its stopping reason is one closed shape,
+read through <a href="struct.Partial.html#method.stopped" title="method zetesis::prelude::Partial::stopped"><code>stopped</code></a>.</dd><dt><a class="struct" href="struct.Program.html" title="struct zetesis::prelude::Program">Program</a></dt><dd>A part-structured set of statements, giving cheap part-wise access for multi-shot use
+(§4.1). <code>base</code> is the implicit default part, always present — seeded at construction
+(<code>Default</code>, <code>empty</code>, <code>of</code>, <code>of_nodes</code>, and <code>of_keyed_nodes</code>), so <code>base</code> is total and the
+empty program has one form.</dd><dt><a class="struct" href="struct.Provenance.html" title="struct zetesis::prelude::Provenance">Provenance</a></dt><dd>A node’s provenance: a set of origin facts and a set of annotations, merged by
+union (§6.2). Empty is the identity; merge is idempotent, commutative, and
+associative — a bounded join-semilattice — which is what lets a content-equal
+collapse (§5) <em>union</em> both nodes’ provenance rather than keep one arbitrarily.</dd><dt><a class="struct" href="struct.Query.html" title="struct zetesis::prelude::Query">Query</a></dt><dd>An ASP-Core-2 query (grammar §6.1): the queried atom — the class of forms a program
+position holds, so it belongs to the statement enum (§4.2).</dd><dt><a class="struct" href="struct.Raised.html" title="struct zetesis::prelude::Raised">Raised</a></dt><dd>The result of a raise (§8): the lowered program and the lowering diagnostics beside
+it. Owned plain data; a diagnostic is a value on a total raise, not a refusal (§15).</dd><dt><a class="struct" href="struct.RaisedSource.html" title="struct zetesis::prelude::RaisedSource">Raised<wbr>Source</a></dt><dd>A <a href="../struct.Program.html" title="struct zetesis::Program"><code>Program</code></a> raised straight from source text (§8): the syntax <a href="struct.Parse.html" title="struct zetesis::prelude::Parse"><code>Parse</code></a> and the
+<a href="struct.Raised.html" title="struct zetesis::prelude::Raised"><code>Raised</code></a> it lowered to, held together, so a consumer reaches a program in one call
+without threading <a href="fn.parse.html" title="fn zetesis::prelude::parse"><code>parse</code></a> into [<code>raise</code>] by hand. [<code>raise_source</code>] and [<code>raise_str</code>]
+mint one.</dd><dt><a class="struct" href="struct.Related.html" title="struct zetesis::prelude::Related">Related</a></dt><dd>A secondary locus, typed: what the location is, so that its text is
+derived at lowering like every other text on the diagnostic and a
+wording change is never a parser change. Closed; a locus is admitted
+here when a golden shows a reader needs it, as a <code>Hint</code> is.</dd><dt><a class="struct" href="struct.Rule.html" title="struct zetesis::prelude::Rule">Rule</a></dt><dd>A rule: a head and a body (grammar §5.7). A <em>fact</em> is the shape “a single literal head,
+an empty body”; a <em>constraint</em> is the shape “a falsum head”. One type — a constraint
+<strong>is</strong> a rule (<code>⊥ ← body</code>) and a fact <strong>is</strong> a rule (<code>h ← ⊤</code>) (§4.3).</dd><dt><a class="struct" href="struct.Safety.html" title="struct zetesis::prelude::Safety">Safety</a></dt><dd>Two facts about grounding a program (§5): which statements are not safe, and whether
+grounding is finite.</dd><dt><a class="struct" href="struct.Scenario.html" title="struct zetesis::prelude::Scenario">Scenario</a></dt><dd>A reusable, named assumption configuration (docs/design/solve.md §6.3) — a
+concept this library introduces, so this library names it (§1.4): the
+literature’s “assumptions” names the raw set, not a bundle bound to an
+identity and re-applied across solves. Collected from assumptions
+(<code>FromIterator</code>) and read back exactly as given, in order; <code>solve_assuming</code>
+takes one, and blame (§5.4) reports the responsible raw subset. The empty
+scenario — no atom fixed — is the unscoped program, and is <code>Default</code>.
+Owned plain data.</dd><dt><a class="struct" href="struct.Script.html" title="struct zetesis::prelude::Script">Script</a></dt><dd>A <code>#script</code> directive (grammar §5.9): a language name and its body text, carried
+opaque and never run — no I/O in this tier (§4.8, syntax §8.2).</dd><dt><a class="struct" href="struct.SetAggregate.html" title="struct zetesis::prelude::SetAggregate">SetAggregate</a></dt><dd>A set (cardinality) aggregate (grammar §5.3): two guards over set elements — the body
+<code>{ … }</code> form (§4.7). Its elements are counted (§4.4).</dd><dt><a class="struct" href="struct.ShowRule.html" title="struct zetesis::prelude::ShowRule">Show<wbr>Rule</a></dt><dd>A program’s show rule (docs/design/solve.md §5.1): which of a model’s atoms
+its <code>#show</code> directives display — every atom where the directives in force
+include no restricting directive (a signature form, or <code>#show.</code>), else the
+atoms of the signatures those list. A backend builds it from the directives
+it holds and hands it to the core with its run; the core applies it, so the
+rule has one implementation. <code>Default</code> is the rule of no directive: every
+atom. O(directives · log directives) to build.</dd><dt><a class="struct" href="struct.Shown.html" title="struct zetesis::prelude::Shown">Shown</a></dt><dd>What a model displays (§5.1): a view of its own type over the displayed
+symbols — not an <code>AnswerSet</code>, so a position that takes one does not take it;
+its symbols reach such a position only through <a href="struct.Shown.html#method.symbols" title="method zetesis::prelude::Shown::symbols"><code>Shown::symbols</code></a>, written
+at the call.</dd><dt><a class="struct" href="struct.Side.html" title="struct zetesis::prelude::Side">Side</a></dt><dd>One side of a divergence.</dd><dt><a class="struct" href="struct.Signature.html" title="struct zetesis::prelude::Signature">Signature</a></dt><dd>The identity of a predicate atom: its strong sign, its name, and its arity —
+the key the dependency graph’s nodes (analysis.md §4) and the pattern
+matcher’s range (§11.3) are built from (§3.7, §4.8).</dd><dt><a class="struct" href="struct.Snapshot.html" title="struct zetesis::prelude::Snapshot">Snapshot</a></dt><dd>The engine-free form of a world view (docs/design/query.md §2.3): the owned,
+materialised models and the scenario they range over, every reading
+<strong>infallible</strong> — no engine remains to fault, no stream to exhaust. Built only by
+<a href="struct.WorldView.html#method.materialize" title="method zetesis::prelude::WorldView::materialize"><code>WorldView::materialize</code></a>, from a world view whose search closed the space, so
+a snapshot is <strong>complete and non-empty by construction</strong>: its cautious and brave
+consequences are the true ⋂ and ⋃ over the whole collection, never a partial
+fold posing as complete.</dd><dt><a class="struct" href="struct.SolveOptions.html" title="struct zetesis::prelude::SolveOptions">Solve<wbr>Options</a></dt><dd>The options the configured question <a href="struct.Agent.html#method.solve_with" title="method zetesis::prelude::Agent::solve_with"><code>solve_with</code></a>
+carries (docs/design/solve.md §6.3): surfaced at the operation they affect
+and nowhere else. The empty options — the pristine question <code>solve</code> asks —
+are <code>Default</code>; non-exhaustive, so a new knob is a new field, not a breaking
+change. Owned plain data.</dd><dt><a class="struct" href="struct.SolveRequest.html" title="struct zetesis::prelude::SolveRequest">Solve<wbr>Request</a></dt><dd>The ask <code>solve</code> serves (docs/design/solve.md §5.2): enumerate the answer
+sets, or decide consistency. Empty is the pristine ask — the abstract
+object alone, no budget — and is <code>Default</code>; a new knob is a new field, not
+a breaking change. The long tail of engine parameters is not here: it is
+grown on demand behind typed knobs, never a string passthrough (§6.3).</dd><dt><a class="struct" href="struct.Solved.html" title="struct zetesis::prelude::Solved">Solved</a></dt><dd>The borrowed run handle <code>solve</code> returns: stream the models, inspect or
+resolve the trichotomy, read the conclusion. Read by <code>&amp;mut</code> because draining
+the stream is stateful — the terminal <code>conclusion</code> is readable only after the
+drain reaches the end (docs/design/solve.md §5.2).</dd><dt><a class="struct" href="struct.Solver.html" title="struct zetesis::prelude::Solver">Solver</a></dt><dd>A reusable CPU backend over canonical ASP programs.</dd><dt><a class="struct" href="struct.Source.html" title="struct zetesis::prelude::Source">Source</a></dt><dd>One owned source text and its identity. UTF-8 by construction
+(base.md §3.2): arbitrary bytes meet a typed refusal at admission,
+and everything past the door is valid UTF-8.</dd><dt><a class="struct" href="struct.SourceId.html" title="struct zetesis::prelude::SourceId">Source<wbr>Id</a></dt><dd>An opaque identity for one source text. The embedding host mints it,
+because the host already has it (base.md §3.1).</dd><dt><a class="struct" href="struct.StatementId.html" title="struct zetesis::prelude::StatementId">Statement<wbr>Id</a></dt><dd>A handle naming a statement in an agent’s knowledge base together with its
+retraction class (docs/design/solve.md §6.2). The class is readable before
+the retraction the handle names is paid for. A handle is honoured only by the
+ledger that issued it, and only until it is spent: retracting a spent handle,
+or one issued by another agent, is a typed refusal, not a silent no-op.</dd><dt><a class="struct" href="struct.SyntaxError.html" title="struct zetesis::prelude::SyntaxError">Syntax<wbr>Error</a></dt><dd>One syntax diagnostic: what happened, where, and what would settle
+it. Located by construction — the primary span is required.</dd><dt><a class="struct" href="struct.SyntaxText.html" title="struct zetesis::prelude::SyntaxText">Syntax<wbr>Text</a></dt><dt><a class="struct" href="struct.TextRange.html" title="struct zetesis::prelude::TextRange">Text<wbr>Range</a></dt><dd>A range in text, represented as a pair of <a href="struct.TextSize.html" title="struct zetesis::prelude::TextSize"><code>TextSize</code></a>.</dd><dt><a class="struct" href="struct.TextSize.html" title="struct zetesis::prelude::TextSize">Text<wbr>Size</a></dt><dd>A measure of text length. Also, equivalently, an index into text.</dd><dt><a class="struct" href="struct.TooLarge.html" title="struct zetesis::prelude::TooLarge">TooLarge</a></dt><dd>Text longer than <code>Source::MAX_LEN</code> bytes (base.md §3.2).</dd><dt><a class="struct" href="struct.TransformTag.html" title="struct zetesis::prelude::TransformTag">Transform<wbr>Tag</a></dt><dd>The name of a transformation that produced a node (§9.1).</dd><dt><a class="struct" href="struct.UnsafeStatement.html" title="struct zetesis::prelude::UnsafeStatement">Unsafe<wbr>Statement</a></dt><dd>An unsafe statement and why (§5): the statement — by structural value with its provenance, so it
+names a rule or bodied directive of any program — and the variables with no binding occurrence, the
+witness rather than a bare “unsafe”. A source span, when wanted, is read from the statement’s own
+provenance (program §6). Equality is provenance-blind (<code>WithProvenance</code>), as everywhere in this tier.</dd><dt><a class="struct" href="struct.Unsat.html" title="struct zetesis::prelude::Unsat">Unsat</a></dt><dd>The <code>Inconsistent</code> payload (docs/design/solve.md §5.1): the program has no
+answer set — under a scenario, none the scenario admits. It is the home of
+assumption blame (§5.4): which of a scenario’s assumptions are responsible;
+for a plain solve the question is out of scope, which is not the same as
+answering it “none”. Non-exhaustive: a payload that may grow.</dd><dt><a class="struct" href="struct.Unspellable.html" title="struct zetesis::prelude::Unspellable">Unspellable</a></dt><dd>The one refusal (§10): a string symbol whose value has no spelling under the chosen
+dialect (grammar §9’s owned gap — a macro splice can build a string value grammar §4.4
+cannot spell, such as one bearing a tab). Carries the value and the dialect; nothing is
+silently mangled.</dd><dt><a class="struct" href="struct.VarName.html" title="struct zetesis::prelude::VarName">VarName</a></dt><dd>A validated variable name (grammar §4.2’s <code>VARIABLE</code>).</dd><dt><a class="struct" href="struct.WeakConstraint.html" title="struct zetesis::prelude::WeakConstraint">Weak<wbr>Constraint</a></dt><dd>A weak constraint (grammar §5.7): a body and a bracket of a weight at a priority and a
+term tuple. Distinct from <code>Optimize</code> (§4.2) — the two written forms of optimization are
+kept structurally distinct, one of §5’s equality carve-outs.</dd><dt><a class="struct" href="struct.Weight.html" title="struct zetesis::prelude::Weight">Weight</a></dt><dd>A weight at an optimization priority level (grammar §5.7’s <code>weight@priority</code>): a weight
+term and an optional priority term — its absence is the default level 0. One value,
+because <code>weight@priority</code> is written and meant as one thing (how much a term tuple
+contributes, and at which level), and it is the same in a weak constraint (§4.7) and an
+optimize statement (§4.2), the two written forms of optimization. Build it with
+[<code>weight</code>], raising the level with <a href="struct.Weight.html#method.at_priority" title="method zetesis::prelude::Weight::at_priority"><code>Weight::at_priority</code></a>.</dd><dt><a class="struct" href="struct.WithProvenance.html" title="struct zetesis::prelude::WithProvenance">With<wbr>Provenance</a></dt><dd>A structural node and its provenance (§6.2). Identity is the content’s; provenance
+is erased — so equality is up to provenance (§5) and a set dedupes by content. This
+is the one place the erasure is written, so it cannot drift per node: <code>PartialEq</code>,
+<code>Eq</code>, <code>PartialOrd</code>, <code>Ord</code>, and <code>Hash</code> read <code>value</code> alone, while <code>Clone</code> and <code>Debug</code>
+(derived) carry both fields.</dd><dt><a class="struct" href="struct.WorldView.html" title="struct zetesis::prelude::WorldView">World<wbr>View</a></dt><dd>A program’s <em>world view</em> (docs/design/query.md §2.3): the live reading over a
+consistent program’s models, driving the engine that produced them — every
+reading reads a member’s answer set, and a theory assignment, where a backend
+supplies one, rides beside it unread. It is
+built only from a resolved <code>Determination::Consistent(Models)</code> (solve.md §5.2)
+through <a href="struct.WorldView.html#method.of" title="associated function zetesis::prelude::WorldView::of"><code>of</code></a>, so a world view that exists is <strong>non-empty by
+construction</strong> — an inconsistent program is <code>Determination::Inconsistent</code>, never
+an empty world view, and there is no empty value here to mistake for one.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Aggregate.html" title="enum zetesis::prelude::Aggregate">Aggregate</a></dt><dd>An aggregate at body-element position (§4.7): a function aggregate over body elements
+that <em>test</em>, or a set (cardinality) aggregate. A head function aggregate is a
+<code>Head::Aggregate</code> (§4.4), a distinct type — the position lives here in the type.</dd><dt><a class="enum" href="enum.AggregateFunction.html" title="enum zetesis::prelude::AggregateFunction">Aggregate<wbr>Function</a></dt><dd>An aggregate function (grammar §5.3). <code>SumPlus</code> is <code>#sum+</code>.</dd><dt><a class="enum" href="enum.Answer.html" title="enum zetesis::prelude::Answer">Answer</a></dt><dd>The epistemic answer to a ground query (docs/design/query.md §2.2): <code>Yes</code>
+iff the query is true in every member of the world view, <code>No</code> iff it is
+false in every member — its <em>contrary</em> present, never merely the query
+absent — and <code>Unknown</code> otherwise, a genuine value never collapsed into <code>No</code>.</dd><dt><a class="enum" href="enum.Arguments.html" title="enum zetesis::prelude::Arguments">Arguments</a></dt><dd>An atom’s arguments (§8): one tuple, or an argument-list pool of two or more tuples
+whose alternatives may differ in arity (<code>p(a; b, c)</code> is p/1 and p/2). A pool of
+whole tuples is the atom’s own shape, not a <a href="enum.Term.html#variant.Pool" title="variant zetesis::prelude::Term::Pool"><code>Term::Pool</code></a> (one argument position) —
+the one pooling concept at the level the term/atom split gives it (§4.6). The two-or-
+more normal form is canonicalization’s (§5.1): a one-alternative pool collapses to
+<code>Single</code>, an empty one is refused at the constructor door (<a href="struct.Atom.html#method.pooled" title="associated function zetesis::prelude::Atom::pooled"><code>Atom::pooled</code></a>
+returns <code>Err</code>) — the ≥2 shape is a normal form, so this stays a public value like <code>Term::Pool</code>,
+which carries the same non-empty precondition.</dd><dt><a class="enum" href="enum.Asp.html" title="enum zetesis::prelude::Asp">Asp</a></dt><dd>The rowan language marker: maps <code>SyntaxKind</code> to and from rowan’s raw
+kind. Uninhabited — a type-level tag, never a value.</dd><dt><a class="enum" href="enum.BodyElement.html" title="enum zetesis::prelude::BodyElement">Body<wbr>Element</a></dt><dd>The two-tier body (grammar §5.6). A literal and a conditional literal are one tier; an
+aggregate and a theory atom, which may stand <strong>only</strong> at body-element position, are the
+other, carrying their own default negation. Keeping the aggregate and theory atom out
+of <code>Literal</code> is what makes <code>p(X) : #count{…}</code> unrepresentable (§4.5).</dd><dt><a class="enum" href="enum.Capability.html" title="enum zetesis::prelude::Capability">Capability</a></dt><dd>A declared capability, named (docs/design/solve.md §4.1) — as a refusal
+names the one a request needed (<a href="struct.Fault.html#method.unsupported" title="associated function zetesis::prelude::Fault::unsupported"><code>Fault::unsupported</code></a>, §5.4) and a
+conformance report the one it checked (§13.1). A refusal names one of the six
+whose method refuses — optimization, native consequences, assumptions,
+multi-shot, functions, propagators; undeclared cancellation and the observer
+answer <code>None</code> instead, and externals and the time budget name checks, never
+refusals: a budget nothing realises refuses with
+<a href="enum.Presupposition.html#variant.UnrealisableBudget" title="variant zetesis::prelude::Presupposition::UnrealisableBudget"><code>Presupposition::UnrealisableBudget</code></a> (§6.3). Non-exhaustive, growing with
+<a href="struct.Capabilities.html" title="struct zetesis::prelude::Capabilities"><code>Capabilities</code></a>.</dd><dt><a class="enum" href="enum.Certificate.html" title="enum zetesis::prelude::Certificate">Certificate</a></dt><dd>Which claim is being certified.</dd><dt><a class="enum" href="enum.Conclusion.html" title="enum zetesis::prelude::Conclusion">Conclusion</a></dt><dd>The search question: how did the search end? Closed, and separate from
+the logical question by design (docs/design/solve.md §5.1): one
+conclusion, orthogonal to the <a href="enum.Determination.html" title="enum zetesis::prelude::Determination"><code>Determination</code></a>, with no second flag to
+disagree with (§5.3).</dd><dt><a class="enum" href="enum.ConsequenceSupport.html" title="enum zetesis::prelude::ConsequenceSupport">Consequence<wbr>Support</a></dt><dd>Which path a consequence request takes (docs/design/solve.md §4.2): the
+engine’s own cautious/brave door, in one solve, or the core’s derivation by
+enumeration over <code>solve</code> (<code>solve_assuming</code>, under a scenario) — a different
+computational beast, folding every
+model — so a cost divergence of that size is legible before the request is
+paid for, never disclosed only in the receipt. The absent native door is
+<code>Default</code>: a backend that declares none is served by enumeration.</dd><dt><a class="enum" href="enum.ConstPolicy.html" title="enum zetesis::prelude::ConstPolicy">Const<wbr>Policy</a></dt><dd>A constant directive’s policy (grammar §5.9).</dd><dt><a class="enum" href="enum.Construct.html" title="enum zetesis::prelude::Construct">Construct</a></dt><dd>The constructs an analysis or a lint distinguishes (grammar §5). Closed; a
+construct is admitted when a consumer names it (§7).</dd><dt><a class="enum" href="enum.DefaultNegation.html" title="enum zetesis::prelude::DefaultNegation">Default<wbr>Negation</a></dt><dd>Default negation (grammar §5.2, §5.6). <code>NotNot</code> is its own case — double default
+negation is not the identity under the stable-model semantics, so a name that
+collapsed it would lie (§4). Distinct in the type from <code>Sign</code> (strong negation on
+an atom) and from <code>UnaryOp::BitwiseNot</code> (a term operator): three different things.</dd><dt><a class="enum" href="enum.DependencyKind.html" title="enum zetesis::prelude::DependencyKind">Dependency<wbr>Kind</a></dt><dd>How a body predicate is depended on — the semantic mode a dependency graph reads
+(analysis §4), defined here as its one authority. It is deliberately <strong>not</strong> the
+syntactic <a href="enum.DefaultNegation.html" title="enum zetesis::prelude::DefaultNegation"><code>DefaultNegation</code></a> prefix (§4.5): that carries the negation <em>word</em>, while a
+graph consumer needs the dependency <em>mode</em>, and the mapping also needs the enclosing
+former (a plain literal, an aggregate, a theory atom), which the prefix does not carry.
+The three modes are the honest KR distinctions — positive and negative dependency and
+the non-monotone aggregate edge — and they are <strong>not mutually exclusive</strong>:
+<a href="struct.Rule.html#method.body_signatures" title="method zetesis::prelude::Rule::body_signatures"><code>Rule::body_signatures</code></a> yields one <code>(DependencyKind, Signature)</code> pair per mode an
+occurrence carries, so a predicate reached inside a <em>negated</em> aggregate yields both
+<code>ThroughAggregate</code> and <code>Negative</code> (§12.1, analysis §4).</dd><dt><a class="enum" href="enum.Determination.html" title="enum zetesis::prelude::Determination">Determination</a></dt><dd>The logical question: is the program consistent? A closed trichotomy,
+deliberately not <code>#[non_exhaustive]</code> — the closed set is the affordance
+that forbids a fourth reading (docs/design/solve.md §5.1), so a reading
+that names the three variants needs no fallback arm. The variants are
+closed; their payloads are the surface that may grow. The <code>Consistent</code>
+payload is a view over the live engine (§5.2), so the trichotomy carries
+that borrow, <code>'a</code>.</dd><dt><a class="enum" href="enum.Dialect.html" title="enum zetesis::prelude::Dialect">Dialect</a></dt><dd>The declared parameterization of the one grammar (grammar §1, §6):
+which reading of the two lexical regions — the string rule and the
+block-comment rule — and whether the query statement exists.
+Declared per input, never varied per consumer; the lexer and the
+parser both read it from the token source, so the two cannot
+disagree. Closed: a released clingo 6.x language is a third surface
+until the grammar’s upgrade protocol says otherwise (grammar §12).</dd><dt><a class="enum" href="enum.Direction.html" title="enum zetesis::prelude::Direction">Direction</a></dt><dd>The optimization direction (grammar §5.7).</dd><dt><a class="enum" href="enum.Door.html" title="enum zetesis::prelude::Door">Door</a></dt><dd>The entry values a backend lowers (docs/design/solve.md §10.2): a parse the
+core admitted, or a <code>Program</code>. Every backend takes both — it reads Door A
+in source order or through <a href="enum.Door.html#method.program" title="method zetesis::prelude::Door::program"><code>Door::program</code></a> — so the set is no capability;
+it is closed, so a match over the doors is exhaustive without a wildcard,
+and a new grade would be a new variant every backend’s
+<a href="trait.Backend.html#tymethod.lower" title="method zetesis::prelude::Backend::lower"><code>lower</code></a> answers.</dd><dt><a class="enum" href="enum.EvalError.html" title="enum zetesis::prelude::EvalError">Eval<wbr>Error</a></dt><dd>Why a ground evaluation refused (§3.5). Each carries the offending value.</dd><dt><a class="enum" href="enum.Expected.html" title="enum zetesis::prelude::Expected">Expected</a></dt><dd>One expectation.</dd><dt><a class="enum" href="enum.Grain.html" title="enum zetesis::prelude::Grain">Grain</a></dt><dd>What a ground rule’s statement is (§10.4): a statement of the program
+lowered, merged as the set merges it, or an occurrence of the parse, its
+nested provenance intact.</dd><dt><a class="enum" href="enum.GrammarWord.html" title="enum zetesis::prelude::GrammarWord">Grammar<wbr>Word</a></dt><dd>The words the grammar wants by spelling where it has no token for
+them (grammar §5.9): the ten identifiers matched by spelling in
+<code>#const</code> annotations and <code>#theory</code> definitions. Closed, so an
+expected set is matchable and a golden can enumerate it; <code>Display</code>
+is the spelling.</dd><dt><a class="enum" href="enum.Head.html" title="enum zetesis::prelude::Head">Head</a></dt><dd>A rule head (grammar §5.5). <code>Falsum</code> is the head of a constraint — <code>:- body.</code> or
+<code>#false :- body.</code>, one head ⊥; <code>Verum</code> is <code>#true</code>, which the engine grounds (§4.4).
+<code>Choice</code> and <code>Disjunction</code> are <strong>distinct</strong> for a model-theoretic reason (<code>a | b</code>
+has answer sets <code>{a}</code>, <code>{b}</code>; <code>{ a; b }</code> has <code>∅</code>, <code>{a}</code>, <code>{b}</code>, <code>{a, b}</code>); a head
+aggregate is a function aggregate (a set head is a <code>Choice</code>).</dd><dt><a class="enum" href="enum.Hint.html" title="enum zetesis::prelude::Hint">Hint</a></dt><dd>The characteristic mistakes the parser recognizes at an unexpected
+token — each a shape the grammar or the corpus names, each carrying
+one help text at lowering. Closed; a hint is admitted here when a
+golden case shows a reader needs it.</dd><dt><a class="enum" href="enum.HornKind.html" title="enum zetesis::prelude::HornKind">Horn<wbr>Kind</a></dt><dd>Whether a program is Horn — normal and negation-free (§6.3): definite, its <code>NotHorn</code>
+arm carrying the rule that breaks it.</dd><dt><a class="enum" href="enum.IncludeTarget.html" title="enum zetesis::prelude::IncludeTarget">Include<wbr>Target</a></dt><dd>The target of an <code>#include</code> directive (grammar §5.9): a quoted path or an
+angle-bracketed system name. Carried, never resolved — no I/O in this tier (§4.8,
+spec §6.8).</dd><dt><a class="enum" href="enum.LexMode.html" title="enum zetesis::prelude::LexMode">LexMode</a></dt><dd>The lexical mode in force at a token’s start — a language fact
+(grammar §4.7, §4.8), not an implementation choice: inside a theory
+atom’s elements and guard, and at the operator positions of a
+<code>#theory</code> definition, operator runs are one token and <code>not</code> is an
+operator; between <code>#script(…)</code> and <code>#end</code>, nothing lexes. The parser
+owns the modes and tells the source which one it wants for each
+token.</dd><dt><a class="enum" href="enum.LiteralInner.html" title="enum zetesis::prelude::LiteralInner">Literal<wbr>Inner</a></dt><dd>What a literal is over (§4.6): an atom, a comparison, or a boolean constant. The
+atom and comparison carry provenance through the <code>WithProvenance</code> carrier (§6.2).</dd><dt><a class="enum" href="enum.Locus.html" title="enum zetesis::prelude::Locus">Locus</a></dt><dd>Where a fault arose — the closed taxonomy at the seam (docs/design/solve.md
+§5.4). Closed is the contract: a consumer matches exhaustively on the five
+loci, and admitting a sixth is a visible breaking change.</dd><dt><a class="enum" href="enum.LowerErrorKind.html" title="enum zetesis::prelude::LowerErrorKind">Lower<wbr>Error<wbr>Kind</a></dt><dd>The ways a raise defeats the value (program §8): a term recovered or not
+representable, which the term raise emits, and the statement and directive
+raise’s own — a definition repeated within its part, and a <code>#script</code> block after the
+program’s first, among them — so a consumer’s match carries a wildcard. <code>#[non_exhaustive]</code>, and a soundness obligation rides it: a new
+kind that marks a <em>lossy</em> reading — a best-effort partial the value could not fully
+represent — of text the grounder itself admits must join the analysis differential’s
+faithful-raise gate (<code>raised_faithfully</code>), or a truncated reading is trusted again, the
+failure <a href="enum.LowerErrorKind.html#variant.PooledArgumentList" title="variant zetesis::prelude::LowerErrorKind::PooledArgumentList"><code>PooledArgumentList</code></a> exists to end.
+<a href="enum.LowerErrorKind.html#variant.RepeatedDefinition" title="variant zetesis::prelude::LowerErrorKind::RepeatedDefinition"><code>RepeatedDefinition</code></a> marks text the authority
+rejects, not a lossy reading, so it is no such kind;
+<a href="enum.LowerErrorKind.html#variant.ExtraScript" title="variant zetesis::prelude::LowerErrorKind::ExtraScript"><code>ExtraScript</code></a> is one — the authority admits a second block
+and runs each where it reads it, in an order the set does not keep, where the merged program
+runs a repeated block once — and so is
+<a href="enum.LowerErrorKind.html#variant.NumberOutOfRange" title="variant zetesis::prelude::LowerErrorKind::NumberOutOfRange"><code>NumberOutOfRange</code></a>, which the pinned authority admits,
+wrapped into the width: its lexer computes a numeral in a machine <code>int</code>
+(<code>libgringo/gringo/lexerstate.hh</code>, <code>LexerState::clingo_number</code>), an observation of
+clingo 5.8.2 scoped to that version (program §3.1). Both join the gate.</dd><dt><a class="enum" href="enum.MisplacedDoc.html" title="enum zetesis::prelude::MisplacedDoc">Misplaced<wbr>Doc</a></dt><dd>Why a doc comment documents nothing.</dd><dt><a class="enum" href="enum.Mode.html" title="enum zetesis::prelude::Mode">Mode</a></dt><dd>Which consequences are asked for (docs/design/solve.md §5.2): cautious —
+what holds in every answer set, the intersection — or brave — what holds
+in some answer set, the union. A <code>Consequences</code> value carries the mode
+that produced it, so a value that has travelled still says which question
+it answers.</dd><dt><a class="enum" href="enum.NativeAnswer.html" title="enum zetesis::prelude::NativeAnswer">Native<wbr>Answer</a></dt><dd>What the engine’s own consequence search established (docs/design/solve.md
+§5.2) — the raw material the core builds <a href="struct.Consequences.html" title="struct zetesis::prelude::Consequences"><code>Consequences</code></a> from: the backend
+reports, and the core decides and words the refusal. A <code>Closed</code> set becomes
+the consequences in the mode asked; <code>NoModel</code> refuses, <code>⋂</code>/<code>⋃</code> over the
+empty world view being undefined, not <code>∅</code>; <code>Stopped</code> refuses, a native
+cautious search stopped early having converged on a <em>super</em>set of <code>⋂</code>, not
+the consequences. Unlike a <a href="trait.Run.html" title="trait zetesis::prelude::Run"><code>Run</code></a>’s models, which the core pulls, the
+report is the backend’s word: its honesty is the backend’s obligation, which
+the conformance suite and the native-versus-derived differential hold.
+Closed: a native search closed the space having seen a model, closed it
+having seen none, or stopped short of it.</dd><dt><a class="enum" href="enum.NodeOrToken.html" title="enum zetesis::prelude::NodeOrToken">Node<wbr>OrToken</a></dt><dt><a class="enum" href="enum.Normality.html" title="enum zetesis::prelude::Normality">Normality</a></dt><dd>Whether every head is a single literal (§6.3): definite, its <code>NotNormal</code> arm carrying
+the first non-normal head’s rule so a consumer can point at what makes it so.</dd><dt><a class="enum" href="enum.NotAPattern.html" title="enum zetesis::prelude::NotAPattern">NotA<wbr>Pattern</a></dt><dd>Why an atom is not a pattern (§11.2), carrying the offending argument term where there
+is one. Non-exhaustive, so a later reason is a new variant, not a migration.</dd><dt><a class="enum" href="enum.NotAdmitted.html" title="enum zetesis::prelude::NotAdmitted">NotAdmitted</a></dt><dd>Why a parse was not admitted at Door A (docs/design/solve.md §10.2) —
+exactly one of two, typed and located, each diagnostic lowering to a base
+diagnostic. It reaches the caller before any backend is asked, and converts
+into a program fault refusing the parse, carried whole, for a caller that
+wants <code>?</code> (§5.4).</dd><dt><a class="enum" href="enum.NotAnInteger.html" title="enum zetesis::prelude::NotAnInteger">NotAn<wbr>Integer</a></dt><dd>Why a real has no integer symbol (§3.4): it is not finite, or it lies outside the
+integer range. Carried by the rounding adapters.</dd><dt><a class="enum" href="enum.NotAttachable.html" title="enum zetesis::prelude::NotAttachable">NotAttachable</a></dt><dd>Why a token has no attachment: it is not a comment, or it is a doc
+line in docs position — structure the statement owns
+(docs/design/syntax.md §5.4).</dd><dt><a class="enum" href="enum.Origin.html" title="enum zetesis::prelude::Origin">Origin</a></dt><dd>Where a node came from (§6.2).</dd><dt><a class="enum" href="enum.Presupposition.html" title="enum zetesis::prelude::Presupposition">Presupposition</a></dt><dd>Why a request was refused: a presupposition of it that fails
+(docs/design/solve.md §5.4), named so a consumer acts on it by matching —
+retrying under a larger budget, routing to another backend, rebuilding —
+never by reading the message. Each variant is a refusal the tier makes, at
+the site cited. Non-exhaustive: a request refused for a reason not yet named
+gains a variant, never a message to tell it by.</dd><dt><a class="enum" href="enum.ProgramClass.html" title="enum zetesis::prelude::ProgramClass">Program<wbr>Class</a></dt><dd>A class a program is <strong>provably</strong> in — a dataless, routable key a solver’s algorithm
+selection reads (§6.4). <code>Ord</code>, so a <code>BTreeSet</code> collects a program’s classes when set
+operations help; <code>#[non_exhaustive]</code>, since the order-consistent, call-consistent, and
+s(CASP)-relevant classes will want in.</dd><dt><a class="enum" href="enum.Project.html" title="enum zetesis::prelude::Project">Project</a></dt><dd>A <code>#project</code> directive (grammar §5.9): a signature or an atom under a body (§4.8).</dd><dt><a class="enum" href="enum.Refused.html" title="enum zetesis::prelude::Refused">Refused</a></dt><dd>What a fault refused — closed, one of five, keyed by locus
+(docs/design/solve.md §5.4). Closed on purpose: a row grows a typed reason
+inside the sum when a consumer first reads one — the <code>Statement</code> or <code>Part</code>
+row, a router’s reason why a backend refused the statement or the part (§12,
+§14) — never a reason held beside it. A view into the fault, freely copied.</dd><dt><a class="enum" href="enum.Refutation.html" title="enum zetesis::prelude::Refutation">Refutation</a></dt><dd>Assumption blame (docs/design/solve.md §5.4): which assumptions are
+responsible for a scenario’s inconsistency. The culprit is a raw set of
+assumptions — the literature’s notion — not a named scenario (§6.3).
+Closed: the three readings are the readings there are, so a consumer
+matches them with no fallback arm.</dd><dt><a class="enum" href="enum.RelatedLocus.html" title="enum zetesis::prelude::RelatedLocus">Related<wbr>Locus</a></dt><dd>The kinds of related locus.</dd><dt><a class="enum" href="enum.Relation.html" title="enum zetesis::prelude::Relation">Relation</a></dt><dd>A comparison relation (grammar §5.2).</dd><dt><a class="enum" href="enum.RestrictedForm.html" title="enum zetesis::prelude::RestrictedForm">Restricted<wbr>Form</a></dt><dd>The term forms a restriction can forbid (syntax.md §6.2).</dd><dt><a class="enum" href="enum.Restriction.html" title="enum zetesis::prelude::Restriction">Restriction</a></dt><dd>The restriction contexts (grammar §5.9, §5.10).</dd><dt><a class="enum" href="enum.RetractionClass.html" title="enum zetesis::prelude::RetractionClass">Retraction<wbr>Class</a></dt><dd>How a statement’s retraction is realised (docs/design/solve.md §6.2), fixed
+at assertion and readable from the statement’s handle before any retraction
+is paid for: a <code>Toggle</code> clears an external guard at the seam in <code>O(1)</code>, a
+<code>Rebuild</code> re-grounds the amended program in <code>Θ(program size)</code>. The divergence
+is disclosed so no caller pays a rebuild believing it a toggle.</dd><dt><a class="enum" href="enum.Segment.html" title="enum zetesis::prelude::Segment">Segment</a></dt><dd>One step of a decode locus (§3.4): a position of an enclosing symbol a
+<code>FromSymbol</code> conversion had descended into when it refused. Positional today —
+<code>Argument(i)</code> is the <code>i</code>-th argument of a function or tuple. <code>#[non_exhaustive]</code>
+leaves room for the deferred field/kind taxonomy without breaking a downstream
+<code>match</code>. Derives <code>Serialize</code>/<code>Deserialize</code> under the <code>serde</code> feature, so the
+locus crosses a service boundary as structured data.</dd><dt><a class="enum" href="enum.Separator.html" title="enum zetesis::prelude::Separator">Separator</a></dt><dd>What must stand between two tokens for each to lex as itself.</dd><dt><a class="enum" href="enum.SetElement.html" title="enum zetesis::prelude::SetElement">SetElement</a></dt><dd>A set aggregate element (grammar §5.3): a literal or a conditional literal (§4.7).</dd><dt><a class="enum" href="enum.Show.html" title="enum zetesis::prelude::Show">Show</a></dt><dd>A <code>#show</code> directive (grammar §5.9): one of four forms (§4.8).</dd><dt><a class="enum" href="enum.Sign.html" title="enum zetesis::prelude::Sign">Sign</a></dt><dd>Strong (explicit) negation — the <code>-</code> of <code>-p</code> (§3.1; the precise register:
+strong, not classical-logic, negation). Distinct in the type from default
+negation (a body-literal sign, §4) and from the bitwise <code>~</code> (a term
+operator, §3.3): the three are three different things and the API holds them
+apart (spec §1.4).</dd><dt><a class="enum" href="enum.Slot.html" title="enum zetesis::prelude::Slot">Slot</a></dt><dd>The slot a comment is attached in.</dd><dt><a class="enum" href="enum.SourceBreach.html" title="enum zetesis::prelude::SourceBreach">Source<wbr>Breach</a></dt><dd>The two breaches of the token-source laws the parser can witness in
+one pass, both at an offset it reached by tiling: <code>Tiling</code> — an
+<code>EOF</code> before the text’s end, or a token running past it, the kind
+and length saying which; <code>Refusal</code> — the door refused where it owed
+a token. The slice law is trusted and determinism unobservable in
+one pass, so neither appears here — the checker’s
+<code>TokenSourceLawViolation</code> is the wider type.</dd><dt><a class="enum" href="enum.Statement.html" title="enum zetesis::prelude::Statement">Statement</a></dt><dd>A statement of a part (grammar §5.11), plus the ASP-Core-2 query (grammar §6.1).
+Non-exhaustive for downstream growth; every internal match is exhaustive with no
+wildcard, so a new family is a compile error here, never a silent drop (§4.2).</dd><dt><a class="enum" href="enum.Stopped.html" title="enum zetesis::prelude::Stopped">Stopped</a></dt><dd>How an inconclusive search stopped (docs/design/solve.md §5.1): at the
+truncation it concluded at, or at an engine fault, which is no conclusion.
+Closed: a stopping reason is exactly one of the two, and an exhausted
+conclusion — which decides — is not among them.</dd><dt><a class="enum" href="enum.Stratification.html" title="enum zetesis::prelude::Stratification">Stratification</a></dt><dd>Whether a program is stratified (§6.2): <strong>definite for negation</strong> (a <code>Negative</code> cycle
+proves non-stratification, its absence proves stratification) and <strong>conservative-safe
+for aggregates</strong> (a <code>ThroughAggregate</code> cycle is reported <code>NotStratified</code> though it may
+be stratifiable) — so a solver safely specializes on either result, the perfect model
+when stratified, the general method otherwise.</dd><dt><a class="enum" href="enum.StringDefect.html" title="enum zetesis::prelude::StringDefect">String<wbr>Defect</a></dt><dd>What broke a string literal.</dd><dt><a class="enum" href="enum.Symbol.html" title="enum zetesis::prelude::Symbol">Symbol</a></dt><dd>A ground term: the value an answer set contains, an <code>@</code>-function exchanges,
+and a pattern unifies against (§3.1). <code>Infimum</code> and <code>Supremum</code> are the least
+and greatest elements of the term order (grammar §5.1). Owned plain data.</dd><dt><a class="enum" href="enum.SyntaxClass.html" title="enum zetesis::prelude::SyntaxClass">Syntax<wbr>Class</a></dt><dd>The grammar’s classes a consumer or a message names as one thing.
+Closed; each is a nonterminal or a family of the grammar of record.</dd><dt><a class="enum" href="enum.SyntaxErrorKind.html" title="enum zetesis::prelude::SyntaxErrorKind">Syntax<wbr>Error<wbr>Kind</a></dt><dd>The closed roster of what can go wrong, each with its typed payload.
+Declared in the order a parse meets them: lexical, then structural,
+then the restrictions, then the warnings.</dd><dt><a class="enum" href="enum.SyntaxKind.html" title="enum zetesis::prelude::SyntaxKind">Syntax<wbr>Kind</a></dt><dd>Every token and node kind of the tree. Tokens first, then
+nodes; within each, the grammar of record’s order (Appendix A
+of docs/design/syntax.md is the complete roster with the
+production each kind realizes). <code>ERROR</code> is one kind naming
+both the lexical error token and the recovery node — the tree
+says which it is where it stands. <code>Debug</code> and <code>Display</code> are
+the SCREAMING_SNAKE name, the spelling dumps and goldens use.</dd><dt><a class="enum" href="enum.Term.html" title="enum zetesis::prelude::Term">Term</a></dt><dd>The non-ground term algebra (§3.3). A term carries <strong>no</strong> strong sign — the <code>-</code>
+of <code>-p</code> is arithmetic <code>Negate</code> in term position and the atom’s sign in literal
+position (§4.6), so it never lives on a <code>Term</code>.</dd><dt><a class="enum" href="enum.TokenAtOffset.html" title="enum zetesis::prelude::TokenAtOffset">Token<wbr>AtOffset</a></dt><dd>There might be zero, one or two leaves at a given offset.</dd><dt><a class="enum" href="enum.TokenRole.html" title="enum zetesis::prelude::TokenRole">Token<wbr>Role</a></dt><dd>What a token is, where it stands (docs/design/syntax.md §5.4).
+<code>Documentation</code>: a <code>DOC_COMMENT</code> in docs position — a leading child
+of a statement node with only trivia and other <code>DOC_COMMENT</code> tokens
+before it. <code>Trivia</code>: whitespace, the plain comment forms wherever
+they stand, and a <code>DOC_COMMENT</code> anywhere else. <code>Significant</code>: every
+other token.</dd><dt><a class="enum" href="enum.Truncation.html" title="enum zetesis::prelude::Truncation">Truncation</a></dt><dd>The conclusions short of the space (docs/design/solve.md §5.1) — its
+target, its budget, or a cancellation. Closed, and without <code>Exhausted</code>: an
+exhausted search decided, so no inconclusive search concluded there. Each
+is the <a href="enum.Conclusion.html" title="enum zetesis::prelude::Conclusion"><code>Conclusion</code></a> of its name.</dd><dt><a class="enum" href="enum.TruthValue.html" title="enum zetesis::prelude::TruthValue">Truth<wbr>Value</a></dt><dd>The value an external atom is assigned — <code>assign_external</code>
+(docs/design/solve.md §4.1): the three values of clingo’s
+<code>clingo_truth_value_t</code>.</dd><dt><a class="enum" href="enum.Variable.html" title="enum zetesis::prelude::Variable">Variable</a></dt><dd>A variable: a named one, <code>X</code>, or the anonymous <code>_</code> (§3.3). Flat and
+non-recursive, so it derives; it is not <code>Copy</code> (it holds a <code>VarName</code>).</dd><dt><a class="enum" href="enum.Verdict.html" title="enum zetesis::prelude::Verdict">Verdict</a></dt><dd>A sound approximation of a ground-program property, read at the predicate level
+(§6.1). <code>Holds</code> is <strong>proven</strong> — the property is guaranteed of the ground program.
+<code>Unknown</code> is undecided at the predicate level — the ground program may or may not
+have it — and carries the <code>Component</code> that blocked the proof. There is
+deliberately <strong>no</strong> third <code>DoesNotHold</code> arm: a consumer specializes on a class’s
+<em>presence</em>, so a false <code>Holds</code> is an unsound result while a missed one is merely
+slower, and the only safe design asserts <code>Holds</code> when it has a proof and folds
+everything else into <code>Unknown</code> (the error direction, §6.1). Concrete over
+<code>Component</code>, not generic: the approximation exists <em>because</em> this crate reads the
+predicate level, so its witness is always a predicate-level component. Grounding
+finiteness (§5) and — once they land — tightness and head-cycle-freeness (§6.2)
+all return this one shape.</dd><dt><a class="enum" href="enum.WalkEvent.html" title="enum zetesis::prelude::WalkEvent">Walk<wbr>Event</a></dt><dd><code>WalkEvent</code> describes tree walking process.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.AgentReading.html" title="trait zetesis::prelude::AgentReading">Agent<wbr>Reading</a></dt><dd>The query readings an <a href="struct.Agent.html" title="struct zetesis::prelude::Agent"><code>Agent</code></a> answers over its own knowledge base (docs/design/
+query.md §2.2, §2.5, §2.6; solve.md §6.2) — the reading half of the agent’s
+surface, held in the query tier so the solve tier need not depend on it. An
+extension trait, implemented for every <code>Agent&lt;B: Backend&gt;</code> and brought into scope
+with the reading vocabulary, so <code>agent.answer(q)?</code> reads as an inherent method.</dd><dt><a class="trait" href="trait.AstNode.html" title="trait zetesis::prelude::AstNode">AstNode</a></dt><dd>The main trait to go from untyped [<code>SyntaxNode</code>] to a typed AST. The
+conversion itself has zero runtime cost: AST and syntax nodes have exactly
+the same representation: a pointer to the tree root and a pointer to the
+node itself.</dd><dt><a class="trait" href="trait.AstToken.html" title="trait zetesis::prelude::AstToken">AstToken</a></dt><dd>A typed token: a view over one token, cast by kind — and, for the
+two comment wrappers, by the token’s role.</dd><dt><a class="trait" href="trait.Backend.html" title="trait zetesis::prelude::Backend">Backend</a></dt><dd>The backend contract (docs/design/solve.md §4.1, §4.3): the sole crossing
+between the engine-free core and any engine — the one door an audit
+reads. A backend implements engine mechanism alone; the derived readings —
+consequences by enumeration (§4.2) and blame (§5.4) — are the core’s, over
+this surface, never a backend author’s.</dd><dt><a class="trait" href="trait.Cancel.html" title="trait zetesis::prelude::Cancel">Cancel</a></dt><dd>The engine’s cancellation primitive (docs/design/solve.md §4.1, §6.3): one
+call cuts the in-flight solve short. <code>Send + Sync</code>, so the core’s timer
+thread and the caller’s handle pull it from another thread. A pull signals
+and returns — <code>O(1)</code>, never blocking on the solving thread — and the stop is
+read through the run’s <code>conclusion</code>.</dd><dt><a class="trait" href="trait.Facts.html" title="trait zetesis::prelude::Facts">Facts</a></dt><dd>A Rust value denoting a set of ground atoms (docs/design/solve.md §7.3):
+the bulk analog of the program tier’s <code>ToSymbol</code>, which denotes one
+ground <code>Symbol</code>. Where <code>ToSymbol</code> is the codec for a value, <code>Facts</code> is the
+codec for a relation — the edges of a graph, the rows of a table — turned
+into the ground atoms a sub-program states as facts, and the result side
+of an <code>@</code>-predicate; [<code>Extract</code>] (§9) is its read-time inverse, and a fix
+to the shared codec pays out across all of them.</dd><dt><a class="trait" href="trait.FromSymbol.html" title="trait zetesis::prelude::FromSymbol">From<wbr>Symbol</a></dt><dd>Extract a Rust value from a ground symbol, refusing with the symbol that did not
+match — a value, not a rendered string (§3.4, spec §1.5).</dd><dt><a class="trait" href="trait.HasGuards.html" title="trait zetesis::prelude::HasGuards">HasGuards</a></dt><dd>Reads the two guards of a guarded aggregate uniformly (§4.7): the small structure a
+<code>FunctionAggregate</code>, a <code>HeadAggregate</code>, and a <code>SetAggregate</code> share.</dd><dt><a class="trait" href="trait.IntoBody.html" title="trait zetesis::prelude::IntoBody">Into<wbr>Body</a></dt><dd>A value that coerces to a rule body (§7.1) — the coercion born here, widened by the
+construction surface (§7).</dd><dt><a class="trait" href="trait.IntoHead.html" title="trait zetesis::prelude::IntoHead">Into<wbr>Head</a></dt><dd>A value that coerces to a rule head (§7.1) — the coercion born here, widened by the
+construction surface (§7).</dd><dt><a class="trait" href="trait.Run.html" title="trait zetesis::prelude::Run">Run</a></dt><dd>The streaming/terminal-state protocol a backend’s <code>solve</code> drives (docs/design/
+solve.md §5.2): the enumeration a backend wraps into the <a href="struct.Solved.html" title="struct zetesis::prelude::Solved"><code>Solved</code></a> it returns,
+built through <a href="struct.Solved.html#method.running" title="associated function zetesis::prelude::Solved::running"><code>Solved::running</code></a>. A run holds its own enumeration state and
+whatever it reads of its engine — a raw handle, or a borrow for <code>'a</code>. The core
+reaches the engine only through this protocol, and <code>Backend::solve</code> returns the
+handle as <code>Solved&lt;'_&gt;</code>, borrowing the backend, so the borrow checker, not the
+live handle, serialises engine access (§6.1).
+A <code>Solved</code>/<code>Models</code> built over a run is <code>!Send</code>: a run may hold a raw engine
+handle whose control is single-threaded, and the protocol does not require a run
+to be <code>Send</code>, so the live handle stays on one thread by construction — a
+deliberate consequence, not an accident (a pure-Rust run carries no such handle,
+yet the handle is <code>!Send</code> all the same, so no consumer may rely on it being
+otherwise).</dd><dt><a class="trait" href="trait.ToSymbol.html" title="trait zetesis::prelude::ToSymbol">ToSymbol</a></dt><dd>A Rust value that denotes a ground symbol (§3.4). The conversion surface is a
+pair of bespoke traits — <code>ToSymbol</code> and <code>FromSymbol</code> (below) — rather than
+<code>From</code>/<code>Into</code>/<code>TryFrom</code>, because the trait shape is what the job needs: the
+conversion is a denotation read by reference (<code>&amp;self</code> here, <code>&amp;Symbol</code> on the
+way back), where <code>From</code>/<code>Into</code> consume by value; that by-ref shape is what
+admits <code>impl ToSymbol for str</code>, since the unsized <code>str</code> cannot be the by-value
+<code>T</code> of <code>From&lt;T&gt;</code>; <code>FromSymbol</code> refuses with one fixed <code>FromSymbolError</code>, where
+each <code>TryFrom</code> impl would declare its own associated <code>Error</code>; a trait this
+crate owns leaves room for blanket impls that <code>std</code>’s <code>From</code>/<code>Into</code> blankets
+would otherwise collide with; and a later interner or context can be threaded
+through its methods. The relation it names is a KR one — <em>this value denotes
+this ground term</em>.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.attachment.html" title="fn zetesis::prelude::attachment">attachment</a></dt><dd>A comment’s attachment. Refuses a token that is not a trivia comment
+— a doc line in docs position (structure) or any significant token —
+with the reason. Total otherwise, allocation-free; O(the trivia
+between <code>prev</code> and <code>next</code> around the comment), each read by
+<code>is_skipped</code> — a stepped <code>DOC_COMMENT</code>’s role is <code>role</code>’s O(preceding
+siblings), so beside a run of m misplaced <code>%!</code> lines under a k-line
+doc block it is O(k·m). For all of a tree’s comments, <code>attachments</code>
+is the bulk form, O(subtree).</dd><dt><a class="fn" href="fn.attachments.html" title="fn zetesis::prelude::attachments">attachments</a></dt><dd>Every trivia comment under <code>node</code>, as the typed <code>Comment</code>, with its
+attachment, in source order, computed in one pass — the bulk form.
+Total; O(subtree).</dd><dt><a class="fn" href="fn.canonical_spelling.html" title="fn zetesis::prelude::canonical_spelling">canonical_<wbr>spelling</a></dt><dd>The canonical spelling of a token that has synonyms (grammar §4.5,
+§4.6): <code>=</code> for <code>EQ</code>, <code>!=</code> for <code>NEQ</code>, <code>#inf</code>, <code>#sup</code> — the spellings
+the authority renders when it prints its own tree — and <code>#minimize</code>,
+<code>#maximize</code>, the roster’s own, since the authority prints an optimize
+statement as a weak constraint (docs/design/syntax.md §11.3); every
+other token’s content is its own canonical form. Total; the identity
+on non-synonym kinds; O(1).</dd><dt><a class="fn" href="fn.comment_sequence.html" title="fn zetesis::prelude::comment_sequence">comment_<wbr>sequence</a></dt><dd>The trivia comments under <code>node</code>, in order: role <code>Trivia</code>, kind a
+comment. Total; O(subtree), the roles read forward in one pass
+(<code>token_roles</code>) with no per-token scan; lazy.</dd><dt><a class="fn" href="fn.comments.html" title="fn zetesis::prelude::comments">comments</a></dt><dd>The comments attached to <code>anchor</code> in <code>slot</code>, as the typed <code>Comment</code>,
+in source order — the inverse direction, for a consumer walking
+anchors. Nothing for a skipped anchor (<code>is_skipped</code>) — a trivia token
+or an empty node — which the policy never attaches to: <code>prev</code> and
+<code>next</code> are found by stepping over exactly the skipped elements, and a
+dangling comment’s parent holds the comment, so is not empty. Total;
+one <code>is_skipped</code> read of the anchor, then O(the trivia adjacent to
+the anchor) for <code>Trailing</code>, O(the anchor’s children) for <code>Dangling</code>;
+for <code>Leading</code>, the run before the anchor is read with the same
+per-<code>DOC_COMMENT</code> role read the directional walks make — <code>role</code>’s
+O(preceding siblings) — so on a statement carrying a k-line doc block
+and a run of m misplaced <code>%!</code> lines after its head it is O(k·m). For
+all of a tree’s comments, <code>attachments</code> is the bulk form, O(subtree).</dd><dt><a class="fn" href="fn.empty_line_between.html" title="fn zetesis::prelude::empty_line_between">empty_<wbr>line_<wbr>between</a></dt><dd>An empty line in the whitespace directly between <code>a</code> and <code>b</code>; false
+when anything but whitespace — a token, a node, a comment — stands
+between them, so a non-adjacent pair answers false rather than
+refusing. Total; O(the trivia between the two elements).</dd><dt><a class="fn" href="fn.equivalent.html" title="fn zetesis::prelude::equivalent">equivalent</a></dt><dd>The certificate: granted, or refused with the first divergence.
+Compares the two sequences whatever the parses’ dialects — a lexical
+statement about two texts, meaningful across them; both roots are of
+one family, as the one <code>T</code> fixes. Total; O(|left| + |right|); a
+single zip over two lazy iterative walks, allocating only to name a
+divergence. Not a refusal but the answer to the certificate’s
+question (docs/design/syntax.md §12.4).</dd><dt><a class="fn" href="fn.lex_mode_of.html" title="fn zetesis::prelude::lex_mode_of">lex_<wbr>mode_<wbr>of</a></dt><dd>The mode in force at <code>token</code>’s start — the parser’s standpoint,
+reconstructed from the tree by docs/design/syntax.md §10.2’s rule and
+bound to the parser’s own choice by law: <code>ScriptBody</code> for a script
+body and for <code>#end</code> — and for the unterminated region’s error token;
+<code>Theory</code> inside a theory atom’s elements and guard — outside their
+conditions and outside what follows a condition through the <code>;</code> or <code>}</code>
+that ends it — at a <code>#theory</code> definition’s operator positions, and at
+the first token after a theory atom (the guard-end peek); <code>Normal</code>
+elsewhere, the <code>{</code> that opens the elements among them. Total;
+O(depth of the token).</dd><dt><a class="fn" href="fn.line_breaks_between.html" title="fn zetesis::prelude::line_breaks_between">line_<wbr>breaks_<wbr>between</a></dt><dd>The count of line breaks in the text between <code>a</code>’s end and <code>b</code>’s
+start — all of it, so a significant token between a non-adjacent pair
+counts too, as <code>same_line</code> reads it. Total; O(the trivia between the
+two elements).</dd><dt><a class="fn" href="fn.non_whitespace_tokens.html" title="fn zetesis::prelude::non_whitespace_tokens">non_<wbr>whitespace_<wbr>tokens</a></dt><dd>Every non-whitespace token under <code>node</code>, in order — the sequence the
+certificates compare: significant tokens and trivia comments
+interleaved as they stand. Total; a lazy iterative preorder walk.</dd><dt><a class="fn" href="fn.parse.html" title="fn zetesis::prelude::parse">parse</a></dt><dd>The file door: an admitted source under a dialect, at
+[<code>NestingLimit::DEFAULT</code>] — the crash-averse floor, safe to hold on a
+modest stack. For the deeper [<code>NestingLimit::CEILING</code>], reach for
+[<code>parse_program</code>] under [<code>with_required_stack</code>]. Total; O(text).</dd><dt><a class="fn" href="fn.parse_str.html" title="fn zetesis::prelude::parse_str">parse_<wbr>str</a></dt><dd>The string door: <code>text</code> under a dialect, read as <a href="fn.parse.html" title="fn zetesis::prelude::parse"><code>parse</code></a> reads a
+<code>Source</code> minted under [<code>STRING_INPUT_SOURCE_ID</code>] — the one-shot form
+for a consumer with no identity to stamp. A thin convenience: it copies
+the text into that <code>Source</code> and hands it to <code>parse</code>, so the tree, the
+diagnostics, and the depth floor are exactly the file door’s. Refuses
+<code>TooLarge</code> — text past <code>Source::MAX_LEN</code>, admission’s one condition
+(base §3.2) — and is total otherwise; O(text).</dd><dt><a class="fn" href="fn.render.html" title="fn zetesis::prelude::render">render</a></dt><dd>Render a program to concrete syntax under a dialect (the dialect decides a string value’s
+spelling, grammar §4.4/§6.2). Canonical: the same program renders the same text, every
+time (§10). Total and iterative in depth (§13) — one work-list walk down each
+self-recursive family, a bounded recursion across the flat layers between them.
+<code>O(output)</code>. The one refusal is <a href="struct.Unspellable.html" title="struct zetesis::prelude::Unspellable"><code>Unspellable</code></a>.</dd><dt><a class="fn" href="fn.render_documented.html" title="fn zetesis::prelude::render_documented">render_<wbr>documented</a></dt><dd>Render a program to concrete syntax under a dialect, each statement preceded by its
+documentation as <code>%!</code> doc-comment lines (grammar §5.11): the doc annotations its
+provenance carries, emitted verbatim above the statement they document, one line per
+<code>\n</code>, in <code>Ord</code> order — for a consumer that writes documented source, the documentation
+riding along the entries it documents. Unlike <code>render</code>, the output is <strong>not</strong> the
+canonical form (§10): it carries provenance the canonical form drops, so it is not the
+version-stable text. It round-trips — the raise reads the <code>%!</code> lines back into each
+statement’s documentation. Total and iterative in depth (§13). <code>O(output)</code>. The one
+refusal is <a href="struct.Unspellable.html" title="struct zetesis::prelude::Unspellable"><code>Unspellable</code></a>.</dd><dt><a class="fn" href="fn.role.html" title="fn zetesis::prelude::role">role</a></dt><dd>The role of <code>token</code> where it stands — <code>role_of</code>, the one definition,
+fed the two positional facts read off the token’s parent. Total;
+O(preceding siblings of the token). <code>roles_of</code> reads a whole node’s
+roles in one pass over its children.</dd><dt><a class="fn" href="fn.same_line.html" title="fn zetesis::prelude::same_line">same_<wbr>line</a></dt><dd>No line break in the text between <code>a</code>’s end and <code>b</code>’s start. Total;
+O(the trivia between the two elements).</dd><dt><a class="fn" href="fn.separator.html" title="fn zetesis::prelude::separator">separator</a></dt><dd>The oracle over tree tokens: derives the mode from <code>left</code>’s position
+(<code>lex_mode_of</code>) and answers for the texts. Total; O(|left| + |right|</dd><dt><a class="fn" href="fn.separator_between.html" title="fn zetesis::prelude::separator_between">separator_<wbr>between</a></dt><dd>The oracle over texts: total, exact, O(|left| + |right|). <code>left</code> and
+<code>right</code> are token texts of one lexed text; the answer is what the
+lexer would do to them abutted under <code>context</code> — <code>Nothing</code> when
+<code>left ++ right</code> lexes <code>left</code> first, <code>LineBreak</code> when <code>left</code> is a
+line form, <code>Whitespace</code> otherwise (docs/design/syntax.md §10.1: a
+space begins no token’s continuation, and no token but the line
+forms extends across it — for the token pairs a lexed text produces,
+which is what §10.1’s lemma scopes the oracle to).</dd><dt><a class="fn" href="fn.theory_operator.html" title="fn zetesis::prelude::theory_operator">theory_<wbr>operator</a></dt><dd>Grammar §4.7’s theory-operator formation: the maximal operator-alphabet
+run at the front of <code>text</code> as one token — <code>.</code>, <code>;</code>, <code>:</code> each its
+structural form, <code>:-</code> the neck, every other run a <code>THEORY_OP</code> — or
+<code>None</code> when <code>text</code> does not begin on the operator alphabet, the
+mode-invariant position a source answers from its own tile. Total; the
+operator alphabet is all ASCII, so the run length is always a char
+boundary and the slice never panics. O(the run). The <code>Token</code>’s text is
+the run, so its length is the extent (docs/design/syntax.md §4.2,
+§10.3): the one home shared with the file lexer’s theory punctuation.</dd><dt><a class="fn" href="fn.token_stream.html" title="fn zetesis::prelude::token_stream">token_<wbr>stream</a></dt><dd>The significant tokens of the tree under <code>node</code>, in order: every
+token whose role is not <code>Trivia</code> — all non-comment, non-whitespace
+tokens plus <code>DOC_COMMENT</code> tokens in docs position. Total; O(subtree),
+the roles read forward in one pass (<code>token_roles</code>) with no per-token
+scan; lazy.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.AnswerSet.html" title="type zetesis::prelude::AnswerSet">Answer<wbr>Set</a></dt><dd>An answer set: a set of ground <a href="../enum.Symbol.html" title="enum zetesis::Symbol"><code>Symbol</code></a>s in the tier’s canonical <code>Ord</code>.</dd><dt><a class="type" href="type.ExpectedSet.html" title="type zetesis::prelude::ExpectedSet">Expected<wbr>Set</a></dt><dd>What the parser would have accepted at a point: tokens by kind,
+identifiers by spelling where the grammar wants a word, and grammar
+classes where listing tokens would mislead. A set — order carries no
+meaning, duplicates are defects, and rendering derives its order
+(kinds, then words, then classes).</dd><dt><a class="type" href="type.Preorder.html" title="type zetesis::prelude::Preorder">Preorder</a></dt><dd>An iterative preorder over nodes.</dd><dt><a class="type" href="type.PreorderWithTokens.html" title="type zetesis::prelude::PreorderWithTokens">Preorder<wbr>With<wbr>Tokens</a></dt><dd>An iterative preorder over nodes and tokens.</dd><dt><a class="type" href="type.SyntaxElement.html" title="type zetesis::prelude::SyntaxElement">Syntax<wbr>Element</a></dt><dd>A node or a token cursor.</dd><dt><a class="type" href="type.SyntaxElementChildren.html" title="type zetesis::prelude::SyntaxElementChildren">Syntax<wbr>Element<wbr>Children</a></dt><dd>A node’s child nodes and tokens, in order.</dd><dt><a class="type" href="type.SyntaxNode.html" title="type zetesis::prelude::SyntaxNode">Syntax<wbr>Node</a></dt><dd>A node cursor over the tree — a view, <code>!Send</code> (docs/design/syntax.md §5.1).</dd><dt><a class="type" href="type.SyntaxNodeChildren.html" title="type zetesis::prelude::SyntaxNodeChildren">Syntax<wbr>Node<wbr>Children</a></dt><dd>A node’s child nodes, in order.</dd><dt><a class="type" href="type.SyntaxNodePtr.html" title="type zetesis::prelude::SyntaxNodePtr">Syntax<wbr>Node<wbr>Ptr</a></dt><dd>Positional identity by kind and range, resolvable against a root.</dd><dt><a class="type" href="type.SyntaxToken.html" title="type zetesis::prelude::SyntaxToken">Syntax<wbr>Token</a></dt><dd>A token cursor over the tree — a view.</dd></dl></section></div></main></body></html>

@@ -2,9 +2,9 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::formula_support::Context;
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::components::{Filter, Pattern <span class="kw">as </span>AtomPattern, Term};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>std::ops::Range;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::components::{Filter, Pattern <span class="kw">as </span>AtomPattern, Term};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>std::ops::Range;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_core::catalog::{AssignmentError, DeclaredPredicate, TermKey};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zetesis_core::{FilterRef, PatternRef, TemplateTerm};
 <a href=#10 id=10 data-nosnippet>10</a>
@@ -39,7 +39,7 @@
 <a href=#39 id=39 data-nosnippet>39</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#40 id=40 data-nosnippet>40</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#41 id=41 data-nosnippet>41</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#42 id=42 data-nosnippet>42</a>        location: Location,
+<a href=#42 id=42 data-nosnippet>42</a>        location: ProgramSite,
 <a href=#43 id=43 data-nosnippet>43</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#44 id=44 data-nosnippet>44</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
 <a href=#45 id=45 data-nosnippet>45</a>            constants: Binding::new(computation, limits, counters, location)<span class="question-mark">?</span>,
@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#56 id=56 data-nosnippet>56</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#57 id=57 data-nosnippet>57</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#58 id=58 data-nosnippet>58</a>        location: Location,
+<a href=#58 id=58 data-nosnippet>58</a>        location: ProgramSite,
 <a href=#59 id=59 data-nosnippet>59</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="self">self</span>.constant(key, computation, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="self">self</span>.scalars += <span class="number">1</span>;
@@ -67,7 +67,7 @@
 <a href=#67 id=67 data-nosnippet>67</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#68 id=68 data-nosnippet>68</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#69 id=69 data-nosnippet>69</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#70 id=70 data-nosnippet>70</a>        location: Location,
+<a href=#70 id=70 data-nosnippet>70</a>        location: ProgramSite,
 <a href=#71 id=71 data-nosnippet>71</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">let </span>term = computation.static_term(<span class="kw-2">*</span>term, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#73 id=73 data-nosnippet>73</a>        <span class="self">self</span>.term(term, <span class="prelude-val">None</span>, computation, limits, counters, location)<span class="question-mark">?</span>;
@@ -81,7 +81,7 @@
 <a href=#81 id=81 data-nosnippet>81</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#82 id=82 data-nosnippet>82</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#83 id=83 data-nosnippet>83</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#84 id=84 data-nosnippet>84</a>        location: Location,
+<a href=#84 id=84 data-nosnippet>84</a>        location: ProgramSite,
 <a href=#85 id=85 data-nosnippet>85</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>pattern = computation.static_pattern(pattern, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#87 id=87 data-nosnippet>87</a>        counters.work(limits, location)<span class="question-mark">?</span>;
@@ -113,7 +113,7 @@
 <a href=#113 id=113 data-nosnippet>113</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#114 id=114 data-nosnippet>114</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#115 id=115 data-nosnippet>115</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#116 id=116 data-nosnippet>116</a>        location: Location,
+<a href=#116 id=116 data-nosnippet>116</a>        location: ProgramSite,
 <a href=#117 id=117 data-nosnippet>117</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let </span>filter = computation.static_filter(filter, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">let </span>(left, right) = filter.terms();
@@ -139,7 +139,7 @@
 <a href=#139 id=139 data-nosnippet>139</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#140 id=140 data-nosnippet>140</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#141 id=141 data-nosnippet>141</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#142 id=142 data-nosnippet>142</a>        location: Location,
+<a href=#142 id=142 data-nosnippet>142</a>        location: ProgramSite,
 <a href=#143 id=143 data-nosnippet>143</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>key = <span class="kw">match </span>term {
 <a href=#145 id=145 data-nosnippet>145</a>            TemplateTerm::Variable(variable) =&gt; <span class="kw">match </span>binding {
@@ -170,7 +170,7 @@
 <a href=#170 id=170 data-nosnippet>170</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#171 id=171 data-nosnippet>171</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#172 id=172 data-nosnippet>172</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#173 id=173 data-nosnippet>173</a>        location: Location,
+<a href=#173 id=173 data-nosnippet>173</a>        location: ProgramSite,
 <a href=#174 id=174 data-nosnippet>174</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">let </span>slot = <span class="self">self</span>.constants.len();
 <a href=#176 id=176 data-nosnippet>176</a>        <span class="self">self</span>.constants
@@ -190,7 +190,7 @@
 <a href=#190 id=190 data-nosnippet>190</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#191 id=191 data-nosnippet>191</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#192 id=192 data-nosnippet>192</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#193 id=193 data-nosnippet>193</a>        location: Location,
+<a href=#193 id=193 data-nosnippet>193</a>        location: ProgramSite,
 <a href=#194 id=194 data-nosnippet>194</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">let </span>read = computation.read();
 <a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span><span class="kw-2">mut </span>fields = Buffer::new(computation, limits, counters, location)<span class="question-mark">?</span>;

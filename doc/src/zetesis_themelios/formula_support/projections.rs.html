@@ -76,7 +76,7 @@
 <a href=#76 id=76 data-nosnippet>76</a>    /// original leases and cannot be populated by a later cursor.
 <a href=#77 id=77 data-nosnippet>77</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>retain_in_rule(
 <a href=#78 id=78 data-nosnippet>78</a>        <span class="kw-2">mut </span><span class="self">self</span>,
-<a href=#79 id=79 data-nosnippet>79</a>        location: themelios_base::span::Location,
+<a href=#79 id=79 data-nosnippet>79</a>        location: <span class="kw">crate</span>::ProgramSite,
 <a href=#80 id=80 data-nosnippet>80</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#81 id=81 data-nosnippet>81</a>        <span class="self">self</span>.lease
 <a href=#82 id=82 data-nosnippet>82</a>            .observe(<span class="self">self</span>.bytes() - size_of::&lt;<span class="self">Self</span>&gt;(), location)<span class="question-mark">?</span>;

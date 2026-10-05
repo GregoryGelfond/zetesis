@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_core::catalog::AssignmentSlice;
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use super</span>::{
-<a href=#10 id=10 data-nosnippet>10</a>    AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Location, Memory, SupportAppend,
+<a href=#10 id=10 data-nosnippet>10</a>    AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Memory, ProgramSite, SupportAppend,
 <a href=#11 id=11 data-nosnippet>11</a>    atom_failure, atom_interner, failure, owner_limits, record_owner_peak, size_of,
 <a href=#12 id=12 data-nosnippet>12</a>};
 <a href=#13 id=13 data-nosnippet>13</a>
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>        workspace: usize,
 <a href=#86 id=86 data-nosnippet>86</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#87 id=87 data-nosnippet>87</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#88 id=88 data-nosnippet>88</a>        location: Location,
+<a href=#88 id=88 data-nosnippet>88</a>        location: ProgramSite,
 <a href=#89 id=89 data-nosnippet>89</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;SourceAtom&gt;, FormulaFailure&gt; {
 <a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let </span>value = <span class="self">self</span>.source_at(<span class="kw-2">&amp;</span>atom.scope, atom.position, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>outer = <span class="self">self</span>.outer_bytes(workspace);
@@ -111,7 +111,7 @@
 <a href=#111 id=111 data-nosnippet>111</a>        position: usize,
 <a href=#112 id=112 data-nosnippet>112</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#113 id=113 data-nosnippet>113</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#114 id=114 data-nosnippet>114</a>        location: Location,
+<a href=#114 id=114 data-nosnippet>114</a>        location: ProgramSite,
 <a href=#115 id=115 data-nosnippet>115</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;AtomRef&lt;<span class="lifetime">'_</span>&gt;, FormulaFailure&gt; {
 <a href=#116 id=116 data-nosnippet>116</a>        counters.work(limits, location)<span class="question-mark">?</span>;
 <a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">if </span>!<span class="self">self</span>.scope.same(scope) {
@@ -128,7 +128,7 @@
 <a href=#128 id=128 data-nosnippet>128</a>        workspace: usize,
 <a href=#129 id=129 data-nosnippet>129</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#130 id=130 data-nosnippet>130</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#131 id=131 data-nosnippet>131</a>        location: Location,
+<a href=#131 id=131 data-nosnippet>131</a>        location: ProgramSite,
 <a href=#132 id=132 data-nosnippet>132</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;SourceAtom, FormulaFailure&gt; {
 <a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span>outer = <span class="self">self</span>.outer_bytes(workspace);
 <a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>checked = owner_limits(limits, outer, location)<span class="question-mark">?</span>;
@@ -206,7 +206,7 @@
 <a href=#206 id=206 data-nosnippet>206</a>        workspace: usize,
 <a href=#207 id=207 data-nosnippet>207</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#208 id=208 data-nosnippet>208</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#209 id=209 data-nosnippet>209</a>        location: Location,
+<a href=#209 id=209 data-nosnippet>209</a>        location: ProgramSite,
 <a href=#210 id=210 data-nosnippet>210</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#211 id=211 data-nosnippet>211</a>        counters.work(limits, location)<span class="question-mark">?</span>;
 <a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">if </span>!<span class="self">self</span>.scope.same(<span class="kw-2">&amp;</span>atom.scope) || atom.position &gt;= <span class="self">self</span>.owner.len() {
@@ -232,7 +232,7 @@
 <a href=#232 id=232 data-nosnippet>232</a>        workspace: usize,
 <a href=#233 id=233 data-nosnippet>233</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#234 id=234 data-nosnippet>234</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#235 id=235 data-nosnippet>235</a>        location: Location,
+<a href=#235 id=235 data-nosnippet>235</a>        location: ProgramSite,
 <a href=#236 id=236 data-nosnippet>236</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span>bytes = usize::try_from(<span class="self">self</span>.owner.storage_bytes() + <span class="self">self</span>.outer_bytes(<span class="number">0</span>))
 <a href=#238 id=238 data-nosnippet>238</a>            .map_err(|<span class="kw">_</span>| failure(Failure::Overflow, location))<span class="question-mark">?</span>;

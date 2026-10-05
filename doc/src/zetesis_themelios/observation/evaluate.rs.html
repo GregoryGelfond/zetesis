@@ -294,7 +294,7 @@
 <a href=#294 id=294 data-nosnippet>294</a>        )<span class="question-mark">?</span>;
 <a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = output::Terms::new(ctx.terms.read());
 <a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">for </span>directive <span class="kw">in </span>program.directives {
-<a href=#297 id=297 data-nosnippet>297</a>            ctx.work.location = directive.origins.first().copied();
+<a href=#297 id=297 data-nosnippet>297</a>            ctx.work.site = directive.site;
 <a href=#298 id=298 data-nosnippet>298</a>            visit(
 <a href=#299 id=299 data-nosnippet>299</a>                <span class="kw-2">&amp;</span>directive.query,
 <a href=#300 id=300 data-nosnippet>300</a>                <span class="kw-2">&amp;</span>atoms,
@@ -329,7 +329,7 @@
 <a href=#329 id=329 data-nosnippet>329</a>        cancellation,
 <a href=#330 id=330 data-nosnippet>330</a>        statistics: Statistics::default(),
 <a href=#331 id=331 data-nosnippet>331</a>        local_bytes: <span class="number">0</span>,
-<a href=#332 id=332 data-nosnippet>332</a>        location: <span class="prelude-val">None</span>,
+<a href=#332 id=332 data-nosnippet>332</a>        site: <span class="kw">crate</span>::ProgramSite::program(),
 <a href=#333 id=333 data-nosnippet>333</a>    };
 <a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span>symbols = terms(program, model, <span class="kw-2">&amp;mut </span>work)<span class="question-mark">?</span>;
 <a href=#335 id=335 data-nosnippet>335</a>    <span class="prelude-val">Ok</span>(Evaluation {

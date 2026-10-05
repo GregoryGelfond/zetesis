@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"]};
+window.SIDEBAR_ITEMS = {"enum":["Grounder","OutputError","Symbol","SymbolStop"],"macro":[["atom",1],["constraint",1],["external",1],["fact",1],["maximize",1],["minimize",1],["program",1],["rule",1],["show",1]],"mod":["prelude"],"struct":["Config","OutputLimits","Program","Solver"]};

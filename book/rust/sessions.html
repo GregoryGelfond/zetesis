@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -563,9 +563,10 @@ the retained prefix. No partial result is treated as a smaller program.
 <code>into_parts()</code> transfers the original cause, subject, answers and outcome into
 <code>WorldViewFailureParts</code> without cloning. <code>into_answer_sets()</code> remains the explicit
 choice to keep only the answers and discard the other failure evidence.</p>
-<p>These are zetesis’s collection guarantees. The streaming <code>Session</code> remains the
-surface for partial observations. Interoperability with another library’s solver
-or query interfaces requires a separate adapter contract.</p>
+<p>These are the native collection guarantees. The streaming <code>Session</code> remains the
+surface for partial observations. <a href="agent.html"><code>zetesis::Solver</code></a> connects native
+execution to the canonical agent and query contracts; their nonempty snapshots
+remain distinct from the native, possibly empty complete family.</p>
 <h2 id="reuse-and-identity"><a class="header" href="#reuse-and-identity">Reuse and identity</a></h2>
 <h3 id="projected-enumeration"><a class="header" href="#projected-enumeration">Projected enumeration</a></h3>
 <p><code>SessionBuilder::projected(ProjectionLimits::default())</code> requests one full
@@ -725,7 +726,9 @@ does not deliver the remaining models. Neither behavior discards the original
 failure reason in favor of a later cleanup stop.</p>
 <p><code>PreparedInput::program</code> borrows a native <code>zetesis_core::Program</code> without source
 metadata. It reaches the same relational session as a source-admitted program,
-including lazy execution; it does not first compile a complete ground graph.</p>
+including lazy execution; it does not first compile a complete ground graph.
+<code>PreparedInput::relational</code> borrows the native program and its display metadata
+from one <a href="source.html#admit-an-existing-logical-program">prepared canonical owner</a>.</p>
 <p>An execution observer receives typed, borrowed facts about preparation and
 execution choices. It need not parse diagnostics. This example constructs the
 fact <code>ready.</code> through the native library and retains only its selected grounding
@@ -963,7 +966,7 @@ sink; <a href="outcomes.html">publication is a separate boundary</a>.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../rust/getting-started.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../rust/agent.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -977,7 +980,7 @@ sink; <a href="outcomes.html">publication is a separate boundary</a>.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../rust/getting-started.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../rust/agent.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

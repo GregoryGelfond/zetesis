@@ -1,0 +1,59 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source-text model, spans, line indexing, and the diagnostics model: the shared vocabulary of location and report under every tier."><title>zetesis::prelude::base - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../crates.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate base</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../zetesis/index.html">zetesis</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#a-worked-example" title="A worked example">A worked example</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In zetesis::<wbr>prelude</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">zetesis</a>::<wbr><a href="../index.html">prelude</a></div><h1>Crate <span>base</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Source-text model, spans, line indexing, and the diagnostics model:
+the shared vocabulary of <em>location</em> and <em>report</em> under every tier.</p>
+<p>Design of record: <code>docs/design/base.md</code>. Every public operation’s
+failure semantics and computational cost are stated on the
+operation and consolidated in base.md §9. This crate does no I/O,
+holds no global state, and knows nothing about any language.</p>
+<h2 id="a-worked-example"><a class="doc-anchor" href="#a-worked-example">§</a>A worked example</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>themelios_base::diagnostic::{
+    Diagnostic, DiagnosticId, Label, Severity,
+};
+<span class="kw">use </span>themelios_base::source::SourceSet;
+<span class="kw">use </span>themelios_base::span::{ByteOffset, Location, Span};
+<span class="kw">use </span>themelios_base::view;
+
+<span class="kw">let </span><span class="kw-2">mut </span>catalog = SourceSet::new();
+<span class="kw">let </span>file = catalog.add(<span class="string">"demo.lp"</span>.into(), <span class="string">"q(X) :- r(X)\n"</span>.into())<span class="question-mark">?</span>;
+
+<span class="kw">const </span>UNEXPECTED: DiagnosticId =
+    DiagnosticId::new(<span class="string">"syntax"</span>, <span class="string">"unexpected-token"</span>);
+<span class="kw">let </span>diagnostic = Diagnostic::new(
+    UNEXPECTED,
+    Severity::Error,
+    <span class="string">"expected `.` after the rule body"</span>.into(),
+    Label {
+        location: Location {
+            source: file,
+            span: Span::new(ByteOffset::new(<span class="number">8</span>), ByteOffset::new(<span class="number">12</span>))<span class="question-mark">?</span>,
+        },
+        message: <span class="prelude-val">None</span>,
+    },
+)<span class="question-mark">?</span>;
+
+<span class="comment">// The same value yields every view.
+</span><span class="kw">let </span>rendered = view::human(<span class="kw-2">&amp;</span>diagnostic, <span class="kw-2">&amp;</span>catalog);
+<span class="macro">assert!</span>(rendered.starts_with(<span class="string">"error[syntax::unexpected-token]:"</span>));
+<span class="kw">let </span>payload = view::editor(
+    <span class="kw-2">&amp;</span>diagnostic,
+    <span class="kw-2">&amp;</span>catalog,
+    themelios_base::line::ColumnEncoding::Utf16Units,
+)<span class="question-mark">?</span>;
+<span class="macro">assert_eq!</span>(payload.code, UNEXPECTED);</code></pre></div></div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="diagnostic/index.html" title="mod zetesis::prelude::base::diagnostic">diagnostic</a></dt><dd>The diagnostics model (docs/design/base.md §6): a report about
+source, located by construction, with a stable machine identity.
+Solve outcomes, faults, and progress events are not diagnostics —
+they have their own models — and an unlocated report is not a
+degenerate diagnostic but a different thing.</dd><dt><a class="mod" href="line/index.html" title="mod zetesis::prelude::base::line">line</a></dt><dd>Line and column structure for one source’s text
+(docs/design/base.md §5): an explicit, pure derivation you construct
+and hold. Zero-based throughout; one-based coordinates exist only
+inside the human rendering, as presentation. Lines break at <code>\n</code>
+alone; a <code>\r</code> stays in its line’s content; nothing is normalized,
+ever.</dd><dt><a class="mod" href="source/index.html" title="mod zetesis::prelude::base::source">source</a></dt><dd>The source-text model (docs/design/base.md §3): text with an
+identity, from anywhere — this crate does no I/O and never sees a
+path. Admission is the one well-formedness authority for text;
+everything downstream rides on a <code>Source</code> and inherits its
+guarantees.</dd><dt><a class="mod" href="span/index.html" title="mod zetesis::prelude::base::span">span</a></dt><dd>Byte positions and half-open regions in one source’s text
+(docs/design/base.md §4). A <code>Span</code> is text-independent arithmetic
+data; boundary discipline lives where span meets text — see
+<code>Source::slice</code> and the line index.</dd><dt><a class="mod" href="view/index.html" title="mod zetesis::prelude::base::view">view</a></dt><dd>Views: pure derivations over <code>(&amp;Diagnostic, &amp;impl Sources)</code>
+(docs/design/base.md §7) — plain functions over the public model,
+whose one polymorphism is over the environment, the <code>Sources</code> trait.</dd></dl></section></div></main></body></html>

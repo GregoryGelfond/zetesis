@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FromBytesRefusal","SliceRefusal","SourceFacet","SourcesLawViolation"],"fn":["check_sources_laws"],"struct":["InvalidUtf8","NotCharBoundary","Source","SourceId","SourceSet","TooLarge"],"trait":["Sources"]};

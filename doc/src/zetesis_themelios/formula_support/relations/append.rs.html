@@ -2,7 +2,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use super</span>::{
 <a href=#4 id=4 data-nosnippet>4</a>    AtomAppender, AtomRef, AtomicUsize, CatalogRead, Counters, Failure, FormulaFailure,
-<a href=#5 id=5 data-nosnippet>5</a>    FormulaLimits, FormulaResource, Location, Memory, Ordering, TermRef, atom_failure,
+<a href=#5 id=5 data-nosnippet>5</a>    FormulaLimits, FormulaResource, Memory, Ordering, ProgramSite, TermRef, atom_failure,
 <a href=#6 id=6 data-nosnippet>6</a>    atom_interner, ceiling, failure, owner_limits, record_owner_peak, size_of,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::GroundingWork;
@@ -40,7 +40,7 @@
 <a href=#40 id=40 data-nosnippet>40</a>        workspace: usize,
 <a href=#41 id=41 data-nosnippet>41</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#42 id=42 data-nosnippet>42</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#43 id=43 data-nosnippet>43</a>        location: Location,
+<a href=#43 id=43 data-nosnippet>43</a>        location: ProgramSite,
 <a href=#44 id=44 data-nosnippet>44</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;zetesis_core::catalog::TermKey, FormulaFailure&gt; {
 <a href=#45 id=45 data-nosnippet>45</a>        <span class="kw">let </span>outer = <span class="self">self</span>.outer_bytes(workspace);
 <a href=#46 id=46 data-nosnippet>46</a>        <span class="self">self</span>.owner.restart_storage_peak();
@@ -134,7 +134,7 @@
 <a href=#134 id=134 data-nosnippet>134</a>        workspace: usize,
 <a href=#135 id=135 data-nosnippet>135</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#136 id=136 data-nosnippet>136</a>        counters: <span class="kw-2">&amp;</span>Counters,
-<a href=#137 id=137 data-nosnippet>137</a>        location: Location,
+<a href=#137 id=137 data-nosnippet>137</a>        location: ProgramSite,
 <a href=#138 id=138 data-nosnippet>138</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>current = <span class="self">self</span>.owner.storage_bytes() + <span class="self">self</span>.outer_bytes(workspace);
 <a href=#140 id=140 data-nosnippet>140</a>        record_owner_peak(
@@ -177,7 +177,7 @@
 <a href=#177 id=177 data-nosnippet>177</a>        atom: AtomRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#178 id=178 data-nosnippet>178</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#179 id=179 data-nosnippet>179</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#180 id=180 data-nosnippet>180</a>        location: Location,
+<a href=#180 id=180 data-nosnippet>180</a>        location: ProgramSite,
 <a href=#181 id=181 data-nosnippet>181</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span>atom = <span class="self">self</span>.discover_ref(atom, <span class="number">0</span>, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="self">self</span>.retain(<span class="kw-2">&amp;</span>atom, <span class="number">0</span>, limits, counters, location)
@@ -189,7 +189,7 @@
 <a href=#189 id=189 data-nosnippet>189</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#190 id=190 data-nosnippet>190</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#191 id=191 data-nosnippet>191</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#192 id=192 data-nosnippet>192</a>        location: Location,
+<a href=#192 id=192 data-nosnippet>192</a>        location: ProgramSite,
 <a href=#193 id=193 data-nosnippet>193</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(checked) = <span class="self">self</span>.selected_order_limits(limits, counters, location)<span class="question-mark">? </span>{
 <a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">let </span>workspace = counters.accounting.workspace.bytes();
@@ -221,7 +221,7 @@
 <a href=#221 id=221 data-nosnippet>221</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#222 id=222 data-nosnippet>222</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#223 id=223 data-nosnippet>223</a>        counters: <span class="kw-2">&amp;</span>Counters,
-<a href=#224 id=224 data-nosnippet>224</a>        location: Location,
+<a href=#224 id=224 data-nosnippet>224</a>        location: ProgramSite,
 <a href=#225 id=225 data-nosnippet>225</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;atom_interner::Limits&gt;, FormulaFailure&gt; {
 <a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(required) = <span class="self">self</span>.owner.selected_order_storage(<span class="self">self</span>.pending.len()) <span class="kw">else </span>{
 <a href=#227 id=227 data-nosnippet>227</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);

@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-themelios/src/formula_ir/domain.rs`."><title>domain.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_themelios" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_themelios/formula_ir/</div>domain.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Distinct explicitly admitted roots, independent of canonical DAG population.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>themelios_base::span::Location;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, TermKey, TermSet};
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">crate</span>::formula::ceiling;
@@ -16,7 +16,7 @@
 <a href=#16 id=16 data-nosnippet>16</a>        source: <span class="kw-2">&amp;</span>Admission&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#17 id=17 data-nosnippet>17</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#18 id=18 data-nosnippet>18</a>        counters: <span class="kw-2">&amp;</span>Counters,
-<a href=#19 id=19 data-nosnippet>19</a>        location: Location,
+<a href=#19 id=19 data-nosnippet>19</a>        location: ProgramSite,
 <a href=#20 id=20 data-nosnippet>20</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#21 id=21 data-nosnippet>21</a>        <span class="kw">let </span><span class="kw-2">mut </span>lease = source.lease();
 <a href=#22 id=22 data-nosnippet>22</a>        lease.observe(size_of::&lt;<span class="self">Self</span>&gt;(), location)<span class="question-mark">?</span>;
@@ -34,7 +34,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>        maximum: usize,
 <a href=#35 id=35 data-nosnippet>35</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#36 id=36 data-nosnippet>36</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#37 id=37 data-nosnippet>37</a>        location: Location,
+<a href=#37 id=37 data-nosnippet>37</a>        location: ProgramSite,
 <a href=#38 id=38 data-nosnippet>38</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#39 id=39 data-nosnippet>39</a>        <span class="kw">if </span><span class="self">self
 <a href=#40 id=40 data-nosnippet>40</a>            </span>.roots
@@ -93,11 +93,11 @@
 <a href=#93 id=93 data-nosnippet>93</a>    };
 <a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">use </span>zetesis_core::{Value, ValueLimits, ValueNode};
 <a href=#95 id=95 data-nosnippet>95</a>
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">fn </span>location() -&gt; Location {
-<a href=#97 id=97 data-nosnippet>97</a>        Location {
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">fn </span>location() -&gt; ProgramSite {
+<a href=#97 id=97 data-nosnippet>97</a>        ProgramSite::source(themelios_base::span::Location {
 <a href=#98 id=98 data-nosnippet>98</a>            source: SourceId::new(<span class="number">17</span>),
 <a href=#99 id=99 data-nosnippet>99</a>            span: Span::empty(ByteOffset::new(<span class="number">0</span>)),
-<a href=#100 id=100 data-nosnippet>100</a>        }
+<a href=#100 id=100 data-nosnippet>100</a>        })
 <a href=#101 id=101 data-nosnippet>101</a>    }
 <a href=#102 id=102 data-nosnippet>102</a>
 <a href=#103 id=103 data-nosnippet>103</a>    <span class="attr">#[test]

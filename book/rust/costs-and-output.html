@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -435,7 +435,9 @@ remain independent. Neither account includes allocator overhead or measures RSS.
 Reached undefined arithmetic, cancellation or a resource refusal returns an
 error without a partial observation. An observation error does not invalidate
 an already verified answer set or complete world view.
-Errors retain their typed cause, source location and partial statistics. The
+Errors retain their typed cause, original statement site and partial statistics.
+<code>site()</code> preserves the logical subject for resolution through its formula owner;
+<code>location()</code> returns a source coordinate only when one exists. The
 fixed diagnostic box is allocated only on refusal and follows the standard
 allocator’s failure policy; these limits do not promise recovery from every
 process allocation failure.</p>

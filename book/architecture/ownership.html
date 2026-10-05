@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -248,10 +248,17 @@ a checked rank for that exact Program. Equal logical atoms from separately
 admitted Programs are comparable semantically but cannot exchange applicability
 witnesses. Tuple writers created for the same Program share vocabulary identity
 while retaining independent atom-row scopes and candidate truth.</p>
-<p>Formula source preparation admits scalar, constructor, predicate and pattern
-components into one canonical authority. Compiled expressions and patterns retain
-occurrence coordinates and topology; temporary themelios source values remain
-at the admission boundary. Preparation transfers this authority and its accepted
+<p>Formula preparation accepts source text or a canonical logical program. Both
+retain the original canonical <code>Program</code> in an <code>Arc</code> through preparation and
+materialization. Typed-input failures also retain that owner. Source input
+additionally retains its original bytes; constructed input needs none.
+<code>ProgramSite</code> carries an optional original statement identity within that program
+and any real source coordinate as separate evidence. Sharing the supplied
+<code>Arc</code> avoids copying the input but keeps its allocation alive. This retention is
+separate from the term authority and its named storage ceilings.</p>
+<p>Preparation admits scalar, constructor, predicate and pattern components into
+one canonical authority. Compiled expressions and patterns retain occurrence
+coordinates and topology. Preparation transfers this authority and its accepted
 work/storage receipts into instantiation, which retains the analysis, provenance,
 activated objectives and emitted builder needed by later phases. Its atom builder
 owns the evolving authority; checked AVL indexes store discovery positions and

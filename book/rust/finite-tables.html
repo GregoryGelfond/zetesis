@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -300,14 +300,13 @@ selector under either strategy, as described below. These execution choices
 preserve complete source meaning and the formula/reduct solver; their different
 work and storage costs can change bounded admission.</p>
 <p>This example materializes a program using each join strategy and compares the
-complete admitted atoms, formulas and source locations. Repeated <code>X</code> requires
+complete admitted atoms, formulas and original statement sites. Repeated <code>X</code> requires
 equal route endpoints; the <code>rail</code> constant restricts the final column. A work
 observer checks that the table index was prepared, queried and reused.</p>
-<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate themelios_base;
-</span><span class="boring">extern crate zetesis_themelios;
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_themelios;
 </span>use std::cell::Cell;
 
-use themelios_base::span::Location;
+use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     GroundingObserver, GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork,
@@ -335,7 +334,7 @@ impl GroundingObserver for JoinWork {
     fn phase_exit(
         &amp;self,
         _: GroundingPhase,
-        _: Option&lt;Location&gt;,
+        _: Option&lt;ProgramSite&gt;,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {

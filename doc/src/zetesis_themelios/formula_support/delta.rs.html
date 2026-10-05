@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>std::ops::Range;
 <a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>themelios_program::program::DefaultNegation;
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use super</span>::{Counters, Support};
@@ -162,7 +162,7 @@
 <a href=#162 id=162 data-nosnippet>162</a>        range: Range&lt;usize&gt;,
 <a href=#163 id=163 data-nosnippet>163</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#164 id=164 data-nosnippet>164</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#165 id=165 data-nosnippet>165</a>        location: Location,
+<a href=#165 id=165 data-nosnippet>165</a>        location: ProgramSite,
 <a href=#166 id=166 data-nosnippet>166</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(posting) = posting <span class="kw">else </span>{
 <a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="self">Self</span>::Interval(range));
@@ -187,7 +187,7 @@
 <a href=#187 id=187 data-nosnippet>187</a>    row: usize,
 <a href=#188 id=188 data-nosnippet>188</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#189 id=189 data-nosnippet>189</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#190 id=190 data-nosnippet>190</a>    location: Location,
+<a href=#190 id=190 data-nosnippet>190</a>    location: ProgramSite,
 <a href=#191 id=191 data-nosnippet>191</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span><span class="kw-2">mut </span>start = <span class="number">0</span>;
 <a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">let </span><span class="kw-2">mut </span>end = posting.len();

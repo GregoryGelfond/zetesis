@@ -1,0 +1,177 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The backend contract (docs/design/solve.md §4.1, §4.3): the sole crossing between the engine-free core and any engine — the one door an audit reads. A backend implements engine mechanism alone; the derived readings — consequences by enumeration (§4.2) and blame (§5.4) — are the core’s, over this surface, never a backend author’s."><title>Backend in zetesis::prelude - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Backend</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../zetesis/index.html">zetesis</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Backend</a></h2><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.capabilities" title="capabilities">capabilities</a></li><li><a href="#tymethod.lower" title="lower">lower</a></li><li><a href="#tymethod.solve" title="solve">solve</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.assign_external" title="assign_external">assign_external</a></li><li><a href="#method.consequences_native" title="consequences_native">consequences_native</a></li><li><a href="#method.ground" title="ground">ground</a></li><li><a href="#method.ground_program" title="ground_program">ground_program</a></li><li><a href="#method.interrupt" title="interrupt">interrupt</a></li><li><a href="#method.optimize" title="optimize">optimize</a></li><li><a href="#method.register_function" title="register_function">register_function</a></li><li><a href="#method.register_propagator" title="register_propagator">register_propagator</a></li><li><a href="#method.reset" title="reset">reset</a></li><li><a href="#method.solve_assuming" title="solve_assuming">solve_assuming</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In zetesis::<wbr>prelude</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">zetesis</a>::<wbr><a href="index.html">prelude</a></div><h1>Trait <span class="trait">Backend</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"></span></div><pre class="rust item-decl"><code>pub trait Backend {
+<details class="toggle type-contents-toggle"><summary class="hideme"><span>Show 13 methods</span></summary>    // Required methods
+    fn <a href="#tymethod.capabilities" class="fn">capabilities</a>(&amp;self) -&gt; <a class="struct" href="struct.Capabilities.html" title="struct zetesis::prelude::Capabilities">Capabilities</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.solve" class="fn">solve</a>(&amp;mut self, request: &amp;<a class="struct" href="struct.SolveRequest.html" title="struct zetesis::prelude::SolveRequest">SolveRequest</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Solved.html" title="struct zetesis::prelude::Solved">Solved</a>&lt;'_&gt;, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.lower" class="fn">lower</a>(&amp;mut self, door: <a class="enum" href="enum.Door.html" title="enum zetesis::prelude::Door">Door</a>&lt;'_&gt;) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;;
+
+    // Provided methods
+    fn <a href="#method.ground_program" class="fn">ground_program</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="struct" href="struct.GroundProgram.html" title="struct zetesis::prelude::GroundProgram">GroundProgram</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.interrupt" class="fn">interrupt</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="trait.Cancel.html" title="trait zetesis::prelude::Cancel">Cancel</a>&gt;&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.optimize" class="fn">optimize</a>(
+        &amp;mut self,
+        _request: &amp;<a class="struct" href="struct.OptimizeRequest.html" title="struct zetesis::prelude::OptimizeRequest">OptimizeRequest</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Optimized.html" title="struct zetesis::prelude::Optimized">Optimized</a>&lt;'_&gt;, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.solve_assuming" class="fn">solve_assuming</a>(
+        &amp;mut self,
+        _scenario: &amp;<a class="struct" href="struct.Scenario.html" title="struct zetesis::prelude::Scenario">Scenario</a>,
+        _request: &amp;<a class="struct" href="struct.SolveRequest.html" title="struct zetesis::prelude::SolveRequest">SolveRequest</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Solved.html" title="struct zetesis::prelude::Solved">Solved</a>&lt;'_&gt;, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.ground" class="fn">ground</a>(
+        &amp;mut self,
+        _parts: &amp;[<a class="struct" href="struct.Part.html" title="struct zetesis::prelude::Part">Part</a>],
+        _options: &amp;<a class="struct" href="struct.GroundOptions.html" title="struct zetesis::prelude::GroundOptions">GroundOptions</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.assign_external" class="fn">assign_external</a>(
+        &amp;mut self,
+        _external: <a class="enum" href="../enum.Symbol.html" title="enum zetesis::Symbol">Symbol</a>,
+        _value: <a class="enum" href="enum.TruthValue.html" title="enum zetesis::prelude::TruthValue">TruthValue</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.reset" class="fn">reset</a>(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.register_function" class="fn">register_function</a>(
+        &amp;mut self,
+        _function: <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Function&gt;,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.register_propagator" class="fn">register_propagator</a>(
+        &amp;mut self,
+        _propagator: <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Propagator&gt;,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.consequences_native" class="fn">consequences_native</a>(
+        &amp;mut self,
+        _mode: <a class="enum" href="enum.Mode.html" title="enum zetesis::prelude::Mode">Mode</a>,
+        _request: &amp;<a class="struct" href="struct.ConsequenceRequest.html" title="struct zetesis::prelude::ConsequenceRequest">ConsequenceRequest</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="enum.NativeAnswer.html" title="enum zetesis::prelude::NativeAnswer">NativeAnswer</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt; { ... }
+</details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The backend contract (docs/design/solve.md §4.1, §4.3): the sole crossing
+between the engine-free core and any engine — the one door an audit
+reads. A backend implements engine mechanism alone; the derived readings —
+consequences by enumeration (§4.2) and blame (§5.4) — are the core’s, over
+this surface, never a backend author’s.</p>
+<p>Three methods are required of every backend: <a href="trait.Backend.html#tymethod.capabilities" title="method zetesis::prelude::Backend::capabilities"><code>capabilities</code></a>, <a href="trait.Backend.html#tymethod.solve" title="method zetesis::prelude::Backend::solve"><code>solve</code></a>,
+and <a href="trait.Backend.html#tymethod.lower" title="method zetesis::prelude::Backend::lower"><code>lower</code></a>. The design marks the rest required
+exactly when the matching capability bit is declared — <code>optimize</code> under
+<code>optimization</code>; <code>solve_assuming</code> under <code>assumptions</code>; <code>ground</code>,
+<code>assign_external</code>, and <code>reset</code> under <code>multi_shot</code>; <code>register_function</code>
+under <code>functions</code>; <code>register_propagator</code> under <code>propagators</code>. The trait
+encodes that obligation as a provided default that refuses: a backend that
+declares the bit overrides the method, and one that does not inherits the
+typed refusal — a request beyond the declaration is a <a href="struct.Fault.html" title="struct zetesis::prelude::Fault"><code>Fault</code></a> at the
+request surface, never a silent degrade (§4.1) — with no method to write
+for a capability it lacks. The remaining methods are provided outright and
+overridden by a capable engine: <a href="trait.Backend.html#method.interrupt" title="method zetesis::prelude::Backend::interrupt"><code>interrupt</code></a>, <code>None</code> unless the backend
+cancels; <a href="trait.Backend.html#method.ground_program" title="method zetesis::prelude::Backend::ground_program"><code>ground_program</code></a>, <code>None</code> unless the backend declares the
+observer; <a href="trait.Backend.html#method.consequences_native" title="method zetesis::prelude::Backend::consequences_native"><code>consequences_native</code></a>, refusing unless the backend has the
+native door.</p>
+<p>Usable as a trait object: the core holds any engine behind this one door.</p>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.capabilities" class="method"><h4 class="code-header">fn <a href="#tymethod.capabilities" class="fn">capabilities</a>(&amp;self) -&gt; <a class="struct" href="struct.Capabilities.html" title="struct zetesis::prelude::Capabilities">Capabilities</a></h4></section></summary><div class="docblock"><p>Required. What this backend can do, read before a request is paid for
+(§4.1). Pure; O(1).</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.solve" class="method"><h4 class="code-header">fn <a href="#tymethod.solve" class="fn">solve</a>(&amp;mut self, request: &amp;<a class="struct" href="struct.SolveRequest.html" title="struct zetesis::prelude::SolveRequest">SolveRequest</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Solved.html" title="struct zetesis::prelude::Solved">Solved</a>&lt;'_&gt;, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required. Consistency and enumeration: the handle resolves the
+trichotomy and streams the models lazily (§5.2). It enumerates
+<code>solve</code>’s model set, which ignores any objective (§5.2): the stable
+models, as if the program had none, so an engine that optimises a
+program with an objective by default owes the enumeration without it.</p>
+<p>It opens the run (docs/design/solve.md §6.3): the run’s control state
+first, then the grounding of the program lowered — a single-shot backend
+grounds here, never in <code>lower</code>, and grounds the <code>base</code> part alone, a part
+beyond it instantiated only through a multi-shot backend’s <code>ground</code> —
+then the search, each model delivered as the caller reads it. A grounding
+that fails fails this solve alone and leaves the lowered program for the
+next one (§4.1). A request’s time budget is a deadline fixed at this call
+(see <a href="struct.SolveRequest.html#structfield.time" title="field zetesis::prelude::SolveRequest::time"><code>SolveRequest::time</code></a>).</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.lower" class="method"><h4 class="code-header">fn <a href="#tymethod.lower" class="fn">lower</a>(&amp;mut self, door: <a class="enum" href="enum.Door.html" title="enum zetesis::prelude::Door">Door</a>&lt;'_&gt;) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required. The bridge (§10): consume a program through a door. On a
+multi-shot backend a repeat <code>lower</code> accumulates into the engine’s
+program, so a rebuild is <code>reset</code> then <code>lower</code> the amended whole; on a
+single-shot backend a <code>lower</code> replaces the program, so a rebuild is one
+<code>lower</code>. It validates and retains (docs/design/solve.md §6.3): its checks
+are each bounded by the program’s size, it grounds nothing — on a
+single-shot backend grounding is <code>solve</code>’s, on a multi-shot one <code>ground</code>’s
+— and a refused <code>lower</code> leaves the program lowered before it (§4.1). A
+single-shot backend that does not admit a part beyond <code>base</code> refuses the
+program here, naming the part (<a href="struct.Fault.html#method.program_part" title="associated function zetesis::prelude::Fault::program_part"><code>Fault::program_part</code></a>, §6.3).</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.ground_program" class="method"><h4 class="code-header">fn <a href="#method.ground_program" class="fn">ground_program</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="struct" href="struct.GroundProgram.html" title="struct zetesis::prelude::GroundProgram">GroundProgram</a>&gt;</h4></section></summary><div class="docblock"><p>Provided. The ground program the backend exposes — the observer, a
+declared capability (§10.4): overridden exactly when
+<code>capabilities().ground_program</code>, so a backend that does not declare it
+writes nothing and inherits the default <code>None</code>. What a declaring
+backend exposes is complete or absent: <code>Some</code> holds the ground program
+as the grounder emitted it, from every grounding that finished since the
+last <code>reset</code> or replacing <code>lower</code>; <code>None</code> before any has finished, after
+a <code>reset</code> or a replacing <code>lower</code> until the next one finishes, and while
+the backend needs a rebuild — never a prefix or a failed grounding’s
+partial output. The conformance suite (§13.1) holds the declaration and
+the attribution’s membership.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.interrupt" class="method"><h4 class="code-header">fn <a href="#method.interrupt" class="fn">interrupt</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="trait.Cancel.html" title="trait zetesis::prelude::Cancel">Cancel</a>&gt;&gt;</h4></section></summary><div class="docblock"><p>Provided. The engine’s cancellation primitive, to cut an in-flight
+solve short from another thread — <code>Some</code> exactly when
+<code>capabilities().cancellation</code> (§6.1, §6.3). The default answers <code>None</code>,
+so a non-cancelling backend inherits it and a cancelling one overrides.
+It is the one primitive the request-side time budget (§6.3) and the
+agent’s interrupt handle — the core’s, over it (§6.2) — are realised
+over; the conformance suite (§13.1) checks that a declared cancellation
+answers <code>Some</code>, so the bit cannot lie.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.optimize" class="method"><h4 class="code-header">fn <a href="#method.optimize" class="fn">optimize</a>(
+    &amp;mut self,
+    _request: &amp;<a class="struct" href="struct.OptimizeRequest.html" title="struct zetesis::prelude::OptimizeRequest">OptimizeRequest</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Optimized.html" title="struct zetesis::prelude::Optimized">Optimized</a>&lt;'_&gt;, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().optimization</code>. The proven optimum, with
+the improving trajectory iff the request asks (§5.3); refuses
+otherwise.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.solve_assuming" class="method"><h4 class="code-header">fn <a href="#method.solve_assuming" class="fn">solve_assuming</a>(
+    &amp;mut self,
+    _scenario: &amp;<a class="struct" href="struct.Scenario.html" title="struct zetesis::prelude::Scenario">Scenario</a>,
+    _request: &amp;<a class="struct" href="struct.SolveRequest.html" title="struct zetesis::prelude::SolveRequest">SolveRequest</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.Solved.html" title="struct zetesis::prelude::Solved">Solved</a>&lt;'_&gt;, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().assumptions</code>. Solve under a scenario
+(§6.3): the models of <code>solve</code>’s set the scenario admits (§5.2). Blame
+(§5.4) is the core’s reading over this, not the backend’s — its
+derivation not yet realised — so there is no separate blame method.
+Refuses otherwise.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.ground" class="method"><h4 class="code-header">fn <a href="#method.ground" class="fn">ground</a>(
+    &amp;mut self,
+    _parts: &amp;[<a class="struct" href="struct.Part.html" title="struct zetesis::prelude::Part">Part</a>],
+    _options: &amp;<a class="struct" href="struct.GroundOptions.html" title="struct zetesis::prelude::GroundOptions">GroundOptions</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().multi_shot</code>. Instantiate the named
+program parts under the options (§6.2); refuses otherwise.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.assign_external" class="method"><h4 class="code-header">fn <a href="#method.assign_external" class="fn">assign_external</a>(
+    &amp;mut self,
+    _external: <a class="enum" href="../enum.Symbol.html" title="enum zetesis::Symbol">Symbol</a>,
+    _value: <a class="enum" href="enum.TruthValue.html" title="enum zetesis::prelude::TruthValue">TruthValue</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().multi_shot</code>. Assign an external atom its
+truth value (§6.2). An atom that is not external — every atom, where the
+backend declares no externals — is refused as
+<a href="enum.Presupposition.html#variant.NotExternal" title="variant zetesis::prelude::Presupposition::NotExternal"><code>Presupposition::NotExternal</code></a>, not with <a href="struct.Fault.html#method.unsupported" title="associated function zetesis::prelude::Fault::unsupported"><code>Fault::unsupported</code></a>: the
+method is there, the atom is not one it assigns. Without <code>multi_shot</code>,
+the default refuses as unsupported.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.reset" class="method"><h4 class="code-header">fn <a href="#method.reset" class="fn">reset</a>(&amp;mut self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().multi_shot</code>. Clear the engine’s
+accumulated program so the agent can rebuild it — the rebuild-class
+retraction path (§6.2), <code>lower</code> then reloading the amended whole.
+Distinct from <code>assign_external</code>, a toggle, and <code>ground</code>, an addition;
+not called on a single-shot backend, where <code>lower</code> replaces. Refuses
+otherwise.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.register_function" class="method"><h4 class="code-header">fn <a href="#method.register_function" class="fn">register_function</a>(
+    &amp;mut self,
+    _function: <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Function&gt;,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().functions</code>. Register an <code>@</code>-function
+for ground-time evaluation (§7); refuses otherwise.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.register_propagator" class="method"><h4 class="code-header">fn <a href="#method.register_propagator" class="fn">register_propagator</a>(
+    &amp;mut self,
+    _propagator: <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Propagator&gt;,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Required under <code>capabilities().propagators</code>. Register a custom
+propagator (§8); refuses otherwise.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.consequences_native" class="method"><h4 class="code-header">fn <a href="#method.consequences_native" class="fn">consequences_native</a>(
+    &amp;mut self,
+    _mode: <a class="enum" href="enum.Mode.html" title="enum zetesis::prelude::Mode">Mode</a>,
+    _request: &amp;<a class="struct" href="struct.ConsequenceRequest.html" title="struct zetesis::prelude::ConsequenceRequest">ConsequenceRequest</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="enum.NativeAnswer.html" title="enum zetesis::prelude::NativeAnswer">NativeAnswer</a>, <a class="struct" href="struct.Fault.html" title="struct zetesis::prelude::Fault">Fault</a>&gt;</h4></section></summary><div class="docblock"><p>Optional: overridden exactly when <code>capabilities().native_consequences</code>
+is <code>Native</code>. The engine’s own cautious or brave door, in one solve,
+ranging over the models <code>solve_assuming(request.scenario)</code> denotes — the
+empty scenario being the unscoped program (§4.2; docs/design/query.md
+§2.4). Only a backend that declares <code>assumptions</code> is handed a non-empty
+scenario: the agent reads that declaration first (§6.2). Absent, the core
+derives the consequences by enumeration — over <code>solve</code>, or under a
+scenario over <code>solve_assuming</code> — and the request surface says which path
+runs. Refuses by default.</p>
+<p>It reports what the engine’s search established, a <a href="enum.NativeAnswer.html" title="enum zetesis::prelude::NativeAnswer"><code>NativeAnswer</code></a>: the
+set it computed over a space it closed having seen a model, no model over
+a closed space, or where it stopped short. The core builds the
+consequences from that answer, or refuses — over no model, and over a
+search that did not close the space, as the derived door refuses — so
+the two doors refuse alike as they answer alike, the free differential of
+<code>query.md</code> §2.4. The refusals’ decision and wording are the core’s; the
+report’s honesty is the backend’s, which the conformance suite checks. A
+fault the search raised is the method’s own refusal.</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-Backend-for-Solver" class="impl"><a class="src rightside" href="../../src/zetesis_engine/backend.rs.html#72">Source</a><a href="#impl-Backend-for-Solver" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Backend.html" title="trait zetesis::prelude::Backend">Backend</a> for <a class="struct" href="../struct.Solver.html" title="struct zetesis::Solver">Solver</a></h3></section></div><script src="../../trait.impl/themelios_solve/contract/trait.Backend.js" data-ignore-extern-crates="zetesis_engine" async></script></section></div></main></body></html>

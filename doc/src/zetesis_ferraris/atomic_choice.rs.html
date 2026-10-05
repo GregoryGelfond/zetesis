@@ -8,20 +8,23 @@
 <a href=#8 id=8 data-nosnippet>8</a>/// rewriting. Each consumer charges it within its root/producer inspection.
 <a href=#9 id=9 data-nosnippet>9</a>/// Cross-atom alternatives and richer classically equivalent forms decline.
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>atom(theory: <span class="kw-2">&amp;</span>Theory, head: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">let </span>Node::Or(left, right) = theory.nodes()[head] <span class="kw">else </span>{
-<a href=#12 id=12 data-nosnippet>12</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#13 id=13 data-nosnippet>13</a>    };
-<a href=#14 id=14 data-nosnippet>14</a>    pair(theory, left, right).or_else(|| pair(theory, right, left))
-<a href=#15 id=15 data-nosnippet>15</a>}
-<a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">fn </span>pair(theory: <span class="kw-2">&amp;</span>Theory, positive: usize, negative: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">let </span>Node::Atom(atom) = theory.nodes()[positive] <span class="kw">else </span>{
-<a href=#19 id=19 data-nosnippet>19</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#20 id=20 data-nosnippet>20</a>    };
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span>Node::Implies(left, right) = theory.nodes()[negative] <span class="kw">else </span>{
-<a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#23 id=23 data-nosnippet>23</a>    };
-<a href=#24 id=24 data-nosnippet>24</a>    (theory.nodes()[left] == Node::Atom(atom) &amp;&amp; theory.nodes()[right] == Node::False)
-<a href=#25 id=25 data-nosnippet>25</a>        .then_some(atom)
-<a href=#26 id=26 data-nosnippet>26</a>}
+<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">let </span>node = theory.nodes()[head];
+<a href=#12 id=12 data-nosnippet>12</a>    <span class="kw">let </span>Node::Or(left, right) = node <span class="kw">else </span>{
+<a href=#13 id=13 data-nosnippet>13</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#14 id=14 data-nosnippet>14</a>    };
+<a href=#15 id=15 data-nosnippet>15</a>    pair(theory, left, right).or_else(|| pair(theory, right, left))
+<a href=#16 id=16 data-nosnippet>16</a>}
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">fn </span>pair(theory: <span class="kw-2">&amp;</span>Theory, positive: usize, negative: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">let </span>node = theory.nodes()[positive];
+<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">let </span>Node::Atom(atom) = node <span class="kw">else </span>{
+<a href=#21 id=21 data-nosnippet>21</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#22 id=22 data-nosnippet>22</a>    };
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span>node = theory.nodes()[negative];
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span>Node::Implies(left, right) = node <span class="kw">else </span>{
+<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#26 id=26 data-nosnippet>26</a>    };
+<a href=#27 id=27 data-nosnippet>27</a>    (theory.nodes()[left] == Node::Atom(atom) &amp;&amp; theory.nodes()[right] == Node::False)
+<a href=#28 id=28 data-nosnippet>28</a>        .then_some(atom)
+<a href=#29 id=29 data-nosnippet>29</a>}
 </code></pre></div></section></main></body></html>

@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-08e3f451.js"></script>
+        <script src="toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -204,7 +204,7 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.</p>
 <p>The documentation site contains the manual under <code>book/</code> and the Rust API
 reference under <code>doc/</code>. Keep them together: the manual’s API links are relative
 to that layout. The site’s root page redirects to <code>book/</code>; <code>doc/index.html</code>
-redirects to <code>zetesis_solve/index.html</code>, the library entry point.</p>
+redirects to <code>zetesis/index.html</code>, the library entry point.</p>
 <p>Before publishing, run the book check above and build the API reference with
 warnings treated as errors:</p>
 <pre><code class="language-sh">RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
@@ -220,7 +220,7 @@ for that release. Check the rendered examples, chapter navigation and API links
 before publishing an update.</p>
 <h2 id="check-the-rust-examples"><a class="header" href="#check-the-rust-examples">Check the Rust examples</a></h2>
 <p>The quickstart is included from <code>crates/zetesis-solve/examples/solve.rs</code>.
-The session, answer-renderer, resource-sharing, measurement, source-preparation,
+The session, answer-renderer, resource-sharing, measurement, program-preparation,
 objective-selection, reduct and derived-workload examples are included from
 <code>docs/book/examples</code>. The code displayed in the chapters is the code tested by
 mdBook. Build their dependencies without requiring a physical GPU through the
@@ -254,9 +254,17 @@ for this dependency set; the other examples select CPU execution explicitly.
 The same files are registered as Cargo examples, so workspace formatting and
 all-target Clippy checks apply to them. zetesis-maintenance’s authored-source
 inventory includes <code>docs/book/examples</code> as a maintained source root.</p>
+<p>The <a href="rust/source.html">program-construction examples</a> pair macros with typed
+constructors. Each pair uses one preparation and enumeration function; both
+versions have Cargo tests for their complete answer sets. The relational pair
+also checks the conditional <code>#show</code> terms. The book displays both construction
+forms and includes their shared execution code once.</p>
 <p>To run one example as an ordinary consumer from the checkout root:</p>
 <pre><code class="language-sh">cargo run --locked -p zetesis-solve --no-default-features --example book-session
 cargo run --locked -p zetesis-solve --no-default-features --example book-source
+cargo run --locked -p zetesis --example book-program
+cargo run --locked -p zetesis --example book-program-macro
+cargo run --locked -p zetesis --example book-formula-program
 cargo run --locked -p zetesis-solve --example solve --no-default-features
 cargo run --locked -p zetesis-solve --no-default-features --example book-selection
 cargo run --locked -p zetesis-solve --no-default-features --example book-measurements

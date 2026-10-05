@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,6 +184,8 @@
 <p>The reduct is the common semantic foundation. Connecting it to an executable
 solver requires several separate arguments; a theorem at one level cannot
 silently stand for all of them.</p>
+<p>The <a href="correctness.html">solver correctness plan</a> orders these obligations into
+verified milestones. This chapter records the more detailed correspondences.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -199,6 +201,326 @@ silently stand for all of them.</p>
 </tbody>
 </table>
 </div>
+<h2 id="tight-body-classification"><a class="header" href="#tight-body-classification">Tight-body classification</a></h2>
+<p><code>TightClassification.completed_semantics</code> connects the generated tight-body
+classifier to <code>TightBodyRecognition</code>: successful classification covers every
+stored node, preserves its exact formula syntax, and distinguishes bodies with
+and without atom occurrences outside negation. Its loop receipt derives the
+full class sequence and work count from actual steps. The proof uses ordered
+nodes, a valid work counter and the successful reservation’s sequence contract;
+it assumes neither allocation success nor class agreement. This is the first
+optimized-route correspondence, not a proof of the whole tight certificate.
+Producer coverage, ranks and membership checking remain separate obligations.
+See <a href="evaluation.html#recognizing-bodies-for-tight-checking">the refinement account</a>
+for the fixed-provider scope.</p>
+<h2 id="atomic-choice-recognition"><a class="header" href="#atomic-choice-recognition">Atomic-choice recognition</a></h2>
+<p><code>AtomicChoice.atom_meaning_iff</code> connects the actual shared head recognizer to
+exact <code>a ∨ not a</code> syntax in either order. The proof derives stored-node witnesses,
+allows distinct occurrences of the same semantic atom, and decodes an ordered
+DAG at a bounded head. The general choice-reduct laws then supply the meaning of
+that shape. Complete producer extraction, root coverage and each consumer’s
+work accounting remain unproved; this result concerns the shared recognizer.
+See <a href="evaluation.html#recognizing-atomic-choices">the recognition contract</a>.</p>
+<h2 id="single-root-tight-producers"><a class="header" href="#single-root-tight-producers">Single-root tight producers</a></h2>
+<p>The ten laws in <code>TightProducerSemantics</code>, <code>TightProducerReads</code> and <code>TightProducer</code>
+connect the actual <code>tight::compile::producer</code> call to an exact original producer.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/TightProducer.lean"><code>TightProducer.completed_producer</code></a>
+retains the root, head, indexed-body formula and ordinary/choice kind. Facts and
+both choice orientations keep their original syntax. <code>after_classification</code>
+supplies the class-table correspondence from the actual completed classifier,
+using its explicit successful-reservation sequence contract.</p>
+<p><code>completed_none</code> identifies falsum or arbitrary default negation. The refusal
+laws recover an unsupported head before any body-class diagnostic, or an already
+recognized head with an unsupported body. Missing reads and backend nonreturns
+are not converted to typed admission errors. The Rust producer copies its two
+inspected nodes before matching; this preserves its reads and branch order.</p>
+<p>These are completed single-root laws, not complete plan extraction. The actual
+two-pass root scan must still establish asserted-root membership, occurrence
+coverage and count/append agreement. That supplies the premises of
+<code>TightPlans.OriginalProducers</code>, <code>Covered</code> and <code>TightEvaluation.Represents</code>;
+rank validation and the optimized membership loop remain separate obligations.</p>
+<h2 id="executable-finite-algorithms"><a class="header" href="#executable-finite-algorithms">Executable finite algorithms</a></h2>
+<p><code>ReductEvaluation.values_correspond</code> proves the actual two-fold Lean algorithm
+for original truth followed by frozen-reduct truth. It derives the mask from
+<code>TightEvaluation.values</code>; the public theorem does not assume mask correctness.
+<code>roots_true_iff</code> handles arbitrary tested interpretations. The corresponding
+Rust loop is <code>zetesis_ferraris::oracle::evaluate</code>, used by <code>FrozenReduct</code>, but
+these proofs do not extract or verify that Rust loop. The separate
+<a href="evaluation.html">implementation-refinement package</a> proves the generated evaluator,
+root scan, stored-reduct construction/query, reference proper-subset search and
+completed public membership checks under explicit library contracts. Its runtime
+projection additionally covers finite successful and refused public reference
+calls through audited contexts with returning reads and reservations.
+<code>FrozenQuery.completed_satisfaction</code> connects the private query Boolean to Ferraris
+reduct satisfaction under explicit stored-mask agreement. <code>FrozenConstruction</code>
+derives that agreement and candidate retention from the actual producer.
+<code>PublicFrozenQuery.constructed_satisfaction</code> composes successful public constructor
+and query calls without an assumed mask, given represented inputs, ordered nodes
+and bounded roots. Construction and query use separate reservation providers,
+limits and fixed controls; this does not model an allocator history or assume
+allocation succeeds. Neither original modelhood nor a tested-subset relation is
+required. <code>TheorySatisfaction</code> retains the separate-call original and reduct
+results, using the same semantic sources under Lean 4.31.0.</p>
+<p><code>EvaluationAccounting</code> derives the exact charged prefix length from every typed
+evaluator return. <code>FrozenQuery.returned_work_bound</code> composes that receipt with
+the actual root scan over the returned work record: limits and subset counts
+are preserved, and the query charges at most <code>N + R</code> for <code>N</code> nodes and <code>R</code> root
+occurrences. Typed stops remain errors. The broader trace relation permits fresh
+control inputs; its traces need not be executions of the fixed-token loop.
+The public reduct query checks owner identity before polling or reservation;
+reservation refusal remains <code>Stop.Allocation</code>. Its fresh query budget excludes
+construction work. These stored-reduct constructor/query laws retain their
+per-invocation fixed-provider scope; the public reference check has the separate
+runtime projection described below. Physical storage and owner-token
+correspondence remain trusted library contracts. The finite construction results below supply exact
+contents and padding under their stated input and reservation contracts.</p>
+<p><code>FixedSelection</code> proves the actual selected-atom loop and entry function. Each
+typed return retains the exact visited prefix and work; completion produces the
+candidate’s atoms in order, with no duplicates. <code>SubsetCarry</code> proves actual
+packed advancement and population updates under the proper-subset guard. A
+completed carry corresponds to one positional increment; a stopped carry retains
+its partial state without claiming that increment completed.</p>
+<p><code>SubsetQuery.completed_reduct</code> connects the actual per-subset query to Ferraris
+reduct satisfaction using the actual original evaluation. <code>SubsetQueryTotal</code>
+constructs every typed outcome and retains its admission and work accounting.
+An admitted query charges one subset even when later evaluation or root scanning
+stops; refusal before admission preserves the old output and work.</p>
+<p><code>FixedSearch.calls_refine</code> constructs a finite execution of the actual search
+from its packed counter invariant. Successful carries increase positional rank;
+false queries refute the visited states. It derives proper-subset coverage,
+returns a proper-subset reduct model on a true result, and propagates typed stops
+without treating them as exhaustion.</p>
+<p><code>MembershipSearch.completed_answer_set</code> composes actual original evaluation,
+a completed original root check, completed selection and completed search. It
+threads work through those phases in source order. Given represented candidate
+storage, ordered nodes, bounded roots, matching atom counts, an empty selection
+vector and zero-filled packed subset storage, search returns no countermodel exactly
+when the candidate satisfies <code>Ferraris.Stable</code> for the asserted theory.
+The mask’s meaning, selected-coordinate coverage and query correctness are
+derived, not supplied as oracle equations.</p>
+<p><code>SubjectMembership.completed_subject</code> further derives those input invariants
+from successful actual theory and owned-vector interpretation constructors, then
+recovers the candidate’s own check from <code>check_interpretation</code>. Its acceptance
+accessor agrees with answer-set membership. <code>completed_stable</code> follows the
+actual consuming conversion and proves that its accepted interpretation retains
+the same candidate. <code>CheckedResults</code> establishes the accessor and conversion
+contracts, including full retention of a rejected decision. These results keep
+the fixed-observation and successful-library-value contracts explicit; they do
+not assume correct inner evaluation or a supplied verdict’s semantic validity.</p>
+<p><code>PublicMembership.completed_answer_set</code> recovers those phases from an actual
+completed public <code>oracle::check</code>: its verdict is <code>Stable</code> exactly for a Ferraris
+answer set. Its premises are exact candidate word storage, ordered nodes, bounded
+roots, a common consistent immutable heap, and empty-sequence preservation by the
+successful selected-atom and subset-word reservations. The actual calls establish
+owner agreement and initial buffers; Boolean workspaces are cleared before use.
+No allocation success or successful inner call is assumed. The negative theorems
+identify an asserted false root or the actual program-owned proper-subset reduct
+model. <code>PublicCheckPhases</code> also identifies the published final statistics;
+<code>PublicCheckBoundary</code> proves wrong-owner, initial-control and first-reservation
+refusals. A public stop returns no partial statistics or membership verdict.</p>
+<p>These are completed-result laws for the generated reference checker. Candidate
+generation, optimized checking, source grounding and device execution remain
+separate. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md#generated-checker-boundary">reproduction guide</a>
+records the supplied-operation and audited context-adaptation boundaries.</p>
+<p><code>PackedSetup.initialized_membership</code> derives the zero-storage premise from the
+backend’s actual resize operation and exact candidate word length.
+<code>MembershipVerdicts.returned_witness</code> identifies the proper-subset reduct model
+returned by the actual search. <code>OwnerChecks</code> connects generated identity and
+clone operations to owner tokens and immutable-heap consistency. These results
+supply the completed public composition; the constructor laws below establish
+exact packed storage for finite inputs. <code>SearchFrame</code> retains the actual theory,
+word length, limits and control across typed search returns, with nondecreasing
+work and subset counts. <code>AdmissionValidation</code> proves the node and root validators
+called by <code>admit</code> for <code>Theory::new</code>; it is described with
+<code>TheoryAdmission</code> below.</p>
+<p><code>RuntimeEffects</code> permits changing read observations and typed reservation failure,
+while preserving embedded backend success, failure and divergence. Audited
+<code>RuntimeContexts</code> and <code>CheckerContexts</code> generalize named calls in the generated
+bodies; reconstruction laws restore the exact original operations. <code>ReferenceEvents</code>
+supplies one eventful checker from those contexts. The generated backend’s own
+result type is unchanged. <code>ContextEvents.poll_reads</code> connects the actual polling
+context to <code>ControlReads</code>: local cancellation precedes an optional U64 slot read,
+whose actual value is compared with the captured active word, and then optional
+expiry. Exact receipts retain mismatching words and require a matching word for
+success. No comparison verdict is assumed.</p>
+<p><code>RuntimeProjection</code> derives the same generated public result from a successful
+finite event execution. <code>RuntimeMembership</code> then proves answer-set equivalence,
+actual negative evidence, and retention of a constructed subject through its
+accepted-result conversion. No inner oracle, successful allocation or always-clear
+read history is assumed. The comparison representative clears unused fixed
+Boolean observations and sets the unused fixed slot observation to its captured
+active word. It retains owner handles, slot presence, captured word and configured
+deadlines, and changes neither Rust state nor runtime responses.</p>
+<p><code>RuntimePublicRefusal</code> identifies the actual reached operation and cause of a
+public typed stop. The proof preserves local-cancellation, slot-cancellation, expiry and quota
+precedence, together with reservation refusal. Supporting loop receipts retain executed
+prefixes and partial state. A refused tick charges no new work. The public error contains no membership
+verdict or partial statistics. These finite-run laws make no fairness or eventual
+response claim. Slot generation allocation, compare-and-swap and window retirement
+remain Rust obligations. Rust/std/Arc/allocator/OS/hardware contracts, immutable handle
+mapping, extraction and source-context adaptation remain trusted boundaries;
+source grounding, candidate enumeration, optimized routes and devices remain
+separate proof obligations.</p>
+<p><code>FiniteMembership.check_iff_answer_set</code> adds a finite reference subset search.
+Its coverage proof constructs a selection representing every semantic subset
+of the supplied candidate. Original satisfaction and absence of a proper-subset
+reduct model therefore follow from executable definitions. The theorem does
+not assume a correct external oracle or complete external proposals. It is
+a reusable ASP theorem. The reference-checker refinement above connects the same
+semantic definition and packed counter laws to actual operations; optimized
+candidate search remains separate.</p>
+<p><code>FiniteClosure.closure_exact</code> proves an in-place-order mathematical rule scan,
+rather than assuming it equals synchronous iteration. Soundness holds at every
+prefix. An unchanged full scan is closed; each changing scan adds a fresh head.
+The head-list length plus one gives a constructive scan bound without a finite
+ambient atom universe. <code>accepts_exact</code> adds the completed constraint and gate
+projection checks. This corresponds to the shape of <code>static_oracle::closure</code>,
+but the Rust storage operations and control effects remain unproved.
+The finite rule presentation has already discharged ground filters; no source
+filter evaluation or grounding claim follows from this theorem.</p>
+<p><code>Refinement.PackedInterpretations</code> models zero-initialized 64-bit words, numeric
+mask insertion, membership and low/high 32-bit export. <code>pack_exact</code> derives
+storage length, exact input-set membership and zero padding from the operations.
+<code>export32_exact</code> then establishes membership and valid word reads at the second
+width. Predicate-set equalities connect these representations to the semantic
+library. The supplied in-range coordinates are a structural premise, not an
+assumption that membership is correct.</p>
+<p>This is newly authored Lean, not a fresh extraction of <code>Interpretation::new</code>,
+<code>contains</code> or <code>words32</code>. The historical membership extraction retains its own
+source identity and toolchain. A current implementation proof must establish
+admission, all internal interpretation producers, machine-index bounds,
+allocation/control behavior and owner identity. The historical immutable-value
+<code>Arc</code> model alone does not establish <code>Arc::ptr_eq</code>. The word-export result does
+not certify a WGSL kernel, device synchronization or readback.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/reduct-evaluation.md">reduct</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-membership.md">membership</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-closure.md">closure</a> and
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-interpretations.md">packed representation</a>
+guides explain these arguments independently of Rust details.</p>
+<h2 id="indexed-reads-counters-and-packed-scans"><a class="header" href="#indexed-reads-counters-and-packed-scans">Indexed reads, counters and packed scans</a></h2>
+<p>Four representation algorithms make additional implementation obligations
+explicit without changing the answer-set definitions:</p>
+<ul>
+<li><code>Refinement.IndexedEvaluation</code> uses checked reads rather than assigning a
+value to an absent entry. Its prefix invariant proves child availability,
+computed-mask coverage and transport of admitted root bounds. Two checked
+passes followed by root checking preserve Ferraris reduct satisfaction.</li>
+<li><code>SubsetCounter</code> constructs the low-bit-first carry and proves exact proper
+subset coverage. It also proves the maintained population updates and the
+<code>present &lt; width</code> guard. Distinct atom positions must denote distinct atoms;
+the theorem states that premise explicitly.</li>
+<li><code>Refinement.PackedClosure</code> initializes 32-bit words directly, selects frozen
+consequence rules, and performs immediate mask updates. Its changed flag is
+false exactly when the whole reference scan is unchanged. Completed iteration
+yields the least reduct closure with exact storage and zero padding.</li>
+<li><code>Refinement.PackedAcceptance</code> checks selected constraints and agreement on the
+supplied gate carrier. Seed admission into that carrier is explicit. Together
+with computed closure, these checks decide the semantic acceptance predicate;
+complete gate coverage then establishes answer-set soundness.</li>
+</ul>
+<p>These are proved authored algorithms, not extractions of the corresponding
+Rust loops. They remove assumed evaluator, counter and packed-scan agreement
+from the mathematical results. The optional reference-checker refinement above
+supplies the selected-atom and packed-counter correspondences under its stated
+models; it does not cover the normal-closure checker or public ownership and
+allocation. In particular, the final carrier comparison cannot itself
+establish seed admission; that condition belongs to the seed constructors and
+their mapping into the compiled program.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/indexed-evaluation.md">indexed-evaluation</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/subset-counter.md">subset-counter</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-closure.md">packed-closure</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-acceptance.md">packed-acceptance</a>
+guides describe the invariants, completion arguments and remaining boundaries.</p>
+<h2 id="iteration-and-completed-search-decisions"><a class="header" href="#iteration-and-completed-search-decisions">Iteration and completed search decisions</a></h2>
+<p><code>Refinement.PackedWordIterator</code> connects individual checked half-word reads to
+the packed export. It proves cursor progress, exact remaining output and fused
+exhaustion. Composing construction and iteration derives membership and zero
+padding without an output-agreement premise. Rust’s byte conversions, borrowing
+and machine indices remain separate implementation obligations.</p>
+<p><code>Refinement.PackedSubsets</code> derives distinct selected coordinates by scanning
+finite packed truth. Its set/clear operations preserve correspondence with the
+selected set and its population, along with storage shape and padding. Their
+proved sequence covers every proper
+subset and no other interpretation. The final mathematical checker therefore
+decides answer-set membership directly from packed candidate truth.</p>
+<p><code>Refinement.CounterSearch</code> proves a complementary control property: compute the
+original truth mask once, stream the counter states, and stop on a countermodel.
+Every completed verdict agrees with answer-set membership, even under a query
+allowance smaller than the complete enumeration bound. An unfinished result
+establishes neither acceptance nor rejection. This allowance is not Rust’s work
+budget, and the theorem does not model cancellation or allocation failure.</p>
+<p><code>Refinement.PackedCounterSearch</code> composes these results. It retains one packed
+subset and population, queries the original computed mask, and carries only
+after a completed false query. <code>search_refines</code> proves equality with the
+positional stream at every allowance; <code>completed_check_iff_answer_set</code> proves
+both positive and negative completed verdicts exact. Candidate construction
+derives storage and padding, while selected-coordinate production supplies
+uniqueness and coverage. No visit list or caller-supplied oracle agreement is
+needed. This composes the authored Lean algorithms independently of Rust. The
+optional reference-checker refinement above separately proves actual reads,
+updates and control flow under fixed observations, then composes public ownership,
+reservation and returning-observation contexts under the contracts stated above.</p>
+<p><code>Refinement.TheoryAdmission</code> checks dimension limits and padded atom count,
+then every node, then asserted roots. <code>validate_exact</code> derives the DAG, atom
+and root premises from successful checks, and <code>scan_refusal_exact</code> identifies
+the first refused node of a refused scan. <code>validated_reduct_exact</code> supplies
+those premises to checked evaluation. The supplied host maximum also bounds
+word counts and live export-cursor increments. This is an authored validator
+over represented natural-number lengths.</p>
+<p><code>root</code> and <code>rootScan</code> name the root check; <code>validate_phases</code> shows that
+validation is the dimension check, then <code>scan</code>, then <code>rootScan</code>, each stopping
+at its first refusal.</p>
+<p>The refinement package’s <code>AdmissionValidation</code> proves that the generated node
+and root validators called by <code>Theory::new</code> compute <code>scan</code> and <code>rootScan</code>
+exactly, for every represented slice. The generated loops always return, and a
+node refusal reports the error of the first refused node. <code>accepted_structure</code>
+derives the evaluator’s ordered-children and bounded-root premises from both
+acceptances, as applied to the constructor’s input vectors. <code>AdmittedData</code>
+proves the generated admission step that <code>Theory::new</code> runs before allocating:
+it computes <code>validate</code> with the host’s <code>Usize.max</code>, including Rust’s checked
+padded-count addition, and returns the supplied vectors unchanged.
+<code>admitted_program_structure</code> derives the evaluator’s premises for any theory
+whose stored value is admitted data. Those premises remain premises of the
+composed membership theorems. <code>TheoryConstruction</code> supplies them from the
+generated <code>Theory::new</code> return under an explicit allocation-value contract.
+It also preserves the exact admission refusal and separates it from allocation
+nonreturn. The wrapper’s allocation parameter is an audited binding adaptation;
+its body is unchanged. A per-invocation fresh-heap contract supports ownership,
+without claiming that one pure provider models repeated fresh allocation.</p>
+<p><code>InterpretationConstruction</code> proves the generated interpretation constructor’s
+phase order and retention of the supplied theory. A successful constructor return
+derives successful reservation, resize, iterable conversion and insertion calls;
+its words are exactly the insertion helper’s returned slice. Reservation refusal
+precedes iterable conversion, and insertion refusals pass through unchanged.
+The helper takes an atom bound and mutable words while the constructor owns
+allocation and publication. Generic iterable and iterator operations remain
+explicit in the generated code.</p>
+<p><code>UsizeCeiling.word_count64</code> connects the modeled standard-library ceiling division
+to the shared packed word count for every host unsigned value. <code>SliceInsertion</code>
+relates checked scalar and slice operations to shared packed insertion.
+<code>InsertionLoop.insert_exact</code> proves the actual helper terminates with sufficient
+word storage and a finite sequence of actual next observations, writing exactly
+the prefix before the
+first invalid coordinate and returning <code>Atom</code> there. Word count is preserved;
+duplicates, arbitrary order and nonfused iterators are permitted.</p>
+<p><code>InterpretationStorage.completed_pack</code> derives retained theory, valid input
+bounds and exact packed contents from actual constructor success. Its library
+contract says a successful reservation preserves the empty input; no allocation
+success is assumed. <code>packed_queries</code> supplies zero padding, exact storage and
+actual membership answers. <code>VectorInput</code> derives the finite observation contract
+from the imported owned-vector iterator, so <code>completed_vector</code> needs no supplied
+trace or validity premise. <code>InsertionBoundaryExample</code> checks first-invalid
+refusal before a diverging tail and completion at the first None.</p>
+<p>These results do not establish unrestricted iterator termination or expose a
+terminal iterator state that the helper does not return. The runtime public-check
+composition uses these constructor results without asserting a physical allocator
+implementation or termination of unrestricted iterators.</p>
+<p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-word-iterator.md">iterator</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-subsets.md">packed-subset</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/counter-search.md">streaming-search</a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/packed-counter-search.md">packed-streaming</a>
+and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/theory-admission.md">admission</a>
+guides explain the arguments and remaining boundaries.</p>
 <h2 id="keyed-constraints-and-checked-source-arithmetic"><a class="header" href="#keyed-constraints-and-checked-source-arithmetic">Keyed constraints and checked source arithmetic</a></h2>
 <p><code>KeyedConstraints.one_value</code> and <code>asked_constraints_preserve</code> justify replacing
 constraints that reject the same answer sets under an established keyed-relation
@@ -215,6 +537,13 @@ refusals and the exclusion of substitutions where no arithmetic is reached.
 The concrete interval analysis and its connection to all possible source
 bindings remain Rust obligations, covered by paired rewritten/unrewritten
 tests; they are not an executable Lean refinement.</p>
+<p>The rewrite also needs an unambiguous original statement. The compiler’s owner
+map associates a canonical analyzed carrier with its original <code>StatementId</code>
+only when each original emits one carrier and distinct originals do not collapse
+to the same carrier. Other constraints remain unchanged.
+This permits the same rewrite for parsed and constructed programs; provenance
+supplies diagnostic evidence, not identity. The owner map and replacement step
+must establish this association before applying the contextual preservation law.</p>
 <h2 id="arithmetic-families"><a class="header" href="#arithmetic-families">Arithmetic families</a></h2>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ArithmeticFamilies.lean"><code>ArithmeticFamilies</code></a>
 specifies admission from the classified outcomes of a complete substitution
@@ -282,11 +611,21 @@ sequential reuse, CPU execution with supplied device resources and shared device
 failure.
 The builder changes request composition; it does not change candidate coverage,
 the frozen reduct or the point at which a checked result is committed.</p>
-<p><code>SessionBuilder::collect</code> consumes a fresh request, selects the unrestricted
-original family and retains each checked answer once. <code>WorldViews</code> requires
-original-answer coverage, completed accounting and complete capture; its prefix
-law applies to interruptions and retention refusals. A selected optimum or the
-remaining suffix of an already consumed session cannot replace that family.</p>
+<p><code>zetesis_solve::SessionBuilder::collect</code> consumes a fresh request, selects the
+unrestricted original family and retains each checked answer once in a native
+<code>zetesis_solve::WorldView</code>. Its empty family establishes inconsistency.
+<code>WorldViews</code> requires original-answer coverage, completed accounting and complete
+capture; its prefix law applies to interruptions and retention refusals. A
+selected optimum or the remaining suffix of an already consumed session cannot
+replace that family.</p>
+<p>The facade re-exports the upstream <code>zetesis::query::WorldView</code>, a nonempty live
+stream that may still be incomplete. Its materialized <code>Snapshot</code> is complete
+and nonempty. These are the original upstream types; type identity supplies no
+proof connecting their construction or readings to the native complete family.
+<code>zetesis-engine</code> implements that backend contract using native CPU sessions.
+Its preservation of full answer sets, display policy and completion evidence is
+covered by executable conformance tests. A Lean correspondence for the adapter
+and query readings remains to be established.</p>
 <p><code>ProjectedAnswers.covered_key_image</code> identifies the key image represented by a
 selected family. <code>selected_property_survives</code> preserves answer-set membership
 and established optimality because representatives remain selected original
@@ -294,8 +633,9 @@ answers. These laws assume a fixed key and complete representative coverage.
 <code>retain_covers</code> and <code>retain_unique</code> establish the coverage and uniqueness
 invariants for one exact identity decision over an already consumed prefix.
 They do not prove source <code>#project</code> compilation, concrete history lookup,
-allocation, cancellation or receipt updates. <code>WorldView</code> collection retains
-full identity and does not use projected representatives as a complete family.</p>
+allocation, cancellation or receipt updates. Native <code>zetesis_solve::WorldView</code>
+collection retains full identity and does not use projected representatives as
+a complete family.</p>
 <p>A shared <code>GpuFormulaProfile</code> retains one exact compiled pipeline, context and
 gate projection. Each oracle starts with fresh residency, epochs and execution
 counters. This does not change the masked satisfaction or frozen-reduct laws.
@@ -872,7 +1212,7 @@ original program or the reduct used to check membership.</p>
 <tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean"><code>Bounds.narrowed_contains_accepted</code>, <code>lower_constraint_refutes</code></a></td><td><code>Candidates::bounded</code> narrows the undecided region to a fixed point by the region’s lower and upper closures (<code>definite_closure</code>, <code>possible_closure</code>, the <code>MustGate</code> and <code>MayGate</code> readings of the shared closure rounds), holds the lower closure’s gate atoms in every seed, never offers a gate atom outside the upper closure, and offers no seed when a constraint fires in a lower closure</td><td>The Rust closures must be the least fixed points of the two consequence operators over the exact admitted program; the counter’s enumeration inside a counted region and the restriction plan’s treatment of held premises are Rust obligations. Each offered seed is still checked in full.</td></tr>
 <tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Search.lean">The <code>split</code> constructor of <code>Search.CoverageTree</code>, <code>Cube.split_partition</code>, <code>Cube.split_disjoint</code>, <code>CoverageTree.mem_outputs_iff</code></a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean"><code>Bounds.conflicting_atom_refutes</code></a></td><td><code>zetesis_cpu::regions::Traversal</code>, the one-worker walk of both routes: a region is narrowed by the caller’s narrowing, refuted, offered as one candidate when decided, split on the atom its narrowing preferred or else its highest open atom into the out and in regions, or counted as a flat interval when its narrowing decided nothing beyond the split and the caller counts; the closure route narrows by its two closures, the formula route by the theory’s knowledge. Under several workers the formula route walks the same tree in <code>zetesis_sat</code>’s parallel regions, a second implementation of the same law: each worker takes its newest region from a deque and idle workers steal older regions from peers</td><td>That the Rust split chooses a fresh atom and forms the two cubes of the law, in the traversal and in the parallel walk alike, that the counted interval offers exactly the region’s seeds, and that the leaf order is the counter’s order when no atom is preferred and one worker walks are Rust obligations; with several workers, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Frontier.lean"><code>Pending.Step.perm</code>, <code>Pending.Walk.exhausted</code></a> is the law: the frontier of pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree’s outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once, in the schedule’s order; that the workers’ deque removals, transfers and active regions form one frontier of the tree is the Rust obligation; the tree’s leaves are exactly the accepted seeds only because each leaf seed is checked in full.</td></tr>
 <tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TightPlans.lean"><code>TightPlans.stable_supported</code></a></td><td>A candidate the complete tight certificate finds with an unsupported present atom is rejected as <code>Check::Unsupported</code> without a reduct query; the candidate without that atom is the law’s witness</td><td>The plan’s coverage of the theory’s producers is established by its construction, not yet by a proved refinement of that construction; the Rust check’s evaluation of producer bodies remains executable evidence.</td></tr>
-<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean"><code>DisjunctiveSupport.answer_set_supported</code>, <code>answer_set_supported_with_choices</code></a></td><td>Necessary ordinary sole-head support and enabled atomic-choice support</td><td>Extraction must cover every asserted root, coalesce repeated ordinary head atoms and recognize exact atomic choices in either operand order using semantic atom identity. Choice bodies remain arbitrary original formulas; they supply permission, not a self-premise. The original theory remains the reduct subject. This is necessary support, not ranked sufficiency; Rust DAG extraction, Boolean encoding and bounded failure remain unproved.</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean"><code>DisjunctiveSupport.answer_set_supported</code>, <code>answer_set_supported_with_choices</code></a></td><td>Necessary ordinary sole-head support and enabled atomic-choice support</td><td>Extraction must cover every asserted root, coalesce repeated ordinary head atoms and recognize exact atomic choices in either operand order using semantic atom identity. Choice bodies remain arbitrary original formulas; they supply permission, not a self-premise. The original theory remains the reduct subject. This is necessary support, not ranked sufficiency. The shared atomic-choice recognizer is refined by <code>AtomicChoice.atom_meaning_iff</code>; complete Rust DAG extraction, Boolean encoding and bounded failure remain unproved.</td></tr>
 <tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean"><code>PackedQueryLiterals.decode_encode</code>, <code>packed_truth</code></a></td><td>Packed classical literals in <code>Cnf</code> and borrowed clause views</td><td>Admission must establish machine representability and valid offsets, including repeated offsets for empty clauses. Natural-number arithmetic does not prove machine operations or allocation.</td></tr>
 <tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IndexedCandidates.lean"><code>IndexedCandidates.index_equals_all_blocks</code>, <code>failed_literal_forced</code></a></td><td>The authoritative semantic-projection exclusion index and independently checked completed assignments</td><td>Flat-trie insertion, watches and trial undo must implement exact complete keys. Separate history admission must preserve prior keys and publish no key on refusal; concrete capacity accounting remains a Rust obligation. A failed-literal conclusion needs a completed branch refutation; a stopped trial supplies none.</td></tr>
 <tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OptionalIndex.lean"><code>OptionalIndex.successor_fits</code>, <code>optional_round_trip</code>, <code>replacement_commutes</code></a></td><td>Optional positive-successor child links in the compact projection trie</td><td>Planned node count must fit 32 bits, decoded links must index allocated nodes, and only complete suffixes may be attached. The laws preserve identity and absence; they do not establish Rust layout, allocation, rollback or control accounting.</td></tr>
@@ -956,6 +1296,39 @@ existing host checker; an interruption or fault cannot discharge its pending
 candidates. Rust ownership, resource compliance and transport identities remain
 implementation obligations.</p>
 <h2 id="representation-and-source-laws"><a class="header" href="#representation-and-source-laws">Representation and source laws</a></h2>
+<p>The <code>zetesis</code> facade’s construction macros generate the canonical themelios
+constructors, and its modules re-export the original upstream types. These
+exports add no admission or lowering step. Macro translation, source admission
+and concrete lowering remain executable correspondence obligations; re-exporting
+a type does not establish them.</p>
+<p>The <code>zetesis-engine</code> adapter connects these values to native CPU sessions. Its
+remaining correspondence obligations include preserving the program at <code>lower</code>,
+enumerating the full unscored family, exporting every atom, keeping display
+selection separate, and mapping a completed or interrupted run to its actual
+conclusion. Named-part refusal retains the exact canonical part key, without a
+fabricated statement or span. Executable conformance tests exercise this
+boundary; they are not an end-to-end Lean proof. The existing scalar-checker
+refinement does not establish adapter or query-layer correctness.</p>
+<p>The typed relational <code>admit_program</code> door and source <code>admit</code> door share
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/compile.rs"><code>compile::checked_statement</code></a>
+and the strong-negation coherence operation. Their entry checks have different
+inputs: source admission checks authored syntax before raising, while typed
+admission bounds the borrowed canonical rule, term and symbol structure. A
+logical program cannot recover an erased empty program section or the original
+multiplicity of set-valued body syntax. The source checks remain in place.
+The shared compiler, statement-evidence borrows and resource traversal are Rust
+correspondence obligations; the existing semantic laws do not prove either
+admission implementation or equality of their admitted input sets.</p>
+<p>The full formula door, <code>prepare_program_formula</code>, borrows the canonical program
+for structural, text and provenance preflight before normalization and analysis.
+It then uses the same formula compiler and grounding routes as source admission.
+The original <code>Arc&lt;logical::Program&gt;</code> remains available through preparation,
+grounding and typed-input refusals. A statement <code>ProgramSite</code> identifies its position in
+that owner’s canonical order and carries a parsed coordinate only when one
+exists. Retaining the right owner, resolving those positions and preserving
+causes through deferred work remain Rust obligations. Neither shared code nor
+retained evidence proves source-to-ground equivalence or makes the source and
+canonical admission boundaries interchangeable.</p>
 <p>Source scalar validation and construction share a bounded symbol walk and the
 core borrowed node’s text/spelling measures. The validation consumer retains
 logical bounds without constructing an output value; actual capacity admission
@@ -963,6 +1336,15 @@ belongs to construction. This changes storage work, not the value’s mathematic
 identity or the requirement to validate inactive authored expressions. The Rust
 borrowed-view correspondence, traversal and capacity checks remain executable
 obligations; no Lean source-to-value refinement is claimed by this separation.</p>
+<p>The public <code>symbols::term_with</code> and <code>symbols::atom_with</code> exports construct an
+upstream <code>Symbol</code> from borrowed core values. Their contract preserves complete
+typed values and atom signs; display selection remains a separate operation.
+Their callbacks bound work and permit interruption before navigation, copying
+and assembly. <code>TermRef::depth_with</code> checks each step of an arbitrary ingress
+subtree’s allocation-free depth scan, whose worst-case work is quadratic;
+complete ingress roots and canonical terms use cached depth. These conversions,
+first-refusal behavior and cost bounds remain executable obligations. The
+refreshed evaluator extraction does not select the depth API or symbol exporter.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean"><code>ColumnRelations</code></a>
 relates complete typed tuples to aligned equality-ID columns. Dictionary round
 trips and exact cell encoding imply reconstruction; equality selection returns
@@ -1067,9 +1449,13 @@ distinguishes these prospective filters from the existing source-domain analysis
 The <a href="normal-rules.html">NormalFerraris bridge</a> proves their equivalence under the
 specified normalized-rule translation, including its filtered/direct-map
 distinction. It does not verify <code>from_ground_program</code>, atom interning or formula
-DAG construction. Likewise, <code>FrozenReduct</code> is a Rust representation of a fixed
-candidate’s reduct; its existence does not close the Rust-to-Lean mask
-correspondence.</p>
+DAG construction. <code>FrozenReduct</code> represents a fixed candidate’s reduct.
+The separate generated-code proofs establish its stored-mask invariant through
+actual construction and compose it with the public query under per-invocation
+reservation providers and fixed observations. Source lowering remains separate.
+<code>PublicMembership</code> supplies the generated public membership composition, and
+<code>RuntimeMembership</code> connects it to finite eventful reference checks. Interpretation
+construction has its finite-input and reservation-contract proof above.</p>
 <p><code>FormulaNodes</code> retains a completed topology-validation prefix across aggregate
 compilations. Its obligation is the inductive one in <code>DagSharing.WellFormed.snoc</code>:
 a previously admitted prefix remains unchanged, and each additional node names
@@ -1226,15 +1612,30 @@ the constraint reducts even when the least set fails the original constraints.
 The checker accepts exactly the least original model. This application still
 depends on the complete root partition and retained-owner correspondence above.</p>
 <p>The head-element laws assume a correctly identified activity family. Explicit
-aggregate elements use complete tuple keys; ordinary Boolean choices use original
-source occurrences, with local witnesses coalesced within an occurrence. Ordinary
-atomic choices distinguish their default-negation sign as well as their atom.
-The Rust
-source adapter receives original occurrences from themelios before program-set
-collection and checks their Boolean element locations against the original
-syntax. It retains complete source identities and separate enclosing-rule
-scopes. Tests cover duplicate rules, separate files and finite interpretations;
-proving this adapter implements the Lean family remains a separate obligation.</p>
+aggregate elements use complete tuple keys; ordinary atomic choices distinguish
+default-negation sign and complete atom. Ordinary Boolean choices instead use
+pool-expanded occurrence keys. Each alternative of one written element has its
+own key, including repeated equal alternatives. Grounding witnesses of one
+expanded occurrence share that key. Thus <code>{ #true : p(1;1) } = 2. p(1).</code> has
+answer set <code>{p(1)}</code>; the two pool occurrences count separately.</p>
+<p>The Rust compiler reads themelios’s counted entries and public <code>Identity</code>
+classification. For a by-occurrence entry, <code>HeadElementKey::Occurrence</code> is
+assigned separately to each literal/condition pool product alternative, before
+local grounding; <code>HeadKey::Occurrence</code> retains it. <code>LocalFamily</code> separately
+retains the original entry for arithmetic definedness and warning handling.
+Keys are local to one choice group, and provenance locates evidence without
+determining counting identity.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FinitePools.lean"><code>FinitePools.expanded_occurrence_activity</code></a>
+authenticates each key by its position in the expanded list and characterizes
+its activity by the existence of a grounding witness.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SignedHeadElements.lean"><code>SignedHeadElements.boolean_witness_key</code> and <code>boolean_occurrence_keys_distinct</code></a>
+then describe the required key equality and separation. The original and frozen
+activity laws apply to these rows under their stated coverage premises.
+<code>FinitePools.local_occurrences_complete</code> and <code>local_activity_complete</code> remain
+valid membership laws, but do not establish the multiplicity of counted pool
+alternatives or justify keeping one Boolean key for a whole written element.
+The Rust source-product enumeration, key assignment, complete witness coverage
+and enclosing group scopes remain correspondence obligations.</p>
 <p>The shared Rust
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir.rs"><code>HeadLiteral</code></a>
 retains the sign and operand. Its <code>positive_atom</code> operation controls producer
@@ -1665,7 +2066,7 @@ laws from the unproved transport, epoch and completion correspondences.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../lean/reading.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../lean/correctness.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -1679,7 +2080,7 @@ laws from the unproved transport, epoch and completion correspondences.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../lean/reading.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../lean/correctness.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

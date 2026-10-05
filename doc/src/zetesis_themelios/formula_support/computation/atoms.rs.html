@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>zetesis_core::PatternRef;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>zetesis_core::catalog::AtomRef;
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use super</span>::{Computation, Counters, FormulaFailure, FormulaLimits, Location, Terms};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use super</span>::{Computation, Counters, FormulaFailure, FormulaLimits, ProgramSite, Terms};
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::formula_binding::Binding;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::GroundingWork;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::relations::{SourceAtom, SourceScope};
@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a>        sign: zetesis_core::Sign,
 <a href=#16 id=16 data-nosnippet>16</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#17 id=17 data-nosnippet>17</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#18 id=18 data-nosnippet>18</a>        location: Location,
+<a href=#18 id=18 data-nosnippet>18</a>        location: ProgramSite,
 <a href=#19 id=19 data-nosnippet>19</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;SourceAtom&gt;, FormulaFailure&gt; {
 <a href=#20 id=20 data-nosnippet>20</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.terms {
 <a href=#21 id=21 data-nosnippet>21</a>            Terms::Append(append) =&gt; append.signed(
@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>        atom: AtomRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#38 id=38 data-nosnippet>38</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#39 id=39 data-nosnippet>39</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#40 id=40 data-nosnippet>40</a>        location: Location,
+<a href=#40 id=40 data-nosnippet>40</a>        location: ProgramSite,
 <a href=#41 id=41 data-nosnippet>41</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;SourceAtom, FormulaFailure&gt; {
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.terms {
 <a href=#43 id=43 data-nosnippet>43</a>            Terms::Append(append) =&gt; append.discover_ref(
@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>        binding: <span class="kw-2">&amp;</span>Binding&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#61 id=61 data-nosnippet>61</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#62 id=62 data-nosnippet>62</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#63 id=63 data-nosnippet>63</a>        location: Location,
+<a href=#63 id=63 data-nosnippet>63</a>        location: ProgramSite,
 <a href=#64 id=64 data-nosnippet>64</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;SourceAtom, FormulaFailure&gt; {
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="kw">let </span>Terms::Append(append) = <span class="kw-2">&amp;mut </span><span class="self">self</span>.terms <span class="kw">else </span>{
 <a href=#66 id=66 data-nosnippet>66</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(owner_failure(location));
@@ -80,7 +80,7 @@
 <a href=#80 id=80 data-nosnippet>80</a>        atom: <span class="kw-2">&amp;</span>SourceAtom,
 <a href=#81 id=81 data-nosnippet>81</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#82 id=82 data-nosnippet>82</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#83 id=83 data-nosnippet>83</a>        location: Location,
+<a href=#83 id=83 data-nosnippet>83</a>        location: ProgramSite,
 <a href=#84 id=84 data-nosnippet>84</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.terms {
 <a href=#86 id=86 data-nosnippet>86</a>            Terms::Append(append) =&gt; append.retain(
@@ -101,7 +101,7 @@
 <a href=#101 id=101 data-nosnippet>101</a>        binding: <span class="kw-2">&amp;</span>Binding&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#102 id=102 data-nosnippet>102</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#103 id=103 data-nosnippet>103</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#104 id=104 data-nosnippet>104</a>        location: Location,
+<a href=#104 id=104 data-nosnippet>104</a>        location: ProgramSite,
 <a href=#105 id=105 data-nosnippet>105</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.terms {
 <a href=#107 id=107 data-nosnippet>107</a>            Terms::Append(append) =&gt; append.contains_pattern(
@@ -123,45 +123,48 @@
 <a href=#123 id=123 data-nosnippet>123</a>        }
 <a href=#124 id=124 data-nosnippet>124</a>    }
 <a href=#125 id=125 data-nosnippet>125</a>
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>source_scope(<span class="kw-2">&amp;</span><span class="self">self</span>, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;SourceScope, FormulaFailure&gt; {
-<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.terms {
-<a href=#128 id=128 data-nosnippet>128</a>            Terms::Append(append) =&gt; <span class="prelude-val">Ok</span>(append.source_scope()),
-<a href=#129 id=129 data-nosnippet>129</a>            Terms::Frozen(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(owner_failure(location)),
-<a href=#130 id=130 data-nosnippet>130</a>        }
-<a href=#131 id=131 data-nosnippet>131</a>    }
-<a href=#132 id=132 data-nosnippet>132</a>
-<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>source_atom(
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#135 id=135 data-nosnippet>135</a>        atom: <span class="kw-2">&amp;</span>SourceAtom,
-<a href=#136 id=136 data-nosnippet>136</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
-<a href=#137 id=137 data-nosnippet>137</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#138 id=138 data-nosnippet>138</a>        location: Location,
-<a href=#139 id=139 data-nosnippet>139</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;AtomRef&lt;<span class="lifetime">'_</span>&gt;, FormulaFailure&gt; {
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="self">self</span>.source_at(<span class="kw-2">&amp;</span>atom.scope, atom.position, limits, counters, location)
-<a href=#141 id=141 data-nosnippet>141</a>    }
-<a href=#142 id=142 data-nosnippet>142</a>
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::formula_support) <span class="kw">fn </span>source_at(
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#145 id=145 data-nosnippet>145</a>        scope: <span class="kw-2">&amp;</span>SourceScope,
-<a href=#146 id=146 data-nosnippet>146</a>        position: usize,
-<a href=#147 id=147 data-nosnippet>147</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
-<a href=#148 id=148 data-nosnippet>148</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#149 id=149 data-nosnippet>149</a>        location: Location,
-<a href=#150 id=150 data-nosnippet>150</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;AtomRef&lt;<span class="lifetime">'_</span>&gt;, FormulaFailure&gt; {
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.terms {
-<a href=#152 id=152 data-nosnippet>152</a>            Terms::Append(append) =&gt; append.source_at(scope, position, limits, counters, location),
-<a href=#153 id=153 data-nosnippet>153</a>            Terms::Frozen(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(owner_failure(location)),
-<a href=#154 id=154 data-nosnippet>154</a>        }
-<a href=#155 id=155 data-nosnippet>155</a>    }
-<a href=#156 id=156 data-nosnippet>156</a>}
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a><span class="kw">fn </span>owner_failure(location: Location) -&gt; FormulaFailure {
-<a href=#159 id=159 data-nosnippet>159</a>    FormulaFailure::SupportRelation {
-<a href=#160 id=160 data-nosnippet>160</a>        error: zetesis_core::relation::Failure::Owner,
-<a href=#161 id=161 data-nosnippet>161</a>        location,
-<a href=#162 id=162 data-nosnippet>162</a>    }
-<a href=#163 id=163 data-nosnippet>163</a>}
-<a href=#164 id=164 data-nosnippet>164</a>
-<a href=#165 id=165 data-nosnippet>165</a><span class="attr">#[cfg(test)]
-<a href=#166 id=166 data-nosnippet>166</a></span><span class="kw">mod </span>tests;
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>source_scope(
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#128 id=128 data-nosnippet>128</a>        location: ProgramSite,
+<a href=#129 id=129 data-nosnippet>129</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;SourceScope, FormulaFailure&gt; {
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.terms {
+<a href=#131 id=131 data-nosnippet>131</a>            Terms::Append(append) =&gt; <span class="prelude-val">Ok</span>(append.source_scope()),
+<a href=#132 id=132 data-nosnippet>132</a>            Terms::Frozen(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(owner_failure(location)),
+<a href=#133 id=133 data-nosnippet>133</a>        }
+<a href=#134 id=134 data-nosnippet>134</a>    }
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>source_atom(
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#138 id=138 data-nosnippet>138</a>        atom: <span class="kw-2">&amp;</span>SourceAtom,
+<a href=#139 id=139 data-nosnippet>139</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
+<a href=#140 id=140 data-nosnippet>140</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
+<a href=#141 id=141 data-nosnippet>141</a>        location: ProgramSite,
+<a href=#142 id=142 data-nosnippet>142</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;AtomRef&lt;<span class="lifetime">'_</span>&gt;, FormulaFailure&gt; {
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="self">self</span>.source_at(<span class="kw-2">&amp;</span>atom.scope, atom.position, limits, counters, location)
+<a href=#144 id=144 data-nosnippet>144</a>    }
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::formula_support) <span class="kw">fn </span>source_at(
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#148 id=148 data-nosnippet>148</a>        scope: <span class="kw-2">&amp;</span>SourceScope,
+<a href=#149 id=149 data-nosnippet>149</a>        position: usize,
+<a href=#150 id=150 data-nosnippet>150</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
+<a href=#151 id=151 data-nosnippet>151</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
+<a href=#152 id=152 data-nosnippet>152</a>        location: ProgramSite,
+<a href=#153 id=153 data-nosnippet>153</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;AtomRef&lt;<span class="lifetime">'_</span>&gt;, FormulaFailure&gt; {
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.terms {
+<a href=#155 id=155 data-nosnippet>155</a>            Terms::Append(append) =&gt; append.source_at(scope, position, limits, counters, location),
+<a href=#156 id=156 data-nosnippet>156</a>            Terms::Frozen(<span class="kw">_</span>) =&gt; <span class="prelude-val">Err</span>(owner_failure(location)),
+<a href=#157 id=157 data-nosnippet>157</a>        }
+<a href=#158 id=158 data-nosnippet>158</a>    }
+<a href=#159 id=159 data-nosnippet>159</a>}
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a><span class="kw">fn </span>owner_failure(location: ProgramSite) -&gt; FormulaFailure {
+<a href=#162 id=162 data-nosnippet>162</a>    FormulaFailure::SupportRelation {
+<a href=#163 id=163 data-nosnippet>163</a>        error: zetesis_core::relation::Failure::Owner,
+<a href=#164 id=164 data-nosnippet>164</a>        location,
+<a href=#165 id=165 data-nosnippet>165</a>    }
+<a href=#166 id=166 data-nosnippet>166</a>}
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a><span class="attr">#[cfg(test)]
+<a href=#169 id=169 data-nosnippet>169</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

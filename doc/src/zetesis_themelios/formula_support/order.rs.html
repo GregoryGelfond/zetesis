@@ -24,7 +24,7 @@
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">use </span>std::cmp::Reverse;
 <a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>zetesis_core::TemplateTerm;
 <a href=#29 id=29 data-nosnippet>29</a>
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use super</span>::{PatternOccurrence, PositivePattern, Relations, comparison, delta};
@@ -58,7 +58,7 @@
 <a href=#58 id=58 data-nosnippet>58</a>        variables: usize,
 <a href=#59 id=59 data-nosnippet>59</a>        rows: SourceRows&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;,
 <a href=#60 id=60 data-nosnippet>60</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#61 id=61 data-nosnippet>61</a>        location: Location,
+<a href=#61 id=61 data-nosnippet>61</a>        location: ProgramSite,
 <a href=#62 id=62 data-nosnippet>62</a>        admit: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Capacity) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt;&gt;,
 <a href=#63 id=63 data-nosnippet>63</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">let </span><span class="kw-2">mut </span>space = Workspace {
@@ -162,7 +162,7 @@
 <a href=#162 id=162 data-nosnippet>162</a>/// successful allocations contribute to its observed capacity.
 <a href=#163 id=163 data-nosnippet>163</a></span><span class="kw">struct </span>Workspace&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#164 id=164 data-nosnippet>164</a>    bytes: u128,
-<a href=#165 id=165 data-nosnippet>165</a>    location: <span class="prelude-ty">Option</span>&lt;Location&gt;,
+<a href=#165 id=165 data-nosnippet>165</a>    location: <span class="prelude-ty">Option</span>&lt;ProgramSite&gt;,
 <a href=#166 id=166 data-nosnippet>166</a>    admit: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span><span class="kw">dyn </span>FnMut(Capacity) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt;&gt;,
 <a href=#167 id=167 data-nosnippet>167</a>}
 <a href=#168 id=168 data-nosnippet>168</a><span class="kw">impl </span>Workspace&lt;<span class="lifetime">'_</span>&gt; {
@@ -255,7 +255,7 @@
 <a href=#255 id=255 data-nosnippet>255</a>        occurrence: <span class="kw-2">&amp;</span>PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#256 id=256 data-nosnippet>256</a>        bound: <span class="kw-2">&amp;</span>[bool],
 <a href=#257 id=257 data-nosnippet>257</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#258 id=258 data-nosnippet>258</a>        location: Location,
+<a href=#258 id=258 data-nosnippet>258</a>        location: ProgramSite,
 <a href=#259 id=259 data-nosnippet>259</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">if </span><span class="self">self</span>.decided {
 <a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
@@ -274,7 +274,7 @@
 <a href=#274 id=274 data-nosnippet>274</a>        occurrence: <span class="kw-2">&amp;</span>PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#275 id=275 data-nosnippet>275</a>        bound: <span class="kw-2">&amp;</span>[bool],
 <a href=#276 id=276 data-nosnippet>276</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#277 id=277 data-nosnippet>277</a>        location: Location,
+<a href=#277 id=277 data-nosnippet>277</a>        location: ProgramSite,
 <a href=#278 id=278 data-nosnippet>278</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">if </span><span class="self">self</span>.decided {
 <a href=#280 id=280 data-nosnippet>280</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
@@ -290,7 +290,7 @@
 <a href=#290 id=290 data-nosnippet>290</a>    }
 <a href=#291 id=291 data-nosnippet>291</a>}
 <a href=#292 id=292 data-nosnippet>292</a>
-<a href=#293 id=293 data-nosnippet>293</a><span class="kw">fn </span>work(budget: <span class="kw-2">&amp;mut </span>Budget, amount: u128, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
+<a href=#293 id=293 data-nosnippet>293</a><span class="kw">fn </span>work(budget: <span class="kw-2">&amp;mut </span>Budget, amount: u128, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#294 id=294 data-nosnippet>294</a>    budget
 <a href=#295 id=295 data-nosnippet>295</a>        .charge(ExpansionResource::TermWork, amount, location)
 <a href=#296 id=296 data-nosnippet>296</a>        .map_err(Into::into)
@@ -302,7 +302,7 @@
 <a href=#302 id=302 data-nosnippet>302</a></span><span class="kw">fn </span>each_slot(
 <a href=#303 id=303 data-nosnippet>303</a>    occurrence: <span class="kw-2">&amp;</span>PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#304 id=304 data-nosnippet>304</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#305 id=305 data-nosnippet>305</a>    location: Location,
+<a href=#305 id=305 data-nosnippet>305</a>    location: ProgramSite,
 <a href=#306 id=306 data-nosnippet>306</a>    visit: <span class="kw">impl </span>FnMut(usize),
 <a href=#307 id=307 data-nosnippet>307</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#308 id=308 data-nosnippet>308</a>    work(budget, <span class="number">1</span>, location)<span class="question-mark">?</span>;
@@ -323,7 +323,7 @@
 <a href=#323 id=323 data-nosnippet>323</a>    occurrence: <span class="kw-2">&amp;</span>PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#324 id=324 data-nosnippet>324</a>    variable: usize,
 <a href=#325 id=325 data-nosnippet>325</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#326 id=326 data-nosnippet>326</a>    location: Location,
+<a href=#326 id=326 data-nosnippet>326</a>    location: ProgramSite,
 <a href=#327 id=327 data-nosnippet>327</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">let </span><span class="kw-2">mut </span>found = <span class="bool-val">false</span>;
 <a href=#329 id=329 data-nosnippet>329</a>    each_slot(occurrence, budget, location, |slot| {
@@ -336,7 +336,7 @@
 <a href=#336 id=336 data-nosnippet>336</a>    occurrence: <span class="kw-2">&amp;</span>PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#337 id=337 data-nosnippet>337</a>    bound: <span class="kw-2">&amp;</span>[bool],
 <a href=#338 id=338 data-nosnippet>338</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#339 id=339 data-nosnippet>339</a>    location: Location,
+<a href=#339 id=339 data-nosnippet>339</a>    location: ProgramSite,
 <a href=#340 id=340 data-nosnippet>340</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">let </span><span class="kw-2">mut </span>all = <span class="bool-val">true</span>;
 <a href=#342 id=342 data-nosnippet>342</a>    each_slot(occurrence, budget, location, |slot| {
@@ -371,7 +371,7 @@
 <a href=#371 id=371 data-nosnippet>371</a>        occurrences: <span class="kw-2">&amp;</span>[PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;],
 <a href=#372 id=372 data-nosnippet>372</a>        prefix: <span class="kw-2">&amp;</span>[bool],
 <a href=#373 id=373 data-nosnippet>373</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#374 id=374 data-nosnippet>374</a>        location: Location,
+<a href=#374 id=374 data-nosnippet>374</a>        location: ProgramSite,
 <a href=#375 id=375 data-nosnippet>375</a>        admit: <span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut(Capacity) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt;,
 <a href=#376 id=376 data-nosnippet>376</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#377 id=377 data-nosnippet>377</a>        <span class="self">Self</span>::with_space(
@@ -485,7 +485,7 @@
 <a href=#485 id=485 data-nosnippet>485</a>    bound: <span class="kw-2">&amp;mut </span>[bool],
 <a href=#486 id=486 data-nosnippet>486</a>    row_count: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>PatternOccurrence&lt;<span class="lifetime">'_</span>&gt;) -&gt; usize,
 <a href=#487 id=487 data-nosnippet>487</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#488 id=488 data-nosnippet>488</a>    location: Location,
+<a href=#488 id=488 data-nosnippet>488</a>    location: ProgramSite,
 <a href=#489 id=489 data-nosnippet>489</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#490 id=490 data-nosnippet>490</a>    arrange_with(
 <a href=#491 id=491 data-nosnippet>491</a>        occurrences,

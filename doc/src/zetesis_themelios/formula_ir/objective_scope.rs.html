@@ -12,18 +12,18 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>themelios_program::term::Term;
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use super</span>::{Compiler, LiteralIr, ObjectiveCondition, ObjectiveFamily, ObjectiveIr, Variables};
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use crate</span>::{ExpansionResource, FormulaFailure};
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>std::collections::BTreeSet;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use crate</span>::{ExpansionResource, FormulaFailure};
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>std::collections::BTreeSet;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>zetesis_objective::WeightPolarity;
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">impl </span>Compiler&lt;<span class="lifetime">'_</span>&gt; {
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>objective_statement(
 <a href=#22 id=22 data-nosnippet>22</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#23 id=23 data-nosnippet>23</a>        statement: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
-<a href=#24 id=24 data-nosnippet>24</a>        origins: <span class="kw-2">&amp;</span>[Location],
+<a href=#24 id=24 data-nosnippet>24</a>        origins: <span class="kw-2">&amp;</span>[ProgramSite],
 <a href=#25 id=25 data-nosnippet>25</a>        objectives: <span class="kw-2">&amp;mut </span>Vec&lt;ObjectiveIr&gt;,
-<a href=#26 id=26 data-nosnippet>26</a>        declarations: <span class="kw-2">&amp;mut </span>Vec&lt;Location&gt;,
+<a href=#26 id=26 data-nosnippet>26</a>        declarations: <span class="kw-2">&amp;mut </span>Vec&lt;ProgramSite&gt;,
 <a href=#27 id=27 data-nosnippet>27</a>        projection_nodes: <span class="kw-2">&amp;mut </span>u128,
 <a href=#28 id=28 data-nosnippet>28</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;WithProvenance&lt;Statement&gt;&gt;&gt;, FormulaFailure&gt; {
 <a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">if let </span>Statement::WeakConstraint(weak) = statement.get()
@@ -39,7 +39,7 @@
 <a href=#39 id=39 data-nosnippet>39</a>            <span class="self">self</span>.objectives(
 <a href=#40 id=40 data-nosnippet>40</a>                optimize,
 <a href=#41 id=41 data-nosnippet>41</a>                origins,
-<a href=#42 id=42 data-nosnippet>42</a>                <span class="kw-2">&amp;</span><span class="kw">crate</span>::extended::parsed_origins(statement),
+<a href=#42 id=42 data-nosnippet>42</a>                <span class="kw-2">&amp;</span><span class="kw">crate</span>::extended::program_sites(statement, <span class="self">self</span>.location),
 <a href=#43 id=43 data-nosnippet>43</a>                objectives,
 <a href=#44 id=44 data-nosnippet>44</a>                declarations,
 <a href=#45 id=45 data-nosnippet>45</a>            )<span class="question-mark">?</span>;
@@ -53,9 +53,9 @@
 <a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>weak_objective(
 <a href=#54 id=54 data-nosnippet>54</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#55 id=55 data-nosnippet>55</a>        weak: <span class="kw-2">&amp;</span>WeakConstraint,
-<a href=#56 id=56 data-nosnippet>56</a>        origins: <span class="kw-2">&amp;</span>[Location],
+<a href=#56 id=56 data-nosnippet>56</a>        origins: <span class="kw-2">&amp;</span>[ProgramSite],
 <a href=#57 id=57 data-nosnippet>57</a>        objectives: <span class="kw-2">&amp;mut </span>Vec&lt;ObjectiveIr&gt;,
-<a href=#58 id=58 data-nosnippet>58</a>        declarations: <span class="kw-2">&amp;mut </span>Vec&lt;Location&gt;,
+<a href=#58 id=58 data-nosnippet>58</a>        declarations: <span class="kw-2">&amp;mut </span>Vec&lt;ProgramSite&gt;,
 <a href=#59 id=59 data-nosnippet>59</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">let </span>body_origins = || {
 <a href=#61 id=61 data-nosnippet>61</a>            weak.body().provenance().origins().chain(
@@ -87,7 +87,7 @@
 <a href=#87 id=87 data-nosnippet>87</a>                .flat_map(|element| element.provenance().origins()),
 <a href=#88 id=88 data-nosnippet>88</a>        ) {
 <a href=#89 id=89 data-nosnippet>89</a>            <span class="kw">if let </span>Origin::Parsed(location) = origin {
-<a href=#90 id=90 data-nosnippet>90</a>                evidence.push(<span class="kw-2">*</span>location);
+<a href=#90 id=90 data-nosnippet>90</a>                evidence.push(<span class="self">self</span>.location.with_location(<span class="kw-2">*</span>location));
 <a href=#91 id=91 data-nosnippet>91</a>            }
 <a href=#92 id=92 data-nosnippet>92</a>        }
 <a href=#93 id=93 data-nosnippet>93</a>        evidence.sort_unstable();
@@ -129,7 +129,7 @@
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>scoped_element(
 <a href=#130 id=130 data-nosnippet>130</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#131 id=131 data-nosnippet>131</a>        element: <span class="kw-2">&amp;</span>OptimizeElement,
-<a href=#132 id=132 data-nosnippet>132</a>        origins: Vec&lt;Location&gt;,
+<a href=#132 id=132 data-nosnippet>132</a>        origins: Vec&lt;ProgramSite&gt;,
 <a href=#133 id=133 data-nosnippet>133</a>        polarity: WeightPolarity,
 <a href=#134 id=134 data-nosnippet>134</a>        family: ObjectiveFamily,
 <a href=#135 id=135 data-nosnippet>135</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ObjectiveIr, FormulaFailure&gt; {
@@ -167,7 +167,7 @@
 <a href=#167 id=167 data-nosnippet>167</a>        source: <span class="kw-2">&amp;</span>Body,
 <a href=#168 id=168 data-nosnippet>168</a>        weight: <span class="kw-2">&amp;</span>Weight,
 <a href=#169 id=169 data-nosnippet>169</a>        terms: <span class="kw">impl </span>Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'source </span>Term&gt;,
-<a href=#170 id=170 data-nosnippet>170</a>        origins: Vec&lt;Location&gt;,
+<a href=#170 id=170 data-nosnippet>170</a>        origins: Vec&lt;ProgramSite&gt;,
 <a href=#171 id=171 data-nosnippet>171</a>        polarity: WeightPolarity,
 <a href=#172 id=172 data-nosnippet>172</a>        family: ObjectiveFamily,
 <a href=#173 id=173 data-nosnippet>173</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ObjectiveIr, FormulaFailure&gt; {
@@ -202,7 +202,7 @@
 <a href=#202 id=202 data-nosnippet>202</a>        source: <span class="kw-2">&amp;</span>Body,
 <a href=#203 id=203 data-nosnippet>203</a>        source_weight: <span class="kw-2">&amp;</span>Weight,
 <a href=#204 id=204 data-nosnippet>204</a>        terms: <span class="kw">impl </span>Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'source </span>Term&gt;,
-<a href=#205 id=205 data-nosnippet>205</a>        origins: Vec&lt;Location&gt;,
+<a href=#205 id=205 data-nosnippet>205</a>        origins: Vec&lt;ProgramSite&gt;,
 <a href=#206 id=206 data-nosnippet>206</a>        polarity: WeightPolarity,
 <a href=#207 id=207 data-nosnippet>207</a>        family: ObjectiveFamily,
 <a href=#208 id=208 data-nosnippet>208</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ObjectiveIr, FormulaFailure&gt; {

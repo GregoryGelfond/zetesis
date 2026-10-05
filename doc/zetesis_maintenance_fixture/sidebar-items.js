@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cargo","clean_arguments","execute","fail","has","main","physical","report_arguments","simulated_failure","trace","value","variable"],"mod":["capture_fixture"]};
+window.SIDEBAR_ITEMS = {"fn":["book_artifacts","cargo","clean_arguments","execute","fail","has","main","physical","report_arguments","simulated_failure","trace","value","variable"],"mod":["capture_fixture"]};

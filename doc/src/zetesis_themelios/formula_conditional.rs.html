@@ -2,7 +2,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::formula_binding::Binding;
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>themelios_program::program::DefaultNegation;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_ferraris::Node;
 <a href=#8 id=8 data-nosnippet>8</a>
@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>        conditional: <span class="kw-2">&amp;</span>ConditionalIr,
 <a href=#38 id=38 data-nosnippet>38</a>        assignment: <span class="kw-2">&amp;</span>Binding,
 <a href=#39 id=39 data-nosnippet>39</a>        support: <span class="kw-2">&amp;</span>Support,
-<a href=#40 id=40 data-nosnippet>40</a>        location: Location,
+<a href=#40 id=40 data-nosnippet>40</a>        location: ProgramSite,
 <a href=#41 id=41 data-nosnippet>41</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = VERUM;
 <a href=#43 id=43 data-nosnippet>43</a>        <span class="kw">let </span><span class="kw-2">mut </span>bindings = Join::new(
@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>        alternatives: <span class="kw-2">&amp;</span>[Alternative],
 <a href=#98 id=98 data-nosnippet>98</a>        binding: <span class="kw-2">&amp;</span>Binding,
 <a href=#99 id=99 data-nosnippet>99</a>        support: <span class="kw-2">&amp;</span>Support,
-<a href=#100 id=100 data-nosnippet>100</a>        location: Location,
+<a href=#100 id=100 data-nosnippet>100</a>        location: ProgramSite,
 <a href=#101 id=101 data-nosnippet>101</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ConsequentInstance, FormulaFailure&gt; {
 <a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">let </span><span class="kw-2">mut </span>disjunction = FALSUM;
 <a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span><span class="kw-2">mut </span>evidence = Evidence::default();
@@ -147,7 +147,7 @@
 <a href=#147 id=147 data-nosnippet>147</a>        alternatives: <span class="kw-2">&amp;</span>[GuardAlternative],
 <a href=#148 id=148 data-nosnippet>148</a>        binding: <span class="kw-2">&amp;</span>Binding,
 <a href=#149 id=149 data-nosnippet>149</a>        support: <span class="kw-2">&amp;</span>Support,
-<a href=#150 id=150 data-nosnippet>150</a>        location: Location,
+<a href=#150 id=150 data-nosnippet>150</a>        location: ProgramSite,
 <a href=#151 id=151 data-nosnippet>151</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ConsequentInstance, FormulaFailure&gt; {
 <a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span><span class="kw-2">mut </span>value = <span class="bool-val">false</span>;
 <a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span><span class="kw-2">mut </span>evidence = Evidence::default();

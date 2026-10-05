@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-08e3f451.js"></script>
+        <script src="toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,12 +189,14 @@ representations. A representation name does not confer a semantic property.</p>
 <tr><th>Concept</th><th>Current Rust representation</th><th>Lean vocabulary</th></tr>
 </thead>
 <tbody>
-<tr><td>Source program</td><td><code>themelios_program::Program</code>, re-exported as <code>zetesis_themelios::logical::Program</code></td><td>Source-template and translation laws use explicit abstract premises</td></tr>
+<tr><td>Canonical logical program</td><td><code>themelios_program::Program</code>, re-exported as <code>zetesis_themelios::logical::Program</code>; constructed directly or raised from source</td><td>Source-template and translation laws use explicit abstract premises</td></tr>
+<tr><td>Original statement evidence</td><td><code>zetesis_themelios::ProgramSite</code> carries an owner-local <code>StatementId</code> when available and an optional real <code>Location</code></td><td>Identity and provenance do not by themselves establish a translation law</td></tr>
 <tr><td>Admitted relational program</td><td><code>zetesis_core::Program</code></td><td><code>Semantics.Program</code></td></tr>
 <tr><td>Finite propositional theory</td><td><code>zetesis_ferraris::Theory</code></td><td><code>Ferraris.Theory</code></td></tr>
 <tr><td>Interpretation</td><td><code>zetesis_core::Interpretation</code> / <code>Model</code>; theory-bound <code>zetesis_ferraris::Interpretation</code></td><td><code>Atoms α</code></td></tr>
 <tr><td>Candidate gate assignment</td><td><code>zetesis_core::Seed</code></td><td>Seed <code>z</code> and <code>Semantics.GateCarrier</code></td></tr>
-<tr><td>Answer set</td><td>Privately constructed <code>AnswerSet</code> (<code>SessionModel</code> compatibility alias), or a native <code>StableInterpretation</code></td><td><code>Semantics.Stable</code> / <code>Ferraris.Stable</code></td></tr>
+<tr><td>Checked answer set</td><td>Privately constructed <code>zetesis_solve::AnswerSet</code> (<code>SessionModel</code> compatibility alias), or a native <code>StableInterpretation</code></td><td><code>Semantics.Stable</code> / <code>Ferraris.Stable</code></td></tr>
+<tr><td>Ground-symbol exchange set</td><td><code>zetesis_themelios::logical::AnswerSet</code>, a plain <code>BTreeSet&lt;Symbol&gt;</code> used by explicit symbol export</td><td>A set representation with no checked membership claim</td></tr>
 <tr><td>Complete world view</td><td><code>WorldView</code> retains the original subject and all full answers after unrestricted exhaustion</td><td>Membership, original-family coverage and complete-capture laws</td></tr>
 <tr><td>Positive consequence closure</td><td>CPU normal oracle result; static or lazy representation</td><td><code>Semantics.Gamma</code>, <code>Zetesis.Least</code></td></tr>
 <tr><td>Frozen reduct</td><td><code>zetesis_ferraris::FrozenReduct</code> or candidate-gated normal consequences</td><td><code>Ferraris.ReductTheory</code> / <code>Semantics.ReductModel</code></td></tr>
@@ -214,8 +216,8 @@ representations. A representation name does not confer a semantic property.</p>
 </tbody>
 </table>
 </div>
-<p>An ordinary Rust <code>Model</code> is an atom collection, not by itself a sealed
-answer-set certificate. Likewise, a <code>Check</code> value describing a decision should
+<p>An ordinary Rust <code>Model</code> or <code>logical::AnswerSet</code> is a collection, not by itself
+a sealed answer-set certificate. Likewise, a <code>Check</code> value describing a decision should
 not be attached to another subject; the checked-owner APIs preserve that
 association explicitly.</p>
 <p><strong>Grounding</strong> supplies finite instances or a stream with the required coverage.

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ColumnEncoding","OffsetRefusal","PositionRefusal"],"struct":["ColumnNotBoundary","ColumnOutOfBounds","LineCol","LineIndex","LineOutOfBounds","OffsetOutOfBounds"]};

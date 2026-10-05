@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-themelios/src/formula_binding.rs`."><title>formula_binding.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis_themelios" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_themelios/</div>formula_binding.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Scoped assignments retain only canonical IDs and explicit absence.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>themelios_base::span::Location;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>zetesis_core::catalog::{
 <a href=#5 id=5 data-nosnippet>5</a>    AssignmentError, AssignmentFailure, AssignmentSlice, CatalogRead, TermAssignment, TermKey,
 <a href=#6 id=6 data-nosnippet>6</a>    TermRef,
@@ -32,7 +32,7 @@
 <a href=#32 id=32 data-nosnippet>32</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#33 id=33 data-nosnippet>33</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#34 id=34 data-nosnippet>34</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#35 id=35 data-nosnippet>35</a>        location: Location,
+<a href=#35 id=35 data-nosnippet>35</a>        location: ProgramSite,
 <a href=#36 id=36 data-nosnippet>36</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#37 id=37 data-nosnippet>37</a>        <span class="kw">let </span>values = computation.read().assignment();
 <a href=#38 id=38 data-nosnippet>38</a>        <span class="kw">let </span><span class="kw-2">mut </span>lease = computation.lease();
@@ -50,7 +50,7 @@
 <a href=#50 id=50 data-nosnippet>50</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#51 id=51 data-nosnippet>51</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#52 id=52 data-nosnippet>52</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#53 id=53 data-nosnippet>53</a>        location: Location,
+<a href=#53 id=53 data-nosnippet>53</a>        location: ProgramSite,
 <a href=#54 id=54 data-nosnippet>54</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="self">Self</span>::new(computation, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#56 id=56 data-nosnippet>56</a>        result.change_storage(
@@ -79,7 +79,7 @@
 <a href=#79 id=79 data-nosnippet>79</a>        variable: usize,
 <a href=#80 id=80 data-nosnippet>80</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#81 id=81 data-nosnippet>81</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#82 id=82 data-nosnippet>82</a>        location: Location,
+<a href=#82 id=82 data-nosnippet>82</a>        location: ProgramSite,
 <a href=#83 id=83 data-nosnippet>83</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">if </span>variable &gt;= <span class="self">self</span>.len() {
 <a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
@@ -96,7 +96,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>        trail: <span class="kw-2">&amp;mut </span>Vec&lt;usize&gt;,
 <a href=#97 id=97 data-nosnippet>97</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#98 id=98 data-nosnippet>98</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#99 id=99 data-nosnippet>99</a>        location: Location,
+<a href=#99 id=99 data-nosnippet>99</a>        location: ProgramSite,
 <a href=#100 id=100 data-nosnippet>100</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>slot <span class="kw">in </span>trail.iter() {
 <a href=#102 id=102 data-nosnippet>102</a>            counters.work(limits, location)<span class="question-mark">?</span>;
@@ -118,7 +118,7 @@
 <a href=#118 id=118 data-nosnippet>118</a>        right: usize,
 <a href=#119 id=119 data-nosnippet>119</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#120 id=120 data-nosnippet>120</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#121 id=121 data-nosnippet>121</a>        location: Location,
+<a href=#121 id=121 data-nosnippet>121</a>        location: ProgramSite,
 <a href=#122 id=122 data-nosnippet>122</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#123 id=123 data-nosnippet>123</a>        <span class="self">self</span>.owned()
 <a href=#124 id=124 data-nosnippet>124</a>            .swap_with(left, right, || counters.work(limits, location))
@@ -131,7 +131,7 @@
 <a href=#131 id=131 data-nosnippet>131</a>        value: <span class="kw-2">&amp;</span>TermKey,
 <a href=#132 id=132 data-nosnippet>132</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#133 id=133 data-nosnippet>133</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#134 id=134 data-nosnippet>134</a>        location: Location,
+<a href=#134 id=134 data-nosnippet>134</a>        location: ProgramSite,
 <a href=#135 id=135 data-nosnippet>135</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#136 id=136 data-nosnippet>136</a>        <span class="self">self</span>.owned()
 <a href=#137 id=137 data-nosnippet>137</a>            .set_with(variable, value, || counters.work(limits, location))
@@ -144,7 +144,7 @@
 <a href=#144 id=144 data-nosnippet>144</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#145 id=145 data-nosnippet>145</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#146 id=146 data-nosnippet>146</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#147 id=147 data-nosnippet>147</a>        location: Location,
+<a href=#147 id=147 data-nosnippet>147</a>        location: ProgramSite,
 <a href=#148 id=148 data-nosnippet>148</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">if </span>end &lt;= <span class="self">self</span>.len() {
 <a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
@@ -163,7 +163,7 @@
 <a href=#163 id=163 data-nosnippet>163</a>        end: usize,
 <a href=#164 id=164 data-nosnippet>164</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#165 id=165 data-nosnippet>165</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#166 id=166 data-nosnippet>166</a>        location: Location,
+<a href=#166 id=166 data-nosnippet>166</a>        location: ProgramSite,
 <a href=#167 id=167 data-nosnippet>167</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#168 id=168 data-nosnippet>168</a>        <span class="self">self</span>.owned()
 <a href=#169 id=169 data-nosnippet>169</a>            .truncate_with(end, || counters.work(limits, location))
@@ -183,7 +183,7 @@
 <a href=#183 id=183 data-nosnippet>183</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#184 id=184 data-nosnippet>184</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#185 id=185 data-nosnippet>185</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#186 id=186 data-nosnippet>186</a>        location: Location,
+<a href=#186 id=186 data-nosnippet>186</a>        location: ProgramSite,
 <a href=#187 id=187 data-nosnippet>187</a>        operation: <span class="kw">impl </span>FnOnce(
 <a href=#188 id=188 data-nosnippet>188</a>            <span class="kw-2">&amp;mut </span>TermAssignment,
 <a href=#189 id=189 data-nosnippet>189</a>            usize,
@@ -240,7 +240,7 @@
 <a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>is_bound(
 <a href=#241 id=241 data-nosnippet>241</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#242 id=242 data-nosnippet>242</a>        variable: usize,
-<a href=#243 id=243 data-nosnippet>243</a>        location: Location,
+<a href=#243 id=243 data-nosnippet>243</a>        location: ProgramSite,
 <a href=#244 id=244 data-nosnippet>244</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#245 id=245 data-nosnippet>245</a>        <span class="self">self</span>.slots()
 <a href=#246 id=246 data-nosnippet>246</a>            .is_bound(variable)
@@ -250,7 +250,7 @@
 <a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>key(
 <a href=#251 id=251 data-nosnippet>251</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#252 id=252 data-nosnippet>252</a>        variable: usize,
-<a href=#253 id=253 data-nosnippet>253</a>        location: Location,
+<a href=#253 id=253 data-nosnippet>253</a>        location: ProgramSite,
 <a href=#254 id=254 data-nosnippet>254</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#255 id=255 data-nosnippet>255</a>        <span class="self">self</span>.slots()
 <a href=#256 id=256 data-nosnippet>256</a>            .key(variable)
@@ -267,7 +267,7 @@
 <a href=#267 id=267 data-nosnippet>267</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#268 id=268 data-nosnippet>268</a>        variable: usize,
 <a href=#269 id=269 data-nosnippet>269</a>        read: CatalogRead&lt;<span class="lifetime">'read</span>&gt;,
-<a href=#270 id=270 data-nosnippet>270</a>        location: Location,
+<a href=#270 id=270 data-nosnippet>270</a>        location: ProgramSite,
 <a href=#271 id=271 data-nosnippet>271</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermRef&lt;<span class="lifetime">'read</span>&gt;, FormulaFailure&gt; {
 <a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span>key = <span class="self">self</span>.key(variable, location)<span class="question-mark">?</span>;
 <a href=#273 id=273 data-nosnippet>273</a>        read.term(<span class="kw-2">&amp;</span>key)
@@ -279,7 +279,7 @@
 <a href=#279 id=279 data-nosnippet>279</a>        read: CatalogRead&lt;<span class="lifetime">'a</span>&gt;,
 <a href=#280 id=280 data-nosnippet>280</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#281 id=281 data-nosnippet>281</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#282 id=282 data-nosnippet>282</a>        location: Location,
+<a href=#282 id=282 data-nosnippet>282</a>        location: ProgramSite,
 <a href=#283 id=283 data-nosnippet>283</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;BindingView&lt;<span class="lifetime">'a</span>&gt;, FormulaFailure&gt; {
 <a href=#284 id=284 data-nosnippet>284</a>        <span class="self">self</span>.slots()
 <a href=#285 id=285 data-nosnippet>285</a>            .bind_with(read, || counters.work(limits, location))
@@ -290,7 +290,7 @@
 <a href=#290 id=290 data-nosnippet>290</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#291 id=291 data-nosnippet>291</a>        term: TemplateTerm&lt;<span class="lifetime">'read</span>&gt;,
 <a href=#292 id=292 data-nosnippet>292</a>        read: CatalogRead&lt;<span class="lifetime">'read</span>&gt;,
-<a href=#293 id=293 data-nosnippet>293</a>        location: Location,
+<a href=#293 id=293 data-nosnippet>293</a>        location: ProgramSite,
 <a href=#294 id=294 data-nosnippet>294</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermRef&lt;<span class="lifetime">'read</span>&gt;, FormulaFailure&gt; {
 <a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">match </span>term {
 <a href=#296 id=296 data-nosnippet>296</a>            TemplateTerm::Constant(value) =&gt; <span class="prelude-val">Ok</span>(value),
@@ -303,7 +303,7 @@
 <a href=#303 id=303 data-nosnippet>303</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#304 id=304 data-nosnippet>304</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#305 id=305 data-nosnippet>305</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#306 id=306 data-nosnippet>306</a>        location: Location,
+<a href=#306 id=306 data-nosnippet>306</a>        location: ProgramSite,
 <a href=#307 id=307 data-nosnippet>307</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Binding&lt;<span class="lifetime">'static</span>&gt;, FormulaFailure&gt; {
 <a href=#308 id=308 data-nosnippet>308</a>        Binding::copy_slots(<span class="self">self</span>.slots(), computation, limits, counters, location)
 <a href=#309 id=309 data-nosnippet>309</a>    }
@@ -326,13 +326,13 @@
 <a href=#326 id=326 data-nosnippet>326</a>    }
 <a href=#327 id=327 data-nosnippet>327</a>}
 <a href=#328 id=328 data-nosnippet>328</a>
-<a href=#329 id=329 data-nosnippet>329</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>assignment(error: AssignmentError, location: Location) -&gt; FormulaFailure {
+<a href=#329 id=329 data-nosnippet>329</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>assignment(error: AssignmentError, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#330 id=330 data-nosnippet>330</a>    FormulaFailure::TermAssignment { error, location }
 <a href=#331 id=331 data-nosnippet>331</a>}
 <a href=#332 id=332 data-nosnippet>332</a>
 <a href=#333 id=333 data-nosnippet>333</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>failure(
 <a href=#334 id=334 data-nosnippet>334</a>    error: AssignmentFailure&lt;FormulaFailure&gt;,
-<a href=#335 id=335 data-nosnippet>335</a>    location: Location,
+<a href=#335 id=335 data-nosnippet>335</a>    location: ProgramSite,
 <a href=#336 id=336 data-nosnippet>336</a>) -&gt; FormulaFailure {
 <a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">match </span>error {
 <a href=#338 id=338 data-nosnippet>338</a>        AssignmentFailure::Assignment(error) =&gt; assignment(error, location),

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,6 +183,12 @@
                         <h1 id="completion-resources-and-output"><a class="header" href="#completion-resources-and-output">Completion, resources, and output</a></h1>
 <p>Keep three questions separate: what has been proved about the program, how much
 search has completed, and what an external consumer received.</p>
+<p>This chapter uses the native <code>zetesis_solve::WorldView</code>: a complete original
+family, possibly empty when the program is inconsistent. The facade’s upstream
+<code>zetesis::query::WorldView</code> is a nonempty live stream. Its materialized
+<code>Snapshot</code> guarantees a complete, nonempty family. These types have distinct
+contracts, as described in
+the <a href="libraries.html#api-reference">library reference</a>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -226,6 +232,11 @@ observed before candidate checking starts. It does not attribute work to a
 closure oracle, countermodel search or device that was never entered. JSON
 uses the interruption kind <code>preparation</code>, with <code>cancelled</code> or <code>deadline</code> as
 its control code.</p>
+<p><code>Interruption</code> implements <code>std::error::Error</code>. Error wrappers can retain it as a
+typed cause; callers can downcast to <code>Interruption</code> and follow <code>source()</code> to the
+underlying stop or resource error. Model-construction work and byte limits carry
+their evidence directly and have no nested source. Display text is for people,
+not a substitute for these typed distinctions.</p>
 <p>JSON interruption <code>kind</code> and <code>code</code> classify the outcome for machine consumers.
 <code>detail</code> is its human-readable explanation and may change as diagnostics improve;
 consumers should not parse Rust debug spellings or infer completion from that text.
@@ -469,6 +480,10 @@ yielded answer. Both <code>HumanRenderer</code> and
 <code>JsonRenderer</code> consume that same typed <code>ModelView</code>: the complete interpretation,
 selected original atoms, evaluated terms and optional priority/cost pairs remain
 separate. An empty displayed projection never changes answer identity.</p>
+<p>Library consumers can borrow evaluated <code>#show</code> terms with
+<code>observation::Evaluation::symbols()</code> or take ownership with <code>into_symbols()</code>.
+The latter moves the existing vector without copying terms or allocating new
+storage. Read <code>statistics()</code> first if the evaluation’s work receipt is needed.</p>
 <p><code>publish_prepared</code> accepts an admitted owner and <code>PublicationConfig</code>, containing
 ordinary <code>SolveConfig</code> and observation limits. It needs no argument parser,
 global stream or complete <code>WorldView</code> buffer. <code>run_with_renderer</code> and
@@ -634,6 +649,17 @@ flag and retires then or when the last clone drops. Polling reads shared flags
 without reading the clock. An already-started bounded static compilation is not
 preemptible; session setup polls before it and subsequent work polls again. A
 deadline is therefore not a hard process-kill guarantee.</p>
+<p>For a reusable interrupt handle across separate runs, <code>CancellationSlot::open</code>
+returns a <code>CancellationRun</code> guard. Keep the guard until that run ends and clone
+its <code>cancellation()</code> token for preparation or workers. Each opening gets a fresh
+identity. Opening again, clearing the slot or dropping the guard stops the old
+tokens; an old guard cannot stop a newer run. Cancelling an idle slot has no
+effect on a later run.</p>
+<p>A slot cancellation makes at most one atomic update, without allocating or
+waiting. Tokens from a slot add one atomic membership read to ordinary polling.
+Deadlines retain their existing timer and retirement costs. Slot identities never
+wrap: exhausting them returns <code>CancellationSlotError::GenerationExhausted</code>
+without changing the current run.</p>
 <p>For Rust consumers migrating from the previous API, <code>Cancellation</code> replaces
 <code>Control</code>, and operations named <code>with_control</code> or ending in <code>_with_control</code> now
 use <code>with_cancellation</code> or <code>_with_cancellation</code>. Update imports, named fields and

@@ -70,7 +70,7 @@
 <a href=#70 id=70 data-nosnippet>70</a>                            resource: InputLimit::BodyElements,
 <a href=#71 id=71 data-nosnippet>71</a>                            limit: options.max_body_elements,
 <a href=#72 id=72 data-nosnippet>72</a>                            observed: index + <span class="number">1</span>,
-<a href=#73 id=73 data-nosnippet>73</a>                            location: parsed.location(element.syntax().text_range()),
+<a href=#73 id=73 data-nosnippet>73</a>                            location: parsed.location(element.syntax().text_range()).into(),
 <a href=#74 id=74 data-nosnippet>74</a>                        });
 <a href=#75 id=75 data-nosnippet>75</a>                    }
 <a href=#76 id=76 data-nosnippet>76</a>                }
@@ -120,7 +120,7 @@
 <a href=#120 id=120 data-nosnippet>120</a>                        resource: InputLimit::BodyElements,
 <a href=#121 id=121 data-nosnippet>121</a>                        limit: options.max_body_elements,
 <a href=#122 id=122 data-nosnippet>122</a>                        observed: index + <span class="number">1</span>,
-<a href=#123 id=123 data-nosnippet>123</a>                        location,
+<a href=#123 id=123 data-nosnippet>123</a>                        location: location.into(),
 <a href=#124 id=124 data-nosnippet>124</a>                    });
 <a href=#125 id=125 data-nosnippet>125</a>                }
 <a href=#126 id=126 data-nosnippet>126</a>                <span class="kw">if </span>!(<span class="macro">matches!</span>(element, ast::BodyElement::Literal(<span class="kw">_</span>))
@@ -185,7 +185,7 @@
 <a href=#185 id=185 data-nosnippet>185</a>                            resource,
 <a href=#186 id=186 data-nosnippet>186</a>                            limit,
 <a href=#187 id=187 data-nosnippet>187</a>                            observed,
-<a href=#188 id=188 data-nosnippet>188</a>                            location,
+<a href=#188 id=188 data-nosnippet>188</a>                            location: location.into(),
 <a href=#189 id=189 data-nosnippet>189</a>                        });
 <a href=#190 id=190 data-nosnippet>190</a>                    }
 <a href=#191 id=191 data-nosnippet>191</a>                }
@@ -299,7 +299,7 @@
 <a href=#299 id=299 data-nosnippet>299</a>                    resource: InputLimit::BodyElements,
 <a href=#300 id=300 data-nosnippet>300</a>                    limit: options.max_body_elements,
 <a href=#301 id=301 data-nosnippet>301</a>                    observed: index + <span class="number">1</span>,
-<a href=#302 id=302 data-nosnippet>302</a>                    location,
+<a href=#302 id=302 data-nosnippet>302</a>                    location: location.into(),
 <a href=#303 id=303 data-nosnippet>303</a>                });
 <a href=#304 id=304 data-nosnippet>304</a>            }
 <a href=#305 id=305 data-nosnippet>305</a>            <span class="kw">if </span>!<span class="macro">matches!</span>(

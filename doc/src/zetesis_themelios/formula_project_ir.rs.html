@@ -2,7 +2,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>//! logical producers. Their temporary dependency projections are discarded;
 <a href=#3 id=3 data-nosnippet>3</a>//! declarations contribute no statements to the retained source analysis.
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>themelios_base::span::Location;
+<a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>themelios_program::program::{
 <a href=#7 id=7 data-nosnippet>7</a>    DefaultNegation, Literal, LiteralInner, Project, Rule, Statement,
 <a href=#8 id=8 data-nosnippet>8</a>};
@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>project_statement(
 <a href=#16 id=16 data-nosnippet>16</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#17 id=17 data-nosnippet>17</a>        statement: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
-<a href=#18 id=18 data-nosnippet>18</a>        origins: <span class="kw-2">&amp;</span>[Location],
+<a href=#18 id=18 data-nosnippet>18</a>        origins: <span class="kw-2">&amp;</span>[ProgramSite],
 <a href=#19 id=19 data-nosnippet>19</a>        projection_nodes: <span class="kw-2">&amp;mut </span>u128,
 <a href=#20 id=20 data-nosnippet>20</a>        declarations: <span class="kw-2">&amp;mut </span>Vec&lt;RuleIr&gt;,
 <a href=#21 id=21 data-nosnippet>21</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {

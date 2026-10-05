@@ -10,9 +10,9 @@
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">mod </span>selection;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">mod </span>source;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">mod </span>symbols;
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">mod </span>workspace;
-<a href=#14 id=14 data-nosnippet>14</a><span class="attr">#[cfg(test)]
-<a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">mod </span>tests;
+<a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[cfg(test)]
+<a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">mod </span>tests;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">mod </span>workspace;
 <a href=#16 id=16 data-nosnippet>16</a>
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>themelios_program::program::Program;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>zetesis_domain::terminal;
@@ -20,7 +20,7 @@
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::formula::Preparation;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::formula_ir::{LiteralIr, RuleIr};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::{Counters, StorageLease};
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use crate</span>::{AnalysisBasis, FormulaFailure};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use crate</span>::{AnalysisBasis, FormulaFailure, ProgramSite};
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>workspace::{Context, Scratch};
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>OriginalAnalysis {
@@ -51,25 +51,25 @@
 <a href=#51 id=51 data-nosnippet>51</a>            .iter()
 <a href=#52 id=52 data-nosnippet>52</a>            .map(|rule| {
 <a href=#53 id=53 data-nosnippet>53</a>                rule.body.capacity() <span class="kw">as </span>u128 * size_of::&lt;LiteralIr&gt;() <span class="kw">as </span>u128
-<a href=#54 id=54 data-nosnippet>54</a>                    + rule.origins.capacity() <span class="kw">as </span>u128
-<a href=#55 id=55 data-nosnippet>55</a>                        * size_of::&lt;themelios_base::span::Location&gt;() <span class="kw">as </span>u128
-<a href=#56 id=56 data-nosnippet>56</a>            })
-<a href=#57 id=57 data-nosnippet>57</a>            .sum::&lt;u128&gt;()
-<a href=#58 id=58 data-nosnippet>58</a>}
-<a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a><span class="kw">struct </span>Selection {
-<a href=#61 id=61 data-nosnippet>61</a>    source: Program,
-<a href=#62 id=62 data-nosnippet>62</a>    analysis: themelios_analysis::Analysis,
-<a href=#63 id=63 data-nosnippet>63</a>    selected: Scratch&lt;u8&gt;,
-<a href=#64 id=64 data-nosnippet>64</a>    base: Scratch&lt;RuleIr&gt;,
-<a href=#65 id=65 data-nosnippet>65</a>    deferred: Scratch&lt;RuleIr&gt;,
-<a href=#66 id=66 data-nosnippet>66</a>}
-<a href=#67 id=67 data-nosnippet>67</a>
-<a href=#68 id=68 data-nosnippet>68</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>partition(<span class="kw-2">mut </span>preparation: Preparation) -&gt; <span class="prelude-ty">Result</span>&lt;Partition, FormulaFailure&gt; {
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">let </span><span class="kw-2">mut </span>counters = Counters::resume(
-<a href=#70 id=70 data-nosnippet>70</a>        std::mem::take(<span class="kw-2">&amp;mut </span>preparation.accounting),
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">crate</span>::grounding_observer::Work::default(),
-<a href=#72 id=72 data-nosnippet>72</a>    );
+<a href=#54 id=54 data-nosnippet>54</a>                    + rule.origins.capacity() <span class="kw">as </span>u128 * size_of::&lt;ProgramSite&gt;() <span class="kw">as </span>u128
+<a href=#55 id=55 data-nosnippet>55</a>            })
+<a href=#56 id=56 data-nosnippet>56</a>            .sum::&lt;u128&gt;()
+<a href=#57 id=57 data-nosnippet>57</a>}
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a><span class="kw">struct </span>Selection {
+<a href=#60 id=60 data-nosnippet>60</a>    source: Program,
+<a href=#61 id=61 data-nosnippet>61</a>    analysis: themelios_analysis::Analysis,
+<a href=#62 id=62 data-nosnippet>62</a>    selected: Scratch&lt;u8&gt;,
+<a href=#63 id=63 data-nosnippet>63</a>    base: Scratch&lt;RuleIr&gt;,
+<a href=#64 id=64 data-nosnippet>64</a>    deferred: Scratch&lt;RuleIr&gt;,
+<a href=#65 id=65 data-nosnippet>65</a>}
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>partition(<span class="kw-2">mut </span>preparation: Preparation) -&gt; <span class="prelude-ty">Result</span>&lt;Partition, FormulaFailure&gt; {
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span><span class="kw-2">mut </span>counters = Counters::resume(
+<a href=#69 id=69 data-nosnippet>69</a>        std::mem::take(<span class="kw-2">&amp;mut </span>preparation.accounting),
+<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw">crate</span>::grounding_observer::Work::default(),
+<a href=#71 id=71 data-nosnippet>71</a>    )
+<a href=#72 id=72 data-nosnippet>72</a>    .with_cancellation(preparation.budget.cancellation());
 <a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>selected = prepare(<span class="kw-2">&amp;mut </span>preparation, <span class="kw-2">&amp;mut </span>counters)<span class="question-mark">?</span>;
 <a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>selected) = selected <span class="kw">else </span>{
 <a href=#75 id=75 data-nosnippet>75</a>        preparation.accounting = counters.into_accounting();
@@ -183,33 +183,32 @@
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">if </span><span class="kw-2">*</span>selected_rule != <span class="number">0 </span>{
 <a href=#184 id=184 data-nosnippet>184</a>            count += <span class="number">1</span>;
 <a href=#185 id=185 data-nosnippet>185</a>            nested_bytes += rule.body.capacity() <span class="kw">as </span>u128 * size_of::&lt;LiteralIr&gt;() <span class="kw">as </span>u128
-<a href=#186 id=186 data-nosnippet>186</a>                + rule.origins.capacity() <span class="kw">as </span>u128
-<a href=#187 id=187 data-nosnippet>187</a>                    * size_of::&lt;themelios_base::span::Location&gt;() <span class="kw">as </span>u128;
-<a href=#188 id=188 data-nosnippet>188</a>        }
-<a href=#189 id=189 data-nosnippet>189</a>    }
-<a href=#190 id=190 data-nosnippet>190</a>    base.reserve(selected.values.len() - count, <span class="kw-2">&amp;mut </span>context)<span class="question-mark">?</span>;
-<a href=#191 id=191 data-nosnippet>191</a>    deferred.reserve(count, <span class="kw-2">&amp;mut </span>context)<span class="question-mark">?</span>;
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">let </span>retained = nested_bytes
-<a href=#193 id=193 data-nosnippet>193</a>        + deferred.values.capacity() <span class="kw">as </span>u128 * size_of::&lt;RuleIr&gt;() <span class="kw">as </span>u128
-<a href=#194 id=194 data-nosnippet>194</a>        + size_of::&lt;Scratch&lt;RuleIr&gt;&gt;() <span class="kw">as </span>u128;
-<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>retained = usize::try_from(retained).map_err(|<span class="kw">_</span>| FormulaFailure::Limit {
-<a href=#196 id=196 data-nosnippet>196</a>        resource: <span class="kw">crate</span>::FormulaResource::SupportBytes,
-<a href=#197 id=197 data-nosnippet>197</a>        observed: retained,
-<a href=#198 id=198 data-nosnippet>198</a>        limit: limits.max_support_bytes <span class="kw">as </span>u128,
-<a href=#199 id=199 data-nosnippet>199</a>        location,
-<a href=#200 id=200 data-nosnippet>200</a>    })<span class="question-mark">?</span>;
-<a href=#201 id=201 data-nosnippet>201</a>    deferred.retain_existing(retained, <span class="kw-2">&amp;</span>context)<span class="question-mark">?</span>;
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="comment">// One permitted read/move per original occurrence; no callbacks during
-<a href=#203 id=203 data-nosnippet>203</a>    // publication can expose a partially partitioned source owner.
-<a href=#204 id=204 data-nosnippet>204</a>    </span>context
-<a href=#205 id=205 data-nosnippet>205</a>        .counters
-<a href=#206 id=206 data-nosnippet>206</a>        .charge_work(selected.values.len() <span class="kw">as </span>u128, limits, location)<span class="question-mark">?</span>;
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Selection {
-<a href=#208 id=208 data-nosnippet>208</a>        source,
-<a href=#209 id=209 data-nosnippet>209</a>        analysis: source_analysis,
-<a href=#210 id=210 data-nosnippet>210</a>        selected,
-<a href=#211 id=211 data-nosnippet>211</a>        base,
-<a href=#212 id=212 data-nosnippet>212</a>        deferred,
-<a href=#213 id=213 data-nosnippet>213</a>    }))
-<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#186 id=186 data-nosnippet>186</a>                + rule.origins.capacity() <span class="kw">as </span>u128 * size_of::&lt;ProgramSite&gt;() <span class="kw">as </span>u128;
+<a href=#187 id=187 data-nosnippet>187</a>        }
+<a href=#188 id=188 data-nosnippet>188</a>    }
+<a href=#189 id=189 data-nosnippet>189</a>    base.reserve(selected.values.len() - count, <span class="kw-2">&amp;mut </span>context)<span class="question-mark">?</span>;
+<a href=#190 id=190 data-nosnippet>190</a>    deferred.reserve(count, <span class="kw-2">&amp;mut </span>context)<span class="question-mark">?</span>;
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">let </span>retained = nested_bytes
+<a href=#192 id=192 data-nosnippet>192</a>        + deferred.values.capacity() <span class="kw">as </span>u128 * size_of::&lt;RuleIr&gt;() <span class="kw">as </span>u128
+<a href=#193 id=193 data-nosnippet>193</a>        + size_of::&lt;Scratch&lt;RuleIr&gt;&gt;() <span class="kw">as </span>u128;
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">let </span>retained = usize::try_from(retained).map_err(|<span class="kw">_</span>| FormulaFailure::Limit {
+<a href=#195 id=195 data-nosnippet>195</a>        resource: <span class="kw">crate</span>::FormulaResource::SupportBytes,
+<a href=#196 id=196 data-nosnippet>196</a>        observed: retained,
+<a href=#197 id=197 data-nosnippet>197</a>        limit: limits.max_support_bytes <span class="kw">as </span>u128,
+<a href=#198 id=198 data-nosnippet>198</a>        location,
+<a href=#199 id=199 data-nosnippet>199</a>    })<span class="question-mark">?</span>;
+<a href=#200 id=200 data-nosnippet>200</a>    deferred.retain_existing(retained, <span class="kw-2">&amp;</span>context)<span class="question-mark">?</span>;
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="comment">// One permitted read/move per original occurrence; no callbacks during
+<a href=#202 id=202 data-nosnippet>202</a>    // publication can expose a partially partitioned source owner.
+<a href=#203 id=203 data-nosnippet>203</a>    </span>context
+<a href=#204 id=204 data-nosnippet>204</a>        .counters
+<a href=#205 id=205 data-nosnippet>205</a>        .charge_work(selected.values.len() <span class="kw">as </span>u128, limits, location)<span class="question-mark">?</span>;
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Selection {
+<a href=#207 id=207 data-nosnippet>207</a>        source,
+<a href=#208 id=208 data-nosnippet>208</a>        analysis: source_analysis,
+<a href=#209 id=209 data-nosnippet>209</a>        selected,
+<a href=#210 id=210 data-nosnippet>210</a>        base,
+<a href=#211 id=211 data-nosnippet>211</a>        deferred,
+<a href=#212 id=212 data-nosnippet>212</a>    }))
+<a href=#213 id=213 data-nosnippet>213</a>}
 </code></pre></div></section></main></body></html>

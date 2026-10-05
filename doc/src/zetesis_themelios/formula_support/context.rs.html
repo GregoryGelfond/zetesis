@@ -2,7 +2,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">super</span>::Counters;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">crate</span>::FormulaLimits;
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="doccomment">/// Borrow one grounding operation's limits, accounting and diagnostic location.
 <a href=#8 id=8 data-nosnippet>8</a>/// Cancellation, shared allowance and observation remain in the same `Counters`;
@@ -11,13 +11,13 @@
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>GroundingWork&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#12 id=12 data-nosnippet>12</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) limits: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FormulaLimits,
 <a href=#13 id=13 data-nosnippet>13</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) counters: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Counters,
-<a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) location: Location,
+<a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) location: ProgramSite,
 <a href=#15 id=15 data-nosnippet>15</a>}
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; GroundingWork&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new(
 <a href=#18 id=18 data-nosnippet>18</a>        limits: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FormulaLimits,
 <a href=#19 id=19 data-nosnippet>19</a>        counters: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Counters,
-<a href=#20 id=20 data-nosnippet>20</a>        location: Location,
+<a href=#20 id=20 data-nosnippet>20</a>        location: ProgramSite,
 <a href=#21 id=21 data-nosnippet>21</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#22 id=22 data-nosnippet>22</a>        <span class="self">Self </span>{
 <a href=#23 id=23 data-nosnippet>23</a>            limits,
@@ -39,7 +39,7 @@
 <a href=#39 id=39 data-nosnippet>39</a>        computation: C,
 <a href=#40 id=40 data-nosnippet>40</a>        limits: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FormulaLimits,
 <a href=#41 id=41 data-nosnippet>41</a>        counters: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Counters,
-<a href=#42 id=42 data-nosnippet>42</a>        location: Location,
+<a href=#42 id=42 data-nosnippet>42</a>        location: ProgramSite,
 <a href=#43 id=43 data-nosnippet>43</a>    ) -&gt; <span class="self">Self </span>{
 <a href=#44 id=44 data-nosnippet>44</a>        <span class="self">Self </span>{
 <a href=#45 id=45 data-nosnippet>45</a>            computation,

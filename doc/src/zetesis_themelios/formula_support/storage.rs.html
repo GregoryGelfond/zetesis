@@ -10,7 +10,7 @@
 <a href=#10 id=10 data-nosnippet>10</a>    atomic::{AtomicUsize, Ordering},
 <a href=#11 id=11 data-nosnippet>11</a>};
 <a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, ReadError};
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::formula::ceiling;
@@ -89,7 +89,7 @@
 <a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>allowance(
 <a href=#90 id=90 data-nosnippet>90</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#91 id=91 data-nosnippet>91</a>        limits: <span class="kw-2">&amp;</span><span class="kw">crate</span>::FormulaLimits,
-<a href=#92 id=92 data-nosnippet>92</a>        location: Location,
+<a href=#92 id=92 data-nosnippet>92</a>        location: ProgramSite,
 <a href=#93 id=93 data-nosnippet>93</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>outside = <span class="self">self</span>.outside();
 <a href=#95 id=95 data-nosnippet>95</a>        ceiling(
@@ -109,7 +109,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>        header: usize,
 <a href=#110 id=110 data-nosnippet>110</a>        limits: <span class="kw-2">&amp;</span><span class="kw">crate</span>::FormulaLimits,
 <a href=#111 id=111 data-nosnippet>111</a>        counters: <span class="kw-2">&amp;</span><span class="kw">super</span>::Counters,
-<a href=#112 id=112 data-nosnippet>112</a>        location: Location,
+<a href=#112 id=112 data-nosnippet>112</a>        location: ProgramSite,
 <a href=#113 id=113 data-nosnippet>113</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>overlap = <span class="kw">if </span><span class="self">self</span>.lease.bytes() &gt; previous {
 <a href=#115 id=115 data-nosnippet>115</a>            previous.saturating_sub(header)
@@ -129,7 +129,7 @@
 <a href=#129 id=129 data-nosnippet>129</a>        component_peak: u128,
 <a href=#130 id=130 data-nosnippet>130</a>        limits: <span class="kw-2">&amp;</span><span class="kw">crate</span>::FormulaLimits,
 <a href=#131 id=131 data-nosnippet>131</a>        counters: <span class="kw-2">&amp;</span><span class="kw">super</span>::Counters,
-<a href=#132 id=132 data-nosnippet>132</a>        location: Location,
+<a href=#132 id=132 data-nosnippet>132</a>        location: ProgramSite,
 <a href=#133 id=133 data-nosnippet>133</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>peak = <span class="self">self</span>.outside().checked_add(component_peak).ok_or_else(|| {
 <a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">crate</span>::formula_binding::assignment(AssignmentError::Storage(Error::Overflow), location)
@@ -147,7 +147,7 @@
 <a href=#147 id=147 data-nosnippet>147</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#148 id=148 data-nosnippet>148</a>        result: <span class="prelude-ty">Result</span>&lt;T, AssignmentFailure&lt;FormulaFailure&gt;&gt;,
 <a href=#149 id=149 data-nosnippet>149</a>        limits: <span class="kw-2">&amp;</span><span class="kw">crate</span>::FormulaLimits,
-<a href=#150 id=150 data-nosnippet>150</a>        location: Location,
+<a href=#150 id=150 data-nosnippet>150</a>        location: ProgramSite,
 <a href=#151 id=151 data-nosnippet>151</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;T, FormulaFailure&gt; {
 <a href=#152 id=152 data-nosnippet>152</a>        result.map_err(|error| <span class="kw">match </span>error {
 <a href=#153 id=153 data-nosnippet>153</a>            AssignmentFailure::Assignment(AssignmentError::Storage(Error::Storage {
@@ -182,7 +182,7 @@
 <a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>transfer_to(
 <a href=#183 id=183 data-nosnippet>183</a>        <span class="kw-2">mut </span><span class="self">self</span>,
 <a href=#184 id=184 data-nosnippet>184</a>        recipient: <span class="kw-2">&amp;mut </span><span class="self">Self</span>,
-<a href=#185 id=185 data-nosnippet>185</a>        location: Location,
+<a href=#185 id=185 data-nosnippet>185</a>        location: ProgramSite,
 <a href=#186 id=186 data-nosnippet>186</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">if </span>!recipient.workspace.owns(<span class="kw-2">&amp;</span><span class="self">self</span>) {
 <a href=#188 id=188 data-nosnippet>188</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">crate</span>::formula_binding::assignment(
@@ -212,7 +212,7 @@
 <a href=#212 id=212 data-nosnippet>212</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>observe(
 <a href=#213 id=213 data-nosnippet>213</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#214 id=214 data-nosnippet>214</a>        bytes: usize,
-<a href=#215 id=215 data-nosnippet>215</a>        location: Location,
+<a href=#215 id=215 data-nosnippet>215</a>        location: ProgramSite,
 <a href=#216 id=216 data-nosnippet>216</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">if </span>bytes == <span class="self">self</span>.bytes {
 <a href=#218 id=218 data-nosnippet>218</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());

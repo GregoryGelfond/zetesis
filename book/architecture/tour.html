@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,6 +209,10 @@ normal rules it can retain relational templates without requiring a complete
 ground-rule graph.
 Admission establishes a well-formed input for a particular execution profile.
 It does not establish satisfiability.</p>
+<p>A constructed logical program can enter the same compiler without source text:
+<code>admit_program</code> handles the relational profile, and <code>prepare_program_formula</code>
+handles general formulas. Both preserve the original statement identity. See
+<a href="../rust/source.html">program preparation</a> for their limits and checked examples.</p>
 <pre><code class="language-text">original source
       │ themelios parsing and logical Program
       ▼

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,7 +192,20 @@ The maintained full index is
 </thead>
 <tbody>
 <tr><td>What makes an interpretation an answer set?</td><td><code>Ferraris.stable_iff_minimal_reduct</code></td><td>Fixed original theory and candidate</td></tr>
+<tr><td>Does the computed frozen DAG evaluate that reduct?</td><td><code>ReductEvaluation.values_correspond</code>, <code>roots_true_iff</code></td><td>Finite indexed formula semantics; mask correctness is derived, not assumed</td></tr>
+<tr><td>Does finite subset search decide membership?</td><td><code>FiniteMembership.check_iff_answer_set</code></td><td>Supplied finite candidate, decidable atom equality; subset coverage is constructed</td></tr>
+<tr><td>Are the evaluator’s child, mask and root reads present?</td><td><code>Refinement.IndexedEvaluation.satisfies_reduct_exact</code>, <code>satisfies_reduct_iff</code></td><td>Admitted DAG and root positions; the computed mask supplies its own coverage</td></tr>
+<tr><td>Does low-bit-first counting cover all proper subsets?</td><td><code>SubsetCounter.proper_iff_visited</code>, <code>countermodel_search_iff</code></td><td>Distinct supplied atoms; tracked count and finite counter coverage are proved</td></tr>
 <tr><td>When does least closure suffice?</td><td><code>Semantics.stable_iff_gamma</code></td><td>Normalized single-head rules and constraints</td></tr>
+<tr><td>Does the sequential rule scan compute that closure?</td><td><code>FiniteClosure.closure_exact</code>, <code>accepts_exact</code>, <code>empty_completes</code></td><td>Finite normalized rules with true filters retained and false filters omitted; explicit head-list scan bound</td></tr>
+<tr><td>Do packed scans preserve the computed least closure?</td><td><code>Refinement.PackedClosure.close_completes</code>, <code>close_exact</code></td><td>Bounded atom coordinates, direct 32-bit construction and proved scan/flag correspondence</td></tr>
+<tr><td>Do final packed checks establish seed acceptance?</td><td><code>Refinement.PackedAcceptance.check_exact</code>, <code>check_sound</code></td><td>Seed belongs to the supplied carrier; complete gate coverage separately establishes answer-set soundness</td></tr>
+<tr><td>Does packed construction preserve atom membership?</td><td><code>Refinement.PackedInterpretations.pack_exact</code>, <code>export32_exact</code></td><td>In-range inserted coordinates; mathematical word operations, with Rust effects and extraction separate</td></tr>
+<tr><td>Does each word-iterator step preserve the export?</td><td><code>Refinement.PackedWordIterator.step_refines</code>, <code>packed_exact</code></td><td>Checked numeric halves and derived cursor/storage invariants; actual Rust byte conversions remain separate</td></tr>
+<tr><td>Do packed set/clear operations give complete subset coverage?</td><td><code>Refinement.PackedSubsets.proper_iff_visited</code>, <code>check_packed_iff_answer_set</code></td><td>Constructed finite selected-coordinate scan and proved word updates; total mathematical denotation is not malformed-input admission</td></tr>
+<tr><td>Are completed streaming membership verdicts exact?</td><td><code>Refinement.CounterSearch.completed_check_exact</code>, <code>accepted_is_answer_set</code></td><td>Distinct finite candidate, admitted DAG and roots; one computed mask and explicit query fuel, not a machine-work budget</td></tr>
+<tr><td>Does the packed stream decide the same membership?</td><td><code>Refinement.PackedCounterSearch.check_refines</code>, <code>completed_check_iff_answer_set</code></td><td>Candidate shape and padding; admitted DAG and roots; selected coordinates and query agreement are derived</td></tr>
+<tr><td>Do structural checks justify indexed evaluation?</td><td><code>Refinement.TheoryAdmission.validate_exact</code>, <code>validate_phases</code>, <code>scan_refusal_exact</code>, <code>rootScan_exact</code>, <code>validated_reduct_exact</code></td><td>Ordered finite validator, supplied dimension and host bounds. The refinement package proves the generated admission step and its validators against it; the constructor’s wrapper, allocation and owner remain separate</td></tr>
 <tr><td>Why do normal and formula checking agree on this fragment?</td><td><code>NormalFerraris.answer_set_iff</code>, <code>ferraris_answer_set_iff_closure</code></td><td>The specified filter-aware translation and one shared atom universe</td></tr>
 <tr><td>Why may only gate atoms be guessed?</td><td><code>Semantics.accept_sound</code>, <code>stable_complete</code>, <code>stable_iff_exists_seed</code></td><td>The supplied carrier covers every frozen gate</td></tr>
 <tr><td>Why may the closure route narrow the seeds’ region by its two closures, and refute it by a constraint?</td><td><code>Bounds.narrowed_contains_accepted</code>, <code>lower_constraint_refutes</code></td><td>The two closures are the least fixed points of the must and may readings over the admitted program; each offered seed is still checked in full</td></tr>
@@ -290,7 +303,10 @@ follows the argument.</p>
 <p><code>FinitePools.value_context_complete</code> and <code>local_occurrences_complete</code> place
 shared finite value expansion below its consumers. A whole-rule product and an
 element-local union have distinct scope meanings; neither may be substituted
-for the other. See the
+for the other. <code>expanded_occurrence_activity</code> separately authenticates each
+pool-expanded position and its eligible grounding witnesses. Equal alternatives
+have different occurrence keys, while witnesses of one position share its key;
+the membership-only local law does not establish that counting convention. See the
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-occurrences.md">finite-occurrence guide</a>
 for the coverage assumptions and concrete cursor obligations.</p>
 <p><code>ObjectiveEligibility.refinement_covers</code> preserves covered truth through a
@@ -339,12 +355,13 @@ extends this distinction to <code>not</code> and <code>not not</code>. <code>ope
 default-negated operand’s truth in the candidate; <code>activity_frozen</code> retains the
 eligibility formula’s own reduct. <code>signed_permission_frozen</code> explains why these
 operands supply no positive atom permission. Ordinary atomic keys include their
-sign, while Boolean keys retain their source occurrence. <code>coalesced_group_in_context</code>
+sign, while Boolean keys distinguish pool-expanded occurrences and coalesce
+grounding witnesses of one occurrence. <code>coalesced_group_in_context</code>
 preserves complete answer sets under its finite family and coalescing hypotheses;
 <code>nonproducing_group_in_context</code> shows that a group without positive atomic operands
 can filter the context’s answers without creating new support. The embedding into
 the earlier head-element laws is mathematical and does not prescribe a compiler
-rewrite or verify its source catalog.</p>
+rewrite or verify its source key assignment.</p>
 <p><code>AggregateReduct.direct_reduct</code> relates the failing-subset formula to original
 and frozen eligibility under complete masks. <code>AggregateRanges</code> establishes bounds
 on mathematical signed partial sums. <code>AggregateDependencies</code> composes complete

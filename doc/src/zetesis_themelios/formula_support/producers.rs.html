@@ -16,8 +16,8 @@
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>std::mem::size_of;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>std::ops::Range;
 <a href=#18 id=18 data-nosnippet>18</a>
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>themelios_analysis::depend::DependencyKind;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>themelios_analysis::depend::DependencyKind;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>themelios_program::symbol::{Sign, Signature};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>zetesis_core::{
 <a href=#23 id=23 data-nosnippet>23</a>    catalog::{AtomRef, PredicateRef},
@@ -49,7 +49,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>    components: <span class="prelude-ty">Option</span>&lt;zetesis_core::TemplateComponentsRef&lt;<span class="lifetime">'_</span>&gt;&gt;,
 <a href=#50 id=50 data-nosnippet>50</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#51 id=51 data-nosnippet>51</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#52 id=52 data-nosnippet>52</a>    location: Location,
+<a href=#52 id=52 data-nosnippet>52</a>    location: ProgramSite,
 <a href=#53 id=53 data-nosnippet>53</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;PositiveSource&lt;<span class="lifetime">'source</span>&gt;&gt;, FormulaFailure&gt; {
 <a href=#54 id=54 data-nosnippet>54</a>    <span class="comment">// Keep the existing cheap refusal before inspecting objective-bearing
 <a href=#55 id=55 data-nosnippet>55</a>    // sources. The certificate below also records empty declarations.
@@ -90,7 +90,7 @@
 <a href=#90 id=90 data-nosnippet>90</a>        catalog: <span class="kw-2">&amp;</span><span class="kw">super</span>::SupportCatalog,
 <a href=#91 id=91 data-nosnippet>91</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#92 id=92 data-nosnippet>92</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#93 id=93 data-nosnippet>93</a>        location: Location,
+<a href=#93 id=93 data-nosnippet>93</a>        location: ProgramSite,
 <a href=#94 id=94 data-nosnippet>94</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt;, FormulaFailure&gt; {
 <a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let </span>components = catalog.component_view(limits, counters, location)<span class="question-mark">?</span>;
 <a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(source) = producer_source(prepared, components, limits, counters, location)<span class="question-mark">?
@@ -205,7 +205,7 @@
 <a href=#205 id=205 data-nosnippet>205</a>        delta: <span class="kw">impl </span>Iterator&lt;Item = AtomRef&lt;<span class="lifetime">'atoms</span>&gt;&gt;,
 <a href=#206 id=206 data-nosnippet>206</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#207 id=207 data-nosnippet>207</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#208 id=208 data-nosnippet>208</a>        location: Location,
+<a href=#208 id=208 data-nosnippet>208</a>        location: ProgramSite,
 <a href=#209 id=209 data-nosnippet>209</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#210 id=210 data-nosnippet>210</a>        <span class="self">self</span>.wake.advance(delta, limits, counters, location)
 <a href=#211 id=211 data-nosnippet>211</a>    }
@@ -248,7 +248,7 @@
 <a href=#248 id=248 data-nosnippet>248</a>    memory: <span class="kw-2">&amp;mut </span>Memory&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#249 id=249 data-nosnippet>249</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#250 id=250 data-nosnippet>250</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#251 id=251 data-nosnippet>251</a>    location: Location,
+<a href=#251 id=251 data-nosnippet>251</a>    location: ProgramSite,
 <a href=#252 id=252 data-nosnippet>252</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Node&lt;<span class="lifetime">'source</span>&gt;&gt;, FormulaFailure&gt; {
 <a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>graph = prepared.analysis.dependencies();
 <a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0_usize</span>;
@@ -301,7 +301,7 @@
 <a href=#301 id=301 data-nosnippet>301</a>    predicate: PredicateRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#302 id=302 data-nosnippet>302</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#303 id=303 data-nosnippet>303</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#304 id=304 data-nosnippet>304</a>    location: Location,
+<a href=#304 id=304 data-nosnippet>304</a>    location: ProgramSite,
 <a href=#305 id=305 data-nosnippet>305</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">let </span><span class="kw-2">mut </span>start = <span class="number">0</span>;
 <a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">let </span><span class="kw-2">mut </span>end = count;
@@ -337,7 +337,7 @@
 <a href=#337 id=337 data-nosnippet>337</a>    edge: (usize, usize),
 <a href=#338 id=338 data-nosnippet>338</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#339 id=339 data-nosnippet>339</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#340 id=340 data-nosnippet>340</a>    location: Location,
+<a href=#340 id=340 data-nosnippet>340</a>    location: ProgramSite,
 <a href=#341 id=341 data-nosnippet>341</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">let </span>(head, body) = edge;
 <a href=#343 id=343 data-nosnippet>343</a>    <span class="kw">let </span>(<span class="prelude-val">Some</span>(head_component), <span class="prelude-val">Some</span>(body_component)) =
@@ -372,7 +372,7 @@
 <a href=#372 id=372 data-nosnippet>372</a>    <span class="prelude-val">Err</span>(invalid(Failure::Owner, location))
 <a href=#373 id=373 data-nosnippet>373</a>}
 <a href=#374 id=374 data-nosnippet>374</a>
-<a href=#375 id=375 data-nosnippet>375</a><span class="kw">fn </span>invalid(error: Failure, location: Location) -&gt; FormulaFailure {
+<a href=#375 id=375 data-nosnippet>375</a><span class="kw">fn </span>invalid(error: Failure, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#376 id=376 data-nosnippet>376</a>    FormulaFailure::SupportRelation { error, location }
 <a href=#377 id=377 data-nosnippet>377</a>}
 </code></pre></div></section></main></body></html>

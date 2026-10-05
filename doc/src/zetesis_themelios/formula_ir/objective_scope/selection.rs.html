@@ -1,9 +1,9 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-themelios/src/formula_ir/objective_scope/selection.rs`."><title>selection.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="zetesis_themelios" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_themelios/formula_ir/objective_scope/</div>selection.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Select scoped binding from syntax before applying either compiler.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::expansion::Budget;
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use crate</span>::{ExpansionResource, FormulaFailure};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::collections::BTreeSet;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">crate</span>::expansion::Budget;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use crate</span>::{ExpansionResource, FormulaFailure};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>std::collections::BTreeSet;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>themelios_program::program::{
 <a href=#8 id=8 data-nosnippet>8</a>    BodyElement, Condition, DefaultNegation, Literal, LiteralInner, WeakConstraint,
 <a href=#9 id=9 data-nosnippet>9</a>};
@@ -12,7 +12,7 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>scoped(
 <a href=#13 id=13 data-nosnippet>13</a>    weak: <span class="kw-2">&amp;</span>WeakConstraint,
 <a href=#14 id=14 data-nosnippet>14</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#15 id=15 data-nosnippet>15</a>    location: Location,
+<a href=#15 id=15 data-nosnippet>15</a>    location: ProgramSite,
 <a href=#16 id=16 data-nosnippet>16</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">for </span>element <span class="kw">in </span>weak.body().get().elements() {
 <a href=#18 id=18 data-nosnippet>18</a>        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
@@ -38,7 +38,7 @@
 <a href=#38 id=38 data-nosnippet>38</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>condition(
 <a href=#39 id=39 data-nosnippet>39</a>    condition: <span class="kw-2">&amp;</span>Condition,
 <a href=#40 id=40 data-nosnippet>40</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#41 id=41 data-nosnippet>41</a>    location: Location,
+<a href=#41 id=41 data-nosnippet>41</a>    location: ProgramSite,
 <a href=#42 id=42 data-nosnippet>42</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#43 id=43 data-nosnippet>43</a>    literals(
 <a href=#44 id=44 data-nosnippet>44</a>        || {
@@ -54,7 +54,7 @@
 <a href=#54 id=54 data-nosnippet>54</a><span class="kw">fn </span>literals&lt;<span class="lifetime">'a</span>, I: Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Literal&gt;&gt;(
 <a href=#55 id=55 data-nosnippet>55</a>    source: <span class="kw">impl </span>Fn() -&gt; I,
 <a href=#56 id=56 data-nosnippet>56</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#57 id=57 data-nosnippet>57</a>    location: Location,
+<a href=#57 id=57 data-nosnippet>57</a>    location: ProgramSite,
 <a href=#58 id=58 data-nosnippet>58</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span><span class="kw-2">mut </span>bound = BTreeSet::new();
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">for </span>literal <span class="kw">in </span>source() {

@@ -24,7 +24,7 @@
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>zetesis_domain::{Analysis, Domain};
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::evaluation::Evaluation;
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use super</span>::{Counters, Event, FormulaFailure, FormulaLimits, Location, Support};
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use super</span>::{Counters, Event, FormulaFailure, FormulaLimits, ProgramSite, Support};
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span><span class="kw">crate</span>::expansion::Budget;
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span><span class="kw">crate</span>::formula_binding::Binding;
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span><span class="kw">crate</span>::formula_ir::{Expression, LiteralIr, RuleIr};
@@ -176,7 +176,7 @@
 <a href=#176 id=176 data-nosnippet>176</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#177 id=177 data-nosnippet>177</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#178 id=178 data-nosnippet>178</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#179 id=179 data-nosnippet>179</a>        location: Location,
+<a href=#179 id=179 data-nosnippet>179</a>        location: ProgramSite,
 <a href=#180 id=180 data-nosnippet>180</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
 <a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0_usize</span>;
 <a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">for </span>selected <span class="kw">in </span><span class="kw-2">&amp;</span>symbols {
@@ -311,7 +311,7 @@
 <a href=#311 id=311 data-nosnippet>311</a>    source: <span class="kw-2">&amp;</span>BTreeSet&lt;<span class="kw-2">&amp;</span><span class="lifetime">'p </span>Symbol&gt;,
 <a href=#312 id=312 data-nosnippet>312</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#313 id=313 data-nosnippet>313</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#314 id=314 data-nosnippet>314</a>    location: Location,
+<a href=#314 id=314 data-nosnippet>314</a>    location: ProgramSite,
 <a href=#315 id=315 data-nosnippet>315</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(values) = target <span class="kw">else </span>{
 <a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span><span class="kw-2">mut </span>values = Vec::new();
@@ -360,7 +360,7 @@
 <a href=#360 id=360 data-nosnippet>360</a>    computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#361 id=361 data-nosnippet>361</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#362 id=362 data-nosnippet>362</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#363 id=363 data-nosnippet>363</a>    location: Location,
+<a href=#363 id=363 data-nosnippet>363</a>    location: ProgramSite,
 <a href=#364 id=364 data-nosnippet>364</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">let </span>left = evaluation.expression(
 <a href=#366 id=366 data-nosnippet>366</a>        comparison.left,
@@ -607,7 +607,7 @@
 <a href=#607 id=607 data-nosnippet>607</a>        row: usize,
 <a href=#608 id=608 data-nosnippet>608</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#609 id=609 data-nosnippet>609</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#610 id=610 data-nosnippet>610</a>        location: Location,
+<a href=#610 id=610 data-nosnippet>610</a>        location: ProgramSite,
 <a href=#611 id=611 data-nosnippet>611</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#612 id=612 data-nosnippet>612</a>        counters.record(Event::DomainGuardRow);
 <a href=#613 id=613 data-nosnippet>613</a>        <span class="kw">for </span>restriction <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.restrictions {
@@ -760,7 +760,7 @@
 <a href=#760 id=760 data-nosnippet>760</a>    column: usize,
 <a href=#761 id=761 data-nosnippet>761</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#762 id=762 data-nosnippet>762</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#763 id=763 data-nosnippet>763</a>    location: Location,
+<a href=#763 id=763 data-nosnippet>763</a>    location: ProgramSite,
 <a href=#764 id=764 data-nosnippet>764</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>BTreeSet&lt;<span class="kw-2">&amp;</span><span class="lifetime">'p </span>Symbol&gt;&gt;, FormulaFailure&gt; {
 <a href=#765 id=765 data-nosnippet>765</a>    <span class="kw">for </span>(signature, index, argument) <span class="kw">in </span>analysis.arguments() {
 <a href=#766 id=766 data-nosnippet>766</a>        counters.charge_work(
@@ -799,7 +799,7 @@
 <a href=#799 id=799 data-nosnippet>799</a>    right: <span class="kw-2">&amp;</span>Symbol,
 <a href=#800 id=800 data-nosnippet>800</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#801 id=801 data-nosnippet>801</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#802 id=802 data-nosnippet>802</a>    location: Location,
+<a href=#802 id=802 data-nosnippet>802</a>    location: ProgramSite,
 <a href=#803 id=803 data-nosnippet>803</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#804 id=804 data-nosnippet>804</a>    counters.charge_work(
 <a href=#805 id=805 data-nosnippet>805</a>        <span class="number">1 </span>+ atomic_bytes(left) <span class="kw">as </span>u128 + atomic_bytes(right) <span class="kw">as </span>u128,
@@ -808,7 +808,7 @@
 <a href=#808 id=808 data-nosnippet>808</a>    )
 <a href=#809 id=809 data-nosnippet>809</a>}
 <a href=#810 id=810 data-nosnippet>810</a>
-<a href=#811 id=811 data-nosnippet>811</a><span class="kw">fn </span>failure(error: Failure, location: Location) -&gt; FormulaFailure {
+<a href=#811 id=811 data-nosnippet>811</a><span class="kw">fn </span>failure(error: Failure, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#812 id=812 data-nosnippet>812</a>    FormulaFailure::SupportRelation { error, location }
 <a href=#813 id=813 data-nosnippet>813</a>}
 </code></pre></div></section></main></body></html>

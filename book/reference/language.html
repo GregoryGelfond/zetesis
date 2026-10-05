@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -384,8 +384,9 @@ head, body or guard occurrence chooses independently and the product emits
 complete rules. Thus <code>q :- p(1;2).</code> supplies the two rules <code>q :- p(1).</code> and
 <code>q :- p(2).</code>; it does not require both body atoms. Pool alternatives inside a
 choice, aggregate or optimization element remain in that same group. Complete
-atom or tuple keys still coalesce by the group’s established semantics. Boolean
-choice contributions retain their original source occurrence keys.</p>
+atom or tuple keys still coalesce by the group’s established semantics. Each
+pool-expanded Boolean choice occurrence instead receives a distinct key, even
+when two alternatives have equal values.</p>
 <p>A local conditional condition has its own environment for every pool selection.
 Universal body conditions contribute separate conjuncts; conditional head
 instances remain alternatives in one disjunction. A bound variable shared within
@@ -444,9 +445,9 @@ of <code>#count</code>, <code>#sum</code>, <code>#sum+</code>, <code>#min</code>
 activity through its truth and its own condition. It introduces no atom and
 supplies no support for atoms in that condition. Thus <code>1{#true;a}1.</code> has only
 the empty answer set, while <code>1{#false;a}1.</code> has only <code>{a}</code>.</p>
-<p>For ordinary Boolean choices, zetesis adopts a source-occurrence counting
-contract: each written Boolean element has its own key within an activated
-outer group. All eligible local witnesses of that one element share its key.
+<p>For ordinary Boolean choices, each pool-expanded element has its own key within
+an activated outer group. All eligible grounding witnesses of that expanded
+element share its key. Equal pool alternatives still produce distinct keys.
 For example, <code>2{#true;#true}2.</code> has the empty answer set, but
 <code>d(1..2).2{#true:d(X)}2.</code> has no answer set: the two <code>d(X)</code> witnesses activate
 one occurrence. Separate written rules retain separate groups. In particular,
@@ -460,15 +461,15 @@ support <code>a</code>, while <code>{a}.</code> does. Ordinary <code>a</code> an
 contributions: <code>1{a;not a;not not a}1.</code> has only the empty answer set, and
 <code>2{a;not not a}2.</code> has only <code>{a}</code>. Repeated occurrences of the same signed atom
 coalesce; repeated Boolean elements retain their separate occurrence keys.</p>
-<p>This Boolean counting rule is an adopted language extension. Its intended
-reduct laws and the remaining source-to-implementation correspondence are
-separated in the <a href="../lean/correspondence.html">Lean proof boundary</a>.
-Pool alternatives in one Boolean element also share that element’s key.
-Thus <code>{p(1);p(2)}.1{#true:p(1;2)}1.</code> admits <code>{p(1)}</code>, <code>{p(2)}</code> and
-<code>{p(1),p(2)}</code> under this contract, like the single element <code>#true:p(X)</code>.
-Writing <code>#true:p(1);#true:p(2)</code> instead introduces two keys and excludes the
-both-atom answer. Clingo treats this pooled condition like the latter form;
-this specific case is an explicit semantic difference, not a parity claim.</p>
+<p>The Boolean element grammar extends ASP-Core-2. Its reduct laws and the
+remaining source-to-implementation correspondence are separated in the
+<a href="../lean/correspondence.html">Lean proof boundary</a>. Pool counting follows the
+expanded occurrences: <code>{p(1);p(2)}.1{#true:p(1;2)}1.</code> admits exactly <code>{p(1)}</code>
+and <code>{p(2)}</code>, as does the head written with <code>#true:p(1);#true:p(2)</code>.
+The both-atom interpretation activates two keys and violates the upper bound.
+Likewise, <code>{ #true : p(1;1) } = 2. p(1).</code> has answer set <code>{p(1)}</code> because its
+two equal pool alternatives produce two active occurrences. This differs from
+multiple variable bindings of one expanded element, which share its key.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -563,9 +564,9 @@ differences are tested explicitly and do not count as clingo parity.</p>
 <code>AnalysisBasis::DependencyProjection</code>. The returned <code>analyzed_program()</code> is a
 signature/polarity projection; <code>source_analysis()</code> reports structural facts
 about that projection. Its safety and class verdicts are not conclusions about
-the original source semantics. The formula compiler retains the original
-occurrence groups separately and refuses with <code>FormulaFailure::ChoiceSource</code>
-if it cannot preserve their source evidence.</p>
+the original source semantics. The formula compiler retains counted choice
+entries and their enclosing groups, assigns Boolean counting identities after
+pool expansion, and preserves statement provenance for diagnostics.</p>
 <p>Boolean operands in explicit tuple-keyed aggregate heads do not by themselves
 require that projection. Always inspect <code>analysis_basis()</code> before interpreting
 analysis results; other admitted constructs can also require a projection.</p>
@@ -860,8 +861,8 @@ evaluated numeric division or remainder with a zero divisor may omit an instance
 <tbody>
 <tr><td>Empty positive join</td><td>Admit silently; there is no instance to evaluate</td></tr>
 <tr><td>Defined instances only</td><td>Admit silently</td></tr>
-<tr><td>Both defined and zero-divisor instances</td><td>Admit the defined instances and issue a source-located warning</td></tr>
-<tr><td>Zero-divisor instances with no defined instance</td><td>Refuse with a source-located arithmetic error</td></tr>
+<tr><td>Both defined and zero-divisor instances</td><td>Admit the defined instances and retain a typed warning</td></tr>
+<tr><td>Zero-divisor instances with no defined instance</td><td>Refuse with a typed arithmetic error</td></tr>
 <tr><td>Any fatal arithmetic failure</td><td>Refuse, even if other instances are defined</td></tr>
 </tbody>
 </table>
@@ -873,9 +874,13 @@ still establishes that the family is not entirely undefined. With <code>d(0..3)<
 instead, the answer also contains <code>p(1,2)</code>. With only <code>d(0)</code>, admission fails.
 Adding <code>X != 0</code> explicitly excludes the bad instance and removes the warning.
 The warning reports omitted source instances and suggests guarding the divisor.
-Successful formula owners retain typed warnings, deduplicated by source span and
-bounded by <code>FormulaLimits::max_warnings</code>. The CLI renders them once on its
-diagnostic stream before solving; JSON answer output remains separate.</p>
+Successful formula owners retain typed warnings, deduplicated by <code>ProgramSite</code>
+(original statement identity and any real source coordinate) and bounded by
+<code>FormulaLimits::max_warnings</code>. Constructed programs retain the statement identity
+without inventing a span; warning <code>location()</code> and <code>diagnostic()</code> then return
+<code>None</code>. For source input, the CLI renders warnings once on its diagnostic stream
+before solving; JSON answer output remains separate. The same distinction between
+logical identity and optional source evidence applies to arithmetic failures.</p>
 <p>Local choice and aggregate elements have separate families for each fixed outer
 binding. In <code>d(0;1). e(0,0). e(1,1). {p(K,X):e(K,X),1/X=1} :- d(K).</code>, the entirely undefined <code>K=0</code> family is refused;
 the defined <code>K=1</code> family does not rescue it. If no <code>e(0,X)</code> fact is present, that

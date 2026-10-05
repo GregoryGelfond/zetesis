@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4a68831a.js";
+            window.path_to_searchindex_js = "../searchindex-c288a928.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-08e3f451.js"></script>
+        <script src="../toc-53ba9757.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,16 +189,18 @@ Ferraris theory. Neither boundary searches for answer sets.</p>
 The <a href="../rust/source.html">source API guide</a> describes the public entry points;
 <a href="grounding.html">grounding</a> explains their mathematical contracts.</p>
 <h2 id="follow-the-owned-objects"><a class="header" href="#follow-the-owned-objects">Follow the owned objects</a></h2>
-<pre><code class="language-text">original source catalog
-  → parsed and raised themelios program
-  → bounded normalization and scope analysis
+<pre><code class="language-text">original source catalog → parsed and raised themelios program ┐
+canonical Arc&lt;Program&gt; → bounded logical inspection           ┴
+  → shared bounded normalization and scope analysis
   → prepared rules, objective/projection declarations and dependency plans
   → completed possible-positive support
   → complete bindings and original formula instances
   → validated theory + atom catalog + objectives + fixed projection domain + metadata
 </code></pre>
 <p>The arrows describe dependencies, not independent copies of every intermediate
-object. Source identities and parsed origins remain available after preparation.
+object. An immutable original program owner survives normalization and grounding;
+source input additionally retains its original catalog. Statement IDs and any
+real parsed origins remain available after preparation.
 Both the source-expansion budget and accepted formula-work charges continue
 across preparation and grounding. Materialization resumes the retained accounting
 under its configured ceilings.
@@ -229,8 +231,8 @@ current constants and bound values. Required body validation receives the same
 positive witnesses. Table membership never replaces a source atom with truth.</p>
 <p>The workspace charges cumulative preparation/query work and simultaneous named
 snapshot, index, scratch and mask capacities to the existing source limits.
-Refused capacity, allocation and work remain located grounding failures; a
-failed table operation is not an indexed fallback or an empty program. These
+Refused capacity, allocation and work retain logical scope and any real source
+coordinates; a failed table operation is not an indexed fallback or an empty program. These
 objects are not a process-memory ceiling. The source builder remains sequential:
 an immutable index can serve independent callers, but selecting this strategy
 launches neither Rayon grounding nor a GPU kernel. See the
@@ -253,7 +255,8 @@ those instructions rather than interpreting the plan as new program semantics.</
 <tr><td>Classical negation</td><td><code>coherence</code></td><td>Distinct signed predicates and consistency constraints</td></tr>
 <tr><td>Semantic value conversion</td><td><code>structural_value</code>, <code>scalar_arithmetic</code>, <code>formula_value</code></td><td>Typed closed values and checked arithmetic; no atom support</td></tr>
 <tr><td>Formula preparation</td><td><code>formula</code>, <code>formula::preparation</code>, <code>formula_ir</code></td><td>Public owned preparation, scoped rule/objective IR and cumulative budgets</td></tr>
-<tr><td>Source occurrences and alternatives</td><td><code>formula_choice_source</code>, <code>formula_pool</code></td><td>Original Boolean choice occurrences and bounded pool alternatives</td></tr>
+<tr><td>Canonical input inspection</td><td><code>program_limits</code>, <code>formula_program_check</code></td><td>Bounded borrowed traversal before relational compilation or formula normalization</td></tr>
+<tr><td>Counted occurrences and alternatives</td><td><code>formula_ir</code>, <code>formula_pool</code></td><td>Canonical counted entries, bounded pool alternatives and expanded Boolean identities</td></tr>
 <tr><td>Upstream analysis</td><td><code>formula_analysis</code>, <code>formula_conditional_projection</code></td><td>Bounded pool-free input and an explicit analysis basis</td></tr>
 <tr><td>Value and pattern lowering</td><td><code>formula_value_ir</code>, <code>formula_range_ir</code>, <code>formula_pattern_ir</code>, <code>formula_projection_ir</code></td><td>Shared bounded value/range fold, structural captures and anonymous negative projection</td></tr>
 <tr><td>Scalar bindings</td><td><code>formula_binding_ir</code>, <code>formula_binding_guard</code>, <code>formula_binding_plan</code></td><td>Safe producers, finite envelopes and dependency order; original guards remain</td></tr>
@@ -274,7 +277,7 @@ those instructions rather than interpreting the plan as new program semantics.</
 <tr><td>Observation and metadata</td><td><code>metadata</code>, <code>observation</code></td><td>Source directives and views of a supplied full model</td></tr>
 <tr><td>Objective bounds</td><td><code>objective_bound</code></td><td>Optional score bounds with their own admission and work limits</td></tr>
 <tr><td>Measurement</td><td><code>grounding_observer</code></td><td>Injected phase/work observations, separate from semantic completion</td></tr>
-<tr><td>Public composition</td><td><code>lib</code></td><td>Exports, strict admission and retained source evidence</td></tr>
+<tr><td>Public composition</td><td><code>lib</code>, <code>formula</code>, <code>formula_owner</code>, <code>program_site</code></td><td>Source/logical admission, retained original program and explicit statement identity</td></tr>
 </tbody>
 </table>
 </div>
@@ -319,8 +322,9 @@ answer-set tests; they do not replace them or justify making private constructor
 public.</p>
 <p>When adding a construct, identify its source scope, readiness rule, complete-row
 validation, possible-support contribution and original formula separately.
-Then identify its source locations, bounded scratch and retained output. A change
-in one stage must not silently transfer an obligation to the next.</p>
+Then identify its original statement identity, any source locations, bounded
+scratch and retained output. A change in one stage must not silently transfer
+an obligation to the next.</p>
 
                     </main>
 

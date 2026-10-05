@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-themelios/src/formula_binding_cursor.rs`."><title>formula_binding_cursor.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis_themelios" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_themelios/</div>formula_binding_cursor.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Per-relational-row scalar/range cursors over scoped term metadata.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::formula_support::{Context, GroundingWork};
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>std::ops::{Range, RangeInclusive};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::{Context, GroundingWork};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::ops::{Range, RangeInclusive};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>zetesis_core::ValueNodeRef;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_core::catalog::TermKey;
 <a href=#8 id=8 data-nosnippet>8</a>
@@ -226,7 +226,7 @@
 <a href=#226 id=226 data-nosnippet>226</a>        computation: <span class="kw-2">&amp;</span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#227 id=227 data-nosnippet>227</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#228 id=228 data-nosnippet>228</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#229 id=229 data-nosnippet>229</a>        location: Location,
+<a href=#229 id=229 data-nosnippet>229</a>        location: ProgramSite,
 <a href=#230 id=230 data-nosnippet>230</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>other = <span class="self">self</span>.bytes() - <span class="self">self</span>.generators.capacity() * size_of::&lt;Generator&lt;<span class="lifetime">'_</span>&gt;&gt;();
 <a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">crate</span>::formula_support::reserve(
@@ -240,7 +240,7 @@
 <a href=#240 id=240 data-nosnippet>240</a>        <span class="self">self</span>.generators.push(value);
 <a href=#241 id=241 data-nosnippet>241</a>        <span class="prelude-val">Ok</span>(())
 <a href=#242 id=242 data-nosnippet>242</a>    }
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">fn </span>state(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: State, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">fn </span>state(<span class="kw-2">&amp;mut </span><span class="self">self</span>, state: State, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#244 id=244 data-nosnippet>244</a>        <span class="self">self</span>.value_frames -= usize::from(<span class="macro">matches!</span>(<span class="self">self</span>.states[<span class="self">self</span>.depth], State::Values { .. }));
 <a href=#245 id=245 data-nosnippet>245</a>        <span class="self">self</span>.value_frames += usize::from(<span class="macro">matches!</span>(state, State::Values { .. }));
 <a href=#246 id=246 data-nosnippet>246</a>        <span class="self">self</span>.states[<span class="self">self</span>.depth] = state;
@@ -249,7 +249,7 @@
 <a href=#249 id=249 data-nosnippet>249</a>        </span><span class="self">self</span>.lease.observe(<span class="self">self</span>.bytes(), location)
 <a href=#250 id=250 data-nosnippet>250</a>    }
 <a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>reject(<span class="kw-2">&amp;mut </span><span class="self">self</span>, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>reject(<span class="kw-2">&amp;mut </span><span class="self">self</span>, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(depth) = <span class="self">self</span>.failed_initialization.take() {
 <a href=#254 id=254 data-nosnippet>254</a>            <span class="self">self</span>.value_frames -= usize::from(<span class="macro">matches!</span>(<span class="self">self</span>.states[depth], State::Values { .. }));
 <a href=#255 id=255 data-nosnippet>255</a>            <span class="self">self</span>.states[depth] = State::Scalar { pending: <span class="bool-val">false </span>};
@@ -268,7 +268,7 @@
 <a href=#268 id=268 data-nosnippet>268</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#269 id=269 data-nosnippet>269</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#270 id=270 data-nosnippet>270</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#271 id=271 data-nosnippet>271</a>        location: Location,
+<a href=#271 id=271 data-nosnippet>271</a>        location: ProgramSite,
 <a href=#272 id=272 data-nosnippet>272</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Binding&lt;<span class="lifetime">'static</span>&gt;&gt;, FormulaFailure&gt; {
 <a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">while </span>!<span class="self">self</span>.finished {
 <a href=#274 id=274 data-nosnippet>274</a>            counters.work(limits, location)<span class="question-mark">?</span>;
@@ -330,7 +330,7 @@
 <a href=#330 id=330 data-nosnippet>330</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#331 id=331 data-nosnippet>331</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#332 id=332 data-nosnippet>332</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#333 id=333 data-nosnippet>333</a>        location: Location,
+<a href=#333 id=333 data-nosnippet>333</a>        location: ProgramSite,
 <a href=#334 id=334 data-nosnippet>334</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">let </span>alternative = <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.states[<span class="self">self</span>.depth] {
 <a href=#336 id=336 data-nosnippet>336</a>            State::Fresh =&gt; <span class="macro">unreachable!</span>(<span class="string">"cursor initialized"</span>),
@@ -407,7 +407,7 @@
 <a href=#407 id=407 data-nosnippet>407</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#408 id=408 data-nosnippet>408</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#409 id=409 data-nosnippet>409</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#410 id=410 data-nosnippet>410</a>        location: Location,
+<a href=#410 id=410 data-nosnippet>410</a>        location: ProgramSite,
 <a href=#411 id=411 data-nosnippet>411</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;State, FormulaFailure&gt; {
 <a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">match </span><span class="self">self</span>.generators[<span class="self">self</span>.depth].literal {
 <a href=#413 id=413 data-nosnippet>413</a>            LiteralIr::Bind { value, .. } =&gt; {
@@ -486,7 +486,7 @@
 <a href=#486 id=486 data-nosnippet>486</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#487 id=487 data-nosnippet>487</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#488 id=488 data-nosnippet>488</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#489 id=489 data-nosnippet>489</a>        location: Location,
+<a href=#489 id=489 data-nosnippet>489</a>        location: ProgramSite,
 <a href=#490 id=490 data-nosnippet>490</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">if </span><span class="self">self</span>.missing_inputs(expression.inputs(), limits, counters, location)<span class="question-mark">? </span>{
 <a href=#492 id=492 data-nosnippet>492</a>            evaluation.source_partial(
@@ -519,7 +519,7 @@
 <a href=#519 id=519 data-nosnippet>519</a>        inputs: <span class="kw">impl </span>Iterator&lt;Item = usize&gt;,
 <a href=#520 id=520 data-nosnippet>520</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#521 id=521 data-nosnippet>521</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#522 id=522 data-nosnippet>522</a>        location: Location,
+<a href=#522 id=522 data-nosnippet>522</a>        location: ProgramSite,
 <a href=#523 id=523 data-nosnippet>523</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#524 id=524 data-nosnippet>524</a>        <span class="kw">if </span><span class="self">self</span>.unavailable == <span class="number">0 </span>{
 <a href=#525 id=525 data-nosnippet>525</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);

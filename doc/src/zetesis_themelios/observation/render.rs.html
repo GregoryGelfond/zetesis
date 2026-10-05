@@ -204,7 +204,7 @@
 <a href=#204 id=204 data-nosnippet>204</a>        cancellation,
 <a href=#205 id=205 data-nosnippet>205</a>        statistics: Statistics::default(),
 <a href=#206 id=206 data-nosnippet>206</a>        local_bytes: <span class="number">0</span>,
-<a href=#207 id=207 data-nosnippet>207</a>        location: <span class="prelude-val">None</span>,
+<a href=#207 id=207 data-nosnippet>207</a>        site: <span class="kw">crate</span>::ProgramSite::program(),
 <a href=#208 id=208 data-nosnippet>208</a>    };
 <a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">let </span>symbols = terms(program, model, <span class="kw-2">&amp;mut </span>work)<span class="question-mark">?</span>;
 <a href=#210 id=210 data-nosnippet>210</a>    render_evaluated(model, AtomChannel::Policy(selection), <span class="kw-2">&amp;</span>symbols, work)
@@ -217,7 +217,7 @@
 <a href=#217 id=217 data-nosnippet>217</a>    symbols: <span class="kw-2">&amp;</span>[Symbol],
 <a href=#218 id=218 data-nosnippet>218</a>    <span class="kw-2">mut </span>work: Work&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#219 id=219 data-nosnippet>219</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Rendered, Error&gt; {
-<a href=#220 id=220 data-nosnippet>220</a>    work.location = <span class="prelude-val">None</span>;
+<a href=#220 id=220 data-nosnippet>220</a>    work.site = <span class="kw">crate</span>::ProgramSite::program();
 <a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span><span class="kw-2">mut </span>text = String::new();
 <a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span><span class="kw-2">mut </span>first = <span class="bool-val">true</span>;
 <a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">for </span>atom <span class="kw">in </span>model.atoms() {

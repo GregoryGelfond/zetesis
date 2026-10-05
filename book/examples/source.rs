@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .formula_origins()
                 .iter()
                 .flatten()
-                .all(|origin| origin.source == options.source_id)
+                .all(|origin| origin.location().expect("parsed source").source == options.source_id)
         );
         let family = WorldView::collect(
             PreparedInput::formula(&admitted),
@@ -94,7 +94,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(resource, FormulaResource::AnalysisNodes);
     assert_eq!(limit, 0);
     assert!(observed > limit);
-    assert_eq!(location.source, options.source_id);
+    assert_eq!(
+        location.location().expect("parsed source").source,
+        options.source_id
+    );
     Ok(())
 }
 // ANCHOR_END: example

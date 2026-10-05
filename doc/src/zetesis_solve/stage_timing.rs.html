@@ -40,7 +40,7 @@
 <a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">fn </span>phase_enter(
 <a href=#41 id=41 data-nosnippet>41</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#42 id=42 data-nosnippet>42</a>        phase: <span class="kw">crate</span>::GroundingPhase,
-<a href=#43 id=43 data-nosnippet>43</a>        _location: <span class="prelude-ty">Option</span>&lt;zetesis_themelios::base::span::Location&gt;,
+<a href=#43 id=43 data-nosnippet>43</a>        _location: <span class="prelude-ty">Option</span>&lt;zetesis_themelios::ProgramSite&gt;,
 <a href=#44 id=44 data-nosnippet>44</a>    ) {
 <a href=#45 id=45 data-nosnippet>45</a>        <span class="kw">if </span><span class="self">self</span>.grounding.is_none() {
 <a href=#46 id=46 data-nosnippet>46</a>            <span class="kw">return</span>;
@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">fn </span>phase_exit(
 <a href=#56 id=56 data-nosnippet>56</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#57 id=57 data-nosnippet>57</a>        phase: <span class="kw">crate</span>::GroundingPhase,
-<a href=#58 id=58 data-nosnippet>58</a>        _location: <span class="prelude-ty">Option</span>&lt;zetesis_themelios::base::span::Location&gt;,
+<a href=#58 id=58 data-nosnippet>58</a>        _location: <span class="prelude-ty">Option</span>&lt;zetesis_themelios::ProgramSite&gt;,
 <a href=#59 id=59 data-nosnippet>59</a>        outcome: <span class="kw">crate</span>::GroundingOutcome,
 <a href=#60 id=60 data-nosnippet>60</a>        work: <span class="kw">crate</span>::GroundingWork,
 <a href=#61 id=61 data-nosnippet>61</a>    ) {

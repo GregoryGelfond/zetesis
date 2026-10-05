@@ -6,15 +6,15 @@
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">use </span>carrier::{Carrier, certify <span class="kw">as </span>carrier};
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">super</span>::Predicates;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::formula::ceiling;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::formula_ir::{AggregateIr, AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::{
-<a href=#12 id=12 data-nosnippet>12</a>    Computation, Counters,
-<a href=#13 id=13 data-nosnippet>13</a>    components::{Pattern, Term},
-<a href=#14 id=14 data-nosnippet>14</a>};
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use crate</span>::{FormulaFailure, FormulaLimits, FormulaResource};
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>std::collections::BTreeSet;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::formula::ceiling;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::formula_ir::{AggregateIr, AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::{
+<a href=#13 id=13 data-nosnippet>13</a>    Computation, Counters,
+<a href=#14 id=14 data-nosnippet>14</a>    components::{Pattern, Term},
+<a href=#15 id=15 data-nosnippet>15</a>};
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use crate</span>::{FormulaFailure, FormulaLimits, FormulaResource};
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>std::collections::BTreeSet;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>themelios_program::program::{AggregateFunction, DefaultNegation};
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>themelios_program::symbol::Signature;
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>zetesis_core::catalog::{PredicateRef, TermRef};
@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>    computation: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Computation&lt;<span class="lifetime">'terms</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#32 id=32 data-nosnippet>32</a>    limits: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>FormulaLimits,
 <a href=#33 id=33 data-nosnippet>33</a>    counters: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Counters,
-<a href=#34 id=34 data-nosnippet>34</a>    location: Location,
+<a href=#34 id=34 data-nosnippet>34</a>    location: ProgramSite,
 <a href=#35 id=35 data-nosnippet>35</a>    entries: usize,
 <a href=#36 id=36 data-nosnippet>36</a>}
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">impl</span>&lt;<span class="lifetime">'source</span>&gt; Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt; {

@@ -39,7 +39,7 @@
 <a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">const </span>NEUTRAL: [<span class="kw-2">&amp;</span>str; <span class="number">3</span>] = [<span class="string">"--locked"</span>, <span class="string">"--no-fail-fast"</span>, <span class="string">"--no-default-features"</span>];
 <a href=#40 id=40 data-nosnippet>40</a>
 <a href=#41 id=41 data-nosnippet>41</a><span class="doccomment">/// The harness options the gate's campaigns use; neither selects a test.
-<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">const </span>HARNESS: [<span class="kw-2">&amp;</span>str; <span class="number">2</span>] = [<span class="string">"--ignored"</span>, <span class="string">"--nocapture"</span>];
+<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">const </span>HARNESS: [<span class="kw-2">&amp;</span>str; <span class="number">2</span>] = [<span class="string">"--ignored"</span>, <span class="string">"--show-output"</span>];
 <a href=#43 id=43 data-nosnippet>43</a>
 <a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// The campaigns of `script`, in script order. A line is a campaign when its
 <a href=#45 id=45 data-nosnippet>45</a>/// first word is `oracle_test`; its words up to `--` are `cargo test`'s
@@ -51,7 +51,7 @@
 <a href=#51 id=51 data-nosnippet>51</a>/// Returns [`Error::Invalid`] describing the first campaign line whose shape the gate
 <a href=#52 id=52 data-nosnippet>52</a>/// does not use: no package, no test target, two packages or two cargo
 <a href=#53 id=53 data-nosnippet>53</a>/// filters, an option other than `-p`, `--test` and the neutral ones, such as
-<a href=#54 id=54 data-nosnippet>54</a>/// `--lib`, or a harness option other than `--ignored` and `--nocapture`,
+<a href=#54 id=54 data-nosnippet>54</a>/// `--lib`, or a harness option other than `--ignored` and `--show-output`,
 <a href=#55 id=55 data-nosnippet>55</a>/// such as `--exact`.
 <a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">pub fn </span>campaigns(script: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Campaign&gt;, Error&gt; {
 <a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">let </span><span class="kw-2">mut </span>found = Vec::new();

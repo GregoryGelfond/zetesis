@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>//! rejects statically absent literals; optional conditions are not tested for
 <a href=#5 id=5 data-nosnippet>5</a>//! joint satisfiability and are never reevaluated against a selected answer.
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>themelios_base::span::Location;
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_core::AtomCatalog;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zetesis_core::catalog::PredicateRef;
 <a href=#10 id=10 data-nosnippet>10</a>
@@ -30,7 +30,7 @@
 <a href=#30 id=30 data-nosnippet>30</a>        publication: <span class="kw-2">&amp;mut </span>Publication&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#31 id=31 data-nosnippet>31</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#32 id=32 data-nosnippet>32</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#33 id=33 data-nosnippet>33</a>        location: Location,
+<a href=#33 id=33 data-nosnippet>33</a>        location: ProgramSite,
 <a href=#34 id=34 data-nosnippet>34</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PreparedProjection, FormulaFailure&gt; {
 <a href=#35 id=35 data-nosnippet>35</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(selection) = <span class="self">self</span>.atoms <span class="kw">else </span>{
 <a href=#36 id=36 data-nosnippet>36</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(PreparedProjection::default());
@@ -65,7 +65,7 @@
 <a href=#65 id=65 data-nosnippet>65</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#66 id=66 data-nosnippet>66</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#67 id=67 data-nosnippet>67</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#68 id=68 data-nosnippet>68</a>    location: Location,
+<a href=#68 id=68 data-nosnippet>68</a>    location: ProgramSite,
 <a href=#69 id=69 data-nosnippet>69</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PendingProjection, FormulaFailure&gt; {
 <a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">if </span>!prepared.project_selection.is_explicit() {
 <a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(PendingProjection { atoms: <span class="prelude-val">None </span>});

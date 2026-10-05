@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! Independent source branches still run after a zero divisor. Reusable scratch
 <a href=#7 id=7 data-nosnippet>7</a>//! retains bounded empty metadata, never an owned Value or copied child tree.
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>themelios_base::span::Location;
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>themelios_program::term::{BinaryOp, EvalError};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>zetesis_core::ValueNodeRef;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>zetesis_core::catalog::{AssignmentError, TermKey};
@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>        <span class="self">self</span>.zero_divisor
 <a href=#38 id=38 data-nosnippet>38</a>    }
 <a href=#39 id=39 data-nosnippet>39</a>
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>zero_divisor_failure(<span class="kw-2">&amp;mut </span><span class="self">self</span>, location: Location) -&gt; FormulaFailure {
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>zero_divisor_failure(<span class="kw-2">&amp;mut </span><span class="self">self</span>, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#41 id=41 data-nosnippet>41</a>        <span class="self">self</span>.zero_divisor = <span class="bool-val">true</span>;
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">super</span>::undefined(location)
 <a href=#43 id=43 data-nosnippet>43</a>    }
@@ -49,7 +49,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#50 id=50 data-nosnippet>50</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#51 id=51 data-nosnippet>51</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#52 id=52 data-nosnippet>52</a>        location: Location,
+<a href=#52 id=52 data-nosnippet>52</a>        location: ProgramSite,
 <a href=#53 id=53 data-nosnippet>53</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#54 id=54 data-nosnippet>54</a>        <span class="self">self</span>.evaluate(
 <a href=#55 id=55 data-nosnippet>55</a>            expression,
@@ -68,7 +68,7 @@
 <a href=#68 id=68 data-nosnippet>68</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#69 id=69 data-nosnippet>69</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#70 id=70 data-nosnippet>70</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#71 id=71 data-nosnippet>71</a>        location: Location,
+<a href=#71 id=71 data-nosnippet>71</a>        location: ProgramSite,
 <a href=#72 id=72 data-nosnippet>72</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#73 id=73 data-nosnippet>73</a>        <span class="self">self</span>.evaluate(
 <a href=#74 id=74 data-nosnippet>74</a>            expression,
@@ -88,7 +88,7 @@
 <a href=#88 id=88 data-nosnippet>88</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#89 id=89 data-nosnippet>89</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#90 id=90 data-nosnippet>90</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#91 id=91 data-nosnippet>91</a>        location: Location,
+<a href=#91 id=91 data-nosnippet>91</a>        location: ProgramSite,
 <a href=#92 id=92 data-nosnippet>92</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#93 id=93 data-nosnippet>93</a>        <span class="self">self</span>.evaluate(
 <a href=#94 id=94 data-nosnippet>94</a>            expression,
@@ -107,7 +107,7 @@
 <a href=#107 id=107 data-nosnippet>107</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#108 id=108 data-nosnippet>108</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#109 id=109 data-nosnippet>109</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#110 id=110 data-nosnippet>110</a>        location: Location,
+<a href=#110 id=110 data-nosnippet>110</a>        location: ProgramSite,
 <a href=#111 id=111 data-nosnippet>111</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;[TermKey; N], FormulaFailure&gt; {
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span><span class="kw-2">mut </span>failures = Failures::default();
 <a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span><span class="kw-2">mut </span>values: [<span class="prelude-ty">Option</span>&lt;TermKey&gt;; N] = std::array::from_fn(|<span class="kw">_</span>| <span class="prelude-val">None</span>);
@@ -133,7 +133,7 @@
 <a href=#133 id=133 data-nosnippet>133</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#134 id=134 data-nosnippet>134</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#135 id=135 data-nosnippet>135</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#136 id=136 data-nosnippet>136</a>        location: Location,
+<a href=#136 id=136 data-nosnippet>136</a>        location: ProgramSite,
 <a href=#137 id=137 data-nosnippet>137</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span><span class="kw-2">mut </span>equal = left.len() == right.len();
 <a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span><span class="kw-2">mut </span>failures = Failures::default();
@@ -174,7 +174,7 @@
 <a href=#174 id=174 data-nosnippet>174</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#175 id=175 data-nosnippet>175</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#176 id=176 data-nosnippet>176</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#177 id=177 data-nosnippet>177</a>        location: Location,
+<a href=#177 id=177 data-nosnippet>177</a>        location: ProgramSite,
 <a href=#178 id=178 data-nosnippet>178</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#179 id=179 data-nosnippet>179</a>        <span class="self">self</span>.zero_divisor = <span class="bool-val">false</span>;
 <a href=#180 id=180 data-nosnippet>180</a>        counters.record(Event::ExpressionEvaluation);
@@ -311,7 +311,7 @@
 <a href=#311 id=311 data-nosnippet>311</a>    computation: <span class="kw-2">&amp;</span><span class="lifetime">'c </span><span class="kw-2">mut </span>Computation&lt;<span class="lifetime">'owner</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#312 id=312 data-nosnippet>312</a>    limits: <span class="kw-2">&amp;</span><span class="lifetime">'c </span>FormulaLimits,
 <a href=#313 id=313 data-nosnippet>313</a>    counters: <span class="kw-2">&amp;</span><span class="lifetime">'c </span><span class="kw-2">mut </span>Counters,
-<a href=#314 id=314 data-nosnippet>314</a>    location: Location,
+<a href=#314 id=314 data-nosnippet>314</a>    location: ProgramSite,
 <a href=#315 id=315 data-nosnippet>315</a>    zero_divisor: <span class="kw-2">&amp;</span><span class="lifetime">'c </span><span class="kw-2">mut </span>bool,
 <a href=#316 id=316 data-nosnippet>316</a>}
 <a href=#317 id=317 data-nosnippet>317</a><span class="kw">impl</span>&lt;V: Fn(usize) -&gt; Input&gt; Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>, V&gt; {
@@ -554,7 +554,7 @@
 <a href=#554 id=554 data-nosnippet>554</a>    context.numeric(<span class="kw-2">&amp;</span>key)
 <a href=#555 id=555 data-nosnippet>555</a>}
 <a href=#556 id=556 data-nosnippet>556</a>
-<a href=#557 id=557 data-nosnippet>557</a><span class="kw">fn </span>scope(error: zetesis_core::catalog::ReadError, location: Location) -&gt; FormulaFailure {
+<a href=#557 id=557 data-nosnippet>557</a><span class="kw">fn </span>scope(error: zetesis_core::catalog::ReadError, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#558 id=558 data-nosnippet>558</a>    <span class="kw">crate</span>::formula_binding::assignment(AssignmentError::Read(error), location)
 <a href=#559 id=559 data-nosnippet>559</a>}
 </code></pre></div></section></main></body></html>

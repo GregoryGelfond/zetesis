@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! Argument order and repeated occurrences determine expanded logical measures.
 <a href=#4 id=4 data-nosnippet>4</a>//! No flat child tree or copied text is retained by expression execution.
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>themelios_base::span::Location;
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_core::catalog::{AssignmentSlice, Limits <span class="kw">as </span>TermLimits, TermKey};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_core::{ConstructionError, ValueError};
 <a href=#9 id=9 data-nosnippet>9</a>
@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>copy(
 <a href=#22 id=22 data-nosnippet>22</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#23 id=23 data-nosnippet>23</a>        budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#24 id=24 data-nosnippet>24</a>        location: Location,
+<a href=#24 id=24 data-nosnippet>24</a>        location: ProgramSite,
 <a href=#25 id=25 data-nosnippet>25</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="self">Self</span>&gt;, FormulaFailure&gt; {
 <a href=#26 id=26 data-nosnippet>26</a>        budget.charge(
 <a href=#27 id=27 data-nosnippet>27</a>            ExpansionResource::ScalarBytes,
@@ -40,7 +40,7 @@
 <a href=#40 id=40 data-nosnippet>40</a>        computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#41 id=41 data-nosnippet>41</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#42 id=42 data-nosnippet>42</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#43 id=43 data-nosnippet>43</a>        location: Location,
+<a href=#43 id=43 data-nosnippet>43</a>        location: ProgramSite,
 <a href=#44 id=44 data-nosnippet>44</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#45 id=45 data-nosnippet>45</a>        <span class="comment">// This is the canonical logical ingress policy: expanded nodes/depth
 <a href=#46 id=46 data-nosnippet>46</a>        // and encoded/rendered length plus ID scratch. Actual retained DAG and
@@ -63,7 +63,7 @@
 <a href=#63 id=63 data-nosnippet>63</a>        term_limits: TermLimits,
 <a href=#64 id=64 data-nosnippet>64</a>        limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#65 id=65 data-nosnippet>65</a>        counters: <span class="kw-2">&amp;mut </span>Counters,
-<a href=#66 id=66 data-nosnippet>66</a>        location: Location,
+<a href=#66 id=66 data-nosnippet>66</a>        location: ProgramSite,
 <a href=#67 id=67 data-nosnippet>67</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermKey, FormulaFailure&gt; {
 <a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">let </span>descriptor = computation.static_constructor(<span class="self">self</span>.shape, limits, counters, location)<span class="question-mark">?</span>;
 <a href=#69 id=69 data-nosnippet>69</a>        computation
@@ -84,7 +84,7 @@
 <a href=#84 id=84 data-nosnippet>84</a>    }
 <a href=#85 id=85 data-nosnippet>85</a>}
 <a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a><span class="kw">fn </span>failure(error: ValueError, location: Location) -&gt; FormulaFailure {
+<a href=#87 id=87 data-nosnippet>87</a><span class="kw">fn </span>failure(error: ValueError, location: ProgramSite) -&gt; FormulaFailure {
 <a href=#88 id=88 data-nosnippet>88</a>    AdmissionFailure::Construction {
 <a href=#89 id=89 data-nosnippet>89</a>        error: ConstructionError::Value(error),
 <a href=#90 id=90 data-nosnippet>90</a>        location,

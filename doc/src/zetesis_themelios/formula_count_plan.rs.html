@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>std::fmt;
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>zetesis_cpu::{Cancellation, Stop};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>zetesis_ferraris::{AggregateLimits, Theory, partition};
 <a href=#12 id=12 data-nosnippet>12</a>
@@ -64,7 +64,7 @@
 <a href=#64 id=64 data-nosnippet>64</a>    </span>Groups,
 <a href=#65 id=65 data-nosnippet>65</a>    <span class="doccomment">/// Captured semantic head occurrences.
 <a href=#66 id=66 data-nosnippet>66</a>    </span>Members,
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Copied source locations.
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Copied original statement sites.
 <a href=#68 id=68 data-nosnippet>68</a>    </span>Origins,
 <a href=#69 id=69 data-nosnippet>69</a>    <span class="doccomment">/// Attempted partitions.
 <a href=#70 id=70 data-nosnippet>70</a>    </span>Attempts,
@@ -102,7 +102,7 @@
 <a href=#102 id=102 data-nosnippet>102</a>    </span><span class="kw">pub </span>groups: usize,
 <a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// Captured head occurrences.
 <a href=#104 id=104 data-nosnippet>104</a>    </span><span class="kw">pub </span>members: usize,
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// Copied source locations.
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// Copied original statement sites.
 <a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub </span>origins: usize,
 <a href=#107 id=107 data-nosnippet>107</a>    <span class="doccomment">/// Attempted complete covers.
 <a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">pub </span>attempts: usize,
@@ -115,11 +115,11 @@
 <a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">pub </span>storage_bytes: u64,
 <a href=#116 id=116 data-nosnippet>116</a>}
 <a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a><span class="doccomment">/// Located optional failure with its accounted work prefix.
+<a href=#118 id=118 data-nosnippet>118</a><span class="doccomment">/// Optional failure retaining its original program site and accounted work prefix.
 <a href=#119 id=119 data-nosnippet>119</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 <a href=#120 id=120 data-nosnippet>120</a></span><span class="kw">pub struct </span>CountPlanFailure {
 <a href=#121 id=121 data-nosnippet>121</a>    kind: CountPlanFailureKind,
-<a href=#122 id=122 data-nosnippet>122</a>    location: Location,
+<a href=#122 id=122 data-nosnippet>122</a>    location: ProgramSite,
 <a href=#123 id=123 data-nosnippet>123</a>    statistics: CountPlanStatistics,
 <a href=#124 id=124 data-nosnippet>124</a>}
 <a href=#125 id=125 data-nosnippet>125</a><span class="kw">impl </span>CountPlanFailure {
@@ -128,189 +128,194 @@
 <a href=#128 id=128 data-nosnippet>128</a>    </span><span class="kw">pub const fn </span>kind(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanFailureKind {
 <a href=#129 id=129 data-nosnippet>129</a>        <span class="self">self</span>.kind
 <a href=#130 id=130 data-nosnippet>130</a>    }
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="doccomment">/// Original source occurrence at the interrupted boundary.
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="doccomment">/// Original program statement at the interrupted boundary.
 <a href=#132 id=132 data-nosnippet>132</a>    </span><span class="attr">#[must_use]
-<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">pub const fn </span>location(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Location {
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">pub const fn </span>site(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ProgramSite {
 <a href=#134 id=134 data-nosnippet>134</a>        <span class="self">self</span>.location
 <a href=#135 id=135 data-nosnippet>135</a>    }
-<a href=#136 id=136 data-nosnippet>136</a>    <span class="doccomment">/// Optional work attempted before the failure.
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="doccomment">/// Actual source coordinate, absent for constructed statements.
 <a href=#137 id=137 data-nosnippet>137</a>    </span><span class="attr">#[must_use]
-<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">pub const fn </span>statistics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanStatistics {
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="self">self</span>.statistics
+<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">pub const fn </span>location(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;themelios_base::span::Location&gt; {
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="self">self</span>.location.location()
 <a href=#140 id=140 data-nosnippet>140</a>    }
-<a href=#141 id=141 data-nosnippet>141</a>}
-<a href=#142 id=142 data-nosnippet>142</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>CountPlanFailure {
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="macro">write!</span>(f, <span class="string">"optional count planning stopped: {:?}"</span>, <span class="self">self</span>.kind)
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// Optional work attempted before the failure.
+<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="attr">#[must_use]
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub const fn </span>statistics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanStatistics {
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="self">self</span>.statistics
 <a href=#145 id=145 data-nosnippet>145</a>    }
 <a href=#146 id=146 data-nosnippet>146</a>}
-<a href=#147 id=147 data-nosnippet>147</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>CountPlanFailure {}
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a><span class="doccomment">/// A source-derived candidate restriction with a closed construction boundary.
-<a href=#150 id=150 data-nosnippet>150</a>///
-<a href=#151 id=151 data-nosnippet>151</a>/// The initial profile uses complete ordinary-choice and bijective count-head
-<a href=#152 id=152 data-nosnippet>152</a>/// groups whose coalesced eligibility is canonical truth. An integer global
-<a href=#153 id=153 data-nosnippet>153</a>/// lower bound and a disjoint, complete partition of upper-bounded groups imply
-<a href=#154 id=154 data-nosnippet>154</a>/// stronger local lower bounds. Capacity groups must be unconditional or share
-<a href=#155 id=155 data-nosnippet>155</a>/// exactly the global activation formula; every consequence keeps that formula.
-<a href=#156 id=156 data-nosnippet>156</a>/// Disequality supplies no interval premise. A group with any nonnumeric logical
-<a href=#157 id=157 data-nosnippet>157</a>/// bound supplies no numeric certificate; independent numeric groups remain
-<a href=#158 id=158 data-nosnippet>158</a>/// eligible. Original source guard evaluation and numeric limits remain unchanged.
-<a href=#159 id=159 data-nosnippet>159</a>///
-<a href=#160 id=160 data-nosnippet>160</a>/// Discovery greedily visits retained grounded groups without backtracking.
-<a href=#161 id=161 data-nosnippet>161</a>/// It can miss a valid alternative cover. With G groups, M retained member
-<a href=#162 id=162 data-nosnippet>162</a>/// occurrences, R original roots and A original atoms, discovery charges at most
-<a href=#163 id=163 data-nosnippet>163</a>/// O(G M² + G² R + G A) work: complete membership probes and root evidence scans
-<a href=#164 id=164 data-nosnippet>164</a>/// are charged conservatively. Emission uses the bounded threshold compiler.
-<a href=#165 id=165 data-nosnippet>165</a>/// Temporary storage includes retained groups and coverage maps, a copied
-<a href=#166 id=166 data-nosnippet>166</a>/// activation DAG prefix, origins and the independently owned restriction.
-<a href=#167 id=167 data-nosnippet>167</a>/// Ordinary grounding retains none of these optional descriptors. Logical work
-<a href=#168 id=168 data-nosnippet>168</a>/// and conservative cumulative payload have separate inclusive ceilings.
-<a href=#169 id=169 data-nosnippet>169</a>///
-<a href=#170 id=170 data-nosnippet>170</a>/// The original theory entails this restriction under the retained source
-<a href=#171 id=171 data-nosnippet>171</a>/// premises. This implementation obligation is tested, not a Rust refinement
-<a href=#172 id=172 data-nosnippet>172</a>/// theorem. The plan proves neither stable membership nor exhaustive search.
-<a href=#173 id=173 data-nosnippet>173</a></span><span class="attr">#[derive(Debug)]
-<a href=#174 id=174 data-nosnippet>174</a></span><span class="kw">pub struct </span>CountPlan {
-<a href=#175 id=175 data-nosnippet>175</a>    original: Theory,
-<a href=#176 id=176 data-nosnippet>176</a>    restriction: Theory,
-<a href=#177 id=177 data-nosnippet>177</a>    origins: Vec&lt;Location&gt;,
-<a href=#178 id=178 data-nosnippet>178</a>    statistics: CountPlanStatistics,
-<a href=#179 id=179 data-nosnippet>179</a>}
-<a href=#180 id=180 data-nosnippet>180</a><span class="kw">impl </span>CountPlan {
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// Exact original reduct subject. Its immutable storage is shared.
-<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="attr">#[must_use]
-<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">pub fn </span>original_theory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Theory {
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.original
-<a href=#185 id=185 data-nosnippet>185</a>    }
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="doccomment">/// Independent original-candidate consequence theory, using the original
-<a href=#187 id=187 data-nosnippet>187</a>    /// semantic atom indices. Apply before proposal, never as a reduct subject.
-<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="attr">#[must_use]
-<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">pub fn </span>restriction(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Theory {
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.restriction
-<a href=#191 id=191 data-nosnippet>191</a>    }
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="doccomment">/// Source count premises supporting the emitted consequences.
+<a href=#147 id=147 data-nosnippet>147</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>CountPlanFailure {
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="macro">write!</span>(f, <span class="string">"optional count planning stopped: {:?}"</span>, <span class="self">self</span>.kind)
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#152 id=152 data-nosnippet>152</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>CountPlanFailure {}
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a><span class="doccomment">/// A source-derived candidate restriction with a closed construction boundary.
+<a href=#155 id=155 data-nosnippet>155</a>///
+<a href=#156 id=156 data-nosnippet>156</a>/// The initial profile uses complete ordinary-choice and bijective count-head
+<a href=#157 id=157 data-nosnippet>157</a>/// groups whose coalesced eligibility is canonical truth. An integer global
+<a href=#158 id=158 data-nosnippet>158</a>/// lower bound and a disjoint, complete partition of upper-bounded groups imply
+<a href=#159 id=159 data-nosnippet>159</a>/// stronger local lower bounds. Capacity groups must be unconditional or share
+<a href=#160 id=160 data-nosnippet>160</a>/// exactly the global activation formula; every consequence keeps that formula.
+<a href=#161 id=161 data-nosnippet>161</a>/// Disequality supplies no interval premise. A group with any nonnumeric logical
+<a href=#162 id=162 data-nosnippet>162</a>/// bound supplies no numeric certificate; independent numeric groups remain
+<a href=#163 id=163 data-nosnippet>163</a>/// eligible. Original source guard evaluation and numeric limits remain unchanged.
+<a href=#164 id=164 data-nosnippet>164</a>///
+<a href=#165 id=165 data-nosnippet>165</a>/// Discovery greedily visits retained grounded groups without backtracking.
+<a href=#166 id=166 data-nosnippet>166</a>/// It can miss a valid alternative cover. With G groups, M retained member
+<a href=#167 id=167 data-nosnippet>167</a>/// occurrences, R original roots and A original atoms, discovery charges at most
+<a href=#168 id=168 data-nosnippet>168</a>/// O(G M² + G² R + G A) work: complete membership probes and root evidence scans
+<a href=#169 id=169 data-nosnippet>169</a>/// are charged conservatively. Emission uses the bounded threshold compiler.
+<a href=#170 id=170 data-nosnippet>170</a>/// Temporary storage includes retained groups and coverage maps, a copied
+<a href=#171 id=171 data-nosnippet>171</a>/// activation DAG prefix, origins and the independently owned restriction.
+<a href=#172 id=172 data-nosnippet>172</a>/// Ordinary grounding retains none of these optional descriptors. Logical work
+<a href=#173 id=173 data-nosnippet>173</a>/// and conservative cumulative payload have separate inclusive ceilings.
+<a href=#174 id=174 data-nosnippet>174</a>///
+<a href=#175 id=175 data-nosnippet>175</a>/// The original theory entails this restriction under the retained source
+<a href=#176 id=176 data-nosnippet>176</a>/// premises. This implementation obligation is tested, not a Rust refinement
+<a href=#177 id=177 data-nosnippet>177</a>/// theorem. The plan proves neither stable membership nor exhaustive search.
+<a href=#178 id=178 data-nosnippet>178</a></span><span class="attr">#[derive(Debug)]
+<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">pub struct </span>CountPlan {
+<a href=#180 id=180 data-nosnippet>180</a>    original: Theory,
+<a href=#181 id=181 data-nosnippet>181</a>    restriction: Theory,
+<a href=#182 id=182 data-nosnippet>182</a>    origins: Vec&lt;ProgramSite&gt;,
+<a href=#183 id=183 data-nosnippet>183</a>    statistics: CountPlanStatistics,
+<a href=#184 id=184 data-nosnippet>184</a>}
+<a href=#185 id=185 data-nosnippet>185</a><span class="kw">impl </span>CountPlan {
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="doccomment">/// Exact original reduct subject. Its immutable storage is shared.
+<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="attr">#[must_use]
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="kw">pub fn </span>original_theory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Theory {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.original
+<a href=#190 id=190 data-nosnippet>190</a>    }
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// Independent original-candidate consequence theory, using the original
+<a href=#192 id=192 data-nosnippet>192</a>    /// semantic atom indices. Apply before proposal, never as a reduct subject.
 <a href=#193 id=193 data-nosnippet>193</a>    </span><span class="attr">#[must_use]
-<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">pub fn </span>origins(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Location] {
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.origins
+<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">pub fn </span>restriction(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Theory {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.restriction
 <a href=#196 id=196 data-nosnippet>196</a>    }
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="doccomment">/// Completed optional planning accounting.
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="doccomment">/// Source count premises supporting the emitted consequences.
 <a href=#198 id=198 data-nosnippet>198</a>    </span><span class="attr">#[must_use]
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub const fn </span>statistics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanStatistics {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="self">self</span>.statistics
+<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub fn </span>origins(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[ProgramSite] {
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.origins
 <a href=#201 id=201 data-nosnippet>201</a>    }
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Number of strictly stronger guarded local lower bounds.
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Completed optional planning accounting.
 <a href=#203 id=203 data-nosnippet>203</a>    </span><span class="attr">#[must_use]
-<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">pub const fn </span>consequence_count(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="self">self</span>.statistics.consequences
+<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">pub const fn </span>statistics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanStatistics {
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="self">self</span>.statistics
 <a href=#206 id=206 data-nosnippet>206</a>    }
-<a href=#207 id=207 data-nosnippet>207</a>}
-<a href=#208 id=208 data-nosnippet>208</a>
-<a href=#209 id=209 data-nosnippet>209</a><span class="doccomment">/// Borrowed outcome of independently requested source-count planning.
-<a href=#210 id=210 data-nosnippet>210</a></span><span class="attr">#[derive(Clone, Copy, Debug)]
-<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">pub enum </span>CountPlanStatus&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="doccomment">/// Ordinary grounding retained no optional descriptors or planning budget.
-<a href=#213 id=213 data-nosnippet>213</a>    </span>NotRequested,
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="doccomment">/// The selected bounded planning policy emitted no stronger restriction.
-<a href=#215 id=215 data-nosnippet>215</a>    /// This does not establish that no other cover or consequence exists.
-<a href=#216 id=216 data-nosnippet>216</a>    </span>NoPlan(CountPlanStatistics),
-<a href=#217 id=217 data-nosnippet>217</a>    <span class="doccomment">/// Complete source-derived candidate restriction.
-<a href=#218 id=218 data-nosnippet>218</a>    </span>Ready(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>CountPlan),
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="doccomment">/// Optional work stopped; the successfully admitted original remains usable.
-<a href=#220 id=220 data-nosnippet>220</a>    </span>Incomplete(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>CountPlanFailure),
-<a href=#221 id=221 data-nosnippet>221</a>}
-<a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a><span class="attr">#[derive(Debug)]
-<a href=#224 id=224 data-nosnippet>224</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>Outcome {
-<a href=#225 id=225 data-nosnippet>225</a>    NotRequested,
-<a href=#226 id=226 data-nosnippet>226</a>    NoPlan(CountPlanStatistics),
-<a href=#227 id=227 data-nosnippet>227</a>    Ready(CountPlan),
-<a href=#228 id=228 data-nosnippet>228</a>    Incomplete(CountPlanFailure),
-<a href=#229 id=229 data-nosnippet>229</a>}
-<a href=#230 id=230 data-nosnippet>230</a><span class="kw">impl </span>Outcome {
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanStatus&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#233 id=233 data-nosnippet>233</a>            <span class="self">Self</span>::NotRequested =&gt; CountPlanStatus::NotRequested,
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="self">Self</span>::NoPlan(stats) =&gt; CountPlanStatus::NoPlan(<span class="kw-2">*</span>stats),
-<a href=#235 id=235 data-nosnippet>235</a>            <span class="self">Self</span>::Ready(plan) =&gt; CountPlanStatus::Ready(plan),
-<a href=#236 id=236 data-nosnippet>236</a>            <span class="self">Self</span>::Incomplete(error) =&gt; CountPlanStatus::Incomplete(error),
-<a href=#237 id=237 data-nosnippet>237</a>        }
-<a href=#238 id=238 data-nosnippet>238</a>    }
-<a href=#239 id=239 data-nosnippet>239</a>}
-<a href=#240 id=240 data-nosnippet>240</a>
-<a href=#241 id=241 data-nosnippet>241</a><span class="attr">#[derive(Clone, Copy)]
-<a href=#242 id=242 data-nosnippet>242</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Request&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">pub </span>limits: CountPlanLimits,
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">pub </span>cancellation: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Cancellation,
-<a href=#245 id=245 data-nosnippet>245</a>}
-<a href=#246 id=246 data-nosnippet>246</a>
-<a href=#247 id=247 data-nosnippet>247</a><span class="kw">struct </span>Work {
-<a href=#248 id=248 data-nosnippet>248</a>    limits: CountPlanLimits,
-<a href=#249 id=249 data-nosnippet>249</a>    cancellation: Cancellation,
-<a href=#250 id=250 data-nosnippet>250</a>    statistics: CountPlanStatistics,
-<a href=#251 id=251 data-nosnippet>251</a>    location: Location,
-<a href=#252 id=252 data-nosnippet>252</a>}
-<a href=#253 id=253 data-nosnippet>253</a><span class="kw">impl </span>Work {
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">fn </span>poll(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
-<a href=#255 id=255 data-nosnippet>255</a>        <span class="self">self</span>.cancellation
-<a href=#256 id=256 data-nosnippet>256</a>            .poll()
-<a href=#257 id=257 data-nosnippet>257</a>            .map_err(CountPlanFailureKind::Stopped)
-<a href=#258 id=258 data-nosnippet>258</a>    }
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">fn </span>charge(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="self">self</span>.poll()<span class="question-mark">?</span>;
-<a href=#261 id=261 data-nosnippet>261</a>        <span class="self">self</span>.record(count)
-<a href=#262 id=262 data-nosnippet>262</a>    }
-<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">if </span>count &gt; <span class="self">self</span>.limits.max_work - <span class="self">self</span>.statistics.work {
-<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CountPlanFailureKind::Limit(CountPlanResource::Work));
-<a href=#266 id=266 data-nosnippet>266</a>        }
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="self">self</span>.statistics.work += count;
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="prelude-val">Ok</span>(())
-<a href=#269 id=269 data-nosnippet>269</a>    }
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">fn </span>payload(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bytes: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span>total = <span class="self">self
-<a href=#272 id=272 data-nosnippet>272</a>            </span>.statistics
-<a href=#273 id=273 data-nosnippet>273</a>            .storage_bytes
-<a href=#274 id=274 data-nosnippet>274</a>            .checked_add(bytes)
-<a href=#275 id=275 data-nosnippet>275</a>            .ok_or(CountPlanFailureKind::Overflow)<span class="question-mark">?</span>;
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">if </span>total &gt; <span class="self">self</span>.limits.max_bytes {
-<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CountPlanFailureKind::Limit(CountPlanResource::Bytes));
-<a href=#278 id=278 data-nosnippet>278</a>        }
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="self">self</span>.statistics.storage_bytes = total;
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="prelude-val">Ok</span>(())
-<a href=#281 id=281 data-nosnippet>281</a>    }
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">fn </span>vector&lt;T&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;T&gt;, CountPlanFailureKind&gt; {
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="self">self</span>.poll()<span class="question-mark">?</span>;
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="self">self</span>.payload(bytes::&lt;T&gt;(count)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#285 id=285 data-nosnippet>285</a>        <span class="kw">let </span><span class="kw-2">mut </span>output = Vec::new();
-<a href=#286 id=286 data-nosnippet>286</a>        output
-<a href=#287 id=287 data-nosnippet>287</a>            .try_reserve_exact(count)
-<a href=#288 id=288 data-nosnippet>288</a>            .map_err(|<span class="kw">_</span>| CountPlanFailureKind::Stopped(Stop::Allocation))<span class="question-mark">?</span>;
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="prelude-val">Ok</span>(output)
-<a href=#290 id=290 data-nosnippet>290</a>    }
-<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">fn </span>failure(<span class="kw-2">&amp;</span><span class="self">self</span>, kind: CountPlanFailureKind) -&gt; CountPlanFailure {
-<a href=#292 id=292 data-nosnippet>292</a>        CountPlanFailure {
-<a href=#293 id=293 data-nosnippet>293</a>            kind,
-<a href=#294 id=294 data-nosnippet>294</a>            location: <span class="self">self</span>.location,
-<a href=#295 id=295 data-nosnippet>295</a>            statistics: <span class="self">self</span>.statistics,
-<a href=#296 id=296 data-nosnippet>296</a>        }
-<a href=#297 id=297 data-nosnippet>297</a>    }
-<a href=#298 id=298 data-nosnippet>298</a>}
-<a href=#299 id=299 data-nosnippet>299</a><span class="kw">fn </span>bytes&lt;T&gt;(count: usize) -&gt; <span class="prelude-ty">Result</span>&lt;u64, CountPlanFailureKind&gt; {
-<a href=#300 id=300 data-nosnippet>300</a>    count
-<a href=#301 id=301 data-nosnippet>301</a>        .checked_mul(size_of::&lt;T&gt;())
-<a href=#302 id=302 data-nosnippet>302</a>        .and_then(|n| u64::try_from(n).ok())
-<a href=#303 id=303 data-nosnippet>303</a>        .ok_or(CountPlanFailureKind::Overflow)
-<a href=#304 id=304 data-nosnippet>304</a>}
-<a href=#305 id=305 data-nosnippet>305</a><span class="kw">fn </span>ceiling(
-<a href=#306 id=306 data-nosnippet>306</a>    actual: usize,
-<a href=#307 id=307 data-nosnippet>307</a>    maximum: usize,
-<a href=#308 id=308 data-nosnippet>308</a>    resource: CountPlanResource,
-<a href=#309 id=309 data-nosnippet>309</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">if </span>actual &gt; maximum {
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="prelude-val">Err</span>(CountPlanFailureKind::Limit(resource))
-<a href=#312 id=312 data-nosnippet>312</a>    } <span class="kw">else </span>{
-<a href=#313 id=313 data-nosnippet>313</a>        <span class="prelude-val">Ok</span>(())
-<a href=#314 id=314 data-nosnippet>314</a>    }
-<a href=#315 id=315 data-nosnippet>315</a>}
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="doccomment">/// Number of strictly stronger guarded local lower bounds.
+<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="attr">#[must_use]
+<a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">pub const fn </span>consequence_count(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="self">self</span>.statistics.consequences
+<a href=#211 id=211 data-nosnippet>211</a>    }
+<a href=#212 id=212 data-nosnippet>212</a>}
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a><span class="doccomment">/// Borrowed outcome of independently requested source-count planning.
+<a href=#215 id=215 data-nosnippet>215</a></span><span class="attr">#[derive(Clone, Copy, Debug)]
+<a href=#216 id=216 data-nosnippet>216</a></span><span class="kw">pub enum </span>CountPlanStatus&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="doccomment">/// Ordinary grounding retained no optional descriptors or planning budget.
+<a href=#218 id=218 data-nosnippet>218</a>    </span>NotRequested,
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="doccomment">/// The selected bounded planning policy emitted no stronger restriction.
+<a href=#220 id=220 data-nosnippet>220</a>    /// This does not establish that no other cover or consequence exists.
+<a href=#221 id=221 data-nosnippet>221</a>    </span>NoPlan(CountPlanStatistics),
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="doccomment">/// Complete source-derived candidate restriction.
+<a href=#223 id=223 data-nosnippet>223</a>    </span>Ready(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>CountPlan),
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="doccomment">/// Optional work stopped; the successfully admitted original remains usable.
+<a href=#225 id=225 data-nosnippet>225</a>    </span>Incomplete(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>CountPlanFailure),
+<a href=#226 id=226 data-nosnippet>226</a>}
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a><span class="attr">#[derive(Debug)]
+<a href=#229 id=229 data-nosnippet>229</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>Outcome {
+<a href=#230 id=230 data-nosnippet>230</a>    NotRequested,
+<a href=#231 id=231 data-nosnippet>231</a>    NoPlan(CountPlanStatistics),
+<a href=#232 id=232 data-nosnippet>232</a>    Ready(CountPlan),
+<a href=#233 id=233 data-nosnippet>233</a>    Incomplete(CountPlanFailure),
+<a href=#234 id=234 data-nosnippet>234</a>}
+<a href=#235 id=235 data-nosnippet>235</a><span class="kw">impl </span>Outcome {
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CountPlanStatus&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="self">Self</span>::NotRequested =&gt; CountPlanStatus::NotRequested,
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="self">Self</span>::NoPlan(stats) =&gt; CountPlanStatus::NoPlan(<span class="kw-2">*</span>stats),
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="self">Self</span>::Ready(plan) =&gt; CountPlanStatus::Ready(plan),
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="self">Self</span>::Incomplete(error) =&gt; CountPlanStatus::Incomplete(error),
+<a href=#242 id=242 data-nosnippet>242</a>        }
+<a href=#243 id=243 data-nosnippet>243</a>    }
+<a href=#244 id=244 data-nosnippet>244</a>}
+<a href=#245 id=245 data-nosnippet>245</a>
+<a href=#246 id=246 data-nosnippet>246</a><span class="attr">#[derive(Clone, Copy)]
+<a href=#247 id=247 data-nosnippet>247</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Request&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">pub </span>limits: CountPlanLimits,
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">pub </span>cancellation: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Cancellation,
+<a href=#250 id=250 data-nosnippet>250</a>}
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a><span class="kw">struct </span>Work {
+<a href=#253 id=253 data-nosnippet>253</a>    limits: CountPlanLimits,
+<a href=#254 id=254 data-nosnippet>254</a>    cancellation: Cancellation,
+<a href=#255 id=255 data-nosnippet>255</a>    statistics: CountPlanStatistics,
+<a href=#256 id=256 data-nosnippet>256</a>    location: ProgramSite,
+<a href=#257 id=257 data-nosnippet>257</a>}
+<a href=#258 id=258 data-nosnippet>258</a><span class="kw">impl </span>Work {
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">fn </span>poll(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="self">self</span>.cancellation
+<a href=#261 id=261 data-nosnippet>261</a>            .poll()
+<a href=#262 id=262 data-nosnippet>262</a>            .map_err(CountPlanFailureKind::Stopped)
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">fn </span>charge(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="self">self</span>.poll()<span class="question-mark">?</span>;
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="self">self</span>.record(count)
+<a href=#267 id=267 data-nosnippet>267</a>    }
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">if </span>count &gt; <span class="self">self</span>.limits.max_work - <span class="self">self</span>.statistics.work {
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CountPlanFailureKind::Limit(CountPlanResource::Work));
+<a href=#271 id=271 data-nosnippet>271</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="self">self</span>.statistics.work += count;
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="prelude-val">Ok</span>(())
+<a href=#274 id=274 data-nosnippet>274</a>    }
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">fn </span>payload(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bytes: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>total = <span class="self">self
+<a href=#277 id=277 data-nosnippet>277</a>            </span>.statistics
+<a href=#278 id=278 data-nosnippet>278</a>            .storage_bytes
+<a href=#279 id=279 data-nosnippet>279</a>            .checked_add(bytes)
+<a href=#280 id=280 data-nosnippet>280</a>            .ok_or(CountPlanFailureKind::Overflow)<span class="question-mark">?</span>;
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">if </span>total &gt; <span class="self">self</span>.limits.max_bytes {
+<a href=#282 id=282 data-nosnippet>282</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CountPlanFailureKind::Limit(CountPlanResource::Bytes));
+<a href=#283 id=283 data-nosnippet>283</a>        }
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="self">self</span>.statistics.storage_bytes = total;
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="prelude-val">Ok</span>(())
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">fn </span>vector&lt;T&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;T&gt;, CountPlanFailureKind&gt; {
+<a href=#288 id=288 data-nosnippet>288</a>        <span class="self">self</span>.poll()<span class="question-mark">?</span>;
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="self">self</span>.payload(bytes::&lt;T&gt;(count)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span><span class="kw-2">mut </span>output = Vec::new();
+<a href=#291 id=291 data-nosnippet>291</a>        output
+<a href=#292 id=292 data-nosnippet>292</a>            .try_reserve_exact(count)
+<a href=#293 id=293 data-nosnippet>293</a>            .map_err(|<span class="kw">_</span>| CountPlanFailureKind::Stopped(Stop::Allocation))<span class="question-mark">?</span>;
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="prelude-val">Ok</span>(output)
+<a href=#295 id=295 data-nosnippet>295</a>    }
+<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">fn </span>failure(<span class="kw-2">&amp;</span><span class="self">self</span>, kind: CountPlanFailureKind) -&gt; CountPlanFailure {
+<a href=#297 id=297 data-nosnippet>297</a>        CountPlanFailure {
+<a href=#298 id=298 data-nosnippet>298</a>            kind,
+<a href=#299 id=299 data-nosnippet>299</a>            location: <span class="self">self</span>.location,
+<a href=#300 id=300 data-nosnippet>300</a>            statistics: <span class="self">self</span>.statistics,
+<a href=#301 id=301 data-nosnippet>301</a>        }
+<a href=#302 id=302 data-nosnippet>302</a>    }
+<a href=#303 id=303 data-nosnippet>303</a>}
+<a href=#304 id=304 data-nosnippet>304</a><span class="kw">fn </span>bytes&lt;T&gt;(count: usize) -&gt; <span class="prelude-ty">Result</span>&lt;u64, CountPlanFailureKind&gt; {
+<a href=#305 id=305 data-nosnippet>305</a>    count
+<a href=#306 id=306 data-nosnippet>306</a>        .checked_mul(size_of::&lt;T&gt;())
+<a href=#307 id=307 data-nosnippet>307</a>        .and_then(|n| u64::try_from(n).ok())
+<a href=#308 id=308 data-nosnippet>308</a>        .ok_or(CountPlanFailureKind::Overflow)
+<a href=#309 id=309 data-nosnippet>309</a>}
+<a href=#310 id=310 data-nosnippet>310</a><span class="kw">fn </span>ceiling(
+<a href=#311 id=311 data-nosnippet>311</a>    actual: usize,
+<a href=#312 id=312 data-nosnippet>312</a>    maximum: usize,
+<a href=#313 id=313 data-nosnippet>313</a>    resource: CountPlanResource,
+<a href=#314 id=314 data-nosnippet>314</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), CountPlanFailureKind&gt; {
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">if </span>actual &gt; maximum {
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="prelude-val">Err</span>(CountPlanFailureKind::Limit(resource))
+<a href=#317 id=317 data-nosnippet>317</a>    } <span class="kw">else </span>{
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="prelude-val">Ok</span>(())
+<a href=#319 id=319 data-nosnippet>319</a>    }
+<a href=#320 id=320 data-nosnippet>320</a>}
 </code></pre></div></section></main></body></html>

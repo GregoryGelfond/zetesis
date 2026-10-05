@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>    atomic::{AtomicU64, Ordering},
 <a href=#6 id=6 data-nosnippet>6</a>};
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>themelios_base::span::Location;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use crate</span>::{
 <a href=#11 id=11 data-nosnippet>11</a>    ConstraintCheckLimits, ConstraintCheckStatistics, ExpansionFailure, ExpansionResource,
@@ -57,7 +57,7 @@
 <a href=#57 id=57 data-nosnippet>57</a>        <span class="self">self</span>.<span class="number">0</span>.receipt()
 <a href=#58 id=58 data-nosnippet>58</a>    }
 <a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>work(<span class="kw-2">&amp;</span><span class="self">self</span>, amount: u128, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>work(<span class="kw-2">&amp;</span><span class="self">self</span>, amount: u128, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#61 id=61 data-nosnippet>61</a>        reserve(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>.work, amount, u128::from(<span class="self">self</span>.<span class="number">0</span>.limits.max_work)).map_err(|observed| {
 <a href=#62 id=62 data-nosnippet>62</a>            FormulaFailure::Limit {
 <a href=#63 id=63 data-nosnippet>63</a>                resource: FormulaResource::Work,
@@ -68,7 +68,7 @@
 <a href=#68 id=68 data-nosnippet>68</a>        })
 <a href=#69 id=69 data-nosnippet>69</a>    }
 <a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>substitution(<span class="kw-2">&amp;</span><span class="self">self</span>, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>substitution(<span class="kw-2">&amp;</span><span class="self">self</span>, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#72 id=72 data-nosnippet>72</a>        reserve(
 <a href=#73 id=73 data-nosnippet>73</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>.substitutions,
 <a href=#74 id=74 data-nosnippet>74</a>            <span class="number">1</span>,
@@ -82,49 +82,53 @@
 <a href=#82 id=82 data-nosnippet>82</a>        })
 <a href=#83 id=83 data-nosnippet>83</a>    }
 <a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>scalar(<span class="kw-2">&amp;</span><span class="self">self</span>, amount: u128, location: Location) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
-<a href=#86 id=86 data-nosnippet>86</a>        reserve(
-<a href=#87 id=87 data-nosnippet>87</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>.scalar_bytes,
-<a href=#88 id=88 data-nosnippet>88</a>            amount,
-<a href=#89 id=89 data-nosnippet>89</a>            <span class="self">self</span>.<span class="number">0</span>.limits.max_scalar_bytes <span class="kw">as </span>u128,
-<a href=#90 id=90 data-nosnippet>90</a>        )
-<a href=#91 id=91 data-nosnippet>91</a>        .map_err(|observed| ExpansionFailure::Limit {
-<a href=#92 id=92 data-nosnippet>92</a>            resource: ExpansionResource::ScalarBytes,
-<a href=#93 id=93 data-nosnippet>93</a>            limit: <span class="self">self</span>.<span class="number">0</span>.limits.max_scalar_bytes <span class="kw">as </span>u128,
-<a href=#94 id=94 data-nosnippet>94</a>            observed,
-<a href=#95 id=95 data-nosnippet>95</a>            location,
-<a href=#96 id=96 data-nosnippet>96</a>        })
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>}
-<a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a><span class="kw">impl </span>Shared {
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">fn </span>receipt(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ConstraintCheckStatistics {
-<a href=#102 id=102 data-nosnippet>102</a>        ConstraintCheckStatistics {
-<a href=#103 id=103 data-nosnippet>103</a>            work: <span class="self">self</span>.work.load(Ordering::Relaxed),
-<a href=#104 id=104 data-nosnippet>104</a>            substitutions: <span class="self">self</span>.substitutions.load(Ordering::Relaxed),
-<a href=#105 id=105 data-nosnippet>105</a>            scalar_bytes: usize::try_from(<span class="self">self</span>.scalar_bytes.load(Ordering::Relaxed))
-<a href=#106 id=106 data-nosnippet>106</a>                .expect(<span class="string">"scalar allowance is bounded by usize"</span>),
-<a href=#107 id=107 data-nosnippet>107</a>        }
-<a href=#108 id=108 data-nosnippet>108</a>    }
-<a href=#109 id=109 data-nosnippet>109</a>}
-<a href=#110 id=110 data-nosnippet>110</a>
-<a href=#111 id=111 data-nosnippet>111</a><span class="doccomment">/// Only counters synchronize here, never program state or verdict publication.
-<a href=#112 id=112 data-nosnippet>112</a>/// Failed reservations change nothing; a successful reservation precedes the
-<a href=#113 id=113 data-nosnippet>113</a>/// caller's infallible local increment and the charged operation.
-<a href=#114 id=114 data-nosnippet>114</a></span><span class="kw">fn </span>reserve(counter: <span class="kw-2">&amp;</span>AtomicU64, amount: u128, limit: u128) -&gt; <span class="prelude-ty">Result</span>&lt;(), u128&gt; {
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="comment">// Every counter starts within its fixed ceiling and only admitted charges
-<a href=#116 id=116 data-nosnippet>116</a>    // can advance it. A zero charge cannot change admission or the receipt.
-<a href=#117 id=117 data-nosnippet>117</a>    // Canonical ID copies and frozen constructor lookups make no scalar charge.
-<a href=#118 id=118 data-nosnippet>118</a>    // Work callers still poll cancellation before reaching this operation.
-<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">if </span>amount == <span class="number">0 </span>{
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#121 id=121 data-nosnippet>121</a>    }
-<a href=#122 id=122 data-nosnippet>122</a>    counter
-<a href=#123 id=123 data-nosnippet>123</a>        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">let </span>observed = u128::from(used).saturating_add(amount);
-<a href=#125 id=125 data-nosnippet>125</a>            (observed &lt;= limit).then(|| u64::try_from(observed).expect(<span class="string">"bounded u64 allowance"</span>))
-<a href=#126 id=126 data-nosnippet>126</a>        })
-<a href=#127 id=127 data-nosnippet>127</a>        .map(|<span class="kw">_</span>| ())
-<a href=#128 id=128 data-nosnippet>128</a>        .map_err(|used| u128::from(used).saturating_add(amount))
-<a href=#129 id=129 data-nosnippet>129</a>}
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>scalar(
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#87 id=87 data-nosnippet>87</a>        amount: u128,
+<a href=#88 id=88 data-nosnippet>88</a>        location: ProgramSite,
+<a href=#89 id=89 data-nosnippet>89</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
+<a href=#90 id=90 data-nosnippet>90</a>        reserve(
+<a href=#91 id=91 data-nosnippet>91</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>.scalar_bytes,
+<a href=#92 id=92 data-nosnippet>92</a>            amount,
+<a href=#93 id=93 data-nosnippet>93</a>            <span class="self">self</span>.<span class="number">0</span>.limits.max_scalar_bytes <span class="kw">as </span>u128,
+<a href=#94 id=94 data-nosnippet>94</a>        )
+<a href=#95 id=95 data-nosnippet>95</a>        .map_err(|observed| ExpansionFailure::Limit {
+<a href=#96 id=96 data-nosnippet>96</a>            resource: ExpansionResource::ScalarBytes,
+<a href=#97 id=97 data-nosnippet>97</a>            limit: <span class="self">self</span>.<span class="number">0</span>.limits.max_scalar_bytes <span class="kw">as </span>u128,
+<a href=#98 id=98 data-nosnippet>98</a>            observed,
+<a href=#99 id=99 data-nosnippet>99</a>            location,
+<a href=#100 id=100 data-nosnippet>100</a>        })
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>}
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="kw">impl </span>Shared {
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">fn </span>receipt(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ConstraintCheckStatistics {
+<a href=#106 id=106 data-nosnippet>106</a>        ConstraintCheckStatistics {
+<a href=#107 id=107 data-nosnippet>107</a>            work: <span class="self">self</span>.work.load(Ordering::Relaxed),
+<a href=#108 id=108 data-nosnippet>108</a>            substitutions: <span class="self">self</span>.substitutions.load(Ordering::Relaxed),
+<a href=#109 id=109 data-nosnippet>109</a>            scalar_bytes: usize::try_from(<span class="self">self</span>.scalar_bytes.load(Ordering::Relaxed))
+<a href=#110 id=110 data-nosnippet>110</a>                .expect(<span class="string">"scalar allowance is bounded by usize"</span>),
+<a href=#111 id=111 data-nosnippet>111</a>        }
+<a href=#112 id=112 data-nosnippet>112</a>    }
+<a href=#113 id=113 data-nosnippet>113</a>}
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a><span class="doccomment">/// Only counters synchronize here, never program state or verdict publication.
+<a href=#116 id=116 data-nosnippet>116</a>/// Failed reservations change nothing; a successful reservation precedes the
+<a href=#117 id=117 data-nosnippet>117</a>/// caller's infallible local increment and the charged operation.
+<a href=#118 id=118 data-nosnippet>118</a></span><span class="kw">fn </span>reserve(counter: <span class="kw-2">&amp;</span>AtomicU64, amount: u128, limit: u128) -&gt; <span class="prelude-ty">Result</span>&lt;(), u128&gt; {
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="comment">// Every counter starts within its fixed ceiling and only admitted charges
+<a href=#120 id=120 data-nosnippet>120</a>    // can advance it. A zero charge cannot change admission or the receipt.
+<a href=#121 id=121 data-nosnippet>121</a>    // Canonical ID copies and frozen constructor lookups make no scalar charge.
+<a href=#122 id=122 data-nosnippet>122</a>    // Work callers still poll cancellation before reaching this operation.
+<a href=#123 id=123 data-nosnippet>123</a>    </span><span class="kw">if </span>amount == <span class="number">0 </span>{
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#125 id=125 data-nosnippet>125</a>    }
+<a href=#126 id=126 data-nosnippet>126</a>    counter
+<a href=#127 id=127 data-nosnippet>127</a>        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+<a href=#128 id=128 data-nosnippet>128</a>            <span class="kw">let </span>observed = u128::from(used).saturating_add(amount);
+<a href=#129 id=129 data-nosnippet>129</a>            (observed &lt;= limit).then(|| u64::try_from(observed).expect(<span class="string">"bounded u64 allowance"</span>))
+<a href=#130 id=130 data-nosnippet>130</a>        })
+<a href=#131 id=131 data-nosnippet>131</a>        .map(|<span class="kw">_</span>| ())
+<a href=#132 id=132 data-nosnippet>132</a>        .map_err(|used| u128::from(used).saturating_add(amount))
+<a href=#133 id=133 data-nosnippet>133</a>}
 </code></pre></div></section></main></body></html>

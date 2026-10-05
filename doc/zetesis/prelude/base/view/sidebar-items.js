@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EditorRefusal"],"fn":["canonical_order","editor","human"],"struct":["EditorDiagnostic","EditorRange","EditorRelated"]};
