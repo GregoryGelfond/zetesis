@@ -265,6 +265,7 @@ impl Counters {
     pub(super) fn record(&self, event: Event) {
         self.observed.record(event);
     }
+    #[inline]
     pub fn work(
         &mut self,
         limits: &FormulaLimits,
@@ -272,6 +273,7 @@ impl Counters {
     ) -> Result<(), FormulaFailure> {
         self.charge_work(1, limits, location)
     }
+    #[inline]
     pub(super) fn charge_work(
         &mut self,
         amount: u128,
@@ -364,6 +366,11 @@ impl Counters {
     }
 }
 
+/// Charge `amount` units of formula work: poll cancellation, check the work
+/// ceiling, charge the shared allowance, then count. Every charged unit runs
+/// on this path, so it inlines into its callers; the site is read only when a
+/// failure is built, on the cold path.
+#[inline]
 fn charge_work(
     work: &mut u64,
     cancellation: Option<&zetesis_cpu::Cancellation>,
@@ -372,10 +379,10 @@ fn charge_work(
     limits: &FormulaLimits,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    if let Some(cancellation) = cancellation {
-        cancellation
-            .poll()
-            .map_err(|reason| FormulaFailure::Interrupted { reason, location })?;
+    if let Some(cancellation) = cancellation
+        && let Err(reason) = cancellation.poll()
+    {
+        return Err(interrupted(reason, location));
     }
     ceiling(
         FormulaResource::Work,
@@ -388,6 +395,13 @@ fn charge_work(
     }
     *work += u64::try_from(amount).expect("charged work fits its u64 ceiling");
     Ok(())
+}
+
+/// The failure of a charge stopped by cancellation or a deadline.
+#[cold]
+#[inline(never)]
+fn interrupted(reason: zetesis_cpu::Stop, location: ProgramSite) -> FormulaFailure {
+    FormulaFailure::Interrupted { reason, location }
 }
 
 pub(crate) fn build(
