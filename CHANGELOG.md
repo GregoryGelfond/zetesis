@@ -22,6 +22,14 @@ Notable changes by release. Versions follow Semantic Versioning.
   quadratically with the number of answers.
 - `AtomTable::index` is a structural lookup and no longer records atom
   identities; the record encoder's own lookup keeps the identity cache.
+- Region narrowing keeps its worklists in a `NarrowingScratch` that each
+  walker passes to every narrowing and reuses, instead of in each region's
+  `Knowledge`; every `zetesis-ferraris` narrowing entry point takes it, and
+  takes what it reads as an `OriginalSubject` or a `FrozenSubject` in place of
+  the separate theory and producer or truth arguments. A
+  knowledge copy at a split no longer carries worklist headers or capacity, so
+  the producer route's frontier `retained_bytes` and `peak_retained_bytes` are
+  lower by at least 72 bytes per retained knowledge on 64-bit hosts.
 - Region narrowing knowledge chooses its counter width once per value and is
   16 bytes smaller on 64-bit hosts. The producer route's frontier
   `retained_bytes` and `peak_retained_bytes` in `--stats` are lower by that

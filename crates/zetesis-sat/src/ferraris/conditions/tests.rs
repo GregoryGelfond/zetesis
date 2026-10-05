@@ -41,11 +41,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (&original, &narrower),
-        None,
+        (&original, &narrower, None),
         &conditions,
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     )
@@ -56,11 +56,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
     conditions.bound = Some(Bound::prepare(&guard(true), 2).unwrap());
     assert_ne!(
         super::super::regions::narrow(
-            (&original, &narrower),
-            None,
+            (&original, &narrower, None),
             &conditions,
             &mut region,
             &mut knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
             &mut budget,
             &mut counts
         )
@@ -215,11 +215,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (&original, &narrower),
-        None,
+        (&original, &narrower, None),
         &conditions,
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     )
@@ -232,11 +232,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let permanent_index = Narrower::new(&permanent);
     conditions.permanent.push((permanent, permanent_index));
     super::super::regions::narrow(
-        (&original, &narrower),
-        None,
+        (&original, &narrower, None),
         &conditions,
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     )

@@ -185,6 +185,11 @@ history with `decided()`'s ascending `(atom, value)` pairs, and `split` consumes
 its parent. `snapshot_decided` copies only the available destination prefix;
 the narrower supplies all `region.len().div_ceil(64)` words.
 
+Every narrowing entry point takes what it reads, an `OriginalSubject` (the
+theory and, when the support cut applies, its producers) or a `FrozenSubject`
+(the theory and a candidate's node truth), then the region, its knowledge and
+the walker's `NarrowingScratch`.
+
 `narrow_known_metered` and `narrow_frozen_known_metered` use the same closure with
 a caller-owned quota. They request a permit before each charged read and return
 `NarrowingAttempt { result, statistics }`, preserving the quota's typed refusal
@@ -217,8 +222,10 @@ independent arrays, with unchanged original/frozen ownership requirements.
 
 For A atoms and C chains, the counter payload on a 64-bit host decreases from
 8(A + 2C) to 4(A + 2C) bytes when the bound fits. Header layout is counted by
-`Knowledge::retained_bytes`; masks, worklists, immutable indexes, scheduler
-state and allocator overhead are separate. Each copied Knowledge carries the
+`Knowledge::retained_bytes`; masks, immutable indexes, scheduler state and
+allocator overhead are separate. A knowledge holds no worklists: they belong
+to the caller's `NarrowingScratch`, which each narrowing empties first and
+whose capacity serves all of a walker's narrowings. Each copied Knowledge carries the
 same payload reduction. This is a storage model, not an RSS or timing result.
 Construction directly allocates the selected width, with no temporary native
 counter array; the incidence bound is read from the existing compact index.
@@ -241,10 +248,9 @@ The `traversal_copies_only_live_knowledge_arrays` test wraps actual
 atoms free, visits all 256 complete candidates and compares native and selected
 counter widths. The receipt counts completed `Knowledge::clone` calls,
 initialized array representation bytes and the returned clones' nonempty
-backing allocations. It separately records source worklist spare capacity:
-`Vec::clone` copies initialized elements, so retained source capacity is not
-copy payload. The test verifies the expected counter-width reduction across
-every measured split.
+backing allocations, and checks that no copied source retains capacity beyond
+its live arrays, since the worklists stay with the walker's scratch. The test
+verifies the expected counter-width reduction across every measured split.
 
 ```sh
 cargo test -p zetesis-ferraris --lib \

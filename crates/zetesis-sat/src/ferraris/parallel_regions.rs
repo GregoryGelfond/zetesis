@@ -66,7 +66,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Narrower, Producers, Theory};
+use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Producers, Theory};
 
 use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -922,10 +922,9 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
             ..Statistics::default()
         },
     };
-    let mut filter = None;
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
-    let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));
+    let mut workspaces = Workspaces::new(shared);
     // One lease serves this worker's consecutive regions, so the shared ledger
     // is locked about twice per grant rather than twice per region. It settles
     // before this worker steals or waits for another region and before it sends
@@ -956,10 +955,9 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
                 shared,
                 entry,
                 index,
+                &mut workspaces,
                 &mut budget,
-                &mut membership,
                 &mut report,
-                &mut filter,
             );
             search = budget.statistics;
             quota = budget.quota;
@@ -1038,16 +1036,34 @@ enum Stepped {
     Resolved(Option<Interpretation>),
 }
 
+/// What one worker reuses across its regions: the narrowing worklists, the
+/// reduct-membership state and the region filter's worker, made when first
+/// needed.
+struct Workspaces<'a> {
+    scratch: NarrowingScratch,
+    membership: crate::prepared_reduct::State,
+    filter: Option<crate::region_filter::Worker<'a>>,
+}
+
+impl Workspaces<'_> {
+    fn new(shared: &Shared) -> Self {
+        Self {
+            scratch: NarrowingScratch::default(),
+            membership: crate::prepared_reduct::State::with_index(Arc::clone(&shared.index)),
+            filter: None,
+        }
+    }
+}
+
 /// Narrow one region and act on it: refuted, split, or a leaf decided by
 /// the reduct. A split publishes both children onto this worker's deque.
 fn step<'a>(
     shared: &'a Shared,
     (mut region, mut knowledge): Entry,
     index: usize,
+    workspaces: &mut Workspaces<'a>,
     budget: &mut Budget<'a, WorkLease<'a>>,
-    membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
-    filter: &mut Option<crate::region_filter::Worker<'a>>,
 ) -> Result<Stepped, Incomplete> {
     // The restrictions current when the region is taken, held for its
     // narrowing without the lock.
@@ -1062,18 +1078,22 @@ fn step<'a>(
     let started = timing::start(report.statistics.phase_timings.as_ref());
     let narrowing: Result<Narrowing, Incomplete> = (|| {
         let narrowing = super::regions::narrow(
-            (shared.index.theory(), shared.index.narrower()),
-            shared.producers.as_ref(),
+            (
+                shared.index.theory(),
+                shared.index.narrower(),
+                shared.producers.as_ref(),
+            ),
             &restrictions,
             &mut region,
             &mut knowledge,
+            &mut workspaces.scratch,
             budget,
             &mut report.regions,
         )?;
         if narrowing != Narrowing::Refuted
             && let Some(factory) = shared.filter.as_ref()
             && factory.check(
-                filter,
+                &mut workspaces.filter,
                 shared.index.theory(),
                 &region,
                 &shared.cancellation,
@@ -1106,7 +1126,8 @@ fn step<'a>(
     let Some(atom) = region.split_atom() else {
         report.regions.leaves += 1;
         Live::add(&shared.live.leaves, 1);
-        return leaf(shared, &region, budget, membership, report).map(Stepped::Resolved);
+        return leaf(shared, &region, budget, &mut workspaces.membership, report)
+            .map(Stepped::Resolved);
     };
     budget.decide()?;
     // Each child carries its own copy of the knowledge, linear in the theory:

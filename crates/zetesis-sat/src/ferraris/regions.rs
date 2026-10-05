@@ -24,8 +24,8 @@ use std::sync::Arc;
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
-    Interpretation, Knowledge, Narrower, NarrowingAttempt, NarrowingQuota, Producers, RegionLimits,
-    Theory,
+    FrozenSubject, Interpretation, Knowledge, Narrower, NarrowingAttempt, NarrowingQuota,
+    NarrowingScratch, Producers, RegionLimits, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -209,6 +209,8 @@ pub(crate) struct RegionSearch {
     traversal: Traversal<CandidateKnowledge>,
     /// Each restriction with its own index.
     restrictions: Conditions<(Theory, Narrower)>,
+    /// The worklists every narrowing of this walk reuses.
+    scratch: NarrowingScratch,
     statistics: RegionSearchStatistics,
     pub(super) filter: Option<crate::region_filter::Filter>,
 }
@@ -276,6 +278,7 @@ impl RegionSearch {
             ),
             index,
             restrictions: Conditions::default(),
+            scratch: NarrowingScratch::default(),
             filter: None,
         })
     }
@@ -369,31 +372,32 @@ impl RegionSearch {
             index,
             traversal,
             restrictions,
+            scratch,
             statistics,
             filter,
         } = self;
-        let subject = index.subject(theory)?;
+        let (formulas, narrower) = index.subject(theory)?;
         let factory = filter.as_ref();
         let mut worker = None;
         let before = traversal.statistics();
         let visit = traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
-            let narrowed = narrow(
-                subject,
-                producers.as_ref(),
+            let narrowing = narrow(
+                (formulas, narrower, producers.as_ref()),
                 restrictions,
                 region,
                 knowledge,
+                scratch,
                 budget,
                 &mut statistics.counts,
             )?;
-            if narrowed != Narrowing::Refuted
+            if narrowing != Narrowing::Refuted
                 && let Some(filter) = factory
                 && filter.check(&mut worker, theory, region, budget.cancellation, timings)?
                     == crate::RegionFeasibility::Refuted
             {
                 return Ok(Narrowing::Refuted);
             }
-            Ok(narrowed)
+            Ok(narrowing)
         });
         let after = traversal.statistics();
         for _ in 0..after.splits_since(before) {
@@ -414,18 +418,18 @@ impl RegionSearch {
 /// unspent permits are refunded, and even a failed narrowing contributes its
 /// admitted prefix to the counts.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
-    theory: (&Theory, &Narrower),
-    producers: Option<&Producers>,
+    (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
     restrictions: &Conditions<R>,
     region: &mut Region,
     knowledge: &mut CandidateKnowledge,
+    scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let mut changed = false;
     loop {
         let mut round = false;
-        for (index, (formulas, narrower)) in std::iter::once(theory)
+        for (index, (formulas, narrower)) in std::iter::once((theory, narrower))
             .chain(restrictions.permanent.iter().map(|restriction| {
                 let (theory, narrower) = restriction.borrow();
                 (theory, narrower)
@@ -436,10 +440,10 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             let known = knowledge.permanent(index, narrower)?;
             let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
                 narrower.narrow_known_reserved(
-                    formulas,
-                    producers,
+                    zetesis_ferraris::OriginalSubject::new(formulas, producers),
                     region,
                     known,
+                    scratch,
                     cancellation,
                     quota,
                 )
@@ -453,7 +457,14 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             let (formulas, narrower) = bound.index.as_ref();
             let known = knowledge.bound(bound)?;
             let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-                narrower.narrow_known_reserved(formulas, None, region, known, cancellation, quota)
+                narrower.narrow_known_reserved(
+                    zetesis_ferraris::OriginalSubject::new(formulas, None),
+                    region,
+                    known,
+                    scratch,
+                    cancellation,
+                    quota,
+                )
             });
             match account(&attempt, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
@@ -491,14 +502,15 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
             region.cut(atom);
         }
     }
+    let mut scratch = NarrowingScratch::default();
     for (theory, narrower) in restrictions.iter() {
         let mut knowledge = narrower.knowledge();
         let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
             narrower.narrow_known_reserved(
-                theory,
-                None,
+                zetesis_ferraris::OriginalSubject::new(theory, None),
                 &mut region,
                 &mut knowledge,
+                &mut scratch,
                 cancellation,
                 quota,
             )
@@ -640,15 +652,16 @@ impl ReductQuery {
             root.cut(atom);
         }
         let mut traversal = Traversal::with_state(root, Counting::Never, narrower.knowledge());
+        let mut scratch = NarrowingScratch::default();
         loop {
             let before = traversal.statistics();
             let visit = traversal.next(|region, knowledge| {
                 narrow_frozen(
                     narrower,
-                    theory,
-                    truth,
+                    FrozenSubject::new(theory, truth),
                     region,
                     knowledge,
+                    &mut scratch,
                     budget,
                     &mut statistics.reduct.regions,
                 )
@@ -682,15 +695,22 @@ impl ReductQuery {
 /// Narrow one region of a proper-subset query by the frozen reduct.
 fn narrow_frozen<Q: Quota>(
     narrower: &Narrower,
-    theory: &Theory,
-    truth: &[bool],
+    subject: FrozenSubject<'_>,
     region: &mut Region,
     knowledge: &mut Knowledge,
+    scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-        narrower.narrow_frozen_known_reserved(theory, truth, region, knowledge, cancellation, quota)
+        narrower.narrow_frozen_known_reserved(
+            subject,
+            region,
+            knowledge,
+            scratch,
+            cancellation,
+            quota,
+        )
     });
     account(&attempt, counts)
 }

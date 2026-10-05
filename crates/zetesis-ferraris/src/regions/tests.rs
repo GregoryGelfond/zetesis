@@ -21,6 +21,19 @@ mod chain_links;
 mod counters;
 mod copy_costs;
 mod metering;
+mod scratch;
+
+/// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the
+/// closure reads every node and parent: a predictable number of charges.
+fn implication_chain(atoms: usize) -> crate::Theory {
+    let mut nodes: Vec<crate::Node> = (0..atoms).map(crate::Node::Atom).collect();
+    let mut roots = vec![0];
+    for atom in 0..atoms - 1 {
+        roots.push(nodes.len());
+        nodes.push(crate::Node::Implies(atom, atom + 1));
+    }
+    crate::Theory::new(atoms, nodes, roots, crate::AdmissionLimits::default()).unwrap()
+}
 
 fn shared_occurrences() -> crate::Theory {
     use crate::Node::{Atom, Implies, Or};
@@ -200,37 +213,12 @@ fn retained_bytes_counts_the_seen_mask() {
     let expected = size_of::<Knowledge>() as u128
         + (k.sure.len() + k.never.len() + k.atom_sure.len() + k.atom_never.len()) as u128
             * size_of::<u64>() as u128
-        + (k.learned.capacity() + k.heads.capacity()) as u128 * size_of::<usize>() as u128
         + k.sure_operands.allocated_bytes()
         + k.never_operands.allocated_bytes()
         + k.unknown.allocated_bytes()
-        + k.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
         + k.seen.len() as u128 * size_of::<u64>() as u128;
     assert_eq!(knowledge.retained_bytes(), expected);
     assert!(k.seen.len() >= 3, "the seen mask is a real allocation here");
-}
-
-#[test]
-fn empty_worklists_retain_their_allocated_bytes() {
-    let mut knowledge = Knowledge {
-        width: Width::Compact(Known::empty(5, 2, Counters::zeros(3))),
-    };
-    let original = knowledge.retained_bytes();
-    compact_mut(&mut knowledge).learned.reserve_exact(7);
-    compact_mut(&mut knowledge).nodes.reserve_exact(11);
-    compact_mut(&mut knowledge).heads.reserve_exact(13);
-    let worklists = compact_mut(&mut knowledge).learned.capacity() as u128
-        * size_of::<usize>() as u128
-        + compact_mut(&mut knowledge).nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
-        + compact_mut(&mut knowledge).heads.capacity() as u128 * size_of::<usize>() as u128;
-    assert_eq!(knowledge.retained_bytes(), original + worklists);
-    compact_mut(&mut knowledge).learned.push(1);
-    compact_mut(&mut knowledge).nodes.push((1, true));
-    compact_mut(&mut knowledge).heads.push(1);
-    compact_mut(&mut knowledge).learned.clear();
-    compact_mut(&mut knowledge).nodes.clear();
-    compact_mut(&mut knowledge).heads.clear();
-    assert_eq!(knowledge.retained_bytes(), original + worklists);
 }
 
 fn propagated_decisions_are_seen(frozen: bool) {
@@ -262,22 +250,23 @@ fn propagated_decisions_are_seen(frozen: bool) {
     }
     assert!(region.hold(0));
     assert!(region.cut(128));
-    let close = |region: &mut Region, knowledge: &mut Knowledge| {
+    let mut scratch = crate::NarrowingScratch::default();
+    let mut close = |region: &mut Region, knowledge: &mut Knowledge| {
         if frozen {
             narrower.narrow_frozen_known(
-                &theory,
-                evaluation.truth(),
+                crate::FrozenSubject::new(&theory, evaluation.truth()),
                 region,
                 knowledge,
+                &mut scratch,
                 RegionLimits::default(),
                 &cancellation,
             )
         } else {
             narrower.narrow_known(
-                &theory,
-                None,
+                crate::OriginalSubject::new(&theory, None),
                 region,
                 knowledge,
+                &mut scratch,
                 RegionLimits::default(),
                 &cancellation,
             )

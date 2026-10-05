@@ -38,9 +38,6 @@ pub(super) fn native(knowledge: &Knowledge) -> Knowledge {
             sure_operands: widened(&known.sure_operands),
             never_operands: widened(&known.never_operands),
             unknown: widened(&known.unknown),
-            learned: known.learned.clone(),
-            nodes: known.nodes.clone(),
-            heads: known.heads.clone(),
             seen: known.seen.clone(),
             seeded: known.seeded,
         }),
@@ -71,9 +68,6 @@ fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     assert_eq!(values(&left.sure_operands), values(&right.sure_operands));
     assert_eq!(values(&left.never_operands), values(&right.never_operands));
     assert_eq!(values(&left.unknown), values(&right.unknown));
-    assert_eq!(left.learned, right.learned);
-    assert_eq!(left.nodes, right.nodes);
-    assert_eq!(left.heads, right.heads);
     assert_eq!(left.seen, right.seen);
     assert_eq!(left.seeded, right.seeded);
 }
@@ -118,19 +112,19 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
         let close = |region: &mut Region, knowledge: &mut Knowledge| {
             if let Some(truth) = frozen {
                 narrower.narrow_frozen_known(
-                    theory,
-                    truth,
+                    crate::FrozenSubject::new(theory, truth),
                     region,
                     knowledge,
+                    &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
             } else {
                 narrower.narrow_known(
-                    theory,
-                    extracted.producers.as_ref(),
+                    crate::OriginalSubject::new(theory, extracted.producers.as_ref()),
                     region,
                     knowledge,
+                    &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
@@ -174,10 +168,10 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
     let cancellation = Cancellation::default();
     narrower
         .narrow_known(
-            &theory,
-            None,
+            crate::OriginalSubject::new(&theory, None),
             &mut parent_region,
             &mut parent,
+            &mut crate::NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,
         )
@@ -188,10 +182,10 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
     let (mut child_region, _) = parent_region.split(atom);
     narrower
         .narrow_known(
-            &theory,
-            None,
+            crate::OriginalSubject::new(&theory, None),
             &mut child_region,
             &mut child,
+            &mut crate::NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,
         )

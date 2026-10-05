@@ -3,19 +3,9 @@
 
 use zetesis_cpu::{Cancellation, Stop};
 
-use crate::{AdmissionLimits, Narrower, NarrowingQuota, Node, Region, Theory};
+use crate::{Narrower, NarrowingQuota, Region, Theory};
 
-/// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the
-/// closure reads every node and parent: a predictable number of charges.
-fn implication_chain(atoms: usize) -> Theory {
-    let mut nodes: Vec<Node> = (0..atoms).map(Node::Atom).collect();
-    let mut roots = vec![0];
-    for atom in 0..atoms - 1 {
-        roots.push(nodes.len());
-        nodes.push(Node::Implies(atom, atom + 1));
-    }
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
-}
+use super::implication_chain;
 
 /// A finite allowance granted in batches of at most `batch`.
 struct Allowance {
@@ -50,10 +40,10 @@ fn per_read(theory: &Theory, limit: u64) -> Run {
     let mut region = Region::all_open(theory.atom_count());
     let mut spent = 0;
     let attempt = narrower.narrow_known_metered(
-        theory,
-        None,
+        crate::OriginalSubject::new(theory, None),
         &mut region,
         &mut knowledge,
+        &mut crate::NarrowingScratch::default(),
         &Cancellation::default(),
         || {
             if spent == limit {
@@ -80,10 +70,10 @@ fn reserved(theory: &Theory, limit: u64, batch: u64) -> (Run, Allowance) {
         refunded: 0,
     };
     let attempt = narrower.narrow_known_reserved(
-        theory,
-        None,
+        crate::OriginalSubject::new(theory, None),
         &mut region,
         &mut knowledge,
+        &mut crate::NarrowingScratch::default(),
         &Cancellation::default(),
         &mut allowance,
     );

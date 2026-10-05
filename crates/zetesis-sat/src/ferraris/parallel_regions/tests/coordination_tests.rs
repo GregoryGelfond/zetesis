@@ -78,8 +78,6 @@ fn report() -> WorkerReport {
 fn a_split_preserves_both_children_and_counts_the_net_gain() {
     let search = search(2);
     let root = search.shared.take_local(0).unwrap();
-    let mut membership =
-        crate::prepared_reduct::State::with_index(Arc::clone(&search.shared.index));
     let mut report = report();
     let mut budget = budget(&search.shared);
     // The root is the one outstanding region before it splits.
@@ -88,10 +86,9 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
         &search.shared,
         root,
         0,
+        &mut Workspaces::new(&search.shared),
         &mut budget,
-        &mut membership,
         &mut report,
-        &mut None,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
@@ -111,11 +108,15 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     ] {
         assert_ne!(
             super::super::super::regions::narrow(
-                (search.shared.index.theory(), search.shared.index.narrower()),
-                search.shared.producers.as_ref(),
+                (
+                    search.shared.index.theory(),
+                    search.shared.index.narrower(),
+                    search.shared.producers.as_ref(),
+                ),
                 &conditions,
                 region,
                 knowledge,
+                &mut zetesis_ferraris::NarrowingScratch::default(),
                 &mut budget,
                 &mut report.regions,
             )
@@ -229,16 +230,13 @@ fn an_idle_worker_takes_a_region_published_while_it_waits() {
     });
     std::thread::sleep(Duration::from_millis(50));
     // Split the root for real: `step` publishes both children on deque 0.
-    let mut membership =
-        crate::prepared_reduct::State::with_index(Arc::clone(&search.shared.index));
     let stepped = step(
         &search.shared,
         root,
         0,
+        &mut Workspaces::new(&search.shared),
         &mut budget(&search.shared),
-        &mut membership,
         &mut report(),
-        &mut None,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
@@ -264,16 +262,14 @@ fn the_idle_wait_returns_at_once_after_the_walk_ended() {
 
 fn split_next(shared: &Shared, index: usize) {
     let entry = shared.take_local(index).unwrap();
-    let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));
     let mut budget = budget(shared);
     let stepped = step(
         shared,
         entry,
         index,
+        &mut Workspaces::new(shared),
         &mut budget,
-        &mut membership,
         &mut report(),
-        &mut None,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));

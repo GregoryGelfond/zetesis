@@ -52,10 +52,10 @@ fn run(
     let mut knowledge = narrower.knowledge();
     let attempt = if let Some(truth) = frozen {
         narrower.narrow_frozen_known_metered(
-            theory,
-            truth,
+            zetesis_ferraris::FrozenSubject::new(theory, truth),
             &mut region,
             &mut knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
             cancellation,
             charge,
         )
@@ -63,10 +63,10 @@ fn run(
         let extracted =
             producers(theory, RegionLimits::default(), &Cancellation::default()).unwrap();
         narrower.narrow_known_metered(
-            theory,
-            extracted.producers.as_ref(),
+            zetesis_ferraris::OriginalSubject::new(theory, extracted.producers.as_ref()),
             &mut region,
             &mut knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
             cancellation,
             charge,
         )
@@ -94,20 +94,20 @@ fn metered_narrowing_matches_local_wrappers() {
         let mut knowledge = narrower.knowledge();
         let local = if let Some(mask) = frozen {
             narrower.narrow_frozen_known(
-                &theory,
-                mask,
+                zetesis_ferraris::FrozenSubject::new(&theory, mask),
                 &mut local_region,
                 &mut knowledge,
+                &mut zetesis_ferraris::NarrowingScratch::default(),
                 RegionLimits::default(),
                 &cancellation,
             )
         } else {
             let extracted = producers(&theory, RegionLimits::default(), &cancellation).unwrap();
             narrower.narrow_known(
-                &theory,
-                extracted.producers.as_ref(),
+                zetesis_ferraris::OriginalSubject::new(&theory, extracted.producers.as_ref()),
                 &mut local_region,
                 &mut knowledge,
+                &mut zetesis_ferraris::NarrowingScratch::default(),
                 RegionLimits::default(),
                 &cancellation,
             )

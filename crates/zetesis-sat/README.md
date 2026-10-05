@@ -154,10 +154,12 @@ The narrowing is driven by a worklist over an index of the theory, built
 once: a node or atom that learns something is revisited once, and only its
 parents, operands and dependent producers are read, as unit propagation
 over watched clauses touches only what moved. What a narrowing knows about
-a region travels with the region: a split clones the knowledge into both
-children, so a child's narrowing starts from its parent's and learns only
-what the split decided (`FormulaBounds.known_mono`), and the regions still
-share nothing. The reduct query carries its knowledge the same way. Node visits and producer
+a region travels with the region: a split copies the knowledge into one
+child and moves it into the other, so a child's narrowing starts from its
+parent's and learns only what the split decided (`FormulaBounds.known_mono`),
+and the regions still share nothing. The worklists belong to the walker
+instead: each walk, worker and producer reuses one `NarrowingScratch` for all
+its narrowings. The reduct query carries its knowledge the same way. Node visits and producer
 checks acquire search-work permits before execution and each split is charged
 as a decision, against the same cumulative `SearchLimits`. The original and
 frozen narrowing receipts retain admitted work even on a control or quota

@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use rayon::prelude::*;
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Narrower, Producers, Theory};
+use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Producers, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::regions::{
@@ -398,6 +398,8 @@ impl Round<'_> {
 
     fn work(&self) {
         let mut filter = None;
+        // The worklists every narrowing of this producer reuses.
+        let mut scratch = NarrowingScratch::default();
         let mut timings = self.timed.then(crate::SearchPhaseTimings::default);
         while let Some(mut entry) = self.take() {
             let mut counts = RegionCounts {
@@ -415,6 +417,7 @@ impl Round<'_> {
                 };
                 self.step(
                     &mut entry,
+                    &mut scratch,
                     &mut budget,
                     &mut counts,
                     &mut filter,
@@ -458,17 +461,18 @@ impl Round<'_> {
     fn step<'a>(
         &'a self,
         (region, knowledge): &mut PendingRegion,
+        scratch: &mut NarrowingScratch,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
         filter: &mut Option<crate::region_filter::Worker<'a>>,
         timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Step, Incomplete> {
         if regions::narrow(
-            (self.theory, self.narrower),
-            self.producers,
+            (self.theory, self.narrower, self.producers),
             self.restrictions,
             region,
             knowledge,
+            scratch,
             budget,
             counts,
         )? == Narrowing::Refuted
