@@ -35,17 +35,20 @@
 //! own narrowing and leaf decisions summed over the workers, so they may
 //! exceed the wall time of the walk.
 //!
-//! Each deque has its own mutex: local removal and split publication lock only
-//! that deque, and a thief skips a busy peer. Narrowing, payload cloning, reduct
+//! Each deque has its own mutex: local removal locks only that deque, a split
+//! publication locks that deque and then, after releasing it, the idle gate to
+//! wake one idle worker, and a thief skips a busy peer. Narrowing, payload cloning, reduct
 //! checks and model sends hold no queue lock. Slot growth is fallible and occurs
 //! before either child is published. An atomic counter of unresolved regions
 //! carries termination — a split raises it before pushing the children, a
 //! resolved region lowers it once, and an unsuccessful thief stops only once
 //! that counter has reached zero. An atomic closed flag, set on the first stop
 //! or when the enumeration stops listening, halts the others at their next region.
-//! Idle workers wait at a gate that the last resolution and every close open, so
-//! none sleeps out its timed wait after the walk has ended; the timed wait bounds
-//! only how late an idle worker sees a cancellation or a newly published region.
+//! Idle workers wait at a gate that the last resolution and every close open, and
+//! that a publication opens for one waiter, so none sleeps out its timed wait
+//! after the walk has ended or while a region it could take is published. The
+//! timed wait bounds how late an idle worker sees a cancellation, and how late it
+//! finds a region left in a deque that was busy when it last looked.
 //!
 //! A local depth-first walk keeps at most one older sibling per ancestor and
 //! the two newest children. Each split decides another atom, and a worker steals
@@ -74,7 +77,8 @@ use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
 
 /// An idle worker looks for a region again and polls cooperative control at
-/// least once per timed wait; the end of the walk wakes it at once.
+/// least once per timed wait; a publication or the end of the walk wakes it at
+/// once.
 const IDLE_WAIT: Duration = Duration::from_millis(1);
 /// Models a worker may have sent and the enumeration not yet taken, per worker.
 const CHANNEL_SLACK: usize = 16;
@@ -118,16 +122,19 @@ struct Shared {
 /// workers wait at for either.
 ///
 /// The count and the flag are atomics because the region loop reads them for
-/// every region; the gate guards no data. Every transition that ends the walk
-/// changes its atomic first and then takes the gate to wake the waiters, and an
-/// idle worker takes the gate and re-checks both conditions before it waits.
-/// Whichever reaches the gate first, no idle worker waits past the end of the
-/// walk: a worker that takes the gate after the ending transition sees it, and
-/// one that took the gate before is already waiting when the wake comes. Zero
-/// is terminal, since a region in hand counts until it is resolved. Every wait
-/// stays bounded by its timeout, so correctness never rests on a wake: the
-/// timeout is how an idle worker sees a cancellation or a newly published
-/// region.
+/// every region; the gate guards the number of idle waiters. Every transition
+/// that ends the walk changes its atomic first and then takes the gate to wake
+/// the waiters, and an idle worker takes the gate and re-checks both conditions,
+/// and the peers' deques, before it waits. Whichever reaches the gate first, no
+/// idle worker waits past the end of the walk: a worker that takes the gate after
+/// the ending transition sees it, and one that took the gate before is already
+/// waiting when the wake comes. A publication pushes its children, releases its
+/// deque and then takes the gate to wake one waiter, so by the same argument no
+/// waiter misses a region published after its re-check. Zero is terminal, since
+/// a region in hand counts until it is resolved. Every wait stays bounded by its
+/// timeout, so correctness never rests on a wake: the timeout is how an idle
+/// worker sees a cancellation, or a region left in a deque its re-check found
+/// busy.
 struct Termination {
     /// Created-but-unresolved regions across every worker's deque and hand: a
     /// split adds one (before pushing its children), a refuted or decided
@@ -139,10 +146,11 @@ struct Termination {
     /// listening; workers check it before each region and while idle, and
     /// exit. Normal termination is `outstanding` reaching zero.
     closed: AtomicBool,
-    /// Held to re-check the walk's end before an idle wait, and to wake the
-    /// waiters after the walk ends.
-    gate: Mutex<()>,
-    /// Idle workers wait here for the walk to end.
+    /// The number of idle workers waiting on `idle`. Held to re-check the
+    /// walk's end and the peers' deques before an idle wait, to wake one waiter
+    /// after a publication, and to wake every waiter after the walk ends.
+    gate: Mutex<usize>,
+    /// Idle workers wait here for a published region or the end of the walk.
     idle: Condvar,
 }
 
@@ -152,7 +160,7 @@ impl Termination {
         Self {
             outstanding: AtomicUsize::new(1),
             closed: AtomicBool::new(false),
-            gate: Mutex::new(()),
+            gate: Mutex::new(0),
             idle: Condvar::new(),
         }
     }
@@ -191,16 +199,11 @@ impl Termination {
         self.is_closed() || self.is_resolved()
     }
 
-    /// Wait for the walk to end, for at most `timeout`, unless it already has.
-    /// A return does not mean the walk ended: the caller re-checks.
-    fn wait_idle(&self, timeout: Duration) {
-        let gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        if !self.has_ended() {
-            drop(
-                self.idle
-                    .wait_timeout(gate, timeout)
-                    .unwrap_or_else(PoisonError::into_inner),
-            );
+    /// Wake one idle worker, if any waits, after a publication.
+    fn wake_one(&self) {
+        let waiting = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+        if *waiting != 0 {
+            self.idle.notify_one();
         }
     }
 
@@ -331,6 +334,50 @@ impl Shared {
         self.queue(index).pop_back()
     }
 
+    /// Take the oldest region of a peer's deque, trying peers in round-robin
+    /// order and skipping a busy one, so one owner's growth cannot block
+    /// stealing from the others. No two queue locks overlap, and none is
+    /// waited for.
+    fn steal(&self, index: usize) -> Option<Entry> {
+        for offset in 1..self.workers {
+            let mut queue = match self.queues[(index + offset) % self.workers].try_lock() {
+                Ok(queue) => queue,
+                Err(TryLockError::Poisoned(error)) => error.into_inner(),
+                Err(TryLockError::WouldBlock) => continue,
+            };
+            if let Some(entry) = queue.pop_front() {
+                return Some(entry);
+            }
+        }
+        None
+    }
+
+    /// Wait at the gate for a published region or the end of the walk, for at
+    /// most `timeout`. Under the gate, the walk's end and the peers' deques are
+    /// re-checked first; a region found then is returned at once. `None` does
+    /// not mean the walk ended: the caller re-checks.
+    fn wait_for_work(&self, index: usize, timeout: Duration) -> Option<Entry> {
+        let mut waiting = self
+            .termination
+            .gate
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if self.termination.has_ended() {
+            return None;
+        }
+        if let Some(entry) = self.steal(index) {
+            return Some(entry);
+        }
+        *waiting += 1;
+        let (mut waiting, _) = self
+            .termination
+            .idle
+            .wait_timeout(waiting, timeout)
+            .unwrap_or_else(PoisonError::into_inner);
+        *waiting -= 1;
+        None
+    }
+
     /// Prepare space for both children before the count or either queue entry
     /// changes. The injected reservation is the sole fallible storage effect;
     /// success must reserve `additional` slots, as `reserve_regions` does.
@@ -348,6 +395,10 @@ impl Shared {
         self.termination.grow();
         queue.push_back(held);
         queue.push_back(cut);
+        // Release the deque before taking the gate: a waiter holds the gate
+        // while it tries the deques, and never waits for a queue lock.
+        drop(queue);
+        self.termination.wake_one();
         Ok(())
     }
 
@@ -946,24 +997,15 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
 /// Steal a region from another worker, waiting while any remains. `None` when
 /// the whole frontier is resolved or a stop closed the run. `idle_wait` bounds
 /// how long an idle worker waits before it looks for a region again and polls
-/// cancellation; the end of the walk ends the wait at once.
+/// cancellation; a publication or the end of the walk ends the wait at once.
 fn find_work(shared: &Shared, index: usize, idle_wait: Duration) -> Option<Entry> {
     let mut idle_rounds = 0u32;
     loop {
         if shared.termination.is_closed() {
             return None;
         }
-        // Try peers in round-robin order, skipping a busy queue so one owner's
-        // growth cannot block stealing from other workers. No two locks overlap.
-        for offset in 1..shared.workers {
-            let mut queue = match shared.queues[(index + offset) % shared.workers].try_lock() {
-                Ok(queue) => queue,
-                Err(TryLockError::Poisoned(error)) => error.into_inner(),
-                Err(TryLockError::WouldBlock) => continue,
-            };
-            if let Some(entry) = queue.pop_front() {
-                return Some(entry);
-            }
+        if let Some(entry) = shared.steal(index) {
+            return Some(entry);
         }
         // No steal succeeded. Even with busy queues, zero means every created
         // region was resolved; a split counts its children before publishing.
@@ -976,7 +1018,9 @@ fn find_work(shared: &Shared, index: usize, idle_wait: Duration) -> Option<Entry
         if idle_rounds < SPIN_ROUNDS_BEFORE_WAIT {
             std::thread::yield_now();
         } else {
-            shared.termination.wait_idle(idle_wait);
+            if let Some(entry) = shared.wait_for_work(index, idle_wait) {
+                return Some(entry);
+            }
             if let Err(error) = shared.cancellation.poll() {
                 shared.stop(error.into());
                 return None;

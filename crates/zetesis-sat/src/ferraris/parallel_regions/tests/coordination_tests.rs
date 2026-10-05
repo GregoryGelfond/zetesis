@@ -216,6 +216,52 @@ fn an_idle_worker_leaves_when_a_peer_stops_the_walk() {
     assert!(idle_thief_after(|shared| shared.stop(Incomplete::WorkLimit)).is_none());
 }
 
+#[test]
+fn an_idle_worker_takes_a_region_published_while_it_waits() {
+    let search = search(2);
+    let root = search.shared.take_local(0).unwrap();
+    let shared = Arc::clone(&search.shared);
+    let (done, result) = mpsc::sync_channel(1);
+    // Detached, as in `idle_thief_after`: a thief that a publication does not
+    // wake sleeps out `IDLE`, and the test fails at `WAIT`.
+    std::thread::spawn(move || {
+        let _ = done.send(find_work(&shared, 1, IDLE));
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    // Split the root for real: `step` publishes both children on deque 0.
+    let mut membership =
+        crate::prepared_reduct::State::with_index(Arc::clone(&search.shared.index));
+    let stepped = step(
+        &search.shared,
+        root,
+        0,
+        &mut budget(&search.shared),
+        &mut membership,
+        &mut report(),
+        &mut None,
+    )
+    .unwrap();
+    assert!(matches!(stepped, Stepped::Split));
+    let stolen = result
+        .recv_timeout(WAIT)
+        .expect("the idle worker was not woken by the publication");
+    assert!(stolen.is_some());
+}
+
+#[test]
+fn the_idle_wait_returns_at_once_after_the_walk_ended() {
+    // The walk ends before the worker reaches the gate: the waiter must see
+    // that under the gate and not sleep out its timeout.
+    for end in [Termination::resolve as fn(&Termination), Termination::close] {
+        let search = search(2);
+        let _root = search.shared.take_local(0).unwrap();
+        end(&search.shared.termination);
+        let started = Instant::now();
+        assert!(search.shared.wait_for_work(1, IDLE).is_none());
+        assert!(started.elapsed() < WAIT);
+    }
+}
+
 fn split_next(shared: &Shared, index: usize) {
     let entry = shared.take_local(index).unwrap();
     let mut membership = crate::prepared_reduct::State::with_index(Arc::clone(&shared.index));

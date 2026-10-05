@@ -1089,14 +1089,17 @@ either child under the same queue guard. A resolved region decrements the count
 once. Taking or stealing only transfers ownership. Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
 can establish termination only when the count reaches zero. Idle workers wait at
-a gate: the resolution that reaches zero, a stop and a close each wake them after
-changing the count or the closed flag, and an idle worker re-checks both under the
-gate before waiting, so none waits past the end of the walk. The wait stays
-bounded, which is how an idle worker sees a cancellation or a newly published
-region; completeness never depends on a wake.
+a gate that also counts them: the resolution that reaches zero, a stop and a close
+each wake them after changing the count or the closed flag, and a split, after
+publishing both children and releasing its queue, wakes one. An idle worker
+re-checks both conditions and the peers' queues under the gate before waiting, so
+none waits past the end of the walk or misses a region published after its
+re-check. The wait stays bounded, which is how an idle worker sees a cancellation,
+or a region left in a queue its re-check found busy; completeness never depends on
+a wake.
 
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
-and exhaustion laws; the atomic count, the queue and gate protocols and absence
+and exhaustion laws; the atomic count, the queue and gate protocols (including the gate's idle count) and absence
 of lost ownership remain Rust refinement obligations. Depth-first local order
 retains at most one older sibling per ancestor plus the newest children. Each
 split decides another atom, and stealing starts only with an empty local deque,
