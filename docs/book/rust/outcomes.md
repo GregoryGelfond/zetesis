@@ -227,12 +227,13 @@ The human renderer preflights one complete record under its byte ceiling. The
 JSON renderer additionally retains a bounded document atom table; each invocation
 starts fresh indices. Structural equality decides each atom's index, so equal
 atoms of independent owners share one; once a canonical atom has been found, the
-table answers its later occurrences from the same owner by owner-scoped identity
-instead of hashing the atom's structure. Identities are kept for the atom owner
-of the record being encoded, so answers published as separate catalogs by one
-writer, such as one closure worker's, keep them; a record of another owner, such
-as each answer with reconstructed terminal definitions, starts the identity
-cache afresh, so its cost does not grow with the number of answers. The public
+table answers its later occurrences in consecutive records of the same atom owner
+by owner-scoped identity instead of hashing the atom's structure. A record of
+another owner starts the identity cache afresh, so its cost does not grow with
+the number of answers when each answer brings its own owner, as answers with
+reconstructed terminal definitions do. Consecutive answers one writer publishes
+as separate catalogs, such as one closure worker's, keep the identities; answers
+of several closure workers interleave, and each change of worker starts afresh. The public
 `AtomTable::index` lookup is structural and records no identity. A refused record withdraws
 the atoms it entered together with their identities. Custom renderers own their encoding
 limits and any copies they retain. The controller retains no complete family

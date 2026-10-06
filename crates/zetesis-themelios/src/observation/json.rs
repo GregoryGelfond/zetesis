@@ -28,9 +28,9 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// its atoms by index, so a document spells each atom once. The table is
 /// bounded by a ceiling on distinct atoms; every entry refers to its atom in
 /// the model that spelled it, sharing that model's catalog rather than
-/// copying the atom. Structural equality decides an atom's index; while
-/// records are encoded, a canonical atom found once is afterwards answered by
-/// its owner-scoped identity.
+/// copying the atom. Structural equality decides an atom's index; within
+/// consecutive records of one atom owner, a canonical atom found once is
+/// afterwards answered by its owner-scoped identity.
 #[derive(Debug)]
 pub struct AtomTable {
     /// Placed by the crate's fixed word hash. The program's author spells
@@ -409,10 +409,13 @@ mod tests {
         // The first record is deferred; the second records both identities.
         record(&mut table, &models[0]);
         record(&mut table, &models[1]);
-        let known = table.identities.len();
-        assert_eq!(known, 2);
-        record(&mut table, &models[2]);
-        assert_eq!(table.identities.len(), known);
+        table.begin_record(models[2].catalog());
+        // The third record's atoms are answered by those identities.
+        for position in 0..2 {
+            let atom = models[2].atoms().at(position).unwrap();
+            assert_eq!(table.identities.get(atom), table.index(atom).unwrap());
+            assert!(table.identities.get(atom).is_some());
+        }
     }
 
     #[test]

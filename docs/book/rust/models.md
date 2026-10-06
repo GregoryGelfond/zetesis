@@ -20,8 +20,11 @@ structured values retain their distinct identities.
 
 There are three separate coordinates: a canonical identity within its owner,
 an original occurrence in a catalog, and a selected true position in a model.
-Raw IDs from different owners are not comparable. `AtomCatalog::same_owner`
-checks the exact occurrence owner; `shares_terms` checks only the term authority.
+Raw IDs from different owners are not comparable. `AtomCatalog::same_atom_owner`
+checks that comparability: two catalogs whose atoms share one atom owner, such
+as selections one writer publishes, give an atom the same canonical identity.
+`AtomCatalog::same_owner` checks the stricter exact occurrence catalog;
+`shares_terms` checks only the term authority.
 Neither asserts the same truth selection. Borrowed `Atoms::same_occurrences`
 and relation `Row::occurrence_in` identify an exact source occurrence mapping,
 including duplicate positions, without a semantic search.
