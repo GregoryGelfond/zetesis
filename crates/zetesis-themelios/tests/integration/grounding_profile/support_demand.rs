@@ -44,6 +44,16 @@ fn a_joined_column_keeps_its_postings() {
 }
 
 #[test]
+fn a_predicate_read_only_under_negation_keeps_no_postings() {
+    // A negated atom is decided by exact lookup once its variables are bound,
+    // never by a posting probe: b keeps none of its 40 rows' postings, while
+    // a keeps its joined column, 40 entries.
+    let (entries, unindexed) = receipts("{ a(1..40) }.\n{ b(1..40) }.\nc(X) :- a(X), not b(X).\n");
+    assert_eq!(entries, 40);
+    assert_eq!(unindexed, 0);
+}
+
+#[test]
 fn every_kind_of_join_finds_its_posting() {
     // Each predicate b is read only at the named construct, with a column the
     // enclosing rule has already bound, so a probe of that column needs it.

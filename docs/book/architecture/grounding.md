@@ -960,13 +960,16 @@ join occurrence of its predicate. The rule is syntactic, and keeps a superset of
 the postings its two readers consult — probes, which choose the shortest posting
 among the columns a pattern binds, and totality domains, which read a column's
 keys. For rules with an ordinary head and a flat body of atoms, comparisons and
-bindings it keeps no column that holds only a variable occurring once; it still
-keeps two kinds no reader consults there: the columns of negated atoms, and
-columns whose variable's only other occurrence consumes it (in a comparison or
-the head) without binding it first. A choice or conditional head, a projection
-and every nested frame index every column they name. A predicate no join reads,
-such as a terminal definition under eager grounding, keeps none, and neither
-does a column of a flat rule holding a variable that occurs once. The demand is
+bindings it keeps no column that holds only a variable occurring once, and no
+column of a negated atom, which is decided by exact lookup once safety has bound
+its variables (those variables still count as occurrences for the other
+columns). It still keeps one kind no reader consults there: columns whose
+variable's only other occurrence consumes it (in a comparison or the head)
+without binding it first. A choice or conditional head, a projection and every
+nested frame index every column they name. A predicate no join reads, such as a
+terminal definition under eager grounding or a predicate a flat rule reads only
+under negation, keeps none, and neither does a column of a flat rule holding a
+variable that occurs once. The demand is
 computed from the compiled rules before support grows, and its storage counts
 toward the support byte ceiling. A column without postings is absent, not
 empty: a probe still resolves its equality and narrows by its other columns, and

@@ -9,11 +9,13 @@
 //! probes the body. A predicate no join occurrence names demands nothing.
 //!
 //! Rules with an ordinary head and a flat body of atoms, comparisons and
-//! bindings are read exactly. Choice and conditional heads, negated
-//! atoms, projections and every nested frame (aggregate elements, choice and
-//! conditional conditions, objectives, witnesses) demand every column holding a
-//! constant or a variable: a superset, since a column indexed without need only
-//! costs memory, while one left unindexed only costs the probe its posting.
+//! bindings are read exactly; there a negated atom demands nothing, since it
+//! is decided by exact lookup once its variables are bound. Choice and
+//! conditional heads, projections and every nested frame (aggregate elements,
+//! choice and conditional conditions, objectives, witnesses) demand every
+//! column holding a constant or a variable: a superset, since a column indexed
+//! without need only costs memory, while one left unindexed only costs the
+//! probe its posting.
 
 use std::collections::{BTreeMap, HashMap};
 use std::mem::size_of;
@@ -152,25 +154,24 @@ impl Walk<'_, '_> {
                 *occurrences.entry(variable).or_default() += 1;
             }
         }
+        // A negated atom is decided by exact lookup once safety has bound its
+        // variables, never by a posting probe: it demands nothing, though its
+        // variables count as occurrences above.
         for literal in literals {
             self.work()?;
-            match literal {
-                LiteralIr::Atom(DefaultNegation::None, atom) => {
-                    let pattern = atom.get(self.view, self.limits, self.counters, self.location)?;
-                    let terms = pattern.terms();
-                    let demanded = (0..terms.len())
-                        .map(|column| match terms.at(column) {
-                            Some(TemplateTerm::Constant(_)) => true,
-                            Some(TemplateTerm::Variable(variable)) => {
-                                occurrences.get(&variable).is_some_and(|&count| count > 1)
-                            }
-                            None => false,
-                        })
-                        .collect();
-                    self.record(pattern.predicate(), demanded);
-                }
-                LiteralIr::Atom(_, atom) => self.every_column(*atom)?,
-                _ => {}
+            if let LiteralIr::Atom(DefaultNegation::None, atom) = literal {
+                let pattern = atom.get(self.view, self.limits, self.counters, self.location)?;
+                let terms = pattern.terms();
+                let demanded = (0..terms.len())
+                    .map(|column| match terms.at(column) {
+                        Some(TemplateTerm::Constant(_)) => true,
+                        Some(TemplateTerm::Variable(variable)) => {
+                            occurrences.get(&variable).is_some_and(|&count| count > 1)
+                        }
+                        None => false,
+                    })
+                    .collect();
+                self.record(pattern.predicate(), demanded);
             }
         }
         Ok(())
