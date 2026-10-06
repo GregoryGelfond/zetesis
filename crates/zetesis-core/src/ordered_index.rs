@@ -143,6 +143,54 @@ impl Index {
     }
 }
 
+/// Where a query stands against the last node in order, the maximum.
+pub(crate) enum Last {
+    /// The query equals the maximum, at this position.
+    Found(usize),
+    /// The query follows every node; its place is after the maximum.
+    Beyond,
+    /// The tree is empty, or the query precedes the maximum: the last node
+    /// cannot place it, and the full search decides.
+    Search,
+}
+
+/// Compare a query with the tree's last node in order, held by its owner,
+/// before any search: arrivals that extend the order, as rows derived in
+/// order do, are placed with one comparison instead of one per level, and any
+/// other arrival pays that one comparison before its search. Only on `Beyond`
+/// is the right spine walked, with `step` admitting each level and no
+/// comparison, and `descend(true)` recorded once per node on it: the route a
+/// full search would take, since every comparison on it is Greater. The
+/// spine ends at `last`, the node its owner holds. An error publishes no
+/// result and changes no node.
+pub(crate) fn last<C, E>(
+    nodes: &[Node],
+    root: Link,
+    last: Option<usize>,
+    context: &mut C,
+    mut step: impl FnMut(&mut C) -> Result<(), E>,
+    compare: impl FnOnce(usize, &mut C) -> Result<Ordering, E>,
+    mut descend: impl FnMut(bool),
+) -> Result<Last, E> {
+    let (Some(mut spine), Some(last)) = (root, last) else {
+        return Ok(Last::Search);
+    };
+    Ok(match compare(last, context)? {
+        Ordering::Equal => Last::Found(last),
+        Ordering::Less => Last::Search,
+        Ordering::Greater => {
+            descend(true);
+            while let Some(next) = nodes[position(spine)].children[1] {
+                step(context)?;
+                spine = next;
+                descend(true);
+            }
+            debug_assert_eq!(position(spine), last, "the held last node ends the spine");
+            Last::Beyond
+        }
+    })
+}
+
 /// Search the owner's ordered identities without owning or copying any payload.
 /// `compare` admits one node visit before comparing the query with the ID's
 /// authoritative value. The callback's ordering must be the tree's ordering.

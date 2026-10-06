@@ -38,6 +38,24 @@
         ]
       },
       "source_sha256": "1953db34682cc2c7e53c809f99a4914d02bee9ca0dba65bf1c84af9cb21b7f66"
+    },
+    {
+      "path": "mastermind.lp",
+      "scaling_constant": "colors",
+      "default_value": 6,
+      "contract": {
+        "family": "all",
+        "satisfiability": "sat",
+        "model_count": 6080,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Every secret code of 6 pegs consistent with one scored guess: colors=5 -> 976, colors=7 -> 19600, colors=8 -> 45832.",
+          "Many-answer enumeration through counting aggregates; exercises per-answer checking and delivery."
+        ]
+      },
+      "source_sha256": "960f9642bafb44faae41205295fb436d8b78ed2ac46ce54356bb835402c75020"
     }
   ]
 }

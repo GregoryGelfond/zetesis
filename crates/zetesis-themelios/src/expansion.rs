@@ -275,8 +275,8 @@ impl std::error::Error for ExpansionFailure {
 /// A clone is a tentative budget: charges made on it either become the
 /// budget as a whole or are discarded with it, never both.
 /// Runtime constraint checkers can additionally attach a shared cumulative
-/// scalar allowance. Those accepted charges are never rolled back or refunded;
-/// tentative source admission does not attach such an allowance.
+/// scalar receipt. Charges reported to it are never rolled back or refunded;
+/// tentative source admission does not attach one.
 #[derive(Clone)]
 pub(crate) struct Budget {
     limits: ExpansionLimits,
@@ -380,7 +380,7 @@ impl Budget {
         if matches!(resource, ExpansionResource::ScalarBytes)
             && let Some(allowance) = &self.allowance
         {
-            allowance.scalar(amount, location)?;
+            allowance.scalar(amount);
         }
         *used = observed;
         Ok(())

@@ -34,8 +34,8 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     fn details_enabled(&self) -> bool {
         self.grounding.is_some()
     }
-    fn terminal_definitions(&self) {
-        self.recorder.mark_terminal_definitions();
+    fn terminal_definitions(&self, base: zetesis_themelios::BaseKind) {
+        self.recorder.mark_terminal_definitions(mark(base));
     }
     fn phase_enter(
         &self,
@@ -64,5 +64,13 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
         };
         let attempt = self.phase.take().expect("phase exit follows its entry");
         grounding.exit(attempt, phase, outcome, &work);
+    }
+}
+
+/// The one place a base kind becomes a telemetry mark.
+pub(crate) const fn mark(base: zetesis_themelios::BaseKind) -> zetesis_telemetry::TerminalBaseMark {
+    match base {
+        zetesis_themelios::BaseKind::Eager => zetesis_telemetry::TerminalBaseMark::Eager,
+        zetesis_themelios::BaseKind::Hybrid => zetesis_telemetry::TerminalBaseMark::Hybrid,
     }
 }

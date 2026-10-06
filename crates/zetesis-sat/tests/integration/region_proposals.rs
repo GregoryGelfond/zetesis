@@ -11,7 +11,7 @@ use crate::support::interpretations::stable_models as expected;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Incomplete, Limits,
-    SearchLimits, SearchMethod, StableModels,
+    RegionFrontierStatistics, SearchLimits, SearchMethod, StableModels,
 };
 use zetesis_test_support::counts::nonzero;
 
@@ -84,7 +84,7 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         assert_eq!(actual.countermodel_queries, reference.countermodel_queries);
         assert_eq!(actual.countermodels, reference.countermodels);
         // Each query starts with private fresh knowledge. Scheduling neither
-        // rebuilds an original index nor changes its frozen-query work.
+        // builds a second original index nor changes its frozen-query work.
         assert_eq!(actual.reduct.regions, reference.reduct.regions);
         for count in [1, 64] {
             for completion_workers in [1, 4] {
@@ -153,35 +153,110 @@ fn frontier_peaks_survive_complete_enumeration() {
     }
 }
 
+/// Three independent `a OR NOT a` formulas, whose eight interpretations are
+/// all stable.
+fn three_choices() -> Theory {
+    theory(
+        3,
+        vec![
+            Node::False,
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Atom(2),
+            Node::Implies(1, 0),
+            Node::Or(1, 4),
+            Node::Implies(2, 0),
+            Node::Or(2, 6),
+            Node::Implies(3, 0),
+            Node::Or(3, 8),
+        ],
+        vec![5, 7, 9],
+    )
+}
+
+#[test]
+fn frontier_byte_receipts_are_unchanged_from_the_roots_first_narrowing() {
+    // One-candidate rounds keep one region active at a time, so the walk,
+    // and every frontier receipt, is deterministic. The root is queued with
+    // no knowledge; its first narrowing creates the original theory's slot,
+    // reserved exactly, as a one-element vector was. From then on every
+    // byte figure equals the receipts recorded before the index moved to
+    // the walk's start; amortized reservation of that slot breaks them.
+    let mut search = StableModels::with_region_producers(
+        &three_choices(),
+        nonzero(2),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    let mut receipts = Vec::new();
+    while !search.exhausted() {
+        search.next_batch(batch(1), residual).unwrap();
+        receipts.push(search.statistics().regions.unwrap().frontier.unwrap());
+    }
+    let peak = |regions, capacity, retained_bytes| RegionFrontierStatistics {
+        regions,
+        capacity,
+        retained_bytes,
+        peak_regions: 4,
+        peak_capacity: 4,
+        peak_retained_bytes: 1352,
+    };
+    assert_eq!(receipts.first(), Some(&peak(3, 4, 1116)));
+    assert_eq!(receipts.last(), Some(&peak(0, 4, 408)));
+}
+
 #[test]
 fn stopped_frontier_retains_its_ownership_receipt() {
     let theory = choice_theories::choices(5);
-    let setup = proposed(&theory, Limits::default())
+    // Construction charges the producer extraction; the walk's start charges
+    // the original index. The stop must fall inside production, after the
+    // root's first narrowing, so the smallest such ceiling is found here.
+    let walk = proposed(&theory, Limits::default())
         .statistics()
         .search
-        .work;
-    let mut search = proposed(
-        &theory,
-        Limits {
-            search: SearchLimits {
-                max_work: setup,
-                ..SearchLimits::default()
+        .work
+        + u64::try_from(theory.nodes().len()).unwrap();
+    for extra in 1..4096 {
+        let ceiling = walk + extra;
+        let mut search = proposed(
+            &theory,
+            Limits {
+                search: SearchLimits {
+                    max_work: ceiling,
+                    ..SearchLimits::default()
+                },
+                ..Limits::default()
             },
-            ..Limits::default()
-        },
-    );
-    let before = search.statistics().regions.unwrap().frontier.unwrap();
-    assert!(matches!(
-        search.next_batch(batch(3), residual),
-        Err(BatchError::Search(Incomplete::WorkLimit))
-    ));
-    let after = search.statistics().regions.unwrap().frontier.unwrap();
-    assert_eq!(after.regions, 1);
-    assert!(after.retained_bytes > 0);
-    assert!(after.peak_retained_bytes >= before.peak_retained_bytes);
-    assert_eq!(search.statistics().search.work, setup);
-    assert_eq!(search.statistics().stable_models, 0);
-    assert!(!search.exhausted());
+        );
+        let before = search.statistics().regions.unwrap().frontier.unwrap();
+        assert!(matches!(
+            search.next_batch(batch(3), residual),
+            Err(BatchError::Search(Incomplete::WorkLimit))
+        ));
+        let statistics = search.statistics();
+        let regions = statistics.regions.unwrap();
+        if regions.counts.regions < 2 {
+            continue;
+        }
+        let after = regions.frontier.unwrap();
+        // Every region taken was refuted, emitted, split into two queued
+        // children, or stopped and queued again. So the frontier holds the
+        // root, plus one per split, less the refuted and emitted ones: a
+        // stopped region that was not queued again would be missing.
+        let splits = usize::try_from(statistics.search.decisions).unwrap();
+        assert_eq!(
+            after.regions,
+            1 + splits - regions.counts.refuted - regions.counts.leaves
+        );
+        assert!(after.retained_bytes > 0);
+        assert!(after.peak_retained_bytes >= before.peak_retained_bytes);
+        assert!(statistics.search.work <= ceiling);
+        assert_eq!(statistics.stable_models, 0);
+        assert!(!search.exhausted());
+        return;
+    }
+    panic!("no ceiling stopped production after the root's narrowing");
 }
 
 #[test]
@@ -337,10 +412,13 @@ fn an_empty_family_needs_no_candidate_allowance() {
 #[test]
 fn production_respects_the_shared_work_ceiling() {
     let theory = choice_theories::choices(6);
+    // The work charged when the walk starts: the producer extraction at
+    // construction, then the original index, one unit per node.
     let setup = proposed(&theory, Limits::default())
         .statistics()
         .search
-        .work;
+        .work
+        + u64::try_from(theory.nodes().len()).unwrap();
     for extra in [0, 1, 8, 64] {
         let ceiling = setup + extra;
         let limits = Limits {
@@ -356,7 +434,10 @@ fn production_respects_the_shared_work_ceiling() {
             result,
             Err(BatchError::Search(Incomplete::WorkLimit))
         ));
-        assert!(search.statistics().search.work <= ceiling);
+        let statistics = search.statistics();
+        assert!(statistics.search.work <= ceiling);
+        // Production was entered: the root's narrowing met the ceiling.
+        assert!(statistics.regions.unwrap().counts.regions >= 1);
         assert!(!search.exhausted());
     }
 }

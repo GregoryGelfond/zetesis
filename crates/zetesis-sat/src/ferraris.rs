@@ -28,12 +28,16 @@ mod reduct_query;
 
 mod regions;
 
+mod original_index;
+pub(crate) use original_index::IndexedTheory;
+use original_index::OriginalIndex;
+
 mod parallel_regions;
 use parallel_regions::ParallelRegions;
 mod region_proposals;
 use region_proposals::RegionProposals;
+pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
-pub(crate) use regions::{IndexedTheory, ReductQuery};
 pub use regions::{RegionCounts, RegionFrontierStatistics, RegionSearchStatistics, SearchMethod};
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
@@ -121,8 +125,9 @@ pub struct Statistics {
     pub stable_models: u64,
     /// Coarse host timings, absent unless explicitly enabled after construction.
     /// These are separate from deterministic semantic work counters. Under
-    /// several workers they are the workers' own intervals summed,
-    /// which may exceed the wall time of the enumeration.
+    /// several workers they are the workers' own intervals summed with the
+    /// coordinator's, such as its build of the original index before the
+    /// workers start, which may exceed the wall time of the enumeration.
     pub phase_timings: Option<crate::SearchPhaseTimings>,
     /// Optional complete-theory certificate attempt and checks.
     pub certified: Option<CertifiedStatistics>,
@@ -218,8 +223,30 @@ fn fresh_membership(
             reduct_membership(theory, candidate, limits, budget, statistics, workspace)
         }
         SearchMethod::Regions => {
-            let mut state = crate::prepared_reduct::State::new(method);
-            state.check(theory, candidate, limits, budget, statistics)
+            // The one standalone holder: its index is built here, inside the
+            // reduct phase, and charged to the reduct's region counts.
+            let mut original = OriginalIndex::new(theory);
+            original
+                .ensure(|work| {
+                    budget.charge(work)?;
+                    statistics.reduct.regions.work = statistics
+                        .reduct
+                        .regions
+                        .work
+                        .checked_add(work)
+                        .ok_or(Incomplete::CounterOverflow)?;
+                    Ok(())
+                })
+                .and_then(|index| {
+                    crate::prepared_reduct::State::new(method).check(
+                        theory,
+                        Some(index),
+                        candidate,
+                        limits,
+                        budget,
+                        statistics,
+                    )
+                })
         }
     };
     timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
@@ -341,6 +368,9 @@ pub struct StableModels {
     positive_candidates: Option<certified::PositiveCandidates>,
     bound_generation: u64,
     reduct: crate::prepared_reduct::State,
+    /// The original theory's index, built when a region walk first needs it
+    /// and shared by that walk and every membership query of its candidates.
+    index: OriginalIndex,
 }
 impl StableModels {
     /// Enumerate by the default method, [`SearchMethod::default`]: regions
@@ -389,8 +419,6 @@ impl StableModels {
         };
         let parallel =
             ParallelRegions::new(theory, workers, limits, cancellation.clone(), &mut budget)?;
-        let reduct =
-            crate::prepared_reduct::State::with_index(std::sync::Arc::clone(parallel.index()));
         let statistics = Statistics {
             search: budget.statistics,
             ..Default::default()
@@ -408,7 +436,8 @@ impl StableModels {
             certificate: None,
             positive_candidates: None,
             bound_generation: 0,
-            reduct,
+            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+            index: OriginalIndex::new(theory),
         })
     }
 
@@ -441,8 +470,6 @@ impl StableModels {
             statistics: SearchStatistics::default(),
         };
         let proposals = RegionProposals::new(theory, workers, &mut budget)?;
-        let reduct =
-            crate::prepared_reduct::State::with_index(std::sync::Arc::clone(proposals.index()));
         let statistics = Statistics {
             search: budget.statistics,
             ..Default::default()
@@ -460,16 +487,19 @@ impl StableModels {
             certificate: None,
             positive_candidates: None,
             bound_generation: 0,
-            reduct,
+            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+            index: OriginalIndex::new(theory),
         })
     }
 
     /// Enumerate by the chosen method. Under [`SearchMethod::Regions`] no
     /// clause form of the theory is built: the theory's producers are
-    /// extracted for the support cut and the root region is opened, both
-    /// charged as search work, and the reduct's proper-subset query is a
-    /// region tree too. The verdict on every candidate is the same either
-    /// way.
+    /// extracted for the support cut, charged as search work, and the root
+    /// region is queued; the theory's index is built, and charged, when a
+    /// region walk first needs it, so a run decided by a positive
+    /// certificate builds none. The reduct's proper-subset query is a region
+    /// tree too, over the same index. The verdict on every candidate is the
+    /// same either way.
     ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
@@ -485,7 +515,7 @@ impl StableModels {
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
-        let (proposer, support, reduct) = match method {
+        let (proposer, support) = match method {
             SearchMethod::Clauses => {
                 let mut cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
                 let support = candidate_support::restrict(&mut cnf, theory, limits, &mut budget)?;
@@ -493,16 +523,12 @@ impl StableModels {
                 (
                     Proposer::Clauses(Box::new(ClauseProposer { cnf, cursor })),
                     Some(support),
-                    crate::prepared_reduct::State::new(method),
                 )
             }
-            SearchMethod::Regions => {
-                let regions = RegionSearch::new(theory, &mut budget)?;
-                let reduct = crate::prepared_reduct::State::with_index(std::sync::Arc::clone(
-                    regions.index(),
-                ));
-                (Proposer::Regions(Box::new(regions)), None, reduct)
-            }
+            SearchMethod::Regions => (
+                Proposer::Regions(Box::new(RegionSearch::new(theory, &mut budget)?)),
+                None,
+            ),
         };
         let statistics = Statistics {
             search: budget.statistics,
@@ -522,7 +548,8 @@ impl StableModels {
             certificate: None,
             positive_candidates: None,
             bound_generation: 0,
-            reduct,
+            reduct: crate::prepared_reduct::State::new(method),
+            index: OriginalIndex::new(theory),
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain
@@ -756,7 +783,12 @@ impl StableModels {
                     countermodel_queries: merged.countermodel_queries,
                     countermodels: merged.countermodels,
                     certified,
-                    phase_timings: merged.phase_timings.or(self.statistics.phase_timings),
+                    // The workers' sums, and the coordinator's own phases:
+                    // the index build before the workers launched.
+                    phase_timings: crate::timing::combined(
+                        merged.phase_timings,
+                        self.statistics.phase_timings,
+                    ),
                     reduct: crate::ReductStatistics {
                         original_work: merged.reduct.original_work,
                         regions: merged.reduct.regions,
@@ -793,6 +825,7 @@ impl StableModels {
                     .as_ref()
                     .and_then(certified::Certificate::cpu),
                 reduct: &mut self.reduct,
+                index: &mut self.index,
                 positive_candidates: self.positive_candidates.as_mut(),
             },
             &mut self.proposer,
@@ -863,6 +896,7 @@ struct Membership<'a> {
     /// share it; the coordinator reads through it.
     certificate: Option<&'a std::sync::Arc<certified::Certification>>,
     reduct: &'a mut crate::prepared_reduct::State,
+    index: &'a mut OriginalIndex,
     positive_candidates: Option<&'a mut certified::PositiveCandidates>,
 }
 
@@ -879,6 +913,14 @@ enum Proposer {
     Parallel(Box<ParallelRegions>),
     /// Bounded parallel production, before any membership operation.
     Proposals(Box<RegionProposals>),
+}
+
+/// Where the next proposal comes from: the positive cursor, which walks no
+/// region, or the proposer's own walk with the original index it reads
+/// (`None` under the clause kernel, which reads none).
+enum Walk<'a> {
+    Positive(&'a mut certified::PositiveCandidates),
+    Index(Option<&'a std::sync::Arc<IndexedTheory>>),
 }
 
 /// What a proposer hands the enumeration.
@@ -906,23 +948,46 @@ impl Proposer {
         }
     }
 
-    /// The next classical candidate, or `None` when the proposer has
-    /// covered the candidate space. A proposal is refused, not returned,
-    /// once the candidate ceiling is reached; the caller admits it.
+    /// Record the original index's work, charged when a region walk first
+    /// needed it, once in this proposer's region counts. The clause kernel
+    /// walks no region and indexes no original theory.
+    fn record_index_work(&mut self, work: u64) -> Result<(), Incomplete> {
+        let counts = match self {
+            Self::Clauses(_) => return Err(Incomplete::InvalidWitness),
+            Self::Regions(regions) => regions.counts_mut(),
+            Self::Parallel(parallel) => parallel.counts_mut(),
+            Self::Proposals(proposals) => proposals.counts_mut(),
+        };
+        counts.work = counts
+            .work
+            .checked_add(work)
+            .ok_or(Incomplete::CounterOverflow)?;
+        Ok(())
+    }
+
+    /// The next classical candidate, from the positive cursor when one is
+    /// active and else from this proposer's own walk, or `None` when the
+    /// candidate space is covered. A proposal is refused, not returned, once
+    /// the candidate ceiling is reached; the caller admits it. A region walk
+    /// reads the index `walk` carries, which [`walk_index`] built; its
+    /// absence there is refused as an invalid witness.
     fn propose(
         &mut self,
         theory: &Theory,
+        walk: Walk<'_>,
         limits: Limits,
         certificate: Option<&std::sync::Arc<certified::Certification>>,
-        positive_candidates: Option<&mut certified::PositiveCandidates>,
         budget: &mut Budget<'_>,
         statistics: &mut Statistics,
     ) -> Result<Option<Proposal>, Incomplete> {
-        if let Some(candidates) = positive_candidates {
-            return candidates
-                .propose(self, theory, limits, budget, statistics)
-                .map(|candidate| candidate.map(Proposal::Candidate));
-        }
+        let index = match walk {
+            Walk::Positive(candidates) => {
+                return candidates
+                    .propose(self, theory, limits, budget, statistics)
+                    .map(|candidate| candidate.map(Proposal::Candidate));
+            }
+            Walk::Index(index) => index,
+        };
         let proposal = match self {
             Self::Clauses(clauses) => {
                 increment(&mut statistics.candidate_queries)?;
@@ -938,22 +1003,26 @@ impl Proposer {
                 }
             }
             Self::Regions(regions) => {
-                let proposal = regions.propose(theory, budget, &mut statistics.phase_timings)?;
+                let index = index.ok_or(Incomplete::InvalidWitness)?;
+                let proposal =
+                    regions.propose(theory, index, budget, &mut statistics.phase_timings)?;
                 if proposal.is_some() && statistics.candidates >= limits.max_candidates {
                     return Err(Incomplete::CandidateLimit);
                 }
                 proposal
             }
             Self::Parallel(parallel) => {
+                let index = index.ok_or(Incomplete::InvalidWitness)?;
                 let timed = statistics.phase_timings.is_some();
                 return Ok(parallel
-                    .propose(certificate, timed, budget)?
+                    .propose(index, certificate, timed, budget)?
                     .map(Proposal::Stable));
             }
             Self::Proposals(proposals) => {
+                let subject = index.ok_or(Incomplete::InvalidWitness)?.subject(theory)?;
                 let mut output = crate::search::storage(1)?;
                 let produced = proposals.fill(
-                    theory,
+                    subject,
                     1,
                     limits.max_candidates.saturating_sub(statistics.candidates),
                     budget,
@@ -1034,8 +1103,14 @@ fn advance(
         limits,
         certificate,
         reduct,
+        index,
         mut positive_candidates,
     } = membership_input;
+    let index = if positive_candidates.is_none() {
+        walk_index(index, proposer, budget, &mut statistics.phase_timings)?
+    } else {
+        None
+    };
     loop {
         // The parallel walk's workers time their own phases; the wait for
         // their models is not a phase.
@@ -1043,14 +1118,11 @@ fn advance(
             Proposer::Parallel(_) if positive_candidates.is_none() => None,
             _ => timing::start(statistics.phase_timings.as_ref()),
         };
-        let proposal = proposer.propose(
-            theory,
-            limits,
-            certificate,
-            positive_candidates.as_deref_mut(),
-            budget,
-            statistics,
-        );
+        let walk = match positive_candidates.as_deref_mut() {
+            Some(candidates) => Walk::Positive(candidates),
+            None => Walk::Index(index),
+        };
+        let proposal = proposer.propose(theory, walk, limits, certificate, budget, statistics);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         let candidate = match proposal? {
             None => return Ok(None),
@@ -1074,7 +1146,14 @@ fn advance(
             .into()
         } else {
             reduct
-                .check(theory, &candidate, limits, budget, statistics)?
+                .check(
+                    theory,
+                    index.map(std::sync::Arc::as_ref),
+                    &candidate,
+                    limits,
+                    budget,
+                    statistics,
+                )?
                 .into()
         };
         if decision == Decision::Invalid {
@@ -1090,6 +1169,37 @@ fn advance(
         }
         blocking?;
     }
+}
+
+/// The original index a region walk reads, built and charged before the
+/// walk's first step: this is the one build site of every enumeration route,
+/// scalar, parallel and batched, and it runs on the coordinator before any
+/// worker starts. The clause kernel walks no region and gets `None`.
+///
+/// The build is charged to `budget` first, one unit per node, and recorded
+/// once in the proposer's region counts in the same step, so search work and
+/// `regions.work` agree on every exit, a build that fails after its charge
+/// was admitted included. Its time, when timed, is one call of the candidate
+/// phase; a built index costs neither work nor a timed call.
+fn walk_index<'i>(
+    original: &'i mut OriginalIndex,
+    proposer: &mut Proposer,
+    budget: &mut Budget<'_>,
+    timings: &mut Option<crate::SearchPhaseTimings>,
+) -> Result<Option<&'i std::sync::Arc<IndexedTheory>>, Incomplete> {
+    if matches!(proposer, Proposer::Clauses(_)) {
+        return Ok(None);
+    }
+    if original.get().is_some() {
+        return Ok(original.get());
+    }
+    let started = timing::start(timings.as_ref());
+    let built = original.ensure(|work| {
+        budget.charge(work)?;
+        proposer.record_index_work(work)
+    });
+    timing::finish(timings, Phase::Candidates, started);
+    built.map(Some)
 }
 
 #[cfg(test)]

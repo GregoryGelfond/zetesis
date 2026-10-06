@@ -38,10 +38,24 @@ fn narrow(
 ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
     let cancellation = Cancellation::default();
     if let Some(truth) = frozen {
-        narrower.narrow_frozen_known(theory, truth, region, knowledge, limits, &cancellation)
+        narrower.narrow_frozen_known(
+            zetesis_ferraris::FrozenSubject::new(theory, truth),
+            region,
+            knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
+            limits,
+            &cancellation,
+        )
     } else {
         // No support extraction: unrelated atoms must remain undecided.
-        narrower.narrow_known(theory, None, region, knowledge, limits, &cancellation)
+        narrower.narrow_known(
+            zetesis_ferraris::OriginalSubject::new(theory, None),
+            region,
+            knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
+            limits,
+            &cancellation,
+        )
     }
 }
 

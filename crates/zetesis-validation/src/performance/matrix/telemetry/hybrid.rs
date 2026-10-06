@@ -7,12 +7,16 @@ use serde_json::Value;
 pub(super) fn read(document: &Value) -> Result<Option<HybridStatistics>, String> {
     let statistics = &document["statistics"];
     let receipt = &statistics["hybrid_execution"];
+    let scope = &statistics["search"]["scope"];
     if receipt.is_null() {
-        if statistics["search"]["scope"] == "retained_core" {
+        if scope == "retained_core" || scope == "terminal_retained_core" {
             return Err("retained-core search lacks its source-checking receipt".into());
         }
         return Ok(None);
     }
+    // Under a terminal base the accepted core answers are the base answers
+    // reconstruction consumed; otherwise they are the published answers.
+    let terminal = &statistics["terminal_execution"];
     let constraints = &receipt["constraints"];
     let parsed = HybridStatistics {
         regions: region_checks(&statistics["search"]["region_filter"])?,
@@ -26,9 +30,14 @@ pub(super) fn read(document: &Value) -> Result<Option<HybridStatistics>, String>
     };
     if parsed.pending != 0
         || parsed.accepted.checked_add(parsed.rejected) != Some(parsed.core_answers)
-        || statistics["search"]["scope"] != "retained_core"
         || number(&statistics["search"], "stable_models")? != parsed.core_answers
-        || number(&document["outcome"], "verified_models")? != parsed.accepted
+        || if terminal.is_null() {
+            scope != "retained_core"
+                || number(&document["outcome"], "verified_models")? != parsed.accepted
+        } else {
+            scope != "terminal_retained_core"
+                || number(terminal, "base_answers")? != parsed.accepted
+        }
     {
         return Err(
             "hybrid core/checker counts contradict complete original-program acceptance".into(),

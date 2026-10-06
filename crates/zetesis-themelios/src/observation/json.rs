@@ -13,7 +13,7 @@ use hashbrown::HashMap;
 use std::fmt;
 
 use zetesis_core::{
-    Model,
+    Atom, Model, ValueLimits,
     catalog::{AtomIdentityMap, AtomRef},
 };
 
@@ -26,11 +26,11 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// The atoms a document has spelled, in the order it spelled them. A record
 /// encoded against the table spells the atoms it adds and refers to all of
 /// its atoms by index, so a document spells each atom once. The table is
-/// bounded by a ceiling on distinct atoms; every entry refers to its atom in
-/// the model that spelled it, sharing that model's catalog rather than
-/// copying the atom. Structural equality decides an atom's index; a
+/// bounded by a ceiling on distinct atoms; every entry owns a copy of its
+/// atom, made once when the document spells it, so the table retains no
+/// answer's model or catalog. Structural equality decides an atom's index; a
 /// canonical atom found once is afterwards answered by its owner-scoped
-/// identity, at most once per distinct atom and owner.
+/// identity while anything outside the table still holds its owner.
 #[derive(Debug)]
 pub struct AtomTable {
     /// Placed by the crate's fixed word hash. The program's author spells
@@ -41,29 +41,48 @@ pub struct AtomTable {
     /// 1.16 of the cell time on the series' large-model cells, hashing
     /// every atom of every model on the way out (the observations record).
     indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
-    /// Indices of canonical atoms already found or entered, by owner-scoped
-    /// identity, so a repeated atom costs an identity hash rather than a
-    /// structural one. An atom of an owner not yet seen is found structurally.
+    /// Indices of canonical atoms already found or entered by the record
+    /// encoder, by owner-scoped identity, so a repeated atom costs an identity
+    /// hash rather than a structural one. Only the encoder's lookup records
+    /// identities. Each record begins by dropping the owners nothing outside
+    /// the cache holds any longer: no atom of theirs can be presented again.
+    /// Interleaved workers' live owners keep their identities across records,
+    /// and runs whose every answer has its own owner, such as reconstructed
+    /// terminal definitions, keep only the owners of answers still alive, so
+    /// the map's linear owner scan does not grow with the number of records.
     identities: AtomIdentityMap<usize>,
+    /// Owners the cache held after its last prune. A prune walks every owner,
+    /// so it runs only once the owners have doubled since: amortized constant
+    /// work per record, whoever holds the answers.
+    held: usize,
+    /// Prunes run, for the amortization tests.
+    #[cfg(test)]
+    prunes: usize,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
     max_atoms: usize,
 }
 
-/// An atom by its position in the model that spelled it. It hashes and
-/// compares as the atom does, so a lookup by atom finds it.
+/// A spelled atom, owned by the table. It hashes and compares as the
+/// canonical atom does, so a lookup by atom finds it.
 #[derive(Debug)]
-struct Entry {
-    model: Model,
-    position: usize,
-}
+struct Entry(Atom);
 impl Entry {
+    /// Copy a spelled atom. The atom was admitted already, so only its own
+    /// size bounds the copy; a copy that cannot be allocated is refused.
+    fn copy(atom: AtomRef<'_>) -> Result<Self, Error> {
+        let unbounded = ValueLimits {
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+            max_bytes: usize::MAX,
+        };
+        atom.to_atom(unbounded)
+            .map(Self)
+            .map_err(|_| Error::Allocation)
+    }
     fn atom(&self) -> AtomRef<'_> {
-        self.model
-            .atoms()
-            .at(self.position)
-            .expect("an entry refers to a position of the model that spelled it")
+        AtomRef::from(&self.0)
     }
 }
 impl hashbrown::Equivalent<Entry> for AtomRef<'_> {
@@ -90,6 +109,9 @@ impl AtomTable {
         Self {
             indices: HashMap::default(),
             identities: AtomIdentityMap::default(),
+            held: 0,
+            #[cfg(test)]
+            prunes: 0,
             deferred: None,
             max_atoms,
         }
@@ -108,20 +130,25 @@ impl AtomTable {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    /// The atom's index when the document has spelled it. The first
-    /// record's atoms are indexed on the first lookup after it, so a document
-    /// of one record never indexes at all. A canonical atom found once is
-    /// answered by its identity afterwards.
+    /// The atom's index when the document has spelled it, by structural
+    /// lookup; no identity is recorded. The first record's atoms are indexed on
+    /// the first lookup after it, so a document of one record never indexes at
+    /// all.
     ///
     /// # Errors
     /// Returns [`Error::Allocation`] when the deferred record cannot be indexed.
     pub fn index<'a>(&mut self, atom: impl Into<AtomRef<'a>>) -> Result<Option<usize>, Error> {
         self.flush()?;
-        let atom = atom.into();
+        Ok(self.indices.get(&atom.into()).copied())
+    }
+    /// The record encoder's lookup of an atom of the record begun last: as
+    /// [`Self::index`], answering a canonical atom found once by its identity
+    /// afterwards.
+    pub(super) fn find(&mut self, atom: AtomRef<'_>) -> Result<Option<usize>, Error> {
         if let Some(index) = self.identities.get(atom) {
             return Ok(Some(index));
         }
-        let index = self.indices.get(&atom).copied();
+        let index = self.index(atom)?;
         if let Some(index) = index {
             let _ = self.identities.insert(atom, index);
         }
@@ -144,42 +171,46 @@ impl AtomTable {
         self.indices
             .try_reserve(model.atoms().len())
             .map_err(|_| Error::Allocation)?;
-        let model = self.deferred.take().expect("reserved deferred model");
-        for position in 0..model.atoms().len() {
-            self.indices.insert(
-                Entry {
-                    model: model.clone(),
-                    position,
-                },
-                position,
-            );
+        let mut entries = Vec::new();
+        entries
+            .try_reserve_exact(model.atoms().len())
+            .map_err(|_| Error::Allocation)?;
+        for atom in model.atoms() {
+            entries.push(Entry::copy(atom)?);
+        }
+        self.deferred = None;
+        for (position, entry) in entries.into_iter().enumerate() {
+            self.indices.insert(entry, position);
         }
         Ok(())
     }
-    /// Enter the atom at `position` of `model`, which the document is about
-    /// to spell, at the next index.
+    /// Start encoding a record. Once the cache's owners have doubled since
+    /// its last prune, forget the identities of owners nothing outside the
+    /// cache holds any longer, before this record's atoms are looked up.
+    pub(super) fn begin_record(&mut self) {
+        if self.identities.owners() > 2 * self.held.max(1) {
+            self.identities.retain_held();
+            self.held = self.identities.owners();
+            #[cfg(test)]
+            {
+                self.prunes += 1;
+            }
+        }
+    }
+    /// Enter `atom`, of the record begun last, which the document is about to
+    /// spell, at the next index.
     ///
     /// # Errors
     /// Returns [`Error::Table`] at the ceiling and [`Error::Allocation`] when
     /// the entry cannot be retained; the table is unchanged either way.
-    pub(super) fn enter(&mut self, model: &Model, position: usize) -> Result<usize, Error> {
+    pub(super) fn enter(&mut self, atom: AtomRef<'_>) -> Result<usize, Error> {
         self.flush()?;
         let index = self.indices.len();
         if index >= self.max_atoms {
             return Err(Error::Table);
         }
         self.indices.try_reserve(1).map_err(|_| Error::Allocation)?;
-        self.indices.insert(
-            Entry {
-                model: model.clone(),
-                position,
-            },
-            index,
-        );
-        let atom = model
-            .atoms()
-            .at(position)
-            .expect("an entered position belongs to its model");
+        self.indices.insert(Entry::copy(atom)?, index);
         let _ = self.identities.insert(atom, index);
         Ok(index)
     }
@@ -272,7 +303,237 @@ impl std::error::Error for Failure {}
 #[cfg(test)]
 mod tests {
     use hashbrown::HashMap;
+    use std::convert::Infallible;
     use std::hash::BuildHasherDefault;
+    use zetesis_core::catalog::interner::{AtomInterner, Limits};
+    use zetesis_core::{AtomCatalog, Model, Sign};
+    use zetesis_test_support::programs::signed_numbered as atom;
+
+    /// Index every atom of `model` as `ModelView::encode_record` does: defer
+    /// the document's first record whole, else look each atom up and enter
+    /// it when the table has not spelled it.
+    fn record(table: &mut super::AtomTable, model: &Model) -> Vec<usize> {
+        table.begin_record();
+        if table.is_empty() {
+            table.defer(model).unwrap();
+            return (0..model.atoms().len()).collect();
+        }
+        (0..model.atoms().len())
+            .map(|position| {
+                let atom = model.atoms().at(position).unwrap();
+                match table.find(atom).unwrap() {
+                    Some(index) => index,
+                    None => table.enter(atom).unwrap(),
+                }
+            })
+            .collect()
+    }
+
+    /// Records whose models each have their own atom owner, as reconstructed
+    /// answers do, sharing `q(0)` and each adding its own `p(n)`.
+    fn separate_owners(records: i32) -> Vec<Model> {
+        (0..records)
+            .map(|n| {
+                Model::new([
+                    atom("q", Sign::Positive, &[0]),
+                    atom("p", Sign::Positive, &[n]),
+                ])
+                .unwrap()
+            })
+            .collect()
+    }
+
+    /// One writer's selections: distinct catalogs of one atom owner, as the
+    /// lazy closure publishes each answer of a worker's workspace.
+    fn one_owner_selections(selections: &[&[usize]]) -> Vec<Model> {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let mut owner = AtomInterner::new();
+        for number in [2, 1, 3] {
+            owner
+                .entry_atom_with(&atom("p", Sign::Positive, &[number]), limits, || {
+                    Ok::<_, Infallible>(())
+                })
+                .unwrap()
+                .insert_with(limits, || Ok::<_, Infallible>(()))
+                .unwrap();
+        }
+        selections
+            .iter()
+            .map(|positions| {
+                let catalog = owner
+                    .publish_selection_with(positions, limits, || Ok::<_, Infallible>(()))
+                    .unwrap();
+                Model::from_positions(&catalog, 0..positions.len()).unwrap()
+            })
+            .collect()
+    }
+
+    /// A live writer holding one atom, as a closure worker's workspace does.
+    fn writer(number: i32) -> AtomInterner {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let mut owner = AtomInterner::new();
+        owner
+            .entry_atom_with(&atom("p", Sign::Positive, &[number]), limits, || {
+                Ok::<_, Infallible>(())
+            })
+            .unwrap()
+            .insert_with(limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        owner
+    }
+
+    fn selection(owner: &mut AtomInterner) -> Model {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let catalog = owner
+            .publish_selection_with(&[0], limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        Model::from_positions(&catalog, [0]).unwrap()
+    }
+
+    #[test]
+    fn interleaved_live_writers_keep_their_identities() {
+        // Two workers' writers stay alive while their records alternate; each
+        // record's model is its own selection, dropped once encoded.
+        let mut left = writer(1);
+        let mut right = writer(2);
+        let mut table = super::AtomTable::new(16);
+        for _ in 0..4 {
+            record(&mut table, &selection(&mut left));
+            record(&mut table, &selection(&mut right));
+        }
+        let model = selection(&mut left);
+        table.begin_record();
+        let atom = model.atoms().at(0).unwrap();
+        assert!(table.identities.get(atom).is_some());
+        assert_eq!(table.identities.get(atom), table.index(atom).unwrap());
+    }
+
+    #[test]
+    fn answers_dropped_after_their_records_leave_the_identity_cache() {
+        let mut table = super::AtomTable::new(1 << 20);
+        // Each model is dropped after its record, as a reconstructed answer
+        // is once published, so pruning keeps the cache to a few owners.
+        for model in separate_owners(50) {
+            record(&mut table, &model);
+        }
+        assert!(
+            table.identities.owners() <= 3,
+            "{}",
+            table.identities.owners()
+        );
+    }
+
+    #[test]
+    fn live_writers_keep_their_identities_through_a_prune() {
+        // Three workers' writers stay alive; each record's model is a fresh
+        // selection dropped once encoded, so at the prune only the writers
+        // hold their owners. The prune must keep all three.
+        let mut writers = [writer(1), writer(2), writer(3)];
+        let mut table = super::AtomTable::new(16);
+        for _ in 0..8 {
+            for owner in &mut writers {
+                record(&mut table, &selection(owner));
+                if table.prunes != 0 {
+                    break;
+                }
+            }
+            if table.prunes != 0 {
+                break;
+            }
+        }
+        assert_eq!(table.prunes, 1, "a prune ran");
+        assert_eq!(table.identities.owners(), 3);
+        for owner in &mut writers {
+            let model = selection(owner);
+            let atom = model.atoms().at(0).unwrap();
+            assert!(table.identities.get(atom).is_some());
+        }
+    }
+
+    #[test]
+    fn retained_answers_are_pruned_a_logarithmic_number_of_times() {
+        // A consumer that keeps every answer keeps every owner held, so no
+        // prune can drop one; prunes stay amortized all the same.
+        let models = separate_owners(256);
+        let mut table = super::AtomTable::new(1 << 20);
+        for model in &models {
+            record(&mut table, model);
+        }
+        assert_eq!(table.identities.owners(), 255);
+        assert!(table.prunes <= 9, "{}", table.prunes);
+    }
+
+    #[test]
+    fn indices_match_a_structural_numbering_across_owners() {
+        let mut table = super::AtomTable::new(1 << 20);
+        let mut reference: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for (n, model) in separate_owners(8).iter().enumerate() {
+            let indices = record(&mut table, model);
+            // Model order is canonical: `p(n)` precedes `q(0)`.
+            for (spelled, index) in [format!("p({n})"), "q(0)".to_owned()]
+                .into_iter()
+                .zip(indices)
+            {
+                let next = reference.len();
+                assert_eq!(*reference.entry(spelled).or_insert(next), index);
+            }
+        }
+    }
+
+    #[test]
+    fn one_catalog_keeps_its_identities_across_records() {
+        let catalog = AtomCatalog::new(vec![
+            atom("q", Sign::Positive, &[0]),
+            atom("p", Sign::Positive, &[1]),
+        ])
+        .unwrap();
+        let models: Vec<_> = (0..3)
+            .map(|_| Model::from_positions(&catalog, [0, 1]).unwrap())
+            .collect();
+        let mut table = super::AtomTable::new(16);
+        // The first record is deferred; the second records both identities.
+        record(&mut table, &models[0]);
+        record(&mut table, &models[1]);
+        table.begin_record();
+        // The third record's atoms are answered by those identities.
+        for position in 0..2 {
+            let atom = models[2].atoms().at(position).unwrap();
+            assert_eq!(table.identities.get(atom), table.index(atom).unwrap());
+            assert!(table.identities.get(atom).is_some());
+        }
+    }
+
+    #[test]
+    fn selections_of_one_owner_keep_their_identities_across_records() {
+        // Every record is its own catalog of the one owner.
+        let models = one_owner_selections(&[&[0], &[0, 1], &[0, 1, 2]]);
+        let mut table = super::AtomTable::new(16);
+        record(&mut table, &models[0]);
+        record(&mut table, &models[1]);
+        table.begin_record();
+        // The next selection's repeated atoms are answered by the identities
+        // the previous one recorded.
+        for position in 0..2 {
+            let atom = models[2].atoms().at(position).unwrap();
+            assert_eq!(table.identities.get(atom), table.index(atom).unwrap());
+            assert!(table.identities.get(atom).is_some());
+        }
+    }
+
+    #[test]
+    fn the_public_index_records_no_identity() {
+        let catalog = AtomCatalog::new(vec![atom("q", Sign::Positive, &[0])]).unwrap();
+        let model = Model::from_positions(&catalog, [0]).unwrap();
+        let mut table = super::AtomTable::new(16);
+        record(&mut table, &model);
+        // An equal atom of another owner is a structural hit whose identity
+        // the table has not recorded; the public lookup leaves it so.
+        let other = Model::new([atom("q", Sign::Positive, &[0])]).unwrap();
+        let other = other.atoms().at(0).unwrap();
+        assert_eq!(table.index(other).unwrap(), Some(0));
+        assert_eq!(table.identities.get(other), None);
+    }
 
     /// The table places the atoms by the crate's fixed word hash, the
     /// placement an author could drive into collisions being bounded by the

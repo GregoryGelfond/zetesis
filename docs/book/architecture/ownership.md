@@ -137,29 +137,54 @@ owner or one memory allowance.
 
 ## Shared original narrowing index
 
-Region enumeration prepares one immutable `IndexedTheory` in `zetesis-sat`:
-the exact admitted `Theory` and its `Narrower` index, constructed together.
-Scalar candidates, parallel candidate producers and native membership workers
-share that owner. Proper-subset queries use the same original DAG index under
-each candidate's frozen truth. Reuse requires `Theory::same_instance`; separately
-admitted equal formulas are different subjects. This is enumeration-owned
-preparation, with no global cache or public interchange of raw index handles.
+Region enumeration owns one `OriginalIndex` in `zetesis-sat`, the only place
+an immutable `IndexedTheory` can be constructed: the exact admitted `Theory`
+and its `Narrower` index, constructed together. The enumeration builds it when
+a region walk first needs it, before the walk's first step, on every route:
+scalar, batched, candidate producers and native membership workers, which
+receive it when they are spawned. A run decided by a positive certificate
+walks no region and builds none. Scalar candidates, parallel candidate
+producers and native membership workers share that owner. Proper-subset
+queries use the same original DAG index under each candidate's frozen truth;
+the membership state holds no index and borrows the one its owner lends.
+Reuse requires `Theory::same_instance`; separately admitted equal formulas are
+different subjects. This is enumeration-owned preparation, with no global
+cache or public interchange of raw index handles.
 
 Only immutable indexing is shared. Each candidate region owns its knowledge;
 each reduct traversal starts with private knowledge under its candidate's mask.
-Evaluation workspaces, budget leases and traversal state remain separate.
+A narrowing's worklists belong to whoever walks: the scalar walk, each parallel
+worker and each producer round keep one `NarrowingScratch` for their candidate
+regions; each reduct workspace keeps one for its proper-subset queries, counted
+in its retained bytes; each proposer keeps one for its positive checks. Each
+narrowing empties the scratch it borrows before reading it, and no scratch is
+shared between threads. Evaluation workspaces, budget leases and traversal
+state remain separate.
+
+Region queries check retained workspace storage before evaluation and before
+returning a successful verdict. The final check includes scratch grown by the
+query; every attempt records its retained peak, including a failed attempt.
+An earlier typed failure keeps its cause. This is a retained-storage boundary,
+not an allocator quota: a refused query may retain capacity above its limit,
+but cannot publish a successful membership verdict.
+
 Candidate-only restrictions retain their own indexes and never enter the
 original theory or supply its support. Tight and positive certificates retain
 their existing membership procedures and do not execute a general reduct query.
 
-Index construction is charged once to candidate preparation, one work unit per
-original node. Reusing that index adds no construction charge to reduct-region
-work. A standalone membership check without candidate preparation constructs
-and charges its own index. Failed query reads retain their existing work and
-query-count receipts, and sharing does not change verification or search limits.
-The index constructor retains its existing allocation boundary; the shared
-handle uses an infallible Arc allocation, as does Theory. These logical work
-and ownership facts do not establish a process RSS bound or a measured speedup.
+Index construction is charged once, when the walk starts, to the candidate
+walk's search work and region receipt, one work unit per original node: the
+charge is made before building, and a refused charge builds nothing and stops
+the run incomplete. A charge admitted before a failed build stays in both
+receipts, as a failed narrowing keeps its admitted prefix. Its host time is
+candidate generation. Reusing that index adds no construction charge to
+reduct-region work. A standalone membership check, which walks no candidate
+region, constructs and charges its own index to its reduct receipt. Failed
+query reads retain their existing work and query-count receipts, and sharing
+does not change verification or search limits. The index constructor retains
+its existing allocation boundary; the shared handle uses an infallible Arc
+allocation, as does Theory. These logical work and ownership facts do not
+establish a process RSS bound or a measured speedup.
 
 ## Prepared formula queries
 

@@ -4,7 +4,7 @@ use std::{cmp::Ordering, fmt, iter::FusedIterator, slice};
 
 use crate::{
     Atom,
-    catalog::{self, AtomRef, PredicateRef},
+    catalog::{self, AtomCatalog, AtomRef, PredicateRef},
 };
 
 /// Transitional borrowed ingress and canonical execution views share one lookup.
@@ -123,6 +123,137 @@ impl<'a> AtomIndex<'a> {
         atoms: Source<'a>,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Self, AtomIndexError<E>> {
+        let Orders {
+            keys,
+            rows,
+            scratch_bytes,
+        } = Orders::prepare(atoms, before)?;
+        let retained =
+            std::mem::size_of::<Self>() as u128 + cells(keys.capacity()) + cells(rows.capacity());
+        Ok(Self {
+            atoms,
+            keys,
+            rows,
+            peak_bytes: retained + scratch_bytes,
+        })
+    }
+
+    /// Borrow both prepared orders. No allocation, validation or payload copy.
+    #[must_use]
+    pub fn lookup(&self) -> AtomLookup<'_, 'a> {
+        AtomLookup {
+            atoms: self.atoms,
+            keys: &self.keys,
+            rows: &self.rows,
+        }
+    }
+
+    /// Owner header plus actual retained integer-vector capacity, not source
+    /// atoms, allocator bookkeeping or RSS.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        std::mem::size_of::<Self>() as u128
+            + cells(self.keys.capacity())
+            + cells(self.rows.capacity())
+    }
+
+    /// Maximum simultaneous index/scratch headers and integer capacities during
+    /// this successful construction; source atom payload is excluded.
+    #[must_use]
+    pub const fn preparation_peak_bytes(&self) -> u128 {
+        self.peak_bytes
+    }
+}
+
+/// An [`AtomIndex`] over every atom of one catalog that holds its own handle
+/// to that catalog, so it can outlive the borrow it was built from and be
+/// shared by every reader of the catalog.
+///
+/// The handle shares the catalog's storage (no atom is copied); the index
+/// owns only its two integer orders, as [`AtomIndex`] does. Lookups go
+/// through the same [`AtomLookup`] view, over the catalog it holds, so a
+/// lookup can never be applied to atoms the orders do not describe.
+#[derive(Debug)]
+pub struct CatalogIndex {
+    catalog: AtomCatalog,
+    keys: Vec<usize>,
+    rows: Vec<usize>,
+    peak_bytes: u128,
+}
+
+impl CatalogIndex {
+    /// Prepare both integer orders over `catalog`'s occurrences, with the
+    /// bounds, charges and refusals of [`AtomIndex::from_catalog_with`].
+    ///
+    /// # Errors
+    /// Refuses duplicate atoms, reservation failure or the first caller error.
+    /// No partial index escapes.
+    pub fn new_with<E>(
+        catalog: &AtomCatalog,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, AtomIndexError<E>> {
+        let Orders {
+            keys,
+            rows,
+            scratch_bytes,
+        } = Orders::prepare(Source::Canonical(catalog.atoms()), &mut before)?;
+        let retained =
+            std::mem::size_of::<Self>() as u128 + cells(keys.capacity()) + cells(rows.capacity());
+        Ok(Self {
+            catalog: catalog.clone(),
+            keys,
+            rows,
+            peak_bytes: retained + scratch_bytes,
+        })
+    }
+
+    /// The catalog this index orders.
+    #[must_use]
+    pub const fn catalog(&self) -> &AtomCatalog {
+        &self.catalog
+    }
+
+    /// Borrow both prepared orders over the held catalog. No allocation,
+    /// validation or payload copy.
+    #[must_use]
+    pub fn lookup(&self) -> AtomLookup<'_, '_> {
+        AtomLookup {
+            atoms: Source::Canonical(self.catalog.atoms()),
+            keys: &self.keys,
+            rows: &self.rows,
+        }
+    }
+
+    /// Owner header plus actual retained integer-vector capacity, not the
+    /// shared catalog, allocator bookkeeping or RSS.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        std::mem::size_of::<Self>() as u128
+            + cells(self.keys.capacity())
+            + cells(self.rows.capacity())
+    }
+
+    /// Maximum simultaneous index/scratch headers and integer capacities during
+    /// this successful construction; catalog atom payload is excluded.
+    #[must_use]
+    pub const fn preparation_peak_bytes(&self) -> u128 {
+        self.peak_bytes
+    }
+}
+
+/// Both checked integer orders of one preparation, and the merge scratch's
+/// bytes (header and capacity), released when preparation ends.
+struct Orders {
+    keys: Vec<usize>,
+    rows: Vec<usize>,
+    scratch_bytes: u128,
+}
+
+impl Orders {
+    fn prepare<E>(
+        atoms: Source<'_>,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, AtomIndexError<E>> {
         let mut checked = || before().map_err(AtomIndexError::Stopped);
         let mut keys = positions(atoms.len(), &mut checked)?;
         let mut rows = positions(atoms.len(), &mut checked)?;
@@ -152,42 +283,11 @@ impl<'a> AtomIndex<'a> {
             SortOrder::Predicate,
             &mut checked,
         )?;
-        let retained =
-            std::mem::size_of::<Self>() as u128 + cells(keys.capacity()) + cells(rows.capacity());
         Ok(Self {
-            atoms,
             keys,
             rows,
-            peak_bytes: retained
-                + std::mem::size_of::<Vec<usize>>() as u128
-                + cells(scratch.capacity()),
+            scratch_bytes: std::mem::size_of::<Vec<usize>>() as u128 + cells(scratch.capacity()),
         })
-    }
-
-    /// Borrow both prepared orders. No allocation, validation or payload copy.
-    #[must_use]
-    pub fn lookup(&self) -> AtomLookup<'_, 'a> {
-        AtomLookup {
-            atoms: self.atoms,
-            keys: &self.keys,
-            rows: &self.rows,
-        }
-    }
-
-    /// Owner header plus actual retained integer-vector capacity, not source
-    /// atoms, allocator bookkeeping or RSS.
-    #[must_use]
-    pub fn retained_bytes(&self) -> u128 {
-        std::mem::size_of::<Self>() as u128
-            + cells(self.keys.capacity())
-            + cells(self.rows.capacity())
-    }
-
-    /// Maximum simultaneous index/scratch headers and integer capacities during
-    /// this successful construction; source atom payload is excluded.
-    #[must_use]
-    pub const fn preparation_peak_bytes(&self) -> u128 {
-        self.peak_bytes
     }
 }
 

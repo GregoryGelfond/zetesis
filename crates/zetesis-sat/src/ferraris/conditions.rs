@@ -64,6 +64,11 @@ impl<R: Borrow<(Theory, Narrower)>> Conditions<R> {
 
 /// No immutable bound owner is retained in a queued region. In particular, a
 /// large inactive frontier cannot prolong the lifetime of a superseded DAG.
+///
+/// A region is queued with the knowledge it already has; the root, with none.
+/// Every slot, the original theory's included, is created by
+/// [`Self::permanent`] or [`Self::bound`] at the region's first narrowing
+/// under its theory, so there is one creation path.
 #[derive(Clone, Debug, Default)]
 pub(super) struct CandidateKnowledge {
     /// Original theory first, then permanent restrictions, then the optional
@@ -73,13 +78,11 @@ pub(super) struct CandidateKnowledge {
 }
 
 impl CandidateKnowledge {
-    pub(super) fn new(original: Knowledge) -> Self {
-        Self {
-            entries: vec![original],
-            bound_generation: None,
-        }
-    }
-
+    /// The knowledge under the `index`th permanent theory, the original
+    /// theory being the zeroth, created from `narrower` when this region has
+    /// none under it yet. The first slot is reserved exactly, so a root that
+    /// knows only the original theory holds one slot; later slots grow the
+    /// vector as amortized growth does.
     pub(super) fn permanent(
         &mut self,
         index: usize,
@@ -87,9 +90,12 @@ impl CandidateKnowledge {
     ) -> Result<&mut Knowledge, Incomplete> {
         let permanent = self.entries.len() - usize::from(self.bound_generation.is_some());
         if index == permanent {
-            self.entries
-                .try_reserve(1)
-                .map_err(|_| Incomplete::Allocation)?;
+            let reserved = if self.entries.is_empty() {
+                self.entries.try_reserve_exact(1)
+            } else {
+                self.entries.try_reserve(1)
+            };
+            reserved.map_err(|_| Incomplete::Allocation)?;
             // At most the bound header moves. Its knowledge remains tied to
             // its own generation, independently of later permanent additions.
             self.entries.insert(index, narrower.knowledge());

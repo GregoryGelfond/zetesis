@@ -535,16 +535,30 @@ fn terminal(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  terminal definitions: eager base; full reconstruction before original membership; base answers={}; reconstructed={}; pending={}",
-        stats.base_answers, stats.reconstructed, stats.pending
+        "  terminal definitions: {} base; full reconstruction before original membership; base answers={}; reconstructed={}; pending={}",
+        match stats.base {
+            zetesis_themelios::BaseKind::Eager => "eager",
+            zetesis_themelios::BaseKind::Hybrid => "hybrid",
+        },
+        stats.base_answers,
+        stats.reconstructed,
+        stats.pending
     )?;
     writeln!(
         sink,
-        "  answer reconstruction: attempts={}; completed={}; work={}; substitutions={}; source admission included; base search work separate",
+        "  answer reconstruction: attempts={}; completed={}; work={}; substitutions={}; source admission included; admission work={}; substitutions={}; per-answer allowance work={}; substitutions={}; latest answer work={}; substitutions={}; largest answer work={}; substitutions={}; base search work separate",
         stats.reconstruction.attempts,
         stats.reconstruction.completed,
         stats.reconstruction.work,
-        stats.reconstruction.substitutions
+        stats.reconstruction.substitutions,
+        stats.reconstruction.admission.work,
+        stats.reconstruction.admission.substitutions,
+        stats.reconstruction.allowance.work,
+        stats.reconstruction.allowance.substitutions,
+        stats.reconstruction.latest.work,
+        stats.reconstruction.latest.substitutions,
+        stats.reconstruction.peak.work,
+        stats.reconstruction.peak.substitutions
     )
 }
 
@@ -560,12 +574,12 @@ fn hybrid(
     )?;
     writeln!(
         sink,
-        "  constraint checks: work={} of {}; substitutions={} of {}; cumulative scalar payload bytes={} of {}; independent of admission and reduct work",
+        "  constraint checks: work={}; substitutions={}; scalar payload bytes={}; each check at most work={}, substitutions={}, scalar payload bytes={}; independent of admission and reduct work",
         stats.constraints.work,
-        config.constraints.max_work,
         stats.constraints.substitutions,
-        config.constraints.max_substitutions,
         stats.constraints.scalar_bytes,
+        config.constraints.max_work,
+        config.constraints.max_substitutions,
         config.constraints.max_scalar_bytes
     )
 }
@@ -885,8 +899,11 @@ fn formula(
     config: &crate::SolveConfig,
     report: &Details<'_>,
 ) -> io::Result<()> {
-    let grounder = if report.terminal_execution.is_some() {
-        "eager_base_terminal_definitions"
+    let grounder = if let Some(terminal) = report.terminal_execution {
+        match terminal.base {
+            zetesis_themelios::BaseKind::Eager => "eager_base_terminal_definitions",
+            zetesis_themelios::BaseKind::Hybrid => "hybrid_base_terminal_definitions",
+        }
     } else if report.hybrid_execution.is_some() {
         "hybrid"
     } else {

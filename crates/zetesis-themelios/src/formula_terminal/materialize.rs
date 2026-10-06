@@ -1,5 +1,7 @@
 //! Consume source certification and the actual retained base grounding owners.
 
+use std::sync::Arc;
+
 use super::{
     Admitted, Extension,
     partition::{self, Definitions, Partition},
@@ -8,14 +10,44 @@ use crate::formula::{Compiled, Preparation, ceiling};
 use crate::formula_support::{Counters, GroundingWork, components};
 use crate::{FormulaFailure, FormulaResource, GroundingObserver};
 
+/// How a materialized core was grounded.
+pub(crate) enum Core {
+    /// Every rule instantiated.
+    Eager,
+    /// Eligible constraints streamed; absent when none was eligible.
+    Hybrid(Option<Box<crate::formula_hybrid::Constraints>>),
+}
+
 pub(crate) struct Materialized {
     pub(crate) compiled: Compiled,
+    pub(crate) core: Core,
     pub(crate) terminal: Option<Extension>,
 }
 
+/// Materialize with an eager base: every rule of the program, or of the base
+/// when terminal definitions are deferred, is instantiated.
 pub(crate) fn materialize(
     preparation: Preparation,
     observer: Option<&dyn GroundingObserver>,
+) -> Result<Materialized, FormulaFailure> {
+    materialize_with(preparation, observer, false)
+}
+
+/// Materialize with a hybrid base: eligible constraints are streamed, and
+/// deferred terminal definitions are reconstructed per answer. The hybrid
+/// schedule's restrictions apply after the partition has declined or
+/// certified its groups, so its charges are retained either way.
+pub(crate) fn materialize_lazy(
+    preparation: Preparation,
+    observer: Option<&dyn GroundingObserver>,
+) -> Result<Materialized, FormulaFailure> {
+    materialize_with(preparation, observer, true)
+}
+
+fn materialize_with(
+    preparation: Preparation,
+    observer: Option<&dyn GroundingObserver>,
+    hybrid: bool,
 ) -> Result<Materialized, FormulaFailure> {
     let cancellation = preparation.budget.cancellation().cloned();
     let location = preparation.location;
@@ -23,13 +55,21 @@ pub(crate) fn materialize(
         crate::formula::poll_control(cancellation.as_ref(), location)?;
         let Partition { base, terminal } = partition::partition(preparation)?;
         let materialized = match terminal {
+            None if hybrid => crate::formula_ground::ground_hybrid(base, observer).map(
+                |(compiled, constraints)| Materialized {
+                    compiled,
+                    core: Core::Hybrid(constraints.map(Box::new)),
+                    terminal: None,
+                },
+            ),
             None => {
                 crate::formula_ground::ground(base, observer, None).map(|compiled| Materialized {
                     compiled,
+                    core: Core::Eager,
                     terminal: None,
                 })
             }
-            Some(definitions) => admit_terminal(base, definitions, observer),
+            Some(definitions) => admit_terminal(base, definitions, observer, hybrid),
         }?;
         crate::formula::poll_control(cancellation.as_ref(), location)?;
         Ok(materialized)
@@ -42,9 +82,14 @@ fn admit_terminal(
     base: Preparation,
     definitions: Definitions,
     observer: Option<&dyn GroundingObserver>,
+    hybrid: bool,
 ) -> Result<Materialized, FormulaFailure> {
     if let Some(observer) = observer {
-        observer.terminal_definitions();
+        observer.terminal_definitions(if hybrid {
+            super::BaseKind::Hybrid
+        } else {
+            super::BaseKind::Eager
+        });
     }
     let Definitions {
         original,
@@ -53,7 +98,7 @@ fn admit_terminal(
     } = definitions;
     let limits = base.limits;
     let location = base.location;
-    let retained = crate::formula_ground::ground_retained(base, observer)?;
+    let retained = crate::formula_ground::ground_retained(base, observer, hybrid)?;
     let envelope_bytes = retained.envelope_bytes();
     let crate::formula_ground::RetainedGrounding {
         mut compiled,
@@ -61,17 +106,12 @@ fn admit_terminal(
         accounting,
         budget,
         mut output_storage,
+        streamed,
     } = retained;
     let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default())
         .with_cancellation(budget.cancellation());
-    let closed = catalog
-        .into_closed(0, GroundingWork::new(&limits, &mut counters, location))
-        .map_err(|failure| {
-            let (failure, _actual_source_peak) = failure.into_parts();
-            // The close operation records its actual composed peak
-            // before returning the original typed refusal.
-            failure
-        })?;
+    let (closed, constraints, relation_bytes) =
+        close_base(catalog, streamed, &limits, &mut counters, location)?;
     let directory_bytes = closed
         .storage
         .prior_publication_metadata_bytes(&compiled.atoms)
@@ -87,9 +127,15 @@ fn admit_terminal(
         .bytes()
         .checked_sub(envelope_bytes)
         .ok_or_else(|| components::missing(location))? as u128;
-    let fixed = (size_of::<Admitted>() - size_of::<crate::formula_support::ClosedSource>()) as u128;
-    let metadata_bytes =
-        output_bytes + directory_bytes + fixed + partition::deferred_bytes(&deferred);
+    // The closed source itself is counted by its storage; the owner holds a
+    // shared handle to it.
+    let fixed =
+        (size_of::<Admitted>() - size_of::<Arc<crate::formula_support::ClosedSource>>()) as u128;
+    let metadata_bytes = output_bytes
+        + directory_bytes
+        + fixed
+        + partition::deferred_bytes(&deferred)
+        + relation_bytes;
     // Before retiring leases, admit both the final owner and the
     // current source-history workspace. Publication never resets work.
     let overlap = closed.storage_bytes() + metadata_bytes + counters.workspace_bytes() as u128
@@ -129,6 +175,11 @@ fn admit_terminal(
     )?;
     Ok(Materialized {
         compiled,
+        core: if hybrid {
+            Core::Hybrid(constraints.map(Box::new))
+        } else {
+            Core::Eager
+        },
         terminal: Some(Extension {
             original,
             deferred,
@@ -139,4 +190,52 @@ fn admit_terminal(
             metadata_bytes,
         }),
     })
+}
+
+/// Close the base catalog once. For a hybrid base with a stream, the close
+/// keeps the relations its constraints read, and both they and reconstruction
+/// share the closed source; otherwise the catalog closes for reconstruction
+/// alone. Returns the closed source, the streamed constraints and the kept
+/// relations' bytes.
+fn close_base(
+    catalog: crate::formula_support::CompletedCatalog,
+    streamed: Option<(Vec<crate::formula_ir::RuleIr>, u64)>,
+    limits: &crate::FormulaLimits,
+    counters: &mut Counters,
+    location: crate::ProgramSite,
+) -> Result<
+    (
+        Arc<crate::formula_support::ClosedSource>,
+        Option<crate::formula_hybrid::Constraints>,
+        u128,
+    ),
+    FormulaFailure,
+> {
+    match streamed {
+        Some((rules, instances)) if !rules.is_empty() => {
+            let support =
+                catalog.into_streamed(&rules, GroundingWork::new(limits, counters, location))?;
+            let closed = Arc::clone(support.closed());
+            let relation_bytes = support.relation_bytes() as u128;
+            let constraints = crate::formula_hybrid::Constraints {
+                support,
+                rules,
+                instances,
+                limits: *limits,
+                location,
+            };
+            Ok((closed, Some(constraints), relation_bytes))
+        }
+        _ => {
+            let closed = catalog
+                .into_closed(0, GroundingWork::new(limits, counters, location))
+                .map_err(|failure| {
+                    let (failure, _actual_source_peak) = failure.into_parts();
+                    // The close operation records its actual composed peak
+                    // before returning the original typed refusal.
+                    failure
+                })?;
+            Ok((Arc::new(closed), None, 0))
+        }
+    }
 }

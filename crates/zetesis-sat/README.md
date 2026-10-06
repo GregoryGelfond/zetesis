@@ -126,7 +126,7 @@ Under `SearchMethod::Regions`, reachable in the solve session as
 `--search regions`, no clause form of the theory is built. The candidate space is the coverage tree of
 `Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
 root leaves every atom open, each region is narrowed by
-`zetesis_ferraris::Narrower::narrow_known_metered`, from its parent's knowledge, to
+`zetesis_ferraris::Narrower::narrow_known_reserved`, from its parent's knowledge, to
 the fixed point of the theory's readings, with
 the theory's producers for the support cut, and by every candidate-only
 restriction without producers, since a restriction supports nothing. A region
@@ -151,13 +151,17 @@ encoding and the clause query serve instead, and the positive
 certificate's unit restriction, which is clause-only, applies.
 
 The narrowing is driven by a worklist over an index of the theory, built
-once: a node or atom that learns something is revisited once, and only its
+once, when the walk first needs it (a run a positive certificate decides
+builds none), and charged then, one work unit per node: a node or atom that learns something is revisited once, and only its
 parents, operands and dependent producers are read, as unit propagation
 over watched clauses touches only what moved. What a narrowing knows about
-a region travels with the region: a split clones the knowledge into both
-children, so a child's narrowing starts from its parent's and learns only
-what the split decided (`FormulaBounds.known_mono`), and the regions still
-share nothing. The reduct query carries its knowledge the same way. Node visits and producer
+a region travels with the region: a split copies the knowledge into one
+child and moves it into the other, so a child's narrowing starts from its
+parent's and learns only what the split decided (`FormulaBounds.known_mono`),
+and the regions still share nothing. The worklists belong to the walker
+instead: each walk, worker and producer reuses one `NarrowingScratch` for its
+candidate regions, each reduct workspace one for its proper-subset queries, and
+each proposer one for its positive checks. The reduct query carries its knowledge the same way. Node visits and producer
 checks acquire search-work permits before execution and each split is charged
 as a decision, against the same cumulative `SearchLimits`. The original and
 frozen narrowing receipts retain admitted work even on a control or quota
@@ -458,8 +462,9 @@ the same split, one knowledge copy per split and the existing bound on the numbe
 of donated regions. They do not establish a bound on all local stacks or total
 process memory.
 
-`StableModels::with_region_producers` instead retains one prepared region index
-and an owned Rayon pool across bounded production rounds. It uses the same
+`StableModels::with_region_producers` instead retains its region preparation
+and an owned Rayon pool across bounded production rounds, each reading the
+enumeration's one original index. It uses the same
 readings and disjoint splits, returning classical candidates for a separate
 membership executor. `next_batch_with_completion` joins each round, independently
 validates original satisfaction, then invokes its checker and finishes residuals.

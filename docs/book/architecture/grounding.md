@@ -268,7 +268,9 @@ optional existing clause-search route retains final constraint checking without
 this region operation.
 
 The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs)
-retains prepared constraints and completed support indexes. Each checker has its
+retains prepared constraints, the closed canonical base and the support
+relations (with their postings) that those constraints read; discovery and
+order indexes and other relations are released when admission closes support. Each checker has its
 own mutable state and prepares a checked dense atom lookup on its first region
 operation. A prepared correspondence maps support rows to original dense atom
 IDs without copying their tuples. The region selects held positive rows before
@@ -916,11 +918,15 @@ truth selection for every answer. Its joins use the shared whole-argument matche
 and borrowed typed keys. It neither imports a second value universe nor treats
 possible support as truth. Duplicate witnesses coalesce only at head publication.
 
-The automatic formula route can choose this schedule. Explicit eager grounding
-still materializes the complete theory; the existing lazy constraint schedule is
-unchanged. Base membership uses the selected CPU or GPU executor. Reconstruction
-currently runs on the host. Work and substitutions remain cumulative across
-source admission and all reconstructions in a session. A refused extension
+The automatic formula route chooses this schedule over an eager base, and the
+lazy formula route over a hybrid base, whose eligible constraints are streamed
+and checked before an answer is reconstructed. Explicit eager grounding still
+materializes the complete theory. Base membership uses the selected CPU or GPU executor. Reconstruction
+currently runs on the host. Each reconstruction starts from source admission's
+account under a per-answer allowance of work and substitutions — the headroom
+the formula ceilings left after grounding — whatever earlier answers used: the
+number of answers is bounded by enumeration limits, time and cancellation, not
+by a cumulative grounding ceiling. Session totals are reported. A refused extension
 publishes no original answer and cannot establish exhausted enumeration.
 
 ### Relation rows and vector operations
@@ -946,6 +952,29 @@ from this relation's dictionary, not absence from the vocabulary or falsity.
 Foreign and ingress terms use typed comparison, as do valid query terms outside
 the supplied canonical prefix. The relation reader must still cover every
 retained row. Static sorted dictionaries retain their own immutable lookup.
+
+Support keeps posting lists only for the columns a join can bind: a column
+holding a constant, or a variable that occurs again in the same rule, body or
+head (factorization binds head variables before it probes the body), in some
+join occurrence of its predicate. The rule is syntactic, and keeps a superset of
+the postings its two readers consult — probes, which choose the shortest posting
+among the columns a pattern binds, and totality domains, which read a column's
+keys. For rules with an ordinary head and a flat body of atoms, comparisons and
+bindings it keeps no column that holds only a variable occurring once, and no
+column of a negated atom, which is decided by exact lookup once safety has bound
+its variables (those variables still count as occurrences for the other
+columns). It still keeps one kind no reader consults there: columns whose
+variable's only other occurrence consumes it (in a comparison or the head)
+without binding it first. A choice or conditional head, a projection and every
+nested frame index every column they name. A predicate no join reads, such as a
+terminal definition under eager grounding or a predicate a flat rule reads only
+under negation, keeps none, and neither does a column of a flat rule holding a
+variable that occurs once. The demand is
+computed from the compiled rules before support grows, and its storage counts
+toward the support byte ceiling once, separately from the relation indexes that
+grow during publication. A column without postings is absent, not
+empty: a probe still resolves its equality and narrows by its other columns, and
+a totality certificate declines it as a domain of distinct values.
 
 For a positive witness, the selector resolves known whole-column equalities and
 chooses the shortest posting list. Equal-length lists retain the first known

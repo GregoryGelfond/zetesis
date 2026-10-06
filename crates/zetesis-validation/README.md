@@ -299,9 +299,9 @@ zetesis-bench run --suite scalability --grounder eager \
 ```
 
 `performance::scalability::workloads` returns authored queens at n=8/9/10,
-pigeonhole at h=5/6/7, and unchanged queens variant 02, SEND+MORE=MONEY and task
-allocation, followed by the authored Sudoku grid. `--include-einstein` adds the
-unchanged riddle as an eleventh workload. Sudoku's reviewed source digest and
+pigeonhole at h=5/6/7 and Mastermind at colors=5/6, and unchanged queens variant
+02, SEND+MORE=MONEY and task allocation, followed by the authored Sudoku grid.
+`--include-einstein` adds the unchanged riddle as a thirteenth workload. Sudoku's reviewed source digest and
 exact 81-digit display contract live in `scalability::sudoku`, also used by the
 ordinary CLI correctness test. Its eight givens per row make it a grounding and
 language workload, not a difficult search instance. The examples root is
@@ -376,7 +376,8 @@ the reference's, and gives every compared cell, fastest ratio first, with
 the native intervals split into grounding, candidate proposal and
 membership, the reference's own grounding and solving times, both peak
 resident sets and the device bytes the native run accounted. Proposal sums
-the candidate setup and generation phases; membership sums certificate
+the candidate setup and generation phases (the regions method builds its
+original index in generation, when its walk starts); membership sums certificate
 setup and checks, closure and exact reduct membership, reduct preparation,
 original validation and the device's host oracle; grounding is the
 grounding stage, absent under lazy grounding, which grounds within

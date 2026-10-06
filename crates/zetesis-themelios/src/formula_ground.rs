@@ -57,32 +57,56 @@ pub(super) const fn boolean(truth: bool) -> usize {
 #[derive(Clone, Copy)]
 enum Schedule<'a> {
     Eager(Option<crate::formula_count_plan::Request<'a>>),
+    /// Every rule instantiated; the catalog kept open for reconstruction.
     Retained,
+    /// Eligible constraints streamed instead of instantiated.
     Hybrid,
+    /// Eligible constraints streamed, and the catalog kept open for
+    /// reconstruction: a terminal owner's hybrid base.
+    HybridRetained,
+}
+
+/// What publication does with the completed catalog.
+#[derive(Clone, Copy)]
+enum Keep<'a> {
+    /// Released with the publication boundary.
+    Release,
+    /// Kept open, with its account, for terminal reconstruction.
+    Retain,
+    /// Closed, keeping the relations these streamed constraint rules read.
+    Stream(&'a [RuleIr]),
 }
 
 impl Schedule<'_> {
+    /// A hybrid schedule with no eligible constraint streams nothing, so its
+    /// catalog is released rather than closed.
+    fn keep(self, rules: &[RuleIr]) -> Keep<'_> {
+        match self {
+            Self::Retained | Self::HybridRetained => Keep::Retain,
+            Self::Hybrid if rules.iter().any(crate::formula_hybrid::eligible) => {
+                Keep::Stream(rules)
+            }
+            Self::Eager(_) | Self::Hybrid => Keep::Release,
+        }
+    }
+
     fn retain_constraints(
-        self,
         mut rules: Vec<RuleIr>,
-        catalog: formula_support::CompletedCatalog,
+        support: formula_support::StreamedSupport,
         instances: u64,
         limits: &FormulaLimits,
         location: ProgramSite,
-    ) -> Option<crate::formula_hybrid::Constraints> {
-        if !matches!(self, Self::Hybrid) {
-            return None;
-        }
+    ) -> crate::formula_hybrid::Constraints {
         // Compact the already admitted source vector in place. No instance
         // population or duplicate source representation is retained.
         rules.retain(crate::formula_hybrid::eligible);
-        Some(crate::formula_hybrid::Constraints {
-            catalog,
+        crate::formula_hybrid::Constraints {
+            support,
             rules,
             instances,
             limits: *limits,
             location,
-        })
+        }
     }
 }
 
@@ -95,10 +119,8 @@ pub(crate) fn ground(
         .map(|grounded| grounded.compiled)
 }
 
-pub(crate) fn ground_hybrid(
-    preparation: crate::formula::Preparation,
-    observer: Option<&dyn crate::GroundingObserver>,
-) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
+/// The hybrid schedule's capability restrictions: no objectives, indexed joins.
+fn hybrid_supported(preparation: &crate::formula::Preparation) -> Result<(), FormulaFailure> {
     preparation.budget.poll(preparation.location)?;
     if let Some(&location) = preparation.program.objective_declarations.first() {
         return Err(FormulaFailure::HybridUnsupported {
@@ -112,14 +134,16 @@ pub(crate) fn ground_hybrid(
             location: preparation.location,
         });
     }
-    ground_with_schedule(preparation, observer, Schedule::Hybrid).map(|grounded| {
-        (
-            grounded.compiled,
-            grounded
-                .constraints
-                .expect("hybrid schedule retains its constraints"),
-        )
-    })
+    Ok(())
+}
+
+pub(crate) fn ground_hybrid(
+    preparation: crate::formula::Preparation,
+    observer: Option<&dyn crate::GroundingObserver>,
+) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
+    hybrid_supported(&preparation)?;
+    ground_with_schedule(preparation, observer, Schedule::Hybrid)
+        .map(|grounded| (grounded.compiled, grounded.constraints))
 }
 
 struct Grounded {
@@ -269,32 +293,36 @@ fn instantiate(
         warnings,
         streamed_instances,
         retained_account,
-    } = pending.publish(
-        &mut catalog,
-        limits,
-        location,
-        matches!(schedule, Schedule::Retained),
-    )?;
+        streamed,
+        catalog: open,
+    } = pending.publish(catalog, limits, location, schedule.keep(&prepared.rules))?;
     let expansion = budget.usage();
     let (constraints, retained) = if let Some((accounting, output_storage)) = retained_account {
         (
             None,
             Some(RetainedState {
-                catalog,
+                catalog: open.expect("a retained schedule keeps its catalog"),
                 accounting,
                 budget: expansion_budget,
                 output_storage,
+                streamed: matches!(schedule, Schedule::HybridRetained).then(|| {
+                    let mut rules = prepared.rules;
+                    rules.retain(crate::formula_hybrid::eligible);
+                    (rules, streamed_instances)
+                }),
             }),
         )
     } else {
         (
-            schedule.retain_constraints(
-                prepared.rules,
-                catalog,
-                streamed_instances,
-                limits,
-                location,
-            ),
+            streamed.map(|support| {
+                Schedule::retain_constraints(
+                    prepared.rules,
+                    support,
+                    streamed_instances,
+                    limits,
+                    location,
+                )
+            }),
             None,
         )
     };
@@ -428,7 +456,7 @@ fn emit<'source>(
             match schedule {
                 Schedule::Eager(request) => request
                     .map(|request| crate::formula_count_plan::Collector::new(request, location)),
-                Schedule::Hybrid | Schedule::Retained => None,
+                Schedule::Hybrid | Schedule::Retained | Schedule::HybridRetained => None,
             },
             location,
         )?;
@@ -450,6 +478,9 @@ fn emit<'source>(
 
 struct PublishedEmission {
     retained_account: Option<(formula_support::Accounting, formula_support::StorageLease)>,
+    streamed: Option<formula_support::StreamedSupport>,
+    /// The open catalog, returned only to a retained schedule.
+    catalog: Option<formula_support::CompletedCatalog>,
     projection: crate::PreparedProjection,
     emission: Emission,
     objectives: zetesis_objective::ObjectiveProgram,
@@ -459,12 +490,15 @@ struct PublishedEmission {
 }
 
 impl PendingEmission {
+    /// Publish the emission. A retained schedule keeps the catalog open for
+    /// reconstruction; a stream of constraints closes it, keeping the relations
+    /// they read, before this account ends; otherwise it is released.
     fn publish(
         self,
-        catalog: &mut formula_support::CompletedCatalog,
+        mut catalog: formula_support::CompletedCatalog,
         limits: &FormulaLimits,
         location: ProgramSite,
-        retain: bool,
+        keep: Keep<'_>,
     ) -> Result<PublishedEmission, FormulaFailure> {
         let Self {
             projection,
@@ -474,7 +508,7 @@ impl PendingEmission {
             streamed_instances,
             mut counters,
         } = self;
-        let mut publication = formula_support::Publication::new(catalog, &counters, location)?;
+        let mut publication = formula_support::Publication::new(&mut catalog, &counters, location)?;
         let projection = projection.publish(&mut publication, limits, &mut counters, location)?;
         let Emission {
             atoms,
@@ -493,7 +527,9 @@ impl PendingEmission {
             origins,
             count_plan,
         };
-        let retained_account = if retain {
+        let mut streamed = None;
+        let mut open = None;
+        let retained_account = if matches!(keep, Keep::Retain) {
             let external = publication.source_bytes(location)?;
             let mut output_storage = publication.into_lease(location)?;
             RetainedGrounding::admit_envelope(
@@ -503,16 +539,25 @@ impl PendingEmission {
                 limits,
                 location,
             )?;
+            open = Some(catalog);
             Some((counters.into_accounting(), output_storage))
         } else {
             // Preserve the ordinary publication boundary: both coordinator and
             // history drop here, before later theory validation.
             drop(publication);
+            if let Keep::Stream(rules) = keep {
+                streamed = Some(catalog.into_streamed(
+                    rules,
+                    formula_support::GroundingWork::new(limits, &mut counters, location),
+                )?);
+            }
             drop(counters);
             None
         };
         Ok(PublishedEmission {
             retained_account,
+            streamed,
+            catalog: open,
             projection,
             emission,
             objectives,
@@ -595,7 +640,8 @@ impl Builder<'_, '_, '_> {
                 crate::GroundingPhase::RuleInstantiation,
                 Some(rule.location),
                 || {
-                    if matches!(schedule, Schedule::Hybrid) && crate::formula_hybrid::eligible(rule)
+                    if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
+                        && crate::formula_hybrid::eligible(rule)
                     {
                         self.capture_constraint(rule, support, &mut streamed_instances)
                     } else {

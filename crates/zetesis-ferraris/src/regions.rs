@@ -50,7 +50,7 @@ use crate::{Node, Theory};
 mod adjacency;
 mod counters;
 use adjacency::Adjacency;
-use counters::Counters;
+use counters::{Count, Counters, compact_fits};
 
 /// The work ceiling of one narrowing, and of producer extraction. Every
 /// propagation event reads at least one node, so the work bounds the
@@ -87,6 +87,71 @@ struct Subject<'a> {
     theory: &'a Theory,
     producers: Option<&'a Producers>,
     frozen: Option<&'a [bool]>,
+}
+
+/// A theory read for its candidates, with the producers of its support
+/// fragment when the support cut applies: what original narrowing reads.
+#[derive(Clone, Copy, Debug)]
+pub struct OriginalSubject<'a> {
+    theory: &'a Theory,
+    producers: Option<&'a Producers>,
+}
+
+impl<'a> OriginalSubject<'a> {
+    /// The candidates of `theory`, cut by `producers`' support when given.
+    #[must_use]
+    pub const fn new(theory: &'a Theory, producers: Option<&'a Producers>) -> Self {
+        Self { theory, producers }
+    }
+}
+
+impl<'a> From<OriginalSubject<'a>> for Subject<'a> {
+    fn from(subject: OriginalSubject<'a>) -> Self {
+        Self {
+            theory: subject.theory,
+            producers: subject.producers,
+            frozen: None,
+        }
+    }
+}
+
+/// A theory read as a candidate's reduct: a node false in `truth`, the
+/// candidate's truth of every node, reads as falsum (`FerrarisMask`). What
+/// frozen narrowing reads.
+#[derive(Clone, Copy, Debug)]
+pub struct FrozenSubject<'a> {
+    theory: &'a Theory,
+    truth: &'a [bool],
+}
+
+impl<'a> FrozenSubject<'a> {
+    /// The reduct of `theory` under the candidate whose node truth is `truth`.
+    #[must_use]
+    pub const fn new(theory: &'a Theory, truth: &'a [bool]) -> Self {
+        Self { theory, truth }
+    }
+
+    /// The theory read.
+    #[must_use]
+    pub const fn theory(&self) -> &'a Theory {
+        self.theory
+    }
+
+    /// The candidate's truth of every node.
+    #[must_use]
+    pub const fn truth(&self) -> &'a [bool] {
+        self.truth
+    }
+}
+
+impl<'a> From<FrozenSubject<'a>> for Subject<'a> {
+    fn from(subject: FrozenSubject<'a>) -> Self {
+        Self {
+            theory: subject.theory,
+            producers: None,
+            frozen: Some(subject.truth),
+        }
+    }
 }
 
 /// The producers of a theory in the support fragment, by head atom.
@@ -131,7 +196,7 @@ pub fn producers(
     })
 }
 
-fn extract(theory: &Theory, work: &mut Work) -> Result<Option<Producers>, Stop> {
+fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, Stop> {
     let nodes = theory.nodes();
     let mut ordinary = Vec::with_capacity(nodes.len());
     for node in nodes {
@@ -223,35 +288,77 @@ pub struct NarrowingAttempt<E = Stop> {
     pub statistics: NarrowingStatistics,
 }
 
-struct Work<F = fn() -> Result<(), Stop>> {
+/// A caller-owned allowance for one narrowing's charged reads, granted in
+/// batches. The narrowing asks for at most [`NARROWING_BATCH`] permits at a
+/// time, spends them one per charged read, and returns the unspent rest when
+/// it ends, whatever its outcome; so the permits it keeps are exactly the
+/// reads it made.
+pub trait NarrowingQuota {
+    /// Grant between one and `wanted` permits, or refuse. A quota that polls
+    /// cancellation or a deadline does so here, so control is observed at
+    /// least once every [`NARROWING_BATCH`] charged reads. A refusal stops
+    /// the narrowing before the read that asked; a grant of zero is a refusal.
+    ///
+    /// # Errors
+    /// The stop that refuses the permits.
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop>;
+    /// Take back permits granted to this narrowing and not spent.
+    fn refund(&mut self, unspent: u64);
+}
+
+/// The most charged reads a narrowing asks its [`NarrowingQuota`] for at once,
+/// and so the most reads between two consultations of it.
+pub const NARROWING_BATCH: u64 = 256;
+
+/// The narrowing's charged reads: a fixed ceiling, or permits granted by a
+/// quota in batches and spent locally.
+struct Work<'q> {
     spent: u64,
     ceiling: u64,
-    charge: F,
+    available: u64,
+    quota: Option<&'q mut dyn NarrowingQuota>,
 }
-impl Work {
+impl Work<'static> {
     fn new(ceiling: u64) -> Self {
         Self {
             spent: 0,
             ceiling,
-            charge: || Ok(()),
+            available: 0,
+            quota: None,
         }
     }
 }
-impl<E: From<Stop>, F: FnMut() -> Result<(), E>> Work<F> {
-    fn metered(charge: F) -> Self {
+impl<'q> Work<'q> {
+    fn reserved(quota: &'q mut dyn NarrowingQuota) -> Self {
         Self {
             spent: 0,
             ceiling: u64::MAX,
-            charge,
+            available: 0,
+            quota: Some(quota),
         }
     }
-    fn tick(&mut self) -> Result<(), E> {
+    #[inline]
+    fn tick(&mut self) -> Result<(), Stop> {
         if self.spent >= self.ceiling {
-            return Err(Stop::WorkLimit.into());
+            return Err(Stop::WorkLimit);
         }
-        (self.charge)()?;
+        if let Some(quota) = &mut self.quota {
+            if self.available == 0 {
+                self.available = quota.reserve(NARROWING_BATCH)?;
+                if self.available == 0 {
+                    return Err(Stop::WorkLimit);
+                }
+            }
+            self.available -= 1;
+        }
         self.spent += 1;
         Ok(())
+    }
+    /// Return the unspent permits to the quota.
+    fn settle(&mut self) {
+        if let Some(quota) = &mut self.quota {
+            quota.refund(std::mem::take(&mut self.available));
+        }
     }
 }
 
@@ -397,7 +504,9 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// value knows nothing and is seeded in full on first use.
 ///
 /// A value is linear in the theory: a bit pair over the nodes and one over
-/// the atoms, two counters per chain, a count per atom and the worklists.
+/// the atoms, two counters per chain and a count per atom; the worklists of
+/// a narrowing belong to the walker's [`NarrowingScratch`]. Its counters
+/// have one width, chosen when the root value is made.
 /// A split that offers one child to another worker clones it, so the
 /// clone is the split's cost. A knowledge belongs to the narrower that
 /// made it and to the region it was closed for: narrowing a region with a
@@ -407,33 +516,48 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// from its parent and by narrowing with the narrower that made it.
 #[derive(Clone, Debug)]
 pub struct Knowledge {
-    known: Known,
+    width: Width,
+}
+
+/// The knowledge at the counter width chosen when it was created: the
+/// closure runs on one concrete width, chosen once.
+#[derive(Clone, Debug)]
+enum Width {
+    Compact(Known<u32>),
+    Native(Known<usize>),
 }
 
 impl Knowledge {
-    /// Header, owned flag, seen and counter arrays, and worklist capacities in
-    /// bytes, including empty worklists' retained capacity. The shared theory, narrower
-    /// and producer index are excluded, as are allocator bookkeeping and
-    /// temporary clones.
+    /// Header, owned flag, seen and counter arrays in bytes. The shared
+    /// theory, narrower and producer index are excluded, as are the walker's
+    /// scratch, allocator bookkeeping and temporary clones.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
-        let known = &self.known;
+        size_of::<Self>() as u128
+            + match &self.width {
+                Width::Compact(known) => known.retained_bytes(),
+                Width::Native(known) => known.retained_bytes(),
+            }
+    }
+}
+
+impl<C: Count> Known<C> {
+    /// Payload and capacities owned by this closure state; the enclosing
+    /// [`Knowledge`] header is counted by its owner.
+    fn retained_bytes(&self) -> u128 {
+        let known = self;
         let flag_words = [
             known.sure.len(),
             known.never.len(),
             known.atom_sure.len(),
             known.atom_never.len(),
         ];
-        let indices = [known.learned.capacity(), known.heads.capacity()];
         let counters = [&known.sure_operands, &known.never_operands, &known.unknown];
-        size_of::<Self>() as u128
-            + flag_words.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<u64>() as u128
-            + indices.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<usize>() as u128
+        flag_words.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<u64>() as u128
             + counters
                 .into_iter()
                 .map(Counters::allocated_bytes)
                 .sum::<u128>()
-            + known.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
             + known.seen.len() as u128 * size_of::<u64>() as u128
     }
 }
@@ -536,15 +660,24 @@ impl Narrower {
         // occurrence in this same incidence stream. Its total bounds all
         // three counter arrays; no theory-size or language cap is imposed.
         let incidences = self.parents.entry_count();
-        let mut unknown = Counters::zeros(self.atom_nodes.len(), incidences);
+        Knowledge {
+            width: if compact_fits(incidences) {
+                Width::Compact(self.root_known())
+            } else {
+                Width::Native(self.root_known())
+            },
+        }
+    }
+
+    /// The root's closure state at one counter width.
+    fn root_known<C: Count>(&self) -> Known<C> {
+        let mut unknown = Counters::zeros(self.atom_nodes.len());
         for (atom, nodes) in self.atom_nodes.iter().enumerate() {
             for &node in nodes {
                 unknown.add(atom, self.parents[node].len());
             }
         }
-        Knowledge {
-            known: Known::empty(self.parents.len(), self.chains.len(), incidences, unknown),
-        }
+        Known::empty(self.parents.len(), self.chains.len(), unknown)
     }
 
     /// Narrow the region to the fixed point of the closure's rules from
@@ -565,22 +698,19 @@ impl Narrower {
     /// region.
     pub fn narrow_known(
         &self,
-        theory: &Theory,
-        producers: Option<&Producers>,
+        subject: OriginalSubject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
+        scratch: &mut NarrowingScratch,
         limits: RegionLimits,
         cancellation: &Cancellation,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        let subject = Subject {
-            theory,
-            producers,
-            frozen: None,
-        };
+        let subject = Subject::from(subject);
         let attempt = self.narrow_with(
             subject,
             region,
             knowledge,
+            scratch,
             Work::new(limits.max_work),
             cancellation,
         );
@@ -589,71 +719,33 @@ impl Narrower {
             .map(|narrowing| (narrowing, attempt.statistics))
     }
 
-    /// Narrow original candidates with a caller-owned work quota. The quota
-    /// is invoked before every charged node, parent, producer or open-atom read;
-    /// a refused permit prevents that read. It owns the work ceiling and may
-    /// also poll control. This operation polls `cancellation` before any mutation,
-    /// including when no charged read is necessary. The receipt counts only
-    /// successful permits and survives every returned failure.
-    ///
-    /// The ownership and ancestor-knowledge preconditions of
-    /// [`Self::narrow_known`] still apply. Any failed attempt's region and
-    /// knowledge must be abandoned. The quota's error is preserved; entry
-    /// control failures and exhaustion of the representable `u64` work count
-    /// use `E::from(Stop)`.
-    pub fn narrow_known_metered<E: From<Stop>>(
-        &self,
-        theory: &Theory,
-        producers: Option<&Producers>,
-        region: &mut Region,
-        knowledge: &mut Knowledge,
-        cancellation: &Cancellation,
-        charge: impl FnMut() -> Result<(), E>,
-    ) -> NarrowingAttempt<E> {
-        let subject = Subject {
-            theory,
-            producers,
-            frozen: None,
-        };
-        self.narrow_with(
-            subject,
-            region,
-            knowledge,
-            Work::metered(charge),
-            cancellation,
-        )
-    }
-
     /// Narrow a region of the theory's frozen reduct under a candidate from
     /// what is already known about it, as [`Self::narrow_known`] does for
-    /// the candidate tree: a node false in `truth`, the candidate's truth of
-    /// every node, reads as falsum (`FerrarisMask`), and the rest of the DAG
-    /// is read unchanged. No support cut applies, since a model of the
+    /// the candidate tree: a node false in the subject's truth, the
+    /// candidate's truth of every node, reads as falsum (`FerrarisMask`), and
+    /// the rest of the DAG is read unchanged. No support cut applies, since a model of the
     /// reduct need not be supported: this narrows the proper-subset query,
     /// not the candidate tree. `knowledge` is this narrower's, closed for an
-    /// enclosing region of the same query under the same `truth`, with the
+    /// enclosing region of the same query under the same truth, with the
     /// precondition [`Knowledge`] states.
     ///
     /// # Errors
     /// As [`Self::narrow_known`].
     pub fn narrow_frozen_known(
         &self,
-        theory: &Theory,
-        truth: &[bool],
+        subject: FrozenSubject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
+        scratch: &mut NarrowingScratch,
         limits: RegionLimits,
         cancellation: &Cancellation,
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
-        let subject = Subject {
-            theory,
-            producers: None,
-            frozen: Some(truth),
-        };
+        let subject = Subject::from(subject);
         let attempt = self.narrow_with(
             subject,
             region,
             knowledge,
+            scratch,
             Work::new(limits.max_work),
             cancellation,
         );
@@ -662,72 +754,138 @@ impl Narrower {
             .map(|narrowing| (narrowing, attempt.statistics))
     }
 
-    /// Narrow a frozen reduct with the quota and failure receipt contract of
-    /// [`Self::narrow_known_metered`]. The frozen mask and ancestor knowledge
-    /// retain the preconditions of [`Self::narrow_frozen_known`].
-    pub fn narrow_frozen_known_metered<E: From<Stop>>(
+    /// Narrow original candidates with work granted in batches by `quota`
+    /// (see [`NarrowingQuota`]): the same closure and decisions as
+    /// [`Self::narrow_known`], with every charged node, parent, producer or
+    /// open-atom read spending one permit, so a refused grant prevents that
+    /// read and the receipt counts the permits spent. The quota is consulted
+    /// at most once every [`NARROWING_BATCH`] charged reads, so its control
+    /// polls are at most that many reads apart; a quota that grants what
+    /// remains refuses a work limit at the same read as per-read charging.
+    /// Unspent permits are refunded on every outcome. This operation polls
+    /// `cancellation` before any mutation.
+    /// The preconditions of [`Self::narrow_known`] apply, and a failed
+    /// attempt's region and knowledge must be abandoned.
+    pub fn narrow_known_reserved(
         &self,
-        theory: &Theory,
-        truth: &[bool],
+        subject: OriginalSubject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
+        scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
-        charge: impl FnMut() -> Result<(), E>,
-    ) -> NarrowingAttempt<E> {
-        let subject = Subject {
-            theory,
-            producers: None,
-            frozen: Some(truth),
-        };
+        quota: &mut dyn NarrowingQuota,
+    ) -> NarrowingAttempt {
+        let subject = Subject::from(subject);
         self.narrow_with(
             subject,
             region,
             knowledge,
-            Work::metered(charge),
+            scratch,
+            Work::reserved(quota),
             cancellation,
         )
     }
 
-    fn narrow_with<E: From<Stop>>(
+    /// Narrow a frozen reduct with work granted in batches by `quota`, as
+    /// [`Self::narrow_known_reserved`] does for original candidates. The
+    /// preconditions of [`Self::narrow_frozen_known`] apply.
+    pub fn narrow_frozen_known_reserved(
+        &self,
+        subject: FrozenSubject<'_>,
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        scratch: &mut NarrowingScratch,
+        cancellation: &Cancellation,
+        quota: &mut dyn NarrowingQuota,
+    ) -> NarrowingAttempt {
+        let subject = Subject::from(subject);
+        self.narrow_with(
+            subject,
+            region,
+            knowledge,
+            scratch,
+            Work::reserved(quota),
+            cancellation,
+        )
+    }
+
+    fn narrow_with(
         &self,
         subject: Subject<'_>,
         region: &mut Region,
         knowledge: &mut Knowledge,
-        mut work: Work<impl FnMut() -> Result<(), E>>,
+        scratch: &mut NarrowingScratch,
+        mut work: Work<'_>,
         cancellation: &Cancellation,
-    ) -> NarrowingAttempt<E> {
+    ) -> NarrowingAttempt {
         let mut statistics = NarrowingStatistics::default();
-        let result = (|| {
-            cancellation.poll().map_err(E::from)?;
-            let known = &mut knowledge.known;
-            if known.close(subject, self, region, &mut work, &mut statistics)?
-                == Step::Contradiction
-            {
-                return Ok(Narrowing::Refuted);
+        let result = cancellation.poll().and_then(|()| {
+            // One choice of width per narrowing; the closure runs on it.
+            match &mut knowledge.width {
+                Width::Compact(known) => self.narrow_known_width(
+                    subject,
+                    region,
+                    known,
+                    scratch,
+                    &mut work,
+                    &mut statistics,
+                ),
+                Width::Native(known) => self.narrow_known_width(
+                    subject,
+                    region,
+                    known,
+                    scratch,
+                    &mut work,
+                    &mut statistics,
+                ),
             }
-            // The atoms this closure learned decide the region; the region's own
-            // decisions, the split's and those made here, are then all seen.
-            let mut changed = false;
-            for atom in known.learned.drain(..) {
-                let was_open = region.is_open(atom);
-                let decided = if bit(&known.atom_sure, atom) {
-                    statistics.held += u64::from(was_open);
-                    region.hold(atom)
-                } else {
-                    statistics.cut += u64::from(was_open);
-                    region.cut(atom)
-                };
-                debug_assert!(decided, "a learned atom agrees with the region");
-                changed |= was_open;
-            }
-            region.snapshot_decided(&mut known.seen);
-            if let Some(atom) = most_constrained(region, known, &mut work)? {
-                region.prefer(atom);
-            }
-            Ok(Narrowing::Fixed { changed })
-        })();
+        });
+        work.settle();
         statistics.work = work.spent;
         NarrowingAttempt { result, statistics }
+    }
+
+    /// The closure, the region's new decisions and the split choice, at the
+    /// knowledge's counter width.
+    fn narrow_known_width<C: Count>(
+        &self,
+        subject: Subject<'_>,
+        region: &mut Region,
+        known: &mut Known<C>,
+        scratch: &mut NarrowingScratch,
+        work: &mut Work<'_>,
+        statistics: &mut NarrowingStatistics,
+    ) -> Result<Narrowing, Stop> {
+        // Whatever an earlier narrowing that refuted or stopped left here
+        // belongs to another region; it is discarded before this one reads.
+        scratch.prepare(subject.theory.atom_count());
+        let mut closure = Closure {
+            known,
+            lists: scratch,
+        };
+        if closure.close(subject, self, region, work, statistics)? == Step::Contradiction {
+            return Ok(Narrowing::Refuted);
+        }
+        // The atoms this closure learned decide the region; the region's own
+        // decisions, the split's and those made here, are then all seen.
+        let mut changed = false;
+        for atom in scratch.learned.drain(..) {
+            let was_open = region.is_open(atom);
+            let decided = if bit(&known.atom_sure, atom) {
+                statistics.held += u64::from(was_open);
+                region.hold(atom)
+            } else {
+                statistics.cut += u64::from(was_open);
+                region.cut(atom)
+            };
+            debug_assert!(decided, "a learned atom agrees with the region");
+            changed |= was_open;
+        }
+        region.snapshot_decided(&mut known.seen);
+        if let Some(atom) = most_constrained(region, known, work)? {
+            region.prefer(atom);
+        }
+        Ok(Narrowing::Fixed { changed })
     }
 }
 
@@ -736,11 +894,11 @@ impl Narrower {
 /// This chooses the split, as the clause search branches on the variable
 /// with the most unresolved occurrences. The counts are kept as parents
 /// become known, so the ranking is one read per open atom.
-fn most_constrained<E: From<Stop>>(
+fn most_constrained<C: Count>(
     region: &Region,
-    known: &Known,
-    work: &mut Work<impl FnMut() -> Result<(), E>>,
-) -> Result<Option<usize>, E> {
+    known: &Known<C>,
+    work: &mut Work<'_>,
+) -> Result<Option<usize>, Stop> {
     let mut best: Option<(usize, usize)> = None;
     for atom in region.open() {
         work.tick()?;
@@ -765,19 +923,37 @@ fn most_constrained<E: From<Stop>>(
 /// dependent producers are read, a chain learning from an operand by one
 /// counter step.
 #[derive(Clone, Debug)]
-struct Known {
+struct Known<C> {
     sure: Box<[u64]>,
     never: Box<[u64]>,
     atom_sure: Box<[u64]>,
     atom_never: Box<[u64]>,
     /// Per chain, the operands known to hold.
-    sure_operands: Counters,
+    sure_operands: Counters<C>,
     /// Per chain, the operands known to fail.
-    never_operands: Counters,
+    never_operands: Counters<C>,
     /// Per atom, the parents of its nodes not yet known: the split ranking.
     /// A parent is counted once here and taken off once when it is
     /// revisited, so the count never goes below zero.
-    unknown: Counters,
+    unknown: Counters<C>,
+    /// The region's decided-mask snapshot already told to this closure; new
+    /// decisions are the region's decided atoms not set here.
+    seen: Box<[u64]>,
+    /// The roots, falsum and every atom's support have been seeded once;
+    /// later closures learn only decisions not yet known.
+    seeded: bool,
+}
+
+/// The worklists of a narrowing: what a closure has learned and must still
+/// propagate. They belong to the walker, not to a region's knowledge: one
+/// value serves every narrowing a walker makes, keeping the capacity its
+/// worklists grew, and a knowledge copied at a split carries none. Its
+/// contents mean nothing between narrowings; each narrowing empties it
+/// first, so whatever a refuted, stopped or cancelled narrowing left is never
+/// read by the next. Its capacity grows with the largest closure a walker
+/// has made and is held until the value is dropped.
+#[derive(Debug, Default)]
+pub struct NarrowingScratch {
     /// The atoms this closure decided, not yet told to the region.
     learned: Vec<usize>,
     /// Nodes that learned something, with what, and have not been revisited.
@@ -785,12 +961,60 @@ struct Known {
     /// Atoms whose support must be rechecked; queued only when producers
     /// are known, since only they say what supports an atom.
     heads: Vec<usize>,
-    /// The region's decided-mask snapshot already told to this closure; new
-    /// decisions are the region's decided atoms not set here.
-    seen: Box<[u64]>,
-    /// The roots, falsum and every atom's support have been seeded once;
-    /// later closures learn only decisions not yet known.
-    seeded: bool,
+    /// One bit per atom, set exactly while the atom is in `heads`, so an
+    /// atom's recheck is queued once until it runs.
+    pending: Vec<u64>,
+}
+
+impl NarrowingScratch {
+    /// Worklist and pending-mask capacity in bytes; the value's own header is
+    /// counted by its owner.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        (self.learned.capacity() + self.heads.capacity()) as u128 * size_of::<usize>() as u128
+            + self.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
+            + self.pending.capacity() as u128 * size_of::<u64>() as u128
+    }
+
+    /// Discard every entry, keeping the capacity, for a narrowing over
+    /// `atoms` atoms.
+    fn prepare(&mut self, atoms: usize) {
+        for &atom in &self.heads {
+            self.pending[atom / 64] &= !(1u64 << (atom % 64));
+        }
+        self.learned.clear();
+        self.nodes.clear();
+        self.heads.clear();
+        if self.pending.len() < flag_words(atoms) {
+            self.pending.resize(flag_words(atoms), 0);
+        }
+    }
+
+    /// Queue the atom's support recheck unless one is already pending. Its
+    /// supporters only fall as knowledge grows, so the pending recheck,
+    /// made with the later knowledge, derives what this one would have.
+    fn queue_recheck(&mut self, atom: usize) {
+        let (word, flag) = (atom / 64, 1u64 << (atom % 64));
+        if self.pending[word] & flag == 0 {
+            self.pending[word] |= flag;
+            self.heads.push(atom);
+        }
+    }
+
+    /// The next atom to recheck, no longer pending: a support change during
+    /// or after its recheck queues it again.
+    fn next_recheck(&mut self) -> Option<usize> {
+        let atom = self.heads.pop()?;
+        self.pending[atom / 64] &= !(1u64 << (atom % 64));
+        Some(atom)
+    }
+}
+
+/// One narrowing's closure: a region's knowledge and the walker's
+/// worklists, borrowed together for the call.
+struct Closure<'a, C> {
+    known: &'a mut Known<C>,
+    lists: &'a mut NarrowingScratch,
 }
 
 /// What a step of the closure did.
@@ -835,39 +1059,38 @@ fn learn(known: &mut [u64], opposite: &[u64], index: usize) -> Step {
     }
 }
 
-impl Known {
-    fn empty(nodes: usize, chains: usize, incidences: usize, unknown: Counters) -> Self {
+impl<C: Count> Known<C> {
+    fn empty(nodes: usize, chains: usize, unknown: Counters<C>) -> Self {
         let seen = vec![0u64; unknown.len().div_ceil(64)].into_boxed_slice();
         Self {
             sure: vec![0; flag_words(nodes)].into_boxed_slice(),
             never: vec![0; flag_words(nodes)].into_boxed_slice(),
             atom_sure: vec![0; flag_words(unknown.len())].into_boxed_slice(),
             atom_never: vec![0; flag_words(unknown.len())].into_boxed_slice(),
-            sure_operands: Counters::zeros(chains, incidences),
-            never_operands: Counters::zeros(chains, incidences),
+            sure_operands: Counters::zeros(chains),
+            never_operands: Counters::zeros(chains),
             unknown,
-            learned: Vec::new(),
-            nodes: Vec::new(),
-            heads: Vec::new(),
             seen,
             seeded: false,
         }
     }
+}
 
+impl<C: Count> Closure<'_, C> {
     /// A node learns to hold; it is revisited if that is new.
     fn sure(&mut self, index: usize) -> Step {
-        let step = learn(&mut self.sure, &self.never, index);
+        let step = learn(&mut self.known.sure, &self.known.never, index);
         if step == Step::Changed {
-            self.nodes.push((index, true));
+            self.lists.nodes.push((index, true));
         }
         step
     }
 
     /// A node learns to fail; it is revisited if that is new.
     fn never(&mut self, index: usize) -> Step {
-        let step = learn(&mut self.never, &self.sure, index);
+        let step = learn(&mut self.known.never, &self.known.sure, index);
         if step == Step::Changed {
-            self.nodes.push((index, false));
+            self.lists.nodes.push((index, false));
         }
         step
     }
@@ -883,14 +1106,14 @@ impl Known {
         value: bool,
     ) -> Step {
         let step = if value {
-            learn(&mut self.atom_sure, &self.atom_never, atom)
+            learn(&mut self.known.atom_sure, &self.known.atom_never, atom)
         } else {
-            learn(&mut self.atom_never, &self.atom_sure, atom)
+            learn(&mut self.known.atom_never, &self.known.atom_sure, atom)
         };
         if step != Step::Changed {
             return step;
         }
-        self.learned.push(atom);
+        self.lists.learned.push(atom);
         let mut step = step;
         for &node in &index.atom_nodes[atom] {
             step = step.join(if value {
@@ -900,7 +1123,7 @@ impl Known {
             });
         }
         if value && producers.is_some() {
-            self.heads.push(atom);
+            self.lists.queue_recheck(atom);
         }
         step
     }
@@ -908,14 +1131,14 @@ impl Known {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Each event on the worklist follows a new bit, or is one of
     /// the initial seeds, so the events are bounded by the bits.
-    fn close<E: From<Stop>>(
+    fn close(
         &mut self,
         subject: Subject<'_>,
         index: &Narrower,
         region: &Region,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
+        work: &mut Work<'_>,
         statistics: &mut NarrowingStatistics,
-    ) -> Result<Step, E> {
+    ) -> Result<Step, Stop> {
         let Subject {
             theory,
             producers,
@@ -923,7 +1146,7 @@ impl Known {
         } = subject;
         let nodes = theory.nodes();
         let mut step = Step::Unchanged;
-        if !self.seeded {
+        if !self.known.seeded {
             for (node, kind) in nodes.iter().enumerate() {
                 if index.absorbed[node] {
                     continue;
@@ -938,27 +1161,29 @@ impl Known {
                 step = step.join(self.sure(root));
             }
             if producers.is_some() {
-                self.heads.extend(0..theory.atom_count());
+                for atom in 0..theory.atom_count() {
+                    self.lists.queue_recheck(atom);
+                }
             }
-            self.seeded = true;
+            self.known.seeded = true;
         }
         // Take the seen mask out so the new-decision iterator borrows the local
         // rather than `self`, leaving `self.atom` free to mutate the closure;
         // the swap moves a box pointer and copies nothing.
-        let mut seen = std::mem::take(&mut self.seen);
+        let mut seen = std::mem::take(&mut self.known.seen);
         for (atom, value) in region.decided_since(&seen) {
             step = step.join(self.atom(index, producers, atom, value));
         }
         region.snapshot_decided(&mut seen);
-        self.seen = seen;
+        self.known.seen = seen;
         if step == Step::Contradiction {
             return Ok(step);
         }
         loop {
-            let step = if let Some((node, value)) = self.nodes.pop() {
+            let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
-            } else if let Some(atom) = self.heads.pop() {
+            } else if let Some(atom) = self.lists.next_recheck() {
                 statistics.propagations += 1;
                 let producers =
                     producers.expect("a support recheck is queued only when producers are known");
@@ -979,14 +1204,14 @@ impl Known {
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
     /// parent under the mask likewise.
-    fn revisit<E: From<Stop>>(
+    fn revisit(
         &mut self,
         subject: Subject<'_>,
         index: &Narrower,
         node: usize,
         value: bool,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
-    ) -> Result<Step, E> {
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
         work.tick()?;
         let Subject {
             theory,
@@ -996,7 +1221,7 @@ impl Known {
         let nodes = theory.nodes();
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         for &atom in &index.atom_operands[node] {
-            self.unknown.decrement(atom);
+            self.known.unknown.decrement(atom);
         }
         let mut step = Step::Unchanged;
         if !masked(node) {
@@ -1011,7 +1236,7 @@ impl Known {
                 self.operand_changed(index, chain_position(chain), value)
             } else {
                 let up = self.learn_from_operands(nodes, parent);
-                if bit(&self.sure, parent) || bit(&self.never, parent) {
+                if bit(&self.known.sure, parent) || bit(&self.known.never, parent) {
                     up.join(self.teach_operands(nodes, index, producers, parent))
                 } else {
                     up
@@ -1034,21 +1259,25 @@ impl Known {
         } = index.chains[chain];
         let total = operands.len();
         if value {
-            self.sure_operands.add(chain, 1);
+            self.known.sure_operands.add(chain, 1);
         } else {
-            self.never_operands.add(chain, 1);
+            self.known.never_operands.add(chain, 1);
         }
         let (sure, never) = (
-            self.sure_operands.get(chain),
-            self.never_operands.get(chain),
+            self.known.sure_operands.get(chain),
+            self.known.never_operands.get(chain),
         );
         match (disjunction, value) {
             (true, true) => self.sure(root),
             (true, false) if never == total => self.never(root),
-            (true, false) if bit(&self.sure, root) && never + 1 == total => self.unit(index, chain),
+            (true, false) if bit(&self.known.sure, root) && never + 1 == total => {
+                self.unit(index, chain)
+            }
             (false, false) => self.never(root),
             (false, true) if sure == total => self.sure(root),
-            (false, true) if bit(&self.never, root) && sure + 1 == total => self.unit(index, chain),
+            (false, true) if bit(&self.known.never, root) && sure + 1 == total => {
+                self.unit(index, chain)
+            }
             _ => Step::Unchanged,
         }
     }
@@ -1068,9 +1297,9 @@ impl Known {
         } = index.chains[chain];
         let open = operands.iter().copied().find(|&operand| {
             if disjunction {
-                !bit(&self.never, operand)
+                !bit(&self.known.never, operand)
             } else {
-                !bit(&self.sure, operand)
+                !bit(&self.known.sure, operand)
             }
         });
         match open {
@@ -1097,19 +1326,17 @@ impl Known {
         if let Some(chain) = index.chain_of[node] {
             step = step.join(self.teach_chain(index, chain_position(chain)));
         }
-        if bit(&self.sure, node) {
+        if bit(&self.known.sure, node) {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => {
                     // A held head blocks the other heads of its producers.
                     if let Some(producers) = producers {
                         for &producer in &producers.by_head[atom] {
-                            self.heads.extend(
-                                producers.rules[producer]
-                                    .heads
-                                    .iter()
-                                    .copied()
-                                    .filter(|&head| head != atom),
-                            );
+                            for &head in &producers.rules[producer].heads {
+                                if head != atom {
+                                    self.lists.queue_recheck(head);
+                                }
+                            }
                         }
                     }
                     self.atom(index, producers, atom, true)
@@ -1117,9 +1344,9 @@ impl Known {
                 Node::False => Step::Contradiction,
                 Node::And(..) | Node::Or(..) => Step::Unchanged,
                 Node::Implies(a, b) => {
-                    if bit(&self.sure, a) {
+                    if bit(&self.known.sure, a) {
                         self.sure(b)
-                    } else if bit(&self.never, b) {
+                    } else if bit(&self.known.never, b) {
                         self.never(a)
                     } else {
                         Step::Unchanged
@@ -1127,7 +1354,7 @@ impl Known {
                 }
             });
         }
-        if bit(&self.never, node) {
+        if bit(&self.known.never, node) {
             step = step.join(match nodes[node] {
                 Node::Atom(atom) => self.atom(index, producers, atom, false),
                 Node::False | Node::And(..) | Node::Or(..) => Step::Unchanged,
@@ -1135,8 +1362,9 @@ impl Known {
             });
             if let Some(producers) = producers {
                 for &producer in &producers.by_body[node] {
-                    self.heads
-                        .extend(producers.rules[producer].heads.iter().copied());
+                    for &head in &producers.rules[producer].heads {
+                        self.lists.queue_recheck(head);
+                    }
                 }
             }
         }
@@ -1152,9 +1380,9 @@ impl Known {
         } = index.chains[chain];
         let total = operands.len();
         let mut step = Step::Unchanged;
-        if bit(&self.sure, root) {
+        if bit(&self.known.sure, root) {
             if disjunction {
-                if self.never_operands.get(chain) + 1 == total {
+                if self.known.never_operands.get(chain) + 1 == total {
                     step = step.join(self.unit(index, chain));
                 }
             } else {
@@ -1163,12 +1391,12 @@ impl Known {
                 }
             }
         }
-        if bit(&self.never, root) {
+        if bit(&self.known.never, root) {
             if disjunction {
                 for &operand in operands {
                     step = step.join(self.never(operand));
                 }
-            } else if self.sure_operands.get(chain) + 1 == total {
+            } else if self.known.sure_operands.get(chain) + 1 == total {
                 step = step.join(self.unit(index, chain));
             }
         }
@@ -1181,10 +1409,10 @@ impl Known {
         match nodes[node] {
             Node::Implies(a, b) => {
                 let mut up = Step::Unchanged;
-                if bit(&self.never, a) || bit(&self.sure, b) {
+                if bit(&self.known.never, a) || bit(&self.known.sure, b) {
                     up = up.join(self.sure(node));
                 }
-                if bit(&self.sure, a) && bit(&self.never, b) {
+                if bit(&self.known.sure, a) && bit(&self.known.never, b) {
                     up = up.join(self.never(node));
                 }
                 up
@@ -1199,14 +1427,14 @@ impl Known {
     /// `sole_support_forces`). A producer can support its atom when its
     /// body is not known to fail and, unless it is a choice, no other of
     /// its heads is known to hold.
-    fn recheck<E: From<Stop>>(
+    fn recheck(
         &mut self,
         index: &Narrower,
         producers: &Producers,
         atom: usize,
-        work: &mut Work<impl FnMut() -> Result<(), E>>,
-    ) -> Result<Step, E> {
-        if bit(&self.atom_never, atom) {
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
+        if bit(&self.known.atom_never, atom) {
             return Ok(Step::Unchanged);
         }
         let mut supporters = 0;
@@ -1214,12 +1442,14 @@ impl Known {
         for &producer in &producers.by_head[atom] {
             work.tick()?;
             let producer = &producers.rules[producer];
-            let body_impossible = producer.body.is_some_and(|body| bit(&self.never, body));
+            let body_impossible = producer
+                .body
+                .is_some_and(|body| bit(&self.known.never, body));
             let other_held = !producer.choice
                 && producer
                     .heads
                     .iter()
-                    .any(|&head| head != atom && bit(&self.atom_sure, head));
+                    .any(|&head| head != atom && bit(&self.known.atom_sure, head));
             if !body_impossible && !other_held {
                 supporters += 1;
                 sole = producer.body;
@@ -1227,7 +1457,7 @@ impl Known {
         }
         Ok(match (supporters, sole) {
             (0, _) => self.atom(index, Some(producers), atom, false),
-            (1, Some(body)) if bit(&self.atom_sure, atom) => self.sure(body),
+            (1, Some(body)) if bit(&self.known.atom_sure, atom) => self.sure(body),
             _ => Step::Unchanged,
         })
     }

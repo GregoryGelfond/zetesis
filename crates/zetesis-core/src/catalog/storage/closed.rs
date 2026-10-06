@@ -16,6 +16,13 @@ pub(super) struct IndexedRows {
     source_owner: Arc<Owner>,
 }
 
+impl IndexedRows {
+    /// The atom scope of the writer whose rows these are.
+    pub(super) const fn source_owner(&self) -> &Arc<Owner> {
+        &self.source_owner
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Closed {
     pub(super) vocabulary: FrozenVocabulary,

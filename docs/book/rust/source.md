@@ -343,6 +343,17 @@ same consuming operation. Use `PreparedInput::formula` for the first result and
 `PreparedInput::terminal` for the second. The terminal session accepts automatic
 grounding and reconstructs full answers before applying original observations.
 
+`PreparedFormula::ground_lazy()` (and its bundle counterpart) defers the same
+certified definitions over a hybrid base: the base's producer core is
+instantiated and its eligible integrity constraints are streamed, even when none
+is eligible. It returns `FormulaMaterialization::Complete(HybridFormula)` when
+nothing is deferred. A terminal owner's `base()` says which base it has; a
+hybrid base's session checks each core answer against the streamed constraints
+before reconstructing it, runs under automatic or lazy grounding on the CPU, and
+refuses an eager request. `zetesis_solve::ground_formula` and `ground_bundle`
+map a requested grounder to its materialization — `eager` to `ground`, `lazy` to
+`ground_lazy`, `auto` to `ground_adaptive` — as the CLI and the facade do.
+
 A terminal definition has a positive, flat body and an ordinary head whose
 predicate is read by no logical rule or constraint. All producers must qualify;
 strong-negation coherence, objectives and explicit projection are checked before
@@ -367,8 +378,13 @@ That lower-level operation checks exact catalog ownership, not base stability;
 the ordinary session supplies the verified-base premise.
 
 The cursor borrows canonical terms and uses private binding and row-selection
-metadata. Each call starts with exactly the supplied true rows. Its cumulative
-work and substitutions include source admission and earlier calls. A refusal
+metadata. Each call starts with exactly the supplied true rows and may charge
+the cursor's per-answer allowance of work and substitutions — the headroom the
+formula ceilings left after source admission — whatever earlier calls used; a
+work or substitution refusal reports that allowance as its limit and the call's
+requested charge as observed; the receipts' `latest` is the call's accepted
+charge. `statistics()` reports the session totals, admission's
+charge, the allowance, the latest call and the largest call. A refusal
 fuses the cursor without invalidating prior returned models. Retained model
 families have their own consumer-side memory limits. These named capacities are
 not process RSS, and the checked mathematical extension law is not yet a proof
@@ -395,8 +411,11 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-termina
 ## Stream ordinary constraints
 
 `PreparedFormula::ground_hybrid()` and the corresponding bundle method return
-one shared `HybridFormula`. It retains the original source, complete possible
-support and typed atom catalog. Producers and constraints with aggregates,
+one shared `HybridFormula`. It retains the original source, the typed atom
+catalog and, when any constraint is streamed, the closed canonical base with the
+possible-support relations those constraints read; discovery and order indexes
+and every other relation are released at admission. Closing is charged as
+formula work, and its transient peak is admitted against `max_support_bytes`. Producers and constraints with aggregates,
 projected atoms or conditional scopes remain in `core_theory()`. Ordinary
 atom/scalar integrity constraints retain their prepared templates instead of
 complete formula DAGs. This first schedule requires indexed joins and refuses
@@ -419,8 +438,14 @@ substitute for owner identity.
 `check_region(&theory, &region, &cancellation)` requires the exact retained core
 and a region spanning its dense atom catalog. A certainly true constraint body
 returns `Refuted { site }`; otherwise it returns `NotRefuted`, which does
-not assert satisfaction. The checker prepares and reuses a typed atom index and
-support-row correspondence on first region use. Region checks select known-held
+not assert satisfaction. On first region use a checker borrows the core's typed
+atom index (a `CatalogIndex`) and the core's support-row positions in that
+catalog. The first checker to need each builds it; every later checker of the
+same core, on any thread, borrows it for one unit of work and pairs the
+positions with its own occurrence maps in work proportional to the number of
+kept predicates. Checkers racing on a first use may each build, and one result
+is kept; a refused build keeps nothing. Each checker's support ledger counts the
+shared structures' retained bytes, as it counts the shared support base. Region checks select known-held
 positive rows before binding, while retaining rows without a known correspondence.
 A necessary signed-predicate test can avoid a template that cannot have a sure
 body. Neither operation changes the final full-model check or arithmetic admission.
@@ -440,21 +465,28 @@ Omitted zero-divisor instances therefore retain the same located warnings, and
 candidate filtering cannot conceal fatal arithmetic.
 
 Hybrid admission preserves its original expansion-budget prefix. It also keeps
-prepared constraint plans and completed support that eager grounding can release
-after emission. The existing source, scalar and support ceilings still apply;
+prepared constraint plans and the support relations they read, which eager
+grounding can release after emission, and, once a region check has used them,
+the core's typed atom index (two integer orders over the core's atoms) and the
+kept support rows' positions in it. The existing source, scalar and support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
 atom guards. `streamed_templates()` counts lowered templates, including pool
 alternatives, and `streamed_instances()` counts scalar-selected instances visited
 during admission; neither is a retained instance store.
 
-`checker(limits)` has its own cumulative work and substitution limits, plus a
-byte allowance for structural capture deltas. ID-only copies and lookups do not
-consume that byte allowance.
+`checker(limits)` gives each check its own work and substitution limits, plus a
+byte allowance for structural capture deltas: the first check's allowance also
+covers the checker's preparation, and each later check is measured from the
+charges accepted when the previous one ended. The limits bound the work spent
+on one candidate, never the number of candidates. A refusal reports the check's
+own allowance as its limit. ID-only copies and lookups do not consume the byte
+allowance.
 For parallel composition, create `ConstraintAllowance::new(limits)` and
 use `checker_with_allowance(&allowance, &cancellation)` for every worker and final
-checker. Its clones share before-operation charges; no allowance is multiplied
-by the worker count. `allowance.statistics()` is exact after those workers join;
+checker. Each check of each checker gets `limits`; the clones share one
+cumulative receipt of every accepted charge, and no limit is multiplied by the
+worker count. `allowance.statistics()` is exact after those workers join;
 live fields are independently observed monotone counters. Snapshot descriptors
 are prepared once per checker, without copying support rows; per-operation
 binding/storage ceilings remain those of the admitted source. A new checker

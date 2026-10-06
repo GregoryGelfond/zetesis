@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// The original index the enumeration would build and hand the workers.
+fn original(theory: &Theory) -> Arc<IndexedTheory> {
+    let mut owner = super::super::OriginalIndex::new(theory);
+    Arc::clone(owner.ensure(|_| Ok(())).unwrap())
+}
+
 #[test]
 fn shared_narrowing_never_executes_an_unleased_read() {
     let cancellation =
@@ -35,14 +41,14 @@ fn shared_narrowing_never_executes_an_unleased_read() {
     };
     let narrower = Narrower::new(&theory);
     let mut region = Region::all_open(theory.atom_count());
-    let mut knowledge = CandidateKnowledge::new(narrower.knowledge());
+    let mut knowledge = CandidateKnowledge::default();
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
-        (&theory, &narrower),
-        None,
+        (&theory, &narrower, None),
         &Conditions::<(Theory, Narrower)>::default(),
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     );
@@ -90,11 +96,12 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     search.started = true;
     let _root = search.shared.take_local(0).unwrap();
     let idle_shared = Arc::clone(&search.shared);
+    let index = original(&theory);
     // The waiter owns the only remaining sender, so the channel disconnects
     // when it exits, letting the coordinator join and report the panic.
     let sender = search.sender.take().unwrap();
     search.handles.push(std::thread::spawn(move || {
-        contain_worker(&idle_shared, || worker(&idle_shared, 0, &sender))
+        contain_worker(&idle_shared, || worker(&idle_shared, &index, 0, &sender))
     }));
     let failed_shared = Arc::clone(&search.shared);
     search.handles.push(std::thread::spawn(move || {
@@ -105,7 +112,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         })
     }));
     assert!(matches!(
-        search.propose(None, false, &mut budget),
+        search.propose(&original(&theory), None, false, &mut budget),
         Err(Incomplete::WorkerPanicked),
     ));
     assert!(!search.exhausted);
@@ -151,7 +158,7 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     )
     .unwrap();
     assert!(matches!(
-        search.propose(Some(&certificate), false, &mut budget),
+        search.propose(&original(&theory), Some(&certificate), false, &mut budget),
         Err(Incomplete::Certificate(crate::CertificateError::Tight(
             zetesis_ferraris::TightError::Limit(zetesis_ferraris::TightResource::Bytes),
         ))),

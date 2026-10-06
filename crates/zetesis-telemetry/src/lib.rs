@@ -57,6 +57,20 @@ pub enum GroundingMode {
     /// during solving. Grounding intervals do not cover the full original theory.
     /// A shared recorder can also contain other eager attempts.
     EagerBaseTerminalDefinitions,
+    /// A hybrid base — an eager producer core with its eligible constraints
+    /// streamed during solving — followed by terminal-definition reconstruction.
+    /// Grounding intervals cover the core only.
+    HybridBaseTerminalDefinitions,
+}
+
+/// How the base of a route with deferred terminal definitions was grounded,
+/// as the route reports it to [`StageRecorder::mark_terminal_definitions`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalBaseMark {
+    /// Every base rule instantiated.
+    Eager,
+    /// The producer core instantiated, eligible constraints streamed.
+    Hybrid,
 }
 impl GroundingMode {
     /// Stable machine-readable identifier.
@@ -68,6 +82,7 @@ impl GroundingMode {
             Self::LazyInterleaved => "lazy_interleaved",
             Self::Mixed => "mixed",
             Self::EagerBaseTerminalDefinitions => "eager_base_terminal_definitions",
+            Self::HybridBaseTerminalDefinitions => "hybrid_base_terminal_definitions",
         }
     }
 }
@@ -265,9 +280,8 @@ impl StageRecorder {
                 record.mode = match record.mode {
                     GroundingMode::Unentered | GroundingMode::Eager => GroundingMode::Eager,
                     GroundingMode::LazyInterleaved | GroundingMode::Mixed => GroundingMode::Mixed,
-                    GroundingMode::EagerBaseTerminalDefinitions => {
-                        GroundingMode::EagerBaseTerminalDefinitions
-                    }
+                    mode @ (GroundingMode::EagerBaseTerminalDefinitions
+                    | GroundingMode::HybridBaseTerminalDefinitions) => mode,
                 };
             }
         }
@@ -290,24 +304,24 @@ impl StageRecorder {
                 GroundingMode::Eager
                 | GroundingMode::Mixed
                 | GroundingMode::EagerBaseTerminalDefinitions => GroundingMode::Mixed,
+                // A hybrid base streams its own constraints during solving.
+                GroundingMode::HybridBaseTerminalDefinitions => {
+                    GroundingMode::HybridBaseTerminalDefinitions
+                }
             };
         }
     }
 
-    /// Record an eager base whose terminal definitions are reconstructed during
-    /// solving. No eager interval for the full original theory is implied, and
-    /// no duration is created. Lazy routes sharing this recorder remain mixed.
-    pub fn mark_terminal_definitions(&self) {
+    /// Record a base, of the kind the route reports, whose terminal
+    /// definitions are reconstructed during solving. No interval for the full
+    /// original theory is implied, and no duration is created. The mode does
+    /// not depend on whether admission was observed: the route supplies the
+    /// base's kind. An eager base meeting lazy routes on this recorder, or a
+    /// base of the other kind, is mixed; a hybrid base's own streaming is lazy.
+    pub fn mark_terminal_definitions(&self, base: TerminalBaseMark) {
         if self.enabled() {
             let mut state = self.lock_state();
-            state.mode = match state.mode {
-                GroundingMode::Unentered
-                | GroundingMode::Eager
-                | GroundingMode::EagerBaseTerminalDefinitions => {
-                    GroundingMode::EagerBaseTerminalDefinitions
-                }
-                GroundingMode::LazyInterleaved | GroundingMode::Mixed => GroundingMode::Mixed,
-            };
+            state.mode = terminal_mode(state.mode, base);
         }
     }
     /// Snapshot attempted durations, including any active exclusive prefix.
@@ -391,3 +405,32 @@ impl Drop for StageSpan<'_> {
 
 #[cfg(test)]
 mod tests;
+
+/// The mode after a terminal-definition mark of `base` on `mode`.
+const fn terminal_mode(mode: GroundingMode, base: TerminalBaseMark) -> GroundingMode {
+    match (base, mode) {
+        (
+            TerminalBaseMark::Eager,
+            GroundingMode::Unentered
+            | GroundingMode::Eager
+            | GroundingMode::EagerBaseTerminalDefinitions,
+        ) => GroundingMode::EagerBaseTerminalDefinitions,
+        (
+            TerminalBaseMark::Hybrid,
+            GroundingMode::Unentered
+            | GroundingMode::Eager
+            | GroundingMode::LazyInterleaved
+            | GroundingMode::Mixed
+            | GroundingMode::HybridBaseTerminalDefinitions,
+        ) => GroundingMode::HybridBaseTerminalDefinitions,
+        (
+            TerminalBaseMark::Eager,
+            GroundingMode::LazyInterleaved
+            | GroundingMode::Mixed
+            | GroundingMode::HybridBaseTerminalDefinitions,
+        )
+        | (TerminalBaseMark::Hybrid, GroundingMode::EagerBaseTerminalDefinitions) => {
+            GroundingMode::Mixed
+        }
+    }
+}

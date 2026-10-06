@@ -50,7 +50,10 @@ impl Fixture {
     fn session(&self) -> HybridSession<'_> {
         let resources = ExecutionResources::default();
         let mut session = HybridSession::new(
-            &self.owner,
+            super::HybridInput {
+                core: self.owner.core(),
+                subject: crate::Subject::Hybrid(self.owner.clone()),
+            },
             &self.config,
             &resources,
             &mut Ignore,
@@ -190,7 +193,10 @@ fn a_construction_stop_precedes_a_later_source_worker_failure() {
     fixture.config.max_model_work = 0;
     let resources = ExecutionResources::default();
     let mut session = HybridSession::new(
-        &fixture.owner,
+        super::HybridInput {
+            core: fixture.owner.core(),
+            subject: crate::Subject::Hybrid(fixture.owner.clone()),
+        },
         &fixture.config,
         &resources,
         &mut Ignore,

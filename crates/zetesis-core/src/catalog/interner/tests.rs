@@ -6,6 +6,7 @@ mod ordering_tests;
 mod prepared_tests;
 mod closed_tests;
 mod publication_tests;
+mod typed_order;
 
 use super::*;
 use crate::{

@@ -112,13 +112,29 @@
     "publicSource": {
       "file": "evaluator.source.llbc",
       "changedPath": [
-        "translated",
-        "options",
-        "dest_file"
+        [
+          "translated",
+          "options",
+          "dest_file"
+        ],
+        [
+          "translated",
+          "files",
+          "*",
+          "contents"
+        ],
+        [
+          "translated",
+          "short_names"
+        ]
       ],
-      "newValue": "evaluator.llbc",
-      "reason": "Remove the extraction-machine destination path; this is command metadata, not executable IR.",
-      "restoringDestinationRestoresEntireParsedOriginal": true
+      "newValue": {
+        "dest_file": "evaluator.llbc",
+        "files.contents": null,
+        "short_names": "sorted by key"
+      },
+      "reason": "Remove the extraction-machine destination path, the embedded source text of every reached file and the nondeterministic short_names order: command metadata and debug text, not executable IR; no proof or generated definition reads them.",
+      "restoringDestinationRestoresParsedOriginalExceptFileTextAndShortNamesOrder": true
     },
     "translationInput": {
       "file": "evaluator.llbc",
@@ -450,7 +466,7 @@
     "documentedExtractionArgvMatchesRecordedRun": true,
     "fullRestoreComparisons": true,
     "recordedOutputPathConvention": "The private extraction and translation output directories are represented as target/replay in reproduction commands. This producer path mapping does not alter generated content or retained command outputs.",
-    "retainedInputCheckScope": "All 311 declared source inputs match the current checkout. The release-version replay changes only the two root Cargo inputs; the other 309 inputs and all 18 imported semantic sources retain their preceding hashes. Local package versions advance from 0.2.0 to 0.3.0; all external dependency records and dependency relationships are unchanged. The original extraction and normalization record remains the provenance of the retained byte-identical generated artifacts; sourceRevalidation records the independent repeated extraction. An inventory is not a theorem about every recorded function."
+    "retainedInputCheckScope": "All 317 declared source inputs match the current checkout: 27 changed and 6 added since the preceding record, all 18 imported semantic sources retain their hashes, and external dependency records are unchanged. The original extraction and normalization record remains the provenance of the retained byte-identical generated Lean; sourceRevalidation records the independent repeated extraction and the regenerated normalized LLBC. An inventory is not a theorem about every recorded function."
   },
   "trustBoundary": [
     "LLBC destination metadata and twelve local names are normalized; only checked unused Debug/Step registrations are omitted. Both constructors, insertion and public checker remain exported. Restoration recovers the complete parsed raw Charon output.",
@@ -465,8 +481,8 @@
     "The atomic-choice model additions are concrete pure definitions for two trusted library contracts. Option.or_else preserves fallback failure/divergence and does not invoke it for Some. Generic signatures do not establish arbitrary Rust drop effects; the selected inputs are scalar indices and shared theory data."
   ],
   "generatedArtifactsSha256": {
-    "evaluator.source.llbc": "e327140540b00d641ca0466b385927c35ce58a4b7293e2cc8de1e60b6349277f",
-    "evaluator.llbc": "6d1c05513aa90e5b31a4d9420da0da7584485a0f3b5e3cbd8205886d167a32d1",
+    "evaluator.source.llbc": "19fea73669102c0b210c4b08aa7ba5adfa51b0ec0c03e89f7b3e3b9c5dc4692f",
+    "evaluator.llbc": "e922519b2c92fe75fe0dc04fb9375b01391e7b895f0ba24311b167f9361ca1f7",
     "Evaluator/Funs.lean": "0bf0cdaa5fea0df9609b672803a662642bcd842ec8c1714351a190cf443b2ad1",
     "Evaluator/FunsExternal_Template.lean": "3482465f2a1a92abb817d7ed817ec8e9deb46c773ec0e4199d56665d917ef381",
     "Evaluator/Types.lean": "e6283fa35725fc00bb7f50440f505ae50a2cdff8a7a42f6620974cc26afbf554",
@@ -561,32 +577,67 @@
     "controlReadMigration": "Poll first reads local Boolean cancellation, then an optional U64 slot word, then optional Boolean expiry. The membership context retains the actual observed-word inequality. ControlReads receipts and ContextEvents.poll_reads derive exact completed read histories. The ghost-clear representative preserves handles, slot presence and captured active word while changing only unused fixed observations; it does not mutate a Rust token."
   },
   "sourceRevalidation": {
-    "checkedOn": "2026-10-04",
-    "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+    "checkedOn": "2026-10-06",
+    "sourceBaseRevision": "69a8e9ade3923ffba101c971d49a643d33f0b229",
     "themeliosRevision": "3339a8abed1e00f21e42c2b3ed2677c16248eda5",
-    "previousSourceInventorySha256": "ab9112a410841cb9bf2921c862fc36f45fe45353e26d2078d3b0a5b474297d44",
-    "sourceInventorySha256": "9fd7f6322e986b927472b550d6852deaa44755dea58c019268e9e10a34ba359f",
+    "previousSourceInventorySha256": "9fd7f6322e986b927472b550d6852deaa44755dea58c019268e9e10a34ba359f",
+    "sourceInventorySha256": "629d47a523419dff4dd1d38b571605a2f238a303f7ef0b779acd5a739b2799da",
     "changedSourceInputs": [
-      "Cargo.lock",
-      "Cargo.toml"
+      "crates/zetesis-core/src/atom_lookup.rs",
+      "crates/zetesis-core/src/catalog/atom_identities.rs",
+      "crates/zetesis-core/src/catalog/atom_identities/tests.rs",
+      "crates/zetesis-core/src/catalog/interner.rs",
+      "crates/zetesis-core/src/catalog/interner/closed.rs",
+      "crates/zetesis-core/src/catalog/interner/query.rs",
+      "crates/zetesis-core/src/catalog/interner/tests.rs",
+      "crates/zetesis-core/src/catalog/interner/tests/probes.rs",
+      "crates/zetesis-core/src/catalog/storage/closed.rs",
+      "crates/zetesis-core/src/catalog/storage/read.rs",
+      "crates/zetesis-core/src/lib.rs",
+      "crates/zetesis-core/src/ordered_index.rs",
+      "crates/zetesis-core/src/relation/catalog.rs",
+      "crates/zetesis-core/src/relation/catalog/tests.rs",
+      "crates/zetesis-core/tests/integration/atom_lookup.rs",
+      "crates/zetesis-ferraris/README.md",
+      "crates/zetesis-ferraris/src/lib.rs",
+      "crates/zetesis-ferraris/src/regions.rs",
+      "crates/zetesis-ferraris/src/regions/counters.rs",
+      "crates/zetesis-ferraris/src/regions/counters/tests.rs",
+      "crates/zetesis-ferraris/src/regions/tests.rs",
+      "crates/zetesis-ferraris/src/regions/tests/chain_links.rs",
+      "crates/zetesis-ferraris/src/regions/tests/copy_costs.rs",
+      "crates/zetesis-ferraris/src/regions/tests/counters.rs",
+      "crates/zetesis-ferraris/tests/integration/region_work.rs",
+      "crates/zetesis-ferraris/tests/integration/regions.rs",
+      "crates/zetesis-ferraris/tests/integration/regions/packed_knowledge.rs"
     ],
-    "addedSourceInputs": [],
-    "sourceInventoryRustInputsChanged": false,
-    "previousWorkspaceVersion": "0.2.0",
+    "addedSourceInputs": [
+      "crates/zetesis-core/proptest-regressions/catalog/interner/tests.txt",
+      "crates/zetesis-core/proptest-regressions/catalog/interner/tests/typed_order.txt",
+      "crates/zetesis-core/src/catalog/interner/tests/typed_order.rs",
+      "crates/zetesis-ferraris/src/regions/tests/metering.rs",
+      "crates/zetesis-ferraris/src/regions/tests/rechecks.rs",
+      "crates/zetesis-ferraris/src/regions/tests/scratch.rs"
+    ],
+    "sourceInventoryRustInputsChanged": true,
+    "previousWorkspaceVersion": "0.3.0",
     "workspaceVersion": "0.3.0",
-    "localPackageVersionsChanged": 22,
+    "localPackageVersionsChanged": 0,
     "externalDependencyRecordsUnchanged": true,
-    "change": "The approved workspace release version changes from 0.2.0 to 0.3.0, with matching versions for 22 local packages in Cargo.lock. All other parsed workspace manifest settings, lockfile records, selected crate manifests and selected Rust source bytes are unchanged.",
+    "change": "CPU execution-cost changes edit 27 selected inputs and add 6 (zetesis-core interning, ordered indexes, relation catalog, atom lookup and closed catalog reads; zetesis-ferraris region narrowing and its re-exports). No selected declaration changes: the extraction's parsed declarations, item names, ordered declarations, options and file names and ids equal the preceding retained extraction. The LLBC normalization now also empties each embedded file's text and orders short_names by key, which no proof or generated definition reads, so the retained LLBC artifacts are regenerated once under that normalization.",
     "freshExtractionExitCode": 0,
-    "freshRawLlbcSha256": "71a581c4cbc58b392abfd3dd28a176552186c92cbb886d7995c19288747cd7bc",
-    "fullParsedLlbcEqualAfterShortNamesOrdering": true,
-    "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
+    "freshRawLlbcSha256": "afc21a14d2d00c31b8f3f9ac546d5c5a5abf96870d735616af83a2863d384923",
+    "parsedLlbcEqualExceptFileTextAndShortNamesOrder": true,
+    "normalizedLlbcByteReproducible": true,
+    "comparisonBasis": "Every parsed LLBC section except the embedded file text and the short_names order equals the preceding retained extraction; those two are removed by the documented normalization. Two independent extractions produce byte-identical normalized LLBC. Aeneas on the normalized input reproduces the stock generated Lean files and, after the documented binders, the provider-bound generated functions byte for byte.",
     "generatedFunsByteIdentical": true,
     "generatedTypesByteIdentical": true,
     "externalTemplatesByteIdentical": true,
     "externalModelsUnchanged": true,
     "proofSourcesUnchanged": true,
-    "retainedGeneratedArtifactsUnchanged": true,
+    "retainedGeneratedArtifactsUnchanged": false,
+    "retainedGeneratedLeanUnchanged": true,
+    "retainedLlbcRenormalized": true,
     "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
     "proofChecksRepeated": false,
     "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
@@ -666,6 +717,38 @@
       "change": "The themelios pin and higher-layer adapter dependencies change. Selected core, CPU and Ferraris Rust sources, manifests and resolved production dependency records are unchanged.",
       "freshExtractionExitCode": 0,
       "freshRawLlbcSha256": "dade52ad6f4b66d90bcef6e861bd0398eed8b86d3ba6887de6319e72d5c85dac",
+      "fullParsedLlbcEqualAfterShortNamesOrdering": true,
+      "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
+      "generatedFunsByteIdentical": true,
+      "generatedTypesByteIdentical": true,
+      "externalTemplatesByteIdentical": true,
+      "externalModelsUnchanged": true,
+      "proofSourcesUnchanged": true,
+      "retainedGeneratedArtifactsUnchanged": true,
+      "retainedProofInputFingerprint": "1f63bcfbb8e0817c0ab91b345774d4903e58ec2ce9188ad1d3e8a35702011ea4",
+      "proofChecksRepeated": false,
+      "proofEvidence": "The five recorded successful proof and context checks retain exactly the same source fingerprint and log bytes. No theorem, generated definition, imported semantic source or proof toolchain changed.",
+      "boundary": "This replay preserves the existing evaluator-refinement scope. It proves no additional adapter, macro, grounding, enumeration, scheduling or GPU correspondence."
+    },
+    {
+      "checkedOn": "2026-10-04",
+      "sourceBaseRevision": "f2ef17049c7c1a33541a740c651e6f6e9673ce5d",
+      "themeliosRevision": "3339a8abed1e00f21e42c2b3ed2677c16248eda5",
+      "previousSourceInventorySha256": "ab9112a410841cb9bf2921c862fc36f45fe45353e26d2078d3b0a5b474297d44",
+      "sourceInventorySha256": "9fd7f6322e986b927472b550d6852deaa44755dea58c019268e9e10a34ba359f",
+      "changedSourceInputs": [
+        "Cargo.lock",
+        "Cargo.toml"
+      ],
+      "addedSourceInputs": [],
+      "sourceInventoryRustInputsChanged": false,
+      "previousWorkspaceVersion": "0.2.0",
+      "workspaceVersion": "0.3.0",
+      "localPackageVersionsChanged": 22,
+      "externalDependencyRecordsUnchanged": true,
+      "change": "The approved workspace release version changes from 0.2.0 to 0.3.0, with matching versions for 22 local packages in Cargo.lock. All other parsed workspace manifest settings, lockfile records, selected crate manifests and selected Rust source bytes are unchanged.",
+      "freshExtractionExitCode": 0,
+      "freshRawLlbcSha256": "71a581c4cbc58b392abfd3dd28a176552186c92cbb886d7995c19288747cd7bc",
       "fullParsedLlbcEqualAfterShortNamesOrdering": true,
       "comparisonBasis": "Complete parsed LLBC matches the retained extraction after normalizing only the destination filename and ordering the documented short_names table. The normalized input, stock generated Lean files and provider-bound generated functions match the retained artifacts.",
       "generatedFunsByteIdentical": true,

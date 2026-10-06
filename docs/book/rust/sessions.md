@@ -402,12 +402,18 @@ Each formula session imports only new cumulative timing work, so repeated
 snapshots cannot count it again. Measurements never establish semantic coverage.
 
 For terminal definitions, `GroundingMode::EagerBaseTerminalDefinitions` identifies
-eager base materialization followed by host reconstruction during solving. A
-grounding interval covers the base, not the complete original theory. The
+eager base materialization followed by host reconstruction during solving, and
+`GroundingMode::HybridBaseTerminalDefinitions` a hybrid base — an eager producer
+core whose eligible constraints are streamed — followed by the same
+reconstruction. The route supplies the base's kind (`TerminalBaseMark`), so the
+mode does not depend on whether admission was observed. A grounding interval
+covers the base (for a hybrid base, its core), not the complete original theory. The
 `AnswerReconstruction` phase records attempted extensions, including refusals;
 `terminal_execution()` separately records consumed base answers, completed
-original answers and an unfinished attempt. Its accepted work includes source
-admission and remains distinct from base search work. These counters are
+original answers and an unfinished attempt. Its accepted work totals include
+source admission and remain distinct from base search work; it also reports
+admission's charge, the per-answer allowance each reconstruction may use, the
+latest call's accepted charge and the componentwise peak of accepted charges. These counters are
 available without timing instrumentation. CLI phase schema 4 introduced
 `answer_reconstruction`; schema 5 adds `model_construction`. Maintained readers
 accept schemas 1–4 without inventing measurements absent from older records.

@@ -319,18 +319,35 @@ impl RunError {
             _ => return Ok(()),
         };
         for diagnostic in diagnostics {
+            // A retained bundle names each file and locates the span by line
+            // and column, with the source excerpt, through the canonical view.
             let location = diagnostic.primary().location;
-            write!(f, "\n  ")?;
-            if let Some(bundle) = bundle {
-                if let Some(source) = bundle.get(location.source) {
-                    write!(f, "{}: ", source.path().display())?;
-                } else {
-                    write!(f, "source {}: ", location.source.get())?;
-                }
+            // A span over the whole file stands for the program, not one
+            // statement: it is named as such, with no line and column.
+            if let Some(bundle) = bundle
+                && let Some(source) = bundle.get(location.source)
+                && location.span == source.source().span()
+            {
+                write!(
+                    f,
+                    "\n  {}: while admitting the program: {}",
+                    source.path().display(),
+                    diagnostic.message()
+                )?;
+                continue;
             }
+            if let Some(bundle) = bundle
+                && bundle.get(location.source).is_some()
+            {
+                let rendered = zetesis_themelios::base::view::human(&diagnostic, bundle);
+                write!(f, "\n{}", rendered.trim_end_matches('\n'))?;
+                continue;
+            }
+            // Without retained source text only the byte span is known.
             write!(
                 f,
-                "bytes {}..{}: {}",
+                "\n  source {}: bytes {}..{}: {}",
+                location.source.get(),
                 location.span.start().get(),
                 location.span.end().get(),
                 diagnostic.message()
@@ -734,16 +751,21 @@ fn report_progress_statistics(
         if !options.stats {
             return result;
         }
-        let emitted = match options.statistics_view {
+        // The report is rendered whole, then written once at this point: its
+        // fragments would otherwise each be a write on unbuffered stderr. Order
+        // relative to other diagnostics is unchanged, and a write failure
+        // surfaces at this one write.
+        let mut report = Vec::new();
+        let rendered = match options.statistics_view {
             crate::StatisticsView::Records => crate::statistics::write_progress(
-                diagnostics,
+                &mut report,
                 options,
                 result.as_ref(),
                 timings.driver_elapsed,
             )
-            .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
-            .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
-            .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding)),
+            .and_then(|()| crate::stage_timing::write(&mut report, &timings.stages))
+            .and_then(|()| crate::phase_timing::write(&mut report, &timings))
+            .and_then(|()| crate::grounding_timing::write(&mut report, &timings.grounding)),
             crate::StatisticsView::Human => {
                 let view = crate::PublicationView {
                     result: result.as_ref(),
@@ -757,9 +779,10 @@ fn report_progress_statistics(
                     failed: view.failure().is_some(),
                 };
                 let layout = diagnostics.layout();
-                writeln!(diagnostics).and_then(|()| statistics.write_human(diagnostics, layout))
+                writeln!(report).and_then(|()| statistics.write_human(&mut report, layout))
             }
         };
+        let emitted = rendered.and_then(|()| diagnostics.write_all(&report));
         if let Err(error) = emitted {
             return Err(match result {
                 Ok(progress) => progress.fail(RunError::Output(error)),

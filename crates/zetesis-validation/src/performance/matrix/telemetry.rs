@@ -15,16 +15,17 @@ pub(super) fn observe(
     let timing = super::super::timing::parse_any(stderr)?;
     let hybrid = hybrid::read(document)?;
     let terminal = terminal::read(document)?;
-    if terminal.is_some() && (hybrid.is_some() || request.grounder != Grounder::Auto) {
-        return Err("terminal definitions require automatic grounding and a distinct route".into());
-    }
+    let hybrid_terminal = terminal_route(terminal.as_ref(), hybrid.is_some(), request)?;
     // An explicit request names the mode the cell must have taken; an
     // automatic request accepts either mode and retains the one observed.
     let taken = match timing.grounding_mode.as_str() {
         "eager" => Grounder::Eager,
         "lazy_interleaved" => Grounder::Lazy,
         "mixed" if hybrid.is_some() => Grounder::Lazy,
-        "eager_base_terminal_definitions" if terminal.is_some() => Grounder::Eager,
+        "eager_base_terminal_definitions" if terminal.is_some() && !hybrid_terminal => {
+            Grounder::Eager
+        }
+        "hybrid_base_terminal_definitions" if hybrid_terminal && hybrid.is_some() => Grounder::Lazy,
         _ => return Err("unsupported reported grounding mode".into()),
     };
     if request.grounder != Grounder::Auto && taken != request.grounder {
@@ -56,7 +57,9 @@ pub(super) fn observe(
         "effective execution",
     )?;
     let effective_backend = field(effective, "backend")?;
-    let grounding = if terminal.is_some() {
+    let grounding = if hybrid_terminal {
+        "hybrid_base_terminal_definitions"
+    } else if terminal.is_some() {
         "eager_base_terminal_definitions"
     } else if hybrid.is_some() {
         "hybrid"
@@ -67,8 +70,13 @@ pub(super) fn observe(
         return Err("effective execution and measured grounding disagree".into());
     }
     let procedure = procedure(effective, request.oracle)?;
+    let hybrid_mode = if hybrid_terminal {
+        "hybrid_base_terminal_definitions"
+    } else {
+        "mixed"
+    };
     if hybrid.is_some()
-        && (timing.grounding_mode != "mixed"
+        && (timing.grounding_mode != hybrid_mode
             || backend != Backend::Cpu
             || procedure == Procedure::Closure)
     {
@@ -506,4 +514,29 @@ fn cpu(statistics: &Value) -> Result<DeviceWork, String> {
         completion(&execution["completion"], residuals, residuals)?;
     }
     Ok(DeviceWork::Cpu)
+}
+
+/// Whether a terminal receipt is of a hybrid base, once its route agrees with
+/// the request: an eager base is automatic grounding's, with no source
+/// checking; a hybrid one is lazy (or automatic) grounding's, with both receipts.
+fn terminal_route(
+    terminal: Option<&super::TerminalStatistics>,
+    hybrid: bool,
+    request: NativeExecution,
+) -> Result<bool, String> {
+    match terminal {
+        Some(receipt) if receipt.hybrid_base => {
+            if !hybrid || request.grounder == Grounder::Eager {
+                return Err(
+                    "a hybrid terminal base requires lazy grounding and its checking receipt"
+                        .into(),
+                );
+            }
+            Ok(true)
+        }
+        Some(_) if hybrid || request.grounder != Grounder::Auto => {
+            Err("terminal definitions require automatic grounding and a distinct route".into())
+        }
+        Some(_) | None => Ok(false),
+    }
 }

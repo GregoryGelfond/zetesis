@@ -96,3 +96,68 @@ fn retained_bytes_grow_with_entries() {
             >= empty + size_of::<Scoped<usize>>() + 2 * size_of::<(storage::AtomId, usize)>()
     );
 }
+
+#[test]
+fn retain_held_drops_an_owner_nothing_else_holds() {
+    let mut map = AtomIdentityMap::default();
+    {
+        let dropped = catalog(&["p"]);
+        map.insert(dropped.atoms().at(0).unwrap(), 1).unwrap();
+    }
+    map.retain_held();
+    assert!(map.is_empty());
+}
+
+#[test]
+fn retain_held_keeps_an_owner_a_catalog_still_holds() {
+    let held = catalog(&["p"]);
+    let mut map = AtomIdentityMap::default();
+    map.insert(held.atoms().at(0).unwrap(), 1).unwrap();
+    map.retain_held();
+    assert_eq!(map.get(held.atoms().at(0).unwrap()), Some(1));
+}
+
+#[test]
+fn retain_held_keeps_the_owner_of_a_live_writer_without_catalogs() {
+    let mut store = storage::Store::new(usize::MAX);
+    let p = store.import_atom(&atom("p"), Limits::default()).unwrap();
+    let mut map = AtomIdentityMap::default();
+    {
+        let published = store.snapshot(0).unwrap();
+        map.insert(AtomRef::new(&published, p).unwrap(), 3).unwrap();
+    }
+    // Every published snapshot is gone; the writer can still present `p`.
+    map.retain_held();
+    assert_eq!(map.owners(), 1);
+    let again = store.snapshot(0).unwrap();
+    assert_eq!(map.get(AtomRef::new(&again, p).unwrap()), Some(3));
+}
+
+#[test]
+fn many_owners_each_keep_their_own_entries() {
+    let catalogs: Vec<_> = (0..1000).map(|_| catalog(&["p"])).collect();
+    let mut map = AtomIdentityMap::default();
+    for (index, catalog) in catalogs.iter().enumerate() {
+        map.insert(catalog.atoms().at(0).unwrap(), index).unwrap();
+    }
+    assert_eq!(map.owners(), 1000);
+    for (index, catalog) in catalogs.iter().enumerate() {
+        assert_eq!(map.get(catalog.atoms().at(0).unwrap()), Some(index));
+    }
+}
+
+#[test]
+fn a_prune_returns_the_owner_tables_excess_capacity() {
+    let mut map = AtomIdentityMap::default();
+    let empty = map.retained_bytes();
+    {
+        let catalogs: Vec<_> = (0..256).map(|_| catalog(&["p"])).collect();
+        for (index, catalog) in catalogs.iter().enumerate() {
+            map.insert(catalog.atoms().at(0).unwrap(), index).unwrap();
+        }
+    }
+    assert!(map.retained_bytes() > empty);
+    map.retain_held();
+    assert_eq!(map.owners(), 0);
+    assert_eq!(map.retained_bytes(), empty);
+}

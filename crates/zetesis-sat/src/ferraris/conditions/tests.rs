@@ -26,7 +26,7 @@ fn guard(conjunction: bool) -> Theory {
 fn a_new_generation_discards_old_dag_knowledge() {
     let original = theory(2, vec![], vec![]);
     let narrower = Narrower::new(&original);
-    let mut knowledge = CandidateKnowledge::new(narrower.knowledge());
+    let mut knowledge = CandidateKnowledge::default();
     let mut conditions = Conditions::<(Theory, Narrower)> {
         bound: Some(Bound::prepare(&guard(false), 1).unwrap()),
         ..Conditions::default()
@@ -41,11 +41,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (&original, &narrower),
-        None,
+        (&original, &narrower, None),
         &conditions,
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     )
@@ -56,11 +56,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
     conditions.bound = Some(Bound::prepare(&guard(true), 2).unwrap());
     assert_ne!(
         super::super::regions::narrow(
-            (&original, &narrower),
-            None,
+            (&original, &narrower, None),
             &conditions,
             &mut region,
             &mut knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
             &mut budget,
             &mut counts
         )
@@ -200,7 +200,7 @@ fn cancellation_does_not_advance_the_bound_generation() {
 fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let original = theory(2, vec![], vec![]);
     let narrower = Narrower::new(&original);
-    let mut knowledge = CandidateKnowledge::new(narrower.knowledge());
+    let mut knowledge = CandidateKnowledge::default();
     let mut conditions = Conditions::<(Theory, Narrower)> {
         bound: Some(Bound::prepare(&guard(false), 1).unwrap()),
         ..Conditions::default()
@@ -215,11 +215,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (&original, &narrower),
-        None,
+        (&original, &narrower, None),
         &conditions,
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     )
@@ -232,11 +232,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let permanent_index = Narrower::new(&permanent);
     conditions.permanent.push((permanent, permanent_index));
     super::super::regions::narrow(
-        (&original, &narrower),
-        None,
+        (&original, &narrower, None),
         &conditions,
         &mut region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
     )
@@ -247,9 +247,27 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
 #[test]
 fn allocated_bytes_include_unused_knowledge_slots() {
     let bound = Bound::prepare(&guard(false), 1).unwrap();
-    let mut knowledge = CandidateKnowledge::new(bound.index.1.knowledge());
+    let mut knowledge = CandidateKnowledge::default();
+    knowledge.permanent(0, &bound.index.1).unwrap();
     knowledge.entries.reserve_exact(7);
     let expected = knowledge.entries[0].retained_bytes()
         + (knowledge.entries.capacity() - 1) as u128 * size_of::<Knowledge>() as u128;
     assert_eq!(knowledge.allocated_bytes(), expected);
+}
+
+#[test]
+fn the_first_knowledge_slot_is_reserved_exactly() {
+    // A root that knows only the original theory holds one slot, as a
+    // one-element vector does; the frontier's byte receipts count it. This
+    // pins `try_reserve_exact`, whose contract permits a larger capacity:
+    // should the standard library ever give one, this fails loudly rather
+    // than letting the receipts drift.
+    let original = guard(false);
+    let narrower = Narrower::new(&original);
+    let mut knowledge = CandidateKnowledge::default();
+    knowledge.permanent(0, &narrower).unwrap();
+    assert_eq!(knowledge.entries.capacity(), 1);
+    let permanent = guard(true);
+    knowledge.permanent(1, &Narrower::new(&permanent)).unwrap();
+    assert_eq!(knowledge.entries.len(), 2);
 }

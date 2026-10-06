@@ -38,6 +38,7 @@ pub(crate) struct Diagnostics<W> {
 enum Core {
     Constraints,
     TerminalDefinitions,
+    HybridTerminalDefinitions,
 }
 impl<W: Write> Diagnostics<W> {
     pub(crate) const fn new(writer: W, color: ColorMode) -> Self {
@@ -130,9 +131,14 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             ),
             Event::LazyGrounding { requested } => self.metadata(Label::Grounding,
                 format_args!("requested={}, effective=lazy (source joins; no complete ground-rule store)", requested.label())),
-            Event::TerminalDefinitions { requested, deferred_templates } => {
+            Event::TerminalDefinitions { requested, base: zetesis_themelios::BaseKind::Eager, deferred_templates, .. } => {
                 self.core = Some(Core::TerminalDefinitions);
                 self.metadata(Label::Grounding, format_args!("requested={}, effective=eager_base_terminal_definitions (eager base; {deferred_templates} terminal definitions reconstructed on the host before each original answer)", requested.label()))
+            }
+            Event::TerminalDefinitions { requested, base: zetesis_themelios::BaseKind::Hybrid, deferred_templates, streamed } => {
+                self.core = Some(Core::HybridTerminalDefinitions);
+                let (templates, instances) = streamed.map_or((0, 0), |streamed| (streamed.templates, streamed.instances));
+                self.metadata(Label::Grounding, format_args!("requested={}, effective=hybrid_base_terminal_definitions (hybrid base: eager producer core, streamed constraints: {templates} templates, {instances} admitted instances; {deferred_templates} terminal definitions reconstructed on the host after each base answer is accepted)", requested.label()))
             }
             Event::HybridGrounding { requested, streamed_templates, streamed_instances } => {
                 self.core = Some(Core::Constraints);
@@ -149,6 +155,8 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 let oracle = if oracle == crate::Oracle::Auto { "Ferraris reduct membership" } else { "Ferraris reduct countermodel" };
                 if self.core == Some(Core::TerminalDefinitions) {
                     self.metadata(Label::Backend, format_args!("cpu; base oracle: {oracle}; search: {}; base grounding: eager; original answer reconstruction: host", search.label()))
+                } else if self.core == Some(Core::HybridTerminalDefinitions) {
+                    self.metadata(Label::Backend, format_args!("cpu; base core oracle: {oracle}; search: {}; base grounding: hybrid (eager producer core); original answer reconstruction: host", search.label()))
                 } else if self.core == Some(Core::Constraints) {
                     self.metadata(Label::Backend, format_args!("cpu; retained-core oracle: {oracle}; search: {}; core grounding: eager", search.label()))
                 } else {

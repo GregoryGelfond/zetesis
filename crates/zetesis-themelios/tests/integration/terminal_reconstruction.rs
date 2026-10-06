@@ -146,3 +146,178 @@ fn sessions_start_from_the_same_admission_history() {
     assert_eq!(second.statistics(), baseline);
     assert!(first.statistics().work > second.statistics().work);
 }
+
+fn terminal_with(source: &str, limits: &FormulaLimits) -> TerminalFormula {
+    let FormulaMaterialization::Terminal(owner) = prepare_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        *limits,
+    )
+    .unwrap()
+    .ground_adaptive()
+    .unwrap() else {
+        panic!("terminal profile required")
+    };
+    owner
+}
+
+const MANY: &str = "{seed(1..4)}. receipt(X):-seed(X).";
+
+/// Admission's work and one reconstruction's of `seeds`, under default limits.
+fn costs_of(seeds: &[&str]) -> (u64, u64) {
+    let owner = terminal(MANY);
+    let mut cursor = owner.reconstruction().unwrap();
+    cursor
+        .reconstruct(&selection(&owner, seeds), &Cancellation::default())
+        .unwrap();
+    let statistics = cursor.statistics();
+    (statistics.admission.work, statistics.latest.work)
+}
+
+fn costs() -> (u64, u64) {
+    costs_of(&["seed(1)", "seed(3)"])
+}
+
+#[test]
+fn the_allowance_is_the_headroom_admission_left() {
+    let limits = FormulaLimits::default();
+    let owner = terminal(MANY);
+    let statistics = owner.reconstruction().unwrap().statistics();
+    assert!(statistics.admission.work > 0);
+    assert_eq!(
+        statistics.allowance.work,
+        limits.max_work - statistics.admission.work
+    );
+    assert_eq!(
+        statistics.allowance.substitutions,
+        limits.max_substitutions - statistics.admission.substitutions
+    );
+}
+
+#[test]
+fn distinct_answers_do_not_exhaust_the_grounding_ceiling() {
+    let all = ["seed(1)", "seed(2)", "seed(3)", "seed(4)"];
+    let (admission, largest) = costs_of(&all);
+    // Room for grounding and about two of the largest reconstructions.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + 2 * largest,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    // Every nonempty subset of the seeds is its own answer.
+    for mask in 1..16_usize {
+        let seeds: Vec<&str> = (0..4)
+            .filter(|bit| mask & (1 << bit) != 0)
+            .map(|bit| all[bit])
+            .collect();
+        let result = cursor
+            .reconstruct(&selection(&owner, &seeds), &Cancellation::default())
+            .unwrap();
+        assert_eq!(names(&result).len(), 2 * seeds.len());
+    }
+    let statistics = cursor.statistics();
+    assert_eq!(statistics.completed, 15);
+    assert_eq!(statistics.peak.work, largest);
+}
+
+#[test]
+fn repeated_reconstructions_do_not_exhaust_the_grounding_ceiling() {
+    let (admission, call) = costs();
+    // Room for grounding and about three reconstructions in all.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + 3 * call + call / 2,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    let model = selection(&owner, &["seed(1)", "seed(3)"]);
+    for _ in 0..10 {
+        let result = cursor
+            .reconstruct(&model, &Cancellation::default())
+            .unwrap();
+        assert_eq!(
+            names(&result),
+            ["receipt(1)", "receipt(3)", "seed(1)", "seed(3)"]
+        );
+    }
+    assert_eq!(cursor.statistics().completed, 10);
+}
+
+#[test]
+fn one_answer_beyond_the_headroom_is_refused() {
+    let (admission, call) = costs();
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + call / 2,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    let model = selection(&owner, &["seed(1)", "seed(3)"]);
+    assert!(
+        cursor
+            .reconstruct(&model, &Cancellation::default())
+            .is_err()
+    );
+    assert_eq!(cursor.statistics().completed, 0);
+}
+
+#[test]
+fn an_answer_fits_exactly_the_headroom_admission_left() {
+    let (admission, call) = costs();
+    let model_names = ["seed(1)", "seed(3)"];
+    // Published at admission + c, with exact receipts.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + call,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    for _ in 0..3 {
+        cursor
+            .reconstruct(&selection(&owner, &model_names), &Cancellation::default())
+            .unwrap();
+        assert_eq!(cursor.statistics().latest.work, call);
+    }
+    assert_eq!(cursor.statistics().work, admission + 3 * call);
+    // Refused at admission + c − 1: the refusal names the allowance and the
+    // call's own charge.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + call - 1,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    let error = cursor
+        .reconstruct(&selection(&owner, &model_names), &Cancellation::default())
+        .unwrap_err();
+    let ReconstructionError::Source(cause) = &error else {
+        panic!("a work refusal: {error:?}");
+    };
+    assert!(
+        matches!(cause.as_ref(), zetesis_themelios::FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::Work,
+            observed,
+            limit,
+            ..
+        } if *limit == u128::from(call - 1) && *observed == u128::from(call)),
+        "{cause:?}"
+    );
+    let statistics = cursor.statistics();
+    assert_eq!(statistics.completed, 0);
+    assert_eq!(statistics.allowance.work, call - 1);
+    assert_eq!(statistics.latest.work, call - 1);
+    // The refused call is the largest so far.
+    assert_eq!(statistics.peak.work, call - 1);
+}

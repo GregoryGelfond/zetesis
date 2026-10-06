@@ -7,6 +7,7 @@ mod closure_reservation;
 mod failures;
 mod hybrid;
 mod language_consumers;
+mod lazy_terminal_sessions;
 mod measurements;
 mod memory_allowance;
 mod model_construction;

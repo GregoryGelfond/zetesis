@@ -9,19 +9,65 @@ use zetesis_cpu::{Cancellation, Stop};
 
 use super::{TerminalFormula, storage::Work};
 use crate::FormulaFailure;
-use crate::formula_support::{Accounting, Counters, components};
+use crate::formula_support::{Counters, components};
 
-/// Cumulative reconstruction history for one session.
+/// Work and substitutions of one account of reconstruction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReconstructionCharges {
+    /// Charged work.
+    pub work: u64,
+    /// Complete substitutions.
+    pub substitutions: u64,
+}
+
+impl ReconstructionCharges {
+    const fn saturating_sub(self, other: Self) -> Self {
+        Self {
+            work: self.work.saturating_sub(other.work),
+            substitutions: self.substitutions.saturating_sub(other.substitutions),
+        }
+    }
+    const fn saturating_add(self, other: Self) -> Self {
+        Self {
+            work: self.work.saturating_add(other.work),
+            substitutions: self.substitutions.saturating_add(other.substitutions),
+        }
+    }
+    fn max(self, other: Self) -> Self {
+        Self {
+            work: self.work.max(other.work),
+            substitutions: self.substitutions.max(other.substitutions),
+        }
+    }
+}
+
+/// Reconstruction history for one session. Each call is bounded by the
+/// per-answer `allowance`, fixed when the cursor is created; the totals are
+/// reported only.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ReconstructionStatistics {
     /// Calls begun, including a refused call.
     pub attempts: u64,
     /// Complete interpretations published.
     pub completed: u64,
-    /// Accepted source and reconstruction work; includes admission history.
+    /// Accepted source and reconstruction work; includes admission history
+    /// and every call, for reporting.
     pub work: u64,
-    /// Accepted source and reconstruction substitutions; includes admission.
+    /// Accepted source and reconstruction substitutions; includes admission
+    /// and every call, for reporting.
     pub substitutions: u64,
+    /// Charged by source admission; every call starts after it.
+    pub admission: ReconstructionCharges,
+    /// What each call may charge: the headroom the formula ceilings left
+    /// after admission.
+    pub allowance: ReconstructionCharges,
+    /// The latest call's accepted charge: on a refused session, what the
+    /// refused call accepted before its refusal; otherwise the answer
+    /// delivered last.
+    pub latest: ReconstructionCharges,
+    /// The componentwise peak of accepted charges over every call, refused
+    /// calls included: how close an answer came to the allowance.
+    pub peak: ReconstructionCharges,
 }
 
 /// A reconstruction refused without publishing a partial interpretation.
@@ -42,6 +88,43 @@ pub enum ReconstructionError {
 }
 
 impl ReconstructionError {
+    /// State a work or substitution refusal of one call against its allowance:
+    /// both the limit and the observed count less admission's charge.
+    fn relative_to(self, admission: ReconstructionCharges) -> Self {
+        let relative = |failure: Box<FormulaFailure>| match *failure {
+            FormulaFailure::Limit {
+                resource,
+                limit,
+                observed,
+                location,
+            } if matches!(
+                resource,
+                crate::FormulaResource::Work | crate::FormulaResource::Substitutions
+            ) =>
+            {
+                let base = u128::from(if resource == crate::FormulaResource::Work {
+                    admission.work
+                } else {
+                    admission.substitutions
+                });
+                Box::new(FormulaFailure::Limit {
+                    resource,
+                    limit: limit.saturating_sub(base),
+                    observed: observed.saturating_sub(base),
+                    location,
+                })
+            }
+            other => Box::new(other),
+        };
+        match self {
+            Self::Source(error) => Self::Source(relative(error)),
+            Self::Model(ModelFailure::Stopped(error)) => {
+                Self::Model(ModelFailure::Stopped(relative(error)))
+            }
+            other => other,
+        }
+    }
+
     fn retain_input(self, owner: &crate::formula_owner::Owner) -> Self {
         match self {
             Self::Source(error) => Self::Source(Box::new(owner.retain_failure(*error))),
@@ -96,12 +179,19 @@ impl std::error::Error for ReconstructionError {
     }
 }
 
-/// Independent cumulative extension cursor over an immutable admitted owner.
-/// Scratch and selected derived rows are private to each call. Nothing from a
-/// previous answer becomes true in a subsequent one through storage reuse.
+/// Independent extension cursor over an immutable admitted owner. Each call
+/// starts from admission's account under the cursor's per-answer allowance;
+/// only the reported totals accumulate (saturating). Scratch and selected
+/// derived rows are private to each call. Nothing from a previous answer
+/// becomes true in a subsequent one through storage reuse.
 pub struct TerminalReconstruction<'a> {
     owner: &'a TerminalFormula,
-    accounting: Accounting,
+    admission: ReconstructionCharges,
+    allowance: ReconstructionCharges,
+    /// Admission and every call so far, for reporting.
+    total: ReconstructionCharges,
+    latest: ReconstructionCharges,
+    peak: ReconstructionCharges,
     attempts: u64,
     completed: u64,
     failed: bool,
@@ -117,9 +207,22 @@ impl<'a> TerminalReconstruction<'a> {
                 .retain_failure(components::missing(prepared.location))
                 .into());
         }
+        let admission = ReconstructionCharges {
+            work: prepared.baseline.work,
+            substitutions: prepared.baseline.substitutions,
+        };
+        // The sizing: each answer may use the headroom admission left.
+        let ceilings = ReconstructionCharges {
+            work: prepared.limits.max_work,
+            substitutions: prepared.limits.max_substitutions,
+        };
         Ok(Self {
             owner,
-            accounting: prepared.baseline.start(),
+            admission,
+            allowance: ceilings.saturating_sub(admission),
+            total: admission,
+            latest: ReconstructionCharges::default(),
+            peak: ReconstructionCharges::default(),
             attempts: 0,
             completed: 0,
             failed: false,
@@ -132,16 +235,25 @@ impl<'a> TerminalReconstruction<'a> {
         ReconstructionStatistics {
             attempts: self.attempts,
             completed: self.completed,
-            work: self.accounting.work,
-            substitutions: self.accounting.substitutions,
+            work: self.total.work,
+            substitutions: self.total.substitutions,
+            admission: self.admission,
+            allowance: self.allowance,
+            latest: self.latest,
+            peak: self.peak,
         }
     }
 
     /// Extend exactly this base interpretation by all certified definitions.
     /// The caller must separately establish that the input is a base answer set.
     /// The partition theorem then establishes membership for the returned model.
-    /// Work and substitutions accumulate across calls, starting at admission;
-    /// no full possible-support relation is enumerated during reconstruction.
+    /// Each call starts from admission's history and may charge the cursor's
+    /// `allowance` of work and substitutions, whatever earlier answers used;
+    /// a work or substitution refusal reports the allowance as its limit and
+    /// the call's requested charge (what the refused operation needed, past the
+    /// accepted one) as observed. Other ceilings are checked within
+    /// the call as during admission. No full possible-support relation is
+    /// enumerated during reconstruction.
     ///
     /// # Errors
     /// Refuses a foreign owner, cancellation, a resource boundary or invalid
@@ -164,14 +276,36 @@ impl<'a> TerminalReconstruction<'a> {
                 .retain_failure(super::storage::overflow(self.owner.0.extension.location))
         })?;
         let owner = self.owner;
-        let result = self
-            .accounting
-            .with_cancellation(cancellation, |counters| extend(owner, model, counters));
+        let prepared = &owner.0.extension;
+        // Each answer starts from admission's history under its own allowance.
+        let limits = crate::FormulaLimits {
+            max_work: self.admission.work.saturating_add(self.allowance.work),
+            max_substitutions: self
+                .admission
+                .substitutions
+                .saturating_add(self.allowance.substitutions),
+            ..prepared.limits
+        };
+        let mut accounting = prepared.baseline.start();
+        let result = accounting.with_cancellation(cancellation, |counters| {
+            extend(owner, model, counters, &limits)
+        });
+        self.latest = ReconstructionCharges {
+            work: accounting.work,
+            substitutions: accounting.substitutions,
+        }
+        .saturating_sub(self.admission);
+        self.peak = self.peak.max(self.latest);
+        self.total = self.total.saturating_add(self.latest);
         if result.is_ok() {
             self.completed += 1; // bounded by the checked attempts count
             self.failed = false;
         }
-        result.map_err(|error| error.retain_input(&owner.0.source))
+        result.map_err(|error| {
+            error
+                .relative_to(self.admission)
+                .retain_input(&owner.0.source)
+        })
     }
 }
 
@@ -179,9 +313,10 @@ fn extend(
     owner: &TerminalFormula,
     model: &Model,
     counters: &mut Counters,
+    limits: &crate::FormulaLimits,
 ) -> Result<Model, ReconstructionError> {
     let prepared = &owner.0.extension;
-    counters.work(&prepared.limits, prepared.location)?;
+    counters.work(limits, prepared.location)?;
     if !model.catalog().same_owner(owner.base_atom_catalog()) {
         return Err(ReconstructionError::ForeignInput);
     }
@@ -194,7 +329,7 @@ fn extend(
         + model.selection_bytes()
         + size_of::<TerminalReconstruction<'_>>() as u128;
     let mut work = Work {
-        limits: &prepared.limits,
+        limits,
         counters,
         location: prepared.location,
         external,
@@ -206,9 +341,7 @@ fn extend(
         .as_ref()
         .ok_or_else(|| components::missing(prepared.location))?
         .bind_with(prepared.closed.storage.vocabulary_read(), || work.permit())
-        .map_err(|error| {
-            components::failure(error, &prepared.limits, external, prepared.location)
-        })?;
+        .map_err(|error| components::failure(error, limits, external, prepared.location))?;
     let mut atoms = model.atoms().iter();
     for _ in 0..atoms.len() {
         work.permit()?;

@@ -14,7 +14,8 @@ use zetesis_cpu::{
 
 use crate::{AdmissionLimits, Narrower, Node, Region, RegionLimits, Theory};
 
-use super::{Counters, Knowledge, counters::native};
+use super::super::{Width, counters::Count};
+use super::{Knowledge, Known, counters::native};
 
 const FREE_ATOMS: usize = 8;
 
@@ -33,7 +34,13 @@ impl Arrays {
     }
 
     fn knowledge(knowledge: &Knowledge) -> Self {
-        let known = &knowledge.known;
+        match &knowledge.width {
+            Width::Compact(known) => Self::known(knowledge, known),
+            Width::Native(known) => Self::known(knowledge, known),
+        }
+    }
+
+    fn known<C: Count>(knowledge: &Knowledge, known: &Known<C>) -> Self {
         let mut arrays = Self::default();
         for words in [
             &known.sure,
@@ -45,14 +52,8 @@ impl Arrays {
             arrays.add::<u64>(words.len(), words.len());
         }
         for counters in [&known.sure_operands, &known.never_operands, &known.unknown] {
-            match counters {
-                Counters::Compact(values) => arrays.add::<u32>(values.len(), values.len()),
-                Counters::Native(values) => arrays.add::<usize>(values.len(), values.len()),
-            }
+            arrays.add::<C>(counters.len(), counters.len());
         }
-        arrays.add::<usize>(known.learned.len(), known.learned.capacity());
-        arrays.add::<usize>(known.heads.len(), known.heads.capacity());
-        arrays.add::<(usize, bool)>(known.nodes.len(), known.nodes.capacity());
         assert_eq!(
             knowledge.retained_bytes(),
             size_of::<Knowledge>() as u128 + arrays.retained_bytes
@@ -131,15 +132,16 @@ fn traverse(
         measured,
     );
     let cancellation = Cancellation::default();
+    let mut scratch = crate::NarrowingScratch::default();
     let mut leaves = BTreeSet::new();
     while let Some(visit) = traversal
         .next(|region, measured| {
             narrower
                 .narrow_known(
-                    theory,
-                    None,
+                    crate::OriginalSubject::new(theory, None),
                     region,
                     &mut measured.knowledge,
+                    &mut scratch,
                     RegionLimits::default(),
                     &cancellation,
                 )
@@ -167,8 +169,9 @@ fn traverse(
     assert_eq!(statistics.regions, (1 << (FREE_ATOMS + 1)) - 1);
     assert_eq!(statistics.leaves, 1 << FREE_ATOMS);
     assert_eq!((statistics.refuted, statistics.counted), (0, 0));
-    // Closed worklists retain source capacity, but contain no cloned elements.
-    assert!(receipt.max_source_spare_bytes > 0);
+    // A knowledge holds no worklists, so no copy's source retains capacity
+    // beyond its live arrays; the walker's scratch keeps the worklists.
+    assert_eq!(receipt.max_source_spare_bytes, 0);
     assert_eq!(receipt.retained_bytes, receipt.initialized_bytes);
     (statistics, receipt, leaves)
 }

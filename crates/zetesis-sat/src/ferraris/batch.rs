@@ -2,8 +2,9 @@
 
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
-use super::{CompletionExecutor, StableModels, verification};
+use super::{CompletionExecutor, IndexedTheory, StableModels, verification};
 use crate::Incomplete;
 use crate::search::{Budget, increment};
 use crate::timing::{self, Phase};
@@ -277,6 +278,7 @@ impl StableModels {
             .pending
             .try_reserve_exact(limits.max_candidates.get())
             .map_err(|_| Incomplete::Allocation)?;
+        let index = self.walk_index()?;
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: self.limits.search,
@@ -284,11 +286,19 @@ impl StableModels {
             statistics: self.statistics.search,
         };
         if self.positive_candidates.is_none()
+            && let Some(index) = &index
             && let super::Proposer::Proposals(proposals) = &mut self.proposer
         {
+            let subject = match index.subject(&self.theory) {
+                Ok(subject) => subject,
+                Err(error) => {
+                    self.statistics.search = budget.statistics;
+                    return Err(error);
+                }
+            };
             let started = timing::start(self.statistics.phase_timings.as_ref());
             let produced = proposals.fill(
-                &self.theory,
+                subject,
                 limits.max_candidates.get(),
                 self.limits
                     .max_candidates
@@ -308,37 +318,18 @@ impl StableModels {
                 started,
             );
             self.statistics.search = budget.statistics;
-            self.batch.exhausted = produced.exhausted;
-            self.pending_error = produced.stopped;
-            // No producer decides membership. Every completed classical leaf
-            // crosses the same independent original-satisfaction boundary as
-            // scalar proposals before the external batch checker receives it.
-            for (validated, candidate) in self.batch.pending.iter().enumerate() {
-                let result = validate_proposal(
-                    &self.theory,
-                    candidate,
-                    self.limits,
-                    &self.cancellation,
-                    &mut self.statistics,
-                )
-                .and_then(|()| increment(&mut self.statistics.candidates));
-                if let Err(error) = result {
-                    // Only the validated prefix crossed the proposal boundary.
-                    // The stopped suffix establishes no coverage, even when
-                    // production had reached the end of its region frontier.
-                    self.batch.pending.truncate(validated);
-                    self.batch.exhausted = false;
-                    self.pending_error = Some(error);
-                    break;
-                }
-            }
+            self.admit_produced(&produced);
             return Ok(());
         }
         while self.batch.pending.len() < limits.max_candidates.get() {
+            let walk = match self.positive_candidates.as_mut() {
+                Some(candidates) => super::Walk::Positive(candidates),
+                None => super::Walk::Index(index.as_ref()),
+            };
             match proposal(
                 &self.theory,
                 &mut self.proposer,
-                self.positive_candidates.as_mut(),
+                walk,
                 self.limits,
                 &mut budget,
                 &mut self.statistics,
@@ -372,6 +363,58 @@ impl StableModels {
         Ok(())
     }
 
+    /// The original index the batch's walk reads, built at the walk's one
+    /// build site, as in scalar iteration; the positive cursor walks no
+    /// region and builds no index. A refused build charge stops the batch.
+    fn walk_index(&mut self) -> Result<Option<Arc<IndexedTheory>>, Incomplete> {
+        if self.positive_candidates.is_some() {
+            return Ok(None);
+        }
+        let mut budget = Budget {
+            quota: crate::search::LocalQuota,
+            limits: self.limits.search,
+            cancellation: &self.cancellation,
+            statistics: self.statistics.search,
+        };
+        let index = super::walk_index(
+            &mut self.index,
+            &mut self.proposer,
+            &mut budget,
+            &mut self.statistics.phase_timings,
+        )
+        .map(|index| index.map(Arc::clone));
+        self.statistics.search = budget.statistics;
+        index
+    }
+
+    /// Admit a joined production round's pending candidates. No producer
+    /// decides membership. Every completed classical leaf crosses the same
+    /// independent original-satisfaction boundary as scalar proposals before
+    /// the external batch checker receives it.
+    fn admit_produced(&mut self, produced: &super::region_proposals::Produced) {
+        self.batch.exhausted = produced.exhausted;
+        self.pending_error = produced.stopped;
+        for (validated, candidate) in self.batch.pending.iter().enumerate() {
+            let result = validate_proposal(
+                &self.theory,
+                candidate,
+                self.limits,
+                &self.cancellation,
+                &mut self.statistics,
+            )
+            .and_then(|()| increment(&mut self.statistics.candidates));
+            if let Err(error) = result {
+                // Only the validated prefix crossed the proposal boundary.
+                // The stopped suffix establishes no coverage, even when
+                // production had reached the end of its region frontier.
+                self.batch.pending.truncate(validated);
+                self.batch.exhausted = false;
+                self.pending_error = Some(error);
+                break;
+            }
+        }
+    }
+
     fn pending_row_bytes(&self) -> u128 {
         (std::mem::size_of::<Interpretation>() as u128) * 2
             + (self.theory.atom_count().div_ceil(64) as u128) * 8
@@ -403,7 +446,9 @@ impl StableModels {
                 verdicts,
                 limits: self.limits,
                 prepared: None,
-                query: None,
+                // A regions residual exists only after a walk, which built
+                // the index; completion borrows it and never builds one.
+                query: self.index.get().map(|index| super::ReductQuery::new(index)),
             },
             &mut budget,
             &mut self.statistics,
@@ -444,20 +489,13 @@ impl StableModels {
 fn proposal(
     theory: &Theory,
     proposer: &mut super::Proposer,
-    positive_candidates: Option<&mut super::certified::PositiveCandidates>,
+    walk: super::Walk<'_>,
     limits: super::Limits,
     budget: &mut Budget<'_>,
     statistics: &mut super::Statistics,
 ) -> Result<Option<Interpretation>, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
-    let proposal = proposer.propose(
-        theory,
-        limits,
-        None,
-        positive_candidates,
-        budget,
-        statistics,
-    );
+    let proposal = proposer.propose(theory, walk, limits, None, budget, statistics);
     timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
     // The batched protocol checks its proposals itself; a worker-decided
     // model is refused here rather than checked twice.

@@ -44,8 +44,10 @@ fn consumed_base_answer_cannot_escape_a_cancelled_reconstruction() {
     // stage as next(). This fixes the cancellation boundary without a time race
     // or a fabricated completed base certificate.
     let consumed = session.statistics.base_answers.checked_add(1).unwrap();
-    let (model, _) = session
-        .base
+    let super::BaseSession::Eager(base) = &mut session.base else {
+        panic!("the fixture has an eager base");
+    };
+    let (model, _) = base
         .next(&session.base_config, &mut Ignore, &cancellation, &phases)
         .unwrap()
         .unwrap();

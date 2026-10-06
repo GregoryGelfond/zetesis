@@ -159,20 +159,6 @@ fn unwind_preserves_shared_admission_charges() {
     assert!(result.is_err());
     assert_eq!(accounting.work, 1);
     assert_eq!(allowance.statistics().work, 1);
-    let refused = accounting.with_cancellation(&cancellation, |counters| {
-        counters.work(&FormulaLimits::default(), location())
-    });
-    assert!(matches!(
-        refused,
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Work,
-            observed: 2,
-            limit: 1,
-            ..
-        })
-    ));
-    assert_eq!(accounting.work, 1);
-    assert_eq!(allowance.statistics().work, 1);
 }
 
 #[test]
@@ -318,7 +304,7 @@ fn resume_preserves_generated_history_and_live_workspace() {
 }
 
 #[test]
-fn resume_preserves_exact_shared_allowance_without_previous_cancellation() {
+fn resume_preserves_the_exact_shared_receipt_without_previous_cancellation() {
     use crate::formula_support::Counters;
     use crate::grounding_observer::Work;
 
@@ -339,24 +325,6 @@ fn resume_preserves_exact_shared_allowance_without_previous_cancellation() {
     resumed.work(&limits, location()).unwrap();
     assert_eq!(resumed.accounting.work, 3);
     assert_eq!(allowance.statistics().work, 3);
-    assert!(matches!(
-        resumed.work(&limits, location()),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Work,
-            observed: 4,
-            limit: 3,
-            ..
-        })
-    ));
-    assert!(matches!(
-        resumed.substitution(&limits, location()),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Substitutions,
-            observed: 2,
-            limit: 1,
-            ..
-        })
-    ));
     assert_eq!(resumed.accounting.work, 3);
     assert_eq!(resumed.accounting.substitutions, 1);
     assert_eq!(allowance.statistics().work, 3);

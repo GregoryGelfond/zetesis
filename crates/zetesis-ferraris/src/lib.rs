@@ -41,7 +41,8 @@ pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
 pub use regions::{
-    Extraction, Knowledge, Narrower, NarrowingAttempt, NarrowingStatistics, Producers,
+    Extraction, FrozenSubject, Knowledge, NARROWING_BATCH, Narrower, NarrowingAttempt,
+    NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject, Producers,
     RegionLimits, producers,
 };
 pub use theory::{

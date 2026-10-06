@@ -185,14 +185,23 @@ history with `decided()`'s ascending `(atom, value)` pairs, and `split` consumes
 its parent. `snapshot_decided` copies only the available destination prefix;
 the narrower supplies all `region.len().div_ceil(64)` words.
 
-`narrow_known_metered` and `narrow_frozen_known_metered` use the same closure with
-a caller-owned quota. They request a permit before each charged read and return
-`NarrowingAttempt { result, statistics }`, preserving the quota's typed refusal
-and the admitted work prefix. Entry control is checked even when no read is
-needed; the quota may additionally poll control at every read. The existing
-`RegionLimits` methods retain their local-ceiling API. SAT injects its search
-budget into the metered methods, so parallel workers acquire shared permits
-before candidate or frozen-reduct reads and retain their receipts after failure.
+Every narrowing entry point takes what it reads, an `OriginalSubject` (the
+theory and, when the support cut applies, its producers) or a `FrozenSubject`
+(the theory and a candidate's node truth), then the region, its knowledge and
+the walker's `NarrowingScratch`.
+
+The `RegionLimits` methods keep their local-ceiling API.
+`narrow_known_reserved` and `narrow_frozen_known_reserved` take a caller's
+`NarrowingQuota` instead and return `NarrowingAttempt { result, statistics }`
+with the admitted work prefix on every outcome. They reserve permits in batches
+of at most `NARROWING_BATCH`, spend one per charged read, and refund the unspent
+rest when narrowing returns. Entry control is checked even when no read is
+needed, and the quota may poll control at each reservation, so control is seen
+within `NARROWING_BATCH` charged reads. A quota that grants what remains refuses
+a work limit at the same read as per-read charging and records the same work.
+SAT injects its search budget, keeping its typed refusal beside the quota, so
+parallel workers hold shared permits before candidate or frozen-reduct reads and
+retain their receipts after failure.
 Failed knowledge still must be abandoned. The [metering regressions](tests/integration/region_work.rs)
 exercise every prefix of original and frozen narrowing and cancellation.
 The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs) compare
@@ -211,8 +220,10 @@ independent arrays, with unchanged original/frozen ownership requirements.
 
 For A atoms and C chains, the counter payload on a 64-bit host decreases from
 8(A + 2C) to 4(A + 2C) bytes when the bound fits. Header layout is counted by
-`Knowledge::retained_bytes`; masks, worklists, immutable indexes, scheduler
-state and allocator overhead are separate. Each copied Knowledge carries the
+`Knowledge::retained_bytes`; masks, immutable indexes, scheduler state and
+allocator overhead are separate. A knowledge holds no worklists: they belong
+to the caller's `NarrowingScratch`, which each narrowing empties first and
+whose capacity serves all of a walker's narrowings. Each copied Knowledge carries the
 same payload reduction. This is a storage model, not an RSS or timing result.
 Construction directly allocates the selected width, with no temporary native
 counter array; the incidence bound is read from the existing compact index.
@@ -235,10 +246,9 @@ The `traversal_copies_only_live_knowledge_arrays` test wraps actual
 atoms free, visits all 256 complete candidates and compares native and selected
 counter widths. The receipt counts completed `Knowledge::clone` calls,
 initialized array representation bytes and the returned clones' nonempty
-backing allocations. It separately records source worklist spare capacity:
-`Vec::clone` copies initialized elements, so retained source capacity is not
-copy payload. The test verifies the expected counter-width reduction across
-every measured split.
+backing allocations, and checks that no copied source retains capacity beyond
+its live arrays, since the worklists stay with the walker's scratch. The test
+verifies the expected counter-width reduction across every measured split.
 
 ```sh
 cargo test -p zetesis-ferraris --lib \

@@ -62,7 +62,9 @@ fn formula_configuration_preserves_composite_grounding() {
         (
             Some(ExecutionObservation::TerminalDefinitions {
                 requested: Grounder::Auto,
+                base: zetesis_themelios::BaseKind::Eager,
                 deferred_templates: 3,
+                streamed: None,
             }),
             GroundingDisplay::TerminalDefinitions,
         ),

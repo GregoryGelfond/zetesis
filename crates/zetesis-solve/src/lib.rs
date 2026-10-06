@@ -73,6 +73,8 @@ mod execution_observation;
 mod execution_resources;
 mod batch_executor;
 mod policy;
+mod grounding;
+pub use grounding::{GroundedFormula, ground_bundle, ground_formula};
 mod engine;
 mod optimization;
 mod objective_bounds;
@@ -108,7 +110,7 @@ pub use batch_executor::ExecutorError;
 pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
-pub use execution_observation::{ExecutionObservation, ExecutionObserver};
+pub use execution_observation::{ExecutionObservation, ExecutionObserver, StreamedConstraints};
 pub use execution_resources::ExecutionResources;
 pub use formula_execution::{
     CompletionAccounting, FormulaDeviceLimits, FormulaExecutionStatistics,

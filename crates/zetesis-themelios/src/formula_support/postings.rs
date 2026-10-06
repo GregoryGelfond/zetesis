@@ -165,12 +165,12 @@ impl Observation {
         if relation.atoms.len() > self.limits.rows {
             return Err(Stop::Rows);
         }
-        if relation.columns.len() > self.limits.columns {
+        if relation.column_count() > self.limits.columns {
             return Err(Stop::Columns);
         }
         let mut bound = Vec::new();
         let mut postings = Vec::new();
-        for (position, (column, term)) in relation.columns.iter().zip(pattern.terms()).enumerate() {
+        for (position, term) in pattern.terms().into_iter().enumerate() {
             self.tick()?;
             let value = match term {
                 TemplateTerm::Constant(value) => Some(value),
@@ -194,10 +194,13 @@ impl Observation {
                         break;
                     }
                 }
-                postings.push(
-                    id.and_then(|id| column.get(&id))
-                        .map_or(&[][..], Vec::as_slice),
-                );
+                // A column without postings offers none to choose among.
+                if let super::relations::Postings::Indexed(column) = relation.postings(position) {
+                    postings.push(
+                        id.and_then(|id| column.get(&id))
+                            .map_or(&[][..], Vec::as_slice),
+                    );
+                }
             }
         }
         // An unavailable restriction and a known-empty posting have different

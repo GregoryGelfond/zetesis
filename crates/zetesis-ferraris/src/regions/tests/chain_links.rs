@@ -135,19 +135,19 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
             let mut knowledge = index.knowledge();
             let result = if let Some(truth) = frozen {
                 index.narrow_frozen_known(
-                    theory,
-                    truth,
+                    crate::FrozenSubject::new(theory, truth),
                     &mut region,
                     &mut knowledge,
+                    &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
             } else {
                 index.narrow_known(
-                    theory,
-                    None,
+                    crate::OriginalSubject::new(theory, None),
                     &mut region,
                     &mut knowledge,
+                    &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )

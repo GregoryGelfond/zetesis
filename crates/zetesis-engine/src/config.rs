@@ -10,8 +10,9 @@ use crate::OutputLimits;
 /// Which native preparation supplies an answer-set run.
 ///
 /// This is a preparation choice: native sessions distinguish their retained
-/// relational, complete-formula, hybrid and terminal-definition inputs separately.
-/// An explicit choice never retries through another profile after a refusal.
+/// relational, complete-formula, hybrid and terminal-definition inputs
+/// separately. The three choices are the CLI's `--grounder` values, with the
+/// same mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Grounder {
     /// Use the checked formula preparation's adaptive terminal-definition plan.
@@ -20,10 +21,13 @@ pub enum Grounder {
     Auto,
     /// Materialize the complete formula theory before search.
     Eager,
-    /// Materialize formula producers and check eligible constraints from source.
-    Hybrid,
-    /// Use relational source joins without a complete ground-rule store.
-    /// General formula heads and aggregates are outside this profile.
+    /// Instantiate on demand. A program inside the relational profile is
+    /// joined from source without a complete ground-rule store. Any other
+    /// program, refused by that profile only for a construct it lacks, is
+    /// grounded as formulas: an eager producer core, eligible integrity
+    /// constraints streamed during search, and certified terminal definitions
+    /// reconstructed per answer. Every other refusal is returned, never
+    /// retried under another mode.
     Lazy,
 }
 
@@ -74,7 +78,7 @@ impl Config {
             backend: zetesis_solve::Backend::Cpu,
             search: zetesis_solve::SearchMethod::Regions,
             grounder: match self.grounder {
-                Grounder::Auto | Grounder::Hybrid => zetesis_solve::Grounder::Auto,
+                Grounder::Auto => zetesis_solve::Grounder::Auto,
                 Grounder::Eager => zetesis_solve::Grounder::Eager,
                 Grounder::Lazy => zetesis_solve::Grounder::Lazy,
             },

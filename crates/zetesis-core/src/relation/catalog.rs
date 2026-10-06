@@ -47,6 +47,9 @@ pub struct Catalog {
     membership: Membership,
     arity: usize,
     rows: Index,
+    /// The last row in typed order: it changes only when a row arrives
+    /// beyond it.
+    last_row: Option<usize>,
     ordered: ordered::Ordered,
     layout: Layout,
     encoding_bytes: u128,
@@ -131,6 +134,7 @@ impl Catalog {
                 membership,
                 arity,
                 rows: Index::default(),
+                last_row: None,
                 ordered: ordered::Ordered::default(),
                 layout: Layout {
                     dictionary: Vec::new(),
@@ -220,6 +224,7 @@ impl Catalog {
         self.rows.nodes.clear();
         self.rows.path.clear();
         self.rows.root = None;
+        self.last_row = None;
         index.order.nodes.clear();
         index.order.path.clear();
         index.order.root = None;
@@ -339,12 +344,27 @@ impl Catalog {
         let mut route = Directions::default();
         work.tick(1)?;
         let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
-        if let Some(row) = self.locate_bound(
-            atoms,
-            |column| atom.values().at(column).expect("checked atom arity"),
+        let value = |column| atom.values().at(column).expect("checked atom arity");
+        // A row beyond the last in order is placed without a search.
+        let last = ordered_index::last(
+            &self.rows.nodes,
+            self.rows.root,
+            self.last_row,
             work,
+            |work| work.tick(1),
+            |row, work| compare_row(atoms, row, &value, work),
             |right| route.push(right).expect("AVL height fits two words"),
-        )? {
+        )?;
+        // An empty tree's first row is its last, as is a row beyond the last.
+        let extends = matches!(last, ordered_index::Last::Beyond) || self.rows.root.is_none();
+        let found = match last {
+            ordered_index::Last::Found(row) => Some(row),
+            ordered_index::Last::Beyond => None,
+            ordered_index::Last::Search => self.locate_bound(atoms, value, work, |right| {
+                route.push(right).expect("AVL height fits two words");
+            })?,
+        };
+        if let Some(row) = found {
             return Ok(Insertion {
                 row,
                 inserted: false,
@@ -360,7 +380,11 @@ impl Catalog {
         let row_root = plan::row(&mut self.rows, row, &route, work)?;
         let plan = plan::values(&mut self.layout, atoms, atom, self.encoding_bytes, work)?;
         self.reserve(&plan, work)?;
-        Ok(self.publish(member, row_root, plan, work))
+        let insertion = self.publish(member, row_root, plan, work);
+        if extends {
+            self.last_row = Some(insertion.row);
+        }
+        Ok(insertion)
     }
 
     fn reserve(&mut self, plan: &plan::Plan, work: &mut Work) -> Result<(), Failure> {
@@ -457,17 +481,7 @@ impl Catalog {
         ordered_index::search(
             &self.rows.nodes,
             self.rows.root,
-            |row| {
-                work.tick(1)?;
-                let atom = atoms.at(row).ok_or(Failure::CatalogIndex)?;
-                for (column, right) in atom.values().iter().enumerate() {
-                    let order = work.compare(value(column), right)?;
-                    if !order.is_eq() {
-                        return Ok(order);
-                    }
-                }
-                Ok(std::cmp::Ordering::Equal)
-            },
+            |row| compare_row(atoms, row, &value, work),
             descend,
         )
     }
@@ -545,6 +559,24 @@ fn vector_bytes<T>(values: &Vec<T>) -> usize {
 
 fn index_bytes(index: &Index) -> usize {
     index.nodes.capacity() * size_of::<Node>() + index.path.capacity() * size_of::<Step>()
+}
+
+/// A query tuple against the indexed row `row`: its values in column order.
+fn compare_row<'value>(
+    atoms: Atoms<'_>,
+    row: usize,
+    value: &impl Fn(usize) -> TermRef<'value>,
+    work: &mut Work,
+) -> Result<std::cmp::Ordering, Failure> {
+    work.tick(1)?;
+    let atom = atoms.at(row).ok_or(Failure::CatalogIndex)?;
+    for (column, right) in atom.values().iter().enumerate() {
+        let order = work.compare(value(column), right)?;
+        if !order.is_eq() {
+            return Ok(order);
+        }
+    }
+    Ok(std::cmp::Ordering::Equal)
 }
 
 #[cfg(test)]

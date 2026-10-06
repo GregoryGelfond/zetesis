@@ -424,3 +424,30 @@ fn an_unwinding_kernel_consumes_its_reserved_allowance() {
     assert!(stopped.is_err());
     state(&shared, (8, 2, 0));
 }
+
+#[test]
+fn batched_grants_conserve_permits_through_refunds() {
+    let shared = budget(WORK_QUANTUM + 10);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
+    assert_eq!(lease.take_up_to(256), Ok(256));
+    lease.give_back(100);
+    assert_eq!(lease.take_up_to(WORK_QUANTUM), Ok(WORK_QUANTUM - 156));
+    // The grant is spent: the next batch refills from what remains.
+    assert_eq!(lease.take_up_to(256), Ok(10));
+    lease.give_back(4);
+    drop(lease);
+    state(&shared, (WORK_QUANTUM + 6, 4, 0));
+}
+
+#[test]
+fn a_batched_grant_is_refused_only_when_no_permit_remains() {
+    let shared = budget(3);
+    let cancellation =
+        Cancellation::with_deadline(Instant::now() + Duration::from_secs(5)).unwrap();
+    let lease = shared.lease(&cancellation);
+    assert_eq!(lease.take_up_to(256), Ok(3));
+    assert_eq!(lease.take_up_to(1), Err(Incomplete::WorkLimit));
+    drop(lease);
+    state(&shared, (3, 0, 0));
+}

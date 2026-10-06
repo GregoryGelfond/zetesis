@@ -26,10 +26,10 @@ fn narrow_fresh(
     let narrower = Narrower::new(theory);
     let mut knowledge = narrower.knowledge();
     narrower.narrow_known(
-        theory,
-        producers,
+        zetesis_ferraris::OriginalSubject::new(theory, producers),
         region,
         &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
         limits,
         cancellation,
     )
@@ -621,10 +621,10 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
         }
         let (narrowing, _) = narrower
             .narrow_frozen_known(
-                &t,
-                truth,
+                zetesis_ferraris::FrozenSubject::new(&t, truth),
                 &mut subsets,
                 &mut narrower.knowledge(),
+                &mut zetesis_ferraris::NarrowingScratch::default(),
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
@@ -667,20 +667,20 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
             let mut fresh = carried.clone();
             let (from_fresh, _) = narrower
                 .narrow_known(
-                    &t,
-                    producers,
+                    zetesis_ferraris::OriginalSubject::new(&t, producers),
                     &mut fresh,
                     &mut narrower.knowledge(),
+                    &mut zetesis_ferraris::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
                 .unwrap();
             let (from_carried, _) = narrower
                 .narrow_known(
-                    &t,
-                    producers,
+                    zetesis_ferraris::OriginalSubject::new(&t, producers),
                     &mut carried,
                     &mut knowledge,
+                    &mut zetesis_ferraris::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
@@ -739,10 +739,10 @@ fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
     let mut region = Region::all_open(1);
     let (narrowing, _) = narrower
         .narrow_known(
-            &t,
-            None,
+            zetesis_ferraris::OriginalSubject::new(&t, None),
             &mut region,
             &mut knowledge,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
             RegionLimits::default(),
             &Cancellation::default(),
         )

@@ -9,15 +9,17 @@ use std::{
 use super::{AtomRef, Error, storage};
 
 /// Values keyed by the owner-scoped identity of canonical atoms, for any
-/// number of atom owners. A lookup hashes one identity word instead of the
-/// atom's structure. Owned ingress and carrier atoms have no identity here,
-/// and equal atoms of different owners are different keys. Each owner is
-/// retained by identity only, never by its payload. Owners are found by a
-/// linear scan, which suits the few owners of one run, such as one per
-/// search worker.
+/// number of atom owners. A lookup hashes the owner's identity and then one
+/// identity word, instead of the atom's structure, so its cost does not grow
+/// with the number of owners. Owned ingress and carrier atoms have no identity
+/// here, and equal atoms of different owners are different keys. Each owner is
+/// retained by identity only, never by its payload; `retain_held` drops the
+/// owners nothing else holds.
 #[derive(Debug)]
 pub struct AtomIdentityMap<T> {
-    owners: Vec<Scoped<T>>,
+    /// By the owner's address, which the entry's own scope handle keeps
+    /// unique and stable while the entry exists.
+    owners: HashMap<usize, Scoped<T>, BuildHasherDefault<IdentityHasher>>,
 }
 
 /// One owner's entries.
@@ -51,7 +53,9 @@ impl Hasher for IdentityHasher {
 
 impl<T> Default for AtomIdentityMap<T> {
     fn default() -> Self {
-        Self { owners: Vec::new() }
+        Self {
+            owners: HashMap::default(),
+        }
     }
 }
 
@@ -61,8 +65,7 @@ impl<T: Copy> AtomIdentityMap<T> {
     pub fn get(&self, atom: AtomRef<'_>) -> Option<T> {
         let (read, id) = atom.canonical()?;
         self.owners
-            .iter()
-            .find(|owner| read.accepts_atom_scope(&owner.scope))?
+            .get(&read.atom_owner_key()?)?
             .values
             .get(&id)
             .copied()
@@ -81,29 +84,44 @@ impl<T: Copy> AtomIdentityMap<T> {
         let Some(scope) = read.atom_scope() else {
             return Ok(false);
         };
-        let position = if let Some(position) = self
-            .owners
-            .iter()
-            .position(|owner| read.accepts_atom_scope(&owner.scope))
-        {
-            position
-        } else {
+        let key = scope.key();
+        if !self.owners.contains_key(&key) {
             self.owners.try_reserve(1).map_err(|_| Error::Allocation)?;
-            self.owners.push(Scoped {
+        }
+        let values = &mut self
+            .owners
+            .entry(key)
+            .or_insert_with(|| Scoped {
                 scope,
                 values: HashMap::default(),
-            });
-            self.owners.len() - 1
-        };
-        let values = &mut self.owners[position].values;
+            })
+            .values;
         values.try_reserve(1).map_err(|_| Error::Allocation)?;
         values.insert(id, value);
         Ok(true)
     }
 
+    /// Drop every owner that only this map still holds: no catalog, writer or
+    /// store refers to it, so none of its atoms can be presented again. One
+    /// scan of the owners; entries of held owners are untouched.
+    pub fn retain_held(&mut self) {
+        self.owners.retain(|_, owner| owner.scope.held_elsewhere());
+        // A prune that leaves the owner table far below its capacity returns
+        // the excess, so retained space follows the owners still held.
+        if self.owners.capacity() > 4 * self.owners.len().max(4) {
+            self.owners.shrink_to(2 * self.owners.len());
+        }
+    }
+
+    /// Atom owners with entries or a held scope.
+    #[must_use]
+    pub fn owners(&self) -> usize {
+        self.owners.len()
+    }
+
     /// Keep only the entries whose value satisfies `keep`.
     pub fn retain(&mut self, mut keep: impl FnMut(T) -> bool) {
-        for owner in &mut self.owners {
+        for owner in self.owners.values_mut() {
             owner.values.retain(|_, value| keep(*value));
         }
     }
@@ -111,13 +129,13 @@ impl<T: Copy> AtomIdentityMap<T> {
     /// Recorded entries across all owners.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.owners.iter().map(|owner| owner.values.len()).sum()
+        self.owners.values().map(|owner| owner.values.len()).sum()
     }
 
     /// Whether no entry is recorded.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.owners.iter().all(|owner| owner.values.is_empty())
+        self.owners.values().all(|owner| owner.values.is_empty())
     }
 
     /// Owner headers and entry capacity; hash-table control bytes and the
@@ -125,10 +143,10 @@ impl<T: Copy> AtomIdentityMap<T> {
     #[must_use]
     pub fn retained_bytes(&self) -> usize {
         size_of::<Self>()
-            + self.owners.capacity() * size_of::<Scoped<T>>()
+            + self.owners.capacity() * size_of::<(usize, Scoped<T>)>()
             + self
                 .owners
-                .iter()
+                .values()
                 .map(|owner| owner.values.capacity() * size_of::<(storage::AtomId, T)>())
                 .sum::<usize>()
     }

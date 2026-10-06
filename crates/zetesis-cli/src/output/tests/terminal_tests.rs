@@ -3,7 +3,14 @@
 use super::{Buffer, reconstruction_kind, terminal_statistics};
 use zetesis_core::{ModelError, ModelFailure};
 use zetesis_solve::TerminalExecutionStatistics;
-use zetesis_themelios::{ReconstructionError, ReconstructionStatistics};
+use zetesis_themelios::{ReconstructionCharges, ReconstructionError, ReconstructionStatistics};
+
+fn charges(count: u64) -> ReconstructionCharges {
+    ReconstructionCharges {
+        work: count,
+        substitutions: count,
+    }
+}
 
 #[test]
 fn reconstruction_limits_do_not_reclassify_allocator_or_identity_failures() {
@@ -29,6 +36,7 @@ fn reconstruction_limits_do_not_reclassify_allocator_or_identity_failures() {
 fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
     for count in [0, u64::MAX] {
         let statistics = TerminalExecutionStatistics {
+            base: zetesis_themelios::BaseKind::Eager,
             base_answers: count,
             reconstructed: count,
             pending: 0,
@@ -37,16 +45,24 @@ fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
                 completed: count,
                 work: count,
                 substitutions: count,
+                admission: charges(count),
+                allowance: charges(count),
+                latest: charges(count),
+                peak: charges(count),
             },
         };
-        let mut complete = Buffer::new(1024);
+        let mut complete = Buffer::new(2048);
         terminal_statistics(&mut complete, Some(&statistics)).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&complete.bytes).unwrap();
         assert_eq!(
             value,
-            serde_json::json!({"base_answers":count,"reconstructed":count,
+            serde_json::json!({"base":"eager","base_answers":count,"reconstructed":count,
             "pending":0,"reconstruction":{"attempts":count,"completed":count,
-                "work":count,"substitutions":count}})
+                "work":count,"substitutions":count,
+                "admission":{"work":count,"substitutions":count},
+                "allowance":{"work":count,"substitutions":count},
+                "latest":{"work":count,"substitutions":count},
+                "peak":{"work":count,"substitutions":count}}})
         );
         for maximum in 0..complete.bytes.len() {
             let mut refused = Buffer::new(maximum);
@@ -57,4 +73,46 @@ fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
     let mut absent = Buffer::new(4);
     terminal_statistics(&mut absent, None).unwrap();
     assert_eq!(absent.bytes, b"null");
+}
+
+#[test]
+fn each_reconstruction_receipt_keeps_its_own_values() {
+    // Distinct values per object and component, so a swapped field shows.
+    let receipt = |work, substitutions| ReconstructionCharges {
+        work,
+        substitutions,
+    };
+    let statistics = TerminalExecutionStatistics {
+        base: zetesis_themelios::BaseKind::Hybrid,
+        base_answers: 2,
+        reconstructed: 2,
+        pending: 0,
+        reconstruction: ReconstructionStatistics {
+            attempts: 2,
+            completed: 2,
+            work: 100,
+            substitutions: 10,
+            admission: receipt(80, 8),
+            allowance: receipt(920, 92),
+            latest: receipt(9, 1),
+            peak: receipt(11, 2),
+        },
+    };
+    let mut complete = Buffer::new(2048);
+    terminal_statistics(&mut complete, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&complete.bytes).unwrap();
+    let reconstruction = &value["reconstruction"];
+    assert_eq!(value["base"], "hybrid");
+    for (object, work, substitutions) in [
+        ("admission", 80, 8),
+        ("allowance", 920, 92),
+        ("latest", 9, 1),
+        ("peak", 11, 2),
+    ] {
+        assert_eq!(reconstruction[object]["work"], work, "{object}");
+        assert_eq!(
+            reconstruction[object]["substitutions"], substitutions,
+            "{object}"
+        );
+    }
 }

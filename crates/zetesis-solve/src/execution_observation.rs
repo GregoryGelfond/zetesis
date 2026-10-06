@@ -4,6 +4,15 @@ use crate::{Grounder, Oracle, SearchMethod, SolveError, SourceBatching};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
+/// The integrity constraints a hybrid base streams.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StreamedConstraints {
+    /// Lowered constraint templates, not a count of original declarations.
+    pub templates: usize,
+    /// Possible instances visited during complete source admission.
+    pub instances: u64,
+}
+
 /// One observation at an execution boundary of the current solve.
 ///
 /// Values borrow the active call; the solver retains no observation queue. These
@@ -16,10 +25,14 @@ pub enum ExecutionObservation<'a> {
     /// definitions. Formula populations and membership events that follow refer
     /// to that base; host reconstruction precedes every original answer.
     TerminalDefinitions {
-        /// Requested schedule; this initial composite profile requires Auto.
+        /// Requested schedule: automatic for an eager base, lazy for a hybrid one.
         requested: Grounder,
+        /// How the base was grounded.
+        base: zetesis_themelios::BaseKind,
         /// Admitted deferred rule occurrences, not a count of ground answers.
         deferred_templates: usize,
+        /// A hybrid base's streamed constraints; absent for an eager base.
+        streamed: Option<StreamedConstraints>,
     },
     /// The complete producer core is retained; eligible source constraints are
     /// checked on the host before any original-program answer is accepted.

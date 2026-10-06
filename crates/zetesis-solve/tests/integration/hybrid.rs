@@ -414,7 +414,9 @@ fn unfinished_region_check_never_yields_a_core_answer() {
     assert_eq!(statistics.rejected, 0);
     assert_eq!(statistics.pending, 0);
     assert!(error.statistics.work <= statistics.constraints.work);
-    assert_eq!(statistics.constraints.work, prepared.work);
+    // The final checker and the region worker each prepared under their own
+    // allowance; the region check then refused before charging more.
+    assert_eq!(statistics.constraints.work, 2 * prepared.work);
     assert_eq!(outcome.verified_models(), 0);
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.unsatisfiable());
@@ -464,13 +466,15 @@ fn cancellation_preserves_only_the_verified_prefix() {
 }
 
 #[test]
-fn workers_share_one_constraint_substitution_allowance() {
+fn workers_do_not_multiply_the_substitution_ceiling() {
+    // A zero ceiling refuses each check's first substitution, whatever the
+    // number of workers checking concurrently.
     let admitted = hybrid(MONOTONE, &limits());
     for workers in [1, 4] {
         let config = SolveConfig {
             workers: NonZeroUsize::new(workers).unwrap(),
             constraints: ConstraintCheckLimits {
-                max_substitutions: 1,
+                max_substitutions: 0,
                 ..Default::default()
             },
             ..configuration()
@@ -488,13 +492,13 @@ fn workers_share_one_constraint_substitution_allowance() {
         };
         assert!(matches!(&error.cause, ConstraintCheckCause::Source(error)
         if matches!(error.as_ref(), FormulaFailure::Limit {
-            resource: FormulaResource::Substitutions, limit: 1, ..
+            resource: FormulaResource::Substitutions, limit: 0, ..
         })));
         let outcome = failure.semantic().unwrap();
         assert_eq!(outcome.completion(), None);
         assert!(!outcome.unsatisfiable());
         let statistics = outcome.hybrid_execution().unwrap();
-        assert_eq!(statistics.constraints.substitutions, 1);
+        assert_eq!(statistics.constraints.substitutions, 0);
         assert!(error.statistics.substitutions <= statistics.constraints.substitutions);
         assert_eq!(statistics.accepted, 0);
         assert!(session.next().is_none());
@@ -534,4 +538,23 @@ fn a_requested_prefix_settles_region_workers() {
         session.progress().hybrid_execution(),
         outcome.hybrid_execution()
     );
+}
+
+#[test]
+fn a_constraint_keeps_the_relation_only_it_reads() {
+    // `p` is read by the streamed constraint alone, so its support relation
+    // must survive admission for the checker to reject `{a, p(1)}`.
+    const SOURCE: &str = "{a; b}. p(1) :- a. q :- b. :- p(X), X = 1.";
+    let admitted = hybrid(SOURCE, &limits());
+    assert!(admitted.streamed_templates() > 0);
+    let original = eager(SOURCE, &limits()).unwrap();
+    let (expected, _) = capture(PreparedInput::formula(&original), configuration());
+    let config = SolveConfig {
+        grounder: Grounder::Lazy,
+        ..configuration()
+    };
+    let (actual, outcome) = capture(PreparedInput::hybrid(&admitted), config);
+    assert_eq!(actual, expected);
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(outcome.verified_models(), 2);
 }

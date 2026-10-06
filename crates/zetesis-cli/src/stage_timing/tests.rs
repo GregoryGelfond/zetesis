@@ -52,7 +52,7 @@ fn lazy_and_mixed_rendering_never_label_missing_lazy_time_as_zero() {
 fn terminal_rendering_names_only_base_grounding_as_eager() {
     let recorder = StageRecorder::new(true);
     drop(recorder.enter(SolveStage::Grounding));
-    recorder.mark_terminal_definitions();
+    recorder.mark_terminal_definitions(zetesis_telemetry::TerminalBaseMark::Eager);
     let mut bytes = Vec::new();
     super::write(&mut bytes, &recorder.snapshot().unwrap()).unwrap();
     let text = String::from_utf8(bytes).unwrap();

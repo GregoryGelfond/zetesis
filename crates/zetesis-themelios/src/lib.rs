@@ -139,14 +139,15 @@ pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
 mod formula_terminal;
 pub use formula_terminal::{
-    FormulaMaterialization, ReconstructionError, ReconstructionStatistics, TerminalFormula,
-    TerminalReconstruction,
+    BaseKind, FormulaMaterialization, ReconstructionCharges, ReconstructionError,
+    ReconstructionStatistics, TerminalBase, TerminalFormula, TerminalReconstruction,
 };
 mod constraint_allowance;
 pub use constraint_allowance::ConstraintAllowance;
 pub use formula_hybrid::{
     ConstraintCheckCause, ConstraintCheckFailure, ConstraintCheckLimits, ConstraintCheckStatistics,
     ConstraintChecker, ConstraintRegionVerdict, ConstraintVerdict, HybridFeature, HybridFormula,
+    StreamedCore,
 };
 mod formula_count_plan;
 pub use formula_count_plan::{

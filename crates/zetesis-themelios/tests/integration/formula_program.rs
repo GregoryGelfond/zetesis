@@ -211,10 +211,10 @@ fn constructed_adaptive_receipt_reconstructs_the_original_answer() {
     assert!(owner.source().is_none());
     assert!(std::ptr::eq(owner.original_program(), program.as_ref()));
     let positions = 0..owner.base_atom_catalog().atoms().len();
-    let candidate = Interpretation::new(owner.base_theory(), positions.clone()).unwrap();
+    let candidate = Interpretation::new(owner.base_theory().unwrap(), positions.clone()).unwrap();
     assert!(
         check(
-            owner.base_theory(),
+            owner.base_theory().unwrap(),
             &candidate,
             Limits::default(),
             &Cancellation::default()
@@ -360,7 +360,6 @@ fn terminal_stop() -> (ReconstructionError, std::sync::Weak<Program>) {
     let failure = reconstruction
         .reconstruct(&base, &cancellation)
         .unwrap_err();
-    drop(reconstruction);
     drop(base);
     drop(owner);
     (failure, original)

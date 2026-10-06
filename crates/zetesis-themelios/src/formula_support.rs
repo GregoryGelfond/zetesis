@@ -29,6 +29,7 @@ pub(crate) use term_selection::TermSelection;
 #[cfg(test)]
 mod columnar;
 mod delta;
+mod demand;
 pub(crate) mod family;
 mod filters;
 #[cfg(test)]
@@ -122,7 +123,94 @@ impl CompletedCatalog {
             append,
         ))
     }
+}
 
+/// Completed support kept for streamed constraints over the closed base: the
+/// closed canonical storage, the relations the constraints read, and a
+/// read-only descendant writer that resolves the base's terms. The relations
+/// are read through the closed catalog, which keeps their writer's scopes; the
+/// descendant serves only vocabulary-scoped term lookups.
+pub(crate) struct StreamedSupport {
+    /// Shared with a terminal owner's reconstruction plan when this support is
+    /// a hybrid base's.
+    closed: std::sync::Arc<ClosedSource>,
+    rows: relations::StreamedRows,
+    lookup: zetesis_core::atom_interner::AtomInterner,
+    completion: Completion,
+}
+
+impl CompletedCatalog {
+    /// Close this support, keeping only the relations of the predicates the
+    /// atoms of `rules` name. The close is charged and its peak admitted as any
+    /// close is.
+    pub(crate) fn into_streamed(
+        self,
+        rules: &[crate::formula_ir::RuleIr],
+        work: GroundingWork<'_>,
+    ) -> Result<StreamedSupport, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let keep = match self.catalog.component_view(limits, counters, location)? {
+            Some(view) => demand::read_predicates(rules, view, limits, counters, location)?,
+            None => None,
+        };
+        let max_bytes = limits.max_atom_storage_bytes;
+        let (closed, rows) = self
+            .catalog
+            .into_streamed(
+                keep.as_ref(),
+                GroundingWork::new(limits, counters, location),
+            )
+            .map_err(|failure| failure.into_parts().0)?;
+        let lookup = zetesis_core::atom_interner::AtomInterner::for_closed_catalog(
+            &closed.storage,
+            max_bytes,
+        )
+        .map_err(|error| FormulaFailure::AtomCatalog { error, location })?;
+        Ok(StreamedSupport {
+            closed: std::sync::Arc::new(closed),
+            rows,
+            lookup,
+            completion: self.completion,
+        })
+    }
+}
+
+impl StreamedSupport {
+    /// The closed base these relations index.
+    pub(crate) fn closed(&self) -> &std::sync::Arc<ClosedSource> {
+        &self.closed
+    }
+
+    /// Named bytes of the kept relations and their postings.
+    pub(crate) fn relation_bytes(&self) -> usize {
+        self.rows.bytes()
+    }
+
+    /// A completed view for an independent checker; nothing is copied.
+    pub(crate) fn snapshot(
+        &self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<CompletedSupport<'_>, FormulaFailure> {
+        self.rows
+            .snapshot(&self.closed, limits, counters, location)
+            .map(|relations| CompletedSupport {
+                lookup_owner: Some(&self.lookup),
+                completion: &self.completion,
+                relations,
+            })
+    }
+}
+
+#[cfg(test)]
+impl CompletedCatalog {
+    /// A completed view over the open owner, which tests read directly;
+    /// production checkers read the closed base (`StreamedSupport`).
     pub(crate) fn snapshot(
         &self,
         limits: &FormulaLimits,
@@ -265,6 +353,7 @@ impl Counters {
     pub(super) fn record(&self, event: Event) {
         self.observed.record(event);
     }
+    #[inline]
     pub fn work(
         &mut self,
         limits: &FormulaLimits,
@@ -272,6 +361,7 @@ impl Counters {
     ) -> Result<(), FormulaFailure> {
         self.charge_work(1, limits, location)
     }
+    #[inline]
     pub(super) fn charge_work(
         &mut self,
         amount: u128,
@@ -357,13 +447,18 @@ impl Counters {
             location,
         )?;
         if let Some(allowance) = &self.accounting.allowance {
-            allowance.substitution(location)?;
+            allowance.substitution();
         }
         self.accounting.substitutions += 1;
         Ok(())
     }
 }
 
+/// Charge `amount` units of formula work: poll cancellation, check the work
+/// ceiling, charge the shared allowance, then count. Every charged unit runs
+/// on this path, so it inlines into its callers; the site is read only when a
+/// failure is built, on the cold path.
+#[inline]
 fn charge_work(
     work: &mut u64,
     cancellation: Option<&zetesis_cpu::Cancellation>,
@@ -372,10 +467,10 @@ fn charge_work(
     limits: &FormulaLimits,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    if let Some(cancellation) = cancellation {
-        cancellation
-            .poll()
-            .map_err(|reason| FormulaFailure::Interrupted { reason, location })?;
+    if let Some(cancellation) = cancellation
+        && let Err(reason) = cancellation.poll()
+    {
+        return Err(interrupted(reason, location));
     }
     ceiling(
         FormulaResource::Work,
@@ -384,10 +479,17 @@ fn charge_work(
         location,
     )?;
     if let Some(allowance) = allowance {
-        allowance.work(amount, location)?;
+        allowance.work(amount);
     }
     *work += u64::try_from(amount).expect("charged work fits its u64 ceiling");
     Ok(())
+}
+
+/// The failure of a charge stopped by cancellation or a deadline.
+#[cold]
+#[inline(never)]
+fn interrupted(reason: zetesis_cpu::Stop, location: ProgramSite) -> FormulaFailure {
+    FormulaFailure::Interrupted { reason, location }
 }
 
 pub(crate) fn build(
@@ -430,6 +532,12 @@ fn complete(
         location: fallback,
     } = work;
     catalog.prepared_bytes(plan.as_ref().map_or(0, producers::ProducerPlan::bytes));
+    // Postings are kept only for columns a join can bind, decided before the
+    // first relation is created, since a column cannot gain postings later.
+    if let Some(view) = catalog.component_view(limits, counters, fallback)? {
+        let demand = demand::Demand::of(prepared, view, limits, counters, fallback)?;
+        catalog.install_demand(demand);
+    }
     catalog.publish(limits, counters, fallback)?;
     #[cfg(test)]
     postings::begin_support();

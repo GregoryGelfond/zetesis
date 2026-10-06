@@ -5,11 +5,23 @@ use std::sync::Arc;
 
 use super::segments::{self, Atom, Counts, Predicate, RowSegment, Term, VocabularySegment};
 use super::{
-    AtomId, FrozenVocabulary, Owner, PredicateId, Snapshot, Store, TermId, TextId, locate,
+    AtomId, Closed, FrozenVocabulary, Owner, PredicateId, Snapshot, Store, TermId, TextId, locate,
 };
 
 #[derive(Clone, Debug)]
 pub(crate) struct AtomScope(Arc<Owner>);
+impl AtomScope {
+    /// Whether anything besides this handle refers to the owner. A count of
+    /// one cannot rise again: a handle is made only by cloning another.
+    pub(crate) fn held_elsewhere(&self) -> bool {
+        Arc::strong_count(&self.0) > 1
+    }
+    /// The owner's address: unique among live owners, and stable while any
+    /// handle, this one included, keeps the owner alive.
+    pub(crate) fn key(&self) -> usize {
+        Arc::as_ptr(&self.0).addr()
+    }
+}
 #[derive(Clone, Debug)]
 pub(crate) struct VocabularyScope(Arc<Owner>);
 impl VocabularyScope {
@@ -26,6 +38,8 @@ pub(crate) enum Read<'a> {
     Snapshot(&'a Snapshot),
     Writer(&'a Store),
     Frozen(&'a FrozenVocabulary),
+    /// A closed original writer: its own scopes and every canonical row.
+    Closed(&'a Closed),
 }
 impl<'a> From<&'a Snapshot> for Read<'a> {
     fn from(snapshot: &'a Snapshot) -> Self {
@@ -35,6 +49,11 @@ impl<'a> From<&'a Snapshot> for Read<'a> {
 impl<'a> From<&'a Store> for Read<'a> {
     fn from(store: &'a Store) -> Self {
         Self::Writer(store)
+    }
+}
+impl<'a> From<&'a Closed> for Read<'a> {
+    fn from(closed: &'a Closed) -> Self {
+        Self::Closed(closed)
     }
 }
 impl<'a> From<&'a FrozenVocabulary> for Read<'a> {
@@ -49,6 +68,7 @@ impl<'a> Read<'a> {
             Self::Snapshot(snapshot) => &snapshot.data.vocabulary.owner,
             Self::Writer(store) => store.vocabulary.owner(),
             Self::Frozen(base) => &base.data.owner,
+            Self::Closed(closed) => &closed.vocabulary.data.owner,
         }
     }
     fn atom_owner(self) -> Option<&'a Arc<Owner>> {
@@ -56,7 +76,12 @@ impl<'a> Read<'a> {
             Self::Snapshot(snapshot) => Some(&snapshot.atom_owner),
             Self::Writer(store) => Some(&store.atom_owner),
             Self::Frozen(_) => None,
+            Self::Closed(closed) => Some(closed.rows.source_owner()),
         }
+    }
+    /// The atom owner's address, as `AtomScope::key` gives it.
+    pub(crate) fn atom_owner_key(self) -> Option<usize> {
+        self.atom_owner().map(|owner| Arc::as_ptr(owner).addr())
     }
     pub(crate) fn atom_scope(self) -> Option<AtomScope> {
         self.atom_owner().map(|owner| AtomScope(Arc::clone(owner)))
@@ -96,6 +121,10 @@ impl<'a> Read<'a> {
             },
             Self::Writer(store) => store.counts(),
             Self::Frozen(base) => base.data.counts,
+            Self::Closed(closed) => Counts {
+                atoms: closed.rows.payload.atoms,
+                ..closed.vocabulary.data.counts
+            },
         }
     }
     // Segments are contiguous from zero and the counts end with the last one
@@ -132,6 +161,9 @@ impl<'a> Read<'a> {
             }),
             Self::Writer(store) => store.vocabulary_segment(id, start),
             Self::Frozen(base) => locate(&base.data.segments, id, |segment| start(segment.start)),
+            Self::Closed(closed) => locate(&closed.vocabulary.data.segments, id, |segment| {
+                start(segment.start)
+            }),
         }
     }
     fn row_segment(self, id: usize) -> Option<&'a RowSegment> {
@@ -139,6 +171,9 @@ impl<'a> Read<'a> {
             Self::Snapshot(snapshot) => snapshot.rows().segment(id),
             Self::Writer(store) => store.row_segment(id),
             Self::Frozen(_) => None,
+            Self::Closed(closed) => {
+                locate(&closed.rows.payload.segments, id, |segment| segment.start)
+            }
         }
     }
     pub(crate) fn text(self, id: TextId) -> &'a str {

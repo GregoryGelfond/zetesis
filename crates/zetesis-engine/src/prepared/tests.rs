@@ -15,6 +15,7 @@ struct Route {
     lazy: bool,
     hybrid_constraints: usize,
     terminal_definitions: usize,
+    terminal_base: Option<zetesis_themelios::BaseKind>,
 }
 
 impl ExecutionObserver for Route {
@@ -34,9 +35,12 @@ impl ExecutionObserver for Route {
                 self.hybrid_constraints = streamed_templates;
             }
             ExecutionObservation::TerminalDefinitions {
-                deferred_templates, ..
+                deferred_templates,
+                base,
+                ..
             } => {
                 self.terminal_definitions = deferred_templates;
+                self.terminal_base = Some(base);
             }
             _ => {}
         }
@@ -70,10 +74,28 @@ fn lazy_configuration_uses_source_closure() {
 }
 
 #[test]
-fn hybrid_configuration_streams_constraints() {
-    let (profile, route) = execute(program! { { p; q }. :- p, q. }, Grounder::Hybrid);
+fn lazy_formula_configuration_streams_constraints() {
+    // A choice rule is outside the relational profile: lazy grounding takes
+    // the formula route, streaming the constraint over a producer core.
+    let (profile, route) = execute(program! { { p; q }. :- p, q. }, Grounder::Lazy);
     assert_eq!(profile, PreparedProfile::Hybrid);
     assert!(route.hybrid_constraints > 0);
+}
+
+#[test]
+fn lazy_formula_configuration_defers_terminal_definitions() {
+    // r/1 is read by nothing: the lazy materialization defers it over a
+    // hybrid base that streams the constraint.
+    let (profile, route) = execute(
+        program! { { s(1); s(2) }. r(X) :- s(X). :- s(1), s(2). },
+        Grounder::Lazy,
+    );
+    assert_eq!(profile, PreparedProfile::TerminalDefinitions);
+    assert_eq!(
+        route.terminal_base,
+        Some(zetesis_themelios::BaseKind::Hybrid)
+    );
+    assert!(route.terminal_definitions > 0);
 }
 
 #[test]

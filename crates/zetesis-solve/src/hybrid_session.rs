@@ -9,7 +9,7 @@ use std::sync::Arc;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, HybridFormula};
+use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, StreamedCore};
 
 use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::Execution;
@@ -40,8 +40,17 @@ pub struct HybridExecutionStatistics {
 #[cfg(test)]
 mod tests;
 
+/// A streamed core and the subject its outcomes report: the hybrid owner, or
+/// the terminal owner whose base the core is.
+pub(crate) struct HybridInput<'a> {
+    pub(crate) core: &'a StreamedCore,
+    pub(crate) subject: crate::Subject,
+}
+
 pub(crate) struct HybridSession<'a> {
-    owner: &'a HybridFormula,
+    /// The subject an outcome reports: the hybrid owner, or the terminal owner
+    /// whose base this core is.
+    subject: crate::Subject,
     core: FormulaSession<'a, Execution>,
     core_config: SolveConfig,
     checker: ConstraintChecker<'a>,
@@ -52,8 +61,11 @@ pub(crate) struct HybridSession<'a> {
 }
 
 impl<'a> HybridSession<'a> {
-    pub(crate) fn new(
-        owner: &'a HybridFormula,
+    /// A hybrid owner's session: the route is recorded as lazy grounding and
+    /// observed as hybrid grounding before the core session starts. A terminal
+    /// owner's hybrid base is observed by its terminal session instead.
+    pub(crate) fn observed(
+        input: HybridInput<'a>,
         config: &SolveConfig,
         resources: &crate::ExecutionResources,
         observations: &mut impl ExecutionSink,
@@ -64,9 +76,33 @@ impl<'a> HybridSession<'a> {
         phases.lazy_grounding();
         observations.record(crate::ExecutionObservation::HybridGrounding {
             requested: config.grounder,
-            streamed_templates: owner.streamed_templates(),
-            streamed_instances: owner.streamed_instances(),
+            streamed_templates: input.core.streamed_templates(),
+            streamed_instances: input.core.streamed_instances(),
         })?;
+        Self::new(
+            input,
+            config,
+            resources,
+            observations,
+            cancellation,
+            phases,
+            selection,
+        )
+    }
+
+    pub(crate) fn new(
+        input: HybridInput<'a>,
+        config: &SolveConfig,
+        resources: &crate::ExecutionResources,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+        selection: AnswerSelection,
+    ) -> Result<Self, SolveError> {
+        let HybridInput {
+            core: owner,
+            subject,
+        } = input;
         let allowance = ConstraintAllowance::new(config.constraints);
         let checker = owner
             .checker_with_allowance(&allowance, cancellation)
@@ -88,7 +124,7 @@ impl<'a> HybridSession<'a> {
             key_analysis: owner.key_analysis(),
             objectives: owner.objectives(),
             certificate_order: crate::countermodel::certificate_order(
-                owner.source_analysis(),
+                owner.analysis(),
                 owner.analysis_basis(),
             ),
         };
@@ -112,7 +148,7 @@ impl<'a> HybridSession<'a> {
                 regions
             });
         Ok(Self {
-            owner,
+            subject,
             core,
             core_config,
             checker,
@@ -176,7 +212,7 @@ impl<'a> HybridSession<'a> {
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
         let mut outcome = self.core.outcome(phases);
-        outcome.subject = Some(crate::Subject::Hybrid(self.owner.clone()));
+        outcome.subject = Some(self.subject.clone());
         outcome.verified = self.statistics.accepted;
         // Core exhaustion cannot establish completion of an unfinished source check.
         outcome.search_state = None;
@@ -246,5 +282,26 @@ impl<'a> HybridSession<'a> {
 
     pub(crate) const fn finished(&self) -> bool {
         self.final_outcome.is_some()
+    }
+
+    /// Settle this session for an enclosing one that stops for `state`: resolve
+    /// it once (workers stopped, the region-failure slot taken) unless it has
+    /// already finished, and return its final search state, or the constraint
+    /// failure that cleanup established.
+    pub(crate) fn conclude(
+        &mut self,
+        state: Option<SearchState>,
+        phases: &Recorder,
+    ) -> Result<Option<SearchState>, SolveError> {
+        if let Some(outcome) = &self.final_outcome {
+            return Ok(outcome.search_state);
+        }
+        match self.finish(state, None, phases) {
+            Some(Err(error)) => Err(error),
+            _ => Ok(self
+                .final_outcome
+                .as_ref()
+                .and_then(|outcome| outcome.search_state)),
+        }
     }
 }

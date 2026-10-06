@@ -18,7 +18,7 @@ use zetesis_core::TemplateTerm;
 use super::{Projections, tick};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
-use crate::formula_support::relations::RelationRows;
+use crate::formula_support::relations::{Postings, RelationRows};
 use crate::formula_support::{Computation, Context, Evaluation, Support};
 use crate::{ExpansionFailure, FormulaFailure};
 
@@ -173,7 +173,10 @@ impl<'a> Projections<'a> {
             // A direct variable leaf performs no partial arithmetic.
             return Ok(true);
         }
-        for posting in domain.rows.columns[domain.column].values() {
+        let Postings::Indexed(postings) = domain.rows.postings(domain.column) else {
+            unreachable!("a domain column keeps postings");
+        };
+        for posting in postings.values() {
             tick(context)?;
             let position = *posting.first().expect("a distinct input has a source row");
             let row = domain
@@ -305,8 +308,16 @@ fn domain<'source>(
             if rows.row_count() == 0 {
                 return Ok(None);
             }
+            // A column without postings has no recorded distinct values: it is
+            // declined, never read as an empty domain.
+            let Postings::Indexed(values) = rows.postings(column) else {
+                continue;
+            };
             if selected.as_ref().is_none_or(|previous| {
-                rows.columns[column].len() < previous.rows.columns[previous.column].len()
+                let Postings::Indexed(known) = previous.rows.postings(previous.column) else {
+                    unreachable!("a selected domain column keeps postings");
+                };
+                values.len() < known.len()
             }) {
                 selected = Some(Domain { rows, column });
             }

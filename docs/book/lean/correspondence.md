@@ -643,7 +643,8 @@ earlier interpretations across those calls.
 
 The objective consumers use `AtomLookup` over immutable model selections or an
 `AtomIndex` over the original catalog. The index owns permutations of row IDs,
-not additional atoms. Its required laws are exact full-key membership and
+not additional atoms; a `CatalogIndex`, which hybrid constraint checkers of one
+core share, also holds a handle to the catalog it orders, sharing its storage. Its required laws are exact full-key membership and
 predicate filtering in original row order. Model lookup must additionally
 exclude unselected catalog atoms. The checked value comparison must agree with
 canonical storage identity, which is distinct from ASP term order. Existing
@@ -1089,14 +1090,17 @@ either child under the same queue guard. A resolved region decrements the count
 once. Taking or stealing only transfers ownership. Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
 can establish termination only when the count reaches zero. Idle workers wait at
-a gate: the resolution that reaches zero, a stop and a close each wake them after
-changing the count or the closed flag, and an idle worker re-checks both under the
-gate before waiting, so none waits past the end of the walk. The wait stays
-bounded, which is how an idle worker sees a cancellation or a newly published
-region; completeness never depends on a wake.
+a gate that also counts them: the resolution that reaches zero, a stop and a close
+each wake them after changing the count or the closed flag, and a split, after
+publishing both children and releasing its queue, wakes one. An idle worker
+re-checks both conditions and the peers' queues under the gate before waiting, so
+none waits past the end of the walk or misses a region published after its
+re-check. The wait stays bounded, which is how an idle worker sees a cancellation,
+or a region left in a queue its re-check found busy; completeness never depends on
+a wake.
 
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
-and exhaustion laws; the atomic count, the queue and gate protocols and absence
+and exhaustion laws; the atomic count, the queue and gate protocols (including the gate's idle count) and absence
 of lost ownership remain Rust refinement obligations. Depth-first local order
 retains at most one older sibling per ancestor plus the newest children. Each
 split decides another atom, and stealing starts only with an empty local deque,
@@ -1113,10 +1117,16 @@ bounded-stop contract.
 The Lean laws do not prove the scheduler's progress or Rust memory ordering.
 
 Original and frozen `Narrower` operations expose metered entry points returning
-an independent `NarrowingAttempt` receipt. The injected SAT budget acquires a
-local or shared permit before each charged read, so the shared ceiling bounds
-execution itself. A refused acquisition prevents that read; all earlier reads
-remain in the attempt and joined region counters even on a stop. The local
+an independent `NarrowingAttempt` receipt. Narrowing reserves permits from
+the injected SAT budget through a `NarrowingQuota`, at most `NARROWING_BATCH`
+(256) at a time, and spends one before each charged read, so the shared
+ceiling bounds execution itself. Cancellation and deadlines are polled at each
+reservation, so at most `NARROWING_BATCH` charged reads apart. A budget grants
+what remains when fewer permits than requested do, so a refused reservation
+prevents the same read per-read charging would; all earlier reads remain in the
+attempt and joined region counters even on a stop. Unspent permits are refunded
+when narrowing returns, so the receipt and the shared ledger count exactly the
+reads made. The local
 `RegionLimits` APIs wrap the same closure. Preservation of semantic narrowing
 still depends on `FormulaBounds` and `FerrarisMask`; permit conservation does
 not prove the reading rules or knowledge ownership. Prefix tests for original
@@ -1165,14 +1175,15 @@ regressions are executable evidence for those boundaries, not formal refinement.
 Retained-byte accounting includes the owned masks; the full seen-mask scan and
 snapshot writes are outside the existing charged-read work counters.
 
-Region candidate preparation and frozen proper-subset queries share one
-immutable index constructed with the exact original `Theory`. Reuse checks
-instance identity. Each region or query retains private `Knowledge`, and each
-candidate supplies freshly authenticated frozen truth. Sharing preserves the
-subjects of the existing `FormulaBounds` and `ReductRegions` laws; it changes
-ownership, not the definition of a reduct. Index construction, identity checks,
-mutable-state separation and attribution of construction work remain Rust
-refinement obligations.
+The region candidate walk and frozen proper-subset queries share one
+immutable index constructed with the exact original `Theory`, built by its one
+owner when the walk first needs it. Reuse checks instance identity. Each
+region or query retains private `Knowledge`, and each candidate supplies
+freshly authenticated frozen truth. Sharing preserves the subjects of the
+existing `FormulaBounds` and `ReductRegions` laws, and building the index later
+builds the same index; it changes ownership and timing, not the definition of
+a reduct. Index construction, identity checks, mutable-state separation and
+attribution of construction work remain Rust refinement obligations.
 
 The immutable region adjacency stores each ordered incidence row as a slice
 between two offsets in one contiguous entry vector.
@@ -1511,7 +1522,12 @@ and scans remaining semantic reads. Reconstruction joins true base-model rows
 and publishes their union with derived heads through one canonical descendant
 store. [`TerminalSession`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/terminal_session.rs)
 retains the original subject, counts only completed extensions as original
-answers, and records an unfinished extension separately. These Rust checks
+answers, and records an unfinished extension separately. Over a hybrid base its
+base session yields only core answers the streamed constraints accepted, so
+each answer is checked, then extended, then published: the composition rests on
+`StreamedConstraints.stable_iff_completed_partition` for the base and
+`TerminalDefinitions.stable_iff` for the extension, and no streamed constraint
+reads a deferred head, so deferral changes no constraint's truth. These Rust checks
 implement the stated obligations; the existing theorem does not prove their
 source-to-proposition or machine-execution correspondence.
 

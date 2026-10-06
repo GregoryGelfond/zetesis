@@ -8,10 +8,13 @@ mod selection;
 
 use crate::formula_support::{Context, GroundingWork};
 
-use std::{fmt, sync::Arc};
+use std::{
+    fmt,
+    sync::{Arc, OnceLock},
+};
 use themelios_base::source::Source;
 use themelios_program::program::{DefaultNegation, Program};
-use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, Model};
+use zetesis_core::{AtomCatalog, AtomIndexError, AtomLookup, CatalogIndex, Model};
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
@@ -20,9 +23,7 @@ use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_owner::Owner;
-use crate::formula_support::{
-    Accounting, CompletedCatalog, CompletedSupport, Counters, PreparedRule, RowFilter,
-};
+use crate::formula_support::{Accounting, CompletedSupport, Counters, PreparedRule, RowFilter};
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
     SourceMetadata,
@@ -48,24 +49,52 @@ impl fmt::Display for HybridFeature {
 }
 
 pub(crate) struct Constraints {
-    pub(crate) catalog: CompletedCatalog,
+    pub(crate) support: crate::formula_support::StreamedSupport,
     pub(crate) rules: Vec<RuleIr>,
     pub(crate) instances: u64,
     pub(crate) limits: FormulaLimits,
     pub(crate) location: ProgramSite,
 }
 
-struct Admitted {
+struct Core {
     compiled: Compiled,
     constraints: Option<Constraints>,
-    source: Owner,
+    source: Arc<Owner>,
+    /// The typed index of `compiled.atoms`, set by the first checker whose
+    /// region check needs it and lent to every later checker of this core.
+    index: OnceLock<CatalogIndex>,
+    /// The kept source rows' positions in `compiled.atoms`, set by the first
+    /// checker whose region check needs them and lent likewise.
+    rows: OnceLock<selection::RowPositions>,
+}
+
+/// A materialized producer core with the integrity constraints streamed over it:
+/// its stable models are proposals, and only those satisfying the streamed
+/// constraints are answer sets of the program this core was admitted for (a
+/// hybrid owner's whole program, or a terminal owner's base). Checkers and
+/// candidate-region filters run over it. Cloning shares all retained storage.
+#[derive(Clone)]
+pub struct StreamedCore(Arc<Core>);
+impl fmt::Debug for StreamedCore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StreamedCore")
+            .field("core_theory", self.core_theory())
+            .field("streamed_templates", &self.streamed_templates())
+            .field("streamed_instances", &self.streamed_instances())
+            .finish_non_exhaustive()
+    }
+}
+
+struct Admitted {
+    core: StreamedCore,
     metadata: SourceMetadata,
 }
 
 /// One immutable original program: a materialized producer core and prepared
-/// integrity constraints over the same complete atom/support envelope. When no
-/// constraints are streamed, the unused completed support and plan storage are
-/// released after admission.
+/// integrity constraints over the same atom envelope. Admission closes the
+/// completed support, keeping the canonical base and only the relations the
+/// streamed constraints read; when no constraint is streamed, the support and
+/// plan storage are released instead.
 ///
 /// Cloning shares all retained source, atoms and indexes. The core's answer sets
 /// are proposals; only those satisfying the streamed constraints are answer
@@ -84,19 +113,22 @@ impl fmt::Debug for HybridFormula {
 impl HybridFormula {
     pub(crate) fn new(
         compiled: Compiled,
-        constraints: Constraints,
+        constraints: Option<Constraints>,
         source: Owner,
         metadata: SourceMetadata,
     ) -> Self {
-        // An all-eager fallback needs neither support nor the filtered vector's
-        // former capacity. Absence drops both together, after full admission.
-        let constraints = (!constraints.rules.is_empty()).then_some(constraints);
+        // With no eligible constraint the support was released at admission,
+        // not closed; the core alone remains.
         Self(Arc::new(Admitted {
-            compiled,
-            constraints,
-            source,
+            core: StreamedCore::new(compiled, constraints, Arc::new(source)),
             metadata,
         }))
+    }
+
+    /// The streamed core: the producer core and the constraints checked over it.
+    #[must_use]
+    pub fn core(&self) -> &StreamedCore {
+        &self.0.core
     }
 
     /// Exact original admitted-owner identity; clones share it.
@@ -109,31 +141,31 @@ impl HybridFormula {
     /// This is the core theory, not the complete original program.
     #[must_use]
     pub fn core_theory(&self) -> &Theory {
-        &self.0.compiled.theory
+        &self.0.core.0.compiled.theory
     }
 
     /// Shared dense atom meanings, including streamed constraint occurrences.
     #[must_use]
     pub fn atom_catalog(&self) -> &AtomCatalog {
-        &self.0.compiled.atoms
+        &self.0.core.0.compiled.atoms
     }
 
     /// Original canonical program before normalization or analysis projection.
     #[must_use]
     pub fn original_program(&self) -> &Program {
-        self.0.source.program()
+        self.0.core.0.source.program()
     }
 
     /// Original single source, absent for a bundle or logical program input.
     #[must_use]
     pub fn source(&self) -> Option<&Source> {
-        self.0.source.source()
+        self.0.core.0.source.source()
     }
 
     /// Complete original include bundle, absent for single source or logical input.
     #[must_use]
     pub fn bundle(&self) -> Option<&SourceBundle> {
-        self.0.source.source_bundle()
+        self.0.core.0.source.source_bundle()
     }
 
     /// Original declarations and display policy.
@@ -145,62 +177,181 @@ impl HybridFormula {
     /// Complete original projection domain, independent of candidate truth.
     #[must_use]
     pub fn projection(&self) -> &crate::PreparedProjection {
-        &self.0.compiled.projection
+        &self.0.core.0.compiled.projection
     }
 
     /// Original source-family warnings, completed before this owner is published.
     #[must_use]
     pub fn warnings(&self) -> &[crate::FormulaWarning] {
-        &self.0.compiled.warnings
+        &self.0.core.0.compiled.warnings
     }
 
     /// Render warnings against retained source bytes or an include bundle.
     /// Logical input instead names the original statement index when available.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
-        self.0.source.warning_view(self.warnings())
+        self.0.core.0.source.warning_view(self.warnings())
     }
 
     /// Empty objective program; authored objective declarations are refused.
     #[must_use]
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
-        &self.0.compiled.objectives
+        &self.0.core.0.compiled.objectives
     }
 
     /// Analysis of the original source projection, not a certificate for the core.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.0.compiled.analysis
+        &self.0.core.0.compiled.analysis
     }
 
     /// Source program to which the retained analysis applies.
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.0.compiled.analyzed
+        &self.0.core.0.compiled.analyzed
     }
 
     /// Whether the analyzed source is exact or a dependency projection.
     #[must_use]
     pub fn analysis_basis(&self) -> crate::AnalysisBasis {
-        self.0.compiled.analysis_basis
+        self.0.core.0.compiled.analysis_basis
     }
 
     /// Applicable key rewrites made during original source preparation.
     #[must_use]
     pub fn keyed_constraints(&self) -> usize {
-        self.0.compiled.keyed_constraints
+        self.0.core.0.compiled.keyed_constraints
     }
 
     /// Completion of the bounded original key analysis.
     #[must_use]
     pub fn key_analysis(&self) -> crate::KeyAnalysis {
-        self.0.compiled.key_analysis
+        self.0.core.0.compiled.key_analysis
     }
 
     /// Source preparation and admission charges, excluding later checks.
     #[must_use]
     pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
-        &self.0.compiled.expansion
+        &self.0.core.0.compiled.expansion
+    }
+
+    /// Retained lowered constraint templates. Pool alternatives count separately.
+    #[must_use]
+    pub fn streamed_templates(&self) -> usize {
+        self.0.core.streamed_templates()
+    }
+
+    /// Scalar-selected instances visited during admission without retaining DAGs.
+    #[must_use]
+    pub fn streamed_instances(&self) -> u64 {
+        self.0.core.streamed_instances()
+    }
+
+    /// As [`StreamedCore::checker`].
+    ///
+    /// # Errors
+    /// As [`StreamedCore::checker`].
+    pub fn checker(
+        &self,
+        limits: ConstraintCheckLimits,
+    ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
+        self.0.core.checker(limits)
+    }
+
+    /// As [`StreamedCore::checker_with_allowance`].
+    ///
+    /// # Errors
+    /// As [`StreamedCore::checker_with_allowance`].
+    pub fn checker_with_allowance(
+        &self,
+        allowance: &ConstraintAllowance,
+        cancellation: &Cancellation,
+    ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
+        self.0.core.checker_with_allowance(allowance, cancellation)
+    }
+}
+
+/// One check's scalar-byte budget, reporting to `allowance` when shared.
+fn scalar_budget(limits: ConstraintCheckLimits, allowance: Option<ConstraintAllowance>) -> Budget {
+    let budget = Budget::new(
+        ExpansionLimits {
+            max_scalar_bytes: limits.max_scalar_bytes,
+            ..ExpansionLimits::default()
+        },
+        0,
+    );
+    match allowance {
+        Some(allowance) => budget.with_allowance(allowance),
+        None => budget,
+    }
+}
+
+impl StreamedCore {
+    pub(crate) fn new(
+        compiled: Compiled,
+        constraints: Option<Constraints>,
+        source: Arc<Owner>,
+    ) -> Self {
+        Self(Arc::new(Core {
+            compiled,
+            constraints,
+            source,
+            index: OnceLock::new(),
+            rows: OnceLock::new(),
+        }))
+    }
+
+    pub(crate) fn compiled(&self) -> &Compiled {
+        &self.0.compiled
+    }
+
+    /// Exact core identity; clones share it.
+    #[must_use]
+    pub fn same_instance(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
+    /// Retained producers, ineligible constraints, coherence and support guards.
+    #[must_use]
+    pub fn core_theory(&self) -> &Theory {
+        &self.0.compiled.theory
+    }
+
+    /// Shared dense atom meanings, including streamed constraint occurrences.
+    #[must_use]
+    pub fn atom_catalog(&self) -> &AtomCatalog {
+        &self.0.compiled.atoms
+    }
+
+    /// Objectives of the admitted program; none under the hybrid schedule.
+    #[must_use]
+    pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
+        &self.0.compiled.objectives
+    }
+
+    /// Analysis of the program this core was admitted for.
+    #[must_use]
+    pub fn analysis(&self) -> &themelios_analysis::Analysis {
+        &self.0.compiled.analysis
+    }
+
+    /// Semantic status of that analysis input.
+    #[must_use]
+    pub fn analysis_basis(&self) -> crate::AnalysisBasis {
+        self.0.compiled.analysis_basis
+    }
+
+    /// Written constraints over a keyed value asked as the one atom their key
+    /// admits during preparation.
+    #[must_use]
+    pub fn keyed_constraints(&self) -> usize {
+        self.0.compiled.keyed_constraints
+    }
+
+    /// How the key analysis that asked them ended.
+    #[must_use]
+    pub fn key_analysis(&self) -> crate::KeyAnalysis {
+        self.0.compiled.key_analysis
     }
 
     /// Retained lowered constraint templates. Pool alternatives count separately.
@@ -232,7 +383,7 @@ impl HybridFormula {
         &self,
         limits: ConstraintCheckLimits,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
-        self.prepare_checker(limits, Counters::default(), scalar_budget(limits))
+        self.prepare_checker(limits, Counters::default(), None)
     }
 
     /// Prepare an independent checker whose charges share `allowance` with all
@@ -255,7 +406,7 @@ impl HybridFormula {
         let checker = self.prepare_checker(
             limits,
             Counters::with_allowance(allowance.clone(), cancellation),
-            scalar_budget(limits).with_allowance(allowance.clone()),
+            Some(allowance.clone()),
         )?;
         cancellation.poll().map_err(|stop| ConstraintCheckFailure {
             cause: ConstraintCheckCause::Stopped(stop),
@@ -268,14 +419,14 @@ impl HybridFormula {
         &self,
         limits: ConstraintCheckLimits,
         mut counters: Counters,
-        budget: Budget,
+        allowance: Option<ConstraintAllowance>,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
         let prepared = if let Some(constraints) = &self.0.constraints {
             let mut formula_limits = constraints.limits;
             formula_limits.max_work = limits.max_work;
             formula_limits.max_substitutions = limits.max_substitutions;
             let completed = constraints
-                .catalog
+                .support
                 .snapshot(&formula_limits, &mut counters, constraints.location)
                 .map_err(|error| ConstraintCheckFailure {
                     cause: ConstraintCheckCause::Source(Box::new(
@@ -301,32 +452,30 @@ impl HybridFormula {
         Ok(ConstraintChecker {
             owner: self,
             prepared,
-            budget,
+            budget: scalar_budget(limits, allowance.clone()),
+            limits,
+            allowance,
+            settled: (0, 0),
+            settled_scalar_bytes: 0,
             accounting: counters.into_accounting(),
         })
     }
 }
 
-fn scalar_budget(limits: ConstraintCheckLimits) -> Budget {
-    Budget::new(
-        ExpansionLimits {
-            max_scalar_bytes: limits.max_scalar_bytes,
-            ..ExpansionLimits::default()
-        },
-        0,
-    )
-}
-
-/// Cumulative allowances for one checker, independent of source admission and
-/// reduct-oracle work. Zero is a zero allowance, never unlimited. Per-operation
-/// binding/storage bounds remain those admitted with the source.
+/// Allowances for each check of a checker (one candidate model or region),
+/// independent of source admission and reduct-oracle work. A checker's first
+/// check also covers its preparation; each later check is measured from the
+/// charges accepted when the previous one ended. They bound the work spent on
+/// any one candidate, never the number of candidates. Zero is a zero
+/// allowance, never unlimited. Per-operation binding/storage bounds remain
+/// those admitted with the source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConstraintCheckLimits {
-    /// Charged join, scalar and typed atom-lookup work across all checks.
+    /// Charged join, scalar and typed atom-lookup work in one check.
     pub max_work: u64,
-    /// Complete substitutions visited across all checks, including false filters.
+    /// Complete substitutions visited in one check, including false filters.
     pub max_substitutions: u64,
-    /// Cumulative bytes requested for capture-delta cells during structural-pattern
+    /// Bytes requested in one check for capture-delta cells during structural-pattern
     /// matching, charged through source expansion's `ScalarBytes` resource.
     /// The historical field name is retained; these cells borrow canonical
     /// terms. ID-only binding copies and frozen constructor lookups add no
@@ -406,6 +555,40 @@ pub enum ConstraintCheckCause {
     Source(Box<FormulaFailure>),
 }
 impl ConstraintCheckCause {
+    /// Report a work or substitution refusal against the check's own
+    /// allowance: subtract the charges `start` accepted before the check.
+    fn relative_to(self, start: (u64, u64)) -> Self {
+        let relative = |error: Box<FormulaFailure>| match *error {
+            FormulaFailure::Limit {
+                resource:
+                    resource @ (crate::FormulaResource::Work | crate::FormulaResource::Substitutions),
+                limit,
+                observed,
+                location,
+            } => {
+                let base = u128::from(if resource == crate::FormulaResource::Work {
+                    start.0
+                } else {
+                    start.1
+                });
+                Box::new(FormulaFailure::Limit {
+                    resource,
+                    limit: limit.saturating_sub(base),
+                    observed: observed.saturating_sub(base),
+                    location,
+                })
+            }
+            other => Box::new(other),
+        };
+        match self {
+            Self::Source(error) => Self::Source(relative(error)),
+            Self::Index(AtomIndexError::Stopped(error)) => {
+                Self::Index(AtomIndexError::Stopped(relative(error)))
+            }
+            other => other,
+        }
+    }
+
     fn retain_input(self, owner: &Owner) -> Self {
         match self {
             Self::Source(error) => Self::Source(Box::new(owner.retain_failure(*error))),
@@ -481,9 +664,20 @@ impl std::error::Error for ConstraintCheckFailure {
 /// The checker can move between threads. Grounding observation and each check's
 /// runtime control remain local to the synchronous operation that uses them.
 pub struct ConstraintChecker<'a> {
-    owner: &'a HybridFormula,
+    owner: &'a StreamedCore,
     prepared: Option<PreparedConstraints<'a>>,
+    /// The current check's scalar-byte budget, fresh for every check.
     budget: Budget,
+    /// The ceilings each check gets for itself.
+    limits: ConstraintCheckLimits,
+    /// The shared receipt this checker reports to, if any.
+    allowance: Option<ConstraintAllowance>,
+    /// Work and substitutions accepted when the previous check ended: the
+    /// next check's allowance is measured from here, so the first check's
+    /// includes this checker's preparation.
+    settled: (u64, u64),
+    /// Scalar bytes requested by every finished check's budget.
+    settled_scalar_bytes: usize,
     accounting: Accounting,
 }
 /// A nonempty source and its borrowed snapshot are present or absent together.
@@ -491,9 +685,10 @@ struct PreparedConstraints<'a> {
     source: &'a Constraints,
     completed: CompletedSupport<'a>,
     limits: FormulaLimits,
-    /// Original dense IDs, prepared once on first region use. The final-model
+    /// Original dense IDs, borrowed from the core's index on first region use
+    /// (and built there by the first checker that needs it). The final-model
     /// path keeps its existing canonical selection lookup.
-    index: Option<AtomIndex<'a>>,
+    index: Option<&'a CatalogIndex>,
     /// Source occurrence IDs mapped once into the original dense catalog.
     rows: Option<SourceRows<'a>>,
     /// Lazily prepared after each rule's first successful predicate gate.
@@ -503,44 +698,122 @@ struct PreparedConstraints<'a> {
 impl<'a> PreparedConstraints<'a> {
     fn prepare_selection(
         &mut self,
-        atoms: &'a AtomCatalog,
+        core: &'a StreamedCore,
         counters: &mut Counters,
     ) -> Result<(), ConstraintCheckCause> {
-        self.prepare_index(atoms, counters)?;
+        self.prepare_index(core, counters)?;
         if self.rows.is_none() {
-            self.rows = Some(
-                SourceRows::prepare(
-                    &mut self.completed,
-                    self.index.as_ref().expect("prepared above"),
-                    &self.limits,
-                    counters,
-                    self.source.location,
-                )
-                .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?,
+            let positions = self
+                .prepare_positions(core, counters)
+                .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+            let rows = SourceRows::attach(
+                &self.completed,
+                positions,
+                &self.limits,
+                counters,
+                self.source.location,
+            )
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+            // Every reservation checked its actual capacity before any publication.
+            self.completed.retain_workspace(
+                usize::try_from(rows.retained_bytes()).expect("admitted support bytes fit usize"),
             );
+            self.rows = Some(rows);
         }
         Ok(())
     }
 
+    /// Borrow the core's row positions, building them first when no checker
+    /// has: one charged index probe per kept support row, against this
+    /// checker's work and support ceilings. Races, refusals and the ledger
+    /// follow [`Self::prepare_index`].
+    fn prepare_positions(
+        &mut self,
+        core: &'a StreamedCore,
+        counters: &mut Counters,
+    ) -> Result<&'a selection::RowPositions, FormulaFailure> {
+        let location = self.source.location;
+        counters.work(&self.limits, location)?;
+        if core.0.rows.get().is_none() {
+            let built = selection::RowPositions::prepare(
+                &self.completed,
+                self.index.expect("prepared before its rows").lookup(),
+                &self.limits,
+                counters,
+                location,
+            )?;
+            // A racing checker may have published first: keep its positions.
+            let _ = core.0.rows.set(built);
+        }
+        let positions = core
+            .0
+            .rows
+            .get()
+            .expect("published above or by a racing checker");
+        let retained = positions.retained_bytes();
+        self.completed
+            .admit_workspace(retained, &self.limits, counters, location)?;
+        self.completed
+            .retain_workspace(usize::try_from(retained).expect("admitted support bytes fit usize"));
+        Ok(positions)
+    }
+
+    /// Borrow the core's index, building it first when no checker has. A
+    /// borrow costs one unit of work; a build costs O(n log n) comparisons
+    /// over the core's n atoms, charged to this checker, which also admits
+    /// its preparation peak. Checkers racing on the first use each build and
+    /// one publishes; none waits on another, so each observes its own
+    /// cancellation. A refused build publishes nothing. Either way the
+    /// checker's support ledger counts the index's retained bytes, as it
+    /// counts the shared support base it reads.
     fn prepare_index(
         &mut self,
-        atoms: &'a AtomCatalog,
+        core: &'a StreamedCore,
         counters: &mut Counters,
     ) -> Result<(), ConstraintCheckCause> {
         if self.index.is_some() {
             return Ok(());
         }
         let location = self.source.location;
+        counters
+            .work(&self.limits, location)
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+        if core.0.index.get().is_none() {
+            let built = self.build_index(&core.0.compiled.atoms, counters)?;
+            // A racing checker may have published first: keep its index.
+            let _ = core.0.index.set(built);
+        }
+        let index = core
+            .0
+            .index
+            .get()
+            .expect("published above or by a racing checker");
+        let retained = index.retained_bytes();
+        self.completed
+            .admit_workspace(retained, &self.limits, counters, location)
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+        self.completed
+            .retain_workspace(usize::try_from(retained).expect("admitted support bytes fit usize"));
+        self.index = Some(index);
+        Ok(())
+    }
+
+    fn build_index(
+        &mut self,
+        atoms: &AtomCatalog,
+        counters: &mut Counters,
+    ) -> Result<CatalogIndex, ConstraintCheckCause> {
+        let location = self.source.location;
         // Two retained integer orders and one preparation scratch order, all
-        // bounded by the admitted atom count. AtomIndex reserves fallibly and
+        // bounded by the admitted atom count. The index reserves fallibly and
         // charges each comparison/write; it never copies atom payloads.
-        let requested = size_of::<AtomIndex<'_>>() as u128
+        let requested = size_of::<CatalogIndex>() as u128
             + size_of::<Vec<usize>>() as u128
             + 3 * atoms.atoms().len() as u128 * size_of::<usize>() as u128;
         self.completed
             .admit_workspace(requested, &self.limits, counters, location)
             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
-        let index = AtomIndex::from_catalog_with(atoms.atoms(), || {
+        let index = CatalogIndex::new_with(atoms, || {
             counters.work(&self.limits, location).map_err(Box::new)
         })
         .map_err(|error| match error {
@@ -555,11 +828,7 @@ impl<'a> PreparedConstraints<'a> {
                 location,
             )
             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
-        self.completed.retain_workspace(
-            usize::try_from(index.retained_bytes()).expect("admitted support bytes fit usize"),
-        );
-        self.index = Some(index);
-        Ok(())
+        Ok(index)
     }
 }
 
@@ -576,7 +845,9 @@ impl ConstraintChecker<'_> {
         ConstraintCheckStatistics {
             work: self.accounting.work,
             substitutions: self.accounting.substitutions,
-            scalar_bytes: self.budget.usage().scalar_bytes,
+            scalar_bytes: self
+                .settled_scalar_bytes
+                .saturating_add(self.budget.usage().scalar_bytes),
         }
     }
 
@@ -611,8 +882,10 @@ impl ConstraintChecker<'_> {
     /// not the provenance of a raw `Region`. No region or candidate is mutated.
     /// Never use this operation to read a candidate's frozen reduct.
     ///
-    /// First use prepares a bounded typed catalog index and source-row ID map;
-    /// later checks reuse both. Necessary predicate and held-row selections
+    /// First use borrows the core's typed catalog index and source-row
+    /// positions (building each when no checker of this core has) and pairs
+    /// the positions with this checker's occurrence maps; later checks reuse
+    /// both. Necessary predicate and held-row selections
     /// precede binding/scalar evaluation, over the same completed support and
     /// shared evaluator as `check`. Missing row IDs remain eligible until the
     /// full body check. Source arithmetic admission has already completed.
@@ -662,6 +935,16 @@ impl ConstraintChecker<'_> {
         candidate: Candidate<'_>,
         cancellation: &Cancellation,
     ) -> Result<Option<ProgramSite>, ConstraintCheckFailure> {
+        // Each check gets the configured ceilings as its own allowance above
+        // the charges accepted when the previous check ended (the first
+        // check's includes preparation), so the ceilings bound each
+        // candidate, never the number of candidates.
+        let start = self.settled;
+        if let Some(prepared) = &mut self.prepared {
+            prepared.limits.max_work = start.0.saturating_add(self.limits.max_work);
+            prepared.limits.max_substitutions =
+                start.1.saturating_add(self.limits.max_substitutions);
+        }
         let result = self.authenticate(candidate).and_then(|()| {
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             let verdict = self
@@ -670,7 +953,7 @@ impl ConstraintChecker<'_> {
                     if matches!(candidate, Candidate::Region(..))
                         && let Some(prepared) = &mut self.prepared
                     {
-                        prepared.prepare_selection(self.owner.atom_catalog(), counters)?;
+                        prepared.prepare_selection(self.owner, counters)?;
                     }
                     Self::scan(
                         self.prepared.as_mut(),
@@ -683,9 +966,14 @@ impl ConstraintChecker<'_> {
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             Ok(verdict)
         });
+        // Settle this check: the next one is measured from here.
+        self.settled = (self.accounting.work, self.accounting.substitutions);
+        let statistics = self.statistics();
+        self.settled_scalar_bytes = statistics.scalar_bytes;
+        self.budget = scalar_budget(self.limits, self.allowance.clone());
         result.map_err(|cause| ConstraintCheckFailure {
-            cause: cause.retain_input(&self.owner.0.source),
-            statistics: self.statistics(),
+            cause: cause.relative_to(start).retain_input(&self.owner.0.source),
+            statistics,
         })
     }
 
@@ -705,8 +993,8 @@ impl ConstraintChecker<'_> {
                 rows: prepared.rows.as_ref().expect("prepared before region scan"),
                 index: prepared
                     .index
-                    .as_ref()
-                    .expect("prepared before region scan"),
+                    .expect("prepared before region scan")
+                    .lookup(),
                 region,
             }),
         };
@@ -766,7 +1054,7 @@ impl ConstraintChecker<'_> {
                         &rule.body,
                         &row.values,
                         candidate,
-                        prepared.index.as_ref(),
+                        prepared.index.map(CatalogIndex::lookup),
                         Context::new(&computation, &prepared.limits, counters, rule.location),
                     )?
                 {
@@ -792,7 +1080,7 @@ fn body(
     literals: &[LiteralIr],
     binding: &Binding<'_>,
     candidate: Candidate<'_>,
-    index: Option<&AtomIndex<'_>>,
+    index: Option<AtomLookup<'_, '_>>,
     context: Context<'_, &crate::formula_support::Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
     let Context {
@@ -831,7 +1119,6 @@ fn body(
             Candidate::Region(_, region) => {
                 let row = index
                     .expect("prepared before region scan")
-                    .lookup()
                     .get_key_with(&key, || counters.work(limits, location))?;
                 // Passing source rows contributed every occurrence to the
                 // completed catalog at admission, including unsupported atoms.
@@ -924,7 +1211,7 @@ mod tests {
             // The complete source has nonempty support. Absence proves that
             // neither its catalog nor an empty plan's spare capacity is retained.
             assert!(!owner.atom_catalog().atoms().is_empty());
-            assert!(owner.0.constraints.is_none());
+            assert!(owner.0.core.0.constraints.is_none());
         }
     }
 }

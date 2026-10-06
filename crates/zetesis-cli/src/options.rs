@@ -50,10 +50,14 @@ pub struct Options {
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
-    /// Relational lazy grounding uses source joins on CPU or GPU. For formula
-    /// inputs, lazy CPU grounding retains an eager producer core and streams
-    /// eligible constraints; objectives and table joins are refused. Formula
-    /// GPU execution requires eager materialization. Grounding limits still apply.
+    /// `eager` instantiates every rule before solving. `lazy` instantiates on
+    /// demand: relational source joins on CPU or GPU, or, for formula inputs on
+    /// the CPU, a producer core with eligible constraints streamed and terminal
+    /// definitions (derived predicates nothing reads) reconstructed per answer;
+    /// objectives and table joins are refused. `auto` admits relational source
+    /// joins where it can, else instantiates an eager base and defers terminal
+    /// definitions. Formula GPU execution needs an eager base. Grounding limits
+    /// still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.
@@ -147,7 +151,8 @@ pub struct Options {
     /// Omission preserves each library default: 1,048,576 source-term operations
     /// and 10,000,000 formula-grounding operations. An explicit value applies
     /// independently to both counters. Formula work includes admission, checked
-    /// lookups, index construction and reconstruction of deferred definitions.
+    /// lookups and index construction; each answer's reconstruction of deferred
+    /// definitions may use the headroom admission left.
     #[arg(long, hide_short_help = true)]
     pub max_expansion_work: Option<usize>,
     /// Maximum named storage for formula support and reconstruction.
@@ -336,7 +341,9 @@ pub struct Options {
     /// Maximum include edges from any explicit input root.
     #[arg(long, default_value_t = 32, hide_short_help = true)]
     pub max_include_depth: usize,
-    /// Maximum substitutions inspected in eager lowering or formula admission.
+    /// Maximum substitutions inspected in eager lowering or formula admission;
+    /// each answer's reconstruction of deferred definitions may inspect the
+    /// headroom admission left, and streamed constraint checks share this limit.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_substitutions, hide_short_help = true)]
     pub max_substitutions: usize,
     /// Maximum rules retained during eager CPU/GPU lowering.
@@ -376,10 +383,12 @@ fn read_host_memory() -> Option<u64> {
 
 /// The host's physical memory in bytes, from the system's `sysctl`: the
 /// crate forbids foreign calls, and the system command is the reading
-/// without one.
+/// without one. It runs by its absolute path on the sealed system volume,
+/// never through `PATH`, so the caller's environment cannot substitute
+/// another program or another reading.
 #[cfg(target_os = "macos")]
 fn read_host_memory() -> Option<u64> {
-    let output = std::process::Command::new("sysctl")
+    let output = std::process::Command::new("/usr/sbin/sysctl")
         .args(["-n", "hw.memsize"])
         .output()
         .ok()?;
@@ -515,7 +524,7 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
         (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU hybrid formula grounding with an eager producer core and streamed eligible constraints.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU formula grounding with an eager producer core, streamed eligible constraints and terminal definitions reconstructed per answer.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }

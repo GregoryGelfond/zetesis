@@ -13,17 +13,17 @@ use zetesis_ferraris::Theory;
 use zetesis_sat::{Incomplete, RegionFeasibility, RegionFilter, RegionFilterWorker};
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckFailure, ConstraintChecker, ConstraintRegionVerdict,
-    HybridFormula,
+    StreamedCore,
 };
 
 pub(crate) struct Constraints {
-    owner: HybridFormula,
+    owner: StreamedCore,
     allowance: ConstraintAllowance,
     failure: Mutex<Option<ConstraintCheckFailure>>,
 }
 
 impl Constraints {
-    pub(crate) fn new(owner: HybridFormula, allowance: ConstraintAllowance) -> Self {
+    pub(crate) fn new(owner: StreamedCore, allowance: ConstraintAllowance) -> Self {
         Self {
             owner,
             allowance,

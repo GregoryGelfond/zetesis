@@ -32,7 +32,9 @@ fn exhausted_root_narrowing_keeps_its_charged_work() {
     .unwrap()
     .statistics();
     assert_eq!(initial.regions.unwrap().counts.work, initial.search.work);
-    let limit = initial.search.work + 1;
+    // Room for the original index, charged when the walk starts, and one
+    // read of the root's narrowing.
+    let limit = initial.search.work + u64::try_from(theory.nodes().len()).unwrap() + 1;
     let mut search = StableModels::with_region_workers(
         &theory,
         workers,
@@ -52,9 +54,15 @@ fn exhausted_root_narrowing_keeps_its_charged_work() {
     assert_eq!(statistics.candidates, 0, "{statistics:?}");
     assert_eq!(statistics.search.decisions, 0, "{statistics:?}");
     assert_eq!(statistics.search.work, limit, "{statistics:?}");
-    // With no certificate, decision or leaf, the only post-construction
-    // charged operation is the root's narrowing. RegionCounts explicitly
-    // includes those node/root/producer reads and the construction indexes.
+    let regions = statistics.regions.unwrap();
+    assert_eq!(
+        regions.counts.regions, 1,
+        "the root's narrowing was entered"
+    );
+    // With no certificate, decision or leaf, the only charged operations
+    // after construction are the index and the root's narrowing.
+    // RegionCounts explicitly includes those node/root/producer reads and
+    // the indexes.
     assert_eq!(
         statistics.regions.unwrap().counts.work,
         statistics.search.work,
@@ -111,7 +119,8 @@ fn failed_reduct_narrowing_keeps_its_query_count() {
     let statistics = search.statistics();
     assert!(!search.exhausted());
     assert_eq!(statistics.candidates, 1, "limit={limit}: {statistics:?}");
-    // The original index was charged by candidate preparation and is shared.
+    // The original index was charged when the candidate walk started and is
+    // shared.
     // Every unit of reduct-region work therefore comes from frozen narrowing.
     // Traversal counts completed regions, so a failed first narrowing need
     // not increment that count.

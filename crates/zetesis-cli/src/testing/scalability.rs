@@ -22,7 +22,7 @@ pub struct ScalabilityOptions {
     /// Authored examples root; metadata and source digests are checked.
     #[arg(long, default_value = "examples")]
     pub examples: PathBuf,
-    /// Include the unchanged Einstein riddle as an eleventh workload.
+    /// Include the unchanged Einstein riddle as a thirteenth workload.
     #[arg(long)]
     pub include_einstein: bool,
     /// Modern zetesis executable; omitted uses this installed executable's solve.

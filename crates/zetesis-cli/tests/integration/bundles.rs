@@ -286,7 +286,7 @@ fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
         "p(X) :- not q(X)."
     );
     let display = error.to_string();
-    assert!(display.contains("unsafe.lp: bytes "), "{display}");
+    assert!(display.contains("unsafe.lp:2:1"), "{display}");
     assert!(!display.contains("UNSATISFIABLE"));
 }
 

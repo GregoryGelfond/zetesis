@@ -77,7 +77,7 @@ pub(crate) struct SourceCloseFailure {
 }
 impl SourceCloseFailure {
     // The uncommon failure owns its cause off the successful close path.
-    fn new(failure: FormulaFailure, peak_bytes: u128) -> Self {
+    pub(super) fn new(failure: FormulaFailure, peak_bytes: u128) -> Self {
         Self {
             failure: Box::new(failure),
             peak_bytes,
@@ -104,7 +104,7 @@ impl CompletedCatalog {
 }
 
 impl SupportCatalog {
-    fn into_closed(
+    pub(super) fn into_closed(
         self,
         external_bytes: u128,
         work: GroundingWork<'_>,

@@ -15,10 +15,17 @@ identity; increasing a parameter can instead reach a solver or campaign limit.
 | --- | --- | --- | --- |
 | `n-queens.lp` | enumeration | `#const n` (board size) | `n=8`: 92 answer sets |
 | `pigeonhole.lp` | unsatisfiability | `#const h` (holes; `h+1` pigeons) | `h=7`: UNSAT |
+| `mastermind.lp` | many-answer enumeration | `#const colors` (6 pegs) | `colors=6`: 6080 answer sets |
 
 `n-queens.lp` grows steeply (n=12 → 14200 answer sets, n=13 → 73712), exercising
 both region enumeration and grounding as `n` rises. `pigeonhole.lp` is
 unsatisfiable by construction and measures the work of *proving* unsatisfiability.
+`mastermind.lp` lists every secret code of six pegs consistent with one scored
+guess, counting colour matches with aggregates; its answers grow with the number
+of colours (5 → 976, 6 → 6080, 7 → 19600, 8 → 45832), so it measures
+per-answer checking and delivery. Larger colour counts exceed the default
+evidence-capture limits of the maintained population, which therefore stops at
+`colors=6`; run them directly by editing `#const colors`.
 
 ## Run an example
 
@@ -27,6 +34,7 @@ From the repository root, using the installed solver:
 ```sh
 zetesis solve examples/scalability/n-queens.lp --all
 zetesis solve examples/scalability/pigeonhole.lp --stats
+zetesis solve examples/scalability/mastermind.lp --all
 zetesis solve examples/einstein-riddle.lp --all
 ```
 
@@ -44,8 +52,8 @@ the unchanged source hash, edit and resulting source hash.
 ## Check and measure thread scaling
 
 The maintained `zetesis test scalability` and `zetesis-bench run --suite
-scalability` commands use one library-owned population of ten workloads: queens
-at n=8/9/10, pigeonhole at h=5/6/7, the established correctness queens variant
+scalability` commands use one library-owned population of twelve workloads:
+queens at n=8/9/10, pigeonhole at h=5/6/7, Mastermind at colors=5/6, the established correctness queens variant
 02, SEND+MORE=MONEY and task-allocation cases, and the authored
 [Sudoku grid](../sudoku.lp). Sudoku has eight givens per row and exercises
 grounding and language handling. Test qualifications request CPU eager/indexed
@@ -60,7 +68,7 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-`--include-einstein` adds the unchanged Einstein riddle as an eleventh workload.
+`--include-einstein` adds the unchanged Einstein riddle as a thirteenth workload.
 An explicit `--max-expansion-work 300000000` can be supplied when studying that input; the
 override is retained in every native profile. No limit is raised silently.
 

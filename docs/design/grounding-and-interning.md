@@ -68,7 +68,8 @@ does not assert an atom.
 The [publication boundary](../../crates/zetesis-themelios/src/formula_support/publication.rs)
 shares sealed source storage across final views and transfers occurrence maps.
 Closing support can retire its query and possible-truth indexes while retaining
-the canonical base needed for subsequent operations. In particular, terminal
+the canonical base needed for subsequent operations; a hybrid owner keeps the
+query indexes of exactly the relations its streamed constraints read. In particular, terminal
 definition reconstruction starts from each answer's true rows; the shared store
 never substitutes possible support for that answer's interpretation.
 
@@ -82,8 +83,8 @@ schedule demand-driven.
 
 A core relation view preserves the signed predicate, row order and duplicate
 occurrences. Its dictionary refers to whole source terms; argument columns hold
-local equality IDs. Formula support retains these columns and their equality
-postings across growth rounds. Queries bind to a particular immutable view;
+local equality IDs. Formula support retains these columns, and equality postings
+for the columns a join can bind, across growth rounds. Queries bind to a particular immutable view;
 stable IDs alone do not make a query valid against a later snapshot.
 
 For a positive body occurrence, known equalities select a posting list. The
@@ -118,7 +119,11 @@ order and must not be narrowed to numbers merely because it uses `<` or `>`.
 ## Costs and correctness boundaries
 
 Canonical identity avoids repeated payload comparison when two authenticated
-keys suffice. Constructing an atom still depends on its arity, importing a new
+keys suffice. The interner's and the relation catalogs' ordered indexes keep
+their last entry in typed order and first compare an arrival with it: rows
+derived in order, as a rule's heads usually are, are placed after it with one
+typed comparison instead of one per tree level; any other arrival pays that one
+comparison before the full search. Constructing an atom still depends on its arity, importing a new
 compound visits its structure, and semantic ordering can require typed content
 comparison. Columnar storage alone establishes neither vectorization nor a
 speedup. Measure construction, indexing, execution and output together using the

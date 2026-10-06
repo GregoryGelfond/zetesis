@@ -1297,3 +1297,83 @@ fn public_lookup_requires_the_membership_prefix() {
         .unwrap_err();
     assert_eq!(failure.error, Failure::Read(ReadError::OutsidePrefix));
 }
+
+/// Work charged to insert one wide row per value, in the given order.
+fn row_work(values: impl Iterator<Item = i32>) -> u128 {
+    let predicate = Predicate::new("w", 6).unwrap();
+    let limits = Limits {
+        max_rows: 1 << 16,
+        max_columns: 6,
+        max_values: 1 << 16,
+        max_bytes: 1 << 30,
+        max_work: u64::MAX,
+    };
+    let mut fixture = Fixture::new(&predicate, limits).unwrap();
+    let mut work = 0;
+    for value in values {
+        // Leading columns shared, as a rule's derived heads share them: every
+        // typed comparison reads each column.
+        let wide = Atom::new(
+            predicate.clone(),
+            vec![
+                Value::Number(1),
+                Value::Number(2),
+                Value::Number(3),
+                Value::Number(4),
+                Value::Number(value / 64),
+                Value::Number(value % 64),
+            ],
+        )
+        .unwrap();
+        work += fixture
+            .insert(&wide, limits)
+            .unwrap()
+            .storage
+            .construction_work;
+    }
+    work
+}
+
+#[test]
+fn rows_beyond_the_last_skip_the_typed_search() {
+    const COUNT: i32 = 1 << 12;
+    let ascending = row_work(0..COUNT);
+    let scrambled = row_work((0..COUNT).map(|index| index.wrapping_mul(7919) % COUNT));
+    // Dictionary and value work remain for every row; the search does not.
+    assert!(
+        ascending * 10 <= scrambled * 6,
+        "ascending {ascending}, scrambled {scrambled}"
+    );
+}
+
+#[test]
+fn a_closed_catalog_reads_rows_as_its_writer_did() {
+    let tuples = [atom(5, 6), atom(1, 2), atom(3, 4)];
+    let mut catalog = owner();
+    for tuple in &tuples {
+        catalog.insert(tuple, Limits::default()).unwrap();
+    }
+    let Fixture { authority, rows } = catalog;
+    let closed = authority
+        .into_closed_with(atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    let read: Vec<AtomRef<'_>> = rows.atoms(closed.read()).unwrap().iter().collect();
+    let expected: Vec<AtomRef<'_>> = tuples.iter().map(AtomRef::from).collect();
+    assert_eq!(read, expected);
+}
+
+#[test]
+fn a_closed_catalog_refuses_another_writers_rows() {
+    let mut catalog = owner();
+    catalog.insert(&atom(1, 2), Limits::default()).unwrap();
+    let mut other = owner();
+    other.insert(&atom(1, 2), Limits::default()).unwrap();
+    let closed = other
+        .authority
+        .into_closed_with(atom_limits(), || Ok::<_, ()>(()))
+        .unwrap();
+    assert!(matches!(
+        catalog.rows.atoms(closed.read()),
+        Err(Failure::Read(ReadError::ForeignCatalog))
+    ));
+}

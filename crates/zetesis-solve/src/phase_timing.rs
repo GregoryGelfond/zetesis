@@ -15,12 +15,14 @@ pub enum SolvePhase {
     /// Execution setup, including static lowering, pools or device initialization.
     ExecutionSetup,
     /// Candidate generator initialization or initial classical formula encoding.
+    /// The regions method's original-theory index is not built here.
     CandidateSetup,
     /// Complete original-theory certificate construction, including refusals.
     CertificateSetup,
     /// Applicable class membership checking, including interrupted attempts.
     CertifiedMembership,
-    /// Candidate generation/projection and exact semantic blocking.
+    /// Candidate generation/projection and exact semantic blocking, including
+    /// the regions method's original-theory index, built when its walk starts.
     CandidateGeneration,
     /// Independent original-formula validation, including residual prechecks.
     OriginalValidation,
@@ -213,8 +215,10 @@ impl Recorder {
         self.stages.mark_lazy_grounding();
     }
 
-    pub(crate) fn terminal_grounding(&self) {
-        self.stages.mark_terminal_definitions();
+    /// Mark a route with deferred terminal definitions and its base's kind.
+    pub(crate) fn terminal_grounding(&self, base: zetesis_themelios::BaseKind) {
+        self.stages
+            .mark_terminal_definitions(crate::stage_timing::mark(base));
     }
 
     pub(crate) fn grounding_observer(&self) -> Option<crate::stage_timing::Observer<'_>> {

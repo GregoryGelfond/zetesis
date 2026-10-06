@@ -1469,6 +1469,7 @@ pub(crate) fn poll_control(
     Ok(())
 }
 
+#[inline]
 pub(crate) fn ceiling(
     resource: FormulaResource,
     observed: u128,
@@ -1476,13 +1477,26 @@ pub(crate) fn ceiling(
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     if observed > limit {
-        Err(FormulaFailure::Limit {
-            resource,
-            observed,
-            limit,
-            location,
-        })
+        Err(exceeded(resource, observed, limit, location))
     } else {
         Ok(())
+    }
+}
+
+/// The failure of a ceiling check, built off the hot path: callers pass the
+/// site on every check, and only a refusal reads it.
+#[cold]
+#[inline(never)]
+fn exceeded(
+    resource: FormulaResource,
+    observed: u128,
+    limit: u128,
+    location: ProgramSite,
+) -> FormulaFailure {
+    FormulaFailure::Limit {
+        resource,
+        observed,
+        limit,
+        location,
     }
 }

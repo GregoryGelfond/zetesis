@@ -224,7 +224,6 @@ impl CompletionExecutor {
             }
             let input = Input {
                 prepared: reduct.prepared(),
-                query: reduct.query(),
                 ..input
             };
             let requirements = input.prepared.map_or(Ok(result_slots), |owner| {
@@ -325,8 +324,9 @@ pub(super) struct Input<'a> {
     pub(super) limits: Limits,
     /// The prepared reduct encoding, under the clause kernel.
     pub(super) prepared: Option<&'a PreparedReduct>,
-    /// The region query, under the regions method.
-    pub(super) query: Option<&'a super::ReductQuery>,
+    /// The region query, under the regions method, over the original index
+    /// its owner lends; completion never builds one.
+    pub(super) query: Option<super::ReductQuery<'a>>,
 }
 
 struct Outcome {
@@ -353,24 +353,27 @@ fn classify(
                     prepared.check_with(candidate, workspace, input.limits, budget, statistics)?
                 }
                 (None, Some(query)) => {
-                    let (truth, _) = workspace.evaluate(
-                        candidate,
-                        input.limits,
-                        budget.cancellation,
-                        statistics,
-                    )?;
-                    if !truth.is_model() {
-                        return Err(Incomplete::InvalidWitness);
-                    }
-                    increment(&mut statistics.countermodel_queries)?;
-                    query.check(
-                        input.theory,
-                        candidate,
-                        truth.truth(),
-                        input.limits,
-                        budget,
-                        statistics,
-                    )?
+                    let result = (|| {
+                        let (truth, scratch) = workspace.evaluate(
+                            candidate,
+                            input.limits,
+                            budget.cancellation,
+                            statistics,
+                        )?;
+                        if !truth.is_model() {
+                            return Err(Incomplete::InvalidWitness);
+                        }
+                        increment(&mut statistics.countermodel_queries)?;
+                        query.check(
+                            zetesis_ferraris::FrozenSubject::new(input.theory, truth.truth()),
+                            candidate,
+                            input.limits,
+                            budget,
+                            statistics,
+                            scratch,
+                        )
+                    })();
+                    workspace.finish_check(result, input.limits.max_reduct_bytes, statistics)?
                 }
                 (None, None) => return Err(Incomplete::InvalidWitness),
             };

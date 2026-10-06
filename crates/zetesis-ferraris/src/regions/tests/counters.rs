@@ -8,25 +8,59 @@ use crate::{
 };
 use zetesis_cpu::Cancellation;
 
+use super::super::Width;
+use super::super::counters::Count;
 use super::{Counters, Knowledge, Known, shared_occurrences};
 
-fn values(counts: &Counters) -> Vec<usize> {
+fn values<C: Count>(counts: &Counters<C>) -> Vec<usize> {
     (0..counts.len()).map(|index| counts.get(index)).collect()
 }
 
-pub(super) fn native(knowledge: &Knowledge) -> Knowledge {
-    let mut result = knowledge.clone();
-    for counts in [
-        &mut result.known.sure_operands,
-        &mut result.known.never_operands,
-        &mut result.known.unknown,
-    ] {
-        *counts = Counters::Native(values(counts).into_boxed_slice());
+fn widened(counts: &Counters<u32>) -> Counters<usize> {
+    let mut wide = Counters::zeros(counts.len());
+    for (index, value) in values(counts).into_iter().enumerate() {
+        wide.add(index, value);
     }
-    result
+    wide
 }
 
-fn same_known(left: &Known, right: &Known) {
+/// The same closure state at the native width.
+pub(super) fn native(knowledge: &Knowledge) -> Knowledge {
+    let Width::Compact(known) = &knowledge.width else {
+        panic!("the test theories' knowledge starts compact")
+    };
+    Knowledge {
+        width: Width::Native(Known {
+            sure: known.sure.clone(),
+            never: known.never.clone(),
+            atom_sure: known.atom_sure.clone(),
+            atom_never: known.atom_never.clone(),
+            sure_operands: widened(&known.sure_operands),
+            never_operands: widened(&known.never_operands),
+            unknown: widened(&known.unknown),
+            seen: known.seen.clone(),
+            seeded: known.seeded,
+        }),
+    }
+}
+
+/// The three counter arrays of either width, as native values.
+fn counts(knowledge: &Knowledge) -> [Vec<usize>; 3] {
+    match &knowledge.width {
+        Width::Compact(k) => [
+            values(&k.sure_operands),
+            values(&k.never_operands),
+            values(&k.unknown),
+        ],
+        Width::Native(k) => [
+            values(&k.sure_operands),
+            values(&k.never_operands),
+            values(&k.unknown),
+        ],
+    }
+}
+
+fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     assert_eq!(left.sure, right.sure);
     assert_eq!(left.never, right.never);
     assert_eq!(left.atom_sure, right.atom_sure);
@@ -34,11 +68,17 @@ fn same_known(left: &Known, right: &Known) {
     assert_eq!(values(&left.sure_operands), values(&right.sure_operands));
     assert_eq!(values(&left.never_operands), values(&right.never_operands));
     assert_eq!(values(&left.unknown), values(&right.unknown));
-    assert_eq!(left.learned, right.learned);
-    assert_eq!(left.nodes, right.nodes);
-    assert_eq!(left.heads, right.heads);
     assert_eq!(left.seen, right.seen);
     assert_eq!(left.seeded, right.seeded);
+}
+
+fn same_knowledge(left: &Knowledge, right: &Knowledge) {
+    match (&left.width, &right.width) {
+        (Width::Compact(l), Width::Native(r)) => same_known(l, r),
+        (Width::Compact(l), Width::Compact(r)) => same_known(l, r),
+        (Width::Native(l), Width::Native(r)) => same_known(l, r),
+        (Width::Native(l), Width::Compact(r)) => same_known(l, r),
+    }
 }
 
 fn region(mut code: usize) -> Region {
@@ -58,7 +98,7 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
     let narrower = Narrower::new(theory);
     let fresh = narrower.knowledge();
     assert_eq!(
-        matches!(fresh.known.unknown, Counters::Compact(_)),
+        matches!(fresh.width, Width::Compact(_)),
         size_of::<u32>() < size_of::<usize>()
     );
     let cancellation = Cancellation::default();
@@ -72,19 +112,19 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
         let close = |region: &mut Region, knowledge: &mut Knowledge| {
             if let Some(truth) = frozen {
                 narrower.narrow_frozen_known(
-                    theory,
-                    truth,
+                    crate::FrozenSubject::new(theory, truth),
                     region,
                     knowledge,
+                    &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
             } else {
                 narrower.narrow_known(
-                    theory,
-                    extracted.producers.as_ref(),
+                    crate::OriginalSubject::new(theory, extracted.producers.as_ref()),
                     region,
                     knowledge,
+                    &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
@@ -96,7 +136,7 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
             "region {code}"
         );
         assert_eq!(compact_region, native_region, "region {code}");
-        same_known(&compact.known, &native.known);
+        same_knowledge(&compact, &native);
     }
 }
 
@@ -128,10 +168,10 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
     let cancellation = Cancellation::default();
     narrower
         .narrow_known(
-            &theory,
-            None,
+            crate::OriginalSubject::new(&theory, None),
             &mut parent_region,
             &mut parent,
+            &mut crate::NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,
         )
@@ -142,36 +182,29 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
     let (mut child_region, _) = parent_region.split(atom);
     narrower
         .narrow_known(
-            &theory,
-            None,
+            crate::OriginalSubject::new(&theory, None),
             &mut child_region,
             &mut child,
+            &mut crate::NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,
         )
         .unwrap();
-    assert_ne!(
-        (
-            values(&child.known.sure_operands),
-            values(&child.known.never_operands)
-        ),
-        (
-            values(&before.known.sure_operands),
-            values(&before.known.never_operands)
-        )
-    );
-    same_known(&parent.known, &before.known);
+    assert_ne!(counts(&child)[..2], counts(&before)[..2]);
+    same_knowledge(&parent, &before);
 }
 
 fn counter_bytes(knowledge: &Knowledge) -> u128 {
-    [
-        &knowledge.known.sure_operands,
-        &knowledge.known.never_operands,
-        &knowledge.known.unknown,
-    ]
-    .into_iter()
-    .map(Counters::allocated_bytes)
-    .sum()
+    match &knowledge.width {
+        Width::Compact(k) => [&k.sure_operands, &k.never_operands, &k.unknown]
+            .into_iter()
+            .map(Counters::allocated_bytes)
+            .sum(),
+        Width::Native(k) => [&k.sure_operands, &k.never_operands, &k.unknown]
+            .into_iter()
+            .map(Counters::allocated_bytes)
+            .sum(),
+    }
 }
 
 #[test]

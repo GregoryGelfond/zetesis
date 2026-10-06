@@ -104,15 +104,23 @@ Explicit `--grounder eager` still requests complete materialization.
 
 For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. This hybrid profile is separate from
-automatic terminal-definition reconstruction. It runs on the CPU backend, uses indexed
-joins and refuses objective declarations and table joins. Relational lazy
+checked from their admitted source families. Certified terminal definitions are
+deferred too, and reconstructed from each accepted base answer, as automatic
+admission does over an eager base. It runs on the CPU backend, uses indexed
+joins and refuses objective declarations and table joins.
+
+The three grounders: `eager` instantiates every rule before solving; `lazy`
+instantiates on demand wherever admitted — relational source joins, or the
+hybrid formula schedule with terminal definitions deferred; `auto` admits
+relational source joins where it can, and otherwise instantiates an eager base
+and defers certified terminal definitions. Relational lazy
 closure retains its existing CPU and device routes.
 
 Hybrid statistics distinguish retained-core models from original answers accepted
 after complete constraint checks. The existing source work, substitution and
-scalar-byte options also set separate cumulative ceilings for constraint replay;
-admission and replay do not share one remaining allowance. A stopped check is
+scalar-byte options also set separate ceilings for each constraint check (one
+candidate); they bound the work per candidate, not the number of candidates, and
+admission and checking do not share one remaining allowance. A stopped check is
 incomplete, never an accepted answer or an UNSAT result.
 
 ```sh
@@ -279,9 +287,9 @@ Corpus and backend checks accept every backend: `--backend cpu` (the default),
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same ten workloads as `zetesis-bench run --suite
+`test scalability` uses the same twelve workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
-unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
+authored Mastermind at colors=5/6, unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
 Sudoku grid. It checks one
 complete clingo family and one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
@@ -290,7 +298,7 @@ counts default to `1,2,4,8,14`; one through eight profiles, each at most 256
 threads, are admitted. The positional corpus root defaults to
 `examples/correctness`, and `--examples` defaults to `examples`. Both must come
 from the maintained checkout. `--include-einstein` adds the unchanged Einstein
-riddle as an eleventh workload; `--max-expansion-work` supplies an explicit native grounding ceiling.
+riddle as a thirteenth workload; `--max-expansion-work` supplies an explicit native grounding ceiling.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in `--report NEW.json`.
 Amended inputs use the complete reference family rather than the original

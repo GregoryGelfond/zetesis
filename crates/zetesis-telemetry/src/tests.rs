@@ -125,7 +125,7 @@ fn lazy_grounding_has_no_separate_duration() {
 #[test]
 fn terminal_definitions_do_not_invent_full_grounding_duration() {
     let recorder = StageRecorder::new(true);
-    recorder.mark_terminal_definitions();
+    recorder.mark_terminal_definitions(TerminalBaseMark::Eager);
     let initial = recorder.snapshot().unwrap();
     assert_eq!(
         initial.grounding_mode,
@@ -141,7 +141,7 @@ fn terminal_definitions_do_not_invent_full_grounding_duration() {
         GroundingMode::EagerBaseTerminalDefinitions
     );
     assert_eq!(base.get(SolveStage::Grounding).unwrap().calls, 1);
-    recorder.mark_terminal_definitions();
+    recorder.mark_terminal_definitions(TerminalBaseMark::Eager);
     assert_eq!(
         recorder
             .snapshot()
@@ -156,13 +156,13 @@ fn terminal_definitions_do_not_invent_full_grounding_duration() {
         recorder.snapshot().unwrap().grounding_mode,
         GroundingMode::Mixed
     );
-    recorder.mark_terminal_definitions();
+    recorder.mark_terminal_definitions(TerminalBaseMark::Eager);
     assert_eq!(
         recorder.snapshot().unwrap().grounding_mode,
         GroundingMode::Mixed
     );
     let disabled = StageRecorder::new(false);
-    disabled.mark_terminal_definitions();
+    disabled.mark_terminal_definitions(TerminalBaseMark::Eager);
     assert!(disabled.snapshot().is_none());
 }
 
@@ -351,4 +351,60 @@ fn poisoned_bookkeeping_does_not_change_application_control() {
     assert_eq!(snapshot.get(SolveStage::Solving).unwrap().calls, 1);
     assert_eq!(snapshot.get(SolveStage::Grounding).unwrap().calls, 1);
     assert_eq!(snapshot.grounding_mode, GroundingMode::Mixed);
+}
+
+#[test]
+fn a_hybrid_terminal_base_reports_its_own_mode() {
+    // Admission's core interval (eager), then the route's mark.
+    let recorder = StageRecorder::new(true);
+    drop(recorder.enter(SolveStage::Grounding));
+    recorder.mark_terminal_definitions(TerminalBaseMark::Hybrid);
+    recorder.mark_lazy_grounding();
+    let snapshot = recorder.snapshot().unwrap();
+    assert_eq!(
+        snapshot.grounding_mode,
+        GroundingMode::HybridBaseTerminalDefinitions
+    );
+    assert_eq!(
+        snapshot.grounding_mode.label(),
+        "hybrid_base_terminal_definitions"
+    );
+}
+
+#[test]
+fn an_unobserved_admission_reports_the_routes_base() {
+    for (base, mode) in [
+        (
+            TerminalBaseMark::Eager,
+            GroundingMode::EagerBaseTerminalDefinitions,
+        ),
+        (
+            TerminalBaseMark::Hybrid,
+            GroundingMode::HybridBaseTerminalDefinitions,
+        ),
+    ] {
+        let recorder = StageRecorder::new(true);
+        recorder.mark_terminal_definitions(base);
+        assert_eq!(recorder.snapshot().unwrap().grounding_mode, mode);
+    }
+}
+
+#[test]
+fn every_terminal_mark_has_one_stated_result() {
+    use GroundingMode::{
+        Eager, EagerBaseTerminalDefinitions as EagerBase,
+        HybridBaseTerminalDefinitions as HybridBase, LazyInterleaved, Mixed, Unentered,
+    };
+    let table = [
+        (Unentered, EagerBase, HybridBase),
+        (Eager, EagerBase, HybridBase),
+        (LazyInterleaved, Mixed, HybridBase),
+        (Mixed, Mixed, HybridBase),
+        (EagerBase, EagerBase, Mixed),
+        (HybridBase, Mixed, HybridBase),
+    ];
+    for (mode, eager, hybrid) in table {
+        assert_eq!(super::terminal_mode(mode, TerminalBaseMark::Eager), eager);
+        assert_eq!(super::terminal_mode(mode, TerminalBaseMark::Hybrid), hybrid);
+    }
 }
