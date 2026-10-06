@@ -19,20 +19,21 @@ use crate::formula_ir::RuleIr;
 use crate::formula_support::{CompletedSupport, Counters, RowFilter};
 use crate::{FormulaFailure, FormulaLimits};
 
-struct PredicateRows<'source> {
-    /// The exact source occurrence mapping used by every row of this relation.
-    atoms: Atoms<'source>,
-    positions: Vec<Option<usize>>,
+/// Each kept source predicate's occurrence positions in the core's dense
+/// catalog, in the order the core's streamed rows list those predicates. A
+/// function of the immutable core alone: built once, by the first checker
+/// that needs it, and shared by every checker of the core.
+pub(super) struct RowPositions {
+    predicates: Vec<Vec<Option<usize>>>,
+    bytes: u128,
 }
 
-/// Prepared integer correspondence; no region decisions are retained.
-pub(super) struct SourceRows<'source> {
-    predicates: Vec<PredicateRows<'source>>,
-}
-
-impl<'source> SourceRows<'source> {
+impl RowPositions {
+    /// Map every source occurrence through `index`: one charged probe per
+    /// kept support row. Each buffer is admitted against `support`'s
+    /// workspace before it is filled; the caller retains the total.
     pub(super) fn prepare(
-        support: &mut CompletedSupport<'source>,
+        support: &CompletedSupport<'_>,
         index: AtomLookup<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
@@ -72,11 +73,79 @@ impl<'source> SourceRows<'source> {
                 positions.push(found.map(AtomRow::position));
             }
             counters.work(limits, location)?;
+            predicates.push(positions);
+        }
+        Ok(Self { predicates, bytes })
+    }
+
+    /// The header and every reserved buffer's capacity.
+    pub(super) const fn retained_bytes(&self) -> u128 {
+        self.bytes
+    }
+}
+
+struct PredicateRows<'source> {
+    /// The exact source occurrence mapping used by every row of this relation.
+    atoms: Atoms<'source>,
+    positions: &'source [Option<usize>],
+}
+
+/// A checker's integer correspondence: its own occurrence maps paired with
+/// the core's shared positions. No region decisions are retained.
+pub(super) struct SourceRows<'source> {
+    predicates: Vec<PredicateRows<'source>>,
+    bytes: u128,
+}
+
+impl<'source> SourceRows<'source> {
+    /// Pair each kept predicate's occurrence map in `support` with the core's
+    /// positions: O(predicates) work. The maps and the positions list the
+    /// same predicates in the same order with the same lengths, since both
+    /// come from the core's immutable streamed rows; a mismatch is refused.
+    pub(super) fn attach(
+        support: &CompletedSupport<'source>,
+        positions: &'source RowPositions,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        let owner = || FormulaFailure::SupportRelation {
+            error: Failure::Owner,
+            location,
+        };
+        let mut count = 0;
+        for _ in support.source_atoms() {
+            counters.work(limits, location)?;
+            count += 1;
+        }
+        if count != positions.predicates.len() {
+            return Err(owner());
+        }
+        let mut predicates = Vec::new();
+        let mut bytes = size_of::<Self>() as u128;
+        reserve(
+            &mut predicates,
+            count,
+            &mut bytes,
+            support,
+            limits,
+            counters,
+            location,
+        )?;
+        for ((_, atoms), positions) in support.source_atoms().zip(&positions.predicates) {
+            counters.work(limits, location)?;
+            if atoms.len() != positions.len() {
+                return Err(owner());
+            }
             predicates.push(PredicateRows { atoms, positions });
         }
-        // Every reservation checked its actual capacity before any publication.
-        support.retain_workspace(usize::try_from(bytes).expect("admitted support bytes fit usize"));
-        Ok(Self { predicates })
+        Ok(Self { predicates, bytes })
+    }
+
+    /// The header and the reserved pairing buffer's capacity, which the
+    /// caller retains in its ledger; the shared positions are not included.
+    pub(super) const fn retained_bytes(&self) -> u128 {
+        self.bytes
     }
 }
 
@@ -249,8 +318,8 @@ mod tests {
         // Admit the outer descriptors, then refuse an inner row-ID buffer.
         // The index must survive; temporary map capacity must not be retained.
         prepared.limits.max_support_bytes = usize::try_from(retained).unwrap()
-            + size_of::<SourceRows<'_>>()
-            + prepared.completed.source_atoms().count() * size_of::<PredicateRows<'_>>();
+            + size_of::<RowPositions>()
+            + prepared.completed.source_atoms().count() * size_of::<Vec<Option<usize>>>();
         let mut previous = None;
         for _ in 0..2 {
             let before = counters.accounting.work;
@@ -292,11 +361,7 @@ mod tests {
         let rows = prepared.rows.as_ref().unwrap();
         let map_bytes = size_of::<SourceRows<'_>>() as u128
             + rows.predicates.capacity() as u128 * size_of::<PredicateRows<'_>>() as u128
-            + rows
-                .predicates
-                .iter()
-                .map(|p| p.positions.capacity() as u128 * size_of::<Option<usize>>() as u128)
-                .sum::<u128>();
+            + owner.core().0.rows.get().unwrap().retained_bytes();
         assert_eq!(workspace_bytes(prepared), retained + map_bytes);
         let work = counters.accounting.work;
         prepared
@@ -315,9 +380,17 @@ mod tests {
         // A pre-match support row need not have survived the scalar guards
         // that contributed occurrences to the admitted formula catalog.
         let index = zetesis_core::AtomIndex::new_with(&[], || Ok::<_, FormulaFailure>(())).unwrap();
-        let rows = SourceRows::prepare(
-            &mut prepared.completed,
+        let positions = RowPositions::prepare(
+            &prepared.completed,
             index.lookup(),
+            &prepared.limits,
+            &mut counters,
+            prepared.source.location,
+        )
+        .unwrap();
+        let rows = SourceRows::attach(
+            &prepared.completed,
+            &positions,
             &prepared.limits,
             &mut counters,
             prepared.source.location,
@@ -386,9 +459,17 @@ mod tests {
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let prepared = checker.prepared.as_mut().unwrap();
         let mut counters = Counters::default();
-        let rows = SourceRows::prepare(
-            &mut prepared.completed,
+        let positions = RowPositions::prepare(
+            &prepared.completed,
             index.lookup(),
+            &prepared.limits,
+            &mut counters,
+            prepared.source.location,
+        )
+        .unwrap();
+        let rows = SourceRows::attach(
+            &prepared.completed,
+            &positions,
             &prepared.limits,
             &mut counters,
             prepared.source.location,
@@ -500,5 +581,31 @@ mod tests {
         );
         assert!(prepared.index.is_none());
         assert!(owner.core().0.index.get().is_none());
+    }
+
+    /// The work one checker charges to map the core's source rows, after its
+    /// index is in place.
+    fn rows_charge(owner: &HybridFormula) -> u64 {
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        let prepared = checker.prepared.as_mut().unwrap();
+        let mut counters = Counters::default();
+        prepared.prepare_index(owner.core(), &mut counters).unwrap();
+        let before = counters.accounting.work;
+        prepared
+            .prepare_selection(owner.core(), &mut counters)
+            .unwrap();
+        counters.accounting.work - before
+    }
+
+    #[test]
+    fn a_later_checker_borrows_the_core_row_positions() {
+        // One source predicate read in either core; the larger has 100 times
+        // the rows. A later checker pays per predicate, not per row.
+        let small = owner_of("{p(1..2)}. :-p(X),p(Y),X<Y.");
+        let large = owner_of("{p(1..200)}. :-p(X),p(Y),X+Y=7,X<Y.");
+        let built = (rows_charge(&small), rows_charge(&large));
+        let borrowed = (rows_charge(&small), rows_charge(&large));
+        assert!(built.1 > borrowed.1, "a build maps every row");
+        assert_eq!(borrowed.0, borrowed.1);
     }
 }

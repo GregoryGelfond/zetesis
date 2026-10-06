@@ -63,6 +63,9 @@ struct Core {
     /// The typed index of `compiled.atoms`, set by the first checker whose
     /// region check needs it and lent to every later checker of this core.
     index: OnceLock<CatalogIndex>,
+    /// The kept source rows' positions in `compiled.atoms`, set by the first
+    /// checker whose region check needs them and lent likewise.
+    rows: OnceLock<selection::RowPositions>,
 }
 
 /// A materialized producer core with the integrity constraints streamed over it:
@@ -289,6 +292,7 @@ impl StreamedCore {
             constraints,
             source,
             index: OnceLock::new(),
+            rows: OnceLock::new(),
         }))
     }
 
@@ -641,18 +645,59 @@ impl<'a> PreparedConstraints<'a> {
     ) -> Result<(), ConstraintCheckCause> {
         self.prepare_index(core, counters)?;
         if self.rows.is_none() {
-            self.rows = Some(
-                SourceRows::prepare(
-                    &mut self.completed,
-                    self.index.expect("prepared above").lookup(),
-                    &self.limits,
-                    counters,
-                    self.source.location,
-                )
-                .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?,
+            let positions = self
+                .prepare_positions(core, counters)
+                .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+            let rows = SourceRows::attach(
+                &self.completed,
+                positions,
+                &self.limits,
+                counters,
+                self.source.location,
+            )
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+            // Every reservation checked its actual capacity before any publication.
+            self.completed.retain_workspace(
+                usize::try_from(rows.retained_bytes()).expect("admitted support bytes fit usize"),
             );
+            self.rows = Some(rows);
         }
         Ok(())
+    }
+
+    /// Borrow the core's row positions, building them first when no checker
+    /// has: one charged index probe per kept support row, against this
+    /// checker's work and support ceilings. Races, refusals and the ledger
+    /// follow [`Self::prepare_index`].
+    fn prepare_positions(
+        &mut self,
+        core: &'a StreamedCore,
+        counters: &mut Counters,
+    ) -> Result<&'a selection::RowPositions, FormulaFailure> {
+        let location = self.source.location;
+        counters.work(&self.limits, location)?;
+        if core.0.rows.get().is_none() {
+            let built = selection::RowPositions::prepare(
+                &self.completed,
+                self.index.expect("prepared before its rows").lookup(),
+                &self.limits,
+                counters,
+                location,
+            )?;
+            // A racing checker may have published first: keep its positions.
+            let _ = core.0.rows.set(built);
+        }
+        let positions = core
+            .0
+            .rows
+            .get()
+            .expect("published above or by a racing checker");
+        let retained = positions.retained_bytes();
+        self.completed
+            .admit_workspace(retained, &self.limits, counters, location)?;
+        self.completed
+            .retain_workspace(usize::try_from(retained).expect("admitted support bytes fit usize"));
+        Ok(positions)
     }
 
     /// Borrow the core's index, building it first when no checker has. A
@@ -777,9 +822,10 @@ impl ConstraintChecker<'_> {
     /// not the provenance of a raw `Region`. No region or candidate is mutated.
     /// Never use this operation to read a candidate's frozen reduct.
     ///
-    /// First use borrows the core's typed catalog index (building it when no
-    /// checker of this core has) and prepares a source-row ID map; later
-    /// checks reuse both. Necessary predicate and held-row selections
+    /// First use borrows the core's typed catalog index and source-row
+    /// positions (building each when no checker of this core has) and pairs
+    /// the positions with this checker's occurrence maps; later checks reuse
+    /// both. Necessary predicate and held-row selections
     /// precede binding/scalar evaluation, over the same completed support and
     /// shared evaluator as `check`. Missing row IDs remain eligible until the
     /// full body check. Source arithmetic admission has already completed.

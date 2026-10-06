@@ -41,13 +41,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
-- The constraint checkers of one hybrid core share its typed atom index: the
-  first region check that needs it builds it, and every later checker, on any
-  thread, borrows it for one unit of work instead of sorting the core's atoms
-  again. A run that prepares a checker per proposal, such as `--grounder lazy
-  --all` on a scalar walk, no longer pays that sort per answer. Each checker's
-  support ledger still counts the index's retained bytes; the index stays
-  resident with the core once built.
+- The constraint checkers of one hybrid core share its typed atom index and
+  its support rows' positions in that index: the first region check that needs
+  each builds it, and every later checker, on any thread, borrows it instead of
+  sorting the core's atoms and probing every kept support row again. A run that
+  prepares a checker per proposal, such as `--grounder lazy --all` on a scalar
+  walk, no longer pays either per answer. Each checker's support ledger still
+  counts their retained bytes; both stay resident with the core once built.
 - `--grounder lazy` defers certified terminal definitions over its hybrid
   formula base, reconstructing them from each accepted answer, as `auto` does
   over an eager base; `zetesis_solve::ground_formula` and `ground_bundle` own the
