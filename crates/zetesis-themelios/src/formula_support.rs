@@ -29,6 +29,7 @@ pub(crate) use term_selection::TermSelection;
 #[cfg(test)]
 mod columnar;
 mod delta;
+mod demand;
 pub(crate) mod family;
 mod filters;
 #[cfg(test)]
@@ -444,6 +445,12 @@ fn complete(
         location: fallback,
     } = work;
     catalog.prepared_bytes(plan.as_ref().map_or(0, producers::ProducerPlan::bytes));
+    // Postings are kept only for columns a join can bind, decided before the
+    // first relation is created, since a column cannot gain postings later.
+    if let Some(view) = catalog.component_view(limits, counters, fallback)? {
+        let demand = demand::Demand::of(prepared, view, limits, counters, fallback)?;
+        catalog.install_demand(demand);
+    }
     catalog.publish(limits, counters, fallback)?;
     #[cfg(test)]
     postings::begin_support();

@@ -31,8 +31,15 @@ mod tests;
 
 struct CatalogRows {
     catalog: Catalog,
-    columns: Vec<BTreeMap<u32, Vec<usize>>>,
+    /// One posting map per column a join can bind; `None` keeps no postings.
+    columns: Vec<Option<BTreeMap<u32, Vec<usize>>>>,
     old_rows: usize,
+}
+
+/// A column's postings, or the absence of any for a column no join binds.
+pub(super) enum Postings<'a> {
+    Indexed(&'a BTreeMap<u32, Vec<usize>>),
+    Unindexed,
 }
 
 /// Canonical payload has one evolving authority. Relations and pending rounds
@@ -48,6 +55,9 @@ pub(crate) struct SupportCatalog {
     // publication synchronization; completed snapshots omit this observation.
     // An atomic reference also preserves movable prepared checker state.
     growth: AtomicUsize,
+    /// The columns joins can bind; absent until support completion installs it,
+    /// and then every column of a predicate it does not name is unindexed.
+    demand: Option<super::demand::Demand>,
     entries: usize,
     index_bytes: usize,
     prepared_bytes: usize,
@@ -63,6 +73,7 @@ impl Default for SupportCatalog {
             pending: Vec::new(),
             supported: Vec::new(),
             growth: AtomicUsize::new(0),
+            demand: None,
             entries: 0,
             index_bytes: size_of::<Self>() - size_of::<AtomInterner>()
                 + SourceScope::shared_bytes(),
@@ -81,6 +92,13 @@ impl SupportCatalog {
 
     pub(super) fn release_preparation(&mut self) {
         self.prepared_bytes = 0;
+    }
+
+    /// Keep postings only for demanded columns of relations created from now
+    /// on. A relation published earlier keeps postings for every column: a
+    /// superset of its demand, which costs memory but no probe its posting.
+    pub(super) fn install_demand(&mut self, demand: super::demand::Demand) {
+        self.demand = Some(demand);
     }
 
     pub(in crate::formula_support) fn bytes(
@@ -202,7 +220,14 @@ impl SupportCatalog {
                 {
                     index
                 }
-                _ => catalog_index(&mut self.rows, read, predicate, &mut memory, counters)?,
+                _ => catalog_index(
+                    &mut self.rows,
+                    self.demand.as_ref(),
+                    read,
+                    predicate,
+                    &mut memory,
+                    counters,
+                )?,
             };
             // Only this contiguous predicate run reuses the index: inserting a
             // different relation may shift every later directory position.
@@ -230,12 +255,12 @@ impl SupportCatalog {
             if receipt.inserted {
                 ceiling(
                     FormulaResource::SupportIndexEntries,
-                    self.entries as u128 + predicate.arity() as u128,
+                    self.entries as u128 + source.indexed() as u128,
                     limits.max_support_index_entries as u128,
                     location,
                 )?;
                 source.append_postings(read, receipt.row, &mut memory, counters)?;
-                self.entries += predicate.arity();
+                self.entries += source.indexed();
                 counters.record(Event::SupportAtom);
             }
             self.index_bytes = memory.bytes
@@ -373,6 +398,7 @@ fn find_catalog(
 /// Resolve a predicate run, admitting its relation and directory slot if absent.
 fn catalog_index(
     rows: &mut Vec<CatalogRows>,
+    demand: Option<&super::demand::Demand>,
     read: CatalogRead<'_>,
     predicate: PredicateRef<'_>,
     memory: &mut Memory<'_>,
@@ -388,7 +414,7 @@ fn catalog_index(
     )? {
         Ok(index) => Ok(index),
         Err(index) => {
-            let source = CatalogRows::new(read, predicate, memory, counters)?;
+            let source = CatalogRows::new(read, predicate, demand, memory, counters)?;
             counters.charge_work(rows.len() as u128, memory.limits, memory.location)?;
             memory.reserve(rows, 1)?;
             rows.insert(index, source);
@@ -451,6 +477,7 @@ impl CatalogRows {
     fn new(
         read: CatalogRead<'_>,
         predicate: PredicateRef<'_>,
+        demand: Option<&super::demand::Demand>,
         memory: &mut Memory<'_>,
         counters: &mut Counters,
     ) -> Result<Self, FormulaFailure> {
@@ -472,17 +499,35 @@ impl CatalogRows {
         ));
         counters.charge_work(catalog.construction().construction_work, limits, location)?;
         memory.add(catalog.retained_bytes() - size_of::<Catalog>())?;
+        // Without installed demand every column keeps postings, as before.
+        let demanded = match demand {
+            Some(demand) => demand.columns(predicate, limits, counters, location)?,
+            None => None,
+        };
         let mut columns = Vec::new();
         memory.reserve(&mut columns, predicate.arity())?;
-        for _ in 0..predicate.arity() {
+        for column in 0..predicate.arity() {
             counters.work(limits, location)?;
-            columns.push(BTreeMap::new());
+            let indexed = match (demand, demanded) {
+                (None, _) => true,
+                (Some(_), Some(demanded)) => demanded[column],
+                (Some(_), None) => false,
+            };
+            columns.push(indexed.then(BTreeMap::new));
         }
         Ok(Self {
             catalog,
             columns,
             old_rows: 0,
         })
+    }
+
+    /// The number of columns keeping postings.
+    fn indexed(&self) -> usize {
+        self.columns
+            .iter()
+            .filter(|column| column.is_some())
+            .count()
     }
 
     fn append_postings(
@@ -497,7 +542,12 @@ impl CatalogRows {
             .view(read)
             .map_err(|error| failure(error, memory.location))?;
         memory.add(size_of::<Relation<'_>>())?;
-        for (column, postings) in self.columns.iter_mut().enumerate() {
+        for (column, postings) in self
+            .columns
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(column, postings)| postings.as_mut().map(|postings| (column, postings)))
+        {
             counters.work(memory.limits, memory.location)?;
             let id = view.column(column).expect("checked column")[row];
             let posting = match postings.entry(id) {
@@ -558,13 +608,27 @@ pub(crate) struct Relations<'source> {
 
 pub(super) struct RelationRows<'source> {
     pub(super) relation: Relation<'source>,
-    pub(super) columns: &'source [BTreeMap<u32, Vec<usize>>],
+    columns: &'source [Option<BTreeMap<u32, Vec<usize>>>],
     catalog: &'source Catalog,
     old_rows: usize,
     pub(super) atoms: Atoms<'source>,
 }
 
 impl<'source> RelationRows<'source> {
+    /// The postings of `column`, through which every reader goes: a column
+    /// no join binds keeps none, and is never read as an empty one.
+    pub(super) fn postings(&self, column: usize) -> Postings<'source> {
+        self.columns[column]
+            .as_ref()
+            .map_or(Postings::Unindexed, Postings::Indexed)
+    }
+
+    /// The number of columns.
+    #[cfg(test)]
+    pub(super) fn column_count(&self) -> usize {
+        self.columns.len()
+    }
+
     pub(super) fn row(&self, position: usize) -> Option<Row<'_, 'source>> {
         self.relation.row(position)
     }
@@ -808,11 +872,28 @@ impl<'source> Relations<'source> {
                     zetesis_core::relation::QueryFailure::Stopped(error) => error,
                 })?;
                 if let Some(equality) = equality {
-                    let posting = rows.columns[equality.column()]
-                        .get(&equality.value_id())
-                        .map_or(&[][..], Vec::as_slice);
-                    if selected.is_none_or(|previous| posting.len() < previous.len()) {
-                        selected = Some(posting);
+                    match rows.postings(equality.column()) {
+                        Postings::Indexed(postings) => {
+                            let posting = postings
+                                .get(&equality.value_id())
+                                .map_or(&[][..], Vec::as_slice);
+                            if selected.is_none_or(|previous| posting.len() < previous.len()) {
+                                selected = Some(posting);
+                            }
+                        }
+                        // The value is present, so rows may match; with no
+                        // posting this column narrows nothing, and the
+                        // full matcher still checks every offered row.
+                        Postings::Unindexed => {
+                            counters.record(Event::UnindexedProbe);
+                            debug_assert!(
+                                false,
+                                "demand covers every column a join binds: {}/{} column {}",
+                                pattern.predicate().name(),
+                                pattern.predicate().arity(),
+                                equality.column()
+                            );
+                        }
                     }
                 } else {
                     possible = false;

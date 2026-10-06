@@ -19,6 +19,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Formula support keeps posting lists only for the columns a join can bind. A
+  predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
+  and support work fall; a program such as eager Mastermind 6×8, whose unread
+  `next_guess/6` alone needed 1.57 million entries, no longer stops there.
+  Grounding observations report `unindexed_probes`, which is zero whenever
+  every probe found its posting.
 - Interning a derived atom, and adding a row to a support relation, compares
   it first with the last entry in order: atoms and rows that arrive in order,
   as a rule's derived heads usually do, are placed without a typed search.

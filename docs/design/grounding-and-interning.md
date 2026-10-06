@@ -82,8 +82,8 @@ schedule demand-driven.
 
 A core relation view preserves the signed predicate, row order and duplicate
 occurrences. Its dictionary refers to whole source terms; argument columns hold
-local equality IDs. Formula support retains these columns and their equality
-postings across growth rounds. Queries bind to a particular immutable view;
+local equality IDs. Formula support retains these columns, and equality postings
+for the columns a join can bind, across growth rounds. Queries bind to a particular immutable view;
 stable IDs alone do not make a query valid against a later snapshot.
 
 For a positive body occurrence, known equalities select a posting list. The

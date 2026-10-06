@@ -2,6 +2,7 @@
 
 mod constant_divisors;
 mod lending_rows;
+mod support_demand;
 
 use std::cell::{Cell, RefCell};
 
@@ -165,7 +166,8 @@ fn support_counts_describe_completed_rounds() {
         .unwrap();
     assert_eq!(support.work.support_rounds, Some(2));
     assert_eq!(support.work.support_atoms, Some(1));
-    assert_eq!(support.work.support_index_entries, Some(1));
+    // No join reads p, so its column keeps no postings.
+    assert_eq!(support.work.support_index_entries, Some(0));
 }
 
 #[test]

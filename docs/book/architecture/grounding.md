@@ -947,6 +947,15 @@ Foreign and ingress terms use typed comparison, as do valid query terms outside
 the supplied canonical prefix. The relation reader must still cover every
 retained row. Static sorted dictionaries retain their own immutable lookup.
 
+Support keeps posting lists only for the columns a join can bind: a column
+holding a constant, or a variable that occurs again in the same rule, body or
+head, in some join occurrence of its predicate. A predicate no join reads, such
+as a terminal definition under eager grounding, keeps none, and neither does a
+column holding a variable that occurs once. The demand is computed from the
+compiled rules before support grows. A column without postings is absent, not
+empty: a probe still resolves its equality and narrows by its other columns, and
+a totality certificate declines it as a domain of distinct values.
+
 For a positive witness, the selector resolves known whole-column equalities and
 chooses the shortest posting list. Equal-length lists retain the first known
 column's list. The matcher then checks the complete tuple in original row order,

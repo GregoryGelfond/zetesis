@@ -206,8 +206,9 @@ fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
 #[test]
 fn retained_index_entries_have_an_independent_inclusive_ceiling() {
     for maximum in [0, 1, 2] {
+        // q's rule reads both columns of p, through its head; q is unread.
         let result = admit_formula(
-            "p(1,2).".to_owned(),
+            "p(1,2). q(X,Y) :- p(X,Y).".to_owned(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
             FormulaLimits {

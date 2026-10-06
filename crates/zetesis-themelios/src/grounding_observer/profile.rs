@@ -147,6 +147,9 @@ pub struct GroundingWork {
     pub join_probes: Option<u64>,
     /// Probes executed by the indexed positive-row matcher.
     pub indexed_probes: Option<u64>,
+    /// Probes that bound a column no join was expected to bind, so it kept no
+    /// postings; the probe falls back to its other columns or all rows.
+    pub unindexed_probes: Option<u64>,
     /// Completed-support table probes using indexed matching for structural
     /// patterns or absent relations. Support-growth phases remain indexed.
     pub table_inapplicable_probes: Option<u64>,
@@ -223,6 +226,7 @@ impl Default for GroundingWork {
             support_index_entries: Some(0),
             join_probes: Some(0),
             indexed_probes: Some(0),
+            unindexed_probes: Some(0),
             table_inapplicable_probes: Some(0),
             table_preparations: Some(0),
             table_reuses: Some(0),
@@ -266,6 +270,7 @@ pub(crate) enum Event {
     SupportIndexEntry,
     JoinProbe,
     IndexedProbe,
+    UnindexedProbe,
     TableInapplicableProbe,
     TablePreparation,
     TableReuse,
@@ -333,6 +338,7 @@ impl GroundingWork {
             support_index_entries: sum(self.support_index_entries, other.support_index_entries),
             join_probes: sum(self.join_probes, other.join_probes),
             indexed_probes: sum(self.indexed_probes, other.indexed_probes),
+            unindexed_probes: sum(self.unindexed_probes, other.unindexed_probes),
             table_inapplicable_probes: sum(
                 self.table_inapplicable_probes,
                 other.table_inapplicable_probes,
@@ -400,6 +406,7 @@ impl GroundingWork {
             Event::SupportIndexEntry => &mut self.support_index_entries,
             Event::JoinProbe => &mut self.join_probes,
             Event::IndexedProbe => &mut self.indexed_probes,
+            Event::UnindexedProbe => &mut self.unindexed_probes,
             Event::TableInapplicableProbe => &mut self.table_inapplicable_probes,
             Event::TablePreparation => &mut self.table_preparations,
             Event::TableReuse => &mut self.table_reuses,
