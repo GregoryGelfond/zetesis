@@ -625,8 +625,14 @@ fn a_waiting_worker_never_misses_a_publication() {
     }
 }
 
+/// The number of registered idle waiters, read under the gate that guards it.
 fn waiting(search: &ParallelRegions) -> usize {
-    search.shared.termination.waiting.load(Ordering::Relaxed)
+    *search
+        .shared
+        .termination
+        .gate
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
 }
 
 #[test]
@@ -664,9 +670,8 @@ fn a_waiter_woken_without_a_region_deregisters() {
         while waiting(&search) == 0 {
             std::hint::spin_loop();
         }
-        // The waiter registers and re-checks holding the gate, and releases it
-        // only by waiting: once the gate is free, it waits.
-        drop(shared.termination.gate.lock().unwrap());
+        // The waiter registers holding the gate and releases it only by
+        // waiting: once the count reads one, it waits.
         shared.termination.wake_one();
         assert!(waiter.join().unwrap().is_none());
     });

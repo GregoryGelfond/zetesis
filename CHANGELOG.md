@@ -63,10 +63,6 @@ Notable changes by release. Versions follow Semantic Versioning.
   the close is charged as formula work and its transient peak is checked against
   the support-byte ceiling, so a program within the close's envelope of that
   ceiling can now be refused there. Answers are unchanged.
-- A parallel region worker publishing a split takes the idle workers' lock
-  only when an idle worker waits; waiters register in an atomic count before
-  their last look for work, so a published region is found by that look or
-  wakes a waiter, unless the look found its deque busy, as before.
 - Answers reconstructed with deferred terminal definitions each get a
   per-answer allowance of work and substitutions — the headroom grounding left
   under the formula ceilings — instead of drawing on one cumulative allowance,

@@ -1089,23 +1089,17 @@ either child under the same queue guard. A resolved region decrements the count
 once. Taking or stealing only transfers ownership. Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
 can establish termination only when the count reaches zero. Idle workers wait at
-a gate and register in an atomic count of waiters: the resolution that reaches
-zero, a stop and a close each wake them under the gate after changing the count
-or the closed flag. An idle worker re-checks the end of the walk under the gate,
-registers, issues a sequentially consistent fence and then re-checks the peers'
-queues; a split publishes both children, releases its queue, issues a
-sequentially consistent fence and reads the waiter count, taking the gate to wake
-one only when some worker waits. Sequentially consistent fences are totally
-ordered (C++20 [atomics.order] p4), so either the publisher sees the registration
-or the waiter's re-check sees the children, unless that re-check found the queue
-held by its owner or another thief and skipped it: none waits past the end of the
-walk, and a region published after a worker registered is taken by its re-check
-or wakes a waiter except in that case. The wait stays bounded, which is how an idle worker sees a cancellation,
+a gate that also counts them: the resolution that reaches zero, a stop and a close
+each wake them after changing the count or the closed flag, and a split, after
+publishing both children and releasing its queue, wakes one. An idle worker
+re-checks both conditions and the peers' queues under the gate before waiting, so
+none waits past the end of the walk or misses a region published after its
+re-check. The wait stays bounded, which is how an idle worker sees a cancellation,
 or a region left in a queue its re-check found busy; completeness never depends on
 a wake.
 
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
-and exhaustion laws; the atomic count, the queue and gate protocols (including the fenced waiter count) and absence
+and exhaustion laws; the atomic count, the queue and gate protocols (including the gate's idle count) and absence
 of lost ownership remain Rust refinement obligations. Depth-first local order
 retains at most one older sibling per ancestor plus the newest children. Each
 split decides another atom, and stealing starts only with an empty local deque,
