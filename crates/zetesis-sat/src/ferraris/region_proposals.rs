@@ -124,6 +124,8 @@ pub(crate) struct RegionProposals {
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
     pub(super) filter: Option<crate::region_filter::Filter>,
+    /// The worklists of the coordinator's own positive checks.
+    scratch: NarrowingScratch,
 }
 
 impl std::fmt::Debug for RegionProposals {
@@ -171,6 +173,7 @@ impl RegionProposals {
             pool,
             statistics,
             filter: None,
+            scratch: NarrowingScratch::default(),
         })
     }
 
@@ -240,6 +243,7 @@ impl RegionProposals {
             &self.restrictions,
             self.filter.as_ref(),
             candidate,
+            &mut self.scratch,
             budget,
             &mut self.statistics.counts,
             timings,

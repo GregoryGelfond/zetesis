@@ -435,6 +435,8 @@ pub(crate) struct ParallelRegions {
     statistics: RegionSearchStatistics,
     /// The workers' own membership receipts, merged when they finish.
     merged: Statistics,
+    /// The worklists of the coordinator's own positive checks.
+    scratch: NarrowingScratch,
 }
 
 /// What a worker did, returned when it finishes.
@@ -506,6 +508,7 @@ impl ParallelRegions {
             exhausted: false,
             statistics,
             merged: Statistics::default(),
+            scratch: NarrowingScratch::default(),
         })
     }
 
@@ -683,6 +686,7 @@ impl ParallelRegions {
             &restrictions,
             self.shared.filter.as_ref(),
             candidate,
+            &mut self.scratch,
             budget,
             &mut self.statistics.counts,
             timings,

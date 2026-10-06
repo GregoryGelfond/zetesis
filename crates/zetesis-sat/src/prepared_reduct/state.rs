@@ -117,7 +117,7 @@ impl State {
         }
         self.ensure(theory, limits, budget, statistics)?;
         if let Some(query) = &self.query {
-            let (truth, _) =
+            let (truth, scratch) =
                 self.workspace
                     .evaluate(candidate, limits, budget.cancellation, statistics)?;
             if !truth.is_model() {
@@ -125,7 +125,14 @@ impl State {
             }
             let started = timing::start(statistics.phase_timings.as_ref());
             increment(&mut statistics.countermodel_queries)?;
-            let result = query.check(theory, candidate, truth.truth(), limits, budget, statistics);
+            let result = query.check(
+                zetesis_ferraris::FrozenSubject::new(theory, truth.truth()),
+                candidate,
+                limits,
+                budget,
+                statistics,
+                scratch,
+            );
             timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
             return result;
         }

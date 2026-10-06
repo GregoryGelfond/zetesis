@@ -130,6 +130,18 @@ impl<'a> FrozenSubject<'a> {
     pub const fn new(theory: &'a Theory, truth: &'a [bool]) -> Self {
         Self { theory, truth }
     }
+
+    /// The theory read.
+    #[must_use]
+    pub const fn theory(&self) -> &'a Theory {
+        self.theory
+    }
+
+    /// The candidate's truth of every node.
+    #[must_use]
+    pub const fn truth(&self) -> &'a [bool] {
+        self.truth
+    }
 }
 
 impl<'a> From<FrozenSubject<'a>> for Subject<'a> {
@@ -347,27 +359,6 @@ impl<'q> Work<'q> {
         if let Some(quota) = &mut self.quota {
             quota.refund(std::mem::take(&mut self.available));
         }
-    }
-}
-
-/// A caller's per-read charge as a quota: one permit per call, and the
-/// caller's own refusal kept to be returned unchanged.
-struct PerRead<F, E> {
-    charge: F,
-    failure: Option<E>,
-}
-impl<E, F: FnMut() -> Result<(), E>> NarrowingQuota for PerRead<F, E> {
-    fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
-        match (self.charge)() {
-            Ok(()) => Ok(1),
-            Err(error) => {
-                self.failure = Some(error);
-                Err(Stop::WorkLimit)
-            }
-        }
-    }
-    fn refund(&mut self, unspent: u64) {
-        debug_assert_eq!(unspent, 0, "a per-read permit is spent as it is granted");
     }
 }
 
@@ -728,48 +719,6 @@ impl Narrower {
             .map(|narrowing| (narrowing, attempt.statistics))
     }
 
-    /// Narrow original candidates with a caller-owned work quota. The quota
-    /// is invoked before every charged node, parent, producer or open-atom read;
-    /// a refused permit prevents that read. It owns the work ceiling and may
-    /// also poll control. This operation polls `cancellation` before any mutation,
-    /// including when no charged read is necessary. The receipt counts only
-    /// successful permits and survives every returned failure.
-    ///
-    /// The ownership and ancestor-knowledge preconditions of
-    /// [`Self::narrow_known`] still apply. Any failed attempt's region and
-    /// knowledge must be abandoned. The quota's error is preserved; entry
-    /// control failures and exhaustion of the representable `u64` work count
-    /// use `E::from(Stop)`.
-    pub fn narrow_known_metered<E: From<Stop>>(
-        &self,
-        subject: OriginalSubject<'_>,
-        region: &mut Region,
-        knowledge: &mut Knowledge,
-        scratch: &mut NarrowingScratch,
-        cancellation: &Cancellation,
-        charge: impl FnMut() -> Result<(), E>,
-    ) -> NarrowingAttempt<E> {
-        let subject = Subject::from(subject);
-        let mut quota = PerRead {
-            charge,
-            failure: None,
-        };
-        let attempt = self.narrow_with(
-            subject,
-            region,
-            knowledge,
-            scratch,
-            Work::reserved(&mut quota),
-            cancellation,
-        );
-        NarrowingAttempt {
-            result: attempt
-                .result
-                .map_err(|stop| quota.failure.take().unwrap_or_else(|| E::from(stop))),
-            statistics: attempt.statistics,
-        }
-    }
-
     /// Narrow a region of the theory's frozen reduct under a candidate from
     /// what is already known about it, as [`Self::narrow_known`] does for
     /// the candidate tree: a node false in the subject's truth, the
@@ -805,45 +754,16 @@ impl Narrower {
             .map(|narrowing| (narrowing, attempt.statistics))
     }
 
-    /// Narrow a frozen reduct with the quota and failure receipt contract of
-    /// [`Self::narrow_known_metered`]. The frozen mask and ancestor knowledge
-    /// retain the preconditions of [`Self::narrow_frozen_known`].
-    pub fn narrow_frozen_known_metered<E: From<Stop>>(
-        &self,
-        subject: FrozenSubject<'_>,
-        region: &mut Region,
-        knowledge: &mut Knowledge,
-        scratch: &mut NarrowingScratch,
-        cancellation: &Cancellation,
-        charge: impl FnMut() -> Result<(), E>,
-    ) -> NarrowingAttempt<E> {
-        let subject = Subject::from(subject);
-        let mut quota = PerRead {
-            charge,
-            failure: None,
-        };
-        let attempt = self.narrow_with(
-            subject,
-            region,
-            knowledge,
-            scratch,
-            Work::reserved(&mut quota),
-            cancellation,
-        );
-        NarrowingAttempt {
-            result: attempt
-                .result
-                .map_err(|stop| quota.failure.take().unwrap_or_else(|| E::from(stop))),
-            statistics: attempt.statistics,
-        }
-    }
-
     /// Narrow original candidates with work granted in batches by `quota`
-    /// (see [`NarrowingQuota`]): the same closure, decisions, receipt and
-    /// refusal point as [`Self::narrow_known_metered`] with a per-read charge
-    /// of the same allowance, consulting the quota at most once every
-    /// [`NARROWING_BATCH`] charged reads and refunding the unspent permits on
-    /// every outcome. This operation polls `cancellation` before any mutation.
+    /// (see [`NarrowingQuota`]): the same closure and decisions as
+    /// [`Self::narrow_known`], with every charged node, parent, producer or
+    /// open-atom read spending one permit, so a refused grant prevents that
+    /// read and the receipt counts the permits spent. The quota is consulted
+    /// at most once every [`NARROWING_BATCH`] charged reads, so its control
+    /// polls are at most that many reads apart; a quota that grants what
+    /// remains refuses a work limit at the same read as per-read charging.
+    /// Unspent permits are refunded on every outcome. This operation polls
+    /// `cancellation` before any mutation.
     /// The preconditions of [`Self::narrow_known`] apply, and a failed
     /// attempt's region and knowledge must be abandoned.
     pub fn narrow_known_reserved(
@@ -1047,6 +967,15 @@ pub struct NarrowingScratch {
 }
 
 impl NarrowingScratch {
+    /// Worklist and pending-mask capacity in bytes; the value's own header is
+    /// counted by its owner.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        (self.learned.capacity() + self.heads.capacity()) as u128 * size_of::<usize>() as u128
+            + self.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
+            + self.pending.capacity() as u128 * size_of::<u64>() as u128
+    }
+
     /// Discard every entry, keeping the capacity, for a narrowing over
     /// `atoms` atoms.
     fn prepare(&mut self, atoms: usize) {

@@ -34,29 +34,9 @@ impl NarrowingQuota for Allowance {
 /// Outcome, recorded work and region of one narrowing.
 type Run = (Result<bool, Stop>, u64, Region);
 
+/// Per-read charging of the same allowance: one permit per reservation.
 fn per_read(theory: &Theory, limit: u64) -> Run {
-    let narrower = Narrower::new(theory);
-    let mut knowledge = narrower.knowledge();
-    let mut region = Region::all_open(theory.atom_count());
-    let mut spent = 0;
-    let attempt = narrower.narrow_known_metered(
-        crate::OriginalSubject::new(theory, None),
-        &mut region,
-        &mut knowledge,
-        &mut crate::NarrowingScratch::default(),
-        &Cancellation::default(),
-        || {
-            if spent == limit {
-                return Err(Stop::WorkLimit);
-            }
-            spent += 1;
-            Ok(())
-        },
-    );
-    let outcome = attempt
-        .result
-        .map(|narrowing| matches!(narrowing, crate::Narrowing::Refuted));
-    (outcome, attempt.statistics.work, region)
+    reserved(theory, limit, 1).0
 }
 
 fn reserved(theory: &Theory, limit: u64, batch: u64) -> (Run, Allowance) {

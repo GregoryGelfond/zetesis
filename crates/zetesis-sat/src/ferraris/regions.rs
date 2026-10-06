@@ -353,6 +353,7 @@ impl RegionSearch {
             &self.restrictions,
             self.filter.as_ref(),
             candidate,
+            &mut self.scratch,
             budget,
             &mut self.statistics.counts,
             timings,
@@ -485,6 +486,7 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     restrictions: &Conditions<R>,
     filter: Option<&crate::region_filter::Filter>,
     candidate: &Interpretation,
+    scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_>,
     counts: &mut RegionCounts,
     timings: &mut Option<crate::SearchPhaseTimings>,
@@ -502,7 +504,6 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
             region.cut(atom);
         }
     }
-    let mut scratch = NarrowingScratch::default();
     for (theory, narrower) in restrictions.iter() {
         let mut knowledge = narrower.knowledge();
         let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
@@ -510,7 +511,7 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
                 zetesis_ferraris::OriginalSubject::new(theory, None),
                 &mut region,
                 &mut knowledge,
-                &mut scratch,
+                scratch,
                 cancellation,
                 quota,
             )
@@ -636,14 +637,15 @@ impl ReductQuery {
     /// Work, decision and control stops end the query without a verdict.
     pub(crate) fn check<Q: Quota>(
         &self,
-        theory: &Theory,
+        subject: FrozenSubject<'_>,
         candidate: &Interpretation,
-        truth: &[bool],
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         statistics: &mut crate::Statistics,
+        scratch: &mut NarrowingScratch,
     ) -> Result<crate::Check, Incomplete> {
-        let (theory, narrower) = self.index.subject(theory)?;
+        let truth = subject.truth();
+        let (theory, narrower) = self.index.subject(subject.theory())?;
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
@@ -652,7 +654,6 @@ impl ReductQuery {
             root.cut(atom);
         }
         let mut traversal = Traversal::with_state(root, Counting::Never, narrower.knowledge());
-        let mut scratch = NarrowingScratch::default();
         loop {
             let before = traversal.statistics();
             let visit = traversal.next(|region, knowledge| {
@@ -661,7 +662,7 @@ impl ReductQuery {
                     FrozenSubject::new(theory, truth),
                     region,
                     knowledge,
-                    &mut scratch,
+                    scratch,
                     budget,
                     &mut statistics.reduct.regions,
                 )

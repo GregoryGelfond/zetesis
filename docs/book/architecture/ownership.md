@@ -147,7 +147,13 @@ preparation, with no global cache or public interchange of raw index handles.
 
 Only immutable indexing is shared. Each candidate region owns its knowledge;
 each reduct traversal starts with private knowledge under its candidate's mask.
-Evaluation workspaces, budget leases and traversal state remain separate.
+A narrowing's worklists belong to whoever walks: the scalar walk, each parallel
+worker and each producer round keep one `NarrowingScratch` for their candidate
+regions; each reduct workspace keeps one for its proper-subset queries, counted
+in its retained bytes; each proposer keeps one for its positive checks. Each
+narrowing empties the scratch it borrows before reading it, and no scratch is
+shared between threads. Evaluation workspaces, budget leases and traversal
+state remain separate.
 Candidate-only restrictions retain their own indexes and never enter the
 original theory or supply its support. Tight and positive certificates retain
 their existing membership procedures and do not execute a general reduct query.

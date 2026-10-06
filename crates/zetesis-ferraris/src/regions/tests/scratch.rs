@@ -31,8 +31,15 @@ fn narrow_open(theory: &Theory, narrower: &Narrower, scratch: &mut NarrowingScra
     }
 }
 
-/// The next region's narrowing with `scratch` equals a fresh scratch's.
+/// Whether a narrowing left entries in the scratch.
+fn holds_entries(scratch: &NarrowingScratch) -> bool {
+    !(scratch.learned.is_empty() && scratch.nodes.is_empty() && scratch.heads.is_empty())
+}
+
+/// The next region's narrowing with `scratch`, which an earlier failure left
+/// holding entries, equals a fresh scratch's.
 fn assert_clean_after(theory: &Theory, narrower: &Narrower, mut scratch: NarrowingScratch) {
+    assert!(holds_entries(&scratch), "the failure left nothing to leak");
     let reused = narrow_open(theory, narrower, &mut scratch);
     let fresh = narrow_open(theory, narrower, &mut NarrowingScratch::default());
     assert_eq!(reused, fresh);

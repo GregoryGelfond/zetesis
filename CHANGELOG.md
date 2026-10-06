@@ -12,8 +12,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `zetesis-ferraris` narrowing accepts a `NarrowingQuota` through
   `narrow_known_reserved` and `narrow_frozen_known_reserved`, which reserve
   work permits in batches of at most `NARROWING_BATCH` and refund the unspent
-  ones. A stop happens at the same read as with per-read charging, and the
-  receipt counts the same work. The per-read `*_metered` entry points remain.
+  ones. Work-limit stops and work receipts are those of per-read charging.
+  Cancellation and deadlines are now observed at each reservation, so at most
+  `NARROWING_BATCH` charged reads apart, where they were observed before every
+  read.
 
 ### Changed
 
@@ -32,18 +34,27 @@ Notable changes by release. Versions follow Semantic Versioning.
   walker passes to every narrowing and reuses, instead of in each region's
   `Knowledge`; every `zetesis-ferraris` narrowing entry point takes it, and
   takes what it reads as an `OriginalSubject` or a `FrozenSubject` in place of
-  the separate theory and producer or truth arguments. A
-  knowledge copy at a split no longer carries worklist headers or capacity, so
-  the producer route's frontier `retained_bytes` and `peak_retained_bytes` are
-  lower by at least 72 bytes per retained knowledge on 64-bit hosts.
-- Region narrowing knowledge chooses its counter width once per value and is
-  16 bytes smaller on 64-bit hosts. The producer route's frontier
-  `retained_bytes` and `peak_retained_bytes` in `--stats` are lower by that
-  much for each retained knowledge; counter payloads are unchanged.
+  the separate theory and producer or truth arguments. A knowledge no longer
+  carries worklist headers or capacity: the producer route's frontier
+  `retained_bytes` and `peak_retained_bytes` fall by 72 bytes per knowledge
+  slot on 64-bit hosts, plus the worklist capacity a moved knowledge carried.
+  Each reduct workspace's retained bytes now include its scratch.
+- Region narrowing knowledge chooses its counter width once per value and its
+  header is 16 bytes smaller on 64-bit hosts. The producer route's frontier
+  `retained_bytes` and `peak_retained_bytes` in `--stats` count each queued
+  region's knowledge vector by slot capacity, so they fall by 16 bytes per slot;
+  counter payloads are unchanged.
 - Both `--stats` views, records (`--json --stats`) and human (`--stats`), are
   rendered whole and written to standard error at once, instead of one write
   per fragment. The report's text and its position among other diagnostics are
   unchanged.
+
+### Removed
+
+- `zetesis-ferraris` `Narrower::narrow_known_metered` and
+  `narrow_frozen_known_metered`, the per-read charge entry points, which no
+  caller uses since narrowing reserves work through `NarrowingQuota`. A per-read
+  charge is a quota granting one permit per reservation.
 
 ### Security
 

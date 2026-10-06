@@ -353,7 +353,7 @@ fn classify(
                     prepared.check_with(candidate, workspace, input.limits, budget, statistics)?
                 }
                 (None, Some(query)) => {
-                    let (truth, _) = workspace.evaluate(
+                    let (truth, scratch) = workspace.evaluate(
                         candidate,
                         input.limits,
                         budget.cancellation,
@@ -364,12 +364,12 @@ fn classify(
                     }
                     increment(&mut statistics.countermodel_queries)?;
                     query.check(
-                        input.theory,
+                        zetesis_ferraris::FrozenSubject::new(input.theory, truth.truth()),
                         candidate,
-                        truth.truth(),
                         input.limits,
                         budget,
                         statistics,
+                        scratch,
                     )?
                 }
                 (None, None) => return Err(Incomplete::InvalidWitness),

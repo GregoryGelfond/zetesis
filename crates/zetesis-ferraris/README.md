@@ -190,19 +190,17 @@ theory and, when the support cut applies, its producers) or a `FrozenSubject`
 (the theory and a candidate's node truth), then the region, its knowledge and
 the walker's `NarrowingScratch`.
 
-`narrow_known_metered` and `narrow_frozen_known_metered` use the same closure with
-a caller-owned quota. They request a permit before each charged read and return
-`NarrowingAttempt { result, statistics }`, preserving the quota's typed refusal
-and the admitted work prefix. Entry control is checked even when no read is
-needed; the quota may additionally poll control at every read. The existing
-`RegionLimits` methods retain their local-ceiling API.
-`narrow_known_reserved` and `narrow_frozen_known_reserved` take a
-`NarrowingQuota` instead: they reserve permits in batches of at most
-`NARROWING_BATCH`, spend one per charged read, and refund the unspent rest when
-narrowing returns. A quota that grants what remains stops narrowing at the same
-read as per-read charging and records the same work. SAT injects its search
-budget into the reserved methods, so parallel workers hold shared permits
-before candidate or frozen-reduct reads, poll control once per batch, and
+The `RegionLimits` methods keep their local-ceiling API.
+`narrow_known_reserved` and `narrow_frozen_known_reserved` take a caller's
+`NarrowingQuota` instead and return `NarrowingAttempt { result, statistics }`
+with the admitted work prefix on every outcome. They reserve permits in batches
+of at most `NARROWING_BATCH`, spend one per charged read, and refund the unspent
+rest when narrowing returns. Entry control is checked even when no read is
+needed, and the quota may poll control at each reservation, so control is seen
+within `NARROWING_BATCH` charged reads. A quota that grants what remains refuses
+a work limit at the same read as per-read charging and records the same work.
+SAT injects its search budget, keeping its typed refusal beside the quota, so
+parallel workers hold shared permits before candidate or frozen-reduct reads and
 retain their receipts after failure.
 Failed knowledge still must be abandoned. The [metering regressions](tests/integration/region_work.rs)
 exercise every prefix of original and frozen narrowing and cancellation.

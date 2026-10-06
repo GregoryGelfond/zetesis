@@ -61,6 +61,8 @@ pub struct ReductQueryStatistics {
 #[derive(Debug, Default)]
 pub struct ReductWorkspace {
     evaluation: EvaluationWorkspace,
+    /// The worklists every region query of this workspace reuses.
+    narrowing: zetesis_ferraris::NarrowingScratch,
     parameters: Vec<Literal>,
     search: search::PreparedWorkspace,
     owner: Weak<super::Data>,
@@ -69,18 +71,25 @@ pub struct ReductWorkspace {
 impl ReductWorkspace {
     /// Evaluate the candidate's original truth into this workspace: the
     /// truth as `evaluate_truth` gives it, under this workspace's ceiling
-    /// and with its evaluation workspace.
+    /// and with its evaluation workspace, lending the region query's
+    /// worklists beside it.
     pub(crate) fn evaluate<'a>(
         &'a mut self,
         candidate: &'a Interpretation,
         limits: Limits,
         cancellation: &Cancellation,
         statistics: &mut Statistics,
-    ) -> Result<(FormulaEvaluation<'a>, u128), Incomplete> {
+    ) -> Result<
+        (
+            FormulaEvaluation<'a>,
+            &'a mut zetesis_ferraris::NarrowingScratch,
+        ),
+        Incomplete,
+    > {
         let max_bytes = limits.max_reduct_bytes;
         bound(self.retained_bytes(), max_bytes)?;
         let other_bytes = self.retained_bytes() - self.evaluation.retained_bytes();
-        evaluate_truth(
+        let (truth, _) = evaluate_truth(
             &mut self.evaluation,
             other_bytes,
             max_bytes,
@@ -88,7 +97,8 @@ impl ReductWorkspace {
             limits,
             cancellation,
             statistics,
-        )
+        )?;
+        Ok((truth, &mut self.narrowing))
     }
 
     pub(crate) fn reserve(
@@ -134,6 +144,7 @@ impl ReductWorkspace {
             + self.evaluation.retained_bytes()
             + self.parameters.capacity() as u128 * size_of::<Literal>() as u128
             + self.search.retained_bytes()
+            + self.narrowing.retained_bytes()
     }
 }
 

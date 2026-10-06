@@ -126,7 +126,7 @@ Under `SearchMethod::Regions`, reachable in the solve session as
 `--search regions`, no clause form of the theory is built. The candidate space is the coverage tree of
 `Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
 root leaves every atom open, each region is narrowed by
-`zetesis_ferraris::Narrower::narrow_known_metered`, from its parent's knowledge, to
+`zetesis_ferraris::Narrower::narrow_known_reserved`, from its parent's knowledge, to
 the fixed point of the theory's readings, with
 the theory's producers for the support cut, and by every candidate-only
 restriction without producers, since a restriction supports nothing. A region
@@ -158,8 +158,9 @@ a region travels with the region: a split copies the knowledge into one
 child and moves it into the other, so a child's narrowing starts from its
 parent's and learns only what the split decided (`FormulaBounds.known_mono`),
 and the regions still share nothing. The worklists belong to the walker
-instead: each walk, worker and producer reuses one `NarrowingScratch` for all
-its narrowings. The reduct query carries its knowledge the same way. Node visits and producer
+instead: each walk, worker and producer reuses one `NarrowingScratch` for its
+candidate regions, each reduct workspace one for its proper-subset queries, and
+each proposer one for its positive checks. The reduct query carries its knowledge the same way. Node visits and producer
 checks acquire search-work permits before execution and each split is charged
 as a decision, against the same cumulative `SearchLimits`. The original and
 frozen narrowing receipts retain admitted work even on a control or quota

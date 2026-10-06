@@ -104,23 +104,23 @@ fn a_shared_index_rejects_an_independent_equal_theory() {
     // must precede every indexed access, independently of equal dimensions.
     assert!(matches!(
         state.query().unwrap().check(
-            &equal,
+            zetesis_ferraris::FrozenSubject::new(&equal, &[]),
             &candidate,
-            &[],
             Limits::default(),
             &mut budget,
-            &mut statistics
+            &mut statistics,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
         ),
         Err(Incomplete::WrongTheory)
     ));
     assert!(matches!(
         state.query().unwrap().check(
-            &theory,
+            zetesis_ferraris::FrozenSubject::new(&theory, &[]),
             &candidate,
-            &[],
             Limits::default(),
             &mut budget,
-            &mut statistics
+            &mut statistics,
+            &mut zetesis_ferraris::NarrowingScratch::default(),
         ),
         Err(Incomplete::WrongTheory)
     ));
@@ -212,3 +212,5 @@ fn cancelled_shared_membership_performs_no_query_work() {
     assert_eq!(budget.statistics, SearchStatistics::default());
     assert_eq!(statistics, Statistics::default());
 }
+
+mod batch_control;
