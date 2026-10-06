@@ -321,15 +321,29 @@ impl RunError {
         for diagnostic in diagnostics {
             // A retained bundle names each file and locates the span by line
             // and column, with the source excerpt, through the canonical view.
+            let location = diagnostic.primary().location;
+            // A span over the whole file stands for the program, not one
+            // statement: it is named as such, with no line and column.
             if let Some(bundle) = bundle
-                && bundle.get(diagnostic.primary().location.source).is_some()
+                && let Some(source) = bundle.get(location.source)
+                && location.span == source.source().span()
+            {
+                write!(
+                    f,
+                    "\n  {}: while admitting the program: {}",
+                    source.path().display(),
+                    diagnostic.message()
+                )?;
+                continue;
+            }
+            if let Some(bundle) = bundle
+                && bundle.get(location.source).is_some()
             {
                 let rendered = zetesis_themelios::base::view::human(&diagnostic, bundle);
                 write!(f, "\n{}", rendered.trim_end_matches('\n'))?;
                 continue;
             }
             // Without retained source text only the byte span is known.
-            let location = diagnostic.primary().location;
             write!(
                 f,
                 "\n  source {}: bytes {}..{}: {}",

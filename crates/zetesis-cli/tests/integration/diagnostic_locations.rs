@@ -46,3 +46,35 @@ fn an_included_file_refusal_names_its_own_line_and_column() {
     assert!(diagnostic.contains("child.lp:3:1"), "{diagnostic}");
     assert!(!diagnostic.contains(": bytes "), "{diagnostic}");
 }
+
+#[test]
+fn a_program_wide_refusal_claims_no_line_or_column() {
+    // A tiny cap on support rounds stops completion of the whole program,
+    // a failure no single statement owns.
+    let directory = tempfile::tempdir().unwrap();
+    fs::write(
+        directory.path().join("entry.lp"),
+        "{ a(1..3) }.\nb(X) :- a(X).\nc(X) :- b(X).\nd :- #count{ X : c(X) } >= 2.\n",
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_zetesis"))
+        .args([
+            "--backend",
+            "cpu",
+            "--color",
+            "never",
+            "--max-support-rounds",
+            "1",
+        ])
+        .arg(directory.path().join("entry.lp"))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let diagnostic = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{diagnostic}");
+    assert!(
+        diagnostic.contains("entry.lp: while admitting the program"),
+        "{diagnostic}"
+    );
+    assert!(!diagnostic.contains("entry.lp:1:1"), "{diagnostic}");
+}
