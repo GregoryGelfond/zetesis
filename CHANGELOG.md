@@ -19,6 +19,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Source-admission refusals located in an input file, such as resource limits
+  and unsafe variables, name the file, line and column and show the source
+  excerpt, as syntax errors do, instead of a byte range.
 - `--json` output of runs whose answers each bring their own atom owner, such
   as answers with reconstructed terminal definitions, no longer slows
   quadratically with the number of answers.

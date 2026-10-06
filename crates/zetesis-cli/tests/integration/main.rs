@@ -21,6 +21,7 @@ mod correctness_answers;
 mod count_objective_sessions;
 mod deadline;
 mod diagnostic_control;
+mod diagnostic_locations;
 mod driver;
 mod extended_clingo;
 mod extremal_terms;
