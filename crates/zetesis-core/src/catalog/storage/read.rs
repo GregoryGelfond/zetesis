@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use super::segments::{self, Atom, Counts, Predicate, RowSegment, Term, VocabularySegment};
 use super::{
-    AtomId, FrozenVocabulary, Owner, PredicateId, Snapshot, Store, TermId, TextId, locate,
+    AtomId, Closed, FrozenVocabulary, Owner, PredicateId, Snapshot, Store, TermId, TextId, locate,
 };
 
 #[derive(Clone, Debug)]
@@ -26,6 +26,8 @@ pub(crate) enum Read<'a> {
     Snapshot(&'a Snapshot),
     Writer(&'a Store),
     Frozen(&'a FrozenVocabulary),
+    /// A closed original writer: its own scopes and every canonical row.
+    Closed(&'a Closed),
 }
 impl<'a> From<&'a Snapshot> for Read<'a> {
     fn from(snapshot: &'a Snapshot) -> Self {
@@ -35,6 +37,11 @@ impl<'a> From<&'a Snapshot> for Read<'a> {
 impl<'a> From<&'a Store> for Read<'a> {
     fn from(store: &'a Store) -> Self {
         Self::Writer(store)
+    }
+}
+impl<'a> From<&'a Closed> for Read<'a> {
+    fn from(closed: &'a Closed) -> Self {
+        Self::Closed(closed)
     }
 }
 impl<'a> From<&'a FrozenVocabulary> for Read<'a> {
@@ -49,6 +56,7 @@ impl<'a> Read<'a> {
             Self::Snapshot(snapshot) => &snapshot.data.vocabulary.owner,
             Self::Writer(store) => store.vocabulary.owner(),
             Self::Frozen(base) => &base.data.owner,
+            Self::Closed(closed) => &closed.vocabulary.data.owner,
         }
     }
     fn atom_owner(self) -> Option<&'a Arc<Owner>> {
@@ -56,6 +64,7 @@ impl<'a> Read<'a> {
             Self::Snapshot(snapshot) => Some(&snapshot.atom_owner),
             Self::Writer(store) => Some(&store.atom_owner),
             Self::Frozen(_) => None,
+            Self::Closed(closed) => Some(closed.rows.source_owner()),
         }
     }
     pub(crate) fn atom_scope(self) -> Option<AtomScope> {
@@ -96,6 +105,10 @@ impl<'a> Read<'a> {
             },
             Self::Writer(store) => store.counts(),
             Self::Frozen(base) => base.data.counts,
+            Self::Closed(closed) => Counts {
+                atoms: closed.rows.payload.atoms,
+                ..closed.vocabulary.data.counts
+            },
         }
     }
     // Segments are contiguous from zero and the counts end with the last one
@@ -132,6 +145,9 @@ impl<'a> Read<'a> {
             }),
             Self::Writer(store) => store.vocabulary_segment(id, start),
             Self::Frozen(base) => locate(&base.data.segments, id, |segment| start(segment.start)),
+            Self::Closed(closed) => locate(&closed.vocabulary.data.segments, id, |segment| {
+                start(segment.start)
+            }),
         }
     }
     fn row_segment(self, id: usize) -> Option<&'a RowSegment> {
@@ -139,6 +155,9 @@ impl<'a> Read<'a> {
             Self::Snapshot(snapshot) => snapshot.rows().segment(id),
             Self::Writer(store) => store.row_segment(id),
             Self::Frozen(_) => None,
+            Self::Closed(closed) => {
+                locate(&closed.rows.payload.segments, id, |segment| segment.start)
+            }
         }
     }
     pub(crate) fn text(self, id: TextId) -> &'a str {

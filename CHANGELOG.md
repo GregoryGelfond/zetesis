@@ -9,6 +9,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `AtomCatalog::same_atom_owner` says whether two catalogs' atoms share one
   atom owner, as one writer's published selections do; `same_owner` remains
   the catalog-allocation identity.
+- `ClosedCatalog::read` borrows a closed catalog as its writer read it at the
+  close: the same atom and vocabulary scopes and every canonical row, so that
+  writer's relation memberships bind to it and another writer's are refused.
+  `vocabulary_read` is unchanged.
 - `zetesis-ferraris` narrowing accepts a `NarrowingQuota` through
   `narrow_known_reserved` and `narrow_frozen_known_reserved`, which reserve
   work permits in batches of at most `NARROWING_BATCH` and refund the unspent

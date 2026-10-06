@@ -72,6 +72,14 @@ impl ClosedCatalog {
     pub fn vocabulary_read(&self) -> CatalogRead<'_> {
         CatalogRead(self.storage.vocabulary().into())
     }
+    /// Borrow the original writer's read at its close: its atom and vocabulary
+    /// scopes and every canonical row at its coordinate, including rows never
+    /// published. That writer's memberships bind to it; another writer's are
+    /// refused. Like the writer's own read, it grants no extensional truth.
+    #[must_use]
+    pub fn read(&self) -> CatalogRead<'_> {
+        CatalogRead(storage::Read::from(&self.storage))
+    }
     /// Additional named metadata retained by one earlier publication of the
     /// original writer: its catalog/map and independent prefix directories.
     /// Shared payload and indexes are excluded. Authenticate in constant time
