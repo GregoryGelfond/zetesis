@@ -9,7 +9,7 @@ use std::sync::Arc;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, HybridFormula};
+use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, StreamedCore};
 
 use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::Execution;
@@ -40,8 +40,17 @@ pub struct HybridExecutionStatistics {
 #[cfg(test)]
 mod tests;
 
+/// A streamed core and the subject its outcomes report: the hybrid owner, or
+/// the terminal owner whose base the core is.
+pub(crate) struct HybridInput<'a> {
+    pub(crate) core: &'a StreamedCore,
+    pub(crate) subject: crate::Subject,
+}
+
 pub(crate) struct HybridSession<'a> {
-    owner: &'a HybridFormula,
+    /// The subject an outcome reports: the hybrid owner, or the terminal owner
+    /// whose base this core is.
+    subject: crate::Subject,
     core: FormulaSession<'a, Execution>,
     core_config: SolveConfig,
     checker: ConstraintChecker<'a>,
@@ -53,7 +62,7 @@ pub(crate) struct HybridSession<'a> {
 
 impl<'a> HybridSession<'a> {
     pub(crate) fn new(
-        owner: &'a HybridFormula,
+        input: HybridInput<'a>,
         config: &SolveConfig,
         resources: &crate::ExecutionResources,
         observations: &mut impl ExecutionSink,
@@ -61,6 +70,10 @@ impl<'a> HybridSession<'a> {
         phases: &Recorder,
         selection: AnswerSelection,
     ) -> Result<Self, SolveError> {
+        let HybridInput {
+            core: owner,
+            subject,
+        } = input;
         phases.lazy_grounding();
         observations.record(crate::ExecutionObservation::HybridGrounding {
             requested: config.grounder,
@@ -88,7 +101,7 @@ impl<'a> HybridSession<'a> {
             key_analysis: owner.key_analysis(),
             objectives: owner.objectives(),
             certificate_order: crate::countermodel::certificate_order(
-                owner.source_analysis(),
+                owner.analysis(),
                 owner.analysis_basis(),
             ),
         };
@@ -112,7 +125,7 @@ impl<'a> HybridSession<'a> {
                 regions
             });
         Ok(Self {
-            owner,
+            subject,
             core,
             core_config,
             checker,
@@ -176,7 +189,7 @@ impl<'a> HybridSession<'a> {
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
         let mut outcome = self.core.outcome(phases);
-        outcome.subject = Some(crate::Subject::Hybrid(self.owner.clone()));
+        outcome.subject = Some(self.subject.clone());
         outcome.verified = self.statistics.accepted;
         // Core exhaustion cannot establish completion of an unfinished source check.
         outcome.search_state = None;

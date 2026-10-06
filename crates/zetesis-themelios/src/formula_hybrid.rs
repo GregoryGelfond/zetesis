@@ -53,10 +53,31 @@ pub(crate) struct Constraints {
     pub(crate) location: ProgramSite,
 }
 
-struct Admitted {
+struct Core {
     compiled: Compiled,
     constraints: Option<Constraints>,
-    source: Owner,
+    source: Arc<Owner>,
+}
+
+/// A materialized producer core with the integrity constraints streamed over it:
+/// its stable models are proposals, and only those satisfying the streamed
+/// constraints are answer sets of the program this core was admitted for (a
+/// hybrid owner's whole program, or a terminal owner's base). Checkers and
+/// candidate-region filters run over it. Cloning shares all retained storage.
+#[derive(Clone)]
+pub struct StreamedCore(Arc<Core>);
+impl fmt::Debug for StreamedCore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StreamedCore")
+            .field("core_theory", self.core_theory())
+            .field("streamed_templates", &self.streamed_templates())
+            .field("streamed_instances", &self.streamed_instances())
+            .finish_non_exhaustive()
+    }
+}
+
+struct Admitted {
+    core: StreamedCore,
     metadata: SourceMetadata,
 }
 
@@ -90,11 +111,15 @@ impl HybridFormula {
         // With no eligible constraint the support was released at admission,
         // not closed; the core alone remains.
         Self(Arc::new(Admitted {
-            compiled,
-            constraints,
-            source,
+            core: StreamedCore::new(compiled, constraints, Arc::new(source)),
             metadata,
         }))
+    }
+
+    /// The streamed core: the producer core and the constraints checked over it.
+    #[must_use]
+    pub fn core(&self) -> &StreamedCore {
+        &self.0.core
     }
 
     /// Exact original admitted-owner identity; clones share it.
@@ -107,31 +132,31 @@ impl HybridFormula {
     /// This is the core theory, not the complete original program.
     #[must_use]
     pub fn core_theory(&self) -> &Theory {
-        &self.0.compiled.theory
+        &self.0.core.0.compiled.theory
     }
 
     /// Shared dense atom meanings, including streamed constraint occurrences.
     #[must_use]
     pub fn atom_catalog(&self) -> &AtomCatalog {
-        &self.0.compiled.atoms
+        &self.0.core.0.compiled.atoms
     }
 
     /// Original canonical program before normalization or analysis projection.
     #[must_use]
     pub fn original_program(&self) -> &Program {
-        self.0.source.program()
+        self.0.core.0.source.program()
     }
 
     /// Original single source, absent for a bundle or logical program input.
     #[must_use]
     pub fn source(&self) -> Option<&Source> {
-        self.0.source.source()
+        self.0.core.0.source.source()
     }
 
     /// Complete original include bundle, absent for single source or logical input.
     #[must_use]
     pub fn bundle(&self) -> Option<&SourceBundle> {
-        self.0.source.source_bundle()
+        self.0.core.0.source.source_bundle()
     }
 
     /// Original declarations and display policy.
@@ -143,62 +168,170 @@ impl HybridFormula {
     /// Complete original projection domain, independent of candidate truth.
     #[must_use]
     pub fn projection(&self) -> &crate::PreparedProjection {
-        &self.0.compiled.projection
+        &self.0.core.0.compiled.projection
     }
 
     /// Original source-family warnings, completed before this owner is published.
     #[must_use]
     pub fn warnings(&self) -> &[crate::FormulaWarning] {
-        &self.0.compiled.warnings
+        &self.0.core.0.compiled.warnings
     }
 
     /// Render warnings against retained source bytes or an include bundle.
     /// Logical input instead names the original statement index when available.
     #[must_use]
     pub fn warning_view(&self) -> impl fmt::Display + '_ {
-        self.0.source.warning_view(self.warnings())
+        self.0.core.0.source.warning_view(self.warnings())
     }
 
     /// Empty objective program; authored objective declarations are refused.
     #[must_use]
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
-        &self.0.compiled.objectives
+        &self.0.core.0.compiled.objectives
     }
 
     /// Analysis of the original source projection, not a certificate for the core.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.0.compiled.analysis
+        &self.0.core.0.compiled.analysis
     }
 
     /// Source program to which the retained analysis applies.
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.0.compiled.analyzed
+        &self.0.core.0.compiled.analyzed
     }
 
     /// Whether the analyzed source is exact or a dependency projection.
     #[must_use]
     pub fn analysis_basis(&self) -> crate::AnalysisBasis {
-        self.0.compiled.analysis_basis
+        self.0.core.0.compiled.analysis_basis
     }
 
     /// Applicable key rewrites made during original source preparation.
     #[must_use]
     pub fn keyed_constraints(&self) -> usize {
-        self.0.compiled.keyed_constraints
+        self.0.core.0.compiled.keyed_constraints
     }
 
     /// Completion of the bounded original key analysis.
     #[must_use]
     pub fn key_analysis(&self) -> crate::KeyAnalysis {
-        self.0.compiled.key_analysis
+        self.0.core.0.compiled.key_analysis
     }
 
     /// Source preparation and admission charges, excluding later checks.
     #[must_use]
     pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
-        &self.0.compiled.expansion
+        &self.0.core.0.compiled.expansion
+    }
+
+    /// Retained lowered constraint templates. Pool alternatives count separately.
+    #[must_use]
+    pub fn streamed_templates(&self) -> usize {
+        self.0.core.streamed_templates()
+    }
+
+    /// Scalar-selected instances visited during admission without retaining DAGs.
+    #[must_use]
+    pub fn streamed_instances(&self) -> u64 {
+        self.0.core.streamed_instances()
+    }
+
+    /// As [`StreamedCore::checker`].
+    ///
+    /// # Errors
+    /// As [`StreamedCore::checker`].
+    pub fn checker(
+        &self,
+        limits: ConstraintCheckLimits,
+    ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
+        self.0.core.checker(limits)
+    }
+
+    /// As [`StreamedCore::checker_with_allowance`].
+    ///
+    /// # Errors
+    /// As [`StreamedCore::checker_with_allowance`].
+    pub fn checker_with_allowance(
+        &self,
+        allowance: &ConstraintAllowance,
+        cancellation: &Cancellation,
+    ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
+        self.0.core.checker_with_allowance(allowance, cancellation)
+    }
+}
+
+fn scalar_budget(limits: ConstraintCheckLimits) -> Budget {
+    Budget::new(
+        ExpansionLimits {
+            max_scalar_bytes: limits.max_scalar_bytes,
+            ..ExpansionLimits::default()
+        },
+        0,
+    )
+}
+
+impl StreamedCore {
+    pub(crate) fn new(
+        compiled: Compiled,
+        constraints: Option<Constraints>,
+        source: Arc<Owner>,
+    ) -> Self {
+        Self(Arc::new(Core {
+            compiled,
+            constraints,
+            source,
+        }))
+    }
+
+    /// Exact core identity; clones share it.
+    #[must_use]
+    pub fn same_instance(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
+    /// Retained producers, ineligible constraints, coherence and support guards.
+    #[must_use]
+    pub fn core_theory(&self) -> &Theory {
+        &self.0.compiled.theory
+    }
+
+    /// Shared dense atom meanings, including streamed constraint occurrences.
+    #[must_use]
+    pub fn atom_catalog(&self) -> &AtomCatalog {
+        &self.0.compiled.atoms
+    }
+
+    /// Objectives of the admitted program; none under the hybrid schedule.
+    #[must_use]
+    pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
+        &self.0.compiled.objectives
+    }
+
+    /// Analysis of the program this core was admitted for.
+    #[must_use]
+    pub fn analysis(&self) -> &themelios_analysis::Analysis {
+        &self.0.compiled.analysis
+    }
+
+    /// Semantic status of that analysis input.
+    #[must_use]
+    pub fn analysis_basis(&self) -> crate::AnalysisBasis {
+        self.0.compiled.analysis_basis
+    }
+
+    /// Written constraints over a keyed value asked as the one atom their key
+    /// admits during preparation.
+    #[must_use]
+    pub fn keyed_constraints(&self) -> usize {
+        self.0.compiled.keyed_constraints
+    }
+
+    /// How the key analysis that asked them ended.
+    #[must_use]
+    pub fn key_analysis(&self) -> crate::KeyAnalysis {
+        self.0.compiled.key_analysis
     }
 
     /// Retained lowered constraint templates. Pool alternatives count separately.
@@ -303,16 +436,6 @@ impl HybridFormula {
             accounting: counters.into_accounting(),
         })
     }
-}
-
-fn scalar_budget(limits: ConstraintCheckLimits) -> Budget {
-    Budget::new(
-        ExpansionLimits {
-            max_scalar_bytes: limits.max_scalar_bytes,
-            ..ExpansionLimits::default()
-        },
-        0,
-    )
 }
 
 /// Cumulative allowances for one checker, independent of source admission and
@@ -479,7 +602,7 @@ impl std::error::Error for ConstraintCheckFailure {
 /// The checker can move between threads. Grounding observation and each check's
 /// runtime control remain local to the synchronous operation that uses them.
 pub struct ConstraintChecker<'a> {
-    owner: &'a HybridFormula,
+    owner: &'a StreamedCore,
     prepared: Option<PreparedConstraints<'a>>,
     budget: Budget,
     accounting: Accounting,
@@ -922,7 +1045,7 @@ mod tests {
             // The complete source has nonempty support. Absence proves that
             // neither its catalog nor an empty plan's spare capacity is retained.
             assert!(!owner.atom_catalog().atoms().is_empty());
-            assert!(owner.0.constraints.is_none());
+            assert!(owner.0.core.0.constraints.is_none());
         }
     }
 }

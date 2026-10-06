@@ -147,6 +147,7 @@ pub use constraint_allowance::ConstraintAllowance;
 pub use formula_hybrid::{
     ConstraintCheckCause, ConstraintCheckFailure, ConstraintCheckLimits, ConstraintCheckStatistics,
     ConstraintChecker, ConstraintRegionVerdict, ConstraintVerdict, HybridFeature, HybridFormula,
+    StreamedCore,
 };
 mod formula_count_plan;
 pub use formula_count_plan::{

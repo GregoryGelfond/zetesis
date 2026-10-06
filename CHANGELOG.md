@@ -6,6 +6,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- `StreamedCore`, reached through `HybridFormula::core`, is the producer core
+  with the integrity constraints streamed over it: its theory, atoms, analysis
+  and constraint checkers. A hybrid owner's checkers and candidate-region filter
+  run over it, so the same core can serve a terminal owner's base.
 - `AtomCatalog::same_atom_owner` says whether two catalogs' atoms share one
   atom owner, as one writer's published selections do; `same_owner` remains
   the catalog-allocation identity.

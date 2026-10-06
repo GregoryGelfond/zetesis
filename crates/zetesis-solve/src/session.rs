@@ -759,7 +759,10 @@ impl<'a> Session<'a> {
                 selection,
             )?)),
             Prepared::Hybrid(owner) => State::Hybrid(Box::new(HybridSession::new(
-                owner,
+                crate::hybrid_session::HybridInput {
+                    core: owner.core(),
+                    subject: crate::Subject::Hybrid(owner.clone()),
+                },
                 &config,
                 resources,
                 observations,
