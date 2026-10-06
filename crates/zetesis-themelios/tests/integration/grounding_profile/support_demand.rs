@@ -52,10 +52,15 @@ fn every_kind_of_join_finds_its_posting() {
         "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nn(X) :- a(X), #count{ Y : b(X, Y) } >= 1.\n",
         // A choice element condition.
         "{ a(1..6) }.\n{ b(1..6, 1..2) }.\n{ c(X, Y) : b(X, Y) } :- a(X).\n",
-        // A conditional literal.
-        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\n{ e(1..2) }.\nall(X) :- a(X), b(X, Y) : e(Y).\n",
-        // A default-negated atom.
-        "{ a(1..6) }.\n{ b(1..6) }.\np(X) :- a(X), not b(X).\n",
+        // A conditional literal, its consequent and its condition each
+        // joined on the outer X.
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\n{ e(1..6, 1..2) }.\nall(X) :- a(X), b(X, Y) : e(X, Y).\n",
+        // A default-negated witness: some b(X, f(_)) must not hold.
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\np(X) :- a(X), not b(X, f(_)).\n",
+        // A projected rule body.
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X), b(X, Y).\n#project c/1.\n",
+        // A constraint whose comparison reads a joined column (totality).
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\n:- a(X), b(X, Y), Y > X + 8.\n",
         // An optimization element.
         "{ a(1..6) }.\n{ b(1..6, 1..2) }.\n#minimize { Y, X : a(X), b(X, Y) }.\n",
         // A constant argument.
@@ -64,4 +69,26 @@ fn every_kind_of_join_finds_its_posting() {
         let (_, unindexed) = receipts(source);
         assert_eq!(unindexed, 0, "{source}");
     }
+}
+
+#[test]
+fn a_streamed_constraint_finds_its_posting() {
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, prepare_formula};
+    let observer = Observer::default();
+    prepare_formula(
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2).\n".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect("prepared")
+    .ground_hybrid_with_observer(Some(&observer))
+    .expect("admitted");
+    let unindexed: u64 = observer
+        .records
+        .borrow()
+        .iter()
+        .filter_map(|record| record.work.unindexed_probes)
+        .sum();
+    assert_eq!(unindexed, 0);
 }

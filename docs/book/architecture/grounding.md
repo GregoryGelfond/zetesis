@@ -952,10 +952,15 @@ retained row. Static sorted dictionaries retain their own immutable lookup.
 
 Support keeps posting lists only for the columns a join can bind: a column
 holding a constant, or a variable that occurs again in the same rule, body or
-head, in some join occurrence of its predicate. A predicate no join reads, such
-as a terminal definition under eager grounding, keeps none, and neither does a
-column holding a variable that occurs once. The demand is computed from the
-compiled rules before support grows. A column without postings is absent, not
+head (factorization binds head variables before it probes the body), in some
+join occurrence of its predicate. The rule is applied exactly to rules with an
+ordinary head and a flat body of atoms, comparisons and bindings; a choice or
+conditional head, a negated atom, a projection and every nested frame index
+every column they name, a conservative superset. A predicate no join reads,
+such as a terminal definition under eager grounding, keeps none, and neither
+does a column of a flat rule holding a variable that occurs once. The demand is
+computed from the compiled rules before support grows, and its storage counts
+toward the support byte ceiling. A column without postings is absent, not
 empty: a probe still resolves its equality and narrows by its other columns, and
 a totality certificate declines it as a domain of distinct values.
 

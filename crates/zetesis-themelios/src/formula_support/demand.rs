@@ -16,6 +16,7 @@
 //! costs memory, while one left unindexed only costs the probe its posting.
 
 use std::collections::{BTreeMap, HashMap};
+use std::mem::size_of;
 
 use zetesis_core::catalog::PredicateRef;
 use zetesis_core::{Predicate, TemplateComponentsRef, TemplateTerm};
@@ -33,6 +34,17 @@ pub(crate) struct Demand {
 }
 
 impl Demand {
+    /// Named capacity: one entry per predicate a join names, with its owned
+    /// signature and column flags. Hash-table control bytes are excluded.
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.columns.capacity() * size_of::<(Predicate, Vec<bool>)>()
+            + self
+                .columns
+                .iter()
+                .map(|(predicate, columns)| predicate.name().len() + columns.capacity())
+                .sum::<usize>()
+    }
+
     /// The demanded columns of `predicate`; `None` when no join names it.
     pub(crate) fn columns(
         &self,

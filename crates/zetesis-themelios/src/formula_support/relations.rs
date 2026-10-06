@@ -112,6 +112,13 @@ impl SupportCatalog {
             .and_then(|bytes| bytes.checked_add(self.component_bytes().ok()?))
             .and_then(|bytes| bytes.checked_add(self.pending.capacity() * size_of::<usize>()))
             .and_then(|bytes| bytes.checked_add(self.supported.capacity() * size_of::<u64>()))
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    self.demand
+                        .as_ref()
+                        .map_or(0, super::demand::Demand::retained_bytes),
+                )
+            })
             .ok_or_else(|| failure(Failure::Overflow, location))
     }
 

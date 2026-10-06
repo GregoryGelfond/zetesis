@@ -27,8 +27,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   cumulative allowance, so a program with many answers is no longer stopped by
   the grounding work ceiling. `ReconstructionStatistics` adds the latest call's
   `latest_work` and `latest_substitutions`.
-- Formula support keeps posting lists only for the columns a join can bind. A
-  predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
+- Formula support keeps posting lists only for the columns a join can bind
+  (exactly for rules with an ordinary head and a flat body, conservatively for
+  other constructs). A predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
   and support work fall; a program such as eager Mastermind 6×8, whose unread
   `next_guess/6` alone needed 1.57 million entries, no longer stops there.
   Grounding observations report `unindexed_probes`, which is zero whenever
