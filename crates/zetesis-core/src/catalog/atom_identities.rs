@@ -101,6 +101,13 @@ impl<T: Copy> AtomIdentityMap<T> {
         Ok(true)
     }
 
+    /// Drop every owner that only this map still holds: no catalog, writer or
+    /// store refers to it, so none of its atoms can be presented again. One
+    /// scan of the owners; entries of held owners are untouched.
+    pub fn retain_held(&mut self) {
+        self.owners.retain(|owner| owner.scope.held_elsewhere());
+    }
+
     /// Keep only the entries whose value satisfies `keep`.
     pub fn retain(&mut self, mut keep: impl FnMut(T) -> bool) {
         for owner in &mut self.owners {

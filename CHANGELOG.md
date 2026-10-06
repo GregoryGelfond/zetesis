@@ -9,6 +9,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `AtomCatalog::same_atom_owner` says whether two catalogs' atoms share one
   atom owner, as one writer's published selections do; `same_owner` remains
   the catalog-allocation identity.
+- `AtomIdentityMap::retain_held` drops the owners that only the map still
+  holds, whose atoms can no longer be presented.
 - `ClosedCatalog::read` borrows a closed catalog as its writer read it at the
   close: the same atom and vocabulary scopes and every canonical row, so that
   writer's relation memberships bind to it and another writer's are refused.
@@ -50,7 +52,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   excerpt, as syntax errors do, instead of a byte range.
 - `--json` output of runs whose answers each bring their own atom owner, such
   as answers with reconstructed terminal definitions, no longer slows
-  quadratically with the number of answers.
+  quadratically with the number of answers. The document's atom table copies
+  each atom it spells once instead of retaining the answer that spelled it, so
+  such runs no longer keep every answer alive until the document ends; its
+  identity cache keeps every atom owner something else still holds, so
+  interleaved closure workers keep reusing identities across records.
 - `AtomTable::index` is a structural lookup and no longer records atom
   identities; the record encoder's own lookup keeps the identity cache.
 - Region narrowing queues an atom's support recheck at most once until it

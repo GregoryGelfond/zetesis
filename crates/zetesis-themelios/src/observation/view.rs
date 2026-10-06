@@ -295,7 +295,7 @@ impl ModelView<'_> {
         // lookup is one hash probe; a refused record withdraws its entries.
         let mut added = Vec::new();
         let mut deferred = false;
-        table.begin_record(self.model.catalog());
+        table.begin_record();
         let result = self.encode_record_into(&mut out, table, &mut added, &mut deferred);
         let statistics = super::json::Statistics {
             work: out.work,
@@ -340,7 +340,7 @@ impl ModelView<'_> {
             table.defer(self.model)?;
             *deferred = true;
         } else {
-            for (position, atom) in self.model.atoms().iter().enumerate() {
+            for atom in self.model.atoms() {
                 let index = if let Some(index) = table.find(atom)? {
                     index
                 } else {
@@ -349,7 +349,7 @@ impl ModelView<'_> {
                     }
                     out.atom(atom)?;
                     added.try_reserve(1).map_err(|_| ViewError::Allocation)?;
-                    let index = table.enter(self.model, position)?;
+                    let index = table.enter(atom)?;
                     added.push(atom);
                     index
                 };

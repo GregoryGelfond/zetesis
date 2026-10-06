@@ -226,14 +226,15 @@ flush, and a successful later flush cannot clear an earlier publication failure.
 The human renderer preflights one complete record under its byte ceiling. The
 JSON renderer additionally retains a bounded document atom table; each invocation
 starts fresh indices. Structural equality decides each atom's index, so equal
-atoms of independent owners share one; once a canonical atom has been found, the
-table answers its later occurrences in consecutive records of the same atom owner
-by owner-scoped identity instead of hashing the atom's structure. A record of
-another owner starts the identity cache afresh, so its cost does not grow with
-the number of answers when each answer brings its own owner, as answers with
-reconstructed terminal definitions do. Consecutive answers one writer publishes
-as separate catalogs, such as one closure worker's, keep the identities; answers
-of several closure workers interleave, and each change of worker starts afresh. The public
+atoms of independent owners share one. The table copies each atom it spells once
+and retains no answer. Once a canonical atom has been found, the table answers
+its later occurrences by owner-scoped identity instead of hashing the atom's
+structure, for as long as something outside the table still holds that atom's
+owner: each record begins by forgetting the owners nothing else holds, whose
+atoms can no longer be presented. Interleaved closure workers therefore keep
+their identities across records, while answers that each bring their own owner,
+as answers with reconstructed terminal definitions do, leave the cache once they
+are released, so its cost does not grow with the number of answers. The public
 `AtomTable::index` lookup is structural and records no identity. A refused record withdraws
 the atoms it entered together with their identities. Custom renderers own their encoding
 limits and any copies they retain. The controller retains no complete family

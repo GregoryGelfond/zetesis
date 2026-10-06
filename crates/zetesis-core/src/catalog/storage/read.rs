@@ -10,6 +10,13 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub(crate) struct AtomScope(Arc<Owner>);
+impl AtomScope {
+    /// Whether anything besides this handle refers to the owner. A count of
+    /// one cannot rise again: a handle is made only by cloning another.
+    pub(crate) fn held_elsewhere(&self) -> bool {
+        Arc::strong_count(&self.0) > 1
+    }
+}
 #[derive(Clone, Debug)]
 pub(crate) struct VocabularyScope(Arc<Owner>);
 impl VocabularyScope {

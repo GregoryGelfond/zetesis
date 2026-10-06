@@ -96,3 +96,23 @@ fn retained_bytes_grow_with_entries() {
             >= empty + size_of::<Scoped<usize>>() + 2 * size_of::<(storage::AtomId, usize)>()
     );
 }
+
+#[test]
+fn retain_held_drops_an_owner_nothing_else_holds() {
+    let mut map = AtomIdentityMap::default();
+    {
+        let dropped = catalog(&["p"]);
+        map.insert(dropped.atoms().at(0).unwrap(), 1).unwrap();
+    }
+    map.retain_held();
+    assert!(map.is_empty());
+}
+
+#[test]
+fn retain_held_keeps_an_owner_a_catalog_still_holds() {
+    let held = catalog(&["p"]);
+    let mut map = AtomIdentityMap::default();
+    map.insert(held.atoms().at(0).unwrap(), 1).unwrap();
+    map.retain_held();
+    assert_eq!(map.get(held.atoms().at(0).unwrap()), Some(1));
+}
