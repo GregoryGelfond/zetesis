@@ -230,11 +230,14 @@ atoms of independent owners share one. The table copies each atom it spells once
 and retains no answer. Once a canonical atom has been found, the table answers
 its later occurrences by owner-scoped identity instead of hashing the atom's
 structure, for as long as something outside the table still holds that atom's
-owner: each record begins by forgetting the owners nothing else holds, whose
-atoms can no longer be presented. Interleaved closure workers therefore keep
-their identities across records, while answers that each bring their own owner,
-as answers with reconstructed terminal definitions do, leave the cache once they
-are released, so its cost does not grow with the number of answers. The public
+owner. Owners are found by hashing their identity, so a lookup's cost does not
+grow with the number of owners; once the cached owners have doubled since the
+last prune, a record begins by forgetting the owners nothing else holds, whose
+atoms can no longer be presented — amortized constant work per record, whether
+or not the consumer keeps its answers. Interleaved closure workers therefore
+keep their identities across records, and answers that each bring their own
+owner, as answers with reconstructed terminal definitions do, leave the cache
+once they are released. The public
 `AtomTable::index` lookup is structural and records no identity. A refused record withdraws
 the atoms it entered together with their identities. Custom renderers own their encoding
 limits and any copies they retain. The controller retains no complete family

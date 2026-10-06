@@ -51,6 +51,13 @@ pub struct AtomTable {
     /// terminal definitions, keep only the owners of answers still alive, so
     /// the map's linear owner scan does not grow with the number of records.
     identities: AtomIdentityMap<usize>,
+    /// Owners the cache held after its last prune. A prune walks every owner,
+    /// so it runs only once the owners have doubled since: amortized constant
+    /// work per record, whoever holds the answers.
+    held: usize,
+    /// Prunes run, for the amortization tests.
+    #[cfg(test)]
+    prunes: usize,
     /// The first record's model, whose atoms hold the indices `0..len` in
     /// model order and are indexed only when a second record asks.
     deferred: Option<Model>,
@@ -102,6 +109,9 @@ impl AtomTable {
         Self {
             indices: HashMap::default(),
             identities: AtomIdentityMap::default(),
+            held: 0,
+            #[cfg(test)]
+            prunes: 0,
             deferred: None,
             max_atoms,
         }
@@ -174,10 +184,18 @@ impl AtomTable {
         }
         Ok(())
     }
-    /// Start encoding a record: forget the identities of owners nothing
-    /// outside the cache holds any longer.
+    /// Start encoding a record. Once the cache's owners have doubled since
+    /// its last prune, forget the identities of owners nothing outside the
+    /// cache holds any longer, before this record's atoms are looked up.
     pub(super) fn begin_record(&mut self) {
-        self.identities.retain_held();
+        if self.identities.owners() > 2 * self.held.max(1) {
+            self.identities.retain_held();
+            self.held = self.identities.owners();
+            #[cfg(test)]
+            {
+                self.prunes += 1;
+            }
+        }
     }
     /// Enter `atom`, of the record begun last, which the document is about to
     /// spell, at the next index.
@@ -350,16 +368,40 @@ mod tests {
             .collect()
     }
 
+    /// A live writer holding one atom, as a closure worker's workspace does.
+    fn writer(number: i32) -> AtomInterner {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let mut owner = AtomInterner::new();
+        owner
+            .entry_atom_with(&atom("p", Sign::Positive, &[number]), limits, || {
+                Ok::<_, Infallible>(())
+            })
+            .unwrap()
+            .insert_with(limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        owner
+    }
+
+    fn selection(owner: &mut AtomInterner) -> Model {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let catalog = owner
+            .publish_selection_with(&[0], limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        Model::from_positions(&catalog, [0]).unwrap()
+    }
+
     #[test]
-    fn interleaved_live_owners_keep_their_identities() {
-        // Two workers' catalogs stay alive while their records alternate.
-        let left = AtomCatalog::new(vec![atom("p", Sign::Positive, &[1])]).unwrap();
-        let right = AtomCatalog::new(vec![atom("p", Sign::Positive, &[2])]).unwrap();
+    fn interleaved_live_writers_keep_their_identities() {
+        // Two workers' writers stay alive while their records alternate; each
+        // record's model is its own selection, dropped once encoded.
+        let mut left = writer(1);
+        let mut right = writer(2);
         let mut table = super::AtomTable::new(16);
-        for catalog in [&left, &right, &left, &right] {
-            record(&mut table, &Model::from_positions(catalog, [0]).unwrap());
+        for _ in 0..4 {
+            record(&mut table, &selection(&mut left));
+            record(&mut table, &selection(&mut right));
         }
-        let model = Model::from_positions(&left, [0]).unwrap();
+        let model = selection(&mut left);
         table.begin_record();
         let atom = model.atoms().at(0).unwrap();
         assert!(table.identities.get(atom).is_some());
@@ -370,12 +412,28 @@ mod tests {
     fn answers_dropped_after_their_records_leave_the_identity_cache() {
         let mut table = super::AtomTable::new(1 << 20);
         // Each model is dropped after its record, as a reconstructed answer
-        // is once published, so each record begins by forgetting the last
-        // owner: the cache holds one record's atoms.
+        // is once published, so pruning keeps the cache to a few owners.
         for model in separate_owners(50) {
             record(&mut table, &model);
         }
-        assert!(table.identities.len() <= 2, "{}", table.identities.len());
+        assert!(
+            table.identities.owners() <= 3,
+            "{}",
+            table.identities.owners()
+        );
+    }
+
+    #[test]
+    fn retained_answers_are_pruned_a_logarithmic_number_of_times() {
+        // A consumer that keeps every answer keeps every owner held, so no
+        // prune can drop one; prunes stay amortized all the same.
+        let models = separate_owners(256);
+        let mut table = super::AtomTable::new(1 << 20);
+        for model in &models {
+            record(&mut table, model);
+        }
+        assert_eq!(table.identities.owners(), 255);
+        assert!(table.prunes <= 9, "{}", table.prunes);
     }
 
     #[test]

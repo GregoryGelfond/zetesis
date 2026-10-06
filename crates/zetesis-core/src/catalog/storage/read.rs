@@ -16,6 +16,11 @@ impl AtomScope {
     pub(crate) fn held_elsewhere(&self) -> bool {
         Arc::strong_count(&self.0) > 1
     }
+    /// The owner's address: unique among live owners, and stable while any
+    /// handle, this one included, keeps the owner alive.
+    pub(crate) fn key(&self) -> usize {
+        Arc::as_ptr(&self.0).addr()
+    }
 }
 #[derive(Clone, Debug)]
 pub(crate) struct VocabularyScope(Arc<Owner>);
@@ -73,6 +78,10 @@ impl<'a> Read<'a> {
             Self::Frozen(_) => None,
             Self::Closed(closed) => Some(closed.rows.source_owner()),
         }
+    }
+    /// The atom owner's address, as `AtomScope::key` gives it.
+    pub(crate) fn atom_owner_key(self) -> Option<usize> {
+        self.atom_owner().map(|owner| Arc::as_ptr(owner).addr())
     }
     pub(crate) fn atom_scope(self) -> Option<AtomScope> {
         self.atom_owner().map(|owner| AtomScope(Arc::clone(owner)))

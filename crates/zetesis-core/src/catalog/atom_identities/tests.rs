@@ -116,3 +116,32 @@ fn retain_held_keeps_an_owner_a_catalog_still_holds() {
     map.retain_held();
     assert_eq!(map.get(held.atoms().at(0).unwrap()), Some(1));
 }
+
+#[test]
+fn retain_held_keeps_the_owner_of_a_live_writer_without_catalogs() {
+    let mut store = storage::Store::new(usize::MAX);
+    let p = store.import_atom(&atom("p"), Limits::default()).unwrap();
+    let mut map = AtomIdentityMap::default();
+    {
+        let published = store.snapshot(0).unwrap();
+        map.insert(AtomRef::new(&published, p).unwrap(), 3).unwrap();
+    }
+    // Every published snapshot is gone; the writer can still present `p`.
+    map.retain_held();
+    assert_eq!(map.owners(), 1);
+    let again = store.snapshot(0).unwrap();
+    assert_eq!(map.get(AtomRef::new(&again, p).unwrap()), Some(3));
+}
+
+#[test]
+fn many_owners_each_keep_their_own_entries() {
+    let catalogs: Vec<_> = (0..1000).map(|_| catalog(&["p"])).collect();
+    let mut map = AtomIdentityMap::default();
+    for (index, catalog) in catalogs.iter().enumerate() {
+        map.insert(catalog.atoms().at(0).unwrap(), index).unwrap();
+    }
+    assert_eq!(map.owners(), 1000);
+    for (index, catalog) in catalogs.iter().enumerate() {
+        assert_eq!(map.get(catalog.atoms().at(0).unwrap()), Some(index));
+    }
+}
