@@ -360,7 +360,6 @@ fn terminal_stop() -> (ReconstructionError, std::sync::Weak<Program>) {
     let failure = reconstruction
         .reconstruct(&base, &cancellation)
         .unwrap_err();
-    drop(reconstruction);
     drop(base);
     drop(owner);
     (failure, original)

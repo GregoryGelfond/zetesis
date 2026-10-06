@@ -37,6 +37,8 @@ fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
                 completed: count,
                 work: count,
                 substitutions: count,
+                latest_work: count,
+                latest_substitutions: count,
             },
         };
         let mut complete = Buffer::new(1024);

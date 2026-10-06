@@ -9,7 +9,11 @@ use zetesis_cpu::Cancellation;
 use zetesis_themelios::{FormulaFailure, FormulaResource, ReconstructionError};
 use zetesis_validation::answers::{self, native_json};
 
-fn capture(work: Option<u64>) -> (Result<Report, RunFailure>, Vec<u8>) {
+/// The answer b(1) is reconstructed first; a(1), reconstructed second, also
+/// derives w(1,1) and w(1,2), so its reconstruction alone costs more.
+const PROGRAM: &str = "n(1;2). a(1) | b(1). c(X):-a(X). c(X):-b(X). w(X,Y):-a(X),n(Y).";
+
+fn capture(work: Option<u64>, models: &str) -> (Result<Report, RunFailure>, Vec<u8>) {
     let options = Options::try_parse_from(
         [
             "zetesis",
@@ -24,7 +28,7 @@ fn capture(work: Option<u64>) -> (Result<Report, RunFailure>, Vec<u8>) {
             "--completion-workers",
             "1",
             "--models",
-            "0",
+            models,
             "--json",
             "--stats",
         ]
@@ -38,7 +42,7 @@ fn capture(work: Option<u64>) -> (Result<Report, RunFailure>, Vec<u8>) {
     .unwrap();
     let mut output = Vec::new();
     let result = run_detailed_with_diagnostics(
-        "a(1) | b(1). c(X):-a(X). c(X):-b(X).".into(),
+        PROGRAM.into(),
         &options,
         &mut output,
         &mut Vec::new(),
@@ -49,7 +53,7 @@ fn capture(work: Option<u64>) -> (Result<Report, RunFailure>, Vec<u8>) {
 
 #[test]
 fn work_refusal_retains_only_the_original_checked_prefix() {
-    let (complete, output) = capture(None);
+    let (complete, output) = capture(None, "0");
     let complete = complete.unwrap();
     assert_eq!(complete.completion, Completion::Exhausted);
     let receipt = complete.terminal_execution.unwrap();
@@ -63,11 +67,27 @@ fn work_refusal_retains_only_the_original_checked_prefix() {
         model.sort();
     }
     family.sort();
-    assert_eq!(family, [vec!["a(1)", "c(1)"], vec!["b(1)", "c(1)"]]);
+    assert_eq!(
+        family,
+        [
+            vec!["a(1)", "c(1)", "n(1)", "n(2)", "w(1,1)", "w(1,2)"],
+            vec!["b(1)", "c(1)", "n(1)", "n(2)"]
+        ]
+    );
     let complete_document: Value = serde_json::from_slice(&output).unwrap();
 
-    let ceiling = receipt.reconstruction.work.checked_sub(1).unwrap();
-    let (refused, output) = capture(Some(ceiling));
+    // Each answer gets the headroom left after admission: a ceiling one short
+    // of admission plus the second answer's cost admits the first answer only.
+    let second = receipt.reconstruction.latest_work;
+    let (first, _) = capture(None, "1");
+    let first = first.unwrap().terminal_execution.unwrap().reconstruction;
+    let admission = first.work - first.latest_work;
+    assert!(
+        first.latest_work < second,
+        "the fixture's second answer costs more"
+    );
+    let ceiling = admission + second - 1;
+    let (refused, output) = capture(Some(ceiling), "0");
     let refused = refused.unwrap_err();
     let RunError::Reconstruction(ReconstructionError::Source(cause)) = refused.cause.as_ref()
     else {
@@ -94,7 +114,10 @@ fn work_refusal_retains_only_the_original_checked_prefix() {
         ),
         (2, 1)
     );
-    assert_eq!(receipt.reconstruction.work, ceiling);
+    // The refused call used its whole headroom; the first answer's work counts
+    // in the session total, not against the refused one.
+    assert_eq!(receipt.reconstruction.latest_work, ceiling - admission);
+    assert_eq!(receipt.reconstruction.work, ceiling + first.latest_work);
 
     check_refused_publication(&output, &complete_document);
 }

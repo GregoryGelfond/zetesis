@@ -146,3 +146,79 @@ fn sessions_start_from_the_same_admission_history() {
     assert_eq!(second.statistics(), baseline);
     assert!(first.statistics().work > second.statistics().work);
 }
+
+fn terminal_with(source: &str, limits: &FormulaLimits) -> TerminalFormula {
+    let FormulaMaterialization::Terminal(owner) = prepare_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        *limits,
+    )
+    .unwrap()
+    .ground_adaptive()
+    .unwrap() else {
+        panic!("terminal profile required")
+    };
+    owner
+}
+
+const MANY: &str = "{seed(1..4)}. receipt(X):-seed(X).";
+
+/// Admission's work and one reconstruction's, under default limits.
+fn costs() -> (u64, u64) {
+    let owner = terminal(MANY);
+    let mut cursor = owner.reconstruction().unwrap();
+    let admission = cursor.statistics().work;
+    cursor
+        .reconstruct(
+            &selection(&owner, &["seed(1)", "seed(3)"]),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    (admission, cursor.statistics().work - admission)
+}
+
+#[test]
+fn many_answers_do_not_exhaust_the_grounding_ceiling() {
+    let (admission, call) = costs();
+    // Room for grounding and about three reconstructions in all.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + 3 * call + call / 2,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    let model = selection(&owner, &["seed(1)", "seed(3)"]);
+    for _ in 0..10 {
+        let result = cursor
+            .reconstruct(&model, &Cancellation::default())
+            .unwrap();
+        assert_eq!(
+            names(&result),
+            ["receipt(1)", "receipt(3)", "seed(1)", "seed(3)"]
+        );
+    }
+    assert_eq!(cursor.statistics().completed, 10);
+}
+
+#[test]
+fn one_answer_beyond_the_headroom_is_refused() {
+    let (admission, call) = costs();
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + call / 2,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    let model = selection(&owner, &["seed(1)", "seed(3)"]);
+    assert!(
+        cursor
+            .reconstruct(&model, &Cancellation::default())
+            .is_err()
+    );
+    assert_eq!(cursor.statistics().completed, 0);
+}

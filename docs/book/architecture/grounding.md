@@ -919,8 +919,11 @@ possible support as truth. Duplicate witnesses coalesce only at head publication
 The automatic formula route can choose this schedule. Explicit eager grounding
 still materializes the complete theory; the existing lazy constraint schedule is
 unchanged. Base membership uses the selected CPU or GPU executor. Reconstruction
-currently runs on the host. Work and substitutions remain cumulative across
-source admission and all reconstructions in a session. A refused extension
+currently runs on the host. Each reconstruction starts from source admission's
+work and substitutions, so one answer may use the headroom the formula ceilings
+left after grounding, whatever earlier answers used: the number of answers is
+bounded by enumeration limits, time and cancellation, never by the grounding
+ceiling. Session totals are reported. A refused extension
 publishes no original answer and cannot establish exhausted enumeration.
 
 ### Relation rows and vector operations

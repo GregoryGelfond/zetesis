@@ -19,6 +19,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Answers reconstructed with deferred terminal definitions each get the
+  headroom grounding left under the formula ceilings, instead of drawing on one
+  cumulative allowance, so a program with many answers is no longer stopped by
+  the grounding work ceiling. `ReconstructionStatistics` adds the latest call's
+  `latest_work` and `latest_substitutions`.
 - Formula support keeps posting lists only for the columns a join can bind. A
   predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
   and support work fall; a program such as eager Mastermind 6×8, whose unread

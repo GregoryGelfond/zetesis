@@ -9,19 +9,26 @@ use zetesis_cpu::{Cancellation, Stop};
 
 use super::{TerminalFormula, storage::Work};
 use crate::FormulaFailure;
-use crate::formula_support::{Accounting, Counters, components};
+use crate::formula_support::{Counters, components};
 
-/// Cumulative reconstruction history for one session.
+/// Reconstruction history for one session. Each call is bounded by the
+/// formula ceilings' headroom after admission; the totals are reported only.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ReconstructionStatistics {
     /// Calls begun, including a refused call.
     pub attempts: u64,
     /// Complete interpretations published.
     pub completed: u64,
-    /// Accepted source and reconstruction work; includes admission history.
+    /// Accepted source and reconstruction work; includes admission history
+    /// and every call, for reporting.
     pub work: u64,
-    /// Accepted source and reconstruction substitutions; includes admission.
+    /// Accepted source and reconstruction substitutions; includes admission
+    /// and every call, for reporting.
     pub substitutions: u64,
+    /// Work accepted by the latest call alone.
+    pub latest_work: u64,
+    /// Substitutions accepted by the latest call alone.
+    pub latest_substitutions: u64,
 }
 
 /// A reconstruction refused without publishing a partial interpretation.
@@ -101,7 +108,10 @@ impl std::error::Error for ReconstructionError {
 /// previous answer becomes true in a subsequent one through storage reuse.
 pub struct TerminalReconstruction<'a> {
     owner: &'a TerminalFormula,
-    accounting: Accounting,
+    /// Admission and every call so far, for reporting.
+    total: (u64, u64),
+    /// The latest call alone.
+    latest: (u64, u64),
     attempts: u64,
     completed: u64,
     failed: bool,
@@ -119,7 +129,8 @@ impl<'a> TerminalReconstruction<'a> {
         }
         Ok(Self {
             owner,
-            accounting: prepared.baseline.start(),
+            total: (prepared.baseline.work, prepared.baseline.substitutions),
+            latest: (0, 0),
             attempts: 0,
             completed: 0,
             failed: false,
@@ -132,16 +143,20 @@ impl<'a> TerminalReconstruction<'a> {
         ReconstructionStatistics {
             attempts: self.attempts,
             completed: self.completed,
-            work: self.accounting.work,
-            substitutions: self.accounting.substitutions,
+            work: self.total.0,
+            substitutions: self.total.1,
+            latest_work: self.latest.0,
+            latest_substitutions: self.latest.1,
         }
     }
 
     /// Extend exactly this base interpretation by all certified definitions.
     /// The caller must separately establish that the input is a base answer set.
     /// The partition theorem then establishes membership for the returned model.
-    /// Work and substitutions accumulate across calls, starting at admission;
-    /// no full possible-support relation is enumerated during reconstruction.
+    /// Each call starts from admission's work and substitutions, so it is
+    /// bounded by the headroom the formula ceilings left after grounding, not
+    /// by what earlier answers used; no full possible-support relation is
+    /// enumerated during reconstruction.
     ///
     /// # Errors
     /// Refuses a foreign owner, cancellation, a resource boundary or invalid
@@ -164,9 +179,20 @@ impl<'a> TerminalReconstruction<'a> {
                 .retain_failure(super::storage::overflow(self.owner.0.extension.location))
         })?;
         let owner = self.owner;
-        let result = self
-            .accounting
-            .with_cancellation(cancellation, |counters| extend(owner, model, counters));
+        // Each answer starts from admission's history: it may use the headroom
+        // grounding left, whatever earlier answers used.
+        let baseline = owner.0.extension.baseline;
+        let mut accounting = baseline.start();
+        let result =
+            accounting.with_cancellation(cancellation, |counters| extend(owner, model, counters));
+        self.latest = (
+            accounting.work - baseline.work,
+            accounting.substitutions - baseline.substitutions,
+        );
+        self.total = (
+            self.total.0.saturating_add(self.latest.0),
+            self.total.1.saturating_add(self.latest.1),
+        );
         if result.is_ok() {
             self.completed += 1; // bounded by the checked attempts count
             self.failed = false;

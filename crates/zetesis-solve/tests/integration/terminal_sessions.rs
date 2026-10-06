@@ -469,23 +469,34 @@ fn pre_cancelled_sessions_retain_the_original_subject_without_reconstruction() {
 #[test]
 fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     let owner = terminal(OPTIONAL);
-    let view = Session::builder(
+    // Each answer gets the headroom admission left. The answer holding both
+    // seeds costs the most to reconstruct; a ceiling one short of admission
+    // plus its cost refuses that answer alone.
+    let mut cursor = owner.reconstruction().unwrap();
+    let admission = cursor.statistics().work;
+    let both = Model::from_positions(
+        owner.base_atom_catalog(),
+        0..owner.base_atom_catalog().atoms().len(),
+    )
+    .unwrap();
+    cursor.reconstruct(&both, &Cancellation::default()).unwrap();
+    let costliest = cursor.statistics().latest_work;
+    let completed_work = Session::builder(
         PreparedInput::terminal(&owner),
         config(),
         Cancellation::default(),
     )
     .collect(WorldViewLimits::default())
-    .unwrap();
-    let completed_work = view
-        .outcome()
-        .terminal_execution()
-        .unwrap()
-        .reconstruction
-        .work;
+    .unwrap()
+    .outcome()
+    .terminal_execution()
+    .unwrap()
+    .reconstruction
+    .work;
     let limited = terminal_with_limits(
         OPTIONAL,
         &FormulaLimits {
-            max_work: completed_work.checked_sub(1).unwrap(),
+            max_work: admission + costliest - 1,
             ..FormulaLimits::default()
         },
     );

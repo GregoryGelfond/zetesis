@@ -540,11 +540,13 @@ fn terminal(
     )?;
     writeln!(
         sink,
-        "  answer reconstruction: attempts={}; completed={}; work={}; substitutions={}; source admission included; base search work separate",
+        "  answer reconstruction: attempts={}; completed={}; work={}; substitutions={}; source admission included; latest answer work={}; substitutions={}; each answer bounded by the headroom after admission; base search work separate",
         stats.reconstruction.attempts,
         stats.reconstruction.completed,
         stats.reconstruction.work,
-        stats.reconstruction.substitutions
+        stats.reconstruction.substitutions,
+        stats.reconstruction.latest_work,
+        stats.reconstruction.latest_substitutions
     )
 }
 
