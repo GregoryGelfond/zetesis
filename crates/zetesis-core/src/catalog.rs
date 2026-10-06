@@ -292,15 +292,6 @@ impl AtomCatalog {
         Arc::ptr_eq(&self.0, &other.0)
     }
 
-    /// Whether both catalogs' atoms belong to one atom owner, so an atom has
-    /// one owner-scoped identity in either. Selections one writer publishes
-    /// share their owner while being distinct catalogs; [`Self::same_owner`]
-    /// is the stricter catalog-allocation identity.
-    #[must_use]
-    pub fn same_atom_owner(&self, other: &Self) -> bool {
-        self.0.snapshot.same_atom_owner(&other.0.snapshot)
-    }
-
     /// Whether both catalogs retain the exact same immutable prefix allocation.
     /// Their occurrence maps may differ. Equal contents, a common vocabulary or
     /// partially shared segments do not establish this stronger relation.

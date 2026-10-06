@@ -169,25 +169,3 @@ fn checked_storage_matches_the_complete_measure() {
         }
     }
 }
-
-#[test]
-fn selections_of_one_writer_share_their_atom_owner() {
-    let mut owner = owner();
-    let first = owner
-        .publish_selection_with(&[0, 1], limits(), || Ok::<_, Infallible>(()))
-        .unwrap();
-    let second = owner
-        .publish_selection_with(&[2], limits(), || Ok::<_, Infallible>(()))
-        .unwrap();
-    // Distinct catalog allocations, one identity scope for their atoms.
-    assert!(!first.same_owner(&second));
-    assert!(first.same_atom_owner(&second));
-}
-
-#[test]
-fn separately_built_catalogs_have_distinct_atom_owners() {
-    let first = AtomCatalog::new(vec![unary("p", 1)]).unwrap();
-    let second = AtomCatalog::new(vec![unary("p", 1)]).unwrap();
-    assert!(!first.same_atom_owner(&second));
-    assert!(first.same_atom_owner(&first.clone()));
-}

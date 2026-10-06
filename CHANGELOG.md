@@ -20,9 +20,6 @@ Notable changes by release. Versions follow Semantic Versioning.
   with the integrity constraints streamed over it: its theory, atoms, analysis
   and constraint checkers. A hybrid owner's checkers and candidate-region filter
   run over it, so the same core can serve a terminal owner's base.
-- `AtomCatalog::same_atom_owner` says whether two catalogs' atoms share one
-  atom owner, as one writer's published selections do; `same_owner` remains
-  the catalog-allocation identity.
 - `AtomIdentityMap::retain_held` drops the owners that only the map still
   holds, whose atoms can no longer be presented, and `owners` counts them. The
   map now finds an owner by hashing its identity rather than by a linear scan.
