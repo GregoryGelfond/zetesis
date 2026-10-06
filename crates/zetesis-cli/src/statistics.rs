@@ -535,8 +535,14 @@ fn terminal(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  terminal definitions: eager base; full reconstruction before original membership; base answers={}; reconstructed={}; pending={}",
-        stats.base_answers, stats.reconstructed, stats.pending
+        "  terminal definitions: {} base; full reconstruction before original membership; base answers={}; reconstructed={}; pending={}",
+        match stats.base {
+            zetesis_themelios::BaseKind::Eager => "eager",
+            zetesis_themelios::BaseKind::Hybrid => "hybrid",
+        },
+        stats.base_answers,
+        stats.reconstructed,
+        stats.pending
     )?;
     writeln!(
         sink,
@@ -893,8 +899,11 @@ fn formula(
     config: &crate::SolveConfig,
     report: &Details<'_>,
 ) -> io::Result<()> {
-    let grounder = if report.terminal_execution.is_some() {
-        "eager_base_terminal_definitions"
+    let grounder = if let Some(terminal) = report.terminal_execution {
+        match terminal.base {
+            zetesis_themelios::BaseKind::Eager => "eager_base_terminal_definitions",
+            zetesis_themelios::BaseKind::Hybrid => "hybrid_base_terminal_definitions",
+        }
     } else if report.hybrid_execution.is_some() {
         "hybrid"
     } else {

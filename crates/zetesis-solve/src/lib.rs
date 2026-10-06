@@ -73,6 +73,8 @@ mod execution_observation;
 mod execution_resources;
 mod batch_executor;
 mod policy;
+mod grounding;
+pub use grounding::{GroundedFormula, ground_bundle, ground_formula};
 mod engine;
 mod optimization;
 mod objective_bounds;

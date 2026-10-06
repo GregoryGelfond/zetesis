@@ -26,6 +26,8 @@ mod tests;
 /// toward original-program membership or its requested model limit.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TerminalExecutionStatistics {
+    /// How the base was grounded.
+    pub base: zetesis_themelios::BaseKind,
     /// Base answers consumed, before reconstruction starts.
     pub base_answers: u64,
     /// Complete interpretations reconstructed for the original source.
@@ -77,6 +79,7 @@ impl<'a> TerminalSession<'a> {
         })?;
         let reconstruction = owner.reconstruction().map_err(SolveError::Reconstruction)?;
         let statistics = TerminalExecutionStatistics {
+            base: owner.base_kind(),
             reconstruction: reconstruction.statistics(),
             ..TerminalExecutionStatistics::default()
         };

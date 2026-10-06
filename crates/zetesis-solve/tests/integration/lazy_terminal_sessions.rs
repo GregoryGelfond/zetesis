@@ -98,9 +98,14 @@ fn lazy_grounding_defers_terminal_definitions_over_a_hybrid_base() {
 #[test]
 fn a_rejected_core_answer_is_never_extended() {
     // The core answers {b} and {a, b} violate `:- b.` and would extend by t/1;
-    // only the two accepted ones are reconstructed.
+    // only the two accepted ones are reconstructed. Clause search proposes
+    // every core answer, so each one reaches the full check.
     let owner = lazy_terminal("{a; b}. d(1..2). t(X) :- b, d(X). :- b.");
-    let (actual, view) = family(PreparedInput::terminal(&owner), config(Grounder::Lazy));
+    let config = SolveConfig {
+        search: zetesis_solve::SearchMethod::Clauses,
+        ..config(Grounder::Lazy)
+    };
+    let (actual, view) = family(PreparedInput::terminal(&owner), config);
     assert_eq!(actual.len(), 2);
     assert!(actual.iter().all(|model| {
         model
@@ -117,9 +122,8 @@ fn a_rejected_core_answer_is_never_extended() {
             .attempts,
         2
     );
-    // The violating core answers are refuted as regions before a full check,
-    // so none reaches reconstruction either way.
-    assert!(outcome.hybrid_execution().is_some());
+    let hybrid = outcome.hybrid_execution().unwrap();
+    assert_eq!((hybrid.core_answers, hybrid.rejected), (4, 2));
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
 }
 
@@ -135,22 +139,25 @@ fn an_empty_stream_still_gives_a_hybrid_base() {
 }
 
 #[test]
-fn a_lazy_request_accepts_exactly_a_hybrid_terminal_base() {
+fn an_eager_request_is_refused_by_a_hybrid_terminal_base() {
     let owner = lazy_terminal(OPTIONAL);
-    for grounder in [Grounder::Auto, Grounder::Eager] {
-        assert!(
-            matches!(
-                Session::builder(
-                    PreparedInput::terminal(&owner),
-                    config(grounder),
-                    Cancellation::default()
-                )
-                .collect(WorldViewLimits::default()),
-                Err(failure) if refused(&failure, |error| matches!(error, SolveError::PreparedInput { .. }))
-            ),
-            "{grounder:?}"
-        );
-    }
+    assert!(matches!(
+        Session::builder(
+            PreparedInput::terminal(&owner),
+            config(Grounder::Eager),
+            Cancellation::default()
+        )
+        .collect(WorldViewLimits::default()),
+        Err(failure) if refused(&failure, |error| matches!(error, SolveError::PreparedInput { .. }))
+    ));
+}
+
+#[test]
+fn an_automatic_request_runs_a_hybrid_terminal_base() {
+    let owner = lazy_terminal(OPTIONAL);
+    let (actual, view) = family(PreparedInput::terminal(&owner), config(Grounder::Auto));
+    assert_eq!(view.outcome().completion(), Some(Completion::Exhausted));
+    assert_eq!(actual.len(), 3);
 }
 
 #[test]
@@ -213,4 +220,17 @@ fn a_stopped_constraint_check_never_claims_exhaustion() {
             "{failure:?}"
         ),
     }
+}
+
+#[test]
+fn a_streamed_check_constructs_terms_over_the_closed_base() {
+    // The constraint's check builds f(X) for each p(X), resolving it through
+    // the closed base's terms.
+    const SOURCE: &str =
+        "{p(1); p(2)}. {q(f(1))}. r(X) :- p(X), seed(X). seed(1..2). :- p(X), q(f(X)).";
+    let owner = lazy_terminal(SOURCE);
+    let (actual, _) = family(PreparedInput::terminal(&owner), config(Grounder::Lazy));
+    let reference = adaptive_terminal(SOURCE);
+    let (expected, _) = family(PreparedInput::terminal(&reference), config(Grounder::Auto));
+    assert_eq!(actual, expected);
 }

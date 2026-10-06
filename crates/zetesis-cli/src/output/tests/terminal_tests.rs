@@ -36,6 +36,7 @@ fn reconstruction_limits_do_not_reclassify_allocator_or_identity_failures() {
 fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
     for count in [0, u64::MAX] {
         let statistics = TerminalExecutionStatistics {
+            base: zetesis_themelios::BaseKind::Eager,
             base_answers: count,
             reconstructed: count,
             pending: 0,
@@ -55,7 +56,7 @@ fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
         let value: serde_json::Value = serde_json::from_slice(&complete.bytes).unwrap();
         assert_eq!(
             value,
-            serde_json::json!({"base_answers":count,"reconstructed":count,
+            serde_json::json!({"base":"eager","base_answers":count,"reconstructed":count,
             "pending":0,"reconstruction":{"attempts":count,"completed":count,
                 "work":count,"substitutions":count,
                 "admission":{"work":count,"substitutions":count},

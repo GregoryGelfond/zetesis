@@ -209,6 +209,10 @@ pub struct TerminalStatistics {
     pub work: u64,
     /// Accepted source and reconstruction substitutions.
     pub substitutions: u64,
+    /// The base streamed its constraints (lazy grounding) rather than being
+    /// instantiated whole; omitted from records when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hybrid_base: bool,
 }
 
 /// Completed hybrid source-checking receipt, independent of device execution.

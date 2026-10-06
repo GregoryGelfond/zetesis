@@ -6,18 +6,17 @@ use themelios_program::program::Program;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::PreparedInput;
 use zetesis_themelios::{
-    AdmittedFormula, FormulaFailure, FormulaMaterialization, FormulaPurpose, HybridFormula,
-    PreparedRelational, ProgramFormulaOptions, ProgramRelationalOptions, SourceMetadata,
-    TerminalFormula, prepare_program_formula_with, prepare_program_relational,
+    FormulaFailure, FormulaPurpose, PreparedRelational, ProgramFormulaOptions,
+    ProgramRelationalOptions, SourceMetadata, prepare_program_formula_with,
+    prepare_program_relational,
 };
 
 use crate::{Config, Grounder};
 
 pub(crate) enum Prepared {
     Relational(Box<PreparedRelational>),
-    Formula(Box<AdmittedFormula>),
-    Hybrid(HybridFormula),
-    Terminal(TerminalFormula),
+    /// Materialized by the library's grounder mapping, as the CLI's is.
+    Formula(Box<zetesis_solve::GroundedFormula>),
 }
 
 impl Prepared {
@@ -50,38 +49,30 @@ impl Prepared {
                 cancellation: Some(cancellation.clone()),
             },
         )?;
-        match config.grounder {
-            Grounder::Auto => prepared
-                .ground_adaptive()
-                .map(|materialized| match materialized {
-                    FormulaMaterialization::Complete(formula) => Self::Formula(Box::new(formula)),
-                    FormulaMaterialization::Terminal(terminal) => Self::Terminal(terminal),
-                }),
-            Grounder::Eager => prepared
-                .ground()
-                .map(|formula| Self::Formula(Box::new(formula))),
-            Grounder::Hybrid => prepared.ground_hybrid().map(Self::Hybrid),
+        // The facade's `Hybrid` is the lazy formula materialization.
+        let grounder = match config.grounder {
+            Grounder::Auto => zetesis_solve::Grounder::Auto,
+            Grounder::Eager => zetesis_solve::Grounder::Eager,
+            Grounder::Hybrid => zetesis_solve::Grounder::Lazy,
             Grounder::Lazy => {
                 unreachable!("relational preparation returned before formula compilation")
             }
-        }
+        };
+        zetesis_solve::ground_formula(prepared, grounder, None)
+            .map(|grounded| Self::Formula(Box::new(grounded)))
     }
 
     pub(crate) fn input(&self) -> PreparedInput<'_> {
         match self {
             Self::Relational(owner) => PreparedInput::relational(owner),
-            Self::Formula(owner) => PreparedInput::formula(owner),
-            Self::Hybrid(owner) => PreparedInput::hybrid(owner),
-            Self::Terminal(owner) => PreparedInput::terminal(owner),
+            Self::Formula(grounded) => grounded.input(),
         }
     }
 
     pub(crate) fn metadata(&self) -> &SourceMetadata {
         match self {
             Self::Relational(owner) => owner.metadata(),
-            Self::Formula(owner) => owner.metadata(),
-            Self::Hybrid(owner) => owner.metadata(),
-            Self::Terminal(owner) => owner.metadata(),
+            Self::Formula(grounded) => grounded.metadata(),
         }
     }
 }

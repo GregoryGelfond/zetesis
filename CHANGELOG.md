@@ -12,8 +12,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   producer core is instantiated and whose eligible integrity constraints are
   streamed. `TerminalFormula::base_kind` and `TerminalFormula::base` (`BaseKind`,
   `TerminalBase`) say which base an owner has; a session runs a hybrid terminal
-  base under lazy grounding on the CPU, checking each core answer before it is
-  reconstructed. `ExecutionObservation::TerminalDefinitions` reports the base
+  base under automatic or lazy grounding on the CPU, refusing an eager request,
+  and checks each core answer before it is reconstructed. `ExecutionObservation::TerminalDefinitions` reports the base
   kind and its streamed constraints (`StreamedConstraints`), and telemetry adds
   `GroundingMode::HybridBaseTerminalDefinitions` with `TerminalBaseMark`.
 - `StreamedCore`, reached through `HybridFormula::core`, is the producer core
@@ -40,6 +40,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- `--grounder lazy` defers certified terminal definitions over its hybrid
+  formula base, reconstructing them from each accepted answer, as `auto` does
+  over an eager base; `zetesis_solve::ground_formula` and `ground_bundle` own the
+  grounder-to-materialization mapping the CLI and the `zetesis` facade now use,
+  and the facade's `Hybrid` grounder takes the same lazy route. `--stats` and
+  JSON report a hybrid terminal base (`hybrid_base_terminal_definitions`, search
+  scope `terminal_retained_core`, `terminal_execution.base`), and validation
+  reconciles its two receipts.
 - `TerminalFormula::base_theory` returns `Option<&Theory>`: `None` for a hybrid
   base, whose core theory's stable models are only proposals until its
   constraints accept them. Match `TerminalFormula::base` instead, and check a

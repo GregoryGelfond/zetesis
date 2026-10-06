@@ -104,9 +104,16 @@ Explicit `--grounder eager` still requests complete materialization.
 
 For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. This hybrid profile is separate from
-automatic terminal-definition reconstruction. It runs on the CPU backend, uses indexed
-joins and refuses objective declarations and table joins. Relational lazy
+checked from their admitted source families. Certified terminal definitions are
+deferred too, and reconstructed from each accepted base answer, as automatic
+admission does over an eager base. It runs on the CPU backend, uses indexed
+joins and refuses objective declarations and table joins.
+
+The three grounders: `eager` instantiates every rule before solving; `lazy`
+instantiates on demand wherever admitted — relational source joins, or the
+hybrid formula schedule with terminal definitions deferred; `auto` admits
+relational source joins where it can, and otherwise instantiates an eager base
+and defers certified terminal definitions. Relational lazy
 closure retains its existing CPU and device routes.
 
 Hybrid statistics distinguish retained-core models from original answers accepted

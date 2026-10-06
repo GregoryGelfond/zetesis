@@ -19,35 +19,28 @@ enum Input {
     Parsed(ParsedSource),
 }
 
-enum FormulaInput {
-    Source(zetesis_themelios::AdmittedFormula),
-    Bundle(zetesis_themelios::AdmittedFormulaBundle),
-    Hybrid(zetesis_themelios::HybridFormula),
-    Terminal(zetesis_themelios::TerminalFormula),
-}
+/// A formula program materialized by the library for the requested grounder;
+/// the CLI only presents its warnings and failures.
+struct FormulaInput(zetesis_solve::GroundedFormula);
 
 impl FormulaInput {
     fn prepared(&self) -> crate::PreparedInput<'_> {
-        match self {
-            Self::Source(owner) => crate::PreparedInput::formula(owner),
-            Self::Bundle(owner) => crate::PreparedInput::formula_bundle(owner),
-            Self::Hybrid(owner) => crate::PreparedInput::hybrid(owner),
-            Self::Terminal(owner) => crate::PreparedInput::terminal(owner),
-        }
+        self.0.input()
     }
 
     fn warnings(&self, diagnostics: &mut Diagnostics<impl Write>) -> std::io::Result<()> {
-        match self {
-            Self::Source(owner) if !owner.warnings().is_empty() => {
+        use zetesis_solve::GroundedFormula as Grounded;
+        match &self.0 {
+            Grounded::Source(owner) if !owner.warnings().is_empty() => {
                 diagnostics.diagnostic(&owner.warning_view())
             }
-            Self::Bundle(owner) if !owner.warnings().is_empty() => {
+            Grounded::Bundle(owner) if !owner.warnings().is_empty() => {
                 diagnostics.diagnostic(&owner.warning_view())
             }
-            Self::Hybrid(owner) if !owner.warnings().is_empty() => {
+            Grounded::Hybrid(owner) if !owner.warnings().is_empty() => {
                 diagnostics.diagnostic(&owner.warning_view())
             }
-            Self::Terminal(owner) if !owner.warnings().is_empty() => {
+            Grounded::Terminal(owner) if !owner.warnings().is_empty() => {
                 diagnostics.diagnostic(&owner.warning_view())
             }
             _ => Ok(()),
@@ -55,16 +48,17 @@ impl FormulaInput {
     }
 
     fn retain_source(&self, failure: PublicationFailure) -> PublicationFailure {
-        match self {
-            Self::Source(owner) => {
+        use zetesis_solve::GroundedFormula as Grounded;
+        match &self.0 {
+            Grounded::Source(owner) => {
                 if let Some(source) = owner.source() {
                     source_failure(failure, "<input>", source)
                 } else {
                     failure
                 }
             }
-            Self::Bundle(owner) => bundle_failure(failure, owner.bundle()),
-            Self::Hybrid(owner) => {
+            Grounded::Bundle(owner) => bundle_failure(failure, owner.bundle()),
+            Grounded::Hybrid(owner) => {
                 if let Some(bundle) = owner.bundle() {
                     bundle_failure(failure, bundle)
                 } else if let Some(source) = owner.source() {
@@ -73,7 +67,7 @@ impl FormulaInput {
                     failure
                 }
             }
-            Self::Terminal(owner) => {
+            Grounded::Terminal(owner) => {
                 if let Some(bundle) = owner.bundle() {
                     bundle_failure(failure, bundle)
                 } else if let Some(source) = owner.source() {
@@ -189,26 +183,7 @@ pub(crate) fn source(
             let observer = observer
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
-            if options.grounder == crate::Grounder::Lazy {
-                prepared
-                    .ground_hybrid_with_observer(observer)
-                    .map(FormulaInput::Hybrid)
-            } else if options.grounder == crate::Grounder::Auto {
-                prepared
-                    .ground_adaptive_with_observer(observer)
-                    .map(|admitted| match admitted {
-                        zetesis_themelios::FormulaMaterialization::Complete(owner) => {
-                            FormulaInput::Source(owner)
-                        }
-                        zetesis_themelios::FormulaMaterialization::Terminal(owner) => {
-                            FormulaInput::Terminal(owner)
-                        }
-                    })
-            } else {
-                prepared
-                    .ground_with_observer(observer)
-                    .map(FormulaInput::Source)
-            }
+            zetesis_solve::ground_formula(prepared, options.grounder, observer).map(FormulaInput)
         })
         .map_err(RunError::FormulaAdmission)?;
     admitted.solve(options, renderer, diagnostics, cancellation, phases)
@@ -291,26 +266,7 @@ pub(crate) fn bundle(
             let observer = observer
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
-            if options.grounder == crate::Grounder::Lazy {
-                prepared
-                    .ground_hybrid_with_observer(observer)
-                    .map(FormulaInput::Hybrid)
-            } else if options.grounder == crate::Grounder::Auto {
-                prepared
-                    .ground_adaptive_with_observer(observer)
-                    .map(|admitted| match admitted {
-                        zetesis_themelios::FormulaMaterialization::Complete(owner) => {
-                            FormulaInput::Bundle(owner)
-                        }
-                        zetesis_themelios::FormulaMaterialization::Terminal(owner) => {
-                            FormulaInput::Terminal(owner)
-                        }
-                    })
-            } else {
-                prepared
-                    .ground_with_observer(observer)
-                    .map(FormulaInput::Bundle)
-            }
+            zetesis_solve::ground_bundle(prepared, options.grounder, observer).map(FormulaInput)
         })
         .map_err(RunError::FormulaBundleAdmission)?;
     admitted.solve(options, renderer, diagnostics, cancellation, phases)

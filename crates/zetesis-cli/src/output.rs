@@ -585,8 +585,12 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         search_statistics(
             out,
             view.search,
-            if view.terminal_execution.is_some() {
-                "terminal_base"
+            if let Some(terminal) = view.terminal_execution {
+                match terminal.base {
+                    zetesis_themelios::BaseKind::Eager => "terminal_base",
+                    // The search ran over the hybrid base's producer core.
+                    zetesis_themelios::BaseKind::Hybrid => "terminal_retained_core",
+                }
             } else if view.hybrid_execution.is_some() {
                 "retained_core"
             } else {
@@ -890,7 +894,12 @@ fn terminal_statistics(
     let Some(statistics) = statistics else {
         return out.text("null");
     };
-    out.text("{\"base_answers\":")?;
+    out.text("{\"base\":")?;
+    out.text(match statistics.base {
+        zetesis_themelios::BaseKind::Eager => "\"eager\"",
+        zetesis_themelios::BaseKind::Hybrid => "\"hybrid\"",
+    })?;
+    out.text(",\"base_answers\":")?;
     out.text(&statistics.base_answers.to_string())?;
     out.number_field("reconstructed", statistics.reconstructed)?;
     out.number_field("pending", statistics.pending)?;

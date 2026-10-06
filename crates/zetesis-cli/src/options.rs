@@ -50,10 +50,14 @@ pub struct Options {
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
-    /// Relational lazy grounding uses source joins on CPU or GPU. For formula
-    /// inputs, lazy CPU grounding retains an eager producer core and streams
-    /// eligible constraints; objectives and table joins are refused. Formula
-    /// GPU execution requires eager materialization. Grounding limits still apply.
+    /// `eager` instantiates every rule before solving. `lazy` instantiates on
+    /// demand: relational source joins on CPU or GPU, or, for formula inputs on
+    /// the CPU, a producer core with eligible constraints streamed and terminal
+    /// definitions (derived predicates nothing reads) reconstructed per answer;
+    /// objectives and table joins are refused. `auto` admits relational source
+    /// joins where it can, else instantiates an eager base and defers terminal
+    /// definitions. Formula GPU execution needs an eager base. Grounding limits
+    /// still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.
@@ -518,7 +522,7 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
         (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU hybrid formula grounding with an eager producer core and streamed eligible constraints.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU formula grounding with an eager producer core, streamed eligible constraints and terminal definitions reconstructed per answer.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }

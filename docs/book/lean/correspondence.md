@@ -1526,7 +1526,12 @@ and scans remaining semantic reads. Reconstruction joins true base-model rows
 and publishes their union with derived heads through one canonical descendant
 store. [`TerminalSession`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/terminal_session.rs)
 retains the original subject, counts only completed extensions as original
-answers, and records an unfinished extension separately. These Rust checks
+answers, and records an unfinished extension separately. Over a hybrid base its
+base session yields only core answers the streamed constraints accepted, so
+each answer is checked, then extended, then published: the composition rests on
+`StreamedConstraints.stable_iff_completed_partition` for the base and
+`TerminalDefinitions.stable_iff` for the extension, and no streamed constraint
+reads a deferred head, so deferral changes no constraint's truth. These Rust checks
 implement the stated obligations; the existing theorem does not prove their
 source-to-proposition or machine-execution correspondence.
 

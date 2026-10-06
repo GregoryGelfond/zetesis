@@ -51,9 +51,11 @@ pub(crate) struct Extension {
 }
 
 /// How a terminal owner's base was grounded.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum BaseKind {
-    /// Every base rule was instantiated.
+    /// Every base rule was instantiated: the base adaptive materialization
+    /// grounds, and the default of an empty receipt.
+    #[default]
     Eager,
     /// The base's producer core was instantiated and its eligible integrity
     /// constraints (possibly none) are streamed: its stable models are

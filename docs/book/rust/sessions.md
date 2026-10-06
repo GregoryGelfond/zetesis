@@ -402,8 +402,12 @@ Each formula session imports only new cumulative timing work, so repeated
 snapshots cannot count it again. Measurements never establish semantic coverage.
 
 For terminal definitions, `GroundingMode::EagerBaseTerminalDefinitions` identifies
-eager base materialization followed by host reconstruction during solving. A
-grounding interval covers the base, not the complete original theory. The
+eager base materialization followed by host reconstruction during solving, and
+`GroundingMode::HybridBaseTerminalDefinitions` a hybrid base — an eager producer
+core whose eligible constraints are streamed — followed by the same
+reconstruction. The route supplies the base's kind (`TerminalBaseMark`), so the
+mode does not depend on whether admission was observed. A grounding interval
+covers the base (for a hybrid base, its core), not the complete original theory. The
 `AnswerReconstruction` phase records attempted extensions, including refusals;
 `terminal_execution()` separately records consumed base answers, completed
 original answers and an unfinished attempt. Its accepted work totals include

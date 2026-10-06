@@ -8,9 +8,11 @@ pub enum Grounder {
     /// Prefer lazy source grounding where admitted, independently of hardware.
     #[default]
     Auto,
-    /// Require source joins without materializing a complete ground rule store.
-    /// A GPU backend checks the joined sources in immutable relational rounds;
-    /// the CPU backend checks them on the host.
+    /// Instantiate on demand: source joins without a complete ground rule
+    /// store, or, for formula programs, a producer core with eligible
+    /// constraints streamed and terminal definitions reconstructed per answer.
+    /// A GPU backend checks joined sources in immutable relational rounds; the
+    /// hybrid formula schedule runs on the CPU.
     Lazy,
     /// Materialize a bounded static program before checking on CPU or GPU.
     Eager,

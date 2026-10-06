@@ -67,9 +67,9 @@ impl<'a> PreparedInput<'a> {
     /// Borrow the original source plan with its checked base and terminal
     /// definitions. Each verified base answer is reconstructed before a full
     /// answer can be published. An eager base runs under automatic grounding;
-    /// a hybrid base (from lazy materialization) runs under lazy grounding, on
-    /// the CPU backend only, its constraints checked before reconstruction. An
-    /// eager request never acquires terminal meaning. Explicit projection and
+    /// a hybrid base (from lazy materialization) runs under automatic or lazy
+    /// grounding, on the CPU backend only, its constraints checked before
+    /// reconstruction. An eager request never acquires terminal meaning. Explicit projection and
     /// objectives are outside this profile. No admission or execution occurs in
     /// this borrow.
     #[must_use]
@@ -230,19 +230,23 @@ impl<'a> PreparedInput<'a> {
             config.validate_hybrid()?;
             return Ok(config);
         }
-        // A hybrid terminal base is the lazy route's: lazy requests only, and
-        // the hybrid route's backend and batching restrictions.
+        // A hybrid terminal base runs as the hybrid route does: an eager
+        // request contradicts its materialization and is refused, automatic
+        // and lazy requests run it, under the hybrid backend and batching
+        // restrictions.
         if let Prepared::TerminalDefinitions(owner) = self.input
             && owner.base_kind() == zetesis_themelios::BaseKind::Hybrid
         {
-            if config.grounder != Grounder::Lazy {
-                return Err(SolveError::PreparedInput {
+            config.validate_hybrid().map_err(|error| match error {
+                SolveError::PreparedInput {
+                    oracle, grounder, ..
+                } => SolveError::PreparedInput {
                     profile: self.profile(),
-                    oracle: config.oracle,
-                    grounder: config.grounder,
-                });
-            }
-            config.validate_hybrid()?;
+                    oracle,
+                    grounder,
+                },
+                other => other,
+            })?;
             return Ok(config);
         }
         if !matches!(self.input, Prepared::Relational(_))

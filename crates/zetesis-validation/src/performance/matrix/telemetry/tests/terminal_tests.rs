@@ -110,3 +110,58 @@ fn incomplete_or_misidentified_reconstruction_cannot_qualify() {
         .is_err()
     );
 }
+
+/// The lazy route: a hybrid base whose core search proposed six answers, four
+/// accepted by the streamed constraints and reconstructed.
+fn hybrid_terminal() -> (Value, String, NativeExecution) {
+    let (mut document, text, request) = terminal();
+    document["statistics"]["stage_timings"]["grounding_mode"] =
+        json!("hybrid_base_terminal_definitions");
+    document["statistics"]["search"] = json!({"scope":"terminal_retained_core","stable_models":6});
+    document["statistics"]["terminal_execution"]["base"] = json!("hybrid");
+    document["statistics"]["hybrid_execution"] = json!({"core_answers":6,"accepted":4,
+        "rejected":2,"pending":0,"constraints":{"work":9,"substitutions":3,"scalar_bytes":0}});
+    let text = text
+        .replace(
+            "grounding_mode: eager_base_terminal_definitions",
+            "grounding_mode: hybrid_base_terminal_definitions",
+        )
+        .replace(
+            "grounder=eager_base_terminal_definitions",
+            "grounder=hybrid_base_terminal_definitions",
+        );
+    (
+        document,
+        text,
+        NativeExecution {
+            grounder: Grounder::Lazy,
+            ..request
+        },
+    )
+}
+
+#[test]
+fn a_hybrid_terminal_base_reconciles_both_receipts() {
+    let (document, text, request) = hybrid_terminal();
+    let observation = observe(&document, text.as_bytes(), request).unwrap();
+    assert!(observation.terminal.unwrap().hybrid_base);
+    assert_eq!(observation.hybrid.unwrap().accepted, 4);
+}
+
+#[test]
+fn a_hybrid_terminal_base_needs_each_receipt() {
+    let (document, text, request) = hybrid_terminal();
+    for receipt in ["hybrid_execution", "terminal_execution"] {
+        let mut missing = document.clone();
+        missing["statistics"][receipt] = Value::Null;
+        assert!(
+            observe(&missing, text.as_bytes(), request).is_err(),
+            "{receipt}"
+        );
+    }
+    let eager = NativeExecution {
+        grounder: Grounder::Eager,
+        ..request
+    };
+    assert!(observe(&document, text.as_bytes(), eager).is_err());
+}

@@ -343,6 +343,17 @@ same consuming operation. Use `PreparedInput::formula` for the first result and
 `PreparedInput::terminal` for the second. The terminal session accepts automatic
 grounding and reconstructs full answers before applying original observations.
 
+`PreparedFormula::ground_lazy()` (and its bundle counterpart) defers the same
+certified definitions over a hybrid base: the base's producer core is
+instantiated and its eligible integrity constraints are streamed, even when none
+is eligible. It returns `FormulaMaterialization::Complete(HybridFormula)` when
+nothing is deferred. A terminal owner's `base()` says which base it has; a
+hybrid base's session checks each core answer against the streamed constraints
+before reconstructing it, runs under automatic or lazy grounding on the CPU, and
+refuses an eager request. `zetesis_solve::ground_formula` and `ground_bundle`
+map a requested grounder to its materialization — `eager` to `ground`, `lazy` to
+`ground_lazy`, `auto` to `ground_adaptive` — as the CLI and the facade do.
+
 A terminal definition has a positive, flat body and an ordinary head whose
 predicate is read by no logical rule or constraint. All producers must qualify;
 strong-negation coherence, objectives and explicit projection are checked before
