@@ -1118,14 +1118,29 @@ impl<'a> AtomAppender<'a> {
         )?;
         let mut directions = Directions::default();
         let found = match relation {
-            Ok(relation) => query.search(
-                self.store,
-                |id| self.get(id),
-                &self.index.nodes,
-                self.subtrees[relation].root,
-                &mut checked,
-                |right| directions.push(right).expect("AVL height fits two words"),
-            )?,
+            Ok(relation) => {
+                let root = self.subtrees[relation].root;
+                // An atom beyond the predicate's last is placed without a search.
+                match index::last(
+                    &self.index.nodes,
+                    root,
+                    &mut checked,
+                    |checked| checked(),
+                    |id, checked| query.compare_at(self.store, &|id| self.get(id), id, checked),
+                    |right| directions.push(right).expect("AVL height fits two words"),
+                )? {
+                    index::Last::Found(id) => Some(id),
+                    index::Last::Beyond => None,
+                    index::Last::Before => query.search(
+                        self.store,
+                        |id| self.get(id),
+                        &self.index.nodes,
+                        root,
+                        &mut checked,
+                        |right| directions.push(right).expect("AVL height fits two words"),
+                    )?,
+                }
+            }
             Err(_) => None,
         };
         if found.is_none() {

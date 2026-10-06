@@ -339,12 +339,24 @@ impl Catalog {
         let mut route = Directions::default();
         work.tick(1)?;
         let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
-        if let Some(row) = self.locate_bound(
-            atoms,
-            |column| atom.values().at(column).expect("checked atom arity"),
+        let value = |column| atom.values().at(column).expect("checked atom arity");
+        // A row beyond the last in order is placed without a search.
+        let last = ordered_index::last(
+            &self.rows.nodes,
+            self.rows.root,
             work,
+            |work| work.tick(1),
+            |row, work| compare_row(atoms, row, &value, work),
             |right| route.push(right).expect("AVL height fits two words"),
-        )? {
+        )?;
+        let found = match last {
+            ordered_index::Last::Found(row) => Some(row),
+            ordered_index::Last::Beyond => None,
+            ordered_index::Last::Before => self.locate_bound(atoms, value, work, |right| {
+                route.push(right).expect("AVL height fits two words");
+            })?,
+        };
+        if let Some(row) = found {
             return Ok(Insertion {
                 row,
                 inserted: false,
@@ -457,17 +469,7 @@ impl Catalog {
         ordered_index::search(
             &self.rows.nodes,
             self.rows.root,
-            |row| {
-                work.tick(1)?;
-                let atom = atoms.at(row).ok_or(Failure::CatalogIndex)?;
-                for (column, right) in atom.values().iter().enumerate() {
-                    let order = work.compare(value(column), right)?;
-                    if !order.is_eq() {
-                        return Ok(order);
-                    }
-                }
-                Ok(std::cmp::Ordering::Equal)
-            },
+            |row| compare_row(atoms, row, &value, work),
             descend,
         )
     }
@@ -545,6 +547,24 @@ fn vector_bytes<T>(values: &Vec<T>) -> usize {
 
 fn index_bytes(index: &Index) -> usize {
     index.nodes.capacity() * size_of::<Node>() + index.path.capacity() * size_of::<Step>()
+}
+
+/// A query tuple against the indexed row `row`: its values in column order.
+fn compare_row<'value>(
+    atoms: Atoms<'_>,
+    row: usize,
+    value: &impl Fn(usize) -> TermRef<'value>,
+    work: &mut Work,
+) -> Result<std::cmp::Ordering, Failure> {
+    work.tick(1)?;
+    let atom = atoms.at(row).ok_or(Failure::CatalogIndex)?;
+    for (column, right) in atom.values().iter().enumerate() {
+        let order = work.compare(value(column), right)?;
+        if !order.is_eq() {
+            return Ok(order);
+        }
+    }
+    Ok(std::cmp::Ordering::Equal)
 }
 
 #[cfg(test)]

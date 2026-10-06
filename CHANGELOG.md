@@ -19,6 +19,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Interning a derived atom, and adding a row to a support relation, compares
+  it first with the last entry in order: atoms and rows that arrive in order,
+  as a rule's derived heads usually do, are placed without a typed search.
+  Results, positions and orders are unchanged; charged work falls for in-order
+  arrivals and rises by one comparison for others.
 - Source-admission refusals located in an input file, such as resource limits
   and unsafe variables, name the file, line and column and show the source
   excerpt, as syntax errors do, instead of a byte range.

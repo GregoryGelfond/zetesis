@@ -194,24 +194,34 @@ impl<'a> Query<'a> {
         ordered_index::search(
             nodes,
             cursor,
-            |id| {
-                before()?;
-                let atom = resolve(id).expect("index references admitted atom");
-                before()?;
-                let arity = self.predicate(store).arity();
-                for column in 0..arity {
-                    before()?;
-                    let left = self.argument(column, store);
-                    let right = atom.values().at(column).expect("same predicate arity");
-                    let order = left.compare_ref_with(right, &mut *before)?;
-                    if !order.is_eq() {
-                        return Ok(order);
-                    }
-                }
-                Ok(std::cmp::Ordering::Equal)
-            },
+            |id| self.compare_at(store, &resolve, id, &mut *before),
             descend,
         )
+    }
+
+    /// The query against the indexed atom at `id`, within one signed
+    /// predicate: its arguments in order, each in its own read owner.
+    pub(super) fn compare_at<'rows, E>(
+        self,
+        store: &Store,
+        resolve: &impl Fn(usize) -> Option<AtomRef<'rows>>,
+        id: usize,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<std::cmp::Ordering, E> {
+        before()?;
+        let atom = resolve(id).expect("index references admitted atom");
+        before()?;
+        let arity = self.predicate(store).arity();
+        for column in 0..arity {
+            before()?;
+            let left = self.argument(column, store);
+            let right = atom.values().at(column).expect("same predicate arity");
+            let order = left.compare_ref_with(right, &mut *before)?;
+            if !order.is_eq() {
+                return Ok(order);
+            }
+        }
+        Ok(std::cmp::Ordering::Equal)
     }
 
     pub(super) fn intern_with<E>(

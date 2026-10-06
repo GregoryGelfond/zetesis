@@ -143,6 +143,54 @@ impl Index {
     }
 }
 
+/// Where a query stands against the last node in order, the maximum.
+pub(crate) enum Last {
+    /// The query equals the maximum, at this position.
+    Found(usize),
+    /// The query follows every node; its place is after the maximum.
+    Beyond,
+    /// The tree is empty or the query precedes the maximum: the full search decides.
+    Before,
+}
+
+/// Compare a query with the last node in order before any search: arrivals
+/// that extend the order, as rows derived in order do, are placed with one
+/// comparison instead of one per level. The last node is reached by right
+/// children alone, with `step` admitting each level on the caller's context
+/// and no comparison; on `Beyond`, `descend(true)` is recorded once per node
+/// on that right spine, the route a full search would take, since every
+/// comparison on it is Greater. An error publishes no result and changes no
+/// node.
+pub(crate) fn last<C, E>(
+    nodes: &[Node],
+    root: Link,
+    context: &mut C,
+    mut step: impl FnMut(&mut C) -> Result<(), E>,
+    compare: impl FnOnce(usize, &mut C) -> Result<Ordering, E>,
+    mut descend: impl FnMut(bool),
+) -> Result<Last, E> {
+    let Some(mut last) = root else {
+        return Ok(Last::Before);
+    };
+    let mut depth = 1_usize;
+    while let Some(next) = nodes[position(last)].children[1] {
+        step(context)?;
+        last = next;
+        depth += 1;
+    }
+    let id = position(last);
+    Ok(match compare(id, context)? {
+        Ordering::Equal => Last::Found(id),
+        Ordering::Greater => {
+            for _ in 0..depth {
+                descend(true);
+            }
+            Last::Beyond
+        }
+        Ordering::Less => Last::Before,
+    })
+}
+
 /// Search the owner's ordered identities without owning or copying any payload.
 /// `compare` admits one node visit before comparing the query with the ID's
 /// authoritative value. The callback's ordering must be the tree's ordering.
