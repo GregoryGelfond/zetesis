@@ -129,10 +129,14 @@ extraction and proof evidence. Source changes require a new extraction and proof
 check; old hashes cannot qualify changed code.
 
 Pinned Charon serializes its `short_names` table in an order that can differ
-between runs of the same extraction. Every declaration, the ordered declaration
-list, item names, files and options are unaffected, and the generated Lean is
-byte-identical. Compare a repeated extraction by those sections and by the
-generated files below, not by the bytes of `evaluator.source.llbc`.
+between runs of the same extraction, and its `files` table embeds the full text
+of every reached local source file. No proof and no generated definition reads
+either: Aeneas uses neither the embedded text nor the table order, and the
+generated Lean is byte-identical with or without them. The first normalization
+step below therefore sorts `short_names` by key and empties each file's
+`contents`, keeping its name and id, so that a repeated extraction of the same
+declarations reproduces `evaluator.source.llbc` byte for byte, while an edit to
+a reached file that changes no declaration changes no retained artifact.
 
 ## Normalize the translation input and compare
 
@@ -150,15 +154,19 @@ The guarded selection below checks identities, the `usize` implementation,
 absence of a vtable and absence of direct or indirect references in surviving
 semantic declarations. Method indices remain fixed; all function declarations
 and executable bodies remain intact except the stated local debug names.
-Restoration must reproduce the entire parsed source and raw output. The later
+Restoration must reproduce the entire parsed source, and the raw output up to
+the file text and `short_names` order removed above. The later
 Lean allocation and reservation binders are separate, explicitly documented
 adaptations. This is
 explicit tool-model compatibility selection, not verification of Rust's standard
 library. These commands require `jq`:
 
 ```sh
-jq -cae '.translated.options.dest_file = "evaluator.llbc"' \
-  target/replay/evaluator.raw.llbc > target/replay/evaluator.source.llbc
+jq -cae '
+.translated.options.dest_file = "evaluator.llbc"
+| .translated.files |= map(.contents = null)
+| .translated.short_names |= sort_by(.key)
+' target/replay/evaluator.raw.llbc > target/replay/evaluator.source.llbc
 jq -cae '
 def checked_argument($id; $name; $count; $type):
   .translated.fun_decls[$id] as $function |
@@ -757,7 +765,9 @@ jq -e --slurpfile source target/replay/evaluator.source.llbc \
  | .translated.trait_decls[9].methods[2] = $source[0].translated.trait_decls[9].methods[2]
  | .translated.trait_decls[9].methods[6] = $source[0].translated.trait_decls[9].methods[6]
  | .translated.trait_impls[23].methods[2] = $source[0].translated.trait_impls[23].methods[2]
- | .translated.trait_impls[23].methods[6] = $source[0].translated.trait_impls[23].methods[6]) | (.translated.options.dest_file = $raw[0].translated.options.dest_file) == $raw[0]
+ | .translated.trait_impls[23].methods[6] = $source[0].translated.trait_impls[23].methods[6]) | (.translated.options.dest_file = $raw[0].translated.options.dest_file)
+ == ($raw[0] | .translated.files |= map(.contents = null)
+     | .translated.short_names |= sort_by(.key))
 ' target/replay/evaluator.llbc
 
 mkdir -p target/replay/Evaluator
