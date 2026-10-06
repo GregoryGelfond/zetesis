@@ -6,6 +6,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- `examples/scalability/mastermind.lp`: every six-peg Mastermind code
+  consistent with one scored guess, with the number of colours as its scaling
+  knob (6080 answer sets at the default `colors=6`, 45832 at 8). The maintained
+  scalability population (`zetesis test scalability`, `zetesis-bench run
+  --suite scalability`) gains it at colors=5 and 6, making twelve workloads
+  (thirteen with Einstein).
 - `zetesis_core::CatalogIndex`: an atom index over every atom of one catalog
   that holds its own handle to that catalog (sharing its storage), so one
   index can be built once and lent as an `AtomLookup` to every reader of the

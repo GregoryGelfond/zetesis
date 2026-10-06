@@ -22,9 +22,9 @@ use crate::{
     selected::{FormulaJoins, NativeExecution, SearchMethod},
 };
 
-/// Reviewed metadata for the two default scalability fixtures.
+/// Reviewed metadata for the three default scalability fixtures.
 pub const MANIFEST_SHA256: &str =
-    "eabb3ca0161beca0816f7438439818aa4920465b979c9618c764f3c3b3bb1870";
+    "f67762b32930c9bec259edc8e1d5925fc2734740f33f5d5751b20315c89abc19";
 const SUDOKU_SHA256: &str = "9ee5cb65a0ad7e563af9378a46e04b3a19762850ce7cb476ad7d9adbe27466ef";
 const EINSTEIN_SHA256: &str = "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b";
 
@@ -64,7 +64,7 @@ fn fixtures(root: &Path, limits: WorkloadLimits) -> Result<Vec<Fixture>, Error> 
     if manifest.schema_version != 1
         || manifest.description.is_empty()
         || manifest.reference_toolchain != "clingo version 5.8.2"
-        || manifest.cases.len() != 2
+        || manifest.cases.len() != 3
     {
         return Err(Error::Configuration("unsupported scalability manifest"));
     }
@@ -100,7 +100,8 @@ fn workload(
     )
 }
 
-/// Admit queens at n=8 and pigeonhole at h=7, with their original contracts.
+/// Admit queens at n=8, pigeonhole at h=7 and Mastermind at colors=6, with
+/// their original contracts.
 /// `root` is the repository's `examples` directory.
 ///
 /// # Errors
@@ -171,9 +172,9 @@ pub fn einstein(root: &Path, limits: WorkloadLimits) -> Result<Workload, Error> 
     )
 }
 
-/// Queens at n=8/9/10 and pigeonhole at h=5/6/7, followed by unchanged queens
-/// variant 02, SEND+MORE=MONEY, task allocation and the authored Sudoku grid.
-/// Einstein is an optional eleventh case. Amended sizes are qualified against
+/// Queens at n=8/9/10, pigeonhole at h=5/6/7 and Mastermind at colors=5/6,
+/// followed by unchanged queens variant 02, SEND+MORE=MONEY, task allocation
+/// and the authored Sudoku grid. Einstein is an optional thirteenth case. Amended sizes are qualified against
 /// a complete reference enumeration.
 ///
 /// # Errors
@@ -185,9 +186,10 @@ pub fn workloads(
     limits: WorkloadLimits,
 ) -> Result<Vec<Workload>, Error> {
     let fixtures = fixtures(root, limits)?;
-    let mut result = Vec::with_capacity(11);
-    for (fixture, sizes) in fixtures.iter().zip([[8, 9, 10], [5, 6, 7]]) {
-        for size in sizes {
+    let mut result = Vec::with_capacity(13);
+    let sizes: [&[i32]; 3] = [&[8, 9, 10], &[5, 6, 7], &[5, 6]];
+    for (fixture, sizes) in fixtures.iter().zip(sizes) {
+        for &size in sizes {
             result.push(workload(root, fixture, size, limits)?);
         }
     }

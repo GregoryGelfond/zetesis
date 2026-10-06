@@ -186,7 +186,7 @@ mod campaigns {
         );
         assert_eq!(
             qualified["report"]["workloads"].as_array().unwrap().len(),
-            10
+            12
         );
         assert!(
             qualified["report"]["samples"]
@@ -306,7 +306,7 @@ mod campaigns {
             .enumerate()
             .filter(|(_, check)| check["slot"]["producer"]["solver"] == "native")
             .collect::<Vec<_>>();
-        assert_eq!(native.len(), 10);
+        assert_eq!(native.len(), 12);
         for (index, check) in native {
             assert_eq!(check["decision"], "refused", "{check}");
             let retained = &evidence["report"]["samples"][index];
