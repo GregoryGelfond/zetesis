@@ -74,3 +74,45 @@ fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
     terminal_statistics(&mut absent, None).unwrap();
     assert_eq!(absent.bytes, b"null");
 }
+
+#[test]
+fn each_reconstruction_receipt_keeps_its_own_values() {
+    // Distinct values per object and component, so a swapped field shows.
+    let receipt = |work, substitutions| ReconstructionCharges {
+        work,
+        substitutions,
+    };
+    let statistics = TerminalExecutionStatistics {
+        base: zetesis_themelios::BaseKind::Hybrid,
+        base_answers: 2,
+        reconstructed: 2,
+        pending: 0,
+        reconstruction: ReconstructionStatistics {
+            attempts: 2,
+            completed: 2,
+            work: 100,
+            substitutions: 10,
+            admission: receipt(80, 8),
+            allowance: receipt(920, 92),
+            latest: receipt(9, 1),
+            peak: receipt(11, 2),
+        },
+    };
+    let mut complete = Buffer::new(2048);
+    terminal_statistics(&mut complete, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&complete.bytes).unwrap();
+    let reconstruction = &value["reconstruction"];
+    assert_eq!(value["base"], "hybrid");
+    for (object, work, substitutions) in [
+        ("admission", 80, 8),
+        ("allowance", 920, 92),
+        ("latest", 9, 1),
+        ("peak", 11, 2),
+    ] {
+        assert_eq!(reconstruction[object]["work"], work, "{object}");
+        assert_eq!(
+            reconstruction[object]["substitutions"], substitutions,
+            "{object}"
+        );
+    }
+}

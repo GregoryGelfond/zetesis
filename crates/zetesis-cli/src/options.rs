@@ -341,7 +341,9 @@ pub struct Options {
     /// Maximum include edges from any explicit input root.
     #[arg(long, default_value_t = 32, hide_short_help = true)]
     pub max_include_depth: usize,
-    /// Maximum substitutions inspected in eager lowering or formula admission.
+    /// Maximum substitutions inspected in eager lowering or formula admission;
+    /// each answer's reconstruction of deferred definitions may inspect the
+    /// headroom admission left, and streamed constraint checks share this limit.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_substitutions, hide_short_help = true)]
     pub max_substitutions: usize,
     /// Maximum rules retained during eager CPU/GPU lowering.

@@ -98,7 +98,7 @@ struct Admitted {
 /// Its base theory alone does not denote the original answer sets. Each base
 /// answer must be extended by [`Self::reconstruction`]. Clones share immutable
 /// source, canonical payload and indexes; each reconstruction session owns its
-/// cumulative work history and private scratch. Objectives and explicit
+/// per-answer allowance, reported totals and private scratch. Objectives and explicit
 /// projection are outside this initial applicability class.
 #[derive(Clone)]
 pub struct TerminalFormula(Arc<Admitted>);

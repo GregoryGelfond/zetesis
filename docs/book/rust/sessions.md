@@ -413,7 +413,7 @@ covers the base (for a hybrid base, its core), not the complete original theory.
 original answers and an unfinished attempt. Its accepted work totals include
 source admission and remain distinct from base search work; it also reports
 admission's charge, the per-answer allowance each reconstruction may use, the
-latest call's charge and the largest. These counters are
+latest call's accepted charge and the componentwise peak of accepted charges. These counters are
 available without timing instrumentation. CLI phase schema 4 introduced
 `answer_reconstruction`; schema 5 adds `model_construction`. Maintained readers
 accept schemas 1–4 without inventing measurements absent from older records.

@@ -923,10 +923,10 @@ lazy formula route over a hybrid base, whose eligible constraints are streamed
 and checked before an answer is reconstructed. Explicit eager grounding still
 materializes the complete theory. Base membership uses the selected CPU or GPU executor. Reconstruction
 currently runs on the host. Each reconstruction starts from source admission's
-work and substitutions, so one answer may use the headroom the formula ceilings
-left after grounding, whatever earlier answers used: the number of answers is
-bounded by enumeration limits, time and cancellation, never by the grounding
-ceiling. Session totals are reported. A refused extension
+account under a per-answer allowance of work and substitutions — the headroom
+the formula ceilings left after grounding — whatever earlier answers used: the
+number of answers is bounded by enumeration limits, time and cancellation, not
+by a cumulative grounding ceiling. Session totals are reported. A refused extension
 publishes no original answer and cannot establish exhausted enumeration.
 
 ### Relation rows and vector operations

@@ -382,7 +382,8 @@ metadata. Each call starts with exactly the supplied true rows and may charge
 the cursor's per-answer allowance of work and substitutions — the headroom the
 formula ceilings left after source admission — whatever earlier calls used; a
 work or substitution refusal reports that allowance as its limit and the call's
-own charge as observed. `statistics()` reports the session totals, admission's
+requested charge as observed; the receipts' `latest` is the call's accepted
+charge. `statistics()` reports the session totals, admission's
 charge, the allowance, the latest call and the largest call. A refusal
 fuses the cursor without invalidating prior returned models. Retained model
 families have their own consumer-side memory limits. These named capacities are

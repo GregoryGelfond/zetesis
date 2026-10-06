@@ -61,11 +61,12 @@ pub struct ReconstructionStatistics {
     /// What each call may charge: the headroom the formula ceilings left
     /// after admission.
     pub allowance: ReconstructionCharges,
-    /// The latest call's charge: on a refused session, what the refused call
-    /// accepted; otherwise the answer delivered last.
+    /// The latest call's accepted charge: on a refused session, what the
+    /// refused call accepted before its refusal; otherwise the answer
+    /// delivered last.
     pub latest: ReconstructionCharges,
-    /// The largest charge of any call, refused calls included, by component:
-    /// how close an answer came to the allowance.
+    /// The componentwise peak of accepted charges over every call, refused
+    /// calls included: how close an answer came to the allowance.
     pub peak: ReconstructionCharges,
 }
 
@@ -178,9 +179,11 @@ impl std::error::Error for ReconstructionError {
     }
 }
 
-/// Independent cumulative extension cursor over an immutable admitted owner.
-/// Scratch and selected derived rows are private to each call. Nothing from a
-/// previous answer becomes true in a subsequent one through storage reuse.
+/// Independent extension cursor over an immutable admitted owner. Each call
+/// starts from admission's account under the cursor's per-answer allowance;
+/// only the reported totals accumulate (saturating). Scratch and selected
+/// derived rows are private to each call. Nothing from a previous answer
+/// becomes true in a subsequent one through storage reuse.
 pub struct TerminalReconstruction<'a> {
     owner: &'a TerminalFormula,
     admission: ReconstructionCharges,
@@ -247,7 +250,8 @@ impl<'a> TerminalReconstruction<'a> {
     /// Each call starts from admission's history and may charge the cursor's
     /// `allowance` of work and substitutions, whatever earlier answers used;
     /// a work or substitution refusal reports the allowance as its limit and
-    /// the call's own charge as observed. Other ceilings are checked within
+    /// the call's requested charge (what the refused operation needed, past the
+    /// accepted one) as observed. Other ceilings are checked within
     /// the call as during admission. No full possible-support relation is
     /// enumerated during reconstruction.
     ///
