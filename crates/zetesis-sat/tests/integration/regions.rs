@@ -131,7 +131,7 @@ fn a_restriction_narrows_the_remaining_regions_without_restarting() {
 
 #[test]
 fn a_restriction_charges_its_indexing_to_the_search_work() {
-    // Indexing the theory is charged when the search is built; indexing a
+    // Indexing the theory is charged when the walk starts; indexing a
     // restriction is charged when it is added, and the region receipts
     // count the same figure.
     let theory = choices(3);
@@ -147,8 +147,8 @@ fn a_restriction_charges_its_indexing_to_the_search_work() {
 
 #[test]
 fn a_restriction_beyond_the_remaining_search_work_is_refused() {
-    // The ceiling is exactly what construction charged, so no work remains
-    // for the restriction's indexing.
+    // The ceiling is exactly what construction charged, the producer
+    // extraction, so no work remains for the restriction's indexing.
     let theory = choices(3);
     let construction = regions(&theory, Limits::default()).statistics().search.work;
     let limits = Limits {
@@ -183,11 +183,13 @@ fn the_candidate_limit_stops_regions_without_exhaustion() {
 
 #[test]
 fn the_work_limit_stops_regions_without_exhaustion() {
-    // Indexing the theory and extracting its producers are charged at
-    // construction; the ceiling leaves a little search beyond them.
+    // Extracting the producers is charged at construction and indexing the
+    // theory, one unit per node, when the walk starts; the ceiling leaves a
+    // little search beyond both, less than the first leaf needs.
     let theory = choices(4);
     let construction = regions(&theory, Limits::default()).statistics().search.work;
-    let max_work = construction + 10;
+    let walk = construction + u64::try_from(theory.nodes().len()).unwrap();
+    let max_work = walk + 10;
     let limits = Limits {
         search: SearchLimits {
             max_work,
@@ -197,9 +199,42 @@ fn the_work_limit_stops_regions_without_exhaustion() {
     };
     let mut search = regions(&theory, limits);
     let outcomes: Vec<_> = search.by_ref().collect();
-    assert!(matches!(outcomes.last(), Some(Err(Incomplete::WorkLimit))));
+    // The walk's own charged reads stop it before its first model.
+    assert!(matches!(outcomes.as_slice(), [Err(Incomplete::WorkLimit)]));
     assert!(!search.exhausted());
-    assert!(search.statistics().search.work >= max_work);
+    let statistics = search.statistics();
+    assert!(
+        statistics.regions.unwrap().counts.work > walk,
+        "reads were charged"
+    );
+    assert!(statistics.search.work >= max_work);
+}
+
+#[test]
+fn the_original_index_charge_at_the_walks_start_is_inclusive() {
+    // Construction charges only the producer extraction. The walk's first
+    // step charges the index whole, one unit per node, before building it:
+    // a ceiling short of that refuses it and spends nothing, and a ceiling
+    // of exactly that admits it.
+    let theory = choices(3);
+    let construction = regions(&theory, Limits::default()).statistics().search.work;
+    let walk = construction + u64::try_from(theory.nodes().len()).unwrap();
+    for max_work in construction..=walk {
+        let limits = Limits {
+            search: SearchLimits {
+                max_work,
+                ..SearchLimits::default()
+            },
+            ..Limits::default()
+        };
+        let mut search = regions(&theory, limits);
+        assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
+        assert!(!search.exhausted());
+        let statistics = search.statistics();
+        let spent = if max_work == walk { walk } else { construction };
+        assert_eq!(statistics.search.work, spent, "at {max_work}");
+        assert_eq!(statistics.regions.unwrap().counts.work, spent);
+    }
 }
 
 #[test]

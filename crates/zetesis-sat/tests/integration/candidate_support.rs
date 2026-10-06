@@ -264,6 +264,10 @@ fn optional_encoding_limit_rolls_back_to_general_search() {
 
 #[test]
 fn setup_work_ceiling_is_inclusive() {
+    // Under the default regions method construction charges only the
+    // producer extraction: the original index is charged when the walk
+    // starts, so construction no longer fails for want of index work, and
+    // the exact ceiling stops at the walk's start.
     let input = disjunctions(2);
     let complete = StableModels::new(&input, Limits::default(), Cancellation::default()).unwrap();
     let work = complete.statistics().search.work;

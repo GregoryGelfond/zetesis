@@ -128,6 +128,27 @@ Notable changes by release. Versions follow Semantic Versioning.
   rendered whole and written to standard error at once, instead of one write
   per fragment. The report's text and its position among other diagnostics are
   unchanged.
+- The regions method builds, and charges, the original theory's narrowing
+  index when a region walk first needs it rather than when the enumeration is
+  constructed: before the walk's first step, on the scalar, batched, producer
+  and parallel routes alike. The charge, one work unit per node, comes first,
+  so a refused charge builds nothing and stops the run incomplete at the walk's
+  start; a charge admitted before a failed build stays in both search work and
+  `regions.work`. Runs decided by a positive certificate build no index and
+  report lower search and region work. The producer route's frontier byte
+  receipts read before the root's first narrowing exclude the original
+  theory's knowledge; from that narrowing on they are unchanged. `--stats`
+  attributes the index's time to candidate generation on every route, the
+  parallel walk included, whose report now adds the coordinator's measurements
+  to the workers' sums: candidate generation counts one more call, and
+  candidate setup no longer includes the index. Under a fixed work limit,
+  construction no longer fails for want of index work, so a run that stopped
+  at construction now stops at the walk's start, and a run a positive
+  certificate decides can complete where it stopped before. Certificate
+  preparation, which now has the index's work still to spend, can select a
+  tight or positive plan that was refused before for lack of work, so such a
+  run can take a different, equally exact membership route, with different
+  certificate and region receipts. Limits are unchanged.
 
 ### Removed
 

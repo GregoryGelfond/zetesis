@@ -110,8 +110,10 @@ impl<Q: Quota> Budget<'_, Q> {
     pub(crate) fn remaining_work(&self) -> u64 {
         self.limits.max_work.saturating_sub(self.statistics.work)
     }
-    /// Charge work an operation already performed, one poll for the lot,
-    /// reserved through the quota as ticks would be.
+    /// Charge an operation's work, one poll for the lot, reserved through the
+    /// quota as ticks would be. The work may be already performed, or known
+    /// in advance and charged before it is performed, as the original index
+    /// is; a refused charge adds nothing.
     pub(crate) fn charge(&mut self, work: u64) -> Result<(), Incomplete> {
         self.cancellation.poll()?;
         self.quota

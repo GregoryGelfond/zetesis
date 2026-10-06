@@ -49,7 +49,9 @@ impl PhaseMeasurement {
 /// external batch/device execution, publication and timer overhead are not included.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchPhaseTimings {
-    /// Candidate query, projection and exact blocking, including failed attempts.
+    /// Candidate query, projection and exact blocking, including failed
+    /// attempts, and one call building the original-theory index when a
+    /// region walk starts.
     pub candidates: PhaseMeasurement,
     /// Independent original-model and original-region checks, including
     /// repeated residual prechecks, filter preparation and failed attempts.
@@ -69,6 +71,32 @@ pub(crate) enum Phase {
     Reduct,
     ReductPreparation,
     Certified,
+}
+
+impl SearchPhaseTimings {
+    /// Add another recorder's measurements, phase by phase, keeping
+    /// overflow sticky.
+    fn merge(&mut self, other: &Self) {
+        self.candidates.merge(other.candidates);
+        self.original_validation.merge(other.original_validation);
+        self.reduct_preparation.merge(other.reduct_preparation);
+        self.reduct.merge(other.reduct);
+        self.certified.merge(other.certified);
+    }
+}
+
+/// Two recorders' measurements summed, or whichever exists.
+pub(crate) fn combined(
+    left: Option<SearchPhaseTimings>,
+    right: Option<SearchPhaseTimings>,
+) -> Option<SearchPhaseTimings> {
+    match (left, right) {
+        (Some(mut left), Some(right)) => {
+            left.merge(&right);
+            Some(left)
+        }
+        (left, right) => left.or(right),
+    }
 }
 
 pub(crate) fn start(timing: Option<&SearchPhaseTimings>) -> Option<Instant> {

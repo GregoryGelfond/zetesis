@@ -146,7 +146,9 @@ fn failed_outer_and_original_attempts_are_recorded_without_false_completion() {
             Incomplete::DecisionLimit | Incomplete::Verification(zetesis_cpu::Stop::WorkLimit)
         ));
         let timing = search.statistics().phase_timings.unwrap();
-        assert_eq!(timing.candidates.calls, 1);
+        // One call builds the original index when the walk starts; one is
+        // the proposal that stopped or was refused.
+        assert_eq!(timing.candidates.calls, 2);
         assert_eq!(timing.original_validation.calls, u64::from(verification));
         assert_eq!(timing.reduct.calls, 0);
         assert_eq!(search.statistics().stable_models, 0);

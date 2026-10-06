@@ -224,7 +224,6 @@ impl CompletionExecutor {
             }
             let input = Input {
                 prepared: reduct.prepared(),
-                query: reduct.query(),
                 ..input
             };
             let requirements = input.prepared.map_or(Ok(result_slots), |owner| {
@@ -325,8 +324,9 @@ pub(super) struct Input<'a> {
     pub(super) limits: Limits,
     /// The prepared reduct encoding, under the clause kernel.
     pub(super) prepared: Option<&'a PreparedReduct>,
-    /// The region query, under the regions method.
-    pub(super) query: Option<&'a super::ReductQuery>,
+    /// The region query, under the regions method, over the original index
+    /// its owner lends; completion never builds one.
+    pub(super) query: Option<super::ReductQuery<'a>>,
 }
 
 struct Outcome {

@@ -79,7 +79,7 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
         (&theory, &narrower, None),
         &Conditions::<(Theory, Narrower)>::default(),
         &mut Region::all_open(theory.atom_count()),
-        &mut CandidateKnowledge::new(narrower.knowledge()),
+        &mut CandidateKnowledge::default(),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,

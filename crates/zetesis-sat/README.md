@@ -151,7 +151,8 @@ encoding and the clause query serve instead, and the positive
 certificate's unit restriction, which is clause-only, applies.
 
 The narrowing is driven by a worklist over an index of the theory, built
-once: a node or atom that learns something is revisited once, and only its
+once, when the walk first needs it (a run a positive certificate decides
+builds none), and charged then, one work unit per node: a node or atom that learns something is revisited once, and only its
 parents, operands and dependent producers are read, as unit propagation
 over watched clauses touches only what moved. What a narrowing knows about
 a region travels with the region: a split copies the knowledge into one
@@ -461,8 +462,9 @@ the same split, one knowledge copy per split and the existing bound on the numbe
 of donated regions. They do not establish a bound on all local stacks or total
 process memory.
 
-`StableModels::with_region_producers` instead retains one prepared region index
-and an owned Rayon pool across bounded production rounds. It uses the same
+`StableModels::with_region_producers` instead retains its region preparation
+and an owned Rayon pool across bounded production rounds, each reading the
+enumeration's one original index. It uses the same
 readings and disjoint splits, returning classical candidates for a separate
 membership executor. `next_batch_with_completion` joins each round, independently
 validates original satisfaction, then invokes its checker and finishes residuals.

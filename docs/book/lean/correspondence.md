@@ -1180,14 +1180,15 @@ regressions are executable evidence for those boundaries, not formal refinement.
 Retained-byte accounting includes the owned masks; the full seen-mask scan and
 snapshot writes are outside the existing charged-read work counters.
 
-Region candidate preparation and frozen proper-subset queries share one
-immutable index constructed with the exact original `Theory`. Reuse checks
-instance identity. Each region or query retains private `Knowledge`, and each
-candidate supplies freshly authenticated frozen truth. Sharing preserves the
-subjects of the existing `FormulaBounds` and `ReductRegions` laws; it changes
-ownership, not the definition of a reduct. Index construction, identity checks,
-mutable-state separation and attribution of construction work remain Rust
-refinement obligations.
+The region candidate walk and frozen proper-subset queries share one
+immutable index constructed with the exact original `Theory`, built by its one
+owner when the walk first needs it. Reuse checks instance identity. Each
+region or query retains private `Knowledge`, and each candidate supplies
+freshly authenticated frozen truth. Sharing preserves the subjects of the
+existing `FormulaBounds` and `ReductRegions` laws, and building the index later
+builds the same index; it changes ownership and timing, not the definition of
+a reduct. Index construction, identity checks, mutable-state separation and
+attribution of construction work remain Rust refinement obligations.
 
 The immutable region adjacency stores each ordered incidence row as a slice
 between two offsets in one contiguous entry vector.

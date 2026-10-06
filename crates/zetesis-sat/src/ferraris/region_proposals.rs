@@ -14,7 +14,7 @@
 
 use std::mem::size_of;
 use std::num::NonZeroUsize;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rayon::prelude::*;
@@ -22,9 +22,7 @@ use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Producers, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
-use super::regions::{
-    self, IndexedTheory, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
-};
+use super::regions::{self, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics};
 use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, SearchStatistics};
 
@@ -115,10 +113,10 @@ impl Frontier {
 }
 
 /// A reusable candidate frontier and an owned Rayon executor. Its immutable
-/// preparation is shared across workers and every bounded production round.
+/// preparation, and the original index each round is lent, are shared across
+/// workers and every bounded production round.
 pub(crate) struct RegionProposals {
     producers: Option<Producers>,
-    index: Arc<IndexedTheory>,
     restrictions: Conditions<(Theory, Narrower)>,
     pending: Frontier,
     pool: rayon::ThreadPool,
@@ -146,6 +144,8 @@ pub(crate) struct Produced {
 }
 
 impl RegionProposals {
+    /// Extract the producers and queue the root region with no knowledge;
+    /// its first narrowing creates each knowledge slot.
     pub(crate) fn new(
         theory: &Theory,
         workers: NonZeroUsize,
@@ -153,7 +153,6 @@ impl RegionProposals {
     ) -> Result<Self, Incomplete> {
         let regions::Opened {
             producers,
-            index,
             statistics,
         } = regions::open(theory, budget)?;
         let pool = rayon::ThreadPoolBuilder::new()
@@ -163,11 +162,10 @@ impl RegionProposals {
             .map_err(|_| Incomplete::Allocation)?;
         let pending = Frontier::new((
             Region::all_open(theory.atom_count()),
-            CandidateKnowledge::new(index.narrower().knowledge()),
+            CandidateKnowledge::default(),
         ))?;
         Ok(Self {
             producers,
-            index,
             restrictions: Conditions::default(),
             pending,
             pool,
@@ -177,8 +175,8 @@ impl RegionProposals {
         })
     }
 
-    pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
-        &self.index
+    pub(crate) fn counts_mut(&mut self) -> &mut RegionCounts {
+        &mut self.statistics.counts
     }
 
     pub(crate) const fn statistics(&self) -> RegionSearchStatistics {
@@ -254,9 +252,11 @@ impl RegionProposals {
     /// is empty on entry; its allocation remains the caller's batch ownership.
     /// A zero remaining candidate allowance still permits coverage work until
     /// either the frontier is refuted or another classical leaf is encountered.
+    /// The round reads the original theory through `subject`, the
+    /// enumeration's one shared index, authenticated by the caller.
     pub(crate) fn fill(
         &mut self,
-        theory: &Theory,
+        (theory, narrower): (&Theory, &Narrower),
         maximum: usize,
         remaining: u64,
         budget: &mut Budget<'_>,
@@ -265,16 +265,6 @@ impl RegionProposals {
     ) -> Produced {
         debug_assert!(output.is_empty());
         debug_assert!(maximum > 0 && output.capacity() >= maximum);
-        let (theory, narrower) = match self.index.subject(theory) {
-            Ok(subject) => subject,
-            Err(error) => {
-                return Produced {
-                    exhausted: false,
-                    stopped: Some(error),
-                    original_validation: crate::PhaseMeasurement::default(),
-                };
-            }
-        };
         let allowance = SharedBudget::new(budget.limits, budget.statistics);
         let round = Round {
             theory,

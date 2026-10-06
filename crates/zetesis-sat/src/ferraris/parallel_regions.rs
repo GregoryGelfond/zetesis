@@ -3,11 +3,13 @@
 //!
 //! Each worker owns a work-stealing deque of regions with their knowledge, a
 //! lease on the enumeration's shared allowance that serves its consecutive
-//! regions, and its own evaluation workspace. Candidate and reduct traversals
-//! share the authenticated original-theory index but never their mutable
-//! knowledge. A worker pops a region from its own deque, narrows it from the
-//! knowledge it carries, drops it when refuted, splits it otherwise and pushes
-//! both children back onto its deque; a worker whose deque is empty steals a
+//! regions, and its own evaluation workspace. The enumeration builds the
+//! original-theory index before the first proposal and hands each worker a
+//! clone when it is spawned; candidate and reduct traversals share that
+//! authenticated index but never their mutable knowledge. A worker pops a
+//! region from its own deque, narrows it from the knowledge it carries, drops
+//! it when refuted, splits it otherwise and pushes both children back onto its
+//! deque; a worker whose deque is empty steals a
 //! region from a peer. At a leaf it decides membership as the scalar proposer
 //! does, by the class certificate when one applies and else by the
 //! proper-subset query as a region tree; a stable model is sent to the
@@ -71,7 +73,8 @@ use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Producers, Th
 
 use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
-use super::regions::{IndexedTheory, RegionCounts, RegionSearchStatistics};
+use super::original_index::IndexedTheory;
+use super::regions::{RegionCounts, RegionSearchStatistics};
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::ferraris::Decision;
 use crate::search::{Budget, SharedBudget, WorkLease};
@@ -93,7 +96,6 @@ type Entry = (Region, CandidateKnowledge);
 
 struct Shared {
     producers: Option<Producers>,
-    index: Arc<IndexedTheory>,
     certificate: Option<Arc<Certification>>,
     filter: Option<crate::region_filter::Filter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
@@ -496,8 +498,10 @@ impl std::fmt::Debug for ParallelRegions {
 }
 
 impl ParallelRegions {
-    /// Prepare the shared structure; the workers start on the first
-    /// proposal, once the enumeration's certificates are configured.
+    /// Prepare the shared structure, queueing the root region with no
+    /// knowledge; its first narrowing creates each knowledge slot. The
+    /// workers start on the first proposal, once the enumeration's
+    /// certificates are configured and its original index is built.
     pub(crate) fn new(
         theory: &Theory,
         workers: NonZeroUsize,
@@ -507,13 +511,12 @@ impl ParallelRegions {
     ) -> Result<Self, Incomplete> {
         let super::regions::Opened {
             producers,
-            index,
             statistics,
         } = super::regions::open(theory, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let root = (
             Region::all_open(theory.atom_count()),
-            CandidateKnowledge::new(index.narrower().knowledge()),
+            CandidateKnowledge::default(),
         );
         let mut queues = crate::search::storage(workers.get())?;
         let mut first = VecDeque::new();
@@ -526,7 +529,6 @@ impl ParallelRegions {
         Ok(Self {
             shared: Arc::new(Shared {
                 producers,
-                index,
                 certificate: None,
                 filter: None,
                 restrictions: RwLock::new(Conditions::default()),
@@ -585,12 +587,13 @@ impl ParallelRegions {
         self.shared.stopped().map_or(joined, Err)
     }
 
-    pub(crate) fn index(&self) -> &Arc<IndexedTheory> {
-        &self.shared.index
+    pub(crate) fn counts_mut(&mut self) -> &mut RegionCounts {
+        &mut self.statistics.counts
     }
 
     /// The region receipts: the workers' live counters, current while they
-    /// run and complete when they have finished, and the set-up work. A
+    /// run and complete when they have finished, and the coordinator's work:
+    /// the producer extraction, restrictions and the original index. A
     /// worker's narrowing work reaches the live counter as it goes and is
     /// counted nowhere else.
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
@@ -734,12 +737,14 @@ impl ParallelRegions {
     }
 
     /// The next verified stable model, or `None` once the workers have
-    /// covered the root. Starts the workers on the first call, with the
+    /// covered the root. Starts the workers on the first call, handing each
+    /// a clone of `index`, the enumeration's one original index, with the
     /// certificate the enumeration holds at that moment, timing their
     /// phases when `timed`. A stop a worker raised is returned once every
     /// model the workers sent has been taken, and on every call after that.
     pub(crate) fn propose(
         &mut self,
+        index: &Arc<IndexedTheory>,
         certificate: Option<&Arc<Certification>>,
         timed: bool,
         budget: &mut Budget<'_>,
@@ -749,7 +754,7 @@ impl ParallelRegions {
         }
         if !self.started {
             self.synchronize_budget(budget.statistics)?;
-            if let Err(error) = self.start(certificate, timed) {
+            if let Err(error) = self.start(index, certificate, timed) {
                 self.account(budget);
                 return Err(error);
             }
@@ -805,13 +810,17 @@ impl ParallelRegions {
 
     fn start(
         &mut self,
+        index: &Arc<IndexedTheory>,
         certificate: Option<&Arc<Certification>>,
         timed: bool,
     ) -> Result<(), Incomplete> {
-        self.start_with(certificate, timed, |shared, index, sender| {
+        self.start_with(certificate, timed, |shared, slot, sender| {
+            let original = Arc::clone(index);
             std::thread::Builder::new()
                 .name("zetesis-region".into())
-                .spawn(move || contain_worker(&shared, || worker(&shared, index, &sender)))
+                .spawn(move || {
+                    contain_worker(&shared, || worker(&shared, &original, slot, &sender))
+                })
         })
     }
 
@@ -951,9 +960,14 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
     into.reduct.regions.add(from.reduct.regions)
 }
 
-/// One worker's walk, until the run closes, a stop is raised, or the
-/// enumeration stops listening.
-fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) -> WorkerReport {
+/// One worker's walk over `original`, the enumeration's index, until the run
+/// closes, a stop is raised, or the enumeration stops listening.
+fn worker(
+    shared: &Shared,
+    original: &IndexedTheory,
+    index: usize,
+    sender: &SyncSender<Interpretation>,
+) -> WorkerReport {
     let mut report = WorkerReport {
         regions: RegionCounts::default(),
         statistics: Statistics {
@@ -968,7 +982,7 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
     };
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
-    let mut workspaces = Workspaces::new(shared);
+    let mut workspaces = Workspaces::new();
     // One lease serves this worker's consecutive regions, so the shared ledger
     // is locked about twice per grant rather than twice per region. It settles
     // before this worker steals or waits for another region and before it sends
@@ -997,6 +1011,7 @@ fn worker(shared: &Shared, index: usize, sender: &SyncSender<Interpretation>) ->
             };
             let result = step(
                 shared,
+                original,
                 entry,
                 index,
                 &mut workspaces,
@@ -1090,10 +1105,10 @@ struct Workspaces<'a> {
 }
 
 impl Workspaces<'_> {
-    fn new(shared: &Shared) -> Self {
+    fn new() -> Self {
         Self {
             scratch: NarrowingScratch::default(),
-            membership: crate::prepared_reduct::State::with_index(Arc::clone(&shared.index)),
+            membership: crate::prepared_reduct::State::new(crate::SearchMethod::Regions),
             filter: None,
         }
     }
@@ -1103,6 +1118,7 @@ impl Workspaces<'_> {
 /// the reduct. A split publishes both children onto this worker's deque.
 fn step<'a>(
     shared: &'a Shared,
+    original: &IndexedTheory,
     (mut region, mut knowledge): Entry,
     index: usize,
     workspaces: &mut Workspaces<'a>,
@@ -1123,8 +1139,8 @@ fn step<'a>(
     let narrowing: Result<Narrowing, Incomplete> = (|| {
         let narrowing = super::regions::narrow(
             (
-                shared.index.theory(),
-                shared.index.narrower(),
+                original.theory(),
+                original.narrower(),
                 shared.producers.as_ref(),
             ),
             &restrictions,
@@ -1138,7 +1154,7 @@ fn step<'a>(
             && let Some(factory) = shared.filter.as_ref()
             && factory.check(
                 &mut workspaces.filter,
-                shared.index.theory(),
+                original.theory(),
                 &region,
                 &shared.cancellation,
                 &mut report.statistics.phase_timings,
@@ -1170,8 +1186,15 @@ fn step<'a>(
     let Some(atom) = region.split_atom() else {
         report.regions.leaves += 1;
         Live::add(&shared.live.leaves, 1);
-        return leaf(shared, &region, budget, &mut workspaces.membership, report)
-            .map(Stepped::Resolved);
+        return leaf(
+            shared,
+            original,
+            &region,
+            budget,
+            &mut workspaces.membership,
+            report,
+        )
+        .map(Stepped::Resolved);
     };
     budget.decide()?;
     // Each child carries its own copy of the knowledge, linear in the theory:
@@ -1185,12 +1208,13 @@ fn step<'a>(
 /// Decide a leaf as the scalar proposer does.
 fn leaf<'a>(
     shared: &Shared,
+    original: &IndexedTheory,
     region: &Region,
     budget: &mut Budget<'a, WorkLease<'a>>,
     membership: &mut crate::prepared_reduct::State,
     report: &mut WorkerReport,
 ) -> Result<Option<Interpretation>, Incomplete> {
-    let candidate = super::regions::leaf_interpretation(shared.index.theory(), region)?;
+    let candidate = super::regions::leaf_interpretation(original.theory(), region)?;
     shared
         .candidates
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
@@ -1232,7 +1256,8 @@ fn leaf<'a>(
     } else {
         membership
             .check(
-                shared.index.theory(),
+                original.theory(),
+                Some(original),
                 &candidate,
                 shared.limits,
                 budget,

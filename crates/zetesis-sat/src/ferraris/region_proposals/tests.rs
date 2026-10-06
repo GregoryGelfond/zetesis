@@ -14,11 +14,11 @@ fn index() -> Narrower {
     Narrower::new(&theory)
 }
 
+/// A region after its first narrowing, knowing only the original theory.
 fn entry() -> PendingRegion {
-    (
-        Region::all_open(2),
-        CandidateKnowledge::new(index().knowledge()),
-    )
+    let mut knowledge = CandidateKnowledge::default();
+    knowledge.permanent(0, &index()).unwrap();
+    (Region::all_open(2), knowledge)
 }
 
 #[test]

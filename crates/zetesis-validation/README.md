@@ -376,7 +376,8 @@ the reference's, and gives every compared cell, fastest ratio first, with
 the native intervals split into grounding, candidate proposal and
 membership, the reference's own grounding and solving times, both peak
 resident sets and the device bytes the native run accounted. Proposal sums
-the candidate setup and generation phases; membership sums certificate
+the candidate setup and generation phases (the regions method builds its
+original index in generation, when its walk starts); membership sums certificate
 setup and checks, closure and exact reduct membership, reduct preparation,
 original validation and the device's host oracle; grounding is the
 grounding stage, absent under lazy grounding, which grounds within

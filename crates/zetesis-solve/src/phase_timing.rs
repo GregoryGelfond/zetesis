@@ -15,12 +15,14 @@ pub enum SolvePhase {
     /// Execution setup, including static lowering, pools or device initialization.
     ExecutionSetup,
     /// Candidate generator initialization or initial classical formula encoding.
+    /// The regions method's original-theory index is not built here.
     CandidateSetup,
     /// Complete original-theory certificate construction, including refusals.
     CertificateSetup,
     /// Applicable class membership checking, including interrupted attempts.
     CertifiedMembership,
-    /// Candidate generation/projection and exact semantic blocking.
+    /// Candidate generation/projection and exact semantic blocking, including
+    /// the regions method's original-theory index, built when its walk starts.
     CandidateGeneration,
     /// Independent original-formula validation, including residual prechecks.
     OriginalValidation,

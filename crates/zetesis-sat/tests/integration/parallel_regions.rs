@@ -241,6 +241,28 @@ fn phase_timings_sum_the_workers_narrowing_and_leaf_decisions() {
 }
 
 #[test]
+fn a_timed_parallel_walk_reports_its_index_build_as_candidate_generation() {
+    let theory = choices(6);
+    let mut parallel = StableModels::with_region_workers(
+        &theory,
+        workers(4),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    parallel.enable_phase_timing();
+    assert_eq!(family(&mut parallel).len(), 64);
+    let statistics = parallel.statistics();
+    let regions = statistics.regions.unwrap().counts.regions;
+    // Each worker times one candidate call per region it narrows; the
+    // coordinator's index build, before the workers launch, is one more.
+    assert_eq!(
+        statistics.phase_timings.unwrap().candidates.calls,
+        u64::try_from(regions).unwrap() + 1
+    );
+}
+
+#[test]
 fn four_workers_report_the_scalar_walks_reading_work() {
     // The workers walk the tree the scalar walk walks, so the regions and
     // leaves they report are its, and so is the reading work, counted once:
