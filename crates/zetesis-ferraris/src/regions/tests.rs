@@ -21,6 +21,7 @@ mod chain_links;
 mod counters;
 mod copy_costs;
 mod metering;
+mod rechecks;
 mod scratch;
 
 /// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the

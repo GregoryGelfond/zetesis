@@ -22,6 +22,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   quadratically with the number of answers.
 - `AtomTable::index` is a structural lookup and no longer records atom
   identities; the record encoder's own lookup keeps the identity cache.
+- Region narrowing queues an atom's support recheck at most once until it
+  runs, since its supporters only fall as knowledge grows and one recheck with
+  the later knowledge derives what the dropped ones would have. Narrowing
+  results are unchanged; the propagation count and charged work in the
+  narrowing receipt, `regions.work` and the search work are lower, so under a
+  fixed work limit some runs complete where 0.3.0 stopped.
 - Region narrowing keeps its worklists in a `NarrowingScratch` that each
   walker passes to every narrowing and reuses, instead of in each region's
   `Knowledge`; every `zetesis-ferraris` narrowing entry point takes it, and

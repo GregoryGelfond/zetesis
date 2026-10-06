@@ -938,7 +938,7 @@ impl Narrower {
     ) -> Result<Narrowing, Stop> {
         // Whatever an earlier narrowing that refuted or stopped left here
         // belongs to another region; it is discarded before this one reads.
-        scratch.clear();
+        scratch.prepare(subject.theory.atom_count());
         let mut closure = Closure {
             known,
             lists: scratch,
@@ -1041,14 +1041,43 @@ pub struct NarrowingScratch {
     /// Atoms whose support must be rechecked; queued only when producers
     /// are known, since only they say what supports an atom.
     heads: Vec<usize>,
+    /// One bit per atom, set exactly while the atom is in `heads`, so an
+    /// atom's recheck is queued once until it runs.
+    pending: Vec<u64>,
 }
 
 impl NarrowingScratch {
-    /// Discard every entry, keeping the capacity.
-    fn clear(&mut self) {
+    /// Discard every entry, keeping the capacity, for a narrowing over
+    /// `atoms` atoms.
+    fn prepare(&mut self, atoms: usize) {
+        for &atom in &self.heads {
+            self.pending[atom / 64] &= !(1u64 << (atom % 64));
+        }
         self.learned.clear();
         self.nodes.clear();
         self.heads.clear();
+        if self.pending.len() < flag_words(atoms) {
+            self.pending.resize(flag_words(atoms), 0);
+        }
+    }
+
+    /// Queue the atom's support recheck unless one is already pending. Its
+    /// supporters only fall as knowledge grows, so the pending recheck,
+    /// made with the later knowledge, derives what this one would have.
+    fn queue_recheck(&mut self, atom: usize) {
+        let (word, flag) = (atom / 64, 1u64 << (atom % 64));
+        if self.pending[word] & flag == 0 {
+            self.pending[word] |= flag;
+            self.heads.push(atom);
+        }
+    }
+
+    /// The next atom to recheck, no longer pending: a support change during
+    /// or after its recheck queues it again.
+    fn next_recheck(&mut self) -> Option<usize> {
+        let atom = self.heads.pop()?;
+        self.pending[atom / 64] &= !(1u64 << (atom % 64));
+        Some(atom)
     }
 }
 
@@ -1165,7 +1194,7 @@ impl<C: Count> Closure<'_, C> {
             });
         }
         if value && producers.is_some() {
-            self.lists.heads.push(atom);
+            self.lists.queue_recheck(atom);
         }
         step
     }
@@ -1203,7 +1232,9 @@ impl<C: Count> Closure<'_, C> {
                 step = step.join(self.sure(root));
             }
             if producers.is_some() {
-                self.lists.heads.extend(0..theory.atom_count());
+                for atom in 0..theory.atom_count() {
+                    self.lists.queue_recheck(atom);
+                }
             }
             self.known.seeded = true;
         }
@@ -1223,7 +1254,7 @@ impl<C: Count> Closure<'_, C> {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
-            } else if let Some(atom) = self.lists.heads.pop() {
+            } else if let Some(atom) = self.lists.next_recheck() {
                 statistics.propagations += 1;
                 let producers =
                     producers.expect("a support recheck is queued only when producers are known");
@@ -1372,13 +1403,11 @@ impl<C: Count> Closure<'_, C> {
                     // A held head blocks the other heads of its producers.
                     if let Some(producers) = producers {
                         for &producer in &producers.by_head[atom] {
-                            self.lists.heads.extend(
-                                producers.rules[producer]
-                                    .heads
-                                    .iter()
-                                    .copied()
-                                    .filter(|&head| head != atom),
-                            );
+                            for &head in &producers.rules[producer].heads {
+                                if head != atom {
+                                    self.lists.queue_recheck(head);
+                                }
+                            }
                         }
                     }
                     self.atom(index, producers, atom, true)
@@ -1404,9 +1433,9 @@ impl<C: Count> Closure<'_, C> {
             });
             if let Some(producers) = producers {
                 for &producer in &producers.by_body[node] {
-                    self.lists
-                        .heads
-                        .extend(producers.rules[producer].heads.iter().copied());
+                    for &head in &producers.rules[producer].heads {
+                        self.lists.queue_recheck(head);
+                    }
                 }
             }
         }
