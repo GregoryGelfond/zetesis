@@ -438,8 +438,13 @@ substitute for owner identity.
 `check_region(&theory, &region, &cancellation)` requires the exact retained core
 and a region spanning its dense atom catalog. A certainly true constraint body
 returns `Refuted { site }`; otherwise it returns `NotRefuted`, which does
-not assert satisfaction. The checker prepares and reuses a typed atom index and
-support-row correspondence on first region use. Region checks select known-held
+not assert satisfaction. On first region use a checker borrows the core's typed
+atom index (a `CatalogIndex`), which the first checker to need it builds and
+every later checker of the same core, on any thread, reuses for one unit of
+work; checkers racing on that first use may each build, and one index is kept.
+Each checker's support ledger counts the index's retained bytes, as it counts
+the shared support base. The checker then prepares and reuses its own
+support-row correspondence. Region checks select known-held
 positive rows before binding, while retaining rows without a known correspondence.
 A necessary signed-predicate test can avoid a template that cannot have a sure
 body. Neither operation changes the final full-model check or arithmetic admission.
@@ -460,7 +465,8 @@ candidate filtering cannot conceal fatal arithmetic.
 
 Hybrid admission preserves its original expansion-budget prefix. It also keeps
 prepared constraint plans and the support relations they read, which eager
-grounding can release after emission. The existing source, scalar and support ceilings still apply;
+grounding can release after emission, and, once a region check has used it,
+the core's typed atom index: two integer orders over the core's atoms. The existing source, scalar and support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
 atom guards. `streamed_templates()` counts lowered templates, including pool

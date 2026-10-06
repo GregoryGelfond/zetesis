@@ -8,10 +8,13 @@ mod selection;
 
 use crate::formula_support::{Context, GroundingWork};
 
-use std::{fmt, sync::Arc};
+use std::{
+    fmt,
+    sync::{Arc, OnceLock},
+};
 use themelios_base::source::Source;
 use themelios_program::program::{DefaultNegation, Program};
-use zetesis_core::{AtomCatalog, AtomIndex, AtomIndexError, Model};
+use zetesis_core::{AtomCatalog, AtomIndexError, AtomLookup, CatalogIndex, Model};
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
@@ -57,6 +60,9 @@ struct Core {
     compiled: Compiled,
     constraints: Option<Constraints>,
     source: Arc<Owner>,
+    /// The typed index of `compiled.atoms`, set by the first checker whose
+    /// region check needs it and lent to every later checker of this core.
+    index: OnceLock<CatalogIndex>,
 }
 
 /// A materialized producer core with the integrity constraints streamed over it:
@@ -282,6 +288,7 @@ impl StreamedCore {
             compiled,
             constraints,
             source,
+            index: OnceLock::new(),
         }))
     }
 
@@ -616,9 +623,10 @@ struct PreparedConstraints<'a> {
     source: &'a Constraints,
     completed: CompletedSupport<'a>,
     limits: FormulaLimits,
-    /// Original dense IDs, prepared once on first region use. The final-model
+    /// Original dense IDs, borrowed from the core's index on first region use
+    /// (and built there by the first checker that needs it). The final-model
     /// path keeps its existing canonical selection lookup.
-    index: Option<AtomIndex<'a>>,
+    index: Option<&'a CatalogIndex>,
     /// Source occurrence IDs mapped once into the original dense catalog.
     rows: Option<SourceRows<'a>>,
     /// Lazily prepared after each rule's first successful predicate gate.
@@ -628,15 +636,15 @@ struct PreparedConstraints<'a> {
 impl<'a> PreparedConstraints<'a> {
     fn prepare_selection(
         &mut self,
-        atoms: &'a AtomCatalog,
+        core: &'a StreamedCore,
         counters: &mut Counters,
     ) -> Result<(), ConstraintCheckCause> {
-        self.prepare_index(atoms, counters)?;
+        self.prepare_index(core, counters)?;
         if self.rows.is_none() {
             self.rows = Some(
                 SourceRows::prepare(
                     &mut self.completed,
-                    self.index.as_ref().expect("prepared above"),
+                    self.index.expect("prepared above").lookup(),
                     &self.limits,
                     counters,
                     self.source.location,
@@ -647,25 +655,62 @@ impl<'a> PreparedConstraints<'a> {
         Ok(())
     }
 
+    /// Borrow the core's index, building it first when no checker has. A
+    /// borrow costs one unit of work; a build costs O(n log n) comparisons
+    /// over the core's n atoms, charged to this checker, which also admits
+    /// its preparation peak. Checkers racing on the first use each build and
+    /// one publishes; none waits on another, so each observes its own
+    /// cancellation. A refused build publishes nothing. Either way the
+    /// checker's support ledger counts the index's retained bytes, as it
+    /// counts the shared support base it reads.
     fn prepare_index(
         &mut self,
-        atoms: &'a AtomCatalog,
+        core: &'a StreamedCore,
         counters: &mut Counters,
     ) -> Result<(), ConstraintCheckCause> {
         if self.index.is_some() {
             return Ok(());
         }
         let location = self.source.location;
+        counters
+            .work(&self.limits, location)
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+        if core.0.index.get().is_none() {
+            let built = self.build_index(&core.0.compiled.atoms, counters)?;
+            // A racing checker may have published first: keep its index.
+            let _ = core.0.index.set(built);
+        }
+        let index = core
+            .0
+            .index
+            .get()
+            .expect("published above or by a racing checker");
+        let retained = index.retained_bytes();
+        self.completed
+            .admit_workspace(retained, &self.limits, counters, location)
+            .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
+        self.completed
+            .retain_workspace(usize::try_from(retained).expect("admitted support bytes fit usize"));
+        self.index = Some(index);
+        Ok(())
+    }
+
+    fn build_index(
+        &mut self,
+        atoms: &AtomCatalog,
+        counters: &mut Counters,
+    ) -> Result<CatalogIndex, ConstraintCheckCause> {
+        let location = self.source.location;
         // Two retained integer orders and one preparation scratch order, all
-        // bounded by the admitted atom count. AtomIndex reserves fallibly and
+        // bounded by the admitted atom count. The index reserves fallibly and
         // charges each comparison/write; it never copies atom payloads.
-        let requested = size_of::<AtomIndex<'_>>() as u128
+        let requested = size_of::<CatalogIndex>() as u128
             + size_of::<Vec<usize>>() as u128
             + 3 * atoms.atoms().len() as u128 * size_of::<usize>() as u128;
         self.completed
             .admit_workspace(requested, &self.limits, counters, location)
             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
-        let index = AtomIndex::from_catalog_with(atoms.atoms(), || {
+        let index = CatalogIndex::new_with(atoms, || {
             counters.work(&self.limits, location).map_err(Box::new)
         })
         .map_err(|error| match error {
@@ -680,11 +725,7 @@ impl<'a> PreparedConstraints<'a> {
                 location,
             )
             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))?;
-        self.completed.retain_workspace(
-            usize::try_from(index.retained_bytes()).expect("admitted support bytes fit usize"),
-        );
-        self.index = Some(index);
-        Ok(())
+        Ok(index)
     }
 }
 
@@ -736,8 +777,9 @@ impl ConstraintChecker<'_> {
     /// not the provenance of a raw `Region`. No region or candidate is mutated.
     /// Never use this operation to read a candidate's frozen reduct.
     ///
-    /// First use prepares a bounded typed catalog index and source-row ID map;
-    /// later checks reuse both. Necessary predicate and held-row selections
+    /// First use borrows the core's typed catalog index (building it when no
+    /// checker of this core has) and prepares a source-row ID map; later
+    /// checks reuse both. Necessary predicate and held-row selections
     /// precede binding/scalar evaluation, over the same completed support and
     /// shared evaluator as `check`. Missing row IDs remain eligible until the
     /// full body check. Source arithmetic admission has already completed.
@@ -795,7 +837,7 @@ impl ConstraintChecker<'_> {
                     if matches!(candidate, Candidate::Region(..))
                         && let Some(prepared) = &mut self.prepared
                     {
-                        prepared.prepare_selection(self.owner.atom_catalog(), counters)?;
+                        prepared.prepare_selection(self.owner, counters)?;
                     }
                     Self::scan(
                         self.prepared.as_mut(),
@@ -830,8 +872,8 @@ impl ConstraintChecker<'_> {
                 rows: prepared.rows.as_ref().expect("prepared before region scan"),
                 index: prepared
                     .index
-                    .as_ref()
-                    .expect("prepared before region scan"),
+                    .expect("prepared before region scan")
+                    .lookup(),
                 region,
             }),
         };
@@ -891,7 +933,7 @@ impl ConstraintChecker<'_> {
                         &rule.body,
                         &row.values,
                         candidate,
-                        prepared.index.as_ref(),
+                        prepared.index.map(CatalogIndex::lookup),
                         Context::new(&computation, &prepared.limits, counters, rule.location),
                     )?
                 {
@@ -917,7 +959,7 @@ fn body(
     literals: &[LiteralIr],
     binding: &Binding<'_>,
     candidate: Candidate<'_>,
-    index: Option<&AtomIndex<'_>>,
+    index: Option<AtomLookup<'_, '_>>,
     context: Context<'_, &crate::formula_support::Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
     let Context {
@@ -956,7 +998,6 @@ fn body(
             Candidate::Region(_, region) => {
                 let row = index
                     .expect("prepared before region scan")
-                    .lookup()
                     .get_key_with(&key, || counters.work(limits, location))?;
                 // Passing source rows contributed every occurrence to the
                 // completed catalog at admission, including unsupported atoms.

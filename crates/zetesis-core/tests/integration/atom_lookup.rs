@@ -5,8 +5,8 @@ use std::{cmp::Ordering, convert::Infallible};
 use zetesis_core::catalog::AtomRef;
 
 use zetesis_core::{
-    Atom, AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, Model, Predicate, Sign, Term, Value,
-    ValueLimits, ValueNode,
+    Atom, AtomCatalog, AtomIndex, AtomIndexError, AtomPattern, CatalogIndex, Model, Predicate,
+    Sign, Term, Value, ValueLimits, ValueNode,
 };
 use zetesis_test_support::programs::signed as atom;
 
@@ -487,4 +487,91 @@ fn empty_catalog_has_empty_predicate_ranges() {
         0
     );
     assert_eq!(calls, 0);
+}
+
+#[test]
+fn a_catalog_index_finds_every_atom_at_its_catalog_row() {
+    let atoms = catalog();
+    let index = CatalogIndex::new_with(&AtomCatalog::new(atoms.clone()).unwrap(), || {
+        Ok::<_, Infallible>(())
+    })
+    .unwrap();
+    // The handle the index was built from is gone: the index keeps its own.
+    let lookup = index.lookup();
+    for (position, query) in atoms.iter().enumerate() {
+        let row = lookup
+            .get_with(query, || Ok::<_, Infallible>(()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.position(), position);
+        assert_eq!(row.atom(), AtomRef::from(query));
+    }
+    assert!(
+        lookup
+            .get_with(&atom("missing", Sign::Positive, vec![]), || {
+                Ok::<_, Infallible>(())
+            })
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn a_catalog_index_ranges_its_predicates_in_catalog_order() {
+    let atoms = catalog();
+    let index = CatalogIndex::new_with(&AtomCatalog::new(atoms.clone()).unwrap(), || {
+        Ok::<_, Infallible>(())
+    })
+    .unwrap();
+    for query in &atoms {
+        let actual: Vec<_> = index
+            .lookup()
+            .predicate_with(query.predicate(), || Ok::<_, Infallible>(()))
+            .unwrap()
+            .map(zetesis_core::AtomRow::position)
+            .collect();
+        let expected: Vec<_> = atoms
+            .iter()
+            .enumerate()
+            .filter(|(_, atom)| atom.predicate() == query.predicate())
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn a_catalog_index_shares_its_catalog() {
+    let atoms = AtomCatalog::new(catalog()).unwrap();
+    let index = CatalogIndex::new_with(&atoms, || Ok::<_, Infallible>(())).unwrap();
+    assert!(index.catalog().same_owner(&atoms));
+}
+
+#[test]
+fn a_catalog_index_retains_what_a_borrowed_index_retains() {
+    // Both own the same two integer orders; the catalog handle is shared, not
+    // copied, so retained bytes differ only by the owner header.
+    let atoms = AtomCatalog::new(catalog()).unwrap();
+    let owned = CatalogIndex::new_with(&atoms, || Ok::<_, Infallible>(())).unwrap();
+    let borrowed = AtomIndex::from_catalog_with(atoms.atoms(), || Ok::<_, Infallible>(())).unwrap();
+    let header = |bytes: u128, size: usize| bytes - size as u128;
+    assert_eq!(
+        header(owned.retained_bytes(), size_of::<CatalogIndex>()),
+        header(borrowed.retained_bytes(), size_of::<AtomIndex<'_>>())
+    );
+    assert!(owned.preparation_peak_bytes() >= owned.retained_bytes());
+}
+
+#[test]
+fn a_stopped_catalog_index_reports_the_callers_stop() {
+    let atoms = AtomCatalog::new(catalog()).unwrap();
+    let mut allowed = 5;
+    let result = CatalogIndex::new_with(&atoms, || {
+        if allowed == 0 {
+            return Err("stop");
+        }
+        allowed -= 1;
+        Ok(())
+    });
+    assert!(matches!(result, Err(AtomIndexError::Stopped("stop"))));
 }

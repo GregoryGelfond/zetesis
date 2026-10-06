@@ -9,7 +9,7 @@
 use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{
-    AtomIndex, AtomRow,
+    AtomLookup, AtomRow,
     catalog::Atoms,
     relation::{Failure, Row},
 };
@@ -33,7 +33,7 @@ pub(super) struct SourceRows<'source> {
 impl<'source> SourceRows<'source> {
     pub(super) fn prepare(
         support: &mut CompletedSupport<'source>,
-        index: &AtomIndex<'_>,
+        index: AtomLookup<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
@@ -67,9 +67,7 @@ impl<'source> SourceRows<'source> {
                 location,
             )?;
             for atom in atoms {
-                let found = index
-                    .lookup()
-                    .get_with(atom, || counters.work(limits, location))?;
+                let found = index.get_with(atom, || counters.work(limits, location))?;
                 counters.work(limits, location)?;
                 positions.push(found.map(AtomRow::position));
             }
@@ -115,7 +113,7 @@ fn reserve<T>(
 /// Borrowed region decisions over prepared source and formula identities.
 pub(super) struct Selection<'a, 'source> {
     pub(super) rows: &'a SourceRows<'source>,
-    pub(super) index: &'a AtomIndex<'source>,
+    pub(super) index: AtomLookup<'a, 'source>,
     pub(super) region: &'a Region,
 }
 
@@ -139,7 +137,6 @@ impl Selection<'_, '_> {
             let pattern = pattern.get(components, limits, counters, rule.location)?;
             let rows = self
                 .index
-                .lookup()
                 .predicate_with(pattern.predicate(), || counters.work(limits, rule.location))?;
             let mut possible = false;
             for row in rows {
@@ -204,8 +201,12 @@ mod tests {
     use zetesis_core::relation::{Limits, Relation};
 
     fn owner() -> HybridFormula {
+        owner_of("{p(1);p(2);-p(1)}. :-p(X),not -p(X).")
+    }
+
+    fn owner_of(source: &str) -> HybridFormula {
         prepare_formula(
-            "{p(1);p(2);-p(1)}. :-p(X),not -p(X).".into(),
+            source.into(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
             FormulaLimits::default(),
@@ -242,9 +243,7 @@ mod tests {
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let prepared = checker.prepared.as_mut().unwrap();
         let mut counters = Counters::default();
-        prepared
-            .prepare_index(owner.atom_catalog(), &mut counters)
-            .unwrap();
+        prepared.prepare_index(owner.core(), &mut counters).unwrap();
         let original_limit = prepared.limits.max_support_bytes;
         let retained = workspace_bytes(prepared);
         // Admit the outer descriptors, then refuse an inner row-ID buffer.
@@ -256,7 +255,7 @@ mod tests {
         for _ in 0..2 {
             let before = counters.accounting.work;
             let cause = prepared
-                .prepare_selection(owner.atom_catalog(), &mut counters)
+                .prepare_selection(owner.core(), &mut counters)
                 .unwrap_err();
             let ConstraintCheckCause::Source(error) = cause else {
                 panic!("expected source refusal")
@@ -288,7 +287,7 @@ mod tests {
         // limits remain fixed. The larger allowance permits a complete retry.
         prepared.limits.max_support_bytes = original_limit;
         prepared
-            .prepare_selection(owner.atom_catalog(), &mut counters)
+            .prepare_selection(owner.core(), &mut counters)
             .unwrap();
         let rows = prepared.rows.as_ref().unwrap();
         let map_bytes = size_of::<SourceRows<'_>>() as u128
@@ -301,7 +300,7 @@ mod tests {
         assert_eq!(workspace_bytes(prepared), retained + map_bytes);
         let work = counters.accounting.work;
         prepared
-            .prepare_selection(owner.atom_catalog(), &mut counters)
+            .prepare_selection(owner.core(), &mut counters)
             .unwrap();
         assert_eq!(counters.accounting.work, work);
         assert_eq!(workspace_bytes(prepared), retained + map_bytes);
@@ -315,10 +314,10 @@ mod tests {
         let mut counters = Counters::default();
         // A pre-match support row need not have survived the scalar guards
         // that contributed occurrences to the admitted formula catalog.
-        let index = AtomIndex::new_with(&[], || Ok::<_, FormulaFailure>(())).unwrap();
+        let index = zetesis_core::AtomIndex::new_with(&[], || Ok::<_, FormulaFailure>(())).unwrap();
         let rows = SourceRows::prepare(
             &mut prepared.completed,
-            &index,
+            index.lookup(),
             &prepared.limits,
             &mut counters,
             prepared.source.location,
@@ -327,7 +326,7 @@ mod tests {
         let region = Region::all_open(0);
         let selection = Selection {
             rows: &rows,
-            index: &index,
+            index: index.lookup(),
             region: &region,
         };
         let mut visited = 0;
@@ -381,13 +380,15 @@ mod tests {
         let atoms = catalog.atoms();
         assert!(atoms.len() > 1);
         assert!(atoms.iter().zip(atoms.iter().skip(1)).all(|(a, b)| a > b));
-        let index = AtomIndex::from_catalog_with(atoms, || Ok::<_, FormulaFailure>(())).unwrap();
+        let index =
+            zetesis_core::AtomIndex::from_catalog_with(atoms, || Ok::<_, FormulaFailure>(()))
+                .unwrap();
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let prepared = checker.prepared.as_mut().unwrap();
         let mut counters = Counters::default();
         let rows = SourceRows::prepare(
             &mut prepared.completed,
-            &index,
+            index.lookup(),
             &prepared.limits,
             &mut counters,
             prepared.source.location,
@@ -400,7 +401,7 @@ mod tests {
             assert!(region.hold(held));
             let selection = Selection {
                 rows: &rows,
-                index: &index,
+                index: index.lookup(),
                 region: &region,
             };
             let mut has_source_row = false;
@@ -427,5 +428,77 @@ mod tests {
         // source rule supports it. Its dense ID must not select another row.
         assert!(saw_supported);
         assert!(saw_unsupported);
+    }
+
+    /// The work one checker charges to reach the core's index.
+    fn index_charge(owner: &HybridFormula) -> (u64, *const zetesis_core::CatalogIndex) {
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        let prepared = checker.prepared.as_mut().unwrap();
+        let mut counters = Counters::default();
+        prepared.prepare_index(owner.core(), &mut counters).unwrap();
+        (
+            counters.accounting.work,
+            std::ptr::from_ref(prepared.index.unwrap()),
+        )
+    }
+
+    #[test]
+    fn a_later_checker_borrows_the_core_index_for_one_unit() {
+        // Two cores of different sizes: the first checker's build grows with
+        // the atom count, every later checker's borrow does not.
+        for source in [
+            "{p(1..2)}. :-p(X),p(Y),X<Y.",
+            "{p(1..200)}. :-p(X),p(Y),X+Y=7,X<Y.",
+        ] {
+            let owner = owner_of(source);
+            let (built, first) = index_charge(&owner);
+            let (borrowed, second) = index_charge(&owner);
+            assert!(built > 1, "{source}");
+            assert_eq!(borrowed, 1, "{source}");
+            assert!(std::ptr::eq(first, second), "{source}");
+        }
+    }
+
+    #[test]
+    fn a_borrowing_checker_counts_the_index_in_its_ledger() {
+        let owner = owner();
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        let prepared = checker.prepared.as_mut().unwrap();
+        let before = workspace_bytes(prepared);
+        index_charge(&owner);
+        prepared
+            .prepare_index(owner.core(), &mut Counters::default())
+            .unwrap();
+        assert_eq!(
+            workspace_bytes(prepared),
+            before + prepared.index.unwrap().retained_bytes()
+        );
+    }
+
+    #[test]
+    fn checkers_racing_on_first_use_share_one_published_index() {
+        let owner = owner_of("{p(1..50)}. :-p(X),p(Y),X+Y=7,X<Y.");
+        let indexes: Vec<usize> = std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..8)
+                .map(|_| scope.spawn(|| index_charge(&owner).1 as usize))
+                .collect();
+            workers.into_iter().map(|w| w.join().unwrap()).collect()
+        });
+        assert!(indexes.iter().all(|&index| index == indexes[0]));
+    }
+
+    #[test]
+    fn a_refused_index_build_publishes_nothing() {
+        let owner = owner();
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        let prepared = checker.prepared.as_mut().unwrap();
+        prepared.limits.max_support_bytes = 0;
+        assert!(
+            prepared
+                .prepare_index(owner.core(), &mut Counters::default())
+                .is_err()
+        );
+        assert!(prepared.index.is_none());
+        assert!(owner.core().0.index.get().is_none());
     }
 }

@@ -6,6 +6,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- `zetesis_core::CatalogIndex`: an atom index over every atom of one catalog
+  that holds its own handle to that catalog (sharing its storage), so one
+  index can be built once and lent as an `AtomLookup` to every reader of the
+  catalog.
 - `PreparedFormula::ground_lazy` and `PreparedFormulaBundle::ground_lazy` (and
   their `_with_observer` forms): lazy materialization defers certified terminal
   definitions, as adaptive materialization does, over a hybrid base whose
@@ -37,6 +41,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The constraint checkers of one hybrid core share its typed atom index: the
+  first region check that needs it builds it, and every later checker, on any
+  thread, borrows it for one unit of work instead of sorting the core's atoms
+  again. A run that prepares a checker per proposal, such as `--grounder lazy
+  --all` on a scalar walk, no longer pays that sort per answer. Each checker's
+  support ledger still counts the index's retained bytes; the index stays
+  resident with the core once built.
 - `--grounder lazy` defers certified terminal definitions over its hybrid
   formula base, reconstructing them from each accepted answer, as `auto` does
   over an eager base; `zetesis_solve::ground_formula` and `ground_bundle` own the

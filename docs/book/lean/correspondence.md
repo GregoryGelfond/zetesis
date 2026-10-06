@@ -643,7 +643,8 @@ earlier interpretations across those calls.
 
 The objective consumers use `AtomLookup` over immutable model selections or an
 `AtomIndex` over the original catalog. The index owns permutations of row IDs,
-not additional atoms. Its required laws are exact full-key membership and
+not additional atoms; a `CatalogIndex`, which hybrid constraint checkers of one
+core share, also holds a handle to the catalog it orders, sharing its storage. Its required laws are exact full-key membership and
 predicate filtering in original row order. Model lookup must additionally
 exclude unselected catalog atoms. The checked value comparison must agree with
 canonical storage identity, which is distinct from ASP term order. Existing
