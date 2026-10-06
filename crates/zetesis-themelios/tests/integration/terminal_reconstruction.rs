@@ -222,3 +222,51 @@ fn one_answer_beyond_the_headroom_is_refused() {
     );
     assert_eq!(cursor.statistics().completed, 0);
 }
+
+#[test]
+fn an_answer_fits_exactly_the_headroom_admission_left() {
+    let (admission, call) = costs();
+    let model_names = ["seed(1)", "seed(3)"];
+    // Published at admission + c, with exact receipts.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + call,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    for _ in 0..3 {
+        cursor
+            .reconstruct(&selection(&owner, &model_names), &Cancellation::default())
+            .unwrap();
+        assert_eq!(cursor.statistics().latest_work, call);
+    }
+    assert_eq!(cursor.statistics().work, admission + 3 * call);
+    // Refused at admission + c − 1: the refusal names the per-answer ceiling.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + call - 1,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    let error = cursor
+        .reconstruct(&selection(&owner, &model_names), &Cancellation::default())
+        .unwrap_err();
+    let ReconstructionError::Source(cause) = &error else {
+        panic!("a work refusal: {error:?}");
+    };
+    assert!(
+        matches!(cause.as_ref(), zetesis_themelios::FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::Work,
+            observed,
+            limit,
+            ..
+        } if *limit == u128::from(admission + call - 1) && *observed == u128::from(admission + call)),
+        "{cause:?}"
+    );
+    assert_eq!(cursor.statistics().completed, 0);
+    assert_eq!(cursor.statistics().latest_work, call - 1);
+}
