@@ -6,6 +6,16 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- `PreparedFormula::ground_lazy` and `PreparedFormulaBundle::ground_lazy` (and
+  their `_with_observer` forms): lazy materialization defers certified terminal
+  definitions, as adaptive materialization does, over a hybrid base whose
+  producer core is instantiated and whose eligible integrity constraints are
+  streamed. `TerminalFormula::base_kind` and `TerminalFormula::base` (`BaseKind`,
+  `TerminalBase`) say which base an owner has; a session runs a hybrid terminal
+  base under lazy grounding on the CPU, checking each core answer before it is
+  reconstructed. `ExecutionObservation::TerminalDefinitions` reports the base
+  kind and its streamed constraints (`StreamedConstraints`), and telemetry adds
+  `GroundingMode::HybridBaseTerminalDefinitions` with `TerminalBaseMark`.
 - `StreamedCore`, reached through `HybridFormula::core`, is the producer core
   with the integrity constraints streamed over it: its theory, atoms, analysis
   and constraint checkers. A hybrid owner's checkers and candidate-region filter
@@ -30,6 +40,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- `TerminalFormula::base_theory` returns `Option<&Theory>`: `None` for a hybrid
+  base, whose core theory's stable models are only proposals until its
+  constraints accept them. Match `TerminalFormula::base` instead, and check a
+  hybrid base's answers with its core's checker before reconstructing them.
+- `ExecutionObservation::TerminalDefinitions` gains `base` and `streamed`;
+  `GroundingObserver::terminal_definitions` and
+  `StageRecorder::mark_terminal_definitions` take the base's kind; exhaustive
+  matches on `GroundingMode` gain a variant.
 - Lazy (hybrid) formula admission closes the completed support once it has
   emitted the producer core, keeping the canonical base and only the support
   relations the streamed constraints read; discovery and order indexes and every

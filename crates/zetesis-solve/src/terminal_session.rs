@@ -12,6 +12,7 @@ use zetesis_themelios::{ReconstructionStatistics, TerminalFormula, TerminalRecon
 use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
+use crate::hybrid_session::{HybridInput, HybridSession};
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
 
@@ -36,9 +37,16 @@ pub struct TerminalExecutionStatistics {
     pub reconstruction: ReconstructionStatistics,
 }
 
+/// The base enumerator: an eager formula session, or a hybrid session that
+/// yields only the core answers its streamed constraints accept.
+enum BaseSession<'a> {
+    Eager(Box<FormulaSession<'a, Execution>>),
+    Hybrid(Box<HybridSession<'a>>),
+}
+
 pub(crate) struct TerminalSession<'a> {
     owner: &'a TerminalFormula,
-    base: FormulaSession<'a, Execution>,
+    base: BaseSession<'a>,
     base_config: SolveConfig,
     reconstruction: TerminalReconstruction<'a>,
     statistics: TerminalExecutionStatistics,
@@ -54,41 +62,76 @@ impl<'a> TerminalSession<'a> {
         cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Result<Self, SolveError> {
+        let streamed = match owner.base() {
+            zetesis_themelios::TerminalBase::Eager(_) => None,
+            zetesis_themelios::TerminalBase::Hybrid(core) => Some(crate::StreamedConstraints {
+                templates: core.streamed_templates(),
+                instances: core.streamed_instances(),
+            }),
+        };
         observations.record(crate::ExecutionObservation::TerminalDefinitions {
             requested: config.grounder,
+            base: owner.base_kind(),
             deferred_templates: owner.deferred_templates(),
+            streamed,
         })?;
         let reconstruction = owner.reconstruction().map_err(SolveError::Reconstruction)?;
         let statistics = TerminalExecutionStatistics {
             reconstruction: reconstruction.statistics(),
             ..TerminalExecutionStatistics::default()
         };
-        let base_config = SolveConfig {
-            models: 0,
-            grounder: crate::Grounder::Eager,
-            ..*config
+        let (base, base_config) = match owner.base() {
+            zetesis_themelios::TerminalBase::Eager(theory) => {
+                let base_config = SolveConfig {
+                    models: 0,
+                    grounder: crate::Grounder::Eager,
+                    ..*config
+                };
+                let input = crate::countermodel::Input {
+                    theory,
+                    atoms: owner.base_atom_catalog(),
+                    objectives: owner.objectives(),
+                    gate_atoms: 0,
+                    keyed_constraints: owner.keyed_constraints(),
+                    key_analysis: owner.key_analysis(),
+                    certificate_order: crate::countermodel::certificate_order(
+                        owner.base_analysis(),
+                        owner.base_analysis_basis(),
+                    ),
+                };
+                let base = FormulaSession::with_resources(
+                    input,
+                    &base_config,
+                    resources,
+                    observations,
+                    cancellation,
+                    phases,
+                    AnswerSelection::All,
+                )?;
+                (BaseSession::Eager(Box::new(base)), base_config)
+            }
+            zetesis_themelios::TerminalBase::Hybrid(core) => {
+                // The hybrid base checks every core answer before this session
+                // sees it: check, then extend, then publish.
+                let base_config = SolveConfig {
+                    models: 0,
+                    ..*config
+                };
+                let base = HybridSession::new(
+                    HybridInput {
+                        core,
+                        subject: crate::Subject::TerminalDefinitions(owner.clone()),
+                    },
+                    &base_config,
+                    resources,
+                    observations,
+                    cancellation,
+                    phases,
+                    AnswerSelection::All,
+                )?;
+                (BaseSession::Hybrid(Box::new(base)), base_config)
+            }
         };
-        let input = crate::countermodel::Input {
-            theory: owner.base_theory(),
-            atoms: owner.base_atom_catalog(),
-            objectives: owner.objectives(),
-            gate_atoms: 0,
-            keyed_constraints: owner.keyed_constraints(),
-            key_analysis: owner.key_analysis(),
-            certificate_order: crate::countermodel::certificate_order(
-                owner.base_analysis(),
-                owner.base_analysis_basis(),
-            ),
-        };
-        let base = FormulaSession::with_resources(
-            input,
-            &base_config,
-            resources,
-            observations,
-            cancellation,
-            phases,
-            AnswerSelection::All,
-        )?;
         Ok(Self {
             owner,
             base,
@@ -117,13 +160,21 @@ impl<'a> TerminalSession<'a> {
         let Some(consumed) = self.statistics.base_answers.checked_add(1) else {
             return self.finish(None, Some(SolveError::TerminalStatisticsOverflow), phases);
         };
-        let model = match self
-            .base
-            .next(&self.base_config, observations, cancellation, phases)
-        {
+        let next = match &mut self.base {
+            BaseSession::Eager(base) => {
+                base.next(&self.base_config, observations, cancellation, phases)
+            }
+            BaseSession::Hybrid(base) => {
+                base.next(&self.base_config, observations, cancellation, phases)
+            }
+        };
+        let model = match next {
             Some(Ok((model, _))) => model,
             Some(Err(error)) => return self.finish(None, Some(error), phases),
-            None => return self.finish(self.base.outcome(phases).search_state, None, phases),
+            None => {
+                let state = self.base_outcome(phases).search_state;
+                return self.finish(state, None, phases);
+            }
         };
         self.reconstruct(&model, consumed, cancellation, phases)
     }
@@ -154,8 +205,15 @@ impl<'a> TerminalSession<'a> {
         }
     }
 
+    fn base_outcome(&self, phases: &Recorder) -> SemanticOutcome {
+        match &self.base {
+            BaseSession::Eager(base) => base.outcome(phases),
+            BaseSession::Hybrid(base) => base.outcome(phases),
+        }
+    }
+
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
-        let mut outcome = self.base.outcome(phases);
+        let mut outcome = self.base_outcome(phases);
         outcome.subject = Some(crate::Subject::TerminalDefinitions(self.owner.clone()));
         outcome.selection = Some(AnswerSelection::All);
         outcome.verified = self.statistics.reconstructed;
@@ -179,8 +237,27 @@ impl<'a> TerminalSession<'a> {
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
         // Settle workers before taking the final base receipt. The original
         // reconstruction/execution failure or finalized interruption takes
-        // precedence over cleanup.
-        let stopped = self.base.stop(phases);
+        // precedence over cleanup, except that a hybrid base's constraint
+        // failure, which decides a candidate's acceptance before any
+        // extension, precedes a reconstruction refusal.
+        let concluded = match &mut self.base {
+            BaseSession::Eager(base) => {
+                let stopped = base.stop(phases);
+                Ok(crate::completion::after_cleanup(state, stopped))
+            }
+            BaseSession::Hybrid(base) => {
+                base.conclude(if error.is_none() { state } else { None }, phases)
+            }
+        };
+        let concluded = match concluded {
+            Ok(state) => state,
+            Err(base_error) => {
+                let mut outcome = self.snapshot(phases);
+                outcome.search_state = None;
+                self.final_outcome = Some(outcome);
+                return Some(Err(base_error));
+            }
+        };
         let (state, result) = match error {
             Some(SolveError::Reconstruction(error)) => match error.stop() {
                 Some(stop) => (
@@ -190,7 +267,7 @@ impl<'a> TerminalSession<'a> {
                 None => (None, Some(Err(SolveError::Reconstruction(error)))),
             },
             Some(error) => (None, Some(Err(error))),
-            None => (crate::completion::after_cleanup(state, stopped), None),
+            None => (concluded, None),
         };
         let mut outcome = self.snapshot(phases);
         outcome.search_state = state;

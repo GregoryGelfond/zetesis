@@ -108,7 +108,7 @@ pub use batch_executor::ExecutorError;
 pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
-pub use execution_observation::{ExecutionObservation, ExecutionObserver};
+pub use execution_observation::{ExecutionObservation, ExecutionObserver, StreamedConstraints};
 pub use execution_resources::ExecutionResources;
 pub use formula_execution::{
     CompletionAccounting, FormulaDeviceLimits, FormulaExecutionStatistics,

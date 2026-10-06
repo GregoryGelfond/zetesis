@@ -1066,7 +1066,7 @@ fn terminal_families(device: GpuApi) {
     };
     assert_eq!(owner.deferred_templates(), 1);
     let subject = Subject::TerminalDefinitions(owner.clone());
-    assert!(!subject.same_instance(&Subject::Theory(owner.base_theory().clone())));
+    assert!(!subject.same_instance(&Subject::Theory(owner.base_theory().unwrap().clone())));
     let resources = ExecutionResources::with_gpu(&device.context());
     let capture = solve(
         PreparedInput::terminal(&owner),

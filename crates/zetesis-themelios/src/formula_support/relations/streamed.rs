@@ -106,6 +106,11 @@ impl SupportCatalog {
 }
 
 impl StreamedRows {
+    /// Named bytes of the kept relations and postings.
+    pub(crate) const fn bytes(&self) -> usize {
+        self.bytes
+    }
+
     /// An immutable view of the kept relations over the closed base. Views
     /// borrow the existing columns and postings; rows are not copied.
     pub(crate) fn snapshot<'a>(

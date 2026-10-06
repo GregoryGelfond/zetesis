@@ -57,8 +57,13 @@ pub(super) const fn boolean(truth: bool) -> usize {
 #[derive(Clone, Copy)]
 enum Schedule<'a> {
     Eager(Option<crate::formula_count_plan::Request<'a>>),
+    /// Every rule instantiated; the catalog kept open for reconstruction.
     Retained,
+    /// Eligible constraints streamed instead of instantiated.
     Hybrid,
+    /// Eligible constraints streamed, and the catalog kept open for
+    /// reconstruction: a terminal owner's hybrid base.
+    HybridRetained,
 }
 
 /// What publication does with the completed catalog.
@@ -77,7 +82,7 @@ impl Schedule<'_> {
     /// catalog is released rather than closed.
     fn keep(self, rules: &[RuleIr]) -> Keep<'_> {
         match self {
-            Self::Retained => Keep::Retain,
+            Self::Retained | Self::HybridRetained => Keep::Retain,
             Self::Hybrid if rules.iter().any(crate::formula_hybrid::eligible) => {
                 Keep::Stream(rules)
             }
@@ -114,10 +119,8 @@ pub(crate) fn ground(
         .map(|grounded| grounded.compiled)
 }
 
-pub(crate) fn ground_hybrid(
-    preparation: crate::formula::Preparation,
-    observer: Option<&dyn crate::GroundingObserver>,
-) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
+/// The hybrid schedule's capability restrictions: no objectives, indexed joins.
+fn hybrid_supported(preparation: &crate::formula::Preparation) -> Result<(), FormulaFailure> {
     preparation.budget.poll(preparation.location)?;
     if let Some(&location) = preparation.program.objective_declarations.first() {
         return Err(FormulaFailure::HybridUnsupported {
@@ -131,6 +134,14 @@ pub(crate) fn ground_hybrid(
             location: preparation.location,
         });
     }
+    Ok(())
+}
+
+pub(crate) fn ground_hybrid(
+    preparation: crate::formula::Preparation,
+    observer: Option<&dyn crate::GroundingObserver>,
+) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
+    hybrid_supported(&preparation)?;
     ground_with_schedule(preparation, observer, Schedule::Hybrid)
         .map(|grounded| (grounded.compiled, grounded.constraints))
 }
@@ -294,6 +305,11 @@ fn instantiate(
                 accounting,
                 budget: expansion_budget,
                 output_storage,
+                streamed: matches!(schedule, Schedule::HybridRetained).then(|| {
+                    let mut rules = prepared.rules;
+                    rules.retain(crate::formula_hybrid::eligible);
+                    (rules, streamed_instances)
+                }),
             }),
         )
     } else {
@@ -440,7 +456,7 @@ fn emit<'source>(
             match schedule {
                 Schedule::Eager(request) => request
                     .map(|request| crate::formula_count_plan::Collector::new(request, location)),
-                Schedule::Hybrid | Schedule::Retained => None,
+                Schedule::Hybrid | Schedule::Retained | Schedule::HybridRetained => None,
             },
             location,
         )?;
@@ -624,7 +640,8 @@ impl Builder<'_, '_, '_> {
                 crate::GroundingPhase::RuleInstantiation,
                 Some(rule.location),
                 || {
-                    if matches!(schedule, Schedule::Hybrid) && crate::formula_hybrid::eligible(rule)
+                    if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
+                        && crate::formula_hybrid::eligible(rule)
                     {
                         self.capture_constraint(rule, support, &mut streamed_instances)
                     } else {

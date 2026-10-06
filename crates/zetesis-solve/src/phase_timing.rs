@@ -213,8 +213,10 @@ impl Recorder {
         self.stages.mark_lazy_grounding();
     }
 
-    pub(crate) fn terminal_grounding(&self) {
-        self.stages.mark_terminal_definitions();
+    /// Mark a route with deferred terminal definitions and its base's kind.
+    pub(crate) fn terminal_grounding(&self, base: zetesis_themelios::BaseKind) {
+        self.stages
+            .mark_terminal_definitions(crate::stage_timing::mark(base));
     }
 
     pub(crate) fn grounding_observer(&self) -> Option<crate::stage_timing::Observer<'_>> {

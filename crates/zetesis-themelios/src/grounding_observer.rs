@@ -48,7 +48,10 @@ pub trait GroundingObserver {
     /// Called before that base materialization attempt, including one that later
     /// refuses. This identifies the attempted route, not completed grounding or
     /// reconstructed answers; it introduces no measurement or work charge.
-    fn terminal_definitions(&self) {}
+    /// `base` says how the base will be grounded.
+    fn terminal_definitions(&self, base: crate::BaseKind) {
+        let _ = base;
+    }
 
     /// Observe the actual optional domain attempt before final rule guards.
     /// Called synchronously, independently of detailed work-counter opt-in.

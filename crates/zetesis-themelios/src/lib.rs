@@ -139,8 +139,8 @@ pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
 mod formula_terminal;
 pub use formula_terminal::{
-    FormulaMaterialization, ReconstructionCharges, ReconstructionError, ReconstructionStatistics,
-    TerminalFormula, TerminalReconstruction,
+    BaseKind, FormulaMaterialization, ReconstructionCharges, ReconstructionError,
+    ReconstructionStatistics, TerminalBase, TerminalFormula, TerminalReconstruction,
 };
 mod constraint_allowance;
 pub use constraint_allowance::ConstraintAllowance;

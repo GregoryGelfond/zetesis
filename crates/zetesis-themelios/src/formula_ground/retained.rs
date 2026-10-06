@@ -19,6 +19,9 @@ pub(crate) struct RetainedGrounding {
     pub(crate) accounting: Accounting,
     pub(crate) budget: Budget,
     pub(crate) output_storage: StorageLease,
+    /// A hybrid base's eligible constraint rules and the instances admission
+    /// visited for them; absent for an eager base.
+    pub(crate) streamed: Option<(Vec<crate::formula_ir::RuleIr>, u64)>,
 }
 
 pub(super) struct RetainedState {
@@ -26,6 +29,7 @@ pub(super) struct RetainedState {
     pub(super) accounting: Accounting,
     pub(super) budget: Budget,
     pub(super) output_storage: StorageLease,
+    pub(super) streamed: Option<(Vec<crate::formula_ir::RuleIr>, u64)>,
 }
 
 impl RetainedGrounding {
@@ -73,21 +77,32 @@ fn envelope_bytes(accounting: &Accounting) -> usize {
 /// Ground an actual base Preparation while retaining its original canonical
 /// owner, account, expansion budget and output receipts. This does not classify
 /// terminal definitions or establish correspondence to another source program.
+/// Ground a terminal owner's base, keeping its catalog open for
+/// reconstruction: every base rule instantiated (eager), or the eligible
+/// constraints streamed (hybrid, under the hybrid schedule's restrictions).
 pub(crate) fn ground_retained(
     preparation: crate::formula::Preparation,
     observer: Option<&dyn GroundingObserver>,
+    hybrid: bool,
 ) -> Result<RetainedGrounding, FormulaFailure> {
+    let schedule = if hybrid {
+        super::hybrid_supported(&preparation)?;
+        Schedule::HybridRetained
+    } else {
+        Schedule::Retained
+    };
     let super::Grounded {
         compiled,
         constraints,
         retained,
-    } = super::ground_with_schedule(preparation, observer, Schedule::Retained)?;
+    } = super::ground_with_schedule(preparation, observer, schedule)?;
     debug_assert!(constraints.is_none());
     let RetainedState {
         catalog,
         accounting,
         budget,
         output_storage,
+        streamed,
     } = retained.expect("retained schedule preserves its source owner");
     Ok(RetainedGrounding {
         compiled,
@@ -95,6 +110,7 @@ pub(crate) fn ground_retained(
         accounting,
         budget,
         output_storage,
+        streamed,
     })
 }
 

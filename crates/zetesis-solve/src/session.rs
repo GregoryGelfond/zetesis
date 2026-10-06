@@ -66,10 +66,12 @@ pub struct PreparedInput<'a> {
 impl<'a> PreparedInput<'a> {
     /// Borrow the original source plan with its checked base and terminal
     /// definitions. Each verified base answer is reconstructed before a full
-    /// answer can be published. This initial profile requires automatic
-    /// grounding; explicit eager and lazy requests keep their existing meanings.
-    /// Explicit projection and objectives are outside this profile. No
-    /// admission or execution occurs in this borrow.
+    /// answer can be published. An eager base runs under automatic grounding;
+    /// a hybrid base (from lazy materialization) runs under lazy grounding, on
+    /// the CPU backend only, its constraints checked before reconstruction. An
+    /// eager request never acquires terminal meaning. Explicit projection and
+    /// objectives are outside this profile. No admission or execution occurs in
+    /// this borrow.
     #[must_use]
     pub fn terminal(owner: &'a zetesis_themelios::TerminalFormula) -> Self {
         Self {
@@ -225,6 +227,21 @@ impl<'a> PreparedInput<'a> {
     }
     fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, SolveError> {
         if matches!(self.input, Prepared::Hybrid(_)) {
+            config.validate_hybrid()?;
+            return Ok(config);
+        }
+        // A hybrid terminal base is the lazy route's: lazy requests only, and
+        // the hybrid route's backend and batching restrictions.
+        if let Prepared::TerminalDefinitions(owner) = self.input
+            && owner.base_kind() == zetesis_themelios::BaseKind::Hybrid
+        {
+            if config.grounder != Grounder::Lazy {
+                return Err(SolveError::PreparedInput {
+                    profile: self.profile(),
+                    oracle: config.oracle,
+                    grounder: config.grounder,
+                });
+            }
             config.validate_hybrid()?;
             return Ok(config);
         }
@@ -695,8 +712,8 @@ impl<'a> Session<'a> {
         observations: &mut impl ExecutionSink,
     ) -> Result<(State<'a>, SolveConfig), SolveError> {
         let config = input.configure(config)?;
-        if input.profile() == PreparedProfile::TerminalDefinitions {
-            phases.terminal_grounding();
+        if let Prepared::TerminalDefinitions(owner) = input.input {
+            phases.terminal_grounding(owner.base_kind());
         }
         let _solving = phases.stage(crate::SolveStage::Solving);
         if let Err(stop) = cancellation.poll() {
@@ -758,7 +775,7 @@ impl<'a> Session<'a> {
                 phases,
                 selection,
             )?)),
-            Prepared::Hybrid(owner) => State::Hybrid(Box::new(HybridSession::new(
+            Prepared::Hybrid(owner) => State::Hybrid(Box::new(HybridSession::observed(
                 crate::hybrid_session::HybridInput {
                     core: owner.core(),
                     subject: crate::Subject::Hybrid(owner.clone()),

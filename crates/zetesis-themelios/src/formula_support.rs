@@ -131,7 +131,9 @@ impl CompletedCatalog {
 /// are read through the closed catalog, which keeps their writer's scopes; the
 /// descendant serves only vocabulary-scoped term lookups.
 pub(crate) struct StreamedSupport {
-    closed: ClosedSource,
+    /// Shared with a terminal owner's reconstruction plan when this support is
+    /// a hybrid base's.
+    closed: std::sync::Arc<ClosedSource>,
     rows: relations::StreamedRows,
     lookup: zetesis_core::atom_interner::AtomInterner,
     completion: Completion,
@@ -169,7 +171,7 @@ impl CompletedCatalog {
         )
         .map_err(|error| FormulaFailure::AtomCatalog { error, location })?;
         Ok(StreamedSupport {
-            closed,
+            closed: std::sync::Arc::new(closed),
             rows,
             lookup,
             completion: self.completion,
@@ -178,6 +180,16 @@ impl CompletedCatalog {
 }
 
 impl StreamedSupport {
+    /// The closed base these relations index.
+    pub(crate) fn closed(&self) -> &std::sync::Arc<ClosedSource> {
+        &self.closed
+    }
+
+    /// Named bytes of the kept relations and their postings.
+    pub(crate) fn relation_bytes(&self) -> usize {
+        self.rows.bytes()
+    }
+
     /// A completed view for an independent checker; nothing is copied.
     pub(crate) fn snapshot(
         &self,

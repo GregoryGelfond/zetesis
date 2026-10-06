@@ -285,6 +285,10 @@ impl StreamedCore {
         }))
     }
 
+    pub(crate) fn compiled(&self) -> &Compiled {
+        &self.0.compiled
+    }
+
     /// Exact core identity; clones share it.
     #[must_use]
     pub fn same_instance(&self, other: &Self) -> bool {

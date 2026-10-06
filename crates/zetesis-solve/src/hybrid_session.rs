@@ -61,6 +61,35 @@ pub(crate) struct HybridSession<'a> {
 }
 
 impl<'a> HybridSession<'a> {
+    /// A hybrid owner's session: the route is recorded as lazy grounding and
+    /// observed as hybrid grounding before the core session starts. A terminal
+    /// owner's hybrid base is observed by its terminal session instead.
+    pub(crate) fn observed(
+        input: HybridInput<'a>,
+        config: &SolveConfig,
+        resources: &crate::ExecutionResources,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+        selection: AnswerSelection,
+    ) -> Result<Self, SolveError> {
+        phases.lazy_grounding();
+        observations.record(crate::ExecutionObservation::HybridGrounding {
+            requested: config.grounder,
+            streamed_templates: input.core.streamed_templates(),
+            streamed_instances: input.core.streamed_instances(),
+        })?;
+        Self::new(
+            input,
+            config,
+            resources,
+            observations,
+            cancellation,
+            phases,
+            selection,
+        )
+    }
+
     pub(crate) fn new(
         input: HybridInput<'a>,
         config: &SolveConfig,
@@ -74,12 +103,6 @@ impl<'a> HybridSession<'a> {
             core: owner,
             subject,
         } = input;
-        phases.lazy_grounding();
-        observations.record(crate::ExecutionObservation::HybridGrounding {
-            requested: config.grounder,
-            streamed_templates: owner.streamed_templates(),
-            streamed_instances: owner.streamed_instances(),
-        })?;
         let allowance = ConstraintAllowance::new(config.constraints);
         let checker = owner
             .checker_with_allowance(&allowance, cancellation)
@@ -259,5 +282,26 @@ impl<'a> HybridSession<'a> {
 
     pub(crate) const fn finished(&self) -> bool {
         self.final_outcome.is_some()
+    }
+
+    /// Settle this session for an enclosing one that stops for `state`: resolve
+    /// it once (workers stopped, the region-failure slot taken) unless it has
+    /// already finished, and return its final search state, or the constraint
+    /// failure that cleanup established.
+    pub(crate) fn conclude(
+        &mut self,
+        state: Option<SearchState>,
+        phases: &Recorder,
+    ) -> Result<Option<SearchState>, SolveError> {
+        if let Some(outcome) = &self.final_outcome {
+            return Ok(outcome.search_state);
+        }
+        match self.finish(state, None, phases) {
+            Some(Err(error)) => Err(error),
+            _ => Ok(self
+                .final_outcome
+                .as_ref()
+                .and_then(|outcome| outcome.search_state)),
+        }
     }
 }

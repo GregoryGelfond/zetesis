@@ -239,7 +239,7 @@ fn reconstruction_uses_answer_truth_not_possible_support() {
         assert!(
             !view
                 .subject()
-                .same_instance(&Subject::Theory(owner.base_theory().clone()))
+                .same_instance(&Subject::Theory(owner.base_theory().unwrap().clone()))
         );
     }
 }
@@ -346,9 +346,13 @@ impl ExecutionObserver for Observed {
         match event {
             ExecutionObservation::TerminalDefinitions {
                 requested,
+                base,
                 deferred_templates,
+                streamed,
             } => {
                 assert_eq!(requested, Grounder::Auto);
+                assert_eq!(base, zetesis_themelios::BaseKind::Eager);
+                assert_eq!(streamed, None);
                 assert_eq!(deferred_templates, 1);
                 self.terminal += 1;
             }

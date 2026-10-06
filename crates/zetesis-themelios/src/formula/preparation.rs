@@ -233,6 +233,7 @@ impl PreparedFormula {
             {
                 Materialized {
                     compiled,
+                    core: _,
                     terminal: None,
                 } => crate::FormulaMaterialization::Complete(AdmittedFormula {
                     compiled,
@@ -241,15 +242,47 @@ impl PreparedFormula {
                 }),
                 Materialized {
                     compiled,
+                    core,
                     terminal: Some(extension),
                 } => crate::FormulaMaterialization::Terminal(crate::TerminalFormula::new(
                     compiled,
+                    core,
                     extension,
                     self.source,
                     self.metadata,
                 )),
             },
         )
+    }
+
+    /// Lazy materialization: the terminal partition defers certified terminal
+    /// definitions, as [`Self::ground_adaptive`] does, but the base (or, with
+    /// nothing deferred, the program) is grounded under the hybrid schedule:
+    /// its producer core is instantiated and its eligible integrity constraints
+    /// are streamed. A terminal owner's base is then [`crate::BaseKind::Hybrid`],
+    /// even with no eligible constraint. Objectives are refused, after the
+    /// partition's charges, as [`Self::ground_hybrid`] refuses them.
+    ///
+    /// # Errors
+    /// Returns the failures of [`Self::ground_adaptive`] and
+    /// [`Self::ground_hybrid`].
+    pub fn ground_lazy(
+        self,
+    ) -> Result<crate::FormulaMaterialization<crate::HybridFormula>, FormulaFailure> {
+        self.ground_lazy_with_observer(None)
+    }
+
+    /// Lazy materialization with caller-owned grounding observations.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::ground_lazy`].
+    pub fn ground_lazy_with_observer(
+        self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::FormulaMaterialization<crate::HybridFormula>, FormulaFailure> {
+        let materialized = crate::formula_terminal::materialize_lazy(self.preparation, observer)
+            .map_err(|error| self.source.retain_failure(error))?;
+        Ok(lazy_outcome(materialized, self.source, self.metadata))
     }
 
     /// Materialize the same original theory while independently attempting
@@ -348,6 +381,7 @@ impl PreparedFormulaBundle {
         match crate::formula_terminal::materialize(self.preparation, observer) {
             Ok(Materialized {
                 compiled,
+                core: _,
                 terminal: None,
             }) => Ok(crate::FormulaMaterialization::Complete(
                 AdmittedFormulaBundle {
@@ -358,10 +392,38 @@ impl PreparedFormulaBundle {
             )),
             Ok(Materialized {
                 compiled,
+                core,
                 terminal: Some(extension),
             }) => Ok(crate::FormulaMaterialization::Terminal(
-                crate::TerminalFormula::new(compiled, extension, self.source, self.metadata),
+                crate::TerminalFormula::new(compiled, core, extension, self.source, self.metadata),
             )),
+            Err(error) => Err(FormulaBundleFailure {
+                bundle: self.source.into_bundle(),
+                error: Box::new(error),
+            }),
+        }
+    }
+
+    /// Bundle counterpart of [`PreparedFormula::ground_lazy`].
+    ///
+    /// # Errors
+    /// Retains the original bundle on every refusal.
+    pub fn ground_lazy(
+        self,
+    ) -> Result<crate::FormulaMaterialization<crate::HybridFormula>, FormulaBundleFailure> {
+        self.ground_lazy_with_observer(None)
+    }
+
+    /// Lazy bundle materialization with grounding observations.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::ground_lazy`].
+    pub fn ground_lazy_with_observer(
+        self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::FormulaMaterialization<crate::HybridFormula>, FormulaBundleFailure> {
+        match crate::formula_terminal::materialize_lazy(self.preparation, observer) {
+            Ok(materialized) => Ok(lazy_outcome(materialized, self.source, self.metadata)),
             Err(error) => Err(FormulaBundleFailure {
                 bundle: self.source.into_bundle(),
                 error: Box::new(error),
@@ -529,3 +591,37 @@ impl PreparedFormulaBundle {
 
 #[cfg(test)]
 mod tests;
+
+/// The owner a lazy materialization admits: a hybrid owner when nothing is
+/// deferred, else a terminal owner with a hybrid base.
+fn lazy_outcome(
+    materialized: crate::formula_terminal::Materialized,
+    source: crate::formula_owner::Owner,
+    metadata: crate::SourceMetadata,
+) -> crate::FormulaMaterialization<crate::HybridFormula> {
+    use crate::formula_terminal::{Core, Materialized};
+    match materialized {
+        Materialized {
+            compiled,
+            core,
+            terminal: Some(extension),
+        } => crate::FormulaMaterialization::Terminal(crate::TerminalFormula::new(
+            compiled, core, extension, source, metadata,
+        )),
+        Materialized {
+            compiled,
+            core: Core::Hybrid(constraints),
+            terminal: None,
+        } => crate::FormulaMaterialization::Complete(crate::HybridFormula::new(
+            compiled,
+            constraints.map(|constraints| *constraints),
+            source,
+            metadata,
+        )),
+        Materialized {
+            core: Core::Eager,
+            terminal: None,
+            ..
+        } => unreachable!("lazy materialization grounds an undeferred program as hybrid"),
+    }
+}
