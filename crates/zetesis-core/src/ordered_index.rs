@@ -149,8 +149,9 @@ pub(crate) enum Last {
     Found(usize),
     /// The query follows every node; its place is after the maximum.
     Beyond,
-    /// The tree is empty or the query precedes the maximum: the full search decides.
-    Before,
+    /// The tree is empty, or the query precedes the maximum: the last node
+    /// cannot place it, and the full search decides.
+    Search,
 }
 
 /// Compare a query with the tree's last node in order, held by its owner,
@@ -172,11 +173,11 @@ pub(crate) fn last<C, E>(
     mut descend: impl FnMut(bool),
 ) -> Result<Last, E> {
     let (Some(mut spine), Some(last)) = (root, last) else {
-        return Ok(Last::Before);
+        return Ok(Last::Search);
     };
     Ok(match compare(last, context)? {
         Ordering::Equal => Last::Found(last),
-        Ordering::Less => Last::Before,
+        Ordering::Less => Last::Search,
         Ordering::Greater => {
             descend(true);
             while let Some(next) = nodes[position(spine)].children[1] {

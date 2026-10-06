@@ -360,7 +360,7 @@ impl Catalog {
         let found = match last {
             ordered_index::Last::Found(row) => Some(row),
             ordered_index::Last::Beyond => None,
-            ordered_index::Last::Before => self.locate_bound(atoms, value, work, |right| {
+            ordered_index::Last::Search => self.locate_bound(atoms, value, work, |right| {
                 route.push(right).expect("AVL height fits two words");
             })?,
         };

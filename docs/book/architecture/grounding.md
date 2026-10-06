@@ -955,10 +955,15 @@ retained row. Static sorted dictionaries retain their own immutable lookup.
 Support keeps posting lists only for the columns a join can bind: a column
 holding a constant, or a variable that occurs again in the same rule, body or
 head (factorization binds head variables before it probes the body), in some
-join occurrence of its predicate. The rule is applied exactly to rules with an
-ordinary head and a flat body of atoms, comparisons and bindings; a choice or
-conditional head, a negated atom, a projection and every nested frame index
-every column they name, a conservative superset. A predicate no join reads,
+join occurrence of its predicate. The rule is syntactic, and keeps a superset of
+the postings its two readers consult — probes, which choose the shortest posting
+among the columns a pattern binds, and totality domains, which read a column's
+keys. For rules with an ordinary head and a flat body of atoms, comparisons and
+bindings it keeps no column that holds only a variable occurring once; it still
+keeps two kinds no reader consults there: the columns of negated atoms, and
+columns whose variable's only other occurrence consumes it (in a comparison or
+the head) without binding it first. A choice or conditional head, a projection
+and every nested frame index every column they name. A predicate no join reads,
 such as a terminal definition under eager grounding, keeps none, and neither
 does a column of a flat rule holding a variable that occurs once. The demand is
 computed from the compiled rules before support grows, and its storage counts

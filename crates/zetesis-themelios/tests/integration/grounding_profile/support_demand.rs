@@ -59,6 +59,8 @@ fn every_kind_of_join_finds_its_posting() {
         "{ a(1..6) }.\n{ b(1..6, 1..2) }.\np(X) :- a(X), not b(X, f(_)).\n",
         // A projected rule body.
         "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X), b(X, Y).\n#project c/1.\n",
+        // An atom projection whose condition joins a and b on X.
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n#project c(X) : a(X), b(X, Y).\n",
         // A constraint whose comparison reads a joined column (totality).
         "{ a(1..6) }.\n{ b(1..6, 1..2) }.\n:- a(X), b(X, Y), Y > X + 8.\n",
         // An optimization element.

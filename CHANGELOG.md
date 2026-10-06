@@ -46,9 +46,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   adds `admission`, `allowance`, `latest` and `peak` (`ReconstructionCharges`),
   shown in the `--stats` records line, the `--stats` table (allowance and
   largest answer) and the JSON `terminal_execution.reconstruction` object.
-- Formula support keeps posting lists only for the columns a join can bind
-  (exactly for rules with an ordinary head and a flat body, conservatively for
-  other constructs). A predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
+- Formula support keeps posting lists only for the columns a join can bind, by
+  a syntactic rule that keeps a superset of what probes and totality domains
+  read (tighter for rules with an ordinary head and a flat body, every named
+  column for other constructs). A predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
   and support work fall; a program such as eager Mastermind 6×8, whose unread
   `next_guess/6` alone needed 1.57 million entries, no longer stops there.
   Grounding observations report `unindexed_probes`, which is zero whenever

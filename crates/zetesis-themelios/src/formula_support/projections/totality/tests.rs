@@ -269,3 +269,30 @@ fn another_rule_cannot_certify_this_join() {
         },
     );
 }
+
+#[test]
+fn a_column_only_the_comparison_reads_remains_a_domain() {
+    // Y occurs in e and in the comparison alone. Support demand counts the
+    // comparison's occurrence, so e's second column keeps its postings, and
+    // its values (no zero) certify 1/Y total.
+    testing::with_completed_source(
+        "d(1..3). e(1..3,1..2). :- d(X), e(X,Y), 1/Y = 1.",
+        |program, support, computation, counters| {
+            let rule = constraints(program).next().unwrap();
+            let limits = FormulaLimits::default();
+            let mut join = Join::rule(
+                rule,
+                support,
+                computation,
+                &limits,
+                &mut testing::budget(),
+                counters,
+            )
+            .unwrap();
+            assert!(
+                join.select_total_constraint(rule, computation, &limits, counters)
+                    .unwrap()
+            );
+        },
+    );
+}

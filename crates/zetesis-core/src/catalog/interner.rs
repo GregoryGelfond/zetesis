@@ -1139,7 +1139,7 @@ impl<'a> AtomAppender<'a> {
                         beyond = true;
                         None
                     }
-                    index::Last::Before => query.search(
+                    index::Last::Search => query.search(
                         self.store,
                         |id| self.get(id),
                         &self.index.nodes,
