@@ -562,3 +562,60 @@ fn coordinator_observations_saturate_with_worker_receipts() {
     assert_eq!(counts.held, u64::MAX);
     assert_eq!(counts.cut, u64::MAX);
 }
+
+/// Busy-wait for `turns` spin hints: a head start for one side of a race.
+fn spin(turns: u32) {
+    for _ in 0..turns {
+        std::hint::spin_loop();
+    }
+}
+
+/// A protocol harness for the idle wake: a waiter whose idle wait is a full
+/// minute must take a region a publisher pushes within a deadline far below
+/// that minute, across many interleavings of the two sides. Only the waiter
+/// can take the region (its owner never pops it before the deadline), so a
+/// lost wakeup fails the deadline. This checks the translation of the
+/// protocol; its ordering argument is the design's.
+#[test]
+fn a_waiting_worker_never_misses_a_publication() {
+    const ROUNDS: u32 = 5000;
+    const IDLE: Duration = Duration::from_mins(1);
+    let search = search(2);
+    let shared = &search.shared;
+    let root = shared.take_local(0).unwrap();
+    for round in 0..ROUNDS {
+        // A deterministic spread of head starts for either side.
+        let waiter_start = round.wrapping_mul(7919) % 3000;
+        let publisher_start = round.wrapping_mul(104_729) % 3000;
+        let (taken, done) = mpsc::channel();
+        std::thread::scope(|scope| {
+            scope.spawn(move || {
+                spin(waiter_start);
+                loop {
+                    if shared.steal(1).is_some() {
+                        let _ = taken.send(());
+                        break;
+                    }
+                    if shared.wait_for_work(1, IDLE).is_some() {
+                        let _ = taken.send(());
+                        break;
+                    }
+                    if shared.termination.has_ended() {
+                        break;
+                    }
+                }
+            });
+            spin(publisher_start);
+            shared
+                .publish_split(0, root.clone(), root.clone(), reserve_regions)
+                .unwrap();
+            if done.recv_timeout(WAIT).is_err() {
+                // End the walk so the stranded waiter returns at once.
+                shared.close();
+                panic!("round {round}: the waiting worker missed the publication");
+            }
+        });
+        // The owner takes the other child, so each round starts empty.
+        assert!(shared.take_local(0).is_some());
+    }
+}

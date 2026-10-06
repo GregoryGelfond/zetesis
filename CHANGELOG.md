@@ -19,6 +19,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- A parallel region worker publishing a split takes the idle workers' lock
+  only when an idle worker waits; waiters register in an atomic count before
+  their last look for work, so no publication is missed.
 - Answers reconstructed with deferred terminal definitions each get the
   headroom grounding left under the formula ceilings, instead of drawing on one
   cumulative allowance, so a program with many answers is no longer stopped by

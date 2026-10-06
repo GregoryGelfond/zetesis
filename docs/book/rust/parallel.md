@@ -142,7 +142,8 @@ so this boundary is not an end-to-end guarantee against allocation failure.
 The unresolved-region counter gains one when two children replace a parent and
 loses one when a region is resolved. Idle workers finish only at zero or an
 explicit stop. The resolution that reaches zero, a stop and a close each wake
-idle workers at once, and each split publication wakes one idle worker;
+idle workers at once, and each split publication wakes one idle worker when
+one waits, taking the idle workers' lock only then;
 otherwise an idle worker looks for a region again and polls cancellation about
 once a millisecond. Queued models are delivered before
 a worker's stop is reported.
