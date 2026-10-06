@@ -535,3 +535,22 @@ fn a_requested_prefix_settles_region_workers() {
         outcome.hybrid_execution()
     );
 }
+
+#[test]
+fn a_constraint_keeps_the_relation_only_it_reads() {
+    // `p` is read by the streamed constraint alone, so its support relation
+    // must survive admission for the checker to reject `{a, p(1)}`.
+    const SOURCE: &str = "{a; b}. p(1) :- a. q :- b. :- p(X), X = 1.";
+    let admitted = hybrid(SOURCE, &limits());
+    assert!(admitted.streamed_templates() > 0);
+    let original = eager(SOURCE, &limits()).unwrap();
+    let (expected, _) = capture(PreparedInput::formula(&original), configuration());
+    let config = SolveConfig {
+        grounder: Grounder::Lazy,
+        ..configuration()
+    };
+    let (actual, outcome) = capture(PreparedInput::hybrid(&admitted), config);
+    assert_eq!(actual, expected);
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(outcome.verified_models(), 2);
+}

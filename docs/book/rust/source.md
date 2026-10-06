@@ -399,8 +399,11 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-termina
 ## Stream ordinary constraints
 
 `PreparedFormula::ground_hybrid()` and the corresponding bundle method return
-one shared `HybridFormula`. It retains the original source, complete possible
-support and typed atom catalog. Producers and constraints with aggregates,
+one shared `HybridFormula`. It retains the original source, the typed atom
+catalog and, when any constraint is streamed, the closed canonical base with the
+possible-support relations those constraints read; discovery and order indexes
+and every other relation are released at admission. Closing is charged as
+formula work, and its transient peak is admitted against `max_support_bytes`. Producers and constraints with aggregates,
 projected atoms or conditional scopes remain in `core_theory()`. Ordinary
 atom/scalar integrity constraints retain their prepared templates instead of
 complete formula DAGs. This first schedule requires indexed joins and refuses
@@ -444,8 +447,8 @@ Omitted zero-divisor instances therefore retain the same located warnings, and
 candidate filtering cannot conceal fatal arithmetic.
 
 Hybrid admission preserves its original expansion-budget prefix. It also keeps
-prepared constraint plans and completed support that eager grounding can release
-after emission. The existing source, scalar and support ceilings still apply;
+prepared constraint plans and the support relations they read, which eager
+grounding can release after emission. The existing source, scalar and support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
 atom guards. `streamed_templates()` counts lowered templates, including pool

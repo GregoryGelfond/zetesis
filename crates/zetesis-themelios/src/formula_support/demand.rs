@@ -328,6 +328,36 @@ fn flat(literal: &LiteralIr) -> bool {
     )
 }
 
+/// The predicates the atoms of `rules` name, any polarity; `None` when a rule
+/// holds a literal this walk does not read, so that every relation is kept.
+pub(crate) fn read_predicates<'r>(
+    rules: impl IntoIterator<Item = &'r RuleIr>,
+    view: TemplateComponentsRef<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Option<std::collections::HashSet<Predicate>>, FormulaFailure> {
+    let mut found = std::collections::HashSet::new();
+    for rule in rules {
+        for literal in &rule.body {
+            counters.work(limits, location)?;
+            let atom = match literal {
+                LiteralIr::Atom(_, atom) => *atom,
+                LiteralIr::PatternAtom(atom) => atom.atom,
+                LiteralIr::Compare(..)
+                | LiteralIr::ArgumentCheck { .. }
+                | LiteralIr::TupleCompare(..)
+                | LiteralIr::Bind { .. }
+                | LiteralIr::Range { .. } => continue,
+                _ => return Ok(None),
+            };
+            let pattern = atom.get(view, limits, counters, location)?;
+            found.insert(owned(pattern.predicate()));
+        }
+    }
+    Ok(Some(found))
+}
+
 /// The owned key of a signed predicate.
 fn owned(predicate: PredicateRef<'_>) -> Predicate {
     Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign())

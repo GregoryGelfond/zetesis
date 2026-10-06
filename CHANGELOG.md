@@ -25,6 +25,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Lazy (hybrid) formula admission closes the completed support once it has
+  emitted the producer core, keeping the canonical base and only the support
+  relations the streamed constraints read; discovery and order indexes and every
+  other relation are released. A hybrid owner retains less support memory;
+  the close is charged as formula work and its transient peak is checked against
+  the support-byte ceiling, so a program within the close's envelope of that
+  ceiling can now be refused there. Answers are unchanged.
 - A parallel region worker publishing a split takes the idle workers' lock
   only when an idle worker waits; waiters register in an atomic count before
   their last look for work, so a published region is found by that look or

@@ -123,7 +123,82 @@ impl CompletedCatalog {
             append,
         ))
     }
+}
 
+/// Completed support kept for streamed constraints over the closed base: the
+/// closed canonical storage, the relations the constraints read, and a
+/// read-only descendant writer that resolves the base's terms. The relations
+/// are read through the closed catalog, which keeps their writer's scopes; the
+/// descendant serves only vocabulary-scoped term lookups.
+pub(crate) struct StreamedSupport {
+    closed: ClosedSource,
+    rows: relations::StreamedRows,
+    lookup: zetesis_core::atom_interner::AtomInterner,
+    completion: Completion,
+}
+
+impl CompletedCatalog {
+    /// Close this support, keeping only the relations of the predicates the
+    /// atoms of `rules` name. The close is charged and its peak admitted as any
+    /// close is.
+    pub(crate) fn into_streamed(
+        self,
+        rules: &[crate::formula_ir::RuleIr],
+        work: GroundingWork<'_>,
+    ) -> Result<StreamedSupport, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let keep = match self.catalog.component_view(limits, counters, location)? {
+            Some(view) => demand::read_predicates(rules, view, limits, counters, location)?,
+            None => None,
+        };
+        let max_bytes = limits.max_atom_storage_bytes;
+        let (closed, rows) = self
+            .catalog
+            .into_streamed(
+                keep.as_ref(),
+                GroundingWork::new(limits, counters, location),
+            )
+            .map_err(|failure| failure.into_parts().0)?;
+        let lookup = zetesis_core::atom_interner::AtomInterner::for_closed_catalog(
+            &closed.storage,
+            max_bytes,
+        )
+        .map_err(|error| FormulaFailure::AtomCatalog { error, location })?;
+        Ok(StreamedSupport {
+            closed,
+            rows,
+            lookup,
+            completion: self.completion,
+        })
+    }
+}
+
+impl StreamedSupport {
+    /// A completed view for an independent checker; nothing is copied.
+    pub(crate) fn snapshot(
+        &self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<CompletedSupport<'_>, FormulaFailure> {
+        self.rows
+            .snapshot(&self.closed, limits, counters, location)
+            .map(|relations| CompletedSupport {
+                lookup_owner: Some(&self.lookup),
+                completion: &self.completion,
+                relations,
+            })
+    }
+}
+
+#[cfg(test)]
+impl CompletedCatalog {
+    /// A completed view over the open owner, which tests read directly;
+    /// production checkers read the closed base (`StreamedSupport`).
     pub(crate) fn snapshot(
         &self,
         limits: &FormulaLimits,

@@ -22,9 +22,11 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 mod append;
 mod close;
 mod publication;
+mod streamed;
 pub(super) use append::SupportAppend;
 pub(crate) use append::{SourceAtom, SourceScope};
 pub(crate) use close::ClosedSource;
+pub(crate) use streamed::StreamedRows;
 
 #[cfg(test)]
 mod tests;
@@ -83,6 +85,7 @@ impl Default for SupportCatalog {
 }
 
 impl SupportCatalog {
+    #[cfg(test)]
     pub(super) fn owner(&self) -> &AtomInterner {
         &self.owner
     }
@@ -284,6 +287,9 @@ impl SupportCatalog {
         Ok(())
     }
 
+    /// An immutable view over the open owner; production checkers read the
+    /// closed base (`StreamedRows::snapshot`), so only tests read this one.
+    #[cfg(test)]
     pub(crate) fn snapshot(
         &self,
         limits: &FormulaLimits,

@@ -20,9 +20,7 @@ use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_owner::Owner;
-use crate::formula_support::{
-    Accounting, CompletedCatalog, CompletedSupport, Counters, PreparedRule, RowFilter,
-};
+use crate::formula_support::{Accounting, CompletedSupport, Counters, PreparedRule, RowFilter};
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
     SourceMetadata,
@@ -48,7 +46,7 @@ impl fmt::Display for HybridFeature {
 }
 
 pub(crate) struct Constraints {
-    pub(crate) catalog: CompletedCatalog,
+    pub(crate) support: crate::formula_support::StreamedSupport,
     pub(crate) rules: Vec<RuleIr>,
     pub(crate) instances: u64,
     pub(crate) limits: FormulaLimits,
@@ -63,9 +61,10 @@ struct Admitted {
 }
 
 /// One immutable original program: a materialized producer core and prepared
-/// integrity constraints over the same complete atom/support envelope. When no
-/// constraints are streamed, the unused completed support and plan storage are
-/// released after admission.
+/// integrity constraints over the same atom envelope. Admission closes the
+/// completed support, keeping the canonical base and only the relations the
+/// streamed constraints read; when no constraint is streamed, the support and
+/// plan storage are released instead.
 ///
 /// Cloning shares all retained source, atoms and indexes. The core's answer sets
 /// are proposals; only those satisfying the streamed constraints are answer
@@ -84,13 +83,12 @@ impl fmt::Debug for HybridFormula {
 impl HybridFormula {
     pub(crate) fn new(
         compiled: Compiled,
-        constraints: Constraints,
+        constraints: Option<Constraints>,
         source: Owner,
         metadata: SourceMetadata,
     ) -> Self {
-        // An all-eager fallback needs neither support nor the filtered vector's
-        // former capacity. Absence drops both together, after full admission.
-        let constraints = (!constraints.rules.is_empty()).then_some(constraints);
+        // With no eligible constraint the support was released at admission,
+        // not closed; the core alone remains.
         Self(Arc::new(Admitted {
             compiled,
             constraints,
@@ -275,7 +273,7 @@ impl HybridFormula {
             formula_limits.max_work = limits.max_work;
             formula_limits.max_substitutions = limits.max_substitutions;
             let completed = constraints
-                .catalog
+                .support
                 .snapshot(&formula_limits, &mut counters, constraints.location)
                 .map_err(|error| ConstraintCheckFailure {
                     cause: ConstraintCheckCause::Source(Box::new(

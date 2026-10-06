@@ -268,7 +268,9 @@ optional existing clause-search route retains final constraint checking without
 this region operation.
 
 The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs)
-retains prepared constraints and completed support indexes. Each checker has its
+retains prepared constraints, the closed canonical base and the support
+relations (with their postings) that those constraints read; discovery and
+order indexes and other relations are released when admission closes support. Each checker has its
 own mutable state and prepares a checked dense atom lookup on its first region
 operation. A prepared correspondence maps support rows to original dense atom
 IDs without copying their tuples. The region selects held positive rows before

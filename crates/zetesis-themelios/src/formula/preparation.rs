@@ -46,7 +46,7 @@ impl Preparation {
     fn ground_hybrid(
         self,
         observer: Option<&dyn GroundingObserver>,
-    ) -> Result<(Compiled, crate::formula_hybrid::Constraints), FormulaFailure> {
+    ) -> Result<(Compiled, Option<crate::formula_hybrid::Constraints>), FormulaFailure> {
         grounding_observer::observe(observer, || formula_ground::ground_hybrid(self, observer))
     }
 

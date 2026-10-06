@@ -68,7 +68,8 @@ does not assert an atom.
 The [publication boundary](../../crates/zetesis-themelios/src/formula_support/publication.rs)
 shares sealed source storage across final views and transfers occurrence maps.
 Closing support can retire its query and possible-truth indexes while retaining
-the canonical base needed for subsequent operations. In particular, terminal
+the canonical base needed for subsequent operations; a hybrid owner keeps the
+query indexes of exactly the relations its streamed constraints read. In particular, terminal
 definition reconstruction starts from each answer's true rows; the shared store
 never substitutes possible support for that answer's interpretation.
 
