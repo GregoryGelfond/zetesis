@@ -473,14 +473,14 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     // seeds costs the most to reconstruct; a ceiling one short of admission
     // plus its cost refuses that answer alone.
     let mut cursor = owner.reconstruction().unwrap();
-    let admission = cursor.statistics().work;
+    let admission = cursor.statistics().admission.work;
     let both = Model::from_positions(
         owner.base_atom_catalog(),
         0..owner.base_atom_catalog().atoms().len(),
     )
     .unwrap();
     cursor.reconstruct(&both, &Cancellation::default()).unwrap();
-    let costliest = cursor.statistics().latest_work;
+    let costliest = cursor.statistics().latest.work;
     let completed_work = Session::builder(
         PreparedInput::terminal(&owner),
         config(),

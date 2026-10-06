@@ -147,7 +147,8 @@ pub struct Options {
     /// Omission preserves each library default: 1,048,576 source-term operations
     /// and 10,000,000 formula-grounding operations. An explicit value applies
     /// independently to both counters. Formula work includes admission, checked
-    /// lookups, index construction and reconstruction of deferred definitions.
+    /// lookups and index construction; each answer's reconstruction of deferred
+    /// definitions may use the headroom admission left.
     #[arg(long, hide_short_help = true)]
     pub max_expansion_work: Option<usize>,
     /// Maximum named storage for formula support and reconstruction.

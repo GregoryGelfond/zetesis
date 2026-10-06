@@ -899,6 +899,19 @@ fn terminal_statistics(
     out.number_field("completed", statistics.reconstruction.completed)?;
     out.number_field("work", statistics.reconstruction.work)?;
     out.number_field("substitutions", statistics.reconstruction.substitutions)?;
+    for (name, charges) in [
+        ("admission", statistics.reconstruction.admission),
+        ("allowance", statistics.reconstruction.allowance),
+        ("latest", statistics.reconstruction.latest),
+        ("peak", statistics.reconstruction.peak),
+    ] {
+        out.text(",\"")?;
+        out.text(name)?;
+        out.text("\":{\"work\":")?;
+        out.text(&charges.work.to_string())?;
+        out.number_field("substitutions", charges.substitutions)?;
+        out.text("}")?;
+    }
     out.text("}}")
 }
 

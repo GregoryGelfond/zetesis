@@ -23,7 +23,9 @@ use crate::formula_owner::Owner;
 use crate::formula_support::{AccountingBaseline, ClosedSource};
 use crate::{AnalysisBasis, FormulaLimits, ProgramSite, SourceBundle, SourceMetadata};
 
-pub use reconstruct::{ReconstructionError, ReconstructionStatistics, TerminalReconstruction};
+pub use reconstruct::{
+    ReconstructionCharges, ReconstructionError, ReconstructionStatistics, TerminalReconstruction,
+};
 
 /// Result of source materialization with terminal-definition analysis enabled.
 /// A terminal plan still requires base solving and answer reconstruction.

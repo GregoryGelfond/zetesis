@@ -164,22 +164,68 @@ fn terminal_with(source: &str, limits: &FormulaLimits) -> TerminalFormula {
 
 const MANY: &str = "{seed(1..4)}. receipt(X):-seed(X).";
 
-/// Admission's work and one reconstruction's, under default limits.
-fn costs() -> (u64, u64) {
+/// Admission's work and one reconstruction's of `seeds`, under default limits.
+fn costs_of(seeds: &[&str]) -> (u64, u64) {
     let owner = terminal(MANY);
     let mut cursor = owner.reconstruction().unwrap();
-    let admission = cursor.statistics().work;
     cursor
-        .reconstruct(
-            &selection(&owner, &["seed(1)", "seed(3)"]),
-            &Cancellation::default(),
-        )
+        .reconstruct(&selection(&owner, seeds), &Cancellation::default())
         .unwrap();
-    (admission, cursor.statistics().work - admission)
+    let statistics = cursor.statistics();
+    (statistics.admission.work, statistics.latest.work)
+}
+
+fn costs() -> (u64, u64) {
+    costs_of(&["seed(1)", "seed(3)"])
 }
 
 #[test]
-fn many_answers_do_not_exhaust_the_grounding_ceiling() {
+fn the_allowance_is_the_headroom_admission_left() {
+    let limits = FormulaLimits::default();
+    let owner = terminal(MANY);
+    let statistics = owner.reconstruction().unwrap().statistics();
+    assert!(statistics.admission.work > 0);
+    assert_eq!(
+        statistics.allowance.work,
+        limits.max_work - statistics.admission.work
+    );
+    assert_eq!(
+        statistics.allowance.substitutions,
+        limits.max_substitutions - statistics.admission.substitutions
+    );
+}
+
+#[test]
+fn distinct_answers_do_not_exhaust_the_grounding_ceiling() {
+    let all = ["seed(1)", "seed(2)", "seed(3)", "seed(4)"];
+    let (admission, largest) = costs_of(&all);
+    // Room for grounding and about two of the largest reconstructions.
+    let owner = terminal_with(
+        MANY,
+        &FormulaLimits {
+            max_work: admission + 2 * largest,
+            ..FormulaLimits::default()
+        },
+    );
+    let mut cursor = owner.reconstruction().unwrap();
+    // Every nonempty subset of the seeds is its own answer.
+    for mask in 1..16_usize {
+        let seeds: Vec<&str> = (0..4)
+            .filter(|bit| mask & (1 << bit) != 0)
+            .map(|bit| all[bit])
+            .collect();
+        let result = cursor
+            .reconstruct(&selection(&owner, &seeds), &Cancellation::default())
+            .unwrap();
+        assert_eq!(names(&result).len(), 2 * seeds.len());
+    }
+    let statistics = cursor.statistics();
+    assert_eq!(statistics.completed, 15);
+    assert_eq!(statistics.peak.work, largest);
+}
+
+#[test]
+fn repeated_reconstructions_do_not_exhaust_the_grounding_ceiling() {
     let (admission, call) = costs();
     // Room for grounding and about three reconstructions in all.
     let owner = terminal_with(
@@ -240,10 +286,11 @@ fn an_answer_fits_exactly_the_headroom_admission_left() {
         cursor
             .reconstruct(&selection(&owner, &model_names), &Cancellation::default())
             .unwrap();
-        assert_eq!(cursor.statistics().latest_work, call);
+        assert_eq!(cursor.statistics().latest.work, call);
     }
     assert_eq!(cursor.statistics().work, admission + 3 * call);
-    // Refused at admission + c − 1: the refusal names the per-answer ceiling.
+    // Refused at admission + c − 1: the refusal names the allowance and the
+    // call's own charge.
     let owner = terminal_with(
         MANY,
         &FormulaLimits {
@@ -264,9 +311,13 @@ fn an_answer_fits_exactly_the_headroom_admission_left() {
             observed,
             limit,
             ..
-        } if *limit == u128::from(admission + call - 1) && *observed == u128::from(admission + call)),
+        } if *limit == u128::from(call - 1) && *observed == u128::from(call)),
         "{cause:?}"
     );
-    assert_eq!(cursor.statistics().completed, 0);
-    assert_eq!(cursor.statistics().latest_work, call - 1);
+    let statistics = cursor.statistics();
+    assert_eq!(statistics.completed, 0);
+    assert_eq!(statistics.allowance.work, call - 1);
+    assert_eq!(statistics.latest.work, call - 1);
+    // The refused call is the largest so far.
+    assert_eq!(statistics.peak.work, call - 1);
 }

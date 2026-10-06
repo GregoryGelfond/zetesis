@@ -367,8 +367,12 @@ That lower-level operation checks exact catalog ownership, not base stability;
 the ordinary session supplies the verified-base premise.
 
 The cursor borrows canonical terms and uses private binding and row-selection
-metadata. Each call starts with exactly the supplied true rows. Its cumulative
-work and substitutions include source admission and earlier calls. A refusal
+metadata. Each call starts with exactly the supplied true rows and may charge
+the cursor's per-answer allowance of work and substitutions — the headroom the
+formula ceilings left after source admission — whatever earlier calls used; a
+work or substitution refusal reports that allowance as its limit and the call's
+own charge as observed. `statistics()` reports the session totals, admission's
+charge, the allowance, the latest call and the largest call. A refusal
 fuses the cursor without invalidating prior returned models. Retained model
 families have their own consumer-side memory limits. These named capacities are
 not process RSS, and the checked mathematical extension law is not yet a proof

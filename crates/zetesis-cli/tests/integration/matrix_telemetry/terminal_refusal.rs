@@ -78,12 +78,13 @@ fn work_refusal_retains_only_the_original_checked_prefix() {
 
     // Each answer gets the headroom left after admission: a ceiling one short
     // of admission plus the second answer's cost admits the first answer only.
-    let second = receipt.reconstruction.latest_work;
+    let second = receipt.reconstruction.latest.work;
+    let admission = receipt.reconstruction.admission.work;
     let (first, _) = capture(None, "1");
     let first = first.unwrap().terminal_execution.unwrap().reconstruction;
-    let admission = first.work - first.latest_work;
+    assert_eq!(first.admission.work, admission);
     assert!(
-        first.latest_work < second,
+        first.latest.work < second,
         "the fixture's second answer costs more"
     );
     let ceiling = admission + second - 1;
@@ -95,7 +96,7 @@ fn work_refusal_retains_only_the_original_checked_prefix() {
     };
     assert!(matches!(cause.as_ref(), FormulaFailure::Limit {
         resource: FormulaResource::Work, observed, limit, ..
-    } if *limit == u128::from(ceiling) && *observed > *limit));
+    } if *limit == u128::from(ceiling - admission) && *observed > *limit));
     let partial = refused.partial_report.as_ref().unwrap();
     assert_eq!((partial.published_models, partial.verified_models), (1, 1));
     assert_eq!(partial.completion, None);
@@ -116,8 +117,10 @@ fn work_refusal_retains_only_the_original_checked_prefix() {
     );
     // The refused call used its whole headroom; the first answer's work counts
     // in the session total, not against the refused one.
-    assert_eq!(receipt.reconstruction.latest_work, ceiling - admission);
-    assert_eq!(receipt.reconstruction.work, ceiling + first.latest_work);
+    assert_eq!(receipt.reconstruction.allowance.work, ceiling - admission);
+    assert_eq!(receipt.reconstruction.latest.work, ceiling - admission);
+    assert_eq!(receipt.reconstruction.peak.work, ceiling - admission);
+    assert_eq!(receipt.reconstruction.work, ceiling + first.latest.work);
 
     check_refused_publication(&output, &complete_document);
 }

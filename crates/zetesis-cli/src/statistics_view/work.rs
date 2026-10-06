@@ -216,6 +216,16 @@ fn terminal(rows: &mut Vec<Row>, execution: &zetesis_solve::TerminalExecutionSta
             execution.reconstruction.substitutions,
             "cumulative source admission and reconstruction",
         ),
+        (
+            "Reconstruction allowance",
+            execution.reconstruction.allowance.work,
+            "work each answer may charge after admission",
+        ),
+        (
+            "Largest answer reconstruction",
+            execution.reconstruction.peak.work,
+            "work of the costliest answer, refused included",
+        ),
     ] {
         rows.push(count(label, value, scope));
     }

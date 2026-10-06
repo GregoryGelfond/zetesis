@@ -3,7 +3,14 @@
 use super::{Buffer, reconstruction_kind, terminal_statistics};
 use zetesis_core::{ModelError, ModelFailure};
 use zetesis_solve::TerminalExecutionStatistics;
-use zetesis_themelios::{ReconstructionError, ReconstructionStatistics};
+use zetesis_themelios::{ReconstructionCharges, ReconstructionError, ReconstructionStatistics};
+
+fn charges(count: u64) -> ReconstructionCharges {
+    ReconstructionCharges {
+        work: count,
+        substitutions: count,
+    }
+}
 
 #[test]
 fn reconstruction_limits_do_not_reclassify_allocator_or_identity_failures() {
@@ -37,18 +44,24 @@ fn terminal_counters_serialize_zero_and_full_width_without_losing_the_bound() {
                 completed: count,
                 work: count,
                 substitutions: count,
-                latest_work: count,
-                latest_substitutions: count,
+                admission: charges(count),
+                allowance: charges(count),
+                latest: charges(count),
+                peak: charges(count),
             },
         };
-        let mut complete = Buffer::new(1024);
+        let mut complete = Buffer::new(2048);
         terminal_statistics(&mut complete, Some(&statistics)).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&complete.bytes).unwrap();
         assert_eq!(
             value,
             serde_json::json!({"base_answers":count,"reconstructed":count,
             "pending":0,"reconstruction":{"attempts":count,"completed":count,
-                "work":count,"substitutions":count}})
+                "work":count,"substitutions":count,
+                "admission":{"work":count,"substitutions":count},
+                "allowance":{"work":count,"substitutions":count},
+                "latest":{"work":count,"substitutions":count},
+                "peak":{"work":count,"substitutions":count}}})
         );
         for maximum in 0..complete.bytes.len() {
             let mut refused = Buffer::new(maximum);

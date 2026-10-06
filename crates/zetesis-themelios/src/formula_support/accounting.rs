@@ -9,7 +9,9 @@ use super::{
     storage::{StorageLease, Workspace},
 };
 
-/// All cumulative formula charges and generated-value identity. The scalar
+/// All cumulative formula charges and generated-value identity. A terminal
+/// reconstruction call is the one exception to cumulation: each call starts
+/// from the admission baseline under its own per-answer allowance. The scalar
 /// payload budget has its own owner. Neither runtime control nor the local
 /// grounding observer belongs to this retained history.
 #[derive(Default)]
@@ -38,7 +40,8 @@ impl Counters {
 }
 
 /// Accepted source history for a closed continuation that generates no terms.
-/// Each new session receives a fresh workspace, never a fresh work allowance.
+/// Each new session receives a fresh workspace, never a fresh work allowance;
+/// a reconstruction call starts from it with the cursor's per-answer allowance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct AccountingBaseline {
     pub(crate) work: u64,
@@ -110,6 +113,8 @@ impl Accounting {
 
     /// Run one synchronous check with supplied cancellation and no grounding observer.
     /// Move the complete history in and back; never clone or reset its values.
+    /// (A reconstruction call starts a new account from the copied baseline; the
+    /// live account is never reset.)
     /// The guard restores accepted charges on success, refusal and unwind.
     pub(crate) fn with_cancellation<T>(
         &mut self,

@@ -27,12 +27,17 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 - A parallel region worker publishing a split takes the idle workers' lock
   only when an idle worker waits; waiters register in an atomic count before
-  their last look for work, so no publication is missed.
-- Answers reconstructed with deferred terminal definitions each get the
-  headroom grounding left under the formula ceilings, instead of drawing on one
-  cumulative allowance, so a program with many answers is no longer stopped by
-  the grounding work ceiling. `ReconstructionStatistics` adds the latest call's
-  `latest_work` and `latest_substitutions`.
+  their last look for work, so a published region is found by that look or
+  wakes a waiter, unless the look found its deque busy, as before.
+- Answers reconstructed with deferred terminal definitions each get a
+  per-answer allowance of work and substitutions — the headroom grounding left
+  under the formula ceilings — instead of drawing on one cumulative allowance,
+  so a program with many answers is no longer stopped by the grounding work
+  ceiling. A refused answer's work or substitution limit is reported as that
+  allowance, with the call's own charge as observed. `ReconstructionStatistics`
+  adds `admission`, `allowance`, `latest` and `peak` (`ReconstructionCharges`),
+  shown in the `--stats` records line, the `--stats` table (allowance and
+  largest answer) and the JSON `terminal_execution.reconstruction` object.
 - Formula support keeps posting lists only for the columns a join can bind
   (exactly for rules with an ordinary head and a flat body, conservatively for
   other constructs). A predicate no rule reads keeps none, so `SupportIndexEntries`, support bytes
