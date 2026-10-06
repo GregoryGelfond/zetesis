@@ -74,19 +74,21 @@ fn lazy_configuration_uses_source_closure() {
 }
 
 #[test]
-fn hybrid_configuration_streams_constraints() {
-    let (profile, route) = execute(program! { { p; q }. :- p, q. }, Grounder::Hybrid);
+fn lazy_formula_configuration_streams_constraints() {
+    // A choice rule is outside the relational profile: lazy grounding takes
+    // the formula route, streaming the constraint over a producer core.
+    let (profile, route) = execute(program! { { p; q }. :- p, q. }, Grounder::Lazy);
     assert_eq!(profile, PreparedProfile::Hybrid);
     assert!(route.hybrid_constraints > 0);
 }
 
 #[test]
-fn hybrid_configuration_defers_terminal_definitions() {
+fn lazy_formula_configuration_defers_terminal_definitions() {
     // r/1 is read by nothing: the lazy materialization defers it over a
     // hybrid base that streams the constraint.
     let (profile, route) = execute(
         program! { { s(1); s(2) }. r(X) :- s(X). :- s(1), s(2). },
-        Grounder::Hybrid,
+        Grounder::Lazy,
     );
     assert_eq!(profile, PreparedProfile::TerminalDefinitions);
     assert_eq!(

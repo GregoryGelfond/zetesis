@@ -143,13 +143,14 @@ the CPU; enabling GPU support elsewhere in a Cargo build does not change that.
 | --- | --- |
 | `Auto` | Existing adaptive formula preparation, including terminal reconstruction where applicable |
 | `Eager` | Complete finite formula grounding |
-| `Hybrid` | Formula producers materialized, eligible constraints instantiated during search |
-| `Lazy` | Relational templates joined during candidate checking |
+| `Lazy` | Relational templates joined during candidate checking; outside that profile, formula producers materialized, eligible constraints instantiated during search and terminal definitions reconstructed per answer |
 
-The admitted language differs by route. Explicit lazy grounding currently
-accepts the [relational profile](source.md#admit-an-existing-logical-program),
-not arbitrary formula programs. Unsupported input is refused; it is not retried
-under another grounding mode.
+These are the CLI's `--grounder` values with the same mapping. Lazy grounding
+joins a program inside the
+[relational profile](source.md#admit-an-existing-logical-program) from source;
+a program that profile refuses only for a construct it lacks takes the lazy
+formula route instead. Every other refusal, such as a resource ceiling, is
+returned; it is not retried under another grounding mode.
 
 Use `Agent::solve_with` and `SolveOptions` for a time budget. The deadline covers
 grounding, search and delivery, including time between reads. Enforcement is

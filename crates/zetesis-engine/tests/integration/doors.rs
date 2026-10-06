@@ -72,7 +72,7 @@ fn unscored_enumeration_preserves_complete_interpretations() {
 }
 
 #[test]
-fn hybrid_constraints_preserve_the_eligible_answer_family() {
+fn lazy_formula_constraints_preserve_the_eligible_answer_family() {
     let source = admitted(include_str!("../fixtures/hybrid.lp"));
     let expected = BTreeSet::from([
         AnswerSet::new(),
@@ -81,7 +81,7 @@ fn hybrid_constraints_preserve_the_eligible_answer_family() {
         AnswerSet::from([unary("picked", 3)]),
     ]);
     let mut solver = Solver::new(Config {
-        grounder: Grounder::Hybrid,
+        grounder: Grounder::Lazy,
         workers: NonZeroUsize::new(2).unwrap(),
         ..Config::default()
     });

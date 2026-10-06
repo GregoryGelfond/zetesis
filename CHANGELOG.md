@@ -40,8 +40,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `--grounder lazy` defers certified terminal definitions over its hybrid
   formula base, reconstructing them from each accepted answer, as `auto` does
   over an eager base; `zetesis_solve::ground_formula` and `ground_bundle` own the
-  grounder-to-materialization mapping the CLI and the `zetesis` facade now use,
-  and the facade's `Hybrid` grounder takes the same lazy route. `--stats` and
+  grounder-to-materialization mapping the CLI and the `zetesis` facade now use.
+  `--stats` and
   JSON report a hybrid terminal base (`hybrid_base_terminal_definitions`, search
   scope `terminal_retained_core`, `terminal_execution.base`), and validation
   reconciles its two receipts.
@@ -146,6 +146,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Removed
 
+- The `zetesis` facade's `Grounder::Hybrid`, so its grounders are the CLI's
+  three. `Grounder::Lazy` now covers it: a program inside the relational
+  profile is still joined from source, and one that profile refuses only for a
+  construct it lacks takes the lazy formula route (eligible constraints
+  streamed, terminal definitions reconstructed per answer) instead of being
+  refused. Migrate `Grounder::Hybrid` to `Grounder::Lazy`; other relational
+  refusals are still returned, not retried.
 - `zetesis-ferraris` `Narrower::narrow_known_metered` and
   `narrow_frozen_known_metered`, the per-read charge entry points, which no
   caller uses since narrowing reserves work through `NarrowingQuota`. A per-read

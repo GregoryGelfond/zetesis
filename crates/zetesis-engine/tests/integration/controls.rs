@@ -15,12 +15,7 @@ use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 #[test]
 fn zero_request_budgets_do_not_poison_later_questions() {
     let program = program! { p :- not q. q :- not p. };
-    for grounder in [
-        Grounder::Auto,
-        Grounder::Eager,
-        Grounder::Hybrid,
-        Grounder::Lazy,
-    ] {
+    for grounder in [Grounder::Auto, Grounder::Eager, Grounder::Lazy] {
         let mut solver = Solver::new(Config {
             grounder,
             ..Config::default()

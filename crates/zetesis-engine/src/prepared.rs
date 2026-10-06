@@ -26,8 +26,8 @@ impl Prepared {
         cancellation: &Cancellation,
     ) -> Result<Self, FormulaFailure> {
         if config.grounder == Grounder::Lazy {
-            return prepare_program_relational(
-                original,
+            let relational = prepare_program_relational(
+                Arc::clone(&original),
                 ProgramRelationalOptions {
                     admission: config.admission,
                     expansion: config.expansion,
@@ -36,8 +36,14 @@ impl Prepared {
                     purpose: FormulaPurpose::AnswerSets,
                     cancellation: Some(cancellation.clone()),
                 },
-            )
-            .map(|relational| Self::Relational(Box::new(relational)));
+            );
+            match relational {
+                Ok(relational) => return Ok(Self::Relational(Box::new(relational))),
+                // Only a construct the relational profile lacks moves the
+                // program to lazy formula grounding, as the CLI's does.
+                Err(failure) if outside_relational_profile(&failure) => {}
+                Err(failure) => return Err(failure),
+            }
         }
         let prepared = prepare_program_formula_with(
             original,
@@ -49,14 +55,10 @@ impl Prepared {
                 cancellation: Some(cancellation.clone()),
             },
         )?;
-        // The facade's `Hybrid` is the lazy formula materialization.
         let grounder = match config.grounder {
             Grounder::Auto => zetesis_solve::Grounder::Auto,
             Grounder::Eager => zetesis_solve::Grounder::Eager,
-            Grounder::Hybrid => zetesis_solve::Grounder::Lazy,
-            Grounder::Lazy => {
-                unreachable!("relational preparation returned before formula compilation")
-            }
+            Grounder::Lazy => zetesis_solve::Grounder::Lazy,
         };
         zetesis_solve::ground_formula(prepared, grounder, None)
             .map(|grounded| Self::Formula(Box::new(grounded)))
@@ -75,6 +77,11 @@ impl Prepared {
             Self::Formula(grounded) => grounded.metadata(),
         }
     }
+}
+
+/// Whether relational preparation refused only a construct its profile lacks.
+fn outside_relational_profile(failure: &FormulaFailure) -> bool {
+    matches!(failure.cause(), FormulaFailure::Expansion(error) if error.needs_formula_admission())
 }
 
 #[cfg(test)]
