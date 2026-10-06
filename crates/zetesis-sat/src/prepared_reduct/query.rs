@@ -101,6 +101,24 @@ impl ReductWorkspace {
         Ok((truth, &mut self.narrowing))
     }
 
+    /// Record the capacity retained by a region query, including a failed
+    /// attempt's growth, and admit it before returning a successful verdict.
+    /// An earlier query failure keeps its original typed cause.
+    pub(crate) fn finish_check(
+        &self,
+        result: Result<Check, Incomplete>,
+        max_bytes: u64,
+        statistics: &mut Statistics,
+    ) -> Result<Check, Incomplete> {
+        let retained = self.retained_bytes();
+        statistics.reduct.peak_workspace_bytes =
+            statistics.reduct.peak_workspace_bytes.max(retained);
+        result.and_then(|verdict| {
+            bound(retained, max_bytes)?;
+            Ok(verdict)
+        })
+    }
+
     pub(crate) fn reserve(
         &mut self,
         prepared: &PreparedReduct,

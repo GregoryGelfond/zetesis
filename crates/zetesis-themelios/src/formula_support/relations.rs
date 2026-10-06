@@ -218,6 +218,12 @@ impl SupportCatalog {
             let discovery = self.pending[position];
             let mut memory =
                 Memory::new(self.bytes(location)?, workspace, limits, counters, location);
+            // Only relation metadata and postings change during this append.
+            // Preserve every other owner's subtotal, including demand, once.
+            let unchanged_bytes = memory
+                .bytes
+                .checked_sub(self.index_bytes)
+                .ok_or_else(|| failure(Failure::Overflow, location))?;
             let read = self.owner.read();
             let atom = self
                 .owner
@@ -273,15 +279,10 @@ impl SupportCatalog {
                 self.entries += source.indexed();
                 counters.record(Event::SupportAtom);
             }
-            self.index_bytes = memory.bytes
-                - usize::try_from(self.owner.storage_bytes())
-                    .map_err(|_| failure(Failure::Overflow, location))?
-                - self.prepared_bytes
-                - self
-                    .component_bytes()
-                    .map_err(|_| failure(Failure::Overflow, location))?
-                - self.pending.capacity() * size_of::<usize>()
-                - self.supported.capacity() * size_of::<u64>();
+            self.index_bytes = memory
+                .bytes
+                .checked_sub(unchanged_bytes)
+                .ok_or_else(|| failure(Failure::Overflow, location))?;
         }
         self.pending.clear();
         Ok(())

@@ -384,4 +384,35 @@ fn cancelled_lent_membership_performs_no_query_work() {
     assert_eq!(statistics, Statistics::default());
 }
 
+#[test]
+fn a_failed_region_query_records_growth_without_replacing_its_error() {
+    let theory = cycle();
+    let candidate = Interpretation::new(&theory, []).unwrap();
+    let index = built(&theory);
+    let mut state = State::new(SearchMethod::Regions);
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, 0);
+    let mut statistics = Statistics::default();
+    // Truth fits exactly. Scratch preparation grows the pending mask before
+    // the query's first charged read is refused by the work ceiling.
+    let limit = u64::try_from(state.workspace.retained_bytes()).unwrap() + nodes(&theory);
+    assert!(matches!(
+        state.check(
+            &theory,
+            Some(&index),
+            &candidate,
+            Limits {
+                max_reduct_bytes: limit,
+                ..Limits::default()
+            },
+            &mut budget,
+            &mut statistics,
+        ),
+        Err(Incomplete::WorkLimit)
+    ));
+    let retained = state.workspace.retained_bytes();
+    assert!(retained > u128::from(limit));
+    assert_eq!(statistics.reduct.peak_workspace_bytes, retained);
+}
+
 mod batch_control;

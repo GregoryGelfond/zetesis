@@ -971,7 +971,8 @@ terminal definition under eager grounding or a predicate a flat rule reads only
 under negation, keeps none, and neither does a column of a flat rule holding a
 variable that occurs once. The demand is
 computed from the compiled rules before support grows, and its storage counts
-toward the support byte ceiling. A column without postings is absent, not
+toward the support byte ceiling once, separately from the relation indexes that
+grow during publication. A column without postings is absent, not
 empty: a probe still resolves its equality and narrows by its other columns, and
 a totality certificate declines it as a domain of distinct values.
 

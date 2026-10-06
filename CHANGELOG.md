@@ -171,6 +171,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   run can take a different, equally exact membership route, with different
   certificate and region receipts. Limits are unchanged.
 
+### Fixed
+
+- Formula grounding counts its column-demand metadata once, instead of
+  charging it again for every published support row. The support storage limit
+  is unchanged.
+- Region-based reduct checking enforces its retained workspace limit before
+  returning a successful verdict, including scratch grown during the query.
+  Failed queries record that storage too and preserve their original error.
+
 ### Removed
 
 - The `zetesis` facade's `Grounder::Hybrid`, so its grounders are the CLI's

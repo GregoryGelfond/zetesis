@@ -353,24 +353,27 @@ fn classify(
                     prepared.check_with(candidate, workspace, input.limits, budget, statistics)?
                 }
                 (None, Some(query)) => {
-                    let (truth, scratch) = workspace.evaluate(
-                        candidate,
-                        input.limits,
-                        budget.cancellation,
-                        statistics,
-                    )?;
-                    if !truth.is_model() {
-                        return Err(Incomplete::InvalidWitness);
-                    }
-                    increment(&mut statistics.countermodel_queries)?;
-                    query.check(
-                        zetesis_ferraris::FrozenSubject::new(input.theory, truth.truth()),
-                        candidate,
-                        input.limits,
-                        budget,
-                        statistics,
-                        scratch,
-                    )?
+                    let result = (|| {
+                        let (truth, scratch) = workspace.evaluate(
+                            candidate,
+                            input.limits,
+                            budget.cancellation,
+                            statistics,
+                        )?;
+                        if !truth.is_model() {
+                            return Err(Incomplete::InvalidWitness);
+                        }
+                        increment(&mut statistics.countermodel_queries)?;
+                        query.check(
+                            zetesis_ferraris::FrozenSubject::new(input.theory, truth.truth()),
+                            candidate,
+                            input.limits,
+                            budget,
+                            statistics,
+                            scratch,
+                        )
+                    })();
+                    workspace.finish_check(result, input.limits.max_reduct_bytes, statistics)?
                 }
                 (None, None) => return Err(Incomplete::InvalidWitness),
             };

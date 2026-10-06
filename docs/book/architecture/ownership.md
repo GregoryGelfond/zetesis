@@ -160,6 +160,14 @@ in its retained bytes; each proposer keeps one for its positive checks. Each
 narrowing empties the scratch it borrows before reading it, and no scratch is
 shared between threads. Evaluation workspaces, budget leases and traversal
 state remain separate.
+
+Region queries check retained workspace storage before evaluation and before
+returning a successful verdict. The final check includes scratch grown by the
+query; every attempt records its retained peak, including a failed attempt.
+An earlier typed failure keeps its cause. This is a retained-storage boundary,
+not an allocator quota: a refused query may retain capacity above its limit,
+but cannot publish a successful membership verdict.
+
 Candidate-only restrictions retain their own indexes and never enter the
 original theory or supply its support. Tight and positive certificates retain
 their existing membership procedures and do not execute a general reduct query.

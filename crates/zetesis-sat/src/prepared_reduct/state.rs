@@ -96,24 +96,29 @@ impl State {
             // Authenticate the lent index before any evaluation work.
             index.subject(theory)?;
             let query = ReductQuery::new(index);
-            let (truth, scratch) =
-                self.workspace
-                    .evaluate(candidate, limits, budget.cancellation, statistics)?;
-            if !truth.is_model() {
-                return Ok(Check::NotModel);
-            }
-            let started = timing::start(statistics.phase_timings.as_ref());
-            increment(&mut statistics.countermodel_queries)?;
-            let result = query.check(
-                zetesis_ferraris::FrozenSubject::new(theory, truth.truth()),
-                candidate,
-                limits,
-                budget,
-                statistics,
-                scratch,
-            );
-            timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
-            return result;
+            let result = (|| {
+                let (truth, scratch) =
+                    self.workspace
+                        .evaluate(candidate, limits, budget.cancellation, statistics)?;
+                if !truth.is_model() {
+                    return Ok(Check::NotModel);
+                }
+                let started = timing::start(statistics.phase_timings.as_ref());
+                increment(&mut statistics.countermodel_queries)?;
+                let result = query.check(
+                    zetesis_ferraris::FrozenSubject::new(theory, truth.truth()),
+                    candidate,
+                    limits,
+                    budget,
+                    statistics,
+                    scratch,
+                );
+                timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
+                result
+            })();
+            return self
+                .workspace
+                .finish_check(result, limits.max_reduct_bytes, statistics);
         }
         let prepared = self.prepared.as_ref().ok_or(Incomplete::InvalidWitness)?;
         prepared.check_with(candidate, &mut self.workspace, limits, budget, statistics)

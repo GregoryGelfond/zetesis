@@ -4,6 +4,26 @@
 use super::{Observer, compile};
 use zetesis_themelios::FormulaLimits;
 
+#[test]
+fn demanded_support_fits_its_storage_allowance() {
+    // This admits 200 rows and one demand table. Charging that table again
+    // for each publication exceeds this bound before support completes.
+    let limits = FormulaLimits {
+        max_support_bytes: 100_000,
+        ..FormulaLimits::default()
+    };
+    let observer = Observer::default();
+    let admitted = compile("d(1..100). p(X):-d(X).", &limits, Some(&observer)).unwrap();
+    assert_eq!(admitted.atoms().len(), 200);
+    let records = observer.records.borrow();
+    let support = records
+        .iter()
+        .find(|record| record.phase == zetesis_themelios::GroundingPhase::SupportCompletion)
+        .unwrap();
+    assert_eq!(support.work.support_atoms, Some(200));
+    assert_eq!(support.work.support_index_entries, Some(100));
+}
+
 /// Total index entries and probes that bound an unindexed column.
 fn receipts(source: &str) -> (u64, u64) {
     let observer = Observer::default();

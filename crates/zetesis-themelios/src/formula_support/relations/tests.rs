@@ -97,6 +97,41 @@ fn membership_preserves_append_order() {
 }
 
 #[test]
+fn demand_storage_is_charged_once_across_publications() {
+    // Every inserted column is demanded, so the two catalogs retain identical
+    // rows and postings. Their only storage difference is the one demand table.
+    let preparation = testing::prepare("seen(X) :- row(X).");
+    let mut indexed = preparation.catalog;
+    let mut counters = Counters::default();
+    let limits = FormulaLimits::default();
+    let view = indexed
+        .component_view(&limits, &mut counters, location())
+        .unwrap()
+        .unwrap();
+    let demand = crate::formula_support::demand::Demand::of(
+        &preparation.program,
+        view,
+        &limits,
+        &mut counters,
+        location(),
+    )
+    .unwrap();
+    let demand_bytes = demand.retained_bytes();
+    assert!(demand_bytes > 0);
+    indexed.install_demand(demand);
+    let mut reference = testing::prepare("seen(X) :- row(X).").catalog;
+    for value in 0..100 {
+        insert(&mut indexed, &atom(&[value]));
+        insert(&mut reference, &atom(&[value]));
+        assert_eq!(
+            indexed.bytes(location()).unwrap(),
+            reference.bytes(location()).unwrap() + demand_bytes,
+            "after publishing row {value}"
+        );
+    }
+}
+
+#[test]
 fn snapshots_reuse_columns_without_row_work() {
     let mut catalog = SupportCatalog::default();
     for value in 0..64 {
