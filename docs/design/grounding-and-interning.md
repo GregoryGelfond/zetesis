@@ -118,10 +118,11 @@ order and must not be narrowed to numbers merely because it uses `<` or `>`.
 ## Costs and correctness boundaries
 
 Canonical identity avoids repeated payload comparison when two authenticated
-keys suffice. The interner's and the relation catalogs' ordered indexes first
-compare an arrival with their last entry in order: rows derived in order, as a
-rule's heads usually are, are placed after it with one typed comparison instead
-of one per tree level; any other arrival takes the full search. Constructing an atom still depends on its arity, importing a new
+keys suffice. The interner's and the relation catalogs' ordered indexes keep
+their last entry in typed order and first compare an arrival with it: rows
+derived in order, as a rule's heads usually are, are placed after it with one
+typed comparison instead of one per tree level; any other arrival pays that one
+comparison before the full search. Constructing an atom still depends on its arity, importing a new
 compound visits its structure, and semantic ordering can require typed content
 comparison. Columnar storage alone establishes neither vectorization nor a
 speedup. Measure construction, indexing, execution and output together using the

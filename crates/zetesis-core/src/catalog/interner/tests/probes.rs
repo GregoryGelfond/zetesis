@@ -21,10 +21,12 @@ const CANONICAL_APPLICABILITY_WORK: usize = 2;
 const NUMERIC_NODE_WORK: usize = 3 + 2 + 1 + 1;
 // A prepared vacant route replays one node/direction and writes one Step.
 const REPLAY_NODE_WORK: usize = 2;
-// In the fixture tree of p(2), p(1), p(3) the last atom, p(3), is one right
-// step below the root; reaching it admits that step, then one numeric row is
-// compared.
-const LAST_WORK: usize = 1 + NUMERIC_NODE_WORK;
+// The subtree holds its last atom, p(3): one numeric comparison with it
+// precedes any search, and only an atom beyond it walks the right spine.
+const LAST_WORK: usize = NUMERIC_NODE_WORK;
+// In the fixture tree of p(2), p(1), p(3) the spine is one right step below
+// the root.
+const SPINE_WORK: usize = 1;
 
 #[test]
 fn queries_borrow_committed_and_pending_identities() {
@@ -310,8 +312,8 @@ fn vacant_entries_charge_link_replay() {
     let mut owner = owner(&[2, 1, 3]);
     assert!(owner.index.path.capacity() >= 2);
     let mut spent = 0;
-    // p(0) precedes the last atom, p(3): after the one comparison with it
-    // (reached by one right step), the full search runs.
+    // p(0) precedes the last atom, p(3): after the one comparison with it,
+    // and no spine walk, the full search runs.
     let absent = atom(0);
     let entry = owner
         .entry_atom_with(&absent, limits(), || {
@@ -351,10 +353,14 @@ fn an_atom_beyond_the_last_is_placed_without_a_search() {
         .unwrap();
     assert_eq!(entry.position(), None);
     // One comparison with the last atom; the route is its right spine, root
-    // p(2) and p(3), replayed without another typed probe.
+    // p(2) and p(3), walked and replayed without another typed probe.
     assert_eq!(
         spent,
-        CANONICAL_APPLICABILITY_WORK + SIGNATURE_WORK + LAST_WORK + 2 * REPLAY_NODE_WORK
+        CANONICAL_APPLICABILITY_WORK
+            + SIGNATURE_WORK
+            + LAST_WORK
+            + SPINE_WORK
+            + 2 * REPLAY_NODE_WORK
     );
     assert_eq!(
         entry

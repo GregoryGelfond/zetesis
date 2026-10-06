@@ -49,8 +49,10 @@ fn ascending_arrivals_skip_the_typed_search() {
     // The same atoms; a scrambled order needs the typed search for each.
     let ascending = charged(0..COUNT);
     let scrambled = charged((0..COUNT).map(|index| index.wrapping_mul(7919) % COUNT));
+    // Interning, discovery and replay remain for every arrival; the typed
+    // search does not.
     assert!(
-        ascending * 2 <= scrambled,
+        ascending * 10 <= scrambled * 6,
         "ascending {ascending}, scrambled {scrambled}"
     );
 }

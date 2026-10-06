@@ -153,41 +153,40 @@ pub(crate) enum Last {
     Before,
 }
 
-/// Compare a query with the last node in order before any search: arrivals
-/// that extend the order, as rows derived in order do, are placed with one
-/// comparison instead of one per level. The last node is reached by right
-/// children alone, with `step` admitting each level on the caller's context
-/// and no comparison; on `Beyond`, `descend(true)` is recorded once per node
-/// on that right spine, the route a full search would take, since every
-/// comparison on it is Greater. An error publishes no result and changes no
-/// node.
+/// Compare a query with the tree's last node in order, held by its owner,
+/// before any search: arrivals that extend the order, as rows derived in
+/// order do, are placed with one comparison instead of one per level, and any
+/// other arrival pays that one comparison before its search. Only on `Beyond`
+/// is the right spine walked, with `step` admitting each level and no
+/// comparison, and `descend(true)` recorded once per node on it: the route a
+/// full search would take, since every comparison on it is Greater. The
+/// spine ends at `last`, the node its owner holds. An error publishes no
+/// result and changes no node.
 pub(crate) fn last<C, E>(
     nodes: &[Node],
     root: Link,
+    last: Option<usize>,
     context: &mut C,
     mut step: impl FnMut(&mut C) -> Result<(), E>,
     compare: impl FnOnce(usize, &mut C) -> Result<Ordering, E>,
     mut descend: impl FnMut(bool),
 ) -> Result<Last, E> {
-    let Some(mut last) = root else {
+    let (Some(mut spine), Some(last)) = (root, last) else {
         return Ok(Last::Before);
     };
-    let mut depth = 1_usize;
-    while let Some(next) = nodes[position(last)].children[1] {
-        step(context)?;
-        last = next;
-        depth += 1;
-    }
-    let id = position(last);
-    Ok(match compare(id, context)? {
-        Ordering::Equal => Last::Found(id),
+    Ok(match compare(last, context)? {
+        Ordering::Equal => Last::Found(last),
+        Ordering::Less => Last::Before,
         Ordering::Greater => {
-            for _ in 0..depth {
+            descend(true);
+            while let Some(next) = nodes[position(spine)].children[1] {
+                step(context)?;
+                spine = next;
                 descend(true);
             }
+            debug_assert_eq!(position(spine), last, "the held last node ends the spine");
             Last::Beyond
         }
-        Ordering::Less => Last::Before,
     })
 }
 

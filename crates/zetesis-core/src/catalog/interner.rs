@@ -170,6 +170,9 @@ pub struct AtomInterner {
 struct Subtree {
     representative: AtomId,
     root: Link,
+    /// The discovery position of the predicate's last atom in typed order:
+    /// it changes only when an atom arrives beyond it.
+    last: usize,
 }
 
 impl Default for AtomInterner {
@@ -1117,6 +1120,7 @@ impl<'a> AtomAppender<'a> {
             &mut checked,
         )?;
         let mut directions = Directions::default();
+        let mut beyond = false;
         let found = match relation {
             Ok(relation) => {
                 let root = self.subtrees[relation].root;
@@ -1124,13 +1128,17 @@ impl<'a> AtomAppender<'a> {
                 match index::last(
                     &self.index.nodes,
                     root,
+                    Some(self.subtrees[relation].last),
                     &mut checked,
                     |checked| checked(),
                     |id, checked| query.compare_at(self.store, &|id| self.get(id), id, checked),
                     |right| directions.push(right).expect("AVL height fits two words"),
                 )? {
                     index::Last::Found(id) => Some(id),
-                    index::Last::Beyond => None,
+                    index::Last::Beyond => {
+                        beyond = true;
+                        None
+                    }
                     index::Last::Before => query.search(
                         self.store,
                         |id| self.get(id),
@@ -1151,7 +1159,10 @@ impl<'a> AtomAppender<'a> {
             appender: self,
             query,
             prepared,
-            position: found.map_or(EntryPosition::Vacant(relation), EntryPosition::Occupied),
+            position: found.map_or(
+                EntryPosition::Vacant { relation, beyond },
+                EntryPosition::Occupied,
+            ),
         })
     }
 
@@ -1222,8 +1233,12 @@ pub struct AtomEntry<'owner, 'key> {
 #[derive(Clone, Copy)]
 enum EntryPosition {
     Occupied(usize),
-    /// Predicate subtree, or insertion offset among typed predicate signatures.
-    Vacant(Result<usize, usize>),
+    /// Predicate subtree, or insertion offset among typed predicate signatures,
+    /// and whether the atom arrives beyond the subtree's last.
+    Vacant {
+        relation: Result<usize, usize>,
+        beyond: bool,
+    },
 }
 impl<'owner> AtomEntry<'owner, '_> {
     /// Import identity before publishing discovery or AVL links. A refusal may
@@ -1258,7 +1273,7 @@ impl<'owner> AtomEntry<'owner, '_> {
     pub const fn position(&self) -> Option<usize> {
         match self.position {
             EntryPosition::Occupied(position) => Some(position),
-            EntryPosition::Vacant(_) => None,
+            EntryPosition::Vacant { .. } => None,
         }
     }
     /// Current named storage after possible vacant-path preparation.
@@ -1326,9 +1341,9 @@ impl<'owner> AtomEntry<'owner, '_> {
         let mut checked = || before().map_err(Failure::Stopped);
         population(self.appender.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
-        let relation = match self.position {
+        let (relation, beyond) = match self.position {
             EntryPosition::Occupied(id) => return Ok(id),
-            EntryPosition::Vacant(relation) => relation,
+            EntryPosition::Vacant { relation, beyond } => (relation, beyond),
         };
         let id = self.appender.len();
         let required = id.checked_add(1).ok_or(Failure::Overflow)?;
@@ -1395,7 +1410,14 @@ impl<'owner> AtomEntry<'owner, '_> {
         let discovery_root = self
             .appender
             .prepare_discovery(atom, extra, limits, &mut before)?;
-        self.publish(atom, relation, root, discovery_root, &mut before)?;
+        self.publish(
+            atom,
+            id,
+            (relation, beyond),
+            root,
+            discovery_root,
+            &mut before,
+        )?;
         Ok(id)
     }
 
@@ -1404,7 +1426,8 @@ impl<'owner> AtomEntry<'owner, '_> {
     fn publish<E>(
         &mut self,
         atom: AtomId,
-        relation: Result<usize, usize>,
+        id: usize,
+        (relation, beyond): (Result<usize, usize>, bool),
         root: Link,
         discovery_root: Link,
         before: &mut impl FnMut() -> Result<(), E>,
@@ -1429,13 +1452,18 @@ impl<'owner> AtomEntry<'owner, '_> {
         self.appender.discovery.publish(discovery_root);
         match relation {
             Ok(relation) => {
-                self.appender.subtrees[relation].root = root;
+                let subtree = &mut self.appender.subtrees[relation];
+                subtree.root = root;
+                if beyond {
+                    subtree.last = id;
+                }
             }
             Err(at) => self.appender.subtrees.insert(
                 at,
                 Subtree {
                     representative: atom,
                     root,
+                    last: id,
                 },
             ),
         }
