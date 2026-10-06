@@ -271,14 +271,19 @@ impl HybridFormula {
     }
 }
 
-fn scalar_budget(limits: ConstraintCheckLimits) -> Budget {
-    Budget::new(
+/// One check's scalar-byte budget, reporting to `allowance` when shared.
+fn scalar_budget(limits: ConstraintCheckLimits, allowance: Option<ConstraintAllowance>) -> Budget {
+    let budget = Budget::new(
         ExpansionLimits {
             max_scalar_bytes: limits.max_scalar_bytes,
             ..ExpansionLimits::default()
         },
         0,
-    )
+    );
+    match allowance {
+        Some(allowance) => budget.with_allowance(allowance),
+        None => budget,
+    }
 }
 
 impl StreamedCore {
@@ -378,7 +383,7 @@ impl StreamedCore {
         &self,
         limits: ConstraintCheckLimits,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
-        self.prepare_checker(limits, Counters::default(), scalar_budget(limits))
+        self.prepare_checker(limits, Counters::default(), None)
     }
 
     /// Prepare an independent checker whose charges share `allowance` with all
@@ -401,7 +406,7 @@ impl StreamedCore {
         let checker = self.prepare_checker(
             limits,
             Counters::with_allowance(allowance.clone(), cancellation),
-            scalar_budget(limits).with_allowance(allowance.clone()),
+            Some(allowance.clone()),
         )?;
         cancellation.poll().map_err(|stop| ConstraintCheckFailure {
             cause: ConstraintCheckCause::Stopped(stop),
@@ -414,7 +419,7 @@ impl StreamedCore {
         &self,
         limits: ConstraintCheckLimits,
         mut counters: Counters,
-        budget: Budget,
+        allowance: Option<ConstraintAllowance>,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
         let prepared = if let Some(constraints) = &self.0.constraints {
             let mut formula_limits = constraints.limits;
@@ -447,22 +452,30 @@ impl StreamedCore {
         Ok(ConstraintChecker {
             owner: self,
             prepared,
-            budget,
+            budget: scalar_budget(limits, allowance.clone()),
+            limits,
+            allowance,
+            settled: (0, 0),
+            settled_scalar_bytes: 0,
             accounting: counters.into_accounting(),
         })
     }
 }
 
-/// Cumulative allowances for one checker, independent of source admission and
-/// reduct-oracle work. Zero is a zero allowance, never unlimited. Per-operation
-/// binding/storage bounds remain those admitted with the source.
+/// Allowances for each check of a checker (one candidate model or region),
+/// independent of source admission and reduct-oracle work. A checker's first
+/// check also covers its preparation; each later check is measured from the
+/// charges accepted when the previous one ended. They bound the work spent on
+/// any one candidate, never the number of candidates. Zero is a zero
+/// allowance, never unlimited. Per-operation binding/storage bounds remain
+/// those admitted with the source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConstraintCheckLimits {
-    /// Charged join, scalar and typed atom-lookup work across all checks.
+    /// Charged join, scalar and typed atom-lookup work in one check.
     pub max_work: u64,
-    /// Complete substitutions visited across all checks, including false filters.
+    /// Complete substitutions visited in one check, including false filters.
     pub max_substitutions: u64,
-    /// Cumulative bytes requested for capture-delta cells during structural-pattern
+    /// Bytes requested in one check for capture-delta cells during structural-pattern
     /// matching, charged through source expansion's `ScalarBytes` resource.
     /// The historical field name is retained; these cells borrow canonical
     /// terms. ID-only binding copies and frozen constructor lookups add no
@@ -542,6 +555,40 @@ pub enum ConstraintCheckCause {
     Source(Box<FormulaFailure>),
 }
 impl ConstraintCheckCause {
+    /// Report a work or substitution refusal against the check's own
+    /// allowance: subtract the charges `start` accepted before the check.
+    fn relative_to(self, start: (u64, u64)) -> Self {
+        let relative = |error: Box<FormulaFailure>| match *error {
+            FormulaFailure::Limit {
+                resource:
+                    resource @ (crate::FormulaResource::Work | crate::FormulaResource::Substitutions),
+                limit,
+                observed,
+                location,
+            } => {
+                let base = u128::from(if resource == crate::FormulaResource::Work {
+                    start.0
+                } else {
+                    start.1
+                });
+                Box::new(FormulaFailure::Limit {
+                    resource,
+                    limit: limit.saturating_sub(base),
+                    observed: observed.saturating_sub(base),
+                    location,
+                })
+            }
+            other => Box::new(other),
+        };
+        match self {
+            Self::Source(error) => Self::Source(relative(error)),
+            Self::Index(AtomIndexError::Stopped(error)) => {
+                Self::Index(AtomIndexError::Stopped(relative(error)))
+            }
+            other => other,
+        }
+    }
+
     fn retain_input(self, owner: &Owner) -> Self {
         match self {
             Self::Source(error) => Self::Source(Box::new(owner.retain_failure(*error))),
@@ -619,7 +666,18 @@ impl std::error::Error for ConstraintCheckFailure {
 pub struct ConstraintChecker<'a> {
     owner: &'a StreamedCore,
     prepared: Option<PreparedConstraints<'a>>,
+    /// The current check's scalar-byte budget, fresh for every check.
     budget: Budget,
+    /// The ceilings each check gets for itself.
+    limits: ConstraintCheckLimits,
+    /// The shared receipt this checker reports to, if any.
+    allowance: Option<ConstraintAllowance>,
+    /// Work and substitutions accepted when the previous check ended: the
+    /// next check's allowance is measured from here, so the first check's
+    /// includes this checker's preparation.
+    settled: (u64, u64),
+    /// Scalar bytes requested by every finished check's budget.
+    settled_scalar_bytes: usize,
     accounting: Accounting,
 }
 /// A nonempty source and its borrowed snapshot are present or absent together.
@@ -787,7 +845,9 @@ impl ConstraintChecker<'_> {
         ConstraintCheckStatistics {
             work: self.accounting.work,
             substitutions: self.accounting.substitutions,
-            scalar_bytes: self.budget.usage().scalar_bytes,
+            scalar_bytes: self
+                .settled_scalar_bytes
+                .saturating_add(self.budget.usage().scalar_bytes),
         }
     }
 
@@ -875,6 +935,16 @@ impl ConstraintChecker<'_> {
         candidate: Candidate<'_>,
         cancellation: &Cancellation,
     ) -> Result<Option<ProgramSite>, ConstraintCheckFailure> {
+        // Each check gets the configured ceilings as its own allowance above
+        // the charges accepted when the previous check ended (the first
+        // check's includes preparation), so the ceilings bound each
+        // candidate, never the number of candidates.
+        let start = self.settled;
+        if let Some(prepared) = &mut self.prepared {
+            prepared.limits.max_work = start.0.saturating_add(self.limits.max_work);
+            prepared.limits.max_substitutions =
+                start.1.saturating_add(self.limits.max_substitutions);
+        }
         let result = self.authenticate(candidate).and_then(|()| {
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             let verdict = self
@@ -896,9 +966,14 @@ impl ConstraintChecker<'_> {
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             Ok(verdict)
         });
+        // Settle this check: the next one is measured from here.
+        self.settled = (self.accounting.work, self.accounting.substitutions);
+        let statistics = self.statistics();
+        self.settled_scalar_bytes = statistics.scalar_bytes;
+        self.budget = scalar_budget(self.limits, self.allowance.clone());
         result.map_err(|cause| ConstraintCheckFailure {
-            cause: cause.retain_input(&self.owner.0.source),
-            statistics: self.statistics(),
+            cause: cause.relative_to(start).retain_input(&self.owner.0.source),
+            statistics,
         })
     }
 

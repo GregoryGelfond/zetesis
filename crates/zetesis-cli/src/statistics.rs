@@ -574,12 +574,12 @@ fn hybrid(
     )?;
     writeln!(
         sink,
-        "  constraint checks: work={} of {}; substitutions={} of {}; cumulative scalar payload bytes={} of {}; independent of admission and reduct work",
+        "  constraint checks: work={}; substitutions={}; scalar payload bytes={}; each check at most work={}, substitutions={}, scalar payload bytes={}; independent of admission and reduct work",
         stats.constraints.work,
-        config.constraints.max_work,
         stats.constraints.substitutions,
-        config.constraints.max_substitutions,
         stats.constraints.scalar_bytes,
+        config.constraints.max_work,
+        config.constraints.max_substitutions,
         config.constraints.max_scalar_bytes
     )
 }

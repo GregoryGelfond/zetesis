@@ -27,7 +27,7 @@ pub struct SolveConfig {
     pub search: SearchMethod,
     /// Enable optional host timing; semantic/resource counters remain independent.
     pub stats: bool,
-    /// Cumulative streamed-constraint limits for a hybrid formula session.
+    /// Per-check streamed-constraint limits for a hybrid formula session.
     /// Independent of core candidate/reduct work; eager sessions do not use them.
     /// The default substitution ceiling matches the ordinary session allowance.
     pub constraints: zetesis_themelios::ConstraintCheckLimits,

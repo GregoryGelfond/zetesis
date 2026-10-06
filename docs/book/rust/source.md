@@ -475,13 +475,18 @@ atom guards. `streamed_templates()` counts lowered templates, including pool
 alternatives, and `streamed_instances()` counts scalar-selected instances visited
 during admission; neither is a retained instance store.
 
-`checker(limits)` has its own cumulative work and substitution limits, plus a
-byte allowance for structural capture deltas. ID-only copies and lookups do not
-consume that byte allowance.
+`checker(limits)` gives each check its own work and substitution limits, plus a
+byte allowance for structural capture deltas: the first check's allowance also
+covers the checker's preparation, and each later check is measured from the
+charges accepted when the previous one ended. The limits bound the work spent
+on one candidate, never the number of candidates. A refusal reports the check's
+own allowance as its limit. ID-only copies and lookups do not consume the byte
+allowance.
 For parallel composition, create `ConstraintAllowance::new(limits)` and
 use `checker_with_allowance(&allowance, &cancellation)` for every worker and final
-checker. Its clones share before-operation charges; no allowance is multiplied
-by the worker count. `allowance.statistics()` is exact after those workers join;
+checker. Each check of each checker gets `limits`; the clones share one
+cumulative receipt of every accepted charge, and no limit is multiplied by the
+worker count. `allowance.statistics()` is exact after those workers join;
 live fields are independently observed monotone counters. Snapshot descriptors
 are prepared once per checker, without copying support rows; per-operation
 binding/storage ceilings remain those of the admitted source. A new checker

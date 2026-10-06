@@ -447,7 +447,7 @@ impl Counters {
             location,
         )?;
         if let Some(allowance) = &self.accounting.allowance {
-            allowance.substitution(location)?;
+            allowance.substitution();
         }
         self.accounting.substitutions += 1;
         Ok(())
@@ -479,7 +479,7 @@ fn charge_work(
         location,
     )?;
     if let Some(allowance) = allowance {
-        allowance.work(amount, location)?;
+        allowance.work(amount);
     }
     *work += u64::try_from(amount).expect("charged work fits its u64 ceiling");
     Ok(())

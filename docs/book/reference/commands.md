@@ -118,8 +118,9 @@ closure retains its existing CPU and device routes.
 
 Hybrid statistics distinguish retained-core models from original answers accepted
 after complete constraint checks. The existing source work, substitution and
-scalar-byte options also set separate cumulative ceilings for constraint replay;
-admission and replay do not share one remaining allowance. A stopped check is
+scalar-byte options also set separate ceilings for each constraint check (one
+candidate); they bound the work per candidate, not the number of candidates, and
+admission and checking do not share one remaining allowance. A stopped check is
 incomplete, never an accepted answer or an UNSAT result.
 
 ```sh

@@ -7,8 +7,8 @@ use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     AdmissionOptions, ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits,
     ConstraintCheckStatistics, ConstraintVerdict, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, GroundingOptions,
-    HybridFeature, HybridFormula, JoinStrategy, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, GroundingOptions, HybridFeature, HybridFormula,
+    JoinStrategy, prepare_formula,
 };
 
 fn prepare(source: &str) -> zetesis_themelios::PreparedFormula {
@@ -282,7 +282,9 @@ fn cancellation_preserves_the_unchecked_verdict() {
 }
 
 #[test]
-fn repeated_checks_share_a_cumulative_substitution_ceiling() {
+fn each_check_has_its_own_substitution_allowance() {
+    // One substitution per check under a one-substitution ceiling: the
+    // ceiling bounds each check, never the number of checks.
     let owner = admit("{p}. :-p.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
@@ -291,27 +293,17 @@ fn repeated_checks_share_a_cumulative_substitution_ceiling() {
         })
         .unwrap();
     let candidate = model(&owner, &[]);
-    assert_eq!(
-        checker.check(&candidate, &Cancellation::default()).unwrap(),
-        ConstraintVerdict::Satisfied
-    );
-    let failure = checker
-        .check(&candidate, &Cancellation::default())
-        .unwrap_err();
-    assert!(matches!(
-        failure.cause,
-        ConstraintCheckCause::Source(error) if matches!(error.as_ref(), FormulaFailure::Limit {
-            resource: FormulaResource::Substitutions,
-            observed: 2,
-            limit: 1,
-            ..
-        })
-    ));
-    assert_eq!(failure.statistics.substitutions, 1);
+    for _ in 0..3 {
+        assert_eq!(
+            checker.check(&candidate, &Cancellation::default()).unwrap(),
+            ConstraintVerdict::Satisfied
+        );
+    }
+    assert_eq!(checker.statistics().substitutions, 3);
 }
 
 #[test]
-fn moving_a_checker_preserves_its_cumulative_budget() {
+fn moving_a_checker_preserves_its_receipts() {
     let owner = admit("{p}. :-p.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
@@ -325,64 +317,90 @@ fn moving_a_checker_preserves_its_cumulative_budget() {
         ConstraintVerdict::Satisfied
     );
     let before = checker.statistics();
-    let (checker, failure) = std::thread::scope(|scope| {
+    let checker = std::thread::scope(|scope| {
         scope
             .spawn(move || {
-                let failure = checker
-                    .check(&candidate, &Cancellation::default())
-                    .unwrap_err();
-                (checker, failure)
+                assert_eq!(
+                    checker.check(&candidate, &Cancellation::default()).unwrap(),
+                    ConstraintVerdict::Satisfied
+                );
+                checker
             })
             .join()
             .unwrap()
     });
-    assert!(
-        matches!(failure.cause, ConstraintCheckCause::Source(ref error)
-            if matches!(error.as_ref(), FormulaFailure::Limit {
-                resource: FormulaResource::Substitutions, observed: 2, limit: 1, ..
-            })
-        )
-    );
-    assert_eq!(failure.statistics.substitutions, before.substitutions);
-    assert!(failure.statistics.work > before.work);
-    assert_eq!(checker.statistics(), failure.statistics);
+    assert_eq!(checker.statistics().substitutions, 2 * before.substitutions);
+    assert!(checker.statistics().work > before.work);
 }
 
 #[test]
-fn repeated_checks_share_a_cumulative_work_ceiling() {
+fn each_check_has_its_own_work_allowance() {
+    // The ceiling admits the first check (preparation included), the most
+    // costly; three checks under it charge what three unbounded checks do.
     let owner = admit("{p}. :-p.");
     let candidate = model(&owner, &[]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     baseline
         .check(&candidate, &Cancellation::default())
         .unwrap();
-    let complete = baseline.statistics();
+    let first = baseline.statistics().work;
+    for _ in 0..2 {
+        baseline
+            .check(&candidate, &Cancellation::default())
+            .unwrap();
+    }
     let mut checker = owner
         .checker(ConstraintCheckLimits {
-            max_work: complete.work,
+            max_work: first,
             ..Default::default()
         })
         .unwrap();
-    checker.check(&candidate, &Cancellation::default()).unwrap();
-    assert_eq!(checker.statistics(), complete);
-    for _ in 0..2 {
-        let failure = checker
-            .check(&candidate, &Cancellation::default())
-            .unwrap_err();
-        assert!(
-            matches!(failure.cause, ConstraintCheckCause::Source(ref error)
-                if matches!(error.as_ref(), FormulaFailure::Limit {
-                    resource: FormulaResource::Work, ..
-                })
-            )
-        );
-        assert_eq!(failure.statistics.work, complete.work);
-        assert_eq!(checker.statistics(), failure.statistics);
+    for _ in 0..3 {
+        checker.check(&candidate, &Cancellation::default()).unwrap();
     }
+    assert_eq!(checker.statistics(), baseline.statistics());
 }
 
 #[test]
-fn structural_checks_share_a_cumulative_scalar_ceiling() {
+fn a_check_is_refused_relative_to_its_own_allowance() {
+    // A violating candidate stops at the first constraint; a satisfying one
+    // scans both. The ceiling admits the cheap first check, so the costly
+    // second check is refused against the ceiling itself, not the checker's
+    // history.
+    let owner = admit("{p}. {q(1..9)}. :-p. :-q(X),q(Y),X<Y.");
+    let violating = model(&owner, &["p"]);
+    let satisfying = model(&owner, &[]);
+    let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    baseline
+        .check(&violating, &Cancellation::default())
+        .unwrap();
+    let cheap = baseline.statistics().work;
+    let mut checker = owner
+        .checker(ConstraintCheckLimits {
+            max_work: cheap,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(matches!(
+        checker.check(&violating, &Cancellation::default()).unwrap(),
+        ConstraintVerdict::Violated { .. }
+    ));
+    let failure = checker
+        .check(&satisfying, &Cancellation::default())
+        .unwrap_err();
+    assert!(
+        matches!(failure.cause, ConstraintCheckCause::Source(ref error)
+            if matches!(error.as_ref(), FormulaFailure::Limit {
+                resource: FormulaResource::Work, limit, observed, ..
+            } if *limit == u128::from(cheap) && *observed == *limit + 1)
+        ),
+        "{:?}",
+        failure.cause
+    );
+}
+
+#[test]
+fn each_check_has_its_own_scalar_allowance() {
     // Structural captures reserve delta cells on each scan. Frozen constructor
     // lookups and binding ID copies do not consume this scalar-byte allowance.
     let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
@@ -402,23 +420,13 @@ fn structural_checks_share_a_cumulative_scalar_ceiling() {
             ..Default::default()
         })
         .unwrap();
-    assert_eq!(
-        checker.check(&candidate, &Cancellation::default()).unwrap(),
-        ConstraintVerdict::Satisfied
-    );
-    assert_eq!(checker.statistics(), complete);
-    let failure = checker
-        .check(&candidate, &Cancellation::default())
-        .unwrap_err();
-    assert!(
-        matches!(failure.cause, ConstraintCheckCause::Source(ref error)
-            if matches!(error.as_ref(), FormulaFailure::Expansion(ExpansionFailure::Limit {
-                resource: ExpansionResource::ScalarBytes, limit, observed, ..
-            }) if *limit == complete.scalar_bytes as u128 && observed > limit)
-        )
-    );
-    assert_eq!(failure.statistics.scalar_bytes, complete.scalar_bytes);
-    assert_eq!(checker.statistics(), failure.statistics);
+    for _ in 0..2 {
+        assert_eq!(
+            checker.check(&candidate, &Cancellation::default()).unwrap(),
+            ConstraintVerdict::Satisfied
+        );
+    }
+    assert_eq!(checker.statistics().scalar_bytes, 2 * complete.scalar_bytes);
 }
 
 #[test]
@@ -604,7 +612,7 @@ fn retained_computed_domains_move_with_the_checker() {
 }
 
 #[test]
-fn computed_domains_share_work_between_checkers() {
+fn checkers_sharing_an_allowance_each_check_within_it() {
     let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
     let candidate = model(&owner, &[]);
     let cancellation = Cancellation::default();
@@ -618,11 +626,13 @@ fn computed_domains_share_work_between_checkers() {
         complete.substitutions, 2,
         "computed domains select X=4 and X=5"
     );
+    // The shared allowance bounds each check and keeps the run's receipt; it
+    // never bounds how many checks its checkers make.
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
-        max_work: 2 * complete.work,
+        max_work: complete.work,
         ..Default::default()
     });
-    for _ in 0..2 {
+    for _ in 0..3 {
         let mut checker = owner
             .checker_with_allowance(&allowance, &cancellation)
             .unwrap();
@@ -632,19 +642,14 @@ fn computed_domains_share_work_between_checkers() {
         );
         assert_eq!(checker.statistics(), complete);
     }
-    assert_eq!(allowance.statistics().work, 2 * complete.work);
-    assert_eq!(allowance.statistics().substitutions, 4);
-    let before = allowance.statistics();
-    let failure = owner
-        .checker_with_allowance(&allowance, &cancellation)
-        .err()
-        .unwrap();
-    assert!(
-        matches!(failure.cause, ConstraintCheckCause::Source(ref error)
-        if matches!(error.as_ref(), FormulaFailure::Limit {
-            resource: FormulaResource::Work, observed, limit, ..
-        } if *observed == *limit + 1 && *limit == u128::from(before.work)))
+    assert_eq!(allowance.statistics().work, 3 * complete.work);
+    assert_eq!(allowance.statistics().substitutions, 6);
+    assert_eq!(
+        allowance.statistics(),
+        ConstraintCheckStatistics {
+            work: 3 * complete.work,
+            substitutions: 6,
+            scalar_bytes: 3 * complete.scalar_bytes,
+        }
     );
-    assert_eq!(failure.statistics, ConstraintCheckStatistics::default());
-    assert_eq!(allowance.statistics(), before);
 }

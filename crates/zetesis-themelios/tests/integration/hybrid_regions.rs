@@ -5,7 +5,7 @@ use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_themelios::{
     AdmissionOptions, ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits,
     ConstraintCheckStatistics, ConstraintRegionVerdict, ConstraintVerdict, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, HybridFormula, prepare_formula,
+    FormulaLimits, HybridFormula, prepare_formula,
 };
 
 fn admit(source: &str) -> HybridFormula {
@@ -222,7 +222,9 @@ fn region_index_is_reused_between_checks() {
 }
 
 #[test]
-fn shared_substitution_limit_spans_all_checkers() {
+fn checkers_sharing_an_allowance_each_check_within_its_ceiling() {
+    // A region check and a final check each make one substitution under a
+    // one-substitution ceiling; the shared receipt holds both.
     let owner = admit("{p}. :-p.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
         max_substitutions: 1,
@@ -243,16 +245,13 @@ fn shared_substitution_limit_spans_all_checkers() {
             .unwrap(),
         ConstraintRegionVerdict::Refuted { .. }
     ));
-    let failure = final_checker
-        .check(&completion(&owner, 0), &cancellation)
-        .unwrap_err();
-    assert!(matches!(failure.cause, ConstraintCheckCause::Source(error)
-        if matches!(error.as_ref(), FormulaFailure::Limit {
-            resource: FormulaResource::Substitutions, observed: 2, limit: 1, ..
-        })
-    ));
-    assert_eq!(failure.statistics.substitutions, 0);
-    assert_eq!(allowance.statistics().substitutions, 1);
+    assert_eq!(
+        final_checker
+            .check(&completion(&owner, 0), &cancellation)
+            .unwrap(),
+        ConstraintVerdict::Satisfied
+    );
+    assert_eq!(allowance.statistics().substitutions, 2);
 }
 
 #[test]
@@ -331,33 +330,28 @@ fn shared_setup_honors_precancellation() {
 }
 
 #[test]
-fn shared_work_limit_covers_later_checker_preparation() {
+fn a_later_checker_prepares_under_its_own_ceiling() {
     let owner = admit("{p}. :-p.");
     let cancellation = Cancellation::default();
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     baseline
         .check(&completion(&owner, 0), &cancellation)
         .unwrap();
+    let one = baseline.statistics();
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
-        max_work: baseline.statistics().work,
+        max_work: one.work,
         ..Default::default()
     });
-    let mut first = owner
-        .checker_with_allowance(&allowance, &cancellation)
-        .unwrap();
-    first.check(&completion(&owner, 0), &cancellation).unwrap();
-    let before = allowance.statistics();
-    let failure = owner
-        .checker_with_allowance(&allowance, &cancellation)
-        .err()
-        .unwrap();
-    assert!(matches!(failure.cause, ConstraintCheckCause::Source(error)
-        if matches!(error.as_ref(), FormulaFailure::Limit {
-            resource: FormulaResource::Work, observed, limit, ..
-        } if *observed == u128::from(before.work) + 1 && *limit == u128::from(before.work))
-    ));
-    assert_eq!(failure.statistics, ConstraintCheckStatistics::default());
-    assert_eq!(allowance.statistics(), before);
+    for _ in 0..2 {
+        let mut checker = owner
+            .checker_with_allowance(&allowance, &cancellation)
+            .unwrap();
+        checker
+            .check(&completion(&owner, 0), &cancellation)
+            .unwrap();
+        assert_eq!(checker.statistics(), one);
+    }
+    assert_eq!(allowance.statistics().work, 2 * one.work);
 }
 
 #[test]
@@ -393,40 +387,38 @@ fn independent_checkers_reuse_canonical_constructors() {
 }
 
 #[test]
-fn shared_worker_quota_is_not_multiplied_by_workers() {
+fn the_shared_receipt_sums_every_workers_charges() {
     let owner = admit("{p}. :-p.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
-        max_substitutions: 5,
+        max_substitutions: 1,
         ..Default::default()
     });
     let receipts = std::thread::scope(|scope| {
-        let workers: Vec<_> = (0..4).map(|_| {
-            let owner = &owner;
-            let allowance = &allowance;
-            scope.spawn(move || {
-                let cancellation = Cancellation::default();
-                let mut checker = owner.checker_with_allowance(allowance, &cancellation).unwrap();
-                loop {
-                    match checker.check(&completion(owner, 0), &cancellation) {
-                        Ok(verdict) => assert_eq!(verdict, ConstraintVerdict::Satisfied),
-                        Err(failure) => {
-                            assert!(matches!(failure.cause, ConstraintCheckCause::Source(error)
-                                if matches!(error.as_ref(), FormulaFailure::Limit {
-                                    resource: FormulaResource::Substitutions, observed: 6, limit: 5, ..
-                                })
-                            ));
-                            return checker.statistics();
-                        }
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                let owner = &owner;
+                let allowance = &allowance;
+                scope.spawn(move || {
+                    let cancellation = Cancellation::default();
+                    let mut checker = owner
+                        .checker_with_allowance(allowance, &cancellation)
+                        .unwrap();
+                    for _ in 0..3 {
+                        assert_eq!(
+                            checker.check(&completion(owner, 0), &cancellation).unwrap(),
+                            ConstraintVerdict::Satisfied
+                        );
                     }
-                }
+                    checker.statistics()
+                })
             })
-        }).collect();
+            .collect();
         workers
             .into_iter()
             .map(|worker| worker.join().unwrap())
             .collect::<Vec<_>>()
     });
-    assert_eq!(allowance.statistics().substitutions, 5);
+    assert_eq!(allowance.statistics().substitutions, 12);
     assert_eq!(
         allowance.statistics(),
         receipts

@@ -1,25 +1,25 @@
-//! One cumulative admission ceiling shared by independent constraint checkers.
+//! Per-check ceilings and one cumulative receipt shared by independent
+//! constraint checkers.
 
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
 };
 
-use crate::ProgramSite;
+use crate::{ConstraintCheckLimits, ConstraintCheckStatistics};
 
-use crate::{
-    ConstraintCheckLimits, ConstraintCheckStatistics, ExpansionFailure, ExpansionResource,
-    FormulaFailure, FormulaResource,
-};
-
-/// Shared cumulative work, substitution and structural-capture reservations.
-/// The historical `scalar_bytes` field counts requested capture-delta bytes,
-/// which borrow canonical terms rather than copying their payload.
+/// The ceilings every attached checker applies to each of its checks, and the
+/// cumulative work, substitution and structural-capture charges all of them
+/// accepted. The historical `scalar_bytes` field counts requested capture-delta
+/// bytes, which borrow canonical terms rather than copying their payload.
 ///
-/// Clones share the same monotone counters. Each charge is admitted before its
-/// operation; stopping or dropping a checker does not refund accepted charges.
-/// No limit is multiplied by the number of workers. Separate checkers retain
-/// independent join/evaluation state and their own local receipts.
+/// Each check (one candidate model or region) gets the ceilings as its own
+/// allowance, so they bound the work spent on any one candidate and never the
+/// number of candidates a run checks. Clones share the same monotone receipt
+/// counters, which saturate rather than refuse; stopping or dropping a checker
+/// does not refund accepted charges. No ceiling is multiplied by the number of
+/// workers. Separate checkers retain independent join/evaluation state and
+/// their own local receipts.
 #[derive(Clone, Debug)]
 pub struct ConstraintAllowance(Arc<Shared>);
 
@@ -32,7 +32,8 @@ struct Shared {
 }
 
 impl ConstraintAllowance {
-    /// Start a finite allowance shared by all checkers attached to its clones.
+    /// Start a receipt shared by all checkers attached to its clones, each
+    /// check of which is bounded by `limits`.
     #[must_use]
     pub fn new(limits: ConstraintCheckLimits) -> Self {
         Self(Arc::new(Shared {
@@ -43,7 +44,7 @@ impl ConstraintAllowance {
         }))
     }
 
-    /// The same configured ceilings apply to every attached checker.
+    /// The ceilings each check of every attached checker gets for itself.
     #[must_use]
     pub fn limits(&self) -> ConstraintCheckLimits {
         self.0.limits
@@ -57,47 +58,16 @@ impl ConstraintAllowance {
         self.0.receipt()
     }
 
-    pub(crate) fn work(&self, amount: u128, location: ProgramSite) -> Result<(), FormulaFailure> {
-        reserve(&self.0.work, amount, u128::from(self.0.limits.max_work)).map_err(|observed| {
-            FormulaFailure::Limit {
-                resource: FormulaResource::Work,
-                limit: u128::from(self.0.limits.max_work),
-                observed,
-                location,
-            }
-        })
+    pub(crate) fn work(&self, amount: u128) {
+        record(&self.0.work, amount);
     }
 
-    pub(crate) fn substitution(&self, location: ProgramSite) -> Result<(), FormulaFailure> {
-        reserve(
-            &self.0.substitutions,
-            1,
-            u128::from(self.0.limits.max_substitutions),
-        )
-        .map_err(|observed| FormulaFailure::Limit {
-            resource: FormulaResource::Substitutions,
-            limit: u128::from(self.0.limits.max_substitutions),
-            observed,
-            location,
-        })
+    pub(crate) fn substitution(&self) {
+        record(&self.0.substitutions, 1);
     }
 
-    pub(crate) fn scalar(
-        &self,
-        amount: u128,
-        location: ProgramSite,
-    ) -> Result<(), ExpansionFailure> {
-        reserve(
-            &self.0.scalar_bytes,
-            amount,
-            self.0.limits.max_scalar_bytes as u128,
-        )
-        .map_err(|observed| ExpansionFailure::Limit {
-            resource: ExpansionResource::ScalarBytes,
-            limit: self.0.limits.max_scalar_bytes as u128,
-            observed,
-            location,
-        })
+    pub(crate) fn scalar(&self, amount: u128) {
+        record(&self.0.scalar_bytes, amount);
     }
 }
 
@@ -113,21 +83,11 @@ impl Shared {
 }
 
 /// Only counters synchronize here, never program state or verdict publication.
-/// Failed reservations change nothing; a successful reservation precedes the
-/// caller's infallible local increment and the charged operation.
-fn reserve(counter: &AtomicU64, amount: u128, limit: u128) -> Result<(), u128> {
-    // Every counter starts within its fixed ceiling and only admitted charges
-    // can advance it. A zero charge cannot change admission or the receipt.
-    // Canonical ID copies and frozen constructor lookups make no scalar charge.
-    // Work callers still poll cancellation before reaching this operation.
-    if amount == 0 {
-        return Ok(());
-    }
-    counter
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
-            let observed = u128::from(used).saturating_add(amount);
-            (observed <= limit).then(|| u64::try_from(observed).expect("bounded u64 allowance"))
-        })
-        .map(|_| ())
-        .map_err(|used| u128::from(used).saturating_add(amount))
+/// The caller has already admitted the charge against its check's own ceiling.
+fn record(counter: &AtomicU64, amount: u128) {
+    let amount = u64::try_from(amount).unwrap_or(u64::MAX);
+    // A saturated receipt stays saturated; it never wraps.
+    let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+        Some(used.saturating_add(amount))
+    });
 }

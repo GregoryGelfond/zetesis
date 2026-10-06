@@ -510,13 +510,14 @@ fn shared_probe_refusal_preserves_its_dictionary_prefix() {
         vec![Term::Constant(Value::Number(7))],
     )
     .unwrap();
-    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits {
-        max_work: 2,
-        ..Default::default()
-    });
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
     let mut counters =
         Counters::with_allowance(allowance.clone(), &zetesis_cpu::Cancellation::default());
-    let result = support.probe(&pattern, &[], &limits, &mut counters, location());
+    let check = FormulaLimits {
+        max_work: 2,
+        ..limits
+    };
+    let result = support.probe(&pattern, &[], &check, &mut counters, location());
     assert!(matches!(
         result,
         Err(FormulaFailure::Limit {
@@ -527,7 +528,7 @@ fn shared_probe_refusal_preserves_its_dictionary_prefix() {
         })
     ));
     // Predicate resolution now precedes the key and dictionary probes.
-    // Every admitted prefix still consumes exactly the shared work allowance.
+    // Every admitted prefix reaches the shared receipt exactly.
     assert_eq!(counters.accounting.work, 2);
     assert_eq!(allowance.statistics().work, 2);
 }

@@ -41,6 +41,16 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Streamed constraint checks are bounded per check, as answer reconstruction
+  is per answer: each check of a candidate model or region gets the configured
+  constraint work, substitution and scalar-byte ceilings as its own allowance
+  (a checker's first check also covers its preparation), instead of every
+  check drawing on one allowance for the whole run. A hybrid or lazy run with
+  many answers, such as Mastermind 6×8 under `--grounder lazy --all`, is no
+  longer stopped by the number of candidates it checks. `ConstraintAllowance`
+  keeps the run's cumulative receipt without refusing; a refusal reports the
+  check's own allowance as its limit; `--stats` prints the receipt and the
+  per-check ceilings.
 - The constraint checkers of one hybrid core share its typed atom index and
   its support rows' positions in that index: the first region check that needs
   each builds it, and every later checker, on any thread, borrows it instead of
