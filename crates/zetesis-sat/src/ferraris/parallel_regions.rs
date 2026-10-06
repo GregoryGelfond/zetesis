@@ -132,13 +132,20 @@ struct Shared {
 /// A publication takes the gate only when a worker waits. A waiter, under the
 /// gate, registers in `waiting`, issues a `SeqCst` fence and only then re-checks
 /// the peers' deques; a publisher pushes, releases its deque, issues a `SeqCst`
-/// fence and reads `waiting`. The two fences are ordered one way or the other:
-/// if the waiter's comes first the publisher reads its registration and wakes it
-/// under the gate, and if the publisher's comes first the waiter's re-check sees
-/// the push. So no waiter misses a region published after it registered. Every
-/// wait stays bounded by its timeout, so correctness never rests on a wake: the
-/// timeout is how an idle worker sees a cancellation, or a region left in a
-/// deque its re-check found busy.
+/// fence and reads `waiting`. Sequentially consistent fences are totally
+/// ordered (C++20 [atomics.order] p4, which Rust's model follows): if the
+/// waiter's comes first the publisher reads its registration, or a later count,
+/// and wakes a waiter under the gate; if the publisher's comes first the
+/// waiter's re-check sees the push. A later count of zero means the waiter has
+/// deregistered; its next registration's re-check comes after the push by the
+/// same order. A re-check that finds the deque still held by the publication
+/// itself read it before the release, so the waiter's fence came first and the
+/// publisher sees the registration. So a
+/// region published after a worker registered is taken by its re-check or wakes
+/// a waiter — unless the re-check found the publisher's deque held by its owner
+/// or by another thief, which it skips. Every wait stays bounded by its timeout,
+/// so coverage never rests on a wake: the timeout is how an idle worker sees a
+/// cancellation, or a region left in a deque its re-check found busy.
 struct Termination {
     /// Created-but-unresolved regions across every worker's deque and hand: a
     /// split adds one (before pushing its children), a refuted or decided
@@ -151,15 +158,34 @@ struct Termination {
     /// exit. Normal termination is `outstanding` reaching zero.
     closed: AtomicBool,
     /// Idle workers registered to wait, and not yet deregistered. A worker
-    /// increments it under the gate before its last re-check and decrements it
-    /// under the gate on every way out of the wait; publishers read it without
-    /// the gate to learn whether anyone needs waking.
+    /// registers under the gate before its last re-check, and its
+    /// `Registration` deregisters it on every return from the wait — the region
+    /// found at the re-check, a wake, the timeout — under the gate where it waited;
+    /// publishers read it without the gate to learn whether anyone needs waking.
     waiting: AtomicUsize,
     /// Held to re-check the walk's end before an idle wait, to register and
     /// deregister, and to wake waiters.
     gate: Mutex<()>,
     /// Idle workers wait here for a published region or the end of the walk.
     idle: Condvar,
+}
+
+/// A worker counted in `Termination::waiting`. Dropping it deregisters, so
+/// every return from a wait, including one added later, pairs with its
+/// registration.
+struct Registration<'a>(&'a AtomicUsize);
+
+impl<'a> Registration<'a> {
+    fn new(waiting: &'a AtomicUsize) -> Self {
+        waiting.fetch_add(1, Ordering::Relaxed);
+        Self(waiting)
+    }
+}
+
+impl Drop for Registration<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 impl Termination {
@@ -377,18 +403,17 @@ impl Shared {
             return None;
         }
         // Register before the last re-check; the fence pairs with a
-        // publisher's (see `Termination`).
-        termination.waiting.fetch_add(1, Ordering::Relaxed);
+        // publisher's (see `Termination`). Every return deregisters.
+        let registration = Registration::new(&termination.waiting);
         fence(Ordering::SeqCst);
         if let Some(entry) = self.steal(index) {
-            termination.waiting.fetch_sub(1, Ordering::Relaxed);
             return Some(entry);
         }
         let (gate, _) = termination
             .idle
             .wait_timeout(gate, timeout)
             .unwrap_or_else(PoisonError::into_inner);
-        termination.waiting.fetch_sub(1, Ordering::Relaxed);
+        drop(registration);
         drop(gate);
         None
     }

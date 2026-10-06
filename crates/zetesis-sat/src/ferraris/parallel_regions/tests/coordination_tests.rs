@@ -619,3 +619,67 @@ fn a_waiting_worker_never_misses_a_publication() {
         assert!(shared.take_local(0).is_some());
     }
 }
+
+fn waiting(search: &ParallelRegions) -> usize {
+    search.shared.termination.waiting.load(Ordering::Relaxed)
+}
+
+#[test]
+fn a_waiter_finding_a_region_at_its_recheck_deregisters() {
+    let search = search(2);
+    let shared = &search.shared;
+    let root = shared.take_local(0).unwrap();
+    shared
+        .publish_split(0, root.clone(), root, reserve_regions)
+        .unwrap();
+    assert!(shared.wait_for_work(1, WAIT).is_some());
+    assert_eq!(waiting(&search), 0);
+}
+
+#[test]
+fn a_waiter_timing_out_deregisters() {
+    let search = search(2);
+    let _root = search.shared.take_local(0).unwrap();
+    assert!(
+        search
+            .shared
+            .wait_for_work(1, Duration::from_millis(1))
+            .is_none()
+    );
+    assert_eq!(waiting(&search), 0);
+}
+
+#[test]
+fn a_waiter_woken_without_a_region_deregisters() {
+    let search = search(2);
+    let shared = &search.shared;
+    let _root = shared.take_local(0).unwrap();
+    std::thread::scope(|scope| {
+        let waiter = scope.spawn(|| shared.wait_for_work(1, Duration::from_mins(1)));
+        while waiting(&search) == 0 {
+            std::hint::spin_loop();
+        }
+        // The waiter registers and re-checks holding the gate, and releases it
+        // only by waiting: once the gate is free, it waits.
+        drop(shared.termination.gate.lock().unwrap());
+        shared.termination.wake_one();
+        assert!(waiter.join().unwrap().is_none());
+    });
+    assert_eq!(waiting(&search), 0);
+}
+
+#[test]
+fn a_waiter_released_by_the_end_of_the_walk_deregisters() {
+    let search = search(2);
+    let shared = &search.shared;
+    let _root = shared.take_local(0).unwrap();
+    std::thread::scope(|scope| {
+        let waiter = scope.spawn(|| shared.wait_for_work(1, Duration::from_mins(1)));
+        while waiting(&search) == 0 {
+            std::hint::spin_loop();
+        }
+        shared.close();
+        assert!(waiter.join().unwrap().is_none());
+    });
+    assert_eq!(waiting(&search), 0);
+}

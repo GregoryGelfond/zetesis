@@ -1095,10 +1095,12 @@ or the closed flag. An idle worker re-checks the end of the walk under the gate,
 registers, issues a sequentially consistent fence and then re-checks the peers'
 queues; a split publishes both children, releases its queue, issues a
 sequentially consistent fence and reads the waiter count, taking the gate to wake
-one only when some worker waits. The two fences are ordered either way, so either
-the publisher sees the registration or the waiter's re-check sees the children:
-none waits past the end of the walk or misses a region published after it
-registered. The wait stays bounded, which is how an idle worker sees a cancellation,
+one only when some worker waits. Sequentially consistent fences are totally
+ordered (C++20 [atomics.order] p4), so either the publisher sees the registration
+or the waiter's re-check sees the children, unless that re-check found the queue
+held by its owner or another thief and skipped it: none waits past the end of the
+walk, and a region published after a worker registered is taken by its re-check
+or wakes a waiter except in that case. The wait stays bounded, which is how an idle worker sees a cancellation,
 or a region left in a queue its re-check found busy; completeness never depends on
 a wake.
 
