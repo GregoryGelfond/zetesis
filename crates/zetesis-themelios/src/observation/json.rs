@@ -424,6 +424,31 @@ mod tests {
     }
 
     #[test]
+    fn live_writers_keep_their_identities_through_a_prune() {
+        // Three workers' writers stay alive; their records interleave until a
+        // prune runs, which must keep every live owner.
+        let mut writers = [writer(1), writer(2), writer(3)];
+        let mut table = super::AtomTable::new(16);
+        let mut models = Vec::new();
+        while table.prunes == 0 {
+            for owner in &mut writers {
+                let model = selection(owner);
+                record(&mut table, &model);
+                models.push(model);
+                if table.prunes != 0 {
+                    break;
+                }
+            }
+        }
+        assert_eq!(table.identities.owners(), 3);
+        for owner in &mut writers {
+            let model = selection(owner);
+            let atom = model.atoms().at(0).unwrap();
+            assert!(table.identities.get(atom).is_some());
+        }
+    }
+
+    #[test]
     fn retained_answers_are_pruned_a_logarithmic_number_of_times() {
         // A consumer that keeps every answer keeps every owner held, so no
         // prune can drop one; prunes stay amortized all the same.

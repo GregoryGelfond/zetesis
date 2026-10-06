@@ -145,3 +145,19 @@ fn many_owners_each_keep_their_own_entries() {
         assert_eq!(map.get(catalog.atoms().at(0).unwrap()), Some(index));
     }
 }
+
+#[test]
+fn a_prune_returns_the_owner_tables_excess_capacity() {
+    let mut map = AtomIdentityMap::default();
+    let empty = map.retained_bytes();
+    {
+        let catalogs: Vec<_> = (0..256).map(|_| catalog(&["p"])).collect();
+        for (index, catalog) in catalogs.iter().enumerate() {
+            map.insert(catalog.atoms().at(0).unwrap(), index).unwrap();
+        }
+    }
+    assert!(map.retained_bytes() > empty);
+    map.retain_held();
+    assert_eq!(map.owners(), 0);
+    assert_eq!(map.retained_bytes(), empty);
+}

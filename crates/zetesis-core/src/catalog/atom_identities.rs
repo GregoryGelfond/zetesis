@@ -106,6 +106,11 @@ impl<T: Copy> AtomIdentityMap<T> {
     /// scan of the owners; entries of held owners are untouched.
     pub fn retain_held(&mut self) {
         self.owners.retain(|_, owner| owner.scope.held_elsewhere());
+        // A prune that leaves the owner table far below its capacity returns
+        // the excess, so retained space follows the owners still held.
+        if self.owners.capacity() > 4 * self.owners.len().max(4) {
+            self.owners.shrink_to(2 * self.owners.len());
+        }
     }
 
     /// Atom owners with entries or a held scope.
