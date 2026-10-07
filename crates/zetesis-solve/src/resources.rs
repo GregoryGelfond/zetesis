@@ -3,7 +3,9 @@
 //! Work, visited substitutions, rounds and copied-byte traffic are receipts,
 //! bounded only by their counter representation. Cancellation and an optional
 //! deadline remain the control boundary. Explicit low-level limit types still
-//! support finite operation allowances. Optional analysis and device dispatch
+//! support finite operation allowances. Tight and positive certificate setup
+//! use the named scratch allowance and shared search work, without independent
+//! population or effort caps. Other optional analyses and device dispatch
 //! retain bounded effort. Optional analyses fail open; mandatory device setup
 //! can still refuse a dispatch that exceeds its internal capacity.
 //!

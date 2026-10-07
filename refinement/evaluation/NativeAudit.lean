@@ -16,6 +16,9 @@ import NativeTightOperands
 frozen queries and public membership. Historical binary membership results
 are audited separately. -/
 
+#print axioms NativeControl.polling_exact
+#print axioms NativeControl.polling_observation
+#print axioms NativeControl.borrowed_poll_exact
 #print axioms NativeControl.poll_exact
 #print axioms NativeControl.tick_stopped
 #print axioms NativeControl.tick_at_limit

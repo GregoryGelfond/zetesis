@@ -361,18 +361,12 @@ fn extend<'a>(
         *plan = Some(built);
     }
     work.location = prepared.location;
-    let mut atoms = model.atoms().iter();
-    for _ in 0..atoms.len() {
-        work.permit()?;
-        let atom = atoms.next().expect("checked immutable model length");
-        let limits = work.limits;
-        let location = work.location;
-        work.atoms(&mut writer, |writer, bound, counters| {
-            writer
-                .entry_atom_with(atom, bound, || counters.work(limits, location))?
-                .insert_with(bound, || counters.work(limits, location))
-        })?;
-    }
+    let location = work.location;
+    work.atoms(&mut writer, |writer, bound, counters| {
+        writer.discover_model_with(&prepared.closed.storage, model, bound, || {
+            counters.work(limits, location)
+        })
+    })?;
     plan.as_ref()
         .expect("a complete immutable plan was published")
         .derive(model, &mut writer, &mut work)?;

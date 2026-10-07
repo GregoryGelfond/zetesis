@@ -22,6 +22,7 @@ mod chains;
 mod copy_costs;
 mod counters;
 mod metering;
+mod preference;
 mod rechecks;
 mod scratch;
 

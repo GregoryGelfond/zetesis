@@ -421,3 +421,4 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
 }
 
 mod batch_control;
+mod preference;

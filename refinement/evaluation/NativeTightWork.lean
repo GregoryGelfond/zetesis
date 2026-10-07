@@ -15,25 +15,25 @@ namespace NativeTightWork
 
 /-- A control stop precedes the work check and preserves the complete record. -/
 theorem stopped (work : tight.Work) (reason : zetesis_cpu.cancellation.Stop)
-    (observed : NativeControl.observation work.cancellation = some reason) :
+    (observed : NativeControl.borrowedObservation work.cancellation = some reason) :
     tight.Work.tick work = ok (.Err (.Stopped reason), work) := by
-  simp [tight.Work.tick, NativeControl.poll_exact, observed,
+  simp [tight.Work.tick, NativeControl.borrowed_poll_exact, observed,
     core.result.Result.Insts.CoreOpsTry.branch,
     core.result.Result.Insts.CoreOpsTryTraitFromResidualResultInfallible.from_residual,
     tight.TightError.Insts.CoreConvertFromStop.from]
 
 /-- Reaching the allowance refuses the next inspection without charging it. -/
 theorem at_limit (work : tight.Work)
-    (clear : NativeControl.observation work.cancellation = none)
+    (clear : NativeControl.borrowedObservation work.cancellation = none)
     (exhausted : work.used = work.max) :
     tight.Work.tick work = ok (.Err (.Limit .Work), work) := by
-  simp [tight.Work.tick, NativeControl.poll_exact, clear, exhausted,
+  simp [tight.Work.tick, NativeControl.borrowed_poll_exact, clear, exhausted,
     core.result.Result.Insts.CoreOpsTry.branch]
 
 /-- An allowed inspection increments exactly once. The stored limit supplies
 the bound needed by machine addition; all other fields remain unchanged. -/
 theorem advances (work : tight.Work)
-    (clear : NativeControl.observation work.cancellation = none)
+    (clear : NativeControl.borrowedObservation work.cancellation = none)
     (remaining : work.used.val < work.max.val) :
     ∃ next : U64, next.val = work.used.val + 1 ∧
       tight.Work.tick work = ok (.Ok (), { work with used := next }) := by
@@ -49,7 +49,7 @@ theorem advances (work : tight.Work)
     rw [same] at remaining
     exact Nat.lt_irrefl _ remaining
   refine ⟨next, by simpa using incremented, ?_⟩
-  simp [tight.Work.tick, NativeControl.poll_exact, clear, distinct, added,
+  simp [tight.Work.tick, NativeControl.borrowed_poll_exact, clear, distinct, added,
     core.result.Result.Insts.CoreOpsTry.branch]
 
 /-- Each valid tick either preserves its record with the reached typed refusal,
@@ -60,7 +60,7 @@ theorem refines (work : tight.Work) (bounded : work.used.val ≤ work.max.val) :
       tight.Work.tick work = ok (.Err reason, work)) ∨
     ∃ next : U64, next.val = work.used.val + 1 ∧ next.val ≤ work.max.val ∧
       tight.Work.tick work = ok (.Ok (), { work with used := next }) := by
-  cases observed : NativeControl.observation work.cancellation with
+  cases observed : NativeControl.borrowedObservation work.cancellation with
   | some reason => exact Or.inl ⟨.Stopped reason, stopped work reason observed⟩
   | none =>
     by_cases reached : work.used = work.max

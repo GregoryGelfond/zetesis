@@ -32,26 +32,74 @@ def observation (control : zetesis_cpu.cancellation.Cancellation) :
       (fun owner => owner.value.deadline.value.expired.nextRead)).getD false
     then some .Deadline else none
 
-/-- The actual extracted poll returns precisely the supplied single-invocation
-observations, in cancellation-before-deadline order. All reads it requests use
-Relaxed ordering, so the external model's unsupported-order branch is absent. -/
+/-- The borrowed representation carries the same supplied atomic tokens and
+immutable slot identity. This is a value relation, not a Rust lifetime theorem. -/
+def pollingView (control : zetesis_cpu.cancellation.Cancellation) :
+    zetesis_cpu.cancellation.CancellationPoll :=
+  { cancelled := control.cancelled.value
+    expired := control.deadline.map (fun owner => owner.value.deadline.value.expired)
+    membership := control.slot.map (fun member =>
+      { state := member.state.value, active := member.active }) }
+
+/-- The reason observed by one borrowed poll, with the original read order. -/
+def borrowedObservation (control : zetesis_cpu.cancellation.CancellationPoll) :
+    Option zetesis_cpu.cancellation.Stop :=
+  if control.cancelled.nextRead then some .Cancelled
+  else if (control.membership.map
+      (fun member => member.state.nextRead != member.active)).getD false
+    then some .Cancelled
+  else if (control.expired.map (fun expired => expired.nextRead)).getD false
+    then some .Deadline else none
+
+/-- Preparing the view preserves each represented atomic token and the slot's
+immutable expected generation without asking the external model for a read. -/
+theorem polling_exact (control : zetesis_cpu.cancellation.Cancellation) :
+    zetesis_cpu.cancellation.Cancellation.polling control = ok (pollingView control) := by
+  cases membership : control.slot <;> cases deadline : control.deadline <;>
+    simp [zetesis_cpu.cancellation.Cancellation.polling, pollingView,
+      zetesis_cpu.cancellation.DeadlineOwner.expiry,
+      zetesis_cpu.cancellation.slot.Membership.polling,
+      alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref,
+      core.option.Option.as_ref,
+      ZetesisNativeExtract.core.option.Option.Insts.CoreOpsTry_traitTry.branch,
+      ZetesisNativeExtract.core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionInfallible.from_residual,
+      membership, deadline]
+
+/-- Borrowing preserves the single-invocation observation represented by the
+owning token; no changing observation history is assumed. -/
+theorem polling_observation (control : zetesis_cpu.cancellation.Cancellation) :
+    borrowedObservation (pollingView control) = observation control := by
+  cases membership : control.slot <;> cases deadline : control.deadline <;>
+    simp [borrowedObservation, pollingView, observation, membership, deadline]
+
+/-- The actual borrowed poll returns the supplied observations in the same
+cancellation, membership and expiry order using only Relaxed reads. -/
+theorem borrowed_poll_exact (control : zetesis_cpu.cancellation.CancellationPoll) :
+    zetesis_cpu.cancellation.CancellationPoll.poll control =
+      ok (match borrowedObservation control with
+        | some reason => core.result.Result.Err reason
+        | none => core.result.Result.Ok ()) := by
+  cases cancelled : control.cancelled.nextRead <;>
+    cases membership : control.membership <;> cases expiry : control.expired <;>
+    simp [zetesis_cpu.cancellation.CancellationPoll.poll, borrowedObservation,
+      core.sync.atomic.AtomicBoolAlign1U8.load,
+      core.sync.atomic.AtomicU64Align8U64.load,
+      zetesis_cpu.cancellation.slot.MembershipPoll.is_cancelled,
+      core.option.Option.is_some_and,
+      zetesis_cpu.cancellation.CancellationPoll.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedAtomicBoolAlign1U8Bool.call_once,
+      cancelled, membership, expiry] <;>
+    repeat' split <;> simp_all
+  all_goals split_ifs <;> rfl
+
+/-- The owning poll delegates through a view preserving the same observations.
+Its original contract remains available to the evaluator's work proofs. -/
 theorem poll_exact (control : zetesis_cpu.cancellation.Cancellation) :
     zetesis_cpu.cancellation.Cancellation.poll control =
       ok (match observation control with
         | some reason => core.result.Result.Err reason
         | none => core.result.Result.Ok ()) := by
-  cases cancelled : control.cancelled.value.nextRead <;>
-    cases membership : control.slot <;> cases deadline : control.deadline <;>
-    simp [zetesis_cpu.cancellation.Cancellation.poll, observation,
-      alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref,
-      core.sync.atomic.AtomicBoolAlign1U8.load,
-      core.sync.atomic.AtomicU64Align8U64.load,
-      zetesis_cpu.cancellation.slot.Membership.is_cancelled,
-      core.option.Option.as_ref, core.option.Option.is_some_and,
-      zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool.call_once,
-      cancelled, membership, deadline] <;>
-    split <;> simp_all
-  all_goals split <;> rfl
+  simp [zetesis_cpu.cancellation.Cancellation.poll, polling_exact,
+    borrowed_poll_exact, polling_observation]
 
 /-- A control stop is returned before any work-limit test or counter update.
 The entire work record is preserved, even if its counter has reached its limit. -/

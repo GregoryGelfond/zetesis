@@ -53,8 +53,14 @@ assert_eq!(config.workers.get(), 4);
 This policy derives named storage capacities from memory and keeps work as
 checked statistics without a selected operation-count cutoff. The independent
 capacities are not a global resident-memory guarantee. Explicit limit fields
-remain available when an embedding needs a bounded operation; optional analyses
-and device dispatches also retain internal effort bounds.
+remain available when an embedding needs a bounded operation; other optional
+analyses and device dispatches also retain internal effort bounds.
+
+Tight and positive certificate preparation uses the session's named scratch
+allowance and shared search work. It has no separate fixed producer, dependency
+or operation-count cutoff. Each certificate still checks the complete theory;
+unsupported programs or insufficient certificate storage leave general reduct
+checking available. Cancellation and allocation failures interrupt the run.
 
 ## Pulling and stopping
 

@@ -27,9 +27,12 @@ separate; the two generations are not interchangeable proof records.
 `zetesis_solve::Resources` derives ordinary admission, execution and publication
 capacities from memory and worker count. It selects no operational ceiling on
 mandatory CPU work; checked counter maxima, cancellation and allocation failures
-remain. Optional fail-open preparation and individual GPU dispatches retain
-separate bounds. Materialized
-source families have a separate memory capacity from cumulative copying work.
+remain. Tight and positive certificate preparation uses the session's scratch
+allowance and remaining search work, with checked population counters. Other
+optional fail-open analyses and individual GPU dispatches retain separate bounds.
+Materialized source families have a separate memory capacity from cumulative
+copying work. The certificate grammar, complete-root coverage and rank or
+least-consequence obligations do not depend on these policy limits.
 
 The existing bounded-operation laws remain applicable to explicit library
 limits. Removing CLI policy choices does not discharge counter-overflow,
@@ -408,6 +411,13 @@ actual inner-loop work and typed refusals. A successful row visits every child
 occurrence; an interrupted row retains only its charged prefix. The class fold
 uses the existing body recognizer. The native outer classifier, exact syntax
 recognition and producer composition remain separate obligations.
+
+The native production control path borrows a `CancellationPoll` view. The owning
+poll delegates through that view, and tight work retains it between operation
+boundaries. The borrowing conversion preserves the represented flag references
+and slot identity under the same fixed per-invocation observation contract.
+This correspondence does not extend to concurrent atomic behavior, Rust borrow
+lifetimes, timers or eventual response to changing control flags.
 
 ## Iteration and completed search decisions
 
@@ -1022,6 +1032,17 @@ Rust must maintain the inverse at publication, authenticate the readable scope
 and prefix, and preserve refusal and allocation boundaries. These laws establish
 neither a concrete hash/index implementation nor support or answer-set membership.
 
+For an empty closed-catalog descendant, `discover_model_with` authenticates the
+model's original writer scope and readable prefix, and the descendant's exact
+shared base. The selected canonical IDs therefore decode to the same atoms in
+both owners, without granting general cross-owner atom identity. The model's
+strict semantic order makes its completed prefix a unique discovery sequence;
+predicate order matches the relation directory, and each next row follows the
+last row of its predicate. Rust still has to preserve both AVL indexes, callback
+and storage bounds, and complete-prefix refusal. The existing catalog selection
+laws express the denotation obligation; they do not verify this insertion path
+or establish that the supplied model is an answer set.
+
 The selected discovery-order operation reuses `normalized_selection_exact` once
 its result is a permutation of the supplied identities. Rust must establish
 that the semantic index visits each discovery once, that the temporary mask
@@ -1298,6 +1319,16 @@ still depends on `FormulaBounds` and `FerrarisMask`; permit conservation does
 not prove the reading rules or knowledge ownership. Prefix tests for original
 and frozen narrowing and a shared one-permit regression exercise the Rust
 admission/receipt boundary.
+
+Candidate composition uses `Narrower::propagate_known_reserved` until a complete
+round changes no region decision, then `Knowledge::preferred_atom_reserved`
+selects once from the last subject: the active bound, latest permanent
+restriction, or original theory, in that precedence. Each subject's propagation
+still completes. The ranking charges each open atom's unknown-parent count,
+retains its charged prefix on refusal and installs no partial preference.
+Packed enumeration must exclude padding and preserve ascending ties. Selecting
+an open atom retains the split-partition obligation of `Search.CoverageTree`;
+the existing laws do not verify these Rust ordering and accounting operations.
 
 ## Candidate generation and query representation
 

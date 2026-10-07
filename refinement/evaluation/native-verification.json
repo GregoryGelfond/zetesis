@@ -11,13 +11,13 @@
     "workingDirectory": "refinement/evaluation",
     "outputDirectory": "The placeholder denotes the actual new external output directory; its machine-local absolute path is omitted.",
     "exitCode": 0,
-    "combinedOutputSha256": "7d7d36ada751943009d2b54fe830e81b0516cb834729405436ab5367b2745271",
-    "rawSha256": "5f76a5d41936d1a7de1e188affeae0a99553d646bf12709bb38d6983dbc73692",
-    "normalizedSourceSha256": "38bdb54e28bbf813f45216c35ef0e59f05f679a6f771b3056441622764fdb8fc",
-    "translationInputSha256": "adecdafd006df329ee3359fa7933d8803ac951926be9830bf03f05ef67bebcfb",
-    "scope": "Replay after the workspace version stamp checked all eight Rust input hashes, restored the complete normalized and parsed raw extraction through the guarded inverse, and reproduced retained Native/Types.lean and provider-free Native/Funs.lean byte-for-byte. All 105 proof artifact hashes remain unchanged; no theorem or external-model scope is extended."
+    "combinedOutputSha256": "a10549c8ef4130e453653069d7bbbdd23e73577ee7c8f946315813ad87e9271b",
+    "rawSha256": "5a6ad8a96e417a3bc5e979df003120f7190c5d8777d3b89f191020551a02945e",
+    "normalizedSourceSha256": "91bf2bf73a2a30a3445328c834eb6a9853700123a0f6a31e87a217acdaa62586",
+    "translationInputSha256": "203f6aaf05911572df32080e7ea0a91dab6ebfc1356a63c648382e5908e7878a",
+    "scope": "Replay checked all eight embedded Rust input hashes, restored the complete normalized and parsed raw extraction through the guarded inverse, and reproduced retained Native/Types.lean and provider-free Native/Funs.lean byte-for-byte. Borrowed controls and their conversion replace the owning control inside tight Work; the same external models and providers are retained."
   },
-  "scope": "Post-0.4.0 replay of the refreshed native generated operations, full default package build and strict complete native axiom audit. Generated bodies, authored theorem statements and covered endpoints are unchanged.",
+  "scope": "Current-source replay of regenerated native operations, full default package build and strict complete native axiom audit. Borrowing conversion and borrowed polling are proved; the owning poll contract and covered endpoints are preserved. Historical Evaluator artifacts and their recorded scope are unchanged.",
   "leanVersion": "4.31.0",
   "lakeExecutableSha256": "58261a1a2fa1a362376c71e02ca854a093e71cc5e6ea64b287a931cb2565273d",
   "commandPaths": "Package-relative executable spelling below identifies the actual resident pinned Lake binary by hash; no machine-local path is required.",
@@ -29,8 +29,9 @@
       ],
       "workingDirectory": "refinement/evaluation",
       "exitCode": 0,
-      "stdoutSha256": "0196de56ddc880fd2ada185455181fa5272fce871f044d5ff25a3800b42ae124",
-      "scope": "Incremental full default package build completed successfully (1955 jobs), reusing the pinned model/dependency cache and unchanged native proof artifacts. This is not a clean dependency rebuild."
+      "stdoutSha256": "22c02f91fb8b2dffa38441e3805afdbc9eff549e47370c26f8019adbde88df3b",
+      "scope": "Incremental full default package build completed successfully against refreshed generated native definitions and authored proofs, reusing the pinned dependency cache. This is not a clean dependency rebuild.",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "executable": "lake",
@@ -44,14 +45,17 @@
       "workingDirectory": "refinement/evaluation",
       "exitCode": 0,
       "stdout": "native-axiom-audit.txt",
-      "stdoutSha256": "4b80596b01455790c15c1e64e0b3f74e460044a3aeffd97df93bcb66b9d5cd9f",
+      "stdoutSha256": "ff023e8388a8388a2e899484312de148956a900c6ae42ad03ec9b7ceb8a52bd8",
       "stderrBytes": 0
     }
   ],
   "artifactInventory": "native-artifacts.sha256",
-  "artifactInventorySha256": "2823115a9c082da95db141a3394ec901c360fe082b9607814779bd1041a45449",
-  "auditDeclarations": 348,
+  "artifactInventorySha256": "b3a92f1fb2f1c7169af3535a1961ee46ec996f2151525312f09edaad328c5f8b",
+  "auditDeclarations": 351,
   "declarations": [
+    "NativeControl.polling_exact",
+    "NativeControl.polling_observation",
+    "NativeControl.borrowed_poll_exact",
     "NativeControl.poll_exact",
     "NativeControl.tick_stopped",
     "NativeControl.tick_at_limit",

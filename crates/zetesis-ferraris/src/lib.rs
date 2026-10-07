@@ -42,8 +42,8 @@ pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduc
 pub use reduct::FrozenReduct;
 pub use regions::{
     Extraction, FrozenSubject, Knowledge, NARROWING_BATCH, Narrower, NarrowingAttempt,
-    NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject, Producers,
-    RegionLimits, producers,
+    NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject, PreferenceAttempt,
+    Producers, RegionLimits, producers,
 };
 pub use theory::{
     AdmissionError, AdmissionLimits, FormulaParts, FormulaSuffix, FormulaTransaction, FormulaView,

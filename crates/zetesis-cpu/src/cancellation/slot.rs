@@ -204,8 +204,30 @@ pub(super) struct Membership {
 }
 
 impl Membership {
-    pub(super) fn is_cancelled(&self) -> bool {
-        self.state.load(Ordering::Relaxed) != self.active
+    #[inline]
+    pub(super) fn polling(membership: Option<&Self>) -> Option<MembershipPoll<'_>> {
+        let membership = membership?;
+        Some(MembershipPoll {
+            state: &membership.state,
+            active: membership.active,
+        })
+    }
+}
+
+/// A live slot-state reference with the token's immutable expected generation.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct MembershipPoll<'a> {
+    state: &'a AtomicU64,
+    active: u64,
+}
+
+impl MembershipPoll<'_> {
+    #[inline]
+    pub(super) fn is_cancelled(membership: Option<Self>) -> bool {
+        let Some(membership) = membership else {
+            return false;
+        };
+        membership.state.load(Ordering::Relaxed) != membership.active
     }
 }
 

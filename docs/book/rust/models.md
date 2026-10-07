@@ -188,6 +188,16 @@ Vocabulary cannot grow after closure, and a descendant cannot be closed again
 to create chains of storage overlays. `max_atoms` continues to bound discoveries,
 independently of the number of stored base rows.
 
+`discover_model_with` seeds an empty descendant from exactly one model's
+selected atoms after authenticating its catalog as a publication of the original
+writer and checking that the descendant shares the supplied closed base.
+The model's existing semantic order places predicates and their rows after the
+completed selection prefix; numeric IDs supply equality, never semantic order.
+This avoids repeating tuple interning and semantic lookup, while using the same
+bounded discovery and AVL insertion operations. A stopped operation retains
+only completed selected rows and reserved capacity. Ordinary insertion may
+continue from that prefix; a new model seed requires empty discovery.
+
 `CloseFailure` retains the actual named peak and the typed cause. The caller
 accounts for external owners separately. `prior_publication_metadata_bytes`
 authenticates a publication from the original writer and reports only its

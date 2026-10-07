@@ -55,7 +55,7 @@ impl TightPlan {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
-            cancellation,
+            cancellation: cancellation.polling(),
         };
         let result = build(theory, None, limits, &mut work);
         TightAttempt {
@@ -79,7 +79,7 @@ impl TightPlan {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
-            cancellation,
+            cancellation: cancellation.polling(),
         };
         build(theory, Some(ranks), limits, &mut work)
     }

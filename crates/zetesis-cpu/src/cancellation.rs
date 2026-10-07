@@ -50,14 +50,53 @@ impl Cancellation {
     /// Returns cancellation first, otherwise an expired deadline.
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
+        self.polling().poll()
+    }
+
+    /// Borrow the immutable handle shape once for repeated boundary polls.
+    /// Preparing this view takes constant work and space, without allocation,
+    /// reference-count updates or flag reads. It borrows the underlying flags,
+    /// so cancellation, deadline expiry and slot retirement remain live.
+    /// The borrow keeps the token's storage alive; it does not keep a slot's
+    /// run active or extend its deadline.
+    #[must_use]
+    #[inline]
+    pub fn polling(&self) -> CancellationPoll<'_> {
+        CancellationPoll {
+            cancelled: &self.cancelled,
+            expired: DeadlineOwner::expiry(self.deadline.as_ref()),
+            membership: slot::Membership::polling(self.slot.as_ref()),
+        }
+    }
+}
+
+/// A borrowed view of the flags read by [`Cancellation::poll`].
+///
+/// Tight loops can retain this view to avoid traversing the owning handle at
+/// each boundary. It caches references and the immutable run identity, never
+/// an observed flag value. Copying it neither owns a token nor prolongs a run.
+#[derive(Clone, Copy, Debug)]
+pub struct CancellationPoll<'a> {
+    cancelled: &'a AtomicBool,
+    expired: Option<&'a AtomicBool>,
+    membership: Option<slot::MembershipPoll<'a>>,
+}
+
+impl CancellationPoll<'_> {
+    /// Observe exactly the same flags, in the same order, as the owning token.
+    /// Reads only relaxed atomics; no clock, allocation or lock is involved.
+    ///
+    /// # Errors
+    /// Returns cancellation first, otherwise an expired deadline.
+    #[inline]
+    pub fn poll(&self) -> Result<(), Stop> {
         if self.cancelled.load(Ordering::Relaxed)
-            || matches!(self.slot.as_ref(), Some(membership) if membership.is_cancelled())
+            || slot::MembershipPoll::is_cancelled(self.membership)
         {
             Err(Stop::Cancelled)
         } else if self
-            .deadline
-            .as_ref()
-            .is_some_and(|owner| owner.deadline.expired.load(Ordering::Relaxed))
+            .expired
+            .is_some_and(|expired| expired.load(Ordering::Relaxed))
         {
             Err(Stop::Deadline)
         } else {
@@ -84,6 +123,13 @@ struct DeadlineOwner {
 }
 
 impl DeadlineOwner {
+    /// Borrow an optional timer flag without observing its current value.
+    #[inline]
+    fn expiry(deadline: Option<&Arc<Self>>) -> Option<&AtomicBool> {
+        let owner = deadline?;
+        Some(&owner.deadline.expired)
+    }
+
     fn arm(at: Instant) -> io::Result<Self> {
         let deadline = Arc::new(Deadline {
             at,
@@ -238,7 +284,9 @@ mod tests {
     fn a_deadline_expires_without_polling() {
         let cancellation =
             Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
+        let polling = cancellation.polling();
         wait_for_expiry(&cancellation);
+        assert_eq!(polling.poll(), Err(Stop::Deadline));
         assert_eq!(cancellation.poll(), Err(Stop::Deadline));
     }
 

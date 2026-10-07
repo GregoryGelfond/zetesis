@@ -64,7 +64,7 @@ jq -cae '
   | .translated.files |= map(.contents = null)
   | .translated.short_names |= sort_by(.key)
 ' "$replay_dir/native.raw.llbc" > "$replay_dir/native.source.llbc"
-printf '%s  %s\n' '38bdb54e28bbf813f45216c35ef0e59f05f679a6f771b3056441622764fdb8fc' \
+printf '%s  %s\n' '91bf2bf73a2a30a3445328c834eb6a9853700123a0f6a31e87a217acdaa62586' \
   "$replay_dir/native.source.llbc" | shasum -a 256 -c -
 jq -cae --slurpfile inventory native-replay/inventory.json \
   -f native-replay/normalize.jq "$replay_dir/native.source.llbc" > "$replay_dir/native.llbc"
@@ -72,7 +72,7 @@ jq -ce --slurpfile inventory native-replay/inventory.json \
   --slurpfile source "$replay_dir/native.source.llbc" \
   --slurpfile raw "$replay_dir/native.raw.llbc" \
   -f native-replay/restore-check.jq "$replay_dir/native.llbc" > "$replay_dir/normalization.json"
-printf '%s  %s\n' 'adecdafd006df329ee3359fa7933d8803ac951926be9830bf03f05ef67bebcfb' \
+printf '%s  %s\n' '203f6aaf05911572df32080e7ea0a91dab6ebfc1356a63c648382e5908e7878a' \
   "$replay_dir/native.llbc" | shasum -a 256 -c -
 .lake/aeneas/aeneas -backend lean -dest "$replay_dir/stock" \
   -split-files -subdir Native -namespace ZetesisNativeExtract -all-computable \

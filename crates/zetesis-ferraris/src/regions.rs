@@ -309,6 +309,16 @@ pub struct NarrowingAttempt<E = Stop> {
     pub statistics: NarrowingStatistics,
 }
 
+/// One split-selection result and its charged reads, including a refused
+/// prefix. A selection changes neither the region nor its closed knowledge.
+#[derive(Debug)]
+pub struct PreferenceAttempt {
+    /// The most constrained open atom, or no atom when the region is decided.
+    pub result: Result<Option<usize>, Stop>,
+    /// One charged unknown-parent-count read per open atom inspected.
+    pub work: u64,
+}
+
 /// A caller-owned allowance for one narrowing's charged reads, granted in
 /// batches. The narrowing asks for at most [`NARROWING_BATCH`] permits at a
 /// time, spends them one per charged read, and returns the unspent rest when
@@ -577,6 +587,53 @@ enum Width {
 }
 
 impl Knowledge {
+    /// Select the open atom with most unknown parents in this knowledge;
+    /// ties, including all-zero scores, select the lowest atom. The region
+    /// and knowledge must use the same atom universe and atom identities;
+    /// their correspondence is a caller precondition, not checked here.
+    /// This preference only orders an exhaustive split; it establishes no
+    /// truth and does not complete propagation.
+    ///
+    /// For `A` atoms and `U` open atoms the scan takes `O(A / 64 + U)` time
+    /// and constant additional space. It charges one count read per open
+    /// atom; packed mask traversal is not separately charged. It polls
+    /// cancellation before reading and reserves/refunds the same batched
+    /// permits as [`Narrower::narrow_known_reserved`]. Call after composed
+    /// propagation has reached its joint fixed point, so the selected
+    /// subject ranks the final region once.
+    ///
+    /// # Errors
+    /// The receipt's result retains a cancellation/deadline stop or the
+    /// quota's refusal; a zero grant is [`Stop::WorkLimit`]. Every failed
+    /// attempt retains its charged prefix and changes neither argument.
+    ///
+    /// # Panics
+    /// Panics if it reads an open atom outside this knowledge's universe,
+    /// violating the caller's shape precondition.
+    pub fn preferred_atom_reserved(
+        &self,
+        region: &Region,
+        cancellation: &Cancellation,
+        quota: &mut dyn NarrowingQuota,
+    ) -> PreferenceAttempt {
+        let mut work = Work::reserved(quota);
+        let result = cancellation
+            .poll()
+            .and_then(|()| self.preferred_atom(region, &mut work));
+        work.settle();
+        PreferenceAttempt {
+            result,
+            work: work.spent,
+        }
+    }
+
+    fn preferred_atom(&self, region: &Region, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
+        match &self.width {
+            Width::Compact(known) => most_constrained(region, known, work),
+            Width::Native(known) => most_constrained(region, known, work),
+        }
+    }
+
     /// Header, owned flag, seen and counter arrays in bytes. The shared
     /// theory, narrower and producer index are excluded, as are the walker's
     /// scratch, allocator bookkeeping and temporary clones.
@@ -640,6 +697,14 @@ fn dependencies<'a>(
                 .flatten()
                 .map(move |operand| (operand, index))
         }))
+}
+
+/// Existing one-theory operations choose immediately; composed closure
+/// defers preference until every subject has stopped deciding atoms.
+#[derive(Clone, Copy)]
+enum SplitSelection {
+    Choose,
+    Defer,
 }
 
 impl Narrower {
@@ -762,7 +827,7 @@ impl Narrower {
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         let subject = Subject::from(subject);
         let attempt = self.narrow_with(
-            subject,
+            (subject, SplitSelection::Choose),
             region,
             knowledge,
             scratch,
@@ -797,7 +862,7 @@ impl Narrower {
     ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
         let subject = Subject::from(subject);
         let attempt = self.narrow_with(
-            subject,
+            (subject, SplitSelection::Choose),
             region,
             knowledge,
             scratch,
@@ -832,7 +897,32 @@ impl Narrower {
     ) -> NarrowingAttempt {
         let subject = Subject::from(subject);
         self.narrow_with(
-            subject,
+            (subject, SplitSelection::Choose),
+            region,
+            knowledge,
+            scratch,
+            Work::reserved(quota),
+            cancellation,
+        )
+    }
+
+    /// Close original-candidate knowledge without selecting a split atom.
+    /// This has the propagation, ownership and failure contracts of
+    /// [`Self::narrow_known_reserved`], but charges no preference scan and
+    /// leaves any existing preference unchanged. Compose several such
+    /// closures to a joint fixed point, then select once with
+    /// [`Knowledge::preferred_atom_reserved`].
+    pub fn propagate_known_reserved(
+        &self,
+        subject: OriginalSubject<'_>,
+        region: &mut Region,
+        knowledge: &mut Knowledge,
+        scratch: &mut NarrowingScratch,
+        cancellation: &Cancellation,
+        quota: &mut dyn NarrowingQuota,
+    ) -> NarrowingAttempt {
+        self.narrow_with(
+            (Subject::from(subject), SplitSelection::Defer),
             region,
             knowledge,
             scratch,
@@ -855,7 +945,7 @@ impl Narrower {
     ) -> NarrowingAttempt {
         let subject = Subject::from(subject);
         self.narrow_with(
-            subject,
+            (subject, SplitSelection::Choose),
             region,
             knowledge,
             scratch,
@@ -866,7 +956,7 @@ impl Narrower {
 
     fn narrow_with(
         &self,
-        subject: Subject<'_>,
+        (subject, selection): (Subject<'_>, SplitSelection),
         region: &mut Region,
         knowledge: &mut Knowledge,
         scratch: &mut NarrowingScratch,
@@ -875,8 +965,8 @@ impl Narrower {
     ) -> NarrowingAttempt {
         let mut statistics = NarrowingStatistics::default();
         let result = cancellation.poll().and_then(|()| {
-            // One choice of width per narrowing; the closure runs on it.
-            match &mut knowledge.width {
+            // Select the counter width once for the closure.
+            let narrowing = match &mut knowledge.width {
                 Width::Compact(known) => self.narrow_known_width(
                     subject,
                     region,
@@ -893,15 +983,22 @@ impl Narrower {
                     &mut work,
                     &mut statistics,
                 ),
+            }?;
+            if matches!(narrowing, Narrowing::Fixed { .. })
+                && matches!(selection, SplitSelection::Choose)
+                && let Some(atom) = knowledge.preferred_atom(region, &mut work)?
+            {
+                region.prefer(atom);
             }
+            Ok(narrowing)
         });
         work.settle();
         statistics.work = work.spent;
         NarrowingAttempt { result, statistics }
     }
 
-    /// The closure, the region's new decisions and the split choice, at the
-    /// knowledge's counter width.
+    /// The closure and the region's new decisions, at the knowledge's
+    /// counter width. Split selection is a separate read of the closed state.
     fn narrow_known_width<C: Count>(
         &self,
         subject: Subject<'_>,
@@ -937,9 +1034,6 @@ impl Narrower {
             changed |= was_open;
         }
         region.snapshot_decided(&mut known.seen);
-        if let Some(atom) = most_constrained(region, known, work)? {
-            region.prefer(atom);
-        }
         Ok(Narrowing::Fixed { changed })
     }
 }

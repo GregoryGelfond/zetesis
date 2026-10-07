@@ -2,6 +2,27 @@
 
 Notable changes by release. Versions follow Semantic Versioning.
 
+## Unreleased
+
+### Changed
+
+- Rank formula-region splits once after the original theory and candidate
+  restrictions reach a shared propagation fixed point. Preserve the existing
+  precedence of the active bound, latest permanent restriction and original
+  theory, and visit open atoms directly through packed masks.
+- Reuse borrowed cancellation flags during tight certificate preparation and
+  checking, preserving per-operation polling, interruption precedence and exact
+  work accounting.
+- Reconstruct terminal answers from authenticated canonical base identities,
+  avoiding repeated tuple lookup and atom-order searches. Each answer retains
+  its own selection and all its true atoms, independently of displayed output.
+
+### Fixed
+
+- Prepare tight and positive-program certificates within the session's memory
+  and search allowances. Fixed internal size limits no longer force otherwise
+  eligible programs onto general reduct checking.
+
 ## 0.4.0 — 2026-10-07
 
 ### Added

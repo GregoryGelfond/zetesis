@@ -100,7 +100,14 @@ regions partition the space exactly, so generation has the closure route's
 shape: data-parallel work inside a region and share-nothing regions beside
 one another. A candidate-only restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
-once. The traversal itself is one operation in `zetesis-cpu`, shared by both
+once. Propagation under the original theory, permanent restrictions and current
+bound repeats to a shared fixed point before one split ranking. That ranking
+uses the active bound when present, otherwise the latest permanent restriction,
+otherwise the original theory. Its open atom with the most unknown parents is
+preferred, with ties going to the lowest atom. The packed region masks enumerate
+open atoms in ascending order, excluding decided atoms and unused final bits;
+each inspected parent count spends one work permit.
+The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes when one worker walks; with several workers the formula route walks
 the same tree in `zetesis-sat`'s parallel regions, each worker owning a stack
 of regions and a shared pool offering regions to idle workers. The closure

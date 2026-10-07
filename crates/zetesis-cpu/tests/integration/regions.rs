@@ -47,6 +47,32 @@ fn decisions_preserve_region_retained_bytes() {
 }
 
 #[test]
+fn open_atoms_match_the_ascending_universe() {
+    for atoms in [0, 1, 63, 64, 65, 127, 128, 129] {
+        let region = Region::all_open(atoms);
+        assert_eq!(
+            region.open().collect::<Vec<_>>(),
+            (0..atoms).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn open_atoms_preserve_sparse_positions() {
+    let atoms = 257;
+    let expected = [0, 63, 64, 192, 255, 256];
+    let mut region = Region::all_open(atoms);
+    for atom in (0..atoms).filter(|atom| !expected.contains(atom)) {
+        if atom % 2 == 0 {
+            assert!(region.hold(atom));
+        } else {
+            assert!(region.cut(atom));
+        }
+    }
+    assert_eq!(region.open().collect::<Vec<_>>(), expected);
+}
+
+#[test]
 fn a_region_holds_cuts_or_leaves_each_atom_open() {
     let mut region = Region::all_open(3);
     assert!(region.is_open(0) && region.is_open(1) && region.is_open(2));

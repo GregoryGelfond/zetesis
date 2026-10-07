@@ -256,7 +256,7 @@ pub struct TightAttempt<T> {
 struct Work<'a> {
     used: u64,
     max: u64,
-    cancellation: &'a zetesis_cpu::Cancellation,
+    cancellation: zetesis_cpu::CancellationPoll<'a>,
 }
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), TightError> {

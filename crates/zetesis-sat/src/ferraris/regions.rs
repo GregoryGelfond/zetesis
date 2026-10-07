@@ -381,7 +381,11 @@ impl RegionSearch {
 /// point is reached when a full round changes nothing. Every charged read
 /// spends a budget permit reserved in batches of at most `NARROWING_BATCH`,
 /// unspent permits are refunded, and even a failed narrowing contributes its
-/// admitted prefix to the counts.
+/// admitted prefix to the counts. Select the split once after the joint
+/// fixed point, using the current candidate bound, else the latest permanent
+/// restriction, else the original theory. This preserves the traversal policy
+/// of narrowing those subjects in sequence while charging only the final
+/// subject's scan, one count read per open atom. Ties prefer the lower atom.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
     restrictions: &Conditions<R>,
@@ -404,7 +408,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             let producers = if index == 0 { producers } else { None };
             let known = knowledge.permanent(index, narrower)?;
             let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-                narrower.narrow_known_reserved(
+                narrower.propagate_known_reserved(
                     zetesis_ferraris::OriginalSubject::new(formulas, producers),
                     region,
                     known,
@@ -422,7 +426,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             let (formulas, narrower) = bound.index.as_ref();
             let known = knowledge.bound(bound)?;
             let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-                narrower.narrow_known_reserved(
+                narrower.propagate_known_reserved(
                     zetesis_ferraris::OriginalSubject::new(formulas, None),
                     region,
                     known,
@@ -438,6 +442,30 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         }
         changed |= round;
         if !round {
+            // Preserve the last subject's preference from the established
+            // narrowing order. Every subject is closed for the final region,
+            // so earlier rounds and subjects need no ranking scan.
+            let known = if let Some(bound) = &restrictions.bound {
+                knowledge.bound(bound)?
+            } else if let Some(restriction) = restrictions.permanent.last() {
+                let (_, restriction_narrower) = restriction.borrow();
+                knowledge.permanent(restrictions.permanent.len(), restriction_narrower)?
+            } else {
+                knowledge.permanent(0, narrower)?
+            };
+            let cancellation = budget.cancellation;
+            let mut quota = BudgetQuota {
+                budget,
+                failure: None,
+            };
+            let preference = known.preferred_atom_reserved(region, cancellation, &mut quota);
+            counts.work += preference.work;
+            let preferred = preference
+                .result
+                .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))?;
+            if let Some(atom) = preferred {
+                region.prefer(atom);
+            }
             return Ok(Narrowing::Fixed { changed });
         }
     }

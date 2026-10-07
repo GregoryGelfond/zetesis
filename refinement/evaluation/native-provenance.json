@@ -1,10 +1,10 @@
 {
   "schema": "zetesis.refinement.evaluation.native.v1",
   "recordedOn": "2026-10-07",
-  "scope": "Refreshed generated native row getters, raw paired admission/construction, evaluator/frozen query, proper-subset search and public membership; inner tight operand classification only. The mathematical statements retain their existing contracts. Runtime-effect composition, outer tight recognition/producer correspondence, consuming checked-topology admission, source grounding, enumeration and devices are outside this record.",
+  "scope": "Current-source native row getters, raw paired admission/construction, evaluator/frozen query, proper-subset search and public membership; inner tight operand classification with borrowed cancellation control. The owning poll contract is preserved through proved view conversion and borrowed polling. Runtime-effect composition, outer tight recognition/producer correspondence, consuming checked-topology admission, source grounding, enumeration and devices remain outside this record.",
   "source": {
     "inventory": "native-source-inputs.sha256",
-    "inventorySha256": "836f49dfb3313df6bb18d80b06b2d8c763f086cf06af3dbb76d130fe61614c1c",
+    "inventorySha256": "048ce4ba118de23fde97ce1d7cc5229eb6c623c4bf872e2f405e9f9926554a71",
     "embeddedFerrarisFiles": 8,
     "scope": "Exact source bytes embedded by this extraction. This is not an inventory or freshness assertion for every dependency Rust source; imported operations are additionally fixed by the complete normalized extraction and explicit external-model boundary.",
     "manifests": [
@@ -113,9 +113,9 @@
       "--locked",
       "--offline"
     ],
-    "rawSha256": "f180f792197c60fb3c1b463d1bf2670beccdb8a961ac23bee657bb9d948a5f15",
-    "normalizedSourceSha256": "38bdb54e28bbf813f45216c35ef0e59f05f679a6f771b3056441622764fdb8fc",
-    "translationInputSha256": "adecdafd006df329ee3359fa7933d8803ac951926be9830bf03f05ef67bebcfb",
+    "rawSha256": "316231620304ea5dc4f792f441d4282fee8d1f409d7c2e4903243ef141f15448",
+    "normalizedSourceSha256": "91bf2bf73a2a30a3445328c834eb6a9853700123a0f6a31e87a217acdaa62586",
+    "translationInputSha256": "203f6aaf05911572df32080e7ea0a91dab6ebfc1356a63c648382e5908e7878a",
     "replay": "native-replay/replay.sh",
     "normalization": "The exact normalized-source hash is the replay guard. Raw destination metadata, embedded source text and short-name ordering may differ; source bytes are checked separately. Fourteen debug local names are changed, unused derived Debug registration is removed, and two unused Step registrations are cleared. The guarded inverse restores complete normalized and parsed raw input; no executable statement or function declaration is removed."
   },
@@ -130,17 +130,17 @@
   "generated": {
     "types": {
       "path": "Native/Types.lean",
-      "sha256": "1248737e7956aa3f9c336c82abc4aca90d5d74a6bbef15df1e487a9719f3e810"
+      "sha256": "6603fda57825522dfad18a92e204343c68ab5b7cb75644544be0aa63ccde7e93"
     },
     "functions": {
       "path": "Native/Funs.lean",
-      "stockSha256": "f086e0ca8d1dc8c379ceb0f9346f9a434fa2396bad3ddb089778ec40e5639f29",
-      "boundSha256": "9d334247e741430ccf5b9171d43920cf1968917e422880bf8e272e58b216a47d"
+      "stockSha256": "825ba2658004cd2fd49241a353c8f55ef3af9421587650938245da01d82311dd",
+      "boundSha256": "da7924dd1ca500394f870c8b110041b960c89a06ebb4f8140d3ccb0506798667"
     }
   },
   "proof": {
     "artifactInventory": "native-artifacts.sha256",
-    "artifactInventorySha256": "2823115a9c082da95db141a3394ec901c360fe082b9607814779bd1041a45449",
+    "artifactInventorySha256": "b3a92f1fb2f1c7169af3535a1961ee46ec996f2151525312f09edaad328c5f8b",
     "localDependencyFiles": 105,
     "externalImports": [
       "Aeneas",
@@ -157,6 +157,6 @@
     ],
     "verification": "native-verification.json",
     "auditOutput": "native-axiom-audit.txt",
-    "auditedDeclarations": 348
+    "auditedDeclarations": 351
   }
 }

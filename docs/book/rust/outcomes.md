@@ -316,6 +316,14 @@ the timer thread cannot be started; an already expired deadline starts no thread
 Clones observe the same flags, and `poll()` reports `Stop::Cancelled` before
 `Stop::Deadline` when both apply.
 
+Repeated polls can retain `Cancellation::polling()`'s borrowed
+`CancellationPoll` view. Preparing the view resolves the token's flag references
+and slot identity once, without allocation or reference-count updates. Each poll
+still reads the live flags in the same order. The view borrows the token; it
+neither owns a run guard nor extends a deadline. Tight certificate preparation
+and formula checking retain this view while preserving their poll before each
+charged primitive operation.
+
 Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. A future deadline owns a timer that sets an expiry
 flag and retires then or when the last clone drops. Polling reads shared flags

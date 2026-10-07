@@ -32,48 +32,138 @@ def alloc.alloc.Global.Insts.CoreAllocAllocatorClone :
   cloneCloneInst := core.core.clone.CloneGlobal
 }
 
-/-- [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::is_cancelled]:
-    Source: 'crates/zetesis-cpu/src/cancellation/slot.rs', lines 207:4-207:45
-    Name pattern: [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::is_cancelled] -/
+/-- [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::polling]:
+    Source: 'crates/zetesis-cpu/src/cancellation/slot.rs', lines 208:4-208:82
+    Name pattern: [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::polling] -/
 @[rust_fun
-  "zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::is_cancelled"]
-def zetesis_cpu.cancellation.slot.Membership.is_cancelled
-  (self : zetesis_cpu.cancellation.slot.Membership) : Result Bool := do
-  let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self.state
-  let i ←
-    core.sync.atomic.AtomicU64Align8U64.load a
-      core.sync.atomic.Ordering.Relaxed
-  ok (i != self.active)
+  "zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::Membership}::polling"]
+def zetesis_cpu.cancellation.slot.Membership.polling
+  (membership : Option zetesis_cpu.cancellation.slot.Membership) :
+  Result (Option zetesis_cpu.cancellation.slot.MembershipPoll)
+  := do
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch membership
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global val.state
+    ok (some { state := a, active := val.active })
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionInfallible.from_residual
+      zetesis_cpu.cancellation.slot.MembershipPoll residual
 
-/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{impl core::ops::function::FnOnce<(&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}}::call_once]:
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 60:25-60:32
-    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>}::call_once] -/
+/-- [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::MembershipPoll<'_0>}::is_cancelled]:
+    Source: 'crates/zetesis-cpu/src/cancellation/slot.rs', lines 226:4-226:64
+    Name pattern: [zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::MembershipPoll<'0>}::is_cancelled] -/
 @[rust_fun
-  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>}::call_once"]
-def
-  zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool.call_once
-  (c : zetesis_cpu.cancellation.Cancellation.poll.closure)
-  (tupled_args : alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner) :
+  "zetesis_cpu::cancellation::slot::{zetesis_cpu::cancellation::slot::MembershipPoll<'0>}::is_cancelled"]
+def zetesis_cpu.cancellation.slot.MembershipPoll.is_cancelled
+  (membership : Option zetesis_cpu.cancellation.slot.MembershipPoll) :
   Result Bool
   := do
-  let «do» ←
-    alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global tupled_args
-  let d ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global «do».deadline
-  core.sync.atomic.AtomicBoolAlign1U8.load d.expired
+  match membership with
+  | none => ok false
+  | some mp =>
+    let i ←
+      core.sync.atomic.AtomicU64Align8U64.load mp.state
+        core.sync.atomic.Ordering.Relaxed
+    ok (i != mp.active)
+
+/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'_0>}::poll::{impl core::ops::function::FnOnce<(&'_ core::sync::atomic::Atomic<bool, core::sync::atomic::private::Align1<u8>>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'_0>}::poll::{closure}<'_0>}::call_once]:
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 99:25-99:34
+    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::closure<'0>, (&'_ core::sync::atomic::Atomic<bool, core::sync::atomic::private::Align1<u8>>), bool>}::call_once] -/
+@[rust_fun
+  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::{core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::closure<'0>, (&'_ core::sync::atomic::Atomic<bool, core::sync::atomic::private::Align1<u8>>), bool>}::call_once"]
+def
+  zetesis_cpu.cancellation.CancellationPoll.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedAtomicBoolAlign1U8Bool.call_once
+  (c : zetesis_cpu.cancellation.CancellationPoll.poll.closure)
+  (tupled_args : core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1
+  Std.U8)) :
+  Result Bool
+  := do
+  core.sync.atomic.AtomicBoolAlign1U8.load tupled_args
     core.sync.atomic.Ordering.Relaxed
 
-/-- Trait implementation: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{impl core::ops::function::FnOnce<(&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}}]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 60:25-60:32
-    Name pattern: [core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>] -/
+/-- Trait implementation: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'_0>}::poll::{impl core::ops::function::FnOnce<(&'_ core::sync::atomic::Atomic<bool, core::sync::atomic::private::Align1<u8>>,), bool> for zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'_0>}::poll::{closure}<'_0>}]
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 99:25-99:34
+    Name pattern: [core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::closure<'0>, (&'_ core::sync::atomic::Atomic<bool, core::sync::atomic::private::Align1<u8>>), bool>] -/
 @[reducible, rust_trait_impl
-  "core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure, (&'_ alloc::sync::Arc<zetesis_cpu::cancellation::DeadlineOwner>), bool>"]
+  "core::ops::function::FnOnce<zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::closure<'0>, (&'_ core::sync::atomic::Atomic<bool, core::sync::atomic::private::Align1<u8>>), bool>"]
 def
-  zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool
-  : core.ops.function.FnOnce zetesis_cpu.cancellation.Cancellation.poll.closure
-  (alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner) Bool := {
+  zetesis_cpu.cancellation.CancellationPoll.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedAtomicBoolAlign1U8Bool
+  : core.ops.function.FnOnce
+  zetesis_cpu.cancellation.CancellationPoll.poll.closure
+  (core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1 Std.U8)) Bool
+  := {
   call_once :=
-    zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool.call_once
+    zetesis_cpu.cancellation.CancellationPoll.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedAtomicBoolAlign1U8Bool.call_once
 }
+
+/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'_0>}::poll]:
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 92:4-92:42
+    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll]
+    Visibility: public -/
+@[rust_fun
+  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll"]
+def zetesis_cpu.cancellation.CancellationPoll.poll
+  (self : zetesis_cpu.cancellation.CancellationPoll) :
+  Result (core.result.Result Unit zetesis_cpu.cancellation.Stop)
+  := do
+  let b ←
+    core.sync.atomic.AtomicBoolAlign1U8.load self.cancelled
+      core.sync.atomic.Ordering.Relaxed
+  if b
+  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
+  else
+    let b1 ←
+      zetesis_cpu.cancellation.slot.MembershipPoll.is_cancelled self.membership
+    if b1
+    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
+    else
+      let b2 ←
+        core.option.Option.is_some_and
+          zetesis_cpu.cancellation.CancellationPoll.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedAtomicBoolAlign1U8Bool
+          self.expired ()
+      if b2
+      then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
+      else ok (core.result.Result.Ok ())
+
+/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::DeadlineOwner}::expiry]:
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 128:4-128:66
+    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::DeadlineOwner}::expiry] -/
+@[rust_fun
+  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::DeadlineOwner}::expiry"]
+def zetesis_cpu.cancellation.DeadlineOwner.expiry
+  (deadline : Option (alloc.sync.Arc zetesis_cpu.cancellation.DeadlineOwner)) :
+  Result (Option (core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1
+    Std.U8)))
+  := do
+  let cf ← core.option.Option.Insts.CoreOpsTry_traitTry.branch deadline
+  match cf with
+  | core.ops.control_flow.ControlFlow.Continue val =>
+    let «do» ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global val
+    let d ←
+      alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global «do».deadline
+    ok (some d.expired)
+  | core.ops.control_flow.ControlFlow.Break residual =>
+    core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionInfallible.from_residual
+      (core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1 Std.U8))
+      residual
+
+/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::polling]:
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 64:4-64:49
+    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::polling]
+    Visibility: public -/
+@[rust_fun
+  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::polling"]
+def zetesis_cpu.cancellation.Cancellation.polling
+  (self : zetesis_cpu.cancellation.Cancellation) :
+  Result zetesis_cpu.cancellation.CancellationPoll
+  := do
+  let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self.cancelled
+  let o ← core.option.Option.as_ref self.deadline
+  let o1 ← zetesis_cpu.cancellation.DeadlineOwner.expiry o
+  let o2 ← core.option.Option.as_ref self.slot
+  let o3 ← zetesis_cpu.cancellation.slot.Membership.polling o2
+  ok { cancelled := a, expired := o1, membership := o3 }
 
 /-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll]:
     Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 52:4-52:42
@@ -85,35 +175,8 @@ def zetesis_cpu.cancellation.Cancellation.poll
   (self : zetesis_cpu.cancellation.Cancellation) :
   Result (core.result.Result Unit zetesis_cpu.cancellation.Stop)
   := do
-  let a ← alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref Global self.cancelled
-  let b ←
-    core.sync.atomic.AtomicBoolAlign1U8.load a
-      core.sync.atomic.Ordering.Relaxed
-  if b
-  then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
-  else
-    let o ← core.option.Option.as_ref self.slot
-    let b1 ←
-      match o with
-      | none => ok false
-      | some membership =>
-        do
-        let b2 ←
-          zetesis_cpu.cancellation.slot.Membership.is_cancelled membership
-        if b2
-        then ok true
-        else ok false
-    if b1
-    then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Cancelled)
-    else
-      let o1 ← core.option.Option.as_ref self.deadline
-      let b2 ←
-        core.option.Option.is_some_and
-          zetesis_cpu.cancellation.Cancellation.poll.closure.Insts.CoreOpsFunctionFnOnceTupleSharedArcDeadlineOwnerBool
-          o1 ()
-      if b2
-      then ok (core.result.Result.Err zetesis_cpu.cancellation.Stop.Deadline)
-      else ok (core.result.Result.Ok ())
+  let cp ← zetesis_cpu.cancellation.Cancellation.polling self
+  zetesis_cpu.cancellation.CancellationPoll.poll cp
 
 /-- [zetesis_ferraris::theory::{zetesis_ferraris::theory::FormulaParts}::view]:
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 210:4-215:5
@@ -2015,7 +2078,7 @@ def tight.Work.tick
   (self : tight.Work) :
   Result ((core.result.Result Unit tight.TightError) × tight.Work)
   := do
-  let r ← zetesis_cpu.cancellation.Cancellation.poll self.cancellation
+  let r ← zetesis_cpu.cancellation.CancellationPoll.poll self.cancellation
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   match cf with
   | core.ops.control_flow.ControlFlow.Continue _ =>

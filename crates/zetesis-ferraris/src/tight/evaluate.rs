@@ -35,7 +35,7 @@ impl TightPlan {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
-            cancellation,
+            cancellation: cancellation.polling(),
         };
         let result = self.evaluate(candidate, limits, &mut work);
         TightAttempt {

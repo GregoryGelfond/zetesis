@@ -31,7 +31,8 @@ pub struct SolveConfig {
     pub constraints: zetesis_themelios::ConstraintCheckLimits,
     /// Maximum yielded models or retained optimum ties; zero requests all.
     pub models: usize,
-    /// Explicit cumulative candidate restriction, encoding and search allowance.
+    /// Explicit cumulative candidate restriction, encoding, certificate preparation
+    /// and search allowance.
     /// Ordinary policy sets the counter representation maximum.
     pub max_search_work: u64,
     /// Cumulative formula branch decisions.

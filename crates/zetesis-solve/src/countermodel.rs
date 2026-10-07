@@ -49,32 +49,17 @@ pub(crate) fn prepare_certificate(
     if options.oracle != crate::Oracle::Auto {
         return Ok(None);
     }
+    let limits = certificate_limits(options);
     let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
         if options.backend.is_gpu() {
             // Device execution currently implements tight support. Preparation
             // authenticates the complete theory and charges the same owner, but
             // does not install CPU membership checks behind a device request.
             return models
-                .prepare_tight_certificate(zetesis_ferraris::TightPlanLimits {
-                    max_bytes: options.max_completion_scratch_bytes,
-                    ..Default::default()
-                })
+                .prepare_tight_certificate(limits.tight)
                 .map(|plan| plan.is_some());
         }
-        models.enable_class_checking(
-            zetesis_sat::CertificateLimits {
-                tight: zetesis_ferraris::TightPlanLimits {
-                    max_bytes: options.max_completion_scratch_bytes,
-                    ..Default::default()
-                },
-                positive: zetesis_ferraris::PositivePlanLimits {
-                    max_bytes: usize::try_from(options.max_completion_scratch_bytes)
-                        .unwrap_or(usize::MAX),
-                    ..Default::default()
-                },
-            },
-            order,
-        )
+        models.enable_class_checking(limits, order)
     });
     match eligibility {
         Ok(true) => match models.statistics().certified.and_then(|stats| stats.plan) {
@@ -96,6 +81,26 @@ pub(crate) fn prepare_certificate(
         Err(error) => return Ok(Some(error)),
     }
     Ok(None)
+}
+
+/// Certificate populations use checked representation ceilings. Each compiler
+/// counts the actual program and checks its storage before allocating; these
+/// ceilings are not reservation sizes. Preparation consumes the enumeration's
+/// remaining search work, so ordinary execution adds no independent work cap.
+fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
+    zetesis_sat::CertificateLimits {
+        tight: zetesis_ferraris::TightPlanLimits {
+            max_producers: usize::MAX,
+            max_dependencies: usize::MAX,
+            max_bytes: options.max_completion_scratch_bytes,
+            max_work: options.max_search_work,
+        },
+        positive: zetesis_ferraris::PositivePlanLimits {
+            max_dependencies: usize::MAX,
+            max_bytes: usize::try_from(options.max_completion_scratch_bytes).unwrap_or(usize::MAX),
+            max_work: options.max_search_work,
+        },
+    }
 }
 
 pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {

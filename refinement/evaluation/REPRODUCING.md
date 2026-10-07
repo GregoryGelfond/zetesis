@@ -32,6 +32,15 @@ a guard by merely replacing its expected hash. The source inventory covers the
 eight embedded Ferraris files, not every dependency source. Complete normalized
 extraction and explicit library models fix the remaining generated operations.
 
+The native control path includes `Cancellation::polling`, the delegated
+`CancellationPoll::poll` and the borrowed slot-membership read. Its borrowing
+conversion retains references and the slot identity under the existing fixed
+per-invocation observation model. Replay and proof refresh must account for
+both conversion and polling. This boundary does not cover concurrent reads,
+Rust borrow lifetimes, timer behavior or response to changing runtime flags.
+The historical `Evaluator` reproduction steps below retain their original
+owning-control representation.
+
 The consuming `TheoryAdmission` topology frontier remains outside this raw
 constructor correspondence. Building a selected constructor does not prove its
 semantics. Preserve the historical binary audits separately.

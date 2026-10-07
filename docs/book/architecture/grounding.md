@@ -1120,6 +1120,10 @@ Reconstruction shares immutable term and tuple storage, but starts with a fresh
 truth selection for every answer. Its joins use the shared whole-argument matcher
 and borrowed typed keys. It neither imports a second value universe nor treats
 possible support as truth. Duplicate witnesses coalesce only at head publication.
+The base selection authenticates the original closed catalog once and discovers
+its existing IDs in the model's semantic order, using the ordinary discovery
+indexes without repeated tuple interning or semantic lookup. Only selected base
+atoms become discovered; every later derived head still uses ordinary insertion.
 The first reconstruction prepares the retained head and body patterns, in their
 original order. Later answers reuse those patterns while initializing their own
 bindings and row cursors. Preparation is charged once; its retained capacity is

@@ -33,11 +33,11 @@ def debug_is_unused:
   and $t.trait_decls[30].item_meta.name == [
     {"Ident":["core",0]}, {"Ident":["fmt",0]}, {"Ident":["Debug",0]}]
   and ($debug.methods | length) == 1
-  and $debug.methods[0].skip_binder.id == 244
-  and $t.fun_decls[244] == null
+  and $debug.methods[0].skip_binder.id == 242
+  and $t.fun_decls[242] == null
   and $debug.vtable.id == 15
   and $t.global_decls[15] == null
-  and $t.ordered_decls[216] == {"TraitImpl":{"NonRec":25}}
+  and $t.ordered_decls[222] == {"TraitImpl":{"NonRec":25}}
   and ([$t.ordered_decls[] | select(. == {"TraitImpl":{"NonRec":25}})] | length) == 1
   and ([[$t.type_decls, $t.fun_decls, $t.global_decls, $t.trait_decls,
           ($t.trait_impls | to_entries | map(select(.key != 25) | .value))]
@@ -45,8 +45,8 @@ def debug_is_unused:
             .TraitImpl? == 25 or .TraitImpl?.id? == 25
             or .impl_ref?.id? == 25 or .trait_impl?.id? == 25
             or .trait_impl_id? == 25
-            or .Fun? == 244 or .Regular? == 244
-            or .fun_id? == 244 or .function_id? == 244
+            or .Fun? == 242 or .Regular? == 242
+            or .fun_id? == 242 or .function_id? == 242
             or .Global? == 15 or .Global?.id? == 15
             or .global_id? == 15)] | length) == 0;
 
@@ -104,7 +104,7 @@ def step_is_unused:
       | length) == 0;
 
 $inventory[0] as $expected |
-if $expected.raw_sha256 != "f180f792197c60fb3c1b463d1bf2670beccdb8a961ac23bee657bb9d948a5f15"
+if $expected.raw_sha256 != "316231620304ea5dc4f792f441d4282fee8d1f409d7c2e4903243ef141f15448"
 then error("unexpected snapshot identity")
 elif functions_match($expected) | not
 then error("unexpected selected declaration, export order or local debug name")
@@ -116,7 +116,7 @@ else
   reduce ($expected.functions[] | select(.rename)) as $entry
     (.; .translated.fun_decls[$entry.id].body.Structured.locals.locals[$entry.rename.index].name = $entry.rename.new)
   | .translated.trait_impls[25] = null
-  | del(.translated.ordered_decls[216])
+  | del(.translated.ordered_decls[222])
   | .translated.trait_decls[7].methods[2] = null
   | .translated.trait_decls[7].methods[6] = null
   | .translated.trait_impls[14].methods[2] = null

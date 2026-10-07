@@ -78,6 +78,14 @@ impl Closed {
 }
 
 impl Store {
+    /// Exact immutable row allocation supplied when this descendant was opened.
+    /// Equal rows or a shared vocabulary alone do not establish this relation.
+    pub(crate) fn shares_closed_base(&self, base: &Closed) -> bool {
+        self.base
+            .as_ref()
+            .is_some_and(|rows| Arc::ptr_eq(rows, &base.rows))
+    }
+
     pub(crate) fn with_closed(base: &Closed, max_bytes: usize) -> Result<Self, Fault> {
         let mut budget = Budget::new(max_bytes, size_of::<Self>());
         budget.add(base.retained_bytes())?;

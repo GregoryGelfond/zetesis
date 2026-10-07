@@ -1,3 +1,6 @@
+'NativeControl.polling_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'NativeControl.polling_observation' depends on axioms: [propext, Quot.sound]
+'NativeControl.borrowed_poll_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'NativeControl.poll_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'NativeControl.tick_stopped' depends on axioms: [propext, Classical.choice, Quot.sound]
 'NativeControl.tick_at_limit' depends on axioms: [propext, Classical.choice, Quot.sound]

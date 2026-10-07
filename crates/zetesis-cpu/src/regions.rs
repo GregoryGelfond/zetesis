@@ -220,10 +220,19 @@ impl Region {
     }
     /// The open atoms, ascending.
     pub fn open(&self) -> impl Iterator<Item = usize> + '_ {
-        (0..self.atoms).filter(move |&atom| {
-            let (word, bit) = locate(atom);
-            (self.held[word] | self.cut[word]) & bit == 0
-        })
+        self.held
+            .iter()
+            .zip(self.cut.iter())
+            .enumerate()
+            .flat_map(move |(word, (&held, &cut))| {
+                let base = word * 64;
+                let mut bits = !(held | cut);
+                let valid = self.atoms - base;
+                if valid < 64 {
+                    bits &= (1u64 << valid) - 1;
+                }
+                SetBits { bits }.map(move |bit| base + bit)
+            })
     }
     /// The atoms this region decides that are not set in `seen`, each paired
     /// with whether it is held, ascending. `seen` is a decided-mask snapshot

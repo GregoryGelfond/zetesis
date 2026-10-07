@@ -5,8 +5,8 @@ $inventory[0] as $expected |
 (reduce ($expected.functions[] | select(.rename)) as $entry
   (.; .translated.fun_decls[$entry.id].body.Structured.locals.locals[$entry.rename.index].name = $entry.rename.old)
  | .translated.trait_impls[25] = $source[0].translated.trait_impls[25]
- | .translated.ordered_decls = (.translated.ordered_decls[:216]
-     + [$source[0].translated.ordered_decls[216]] + .translated.ordered_decls[216:])
+ | .translated.ordered_decls = (.translated.ordered_decls[:222]
+     + [$source[0].translated.ordered_decls[222]] + .translated.ordered_decls[222:])
  | .translated.trait_decls[7].methods[2] = $source[0].translated.trait_decls[7].methods[2]
  | .translated.trait_decls[7].methods[6] = $source[0].translated.trait_decls[7].methods[6]
  | .translated.trait_impls[14].methods[2] = $source[0].translated.trait_impls[14].methods[2]

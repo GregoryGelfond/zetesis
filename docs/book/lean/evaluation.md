@@ -15,6 +15,13 @@ Native runtime-effect composition and the outer tight classifier, recognizer and
 producer proofs remain separate. Historical source records do not qualify changed
 native operations.
 
+The native control representation uses a borrowed `CancellationPoll` view:
+the owning poll delegates through it, and tight work retains it for repeated
+polls. The conversion retains the represented flag references and slot identity
+under the same fixed per-invocation observation model. It adds no concurrent
+atomic, Rust lifetime, timer or dynamic-response guarantee. The historical
+`Evaluator` results below keep their original control representation.
+
 ## Recognizing bodies for tight checking
 
 The optimized tight check needs a structural certificate before it may replace

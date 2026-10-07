@@ -2,8 +2,12 @@
 
 use std::fmt;
 
-use super::{AtomInterner, Failure, Limits, admit, population, storage, store_failure};
-use crate::catalog::{AtomCatalog, CatalogRead, Error, ReadError};
+use super::{
+    AtomAppender, AtomEntry, AtomInterner, Directions, EntryPosition, Failure, InsertionPath,
+    Limits, PREPARED_BYTES, Query, admit, population, storage, store_failure,
+};
+use crate::Model;
+use crate::catalog::{AtomCatalog, AtomRef, CatalogRead, Error, ReadError};
 
 /// Immutable canonical vocabulary, rows and exact indexes. Clone shares their
 /// allocations. Storage presence establishes neither discovery nor truth.
@@ -175,6 +179,60 @@ impl AtomInterner {
         Ok(owner)
     }
 
+    /// Discover exactly a model's selected atoms in an empty descendant of its
+    /// original closed catalog. Authenticate both the supplied base allocation
+    /// and the model's original writer scope and prefix before copying any IDs.
+    /// Descendant, sibling and merely equal catalogs cannot supply this seed.
+    /// The model's semantic order and uniqueness justify each new predicate at
+    /// the end of the relation directory and each row beyond its predicate's
+    /// last row. Canonical IDs themselves are not treated as semantic order.
+    ///
+    /// Reuses the ordinary discovery map, AVL insertion and storage receipts;
+    /// no tuple lookup, term import or additional index is needed. For n selected
+    /// atoms, work is O(n log n) bounded index operations plus immutable segment
+    /// lookups, and retained discovery space is O(n), excluding the shared base
+    /// and caller's model.
+    /// The committed prefix stays empty until an explicit commit. Discovery
+    /// records the supplied selection; it does not establish model membership.
+    ///
+    /// # Errors
+    /// Nonempty discovery or an unauthenticated base/model returns a catalog
+    /// shape refusal before discovery changes. A later resource or caller
+    /// refusal retains the completed selected prefix and any reserved capacity;
+    /// no partial row or AVL update is published. Ordinary entries can continue
+    /// from that prefix, but this operation requires a fresh empty descendant.
+    ///
+    /// # Panics
+    /// Panics if the immutable model iterator violates its exact length.
+    pub fn discover_model_with<E>(
+        &mut self,
+        base: &ClosedCatalog,
+        model: &Model,
+        limits: Limits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(), Failure<E>> {
+        population(self.len(), limits)?;
+        admit(self.storage_bytes(), limits)?;
+        before().map_err(Failure::Stopped)?;
+        if !self.is_empty()
+            || !self.store.shares_closed_base(&base.storage)
+            || base
+                .storage
+                .prior_metadata(&model.catalog().0.snapshot)
+                .is_err()
+        {
+            return Err(Failure::Catalog(Error::Shape));
+        }
+        let mut atoms = model.atoms().iter();
+        for _ in 0..atoms.len() {
+            before().map_err(Failure::Stopped)?;
+            let atom = atoms.next().expect("immutable model selection length");
+            self.appender()
+                .discover_ordered_atom(atom, limits, &mut before)?;
+        }
+        Ok(())
+    }
+
     /// Shared closed allocations already counted by `storage_bytes`, excluding
     /// the separately retained `ClosedCatalog` inline handle. Zero for an ordinary
     /// or vocabulary-only writer. A ledger that owns this writer and its actual
@@ -182,5 +240,62 @@ impl AtomInterner {
     #[must_use]
     pub fn shared_closed_catalog_bytes(&self) -> u128 {
         self.store.shared_closed_bytes()
+    }
+}
+
+impl AtomAppender<'_> {
+    /// The caller authenticated the whole selection and started empty. The
+    /// current discovery is exactly its completed, strictly ordered prefix.
+    /// Hence this row is absent and follows all earlier rows of its predicate.
+    fn discover_ordered_atom<E>(
+        mut self,
+        atom: AtomRef<'_>,
+        limits: Limits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(), Failure<E>> {
+        self.admit_entry(0, limits)?;
+        before().map_err(Failure::Stopped)?;
+        let (_, identity) = atom.canonical().expect("authenticated original selection");
+        let predicate = atom
+            .predicate()
+            .canonical()
+            .expect("authenticated original predicate")
+            .1;
+        let relation = match self.subtrees.last() {
+            Some(last) => {
+                before().map_err(Failure::Stopped)?;
+                let previous = AtomRef::new(&*self.store, last.representative)
+                    .expect("published relation representative")
+                    .predicate()
+                    .canonical()
+                    .expect("canonical relation predicate")
+                    .1;
+                if predicate == previous {
+                    Ok(self.subtrees.len() - 1)
+                } else {
+                    Err(self.subtrees.len())
+                }
+            }
+            None => Err(0),
+        };
+        let directions = Directions::default();
+        let (root, route) = relation.map_or((None, InsertionPath::Recorded(&directions)), |at| {
+            let subtree = &self.subtrees[at];
+            (subtree.root, InsertionPath::BeyondLast(subtree.last))
+        });
+        self.prepare_path(root, route, PREPARED_BYTES, limits, &mut || {
+            before().map_err(Failure::Stopped)
+        })?;
+        AtomEntry {
+            appender: self,
+            query: Query::Atom(atom),
+            prepared: Some(storage::PreparedAtom::existing(identity)),
+            position: EntryPosition::Vacant {
+                relation,
+                beyond: relation.is_ok(),
+            },
+        }
+        .insert_with(limits, before)?;
+        Ok(())
     }
 }

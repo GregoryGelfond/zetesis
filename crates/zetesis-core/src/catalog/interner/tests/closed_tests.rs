@@ -1,6 +1,257 @@
 use super::*;
 use crate::test_support::PERMIT;
 
+fn selected_base() -> (ClosedCatalog, crate::Model) {
+    // Canonical IDs deliberately disagree with semantic argument and predicate
+    // order. The last occurrence stays false, and another row arrives after
+    // the selected catalog's immutable prefix was published.
+    let mut source = owner(&[9, 1, 8, 2, 7, 3, 6, 4, 5, 0]);
+    let nested = Value::from_nodes(
+        vec![
+            ValueNode::Tuple { arity: 2 },
+            ValueNode::String("x".into()),
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Negative,
+                arity: 1,
+            },
+            ValueNode::Number(2),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    for sign in [Sign::Positive, Sign::Negative] {
+        for (name, arguments) in [
+            ("z", vec![]),
+            ("p", vec![]),
+            ("p", vec![nested.clone()]),
+            ("a", vec![Value::Symbol("x".into())]),
+            ("a", vec![Value::String("x".into())]),
+        ] {
+            insert(
+                &mut source,
+                &Atom::new(
+                    Predicate::with_sign(name, arguments.len(), sign).unwrap(),
+                    arguments,
+                )
+                .unwrap(),
+            );
+        }
+    }
+    insert(&mut source, &atom(99));
+    let count = source.len();
+    let catalog = source
+        .publish_selection_with(&(0..count).collect::<Vec<_>>(), limits(), PERMIT)
+        .unwrap();
+    let model = crate::Model::from_positions(&catalog, (0..count - 1).rev().chain([3, 3])).unwrap();
+    insert(&mut source, &atom(77));
+    (source.into_closed_with(limits(), PERMIT).unwrap(), model)
+}
+
+#[test]
+fn selected_discovery_preserves_both_indexes() {
+    let (base, model) = selected_base();
+    let mut descendant = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    let count = descendant.store.snapshot(0).unwrap().atom_count();
+    descendant
+        .discover_model_with(&base, &model, limits(), PERMIT)
+        .unwrap();
+    assert_eq!(descendant.len(), model.atoms().len());
+    assert!(descendant.committed().is_empty());
+    assert!(
+        (0..descendant.len())
+            .map(|at| descendant.get(at).unwrap())
+            .eq(model.atoms().iter())
+    );
+    assert_eq!(descendant.store.snapshot(0).unwrap().atom_count(), count);
+    assert_eq!(
+        descendant
+            .find_atom_with(&atom(99), limits(), PERMIT)
+            .unwrap(),
+        None
+    );
+    validate(&descendant);
+    // A new ordinary entry must still find its place in both seeded indexes.
+    assert_eq!(insert(&mut descendant, &atom(99)), model.atoms().len());
+    validate(&descendant);
+    let catalog = descendant
+        .into_ordered_catalog_with(limits(), PERMIT)
+        .unwrap();
+    let actual = crate::Model::from_ordered_catalog_with(catalog, usize::MAX, PERMIT).unwrap();
+    let mut expected = model.atoms().iter().collect::<Vec<_>>();
+    let added = atom(99);
+    expected.push(AtomRef::from(&added));
+    expected.sort_unstable();
+    assert!(actual.atoms().iter().eq(expected));
+}
+
+#[test]
+fn selected_discovery_avoids_semantic_reinsertion() {
+    let (base, model) = selected_base();
+    let mut seeded = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    let mut selected_work = 0;
+    seeded
+        .discover_model_with(&base, &model, limits(), || {
+            selected_work += 1;
+            Ok::<_, Infallible>(())
+        })
+        .unwrap();
+    let mut ordinary = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    let mut ordinary_work = 0;
+    let mut before = || {
+        ordinary_work += 1;
+        Ok::<_, Infallible>(())
+    };
+    for atom in model.atoms() {
+        ordinary
+            .entry_atom_with(atom, limits(), &mut before)
+            .unwrap()
+            .insert_with(limits(), &mut before)
+            .unwrap();
+    }
+    assert!(selected_work < ordinary_work);
+    assert_eq!(seeded.pending, ordinary.pending);
+}
+
+#[test]
+fn selected_discovery_refuses_unrelated_owners() {
+    let (base, model) = selected_base();
+    let (other_base, other_model) = selected_base();
+    let mut sibling = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    sibling
+        .discover_model_with(&base, &model, limits(), PERMIT)
+        .unwrap();
+    let sibling = crate::Model::from_ordered_catalog_with(
+        sibling.into_ordered_catalog_with(limits(), PERMIT).unwrap(),
+        usize::MAX,
+        PERMIT,
+    )
+    .unwrap();
+    // Equal catalogs, a mismatched supplied base and an actual sibling all fail.
+    for (supplied_base, supplied_model) in [
+        (&base, &other_model),
+        (&other_base, &model),
+        (&base, &sibling),
+    ] {
+        let mut descendant = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+        assert!(matches!(
+            descendant.discover_model_with(supplied_base, supplied_model, limits(), PERMIT),
+            Err(Failure::Catalog(crate::catalog::Error::Shape))
+        ));
+        assert!(descendant.is_empty());
+        descendant
+            .discover_model_with(&base, &model, limits(), PERMIT)
+            .unwrap();
+        validate(&descendant);
+    }
+}
+
+#[test]
+fn selected_discovery_refuses_nonempty_discovery() {
+    let (base, model) = selected_base();
+    let mut descendant = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    insert(&mut descendant, &atom(77));
+    assert!(matches!(
+        descendant.discover_model_with(&base, &model, limits(), PERMIT),
+        Err(Failure::Catalog(crate::catalog::Error::Shape))
+    ));
+    assert_eq!(descendant.len(), 1);
+    assert_eq!(descendant.get(0), Some(AtomRef::from(&atom(77))));
+    validate(&descendant);
+}
+
+#[test]
+fn selected_discovery_stops_at_complete_prefixes() {
+    let (base, model) = selected_base();
+    let mut complete = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    let mut total = 0;
+    complete
+        .discover_model_with(&base, &model, limits(), || {
+            total += 1;
+            Ok::<_, Infallible>(())
+        })
+        .unwrap();
+    for cutoff in 0..total {
+        let mut descendant = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+        let mut accepted = 0;
+        let result = descendant.discover_model_with(&base, &model, limits(), || {
+            if accepted == cutoff {
+                Err(cutoff)
+            } else {
+                accepted += 1;
+                Ok(())
+            }
+        });
+        assert!(matches!(result, Err(Failure::Stopped(actual)) if actual == cutoff));
+        assert_eq!(accepted, cutoff);
+        assert!(
+            (0..descendant.len())
+                .map(|at| descendant.get(at).unwrap())
+                .eq(model.atoms().iter().take(descendant.len()))
+        );
+        validate(&descendant);
+        for atom in model.atoms() {
+            descendant
+                .entry_atom_with(atom, limits(), PERMIT)
+                .unwrap()
+                .insert_with(limits(), PERMIT)
+                .unwrap();
+        }
+        assert_eq!(descendant.len(), model.atoms().len());
+        validate(&descendant);
+    }
+}
+
+#[test]
+fn selected_discovery_obeys_population_limits() {
+    let (base, model) = selected_base();
+    for maximum in 0..model.atoms().len() {
+        let mut descendant = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+        assert!(matches!(
+            descendant.discover_model_with(&base, &model, Limits {
+                max_atoms: maximum,
+                ..limits()
+            }, PERMIT),
+            Err(Failure::Atoms { required, limit })
+                if required == maximum + 1 && limit == maximum
+        ));
+        assert_eq!(descendant.len(), maximum);
+        validate(&descendant);
+    }
+}
+
+#[test]
+fn selected_discovery_obeys_storage_limits() {
+    let (base, model) = selected_base();
+    let mut complete = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+    let initial = complete.storage_bytes();
+    complete
+        .discover_model_with(&base, &model, limits(), PERMIT)
+        .unwrap();
+    let peak = complete.storage_peak_bytes();
+    assert!(peak > initial);
+    for maximum in [initial - 1, initial, peak - 1, peak] {
+        let mut descendant = AtomInterner::for_closed_catalog(&base, usize::MAX).unwrap();
+        let result = descendant.discover_model_with(
+            &base,
+            &model,
+            Limits {
+                max_bytes: maximum,
+                ..limits()
+            },
+            PERMIT,
+        );
+        if maximum < peak {
+            assert!(matches!(result, Err(Failure::Bytes { .. })));
+        } else {
+            result.unwrap();
+        }
+        assert!(descendant.storage_peak_bytes() >= descendant.storage_bytes());
+        assert!(descendant.storage_peak_bytes() <= maximum.max(initial));
+        validate(&descendant);
+    }
+}
+
 fn prepared() -> (AtomInterner, AtomCatalog) {
     let mut source = owner(&[3]);
     for value in [1, 2] {

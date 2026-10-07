@@ -167,6 +167,14 @@ The successful Arc-value and reservation contracts promise no allocation or
 completion. These are fixed-observation library-model results; changing runtime
 observations and their source-checked context projection remain separate.
 
+The native control path uses a borrowed `CancellationPoll` view. The owning
+`Cancellation::poll` prepares this view and delegates to its poll; tight work
+retains the view between operation boundaries. Conversion retains the flag
+references and immutable slot identity under the same fixed per-invocation
+observation model. Cancellation, slot membership and expiry keep their read
+order. This representation adds no proof of concurrent atomic behavior, Rust
+borrow lifetimes, timer behavior or eventual response to changing controls.
+
 `NativeAudit.lean` checks the transitive axioms of the native row, admission,
 evaluation, frozen-query, subset-search and public membership results together.
 Run it with the pinned refinement toolchain:

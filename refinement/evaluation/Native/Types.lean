@@ -48,8 +48,17 @@ structure zetesis_cpu.cancellation.slot.Membership where
     (core.sync.atomic.private.Align8 Std.U64))
   active : Std.U64
 
+/-- [zetesis_cpu::cancellation::slot::MembershipPoll]
+    Source: 'crates/zetesis-cpu/src/cancellation/slot.rs', lines 219:0-219:36
+    Name pattern: [zetesis_cpu::cancellation::slot::MembershipPoll] -/
+@[rust_type "zetesis_cpu::cancellation::slot::MembershipPoll"]
+structure zetesis_cpu.cancellation.slot.MembershipPoll where
+  state : core.sync.atomic.Atomic Std.U64 (core.sync.atomic.private.Align8
+    Std.U64)
+  active : Std.U64
+
 /-- [zetesis_cpu::cancellation::Deadline]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 71:0-71:15
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 110:0-110:15
     Name pattern: [zetesis_cpu::cancellation::Deadline] -/
 @[rust_type "zetesis_cpu::cancellation::Deadline"]
 structure zetesis_cpu.cancellation.Deadline where
@@ -60,7 +69,7 @@ structure zetesis_cpu.cancellation.Deadline where
   wake : std.sync.poison.condvar.Condvar
 
 /-- [zetesis_cpu::cancellation::DeadlineOwner]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 82:0-82:20
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 121:0-121:20
     Name pattern: [zetesis_cpu::cancellation::DeadlineOwner] -/
 @[rust_type "zetesis_cpu::cancellation::DeadlineOwner"]
 structure zetesis_cpu.cancellation.DeadlineOwner where
@@ -78,7 +87,7 @@ structure zetesis_cpu.cancellation.Cancellation where
   slot : Option zetesis_cpu.cancellation.slot.Membership
 
 /-- [zetesis_cpu::cancellation::Stop]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 143:0-143:13
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 189:0-189:13
     Name pattern: [zetesis_cpu::cancellation::Stop]
     Visibility: public -/
 @[discriminant isize, rust_type "zetesis_cpu::cancellation::Stop"]
@@ -95,12 +104,24 @@ inductive zetesis_cpu.cancellation.Stop where
 | WrongProgram : zetesis_cpu.cancellation.Stop
 | InvalidProgram : zetesis_cpu.cancellation.Stop
 
-/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::{closure}]
-    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 60:25-60:32
-    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure] -/
+/-- [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'_0>}::poll::{closure}]
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 99:25-99:34
+    Name pattern: [zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::closure] -/
 @[reducible, rust_type
-  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::Cancellation}::poll::closure"]
-def zetesis_cpu.cancellation.Cancellation.poll.closure := Unit
+  "zetesis_cpu::cancellation::{zetesis_cpu::cancellation::CancellationPoll<'0>}::poll::closure"]
+def zetesis_cpu.cancellation.CancellationPoll.poll.closure := Unit
+
+/-- [zetesis_cpu::cancellation::CancellationPoll]
+    Source: 'crates/zetesis-cpu/src/cancellation.rs', lines 79:0-79:31
+    Name pattern: [zetesis_cpu::cancellation::CancellationPoll]
+    Visibility: public -/
+@[rust_type "zetesis_cpu::cancellation::CancellationPoll"]
+structure zetesis_cpu.cancellation.CancellationPoll where
+  cancelled : core.sync.atomic.Atomic Bool (core.sync.atomic.private.Align1
+    Std.U8)
+  expired : Option (core.sync.atomic.Atomic Bool
+    (core.sync.atomic.private.Align1 Std.U8))
+  membership : Option zetesis_cpu.cancellation.slot.MembershipPoll
 
 /-- [zetesis_ferraris::theory::OperandSpan]
     Source: 'crates/zetesis-ferraris/src/theory.rs', lines 7:0-12:1
@@ -347,7 +368,7 @@ inductive tight.TightError where
 structure tight.Work where
   used : Std.U64
   max : Std.U64
-  cancellation : zetesis_cpu.cancellation.Cancellation
+  cancellation : zetesis_cpu.cancellation.CancellationPoll
 
 /-- [zetesis_ferraris::tight::compile::classify_node::{closure#1}]
     Source: 'crates/zetesis-ferraris/src/tight/compile.rs', lines 129:25-129:49 -/
