@@ -152,10 +152,6 @@ fn arguments(fixture: &Fixture, backend: Backend) -> Vec<String> {
         },
         "--threads",
         "1",
-        "--completion-workers",
-        "1",
-        "--batch-size",
-        "64",
     ]
     .into_iter()
     .map(str::to_owned)

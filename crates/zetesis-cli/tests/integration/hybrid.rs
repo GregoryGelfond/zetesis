@@ -331,21 +331,10 @@ fn hybrid_refuses_unsupported_admission_features() {
 }
 
 #[test]
-fn source_limit_options_bound_constraint_replay_independently() {
-    let config = SolveConfig::from(&options(&[
-        "--max-expansion-work",
-        "471",
-        "--max-substitutions",
-        "23",
-        "--max-expansion-bytes",
-        "97",
-    ]));
+fn constraint_replay_uses_the_ordinary_resource_policy() {
+    let options = options(&["--memory", "1048576"]);
     assert_eq!(
-        config.constraints,
-        zetesis_themelios::ConstraintCheckLimits {
-            max_work: 471,
-            max_substitutions: 23,
-            max_scalar_bytes: 97,
-        }
+        SolveConfig::from(&options).constraints,
+        options.resources().solve_config().constraints
     );
 }

@@ -5,7 +5,9 @@ use crate::support::physical;
 
 use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check};
+use zetesis_ferraris::{
+    FrozenReduct, Interpretation, Limits, Node, NodeView, Theory, Verdict, check,
+};
 use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
@@ -41,15 +43,25 @@ fn setup_work(theory: &Theory) -> u32 {
     // Independent dependency depths over the original nodes; no production
     // schedule or packed output positions are consulted for this work receipt.
     let mut depths = Vec::<usize>::new();
-    for node in theory.nodes() {
-        depths.push(match *node {
-            Node::False | Node::Atom(_) => 0,
-            Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) => 1 + depths[a].max(depths[b]),
+    for index in 0..theory.view().len() {
+        depths.push(match theory.view().node(index).unwrap() {
+            NodeView::False | NodeView::Atom(_) => 0,
+            NodeView::Implies(a, b) => 1 + depths[a].max(depths[b]),
+            NodeView::And(children) | NodeView::Or(children) => {
+                1 + children.iter().map(|&child| depths[child]).max().unwrap()
+            }
         });
     }
     let levels = depths.iter().max().map_or(0, |depth| depth + 1);
     let barriers = if levels == depths.len() { 0 } else { levels };
-    u32::try_from(2 * depths.len() + theory.atom_count() + theory.roots().len() + barriers).unwrap()
+    u32::try_from(
+        2 * depths.len()
+            + theory.parts().occurrences()
+            + theory.atom_count()
+            + theory.roots().len()
+            + barriers,
+    )
+    .unwrap()
 }
 
 fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
@@ -88,7 +100,10 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
             FormulaVerdict::NotModel => {}
         }
         let setup = setup_work(theory);
-        let sweep = u32::try_from(9 * theory.nodes().len() + theory.atom_count() + 65).unwrap();
+        let sweep = u32::try_from(
+            9 * theory.nodes().len() + 2 * theory.parts().occurrences() + theory.atom_count() + 65,
+        )
+        .unwrap();
         assert_eq!(
             result.statistics().work,
             setup + result.statistics().rounds * sweep
@@ -124,22 +139,22 @@ fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
     }
 }
 
-fn frozen_theories() -> [Theory; 9] {
-    [
+fn frozen_theories() -> Vec<Theory> {
+    let mut theories = vec![
         theory(0, vec![], vec![]),
-        theory(0, vec![Node::False], vec![0]),
-        theory(1, vec![Node::Atom(0)], vec![0]),
+        theory(0, vec![Node::falsum()], vec![0]),
+        theory(1, vec![Node::atom(0)], vec![0]),
         // Duplicate leaves retain one semantic slot even when non-Atom slots
         // interleave them. The original child references remain DAG indices.
         theory(
             2,
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::And(0, 2),
-                Node::Or(4, 3),
+                Node::atom(0),
+                Node::falsum(),
+                Node::atom(0),
+                Node::atom(1),
+                Node::and_pair([0, 2]),
+                Node::or_pair([4, 3]),
             ],
             vec![5],
         ),
@@ -149,10 +164,10 @@ fn frozen_theories() -> [Theory; 9] {
         theory(
             1,
             vec![
-                Node::False,
-                Node::Atom(0),
-                Node::Implies(1, 0),
-                Node::Implies(2, 1),
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::implies(2, 1),
             ],
             vec![3],
         ),
@@ -160,10 +175,10 @@ fn frozen_theories() -> [Theory; 9] {
         theory(
             1,
             vec![
-                Node::False,
-                Node::Atom(0),
-                Node::Implies(1, 0),
-                Node::Implies(2, 0),
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::implies(2, 0),
             ],
             vec![3],
         ),
@@ -171,10 +186,10 @@ fn frozen_theories() -> [Theory; 9] {
         theory(
             1,
             vec![
-                Node::False,
-                Node::Atom(0),
-                Node::Implies(1, 0),
-                Node::Or(1, 2),
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::or_pair([1, 2]),
             ],
             vec![3],
         ),
@@ -182,25 +197,27 @@ fn frozen_theories() -> [Theory; 9] {
         theory(
             2,
             vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::Implies(0, 1),
-                Node::Implies(1, 0),
+                Node::atom(0),
+                Node::atom(1),
+                Node::implies(0, 1),
+                Node::implies(1, 0),
             ],
             vec![2, 3],
         ),
         theory(
             2,
             vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::Implies(0, 1),
-                Node::Implies(1, 0),
-                Node::Or(0, 1),
+                Node::atom(0),
+                Node::atom(1),
+                Node::implies(0, 1),
+                Node::implies(1, 0),
+                Node::or_pair([0, 1]),
             ],
             vec![2, 3, 4],
         ),
-    ]
+    ];
+    theories.extend(crate::formula::wide::theories());
+    theories
 }
 
 fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
@@ -227,17 +244,17 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
         for left in 0..4 {
             for right in 0..4 {
                 let mut nodes = vec![
-                    Node::False,
-                    Node::Atom(0),
-                    Node::Atom(1),
-                    Node::Implies(1, 0),
+                    Node::falsum(),
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::implies(1, 0),
                 ];
                 nodes.push(match operator {
-                    0 => Node::And(left, right),
-                    1 => Node::Or(left, right),
-                    _ => Node::Implies(left, right),
+                    0 => Node::and_pair([left, right]),
+                    1 => Node::or_pair([left, right]),
+                    _ => Node::implies(left, right),
                 });
-                nodes.push(Node::Implies(4, 1));
+                nodes.push(Node::implies(4, 1));
                 let graph = theory(3, nodes, vec![5]);
                 let count = compare(&mut oracle, &graph);
                 totals.0 += count.0;
@@ -251,21 +268,21 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
 }
 
 fn scheduled_theories() -> [Theory; 2] {
-    let mut chain = vec![Node::Atom(0)];
-    chain.extend((1..128).map(|index| Node::And(index - 1, index - 1)));
+    let mut chain = vec![Node::atom(0)];
+    chain.extend((1..128).map(|index| Node::and_pair([index - 1, index - 1])));
     [
         theory(1, chain, vec![127]),
         theory(
             2,
             vec![
-                Node::Atom(0),
-                Node::And(0, 0),
-                Node::Atom(1),
-                Node::Or(1, 2),
-                Node::False,
-                Node::Implies(3, 4),
-                Node::Atom(0),
-                Node::And(2, 6),
+                Node::atom(0),
+                Node::and_pair([0, 0]),
+                Node::atom(1),
+                Node::or_pair([1, 2]),
+                Node::falsum(),
+                Node::implies(3, 4),
+                Node::atom(0),
+                Node::and_pair([2, 6]),
             ],
             // a-or-b gives original models, exact refutations and a residual;
             // the unused deeper nodes still exercise scheduled frozen truth.
@@ -287,9 +304,9 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
         vec![0, 64, 130],
         (0..131).collect(),
     ] {
-        let mut nodes = vec![Node::False];
-        nodes.extend((0..131).map(Node::Atom));
-        nodes.push(Node::Atom(130));
+        let mut nodes = vec![Node::falsum()];
+        nodes.extend((0..131).map(Node::atom));
+        nodes.push(Node::atom(130));
         let roots = (0..131)
             .filter(|atom| !available.contains(atom))
             .map(|atom| atom + 1)
@@ -355,7 +372,7 @@ fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
 
 fn qualify_resources(backend: GpuApi, projection: GateProjection) {
     let mut oracle = oracle(backend, projection);
-    let graph = theory(1, vec![Node::Atom(0)], vec![0]);
+    let graph = theory(1, vec![Node::atom(0)], vec![0]);
     let inputs = candidates(&graph);
     for (limits, expected) in [
         (
@@ -411,7 +428,7 @@ fn qualify_resources(backend: GpuApi, projection: GateProjection) {
     let small = *oracle.last_batch_stats().unwrap();
     assert!(!small.theory_uploaded && small.transport_allocated);
     assert!(small.resident_transport_bytes < hot.resident_transport_bytes);
-    let equal = theory(1, vec![Node::Atom(0)], vec![0]);
+    let equal = theory(1, vec![Node::atom(0)], vec![0]);
     let foreign = Interpretation::new(&equal, [0]).unwrap();
     assert_eq!(
         oracle
@@ -426,7 +443,7 @@ fn qualify_resources(backend: GpuApi, projection: GateProjection) {
         .unwrap();
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
     for count in [31, 32, 33, 63, 64, 65, 4097] {
-        let graph = theory(count, vec![Node::Atom(count - 1)], vec![0]);
+        let graph = theory(count, vec![Node::atom(count - 1)], vec![0]);
         let candidate = Interpretation::new(&graph, [count - 1]).unwrap();
         let result = oracle
             .propagate_batch(&graph, &[candidate], FormulaLimits::default())

@@ -465,6 +465,7 @@ fn aggregate_class(error: zetesis_ferraris::AggregateError) -> Class {
         E::ElementLimit
         | E::GuardLimit
         | E::NodeLimit
+        | E::OperandLimit
         | E::WorkLimit
         | E::StateLimit
         | E::SubsetLimit
@@ -480,7 +481,9 @@ fn theory_class(error: zetesis_ferraris::AdmissionError) -> Class {
         }
         zetesis_ferraris::AdmissionError::Atom
         | zetesis_ferraris::AdmissionError::Edge
-        | zetesis_ferraris::AdmissionError::Root => Class::Engine,
+        | zetesis_ferraris::AdmissionError::Root
+        | zetesis_ferraris::AdmissionError::Arity
+        | zetesis_ferraris::AdmissionError::Span => Class::Engine,
     }
 }
 

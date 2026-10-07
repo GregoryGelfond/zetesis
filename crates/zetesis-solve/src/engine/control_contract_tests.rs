@@ -131,13 +131,21 @@ fn eager_static_cache_reuse_avoids_materialization() {
         ..Default::default()
     };
     let phases = crate::phase_timing::Recorder::new(true);
-    let first =
-        super::Executor::cpu(&config, admitted.program(), None, &mut Ignore, &phases).unwrap();
+    let first = super::Executor::cpu(
+        &config,
+        admitted.program(),
+        None,
+        &Cancellation::default(),
+        &mut Ignore,
+        &phases,
+    )
+    .unwrap();
     let ground = first.ground().unwrap();
     let second = super::Executor::cpu(
         &config,
         admitted.program(),
         Some(ground.clone()),
+        &Cancellation::default(),
         &mut Ignore,
         &phases,
     )
@@ -185,11 +193,41 @@ fn observer_failure_remains_an_external_failure() {
         &mut Observer(&mut Adversarial),
         &phases,
     );
-    let Err(SolveError::ExecutionObservation(cause)) = result else {
+    let Err(super::PreparationFailure::Run(SolveError::ExecutionObservation(cause))) = result
+    else {
         panic!("the observer failure must remain external")
     };
     assert!(matches!(
         cause.downcast_ref::<SolveError>(),
         Some(SolveError::BackendUnavailable)
     ));
+}
+
+#[test]
+fn static_materialization_preserves_control_stops() {
+    let admitted = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let config = SolveConfig {
+        grounder: Grounder::Eager,
+        ..Default::default()
+    };
+    let cancelled = Cancellation::default();
+    cancelled.cancel();
+    for (token, expected) in [
+        (cancelled, Stop::Cancelled),
+        (
+            Cancellation::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
+    ] {
+        let result = super::compile_static(
+            &config,
+            admitted.program(),
+            config.max_atoms,
+            &token,
+            &crate::phase_timing::Recorder::new(false),
+        );
+        assert!(
+            matches!(result, Err(super::PreparationFailure::Stopped(actual)) if actual == expected)
+        );
+    }
 }

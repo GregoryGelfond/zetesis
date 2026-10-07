@@ -22,20 +22,62 @@ pub(crate) struct Plan {
     /// Objective admission consumes this fact; scheduling does not certify a
     /// total objective observer.
     pub consumers: bool,
+    /// A normal rule's complete continuation reads, projected onto
+    /// relational outer slots. The checked rule compiler populates this only
+    /// after its head and all generator/filter instructions exist. None leaves
+    /// support witness traversal unchanged. Checked formula factorization also
+    /// borrows this summary to retain every positive activation while sharing
+    /// only equal continuations; the list alone never authorizes that rewrite.
+    pub continuation_inputs: Option<Vec<usize>>,
 }
 
 /// One existing instruction, with a single output and complete outer reads.
 pub(crate) struct Step {
     pub literal: usize,
-    pub required: Vec<usize>,
+    inputs: Inputs,
     pub produced: usize,
+}
+
+/// Aggregate instructions borrow the summary already owned by their source
+/// occurrence. Scalar and range instructions own their separately compiled reads.
+/// `Aggregate` is constructed only for the binding aggregate at `Step::literal`;
+/// its output is exactly `Step::produced`. A plan stays paired with that body.
+enum Inputs {
+    Aggregate,
+    Slots(Vec<usize>),
+}
+
+#[cfg(test)]
+impl Plan {
+    /// Keep the execution inputs fixed while a reference test changes only
+    /// aggregate cache-key metadata. Production plans borrow one summary.
+    pub(crate) fn retain_required_for_test(&mut self, body: &[LiteralIr]) {
+        for step in &mut self.steps {
+            step.inputs = Inputs::Slots(step.required(body).to_vec());
+        }
+    }
+}
+
+impl Step {
+    pub(crate) fn required<'a>(&'a self, body: &'a [LiteralIr]) -> &'a [usize] {
+        match &self.inputs {
+            Inputs::Slots(slots) => slots,
+            Inputs::Aggregate => match &body[self.literal] {
+                LiteralIr::Aggregate(aggregate) if aggregate.binding == Some(self.produced) => {
+                    &aggregate.family_inputs
+                }
+                _ => unreachable!("aggregate step selects its original binding aggregate"),
+            },
+        }
+    }
 }
 
 impl Compiler<'_> {
     /// Allocate only for rules containing aggregate proposals. Plan storage is
-    /// O(steps + input occurrences + variables). Summary construction scans each
-    /// outer slot twice across each instruction's expression/element structure:
-    /// O(variables · total instruction structure). Stable selection can scan
+    /// O(steps + scalar/range input occurrences + variables). Aggregate reads
+    /// borrow the source occurrence's already compiled family-input summary;
+    /// scalar/range summaries scan each slot twice across expression structure.
+    /// Stable selection can scan
     /// O(steps² · inputs) and charges every inspection. Each successful pass
     /// removes one pending step; a pass without progress reports a dependency.
     pub(super) fn assignment_plan(
@@ -78,30 +120,10 @@ impl Compiler<'_> {
                 }
                 assert!(producers[produced].is_none(), "one instruction per target");
                 producers[produced] = Some(pending.len());
-                // Count before reserving exact logical capacity. Repeated
-                // source scans are charged; growing/reallocating summaries
-                // must not hide additional copies of earlier input cells.
-                // Body-local slots cannot name the later synthetic head suffix.
-                // Scalar head instructions may read the completed body frame.
-                let scope = if matches!(literal, LiteralIr::Aggregate(_)) {
-                    body_variables
-                } else {
-                    variables
-                };
-                let mut inputs = 0;
-                for input in 0..scope {
-                    inputs += usize::from(self.instruction_uses(literal, input)?);
-                }
-                self.plan_storage::<usize>(inputs)?;
-                let mut required = Vec::with_capacity(inputs);
-                for input in 0..scope {
-                    if self.instruction_uses(literal, input)? {
-                        required.push(input);
-                    }
-                }
+                let inputs = self.instruction_inputs(literal, variables)?;
                 pending.push(Some(Step {
                     literal: index,
-                    required,
+                    inputs,
                     produced,
                 }));
             }
@@ -112,18 +134,20 @@ impl Compiler<'_> {
             for (index, step) in pending.iter().enumerate() {
                 self.scope_work(1)?;
                 let Some(step) = step else { continue };
-                self.scope_work(step.required.len())?;
-                if step.required.iter().all(|input| ready[*input]) {
+                let required = step.required(body);
+                self.scope_work(required.len())?;
+                if required.iter().all(|input| ready[*input]) {
                     selected = Some(index);
                     break;
                 }
             }
             let Some(index) = selected else {
-                return Err(self.dependency_failure(&pending, &ready, &producers)?);
+                return Err(self.dependency_failure(&pending, body, &ready, &producers)?);
             };
             let step = pending[index].take().expect("selected pending instruction");
-            self.scope_work(step.required.len())?;
-            let dependent = step.required.iter().any(|input| aggregate_values[*input]);
+            let required = step.required(body);
+            self.scope_work(required.len())?;
+            let dependent = required.iter().any(|input| aggregate_values[*input]);
             let aggregate = matches!(body[step.literal], LiteralIr::Aggregate(_));
             // A dependent aggregate selects its own candidate carrier from
             // this completed predecessor row. The cursor resets that carrier
@@ -135,7 +159,11 @@ impl Compiler<'_> {
         }
         let consumers =
             self.assignment_context(body, guards, &aggregate_values[..body_variables])?;
-        Ok(Some(Plan { steps, consumers }))
+        Ok(Some(Plan {
+            steps,
+            consumers,
+            continuation_inputs: None,
+        }))
     }
 
     fn plan_storage<T>(&mut self, count: usize) -> Result<(), FormulaFailure> {
@@ -196,37 +224,52 @@ impl Compiler<'_> {
         Ok(())
     }
 
+    fn instruction_inputs(
+        &mut self,
+        literal: &LiteralIr,
+        variables: usize,
+    ) -> Result<Inputs, FormulaFailure> {
+        if matches!(literal, LiteralIr::Aggregate(_)) {
+            // The aggregate summary was compiled before head-only slots exist.
+            // Its original body frame and required slot storage remain authoritative.
+            return Ok(Inputs::Aggregate);
+        }
+        // Count before reserving exact logical capacity. Scalar head instructions
+        // may read the complete body frame. Charge both scans of their expressions.
+        let mut count = 0;
+        for input in 0..variables {
+            count += usize::from(self.instruction_uses(literal, input)?);
+        }
+        self.plan_storage::<usize>(count)?;
+        let mut slots = Vec::with_capacity(count);
+        for input in 0..variables {
+            if self.instruction_uses(literal, input)? {
+                slots.push(input);
+            }
+        }
+        Ok(Inputs::Slots(slots))
+    }
+
     fn instruction_uses(
         &mut self,
         literal: &LiteralIr,
         input: usize,
     ) -> Result<bool, FormulaFailure> {
-        // Even an empty aggregate performs an outer-slot readiness inspection.
+        // Every scalar or range slot inspection consumes source work.
         self.scope_work(1)?;
         match literal {
             LiteralIr::Bind { value, .. } => self.expression_uses(value, input),
             LiteralIr::Range { lower, upper, .. } => {
                 Ok(self.expression_uses(lower, input)? || self.expression_uses(upper, input)?)
             }
-            LiteralIr::Aggregate(aggregate) => {
-                // Its own equality target is an output, not a guard input.
-                // The caller limits aggregate reads to the original body frame.
-                // Later head-only slots may reuse local numeric indices, but
-                // belong to another scope and never enter this summary.
-                for element in &aggregate.elements {
-                    if self.element_uses(element, input)? {
-                        return Ok(true);
-                    }
-                }
-                Ok(false)
-            }
-            _ => unreachable!("only instructions enter a plan"),
+            _ => unreachable!("aggregate inputs borrow their existing summary"),
         }
     }
 
     fn dependency_failure(
         &mut self,
         pending: &[Option<Step>],
+        body: &[LiteralIr],
         ready: &[bool],
         producers: &[Option<usize>],
     ) -> Result<FormulaFailure, FormulaFailure> {
@@ -234,7 +277,7 @@ impl Compiler<'_> {
         for step in pending {
             self.scope_work(1)?;
             let Some(step) = step else { continue };
-            for &variable in &step.required {
+            for &variable in step.required(body) {
                 self.scope_work(1)?;
                 if !ready[variable] {
                     if producers[variable].is_none() {

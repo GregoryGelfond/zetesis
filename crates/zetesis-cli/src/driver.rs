@@ -9,6 +9,10 @@ use zetesis_themelios::{
     AdmissionFailure, BundleAdmissionFailure, BundleError, ExpansionFailure, SourceBundle,
 };
 
+#[cfg(test)]
+#[path = "publication_fixture.rs"]
+pub(crate) mod fixture;
+
 /// Publication counts and search coverage from a completed driver invocation.
 /// Without objectives, stable models are written as found. Optimization retains
 /// incumbent ties and publishes the requested optimal ties only after exhaustion
@@ -269,7 +273,7 @@ impl fmt::Display for RunError {
                 max_closure_batch_bytes,
             } => write!(
                 f,
-                "--threads {workers} at --max-closure-bytes {max_closure_bytes} need {} bytes, above --max-closure-batch-bytes {max_closure_batch_bytes}; use fewer threads, a smaller allowance, or a larger collective ceiling",
+                "{workers} threads with {max_closure_bytes} closure bytes each need {} bytes, above the collective allowance of {max_closure_batch_bytes}; use fewer threads or a larger --memory allowance",
                 (*workers as u128) * (*max_closure_bytes as u128)
             ),
             Self::SharedCpu(cause) => cause.fmt(f),

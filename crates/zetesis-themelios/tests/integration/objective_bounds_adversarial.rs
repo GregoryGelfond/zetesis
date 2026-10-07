@@ -186,7 +186,10 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
             .iter()
             .zip(input.atoms().iter().skip(1))
             .any(|(left, right)| left > right);
-        let original_nodes = input.theory().nodes().to_vec();
+        let original_nodes = (
+            input.theory().nodes().to_vec(),
+            input.theory().operands().to_vec(),
+        );
         let original_roots = input.theory().roots().to_vec();
         let stable = stable(&input);
         assert_eq!(records(&input, &stable), case.records, "{}", case.name);
@@ -240,7 +243,10 @@ fn every_verified_incumbent_retains_exactly_improving_and_tied_original_models()
                 case.name
             );
         }
-        assert_eq!(input.theory().nodes(), original_nodes);
+        assert_eq!(
+            (input.theory().nodes(), input.theory().operands()),
+            (original_nodes.0.as_slice(), original_nodes.1.as_slice())
+        );
         assert_eq!(input.theory().roots(), original_roots);
     }
     assert_eq!(total, 97);

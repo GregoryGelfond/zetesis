@@ -2,29 +2,23 @@
 
 use std::io::{self, Write};
 
-use clap::Parser;
-use zetesis_cli::{Options, Report, RunError, RunFailure, run_detailed_with_diagnostics};
+use zetesis_cli::{PublicationConfig, Report, RunError, RunFailure};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
-fn options(maximum: usize) -> Options {
-    let mut options = Options::try_parse_from([
-        "zetesis",
-        "--backend",
-        "cpu",
-        "--workers",
-        "1",
-        "--models",
-        "0",
-    ])
-    .unwrap();
-    options.max_observation_bytes = maximum;
-    options
+fn options(maximum: usize) -> PublicationConfig {
+    let mut config = crate::support::prepared::config(&[]);
+    config.observations.max_output_bytes = maximum;
+    config
 }
 
-fn solve(source: &str, options: &Options, output: &mut impl Write) -> Result<Report, RunFailure> {
-    run_detailed_with_diagnostics(
-        source.into(),
+fn solve(
+    source: &str,
+    options: &PublicationConfig,
+    output: &mut impl Write,
+) -> Result<Report, RunFailure> {
+    crate::support::prepared::human(
+        source,
         options,
         output,
         &mut io::sink(),

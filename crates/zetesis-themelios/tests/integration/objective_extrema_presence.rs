@@ -46,7 +46,10 @@ fn presence_keeps_the_original_reduct_subject() {
         // Node identity gives the same truth at every original and frozen pair,
         // including unrealized proposals and candidates rejected by the reduct.
         assert_eq!(observed.atoms(), original.atoms());
-        assert_eq!(observed.theory().nodes(), original.theory().nodes());
+        assert_eq!(
+            (observed.theory().nodes(), observed.theory().operands()),
+            (original.theory().nodes(), original.theory().operands())
+        );
         assert_eq!(observed.theory().roots(), original.theory().roots());
         assert_eq!(observed.formula_origins(), original.formula_origins());
         assert!(

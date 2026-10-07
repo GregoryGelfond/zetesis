@@ -118,16 +118,25 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
             .unwrap()
             .contains("Oracle: reduct closure")
     );
-    let error = run_with_diagnostics(
+    let error = zetesis_themelios::ParsedSource::new(
         source.into(),
-        &options(&["--max-expanded-templates", "2"]),
-        &mut Vec::new(),
-        &mut Vec::new(),
-        &Cancellation::default(),
+        zetesis_themelios::AdmissionOptions::default(),
     )
+    .unwrap()
+    .admit_extended(zetesis_themelios::ExpansionLimits {
+        max_templates: 2,
+        ..Default::default()
+    })
     .unwrap_err();
-    assert!(matches!(error, RunError::Expansion(_)));
-    assert!(error.to_string().contains("bytes "));
+    assert!(matches!(
+        error.error(),
+        zetesis_themelios::ExpansionFailure::Limit {
+            resource: zetesis_themelios::ExpansionResource::Templates,
+            ..
+        }
+    ));
+    assert!(error.error().site().is_some());
+    assert!(!error.error().diagnostics().is_empty());
 }
 
 #[test]
@@ -234,17 +243,17 @@ fn default_execution_ignores_device_transport_limits() {
     let mut diagnostics = Vec::new();
     // Device transport has no producer on the default CPU route. A zero
     // transport ceiling cannot truncate the family or trigger discovery.
-    let report = run_with_diagnostics(
-        "{a}. {b}. {c}. {d}. {e}. {f}.".into(),
-        &options(&[
-            "--models",
-            "0",
-            "--grounder",
-            "eager",
-            "--max-batch-bytes",
-            "0",
-        ]),
-        &mut models,
+    let mut config =
+        zetesis_cli::PublicationConfig::from(&options(&["--models", "0", "--grounder", "eager"]));
+    config.solve.max_batch_bytes = 0;
+    let report = crate::support::prepared::relational(
+        "{a}. {b}. {c}. {d}. {e}. {f}.",
+        &config,
+        &mut zetesis_cli::HumanRenderer::new(
+            &mut models,
+            zetesis_cli::ColorMode::Never,
+            config.observations.max_output_bytes,
+        ),
         &mut diagnostics,
         &Cancellation::default(),
     )
@@ -271,9 +280,8 @@ fn default_execution_ignores_device_transport_limits() {
         })
         .collect();
     assert_eq!(answers, expected);
-    let diagnostics = String::from_utf8(diagnostics).unwrap();
     assert!(models.contains("Backend: CPU"));
-    assert!(!diagnostics.contains("Backend: gpu"));
+    assert!(report.lazy_execution.is_none());
 }
 
 #[cfg(feature = "gpu")]
@@ -281,29 +289,31 @@ fn default_execution_ignores_device_transport_limits() {
 fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
-    let error = run_with_diagnostics(
-        "a.".into(),
-        &options(&[
-            "--backend",
-            "gpu",
-            "--grounder",
-            "eager",
-            "--max-batch-bytes",
-            "0",
-        ]),
-        &mut models,
+    let mut config = zetesis_cli::PublicationConfig::from(&options(&[
+        "--backend",
+        "gpu",
+        "--grounder",
+        "eager",
+    ]));
+    config.solve.max_batch_bytes = 0;
+    let failure = crate::support::prepared::relational(
+        "a.",
+        &config,
+        &mut zetesis_cli::HumanRenderer::new(
+            &mut models,
+            zetesis_cli::ColorMode::Never,
+            config.observations.max_output_bytes,
+        ),
         &mut diagnostics,
         &Cancellation::default(),
     )
     .unwrap_err();
+    let error = *failure.cause;
     assert!(matches!(error, RunError::Gpu(_)));
     assert!(crate::support::human::preamble(&String::from_utf8_lossy(
         &models
     )));
-    assert!(
-        !String::from_utf8(diagnostics)
-            .unwrap()
-            .contains("Backend: cpu")
-    );
+    assert!(!String::from_utf8_lossy(&models).contains("Answer:"));
+    assert!(!String::from_utf8_lossy(&models).contains("Backend: CPU"));
     println!("explicit device refusal: {error}");
 }

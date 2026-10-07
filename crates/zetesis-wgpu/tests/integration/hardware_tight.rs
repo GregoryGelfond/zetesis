@@ -15,7 +15,13 @@ use zetesis_wgpu::{
 };
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
-    let theory = Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        atoms,
+        zetesis_ferraris::FormulaParts::new(nodes, Vec::new()).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     TightPlan::compile(
         &theory,
         TightPlanLimits::default(),
@@ -62,19 +68,19 @@ fn inputs(theory: &Theory) -> Vec<Interpretation> {
 // duplicate writes, while different enabled heads contend for the same word.
 fn conditional_support(atoms: usize) -> TightPlan {
     let mut nodes = vec![
-        Node::False,
-        Node::Atom(0),
-        Node::Implies(1, 0),
-        Node::Or(1, 2),
+        Node::falsum(),
+        Node::atom(0),
+        Node::implies(1, 0),
+        Node::or_pair([1, 2]),
     ];
     let mut roots = vec![3];
     for head in (1..atoms).filter(|head| head % 32 != 2) {
         let atom = nodes.len();
         nodes.extend([
-            Node::Atom(head),
-            Node::Implies(atom, 0),
-            Node::Or(atom, atom + 1),
-            Node::Implies(1, atom + 2),
+            Node::atom(head),
+            Node::implies(atom, 0),
+            Node::or_pair([atom, atom + 1]),
+            Node::implies(1, atom + 2),
         ]);
         roots.push(atom + 3);
         if head % 3 == 0 {
@@ -184,16 +190,16 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
 fn fixtures() -> Vec<TightPlan> {
     let mut fixtures = vec![
         certificate(0, vec![], vec![]),
-        certificate(0, vec![Node::False], vec![0]),
-        certificate(2, vec![Node::Atom(0), Node::Atom(1)], vec![1, 0, 1]),
+        certificate(0, vec![Node::falsum()], vec![0]),
+        certificate(2, vec![Node::atom(0), Node::atom(1)], vec![1, 0, 1]),
         // Double negation alone supplies no producer for its true atom.
         certificate(
             1,
             vec![
-                Node::False,
-                Node::Atom(0),
-                Node::Implies(1, 0),
-                Node::Implies(2, 0),
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::implies(2, 0),
             ],
             vec![3],
         ),
@@ -202,21 +208,53 @@ fn fixtures() -> Vec<TightPlan> {
     // producer. Every body form is evaluated with both truth values where possible.
     for body in [0, 1, 2, 4, 9, 10, 11] {
         let mut nodes = vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Implies(1, 0),
-            Node::Implies(2, 0),
-            Node::Implies(3, 0),
-            Node::Or(1, 4),
-            Node::Or(5, 2),
-            Node::And(1, 2),
-            Node::Or(1, 2),
-            Node::Implies(4, 0),
+            Node::falsum(),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 0),
+            Node::implies(2, 0),
+            Node::implies(3, 0),
+            Node::or_pair([1, 4]),
+            Node::or_pair([5, 2]),
+            Node::and_pair([1, 2]),
+            Node::or_pair([1, 2]),
+            Node::implies(4, 0),
         ];
-        nodes.push(Node::Implies(body, 3));
+        nodes.push(Node::implies(body, 3));
         fixtures.push(certificate(4, nodes, vec![12, 8, 7]));
+    }
+    for width in [3, 65, 129] {
+        for conjunction in [false, true] {
+            let span = zetesis_ferraris::OperandSpan {
+                start: 0,
+                length: width,
+            };
+            let parts = zetesis_ferraris::FormulaParts::new(
+                vec![
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::atom(2),
+                    if conjunction {
+                        Node::and_span(span)
+                    } else {
+                        Node::or_span(span)
+                    },
+                    Node::implies(3, 2),
+                ],
+                (0..width).map(|i| i % 2).collect(),
+            )
+            .unwrap();
+            let theory = Theory::new(3, parts, vec![0, 1, 4], AdmissionLimits::default()).unwrap();
+            fixtures.push(
+                TightPlan::compile(
+                    &theory,
+                    TightPlanLimits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap(),
+            );
+        }
     }
     fixtures
 }
@@ -259,7 +297,9 @@ fn tight_fixture_verdicts_match_exhaustive_reducts() {
             }
         }
     }
-    assert_eq!(census, [37, 33, 61]);
+    // Each of the six wide fixtures adds one answer and eight nonmodels,
+    // including the duplicated empty interpretation in its input batch.
+    assert_eq!(census, [43, 81, 61]);
 }
 
 #[test]
@@ -282,7 +322,7 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
         .iter()
         .map(|certificate| compare(&mut oracle, certificate))
         .sum();
-    assert_eq!(compared, 262);
+    assert_eq!(compared, 370);
     println!("tight support exact candidate occurrences={compared}");
 }
 
@@ -308,7 +348,7 @@ fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupp
     compare_skewed_support(&mut oracle);
     compare_word_witnesses(&mut oracle);
     for atoms in [1, 31, 32, 33, 63, 64, 65, 4097] {
-        let certificate = certificate(atoms, vec![Node::Atom(atoms - 1)], vec![0]);
+        let certificate = certificate(atoms, vec![Node::atom(atoms - 1)], vec![0]);
         let theory = certificate.theory();
         let patterns = [
             Interpretation::new(theory, []).unwrap(),
@@ -349,7 +389,7 @@ fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupp
 }
 
 fn compare_word_witnesses(oracle: &mut GpuTightOracle) {
-    let certificate = certificate(129, vec![Node::Atom(0), Node::Atom(128)], vec![0, 1]);
+    let certificate = certificate(129, vec![Node::atom(0), Node::atom(128)], vec![0, 1]);
     let theory = certificate.theory();
     // Every bit offset appears as the least unsupported atom. A later missing
     // bit also tests the global minimum across words, including empty words.
@@ -387,7 +427,7 @@ fn compare_skewed_support(oracle: &mut GpuTightOracle) {
     // neighboring unsupported bits must survive the large duplicate group.
     let certificate = certificate(
         65,
-        vec![Node::Atom(0), Node::Atom(64)],
+        vec![Node::atom(0), Node::atom(64)],
         std::iter::repeat_n(1, 257).chain([0]).collect(),
     );
     let mut candidates = vec![
@@ -487,7 +527,7 @@ fn vulkan_support_refusals_preserve_reusable_residency() {
 
 fn qualify_support_refusals_preserve_reusable_residency(backend: GpuApi, support: TightSupport) {
     let mut oracle = oracle(backend, support);
-    let certificate = certificate(1, vec![Node::Atom(0)], vec![0]);
+    let certificate = certificate(1, vec![Node::atom(0)], vec![0]);
     let candidate = Interpretation::new(certificate.theory(), [0]).unwrap();
     let input = [candidate];
     let expected = oracle
@@ -583,7 +623,7 @@ fn vulkan_support_residency_tracks_theory_identity() {
 
 fn qualify_support_residency_tracks_theory_identity(backend: GpuApi, support: TightSupport) {
     let mut oracle = oracle(backend, support);
-    let certificate = certificate(1, vec![Node::Atom(0)], vec![0]);
+    let certificate = certificate(1, vec![Node::atom(0)], vec![0]);
     let input = [Interpretation::new(certificate.theory(), [0]).unwrap()];
     let expected = oracle
         .check_batch(
@@ -593,7 +633,13 @@ fn qualify_support_residency_tracks_theory_identity(backend: GpuApi, support: Ti
             &Cancellation::default(),
         )
         .unwrap();
-    let foreign = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+    let foreign = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let error = oracle
         .check_batch(
             &certificate,

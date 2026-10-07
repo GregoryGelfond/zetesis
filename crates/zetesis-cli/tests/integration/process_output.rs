@@ -41,7 +41,7 @@ fn solve(source: &[u8], json: bool, limited: bool, stdout: Stdio) -> Output {
         args.push("--json");
     }
     if limited {
-        args.extend(["--oracle", "countermodel", "--max-search-work", "1"]);
+        args.extend(["--time-limit", "0"]);
     }
     run(Some(source), &args, stdout)
 }

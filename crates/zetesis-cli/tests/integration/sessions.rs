@@ -31,26 +31,12 @@ fn atoms(model: &SessionModel) -> Vec<String> {
 }
 
 #[test]
-fn configuration_defaults_preserve_legacy_limits() {
-    // A separate plain configuration must not silently change CLI defaults.
-    // The command alone follows the host: its worker count is the host's
-    // parallelism, each closure's allowance is that count's share of the
-    // collective ceiling, and its byte ceilings scale with its memory
-    // allowance, here the reference allowance. Every other default is the
-    // library's.
-    let command =
-        SolveConfig::from(&Options::try_parse_from(["zetesis", "--memory", "2147483648"]).unwrap());
-    let library = SolveConfig::default();
+fn configuration_defaults_use_the_ordinary_resource_policy() {
+    let options = Options::try_parse_from(["zetesis", "--memory", "2147483648"]).unwrap();
     assert_eq!(
-        command.max_closure_bytes,
-        library.max_closure_batch_bytes / command.workers.get()
+        SolveConfig::from(&options),
+        options.resources().solve_config()
     );
-    let aligned = SolveConfig {
-        workers: library.workers,
-        max_closure_bytes: library.max_closure_bytes,
-        ..command
-    };
-    assert_eq!(aligned, library);
 }
 
 #[test]
@@ -260,12 +246,11 @@ fn source_and_prepared_objective_costs_agree() {
     let source = "a. {b}. #show. #minimize{0@2,k:a;0@-1,j:b}.";
     let admitted = formula(source);
     for workers in [1, 2] {
+        let mut command = options(&["--json"]);
+        command.workers = NonZeroUsize::new(workers).unwrap();
         let mut session = Session::new(
             PreparedInput::formula(&admitted),
-            SolveConfig {
-                completion_workers: NonZeroUsize::new(workers).unwrap(),
-                ..config()
-            },
+            SolveConfig::from(&command),
             Cancellation::default(),
         )
         .unwrap();
@@ -274,7 +259,7 @@ fn source_and_prepared_objective_costs_agree() {
         let mut output = Vec::new();
         let rendered = run_finalized_with_diagnostics(
             source.into(),
-            &options(&["--json", "--completion-workers", &workers.to_string()]),
+            &command,
             &mut output,
             &mut io::sink(),
             &Cancellation::default(),
@@ -288,28 +273,59 @@ fn source_and_prepared_objective_costs_agree() {
             semantic.scored_models(),
             rendered.semantic().scored_models()
         );
-        assert_eq!(semantic.retained_models(), 2);
-        assert!(semantic.optimum_proved());
+        let costs = vec![(2, 0), (-1, 0)];
+        for outcome in [&semantic, rendered.semantic()] {
+            assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+            assert_eq!(outcome.retained_models(), 2);
+            assert!(outcome.optimum_proved());
+            assert_eq!(outcome.incumbent().unwrap().score.costs(), costs);
+        }
         let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
         assert_eq!(json["models"].as_array().unwrap().len(), models.len());
-        let mut raw = BTreeSet::new();
-        for (record, model) in json["models"].as_array().unwrap().iter().zip(&models) {
-            let names: Vec<_> = spelled(&json, record)
-                .iter()
-                .map(|atom| atom["predicate"].as_str().unwrap().to_string())
-                .collect();
-            assert_eq!(names, atoms(model));
-            assert_eq!(
-                model.score().unwrap().costs(),
-                semantic.incumbent().unwrap().score.costs()
-            );
-            raw.insert(atoms(model));
-        }
+        // Parallel runs need not deliver ties in the same order. Keep each full
+        // interpretation paired with its complete priority/cost vector; sorting
+        // the vectors preserves multiplicity as well as the hidden models.
+        let mut prepared: Vec<_> = models
+            .iter()
+            .map(|model| {
+                let mut names = atoms(model);
+                names.sort();
+                (names, model.score().unwrap().costs().to_vec())
+            })
+            .collect();
+        let mut published: Vec<_> = json["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|record| {
+                let mut names: Vec<_> = spelled(&json, record)
+                    .iter()
+                    .map(|atom| atom["predicate"].as_str().unwrap().to_string())
+                    .collect();
+                names.sort();
+                let costs: Vec<_> = record["model"]["costs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|cost| {
+                        (
+                            i32::try_from(cost["priority"].as_i64().unwrap()).unwrap(),
+                            cost["value"].as_i64().unwrap(),
+                        )
+                    })
+                    .collect();
+                (names, costs)
+            })
+            .collect();
+        prepared.sort();
+        published.sort();
+        assert_eq!(prepared, published);
         assert_eq!(
-            raw,
-            [vec!["a".into()], vec!["a".into(), "b".into()]]
-                .into_iter()
-                .collect()
+            prepared,
+            [
+                (vec!["a".into()], costs.clone()),
+                (vec!["a".into(), "b".into()], costs),
+            ]
         );
         assert_eq!(models.len(), rendered.publication().models());
     }

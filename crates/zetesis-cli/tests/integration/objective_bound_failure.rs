@@ -1,7 +1,6 @@
 //! Optional bound refusal after planning must preserve every exact optimal tie.
 
-use clap::Parser;
-use zetesis_cli::{Completion, Options, Report, run_with_diagnostics};
+use zetesis_cli::{Completion, Report};
 use zetesis_cpu::Cancellation;
 
 const SOURCE: &str = "1 {a;b} 1. {hidden}. #minimize { 5,a:a; 2,b:b }.";
@@ -9,23 +8,13 @@ const STOPPED: &str = "Objective pruning stopped: objective candidate bound Limi
 (template None); exact search continues";
 
 fn solve(source: &str, bound_work: u64) -> (Report, String, String) {
-    let options = Options::try_parse_from([
-        "zetesis",
-        "--backend",
-        "cpu",
-        "--oracle",
-        "countermodel",
-        "--models",
-        "0",
-        "--max-objective-bound-work",
-        &bound_work.to_string(),
-    ])
-    .expect("valid CLI arguments");
+    let mut config = crate::support::prepared::config(&["--oracle", "countermodel"]);
+    config.solve.max_objective_bound_work = bound_work;
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
-    let report = run_with_diagnostics(
-        source.to_owned(),
-        &options,
+    let report = crate::support::prepared::human(
+        source,
+        &config,
         &mut output,
         &mut diagnostics,
         &Cancellation::default(),

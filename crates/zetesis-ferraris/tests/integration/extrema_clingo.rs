@@ -1,5 +1,7 @@
 //! Optional independent source oracle; clingo is never a production dependency.
 
+use crate::support::aggregate_theories::push;
+use crate::support::aggregate_theories::raw;
 use crate::support::clingo_models::{Models, clingo};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
@@ -32,15 +34,15 @@ fn native(
     negations: usize,
     cycle: bool,
 ) -> Models {
-    let mut nodes = vec![
-        Node::False,
-        Node::Implies(0, 0),
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Implies(2, 0),
-        Node::Implies(3, 0),
-        Node::Or(2, 4),
-    ];
+    let mut nodes = raw(vec![
+        Node::falsum(),
+        Node::implies(0, 0),
+        Node::atom(0),
+        Node::atom(1),
+        Node::implies(2, 0),
+        Node::implies(3, 0),
+        Node::or_pair([2, 4]),
+    ]);
     let aggregate = append_extremum(
         &mut nodes,
         elements,
@@ -53,17 +55,20 @@ fn native(
     .unwrap();
     let mut body = aggregate.root();
     for _ in 0..negations {
-        let next = nodes.len();
-        nodes.push(Node::Implies(body, 0));
+        let next = nodes.view().len();
+        push(&mut nodes, zetesis_ferraris::NodeView::Implies(body, 0));
         body = next;
     }
-    let mut roots = vec![nodes.len()];
-    nodes.push(Node::Implies(body, if cycle { 3 } else { 2 }));
+    let mut roots = vec![nodes.view().len()];
+    push(
+        &mut nodes,
+        zetesis_ferraris::NodeView::Implies(body, if cycle { 3 } else { 2 }),
+    );
     if cycle {
-        roots.push(nodes.len());
-        nodes.push(Node::Implies(3, 2));
+        roots.push(nodes.view().len());
+        push(&mut nodes, zetesis_ferraris::NodeView::Implies(3, 2));
     }
-    let theory = Theory::new(2, nodes, roots, AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
     let mut result = Models::new();
     for mask in 0u8..4 {
         let candidate =

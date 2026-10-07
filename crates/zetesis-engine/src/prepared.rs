@@ -25,14 +25,16 @@ impl Prepared {
         config: &Config,
         cancellation: &Cancellation,
     ) -> Result<Self, FormulaFailure> {
+        let resources = config.resources();
+        let formula = resources.formula_limits();
         if config.grounder == Grounder::Lazy {
             let relational = prepare_program_relational(
                 Arc::clone(&original),
                 ProgramRelationalOptions {
-                    admission: config.admission,
-                    expansion: config.expansion,
-                    observation: config.formula.observation,
-                    metadata_storage: config.formula.metadata_storage,
+                    admission: resources.program_admission_options(),
+                    expansion: resources.expansion_limits(),
+                    observation: formula.observation,
+                    metadata_storage: formula.metadata_storage,
                     purpose: FormulaPurpose::AnswerSets,
                     cancellation: Some(cancellation.clone()),
                 },
@@ -48,9 +50,9 @@ impl Prepared {
         let prepared = prepare_program_formula_with(
             original,
             ProgramFormulaOptions {
-                admission: config.admission,
-                expansion: config.expansion,
-                formula: config.formula,
+                admission: resources.program_admission_options(),
+                expansion: resources.expansion_limits(),
+                formula,
                 purpose: FormulaPurpose::AnswerSets,
                 cancellation: Some(cancellation.clone()),
             },

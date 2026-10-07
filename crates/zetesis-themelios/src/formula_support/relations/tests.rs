@@ -151,10 +151,13 @@ fn snapshots_reuse_columns_without_row_work() {
     let left = first.find(predicate.predicate().into()).unwrap();
     let right = second.find(predicate.predicate().into()).unwrap();
     assert!(std::ptr::eq(left.columns, right.columns));
-    assert!(std::ptr::eq(
-        left.relation.column(0).unwrap(),
-        right.relation.column(0).unwrap()
-    ));
+    let zetesis_core::relation::Column::U8(left) = left.relation.column(0).unwrap() else {
+        panic!("64 equality identifiers fit a byte column");
+    };
+    let zetesis_core::relation::Column::U8(right) = right.relation.column(0).unwrap() else {
+        panic!("64 equality identifiers fit a byte column");
+    };
+    assert!(std::ptr::eq(left, right));
 }
 
 #[test]
@@ -896,3 +899,48 @@ fn append_capacity_remains_charged_to_live_snapshot_queries() {
 }
 
 mod storage;
+
+#[test]
+fn publication_sessions_preserve_scalar_postings() {
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let other = |value| {
+        Atom::new(
+            Predicate::new("other", 1).unwrap(),
+            vec![Value::Number(value)],
+        )
+        .unwrap()
+    };
+    let atoms = [
+        atom(&[3, 1]),
+        atom(&[1, 3]),
+        other(4),
+        other(2),
+        atom(&[2, 2]),
+    ];
+    let mut reference = SupportCatalog::default();
+    for tuple in &atoms {
+        insert(&mut reference, tuple);
+    }
+    let mut catalog = SupportCatalog::default();
+    {
+        let (_, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+        for tuple in &atoms {
+            append
+                .atom(tuple.into(), &limits, &mut counters, location())
+                .unwrap();
+        }
+    }
+    catalog.publish(&limits, &mut counters, location()).unwrap();
+    assert_eq!(catalog.index_bytes, reference.index_bytes);
+    assert_eq!(catalog.entries, reference.entries);
+    for (actual, expected) in catalog.rows.iter().zip(&reference.rows) {
+        assert_eq!(actual.columns, expected.columns);
+        let actual = actual.catalog.atoms(catalog.owner.read()).unwrap();
+        let expected = expected.catalog.atoms(reference.owner.read()).unwrap();
+        assert_eq!(
+            actual.iter().collect::<Vec<_>>(),
+            expected.iter().collect::<Vec<_>>()
+        );
+    }
+}

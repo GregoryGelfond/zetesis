@@ -370,18 +370,30 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             .is_ok()
         );
         limits.theory.max_nodes -= 1;
-        assert!(matches!(
-            limited(
-                source,
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                &limits
+        let refusal = limited(
+            source,
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            &limits,
+        );
+        // Aggregate compilation uses the same total-node ceiling before its
+        // suffix is interned. Shared support guards can make the final graph
+        // small enough that the one-short limit first refuses in that compiler.
+        // Both variants identify this node ceiling; unrelated refusals fail.
+        assert!(
+            matches!(
+                &refusal,
+                Err(FormulaFailure::Limit {
+                    resource: FormulaResource::Nodes,
+                    ..
+                })
+            ) || matches!(
+                &refusal,
+                Err(FormulaFailure::Aggregate { error, .. })
+                    if error.kind() == zetesis_ferraris::AggregateErrorKind::NodeLimit
             ),
-            Err(FormulaFailure::Limit {
-                resource: FormulaResource::Nodes,
-                ..
-            })
-        ));
+            "{source}: {refusal:?}"
+        );
     }
 }
 #[test]

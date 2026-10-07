@@ -14,6 +14,36 @@ fn options(extra: &[&str]) -> Options {
     .unwrap()
 }
 
+fn bounded(
+    source: &str,
+    extra: &[&str],
+    configure: impl FnOnce(&mut zetesis_cli::SolveConfig),
+) -> (zetesis_cli::Report, serde_json::Value, String) {
+    let selected = options(extra);
+    let mut config = zetesis_cli::PublicationConfig::from(&selected);
+    configure(&mut config.solve);
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut renderer = zetesis_cli::JsonRenderer::new(
+        &mut output,
+        selected.resources().json_record_bytes(),
+        selected.resources().formula_limits().theory.max_atoms,
+    );
+    let report = crate::support::prepared::relational(
+        source,
+        &config,
+        &mut renderer,
+        &mut diagnostics,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    (
+        report,
+        serde_json::from_slice(&output).unwrap(),
+        String::from_utf8(diagnostics).unwrap(),
+    )
+}
+
 fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, serde_json::Value, String) {
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
@@ -99,7 +129,9 @@ fn requested_model_stop_retains_complete_queued_checks() {
 
 #[test]
 fn world_stop_never_publishes_partial_batch_checks() {
-    let (report, json, _) = solve("a.", &["--source-batching", "union", "--max-work", "0"]);
+    let (report, json, _) = bounded("a.", &["--source-batching", "union"], |config| {
+        config.max_work = 0;
+    });
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(report.models, 0);
     let stats = report.shared_execution.unwrap();
@@ -129,10 +161,9 @@ fn world_stop_never_publishes_partial_batch_checks() {
 
 #[test]
 fn source_stop_has_separate_progress_from_world_work() {
-    let (report, json, _) = solve(
-        "a.",
-        &["--source-batching", "worlds", "--max-source-work", "0"],
-    );
+    let (report, json, _) = bounded("a.", &["--source-batching", "worlds"], |config| {
+        config.max_source_work = 0;
+    });
     let stats = report.shared_execution.unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(
@@ -152,10 +183,9 @@ fn source_stop_has_separate_progress_from_world_work() {
 fn later_batch_stop_preserves_the_complete_prefix() {
     // The empty seed checks two one-gate records in one round (four work).
     // Nonempty seeds need a further round; its first work step exceeds this cap.
-    let (report, json, _) = solve(
-        "{a}. {b}.",
-        &["--source-batching", "union", "--max-work", "4"],
-    );
+    let (report, json, _) = bounded("{a}. {b}.", &["--source-batching", "union"], |config| {
+        config.max_work = 4;
+    });
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(report.models, 1);
     assert_eq!(report.checked, 2); // One complete result, then one batch stop marker.
@@ -182,10 +212,9 @@ fn later_batch_stop_preserves_the_complete_prefix() {
 
 #[test]
 fn shared_host_ceiling_remains_a_resource_interruption() {
-    let (report, _, _) = solve(
-        "a.",
-        &["--source-batching", "union", "--max-batch-bytes", "1"],
-    );
+    let (report, _, _) = bounded("a.", &["--source-batching", "union"], |config| {
+        config.max_batch_bytes = 1;
+    });
     assert_eq!(report.completion, Completion::Interrupted);
     let stats = report.shared_execution.unwrap();
     assert_eq!(
@@ -276,7 +305,7 @@ fn ordinary_help_keeps_source_batching_advanced() {
     assert!(!short.contains("--source-batching"));
     assert!(!short.contains("--max-source-work"));
     assert!(long.contains("--source-batching"));
-    assert!(long.contains("--max-source-work"));
+    assert!(!long.contains("--max-source-work"));
     assert_eq!(
         Options::try_parse_from(["zetesis"])
             .unwrap()

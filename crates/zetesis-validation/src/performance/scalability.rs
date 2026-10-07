@@ -14,17 +14,55 @@ use std::{
 use serde::Deserialize;
 
 use super::{
-    Error,
+    Error, Limits,
     matrix::{self, AuthoredProgram, ConstantAmendment, Workload, WorkloadLimits},
 };
 use crate::{
+    answers::native_json,
     examples,
     selected::{FormulaJoins, NativeExecution, SearchMethod},
 };
 
-/// Reviewed metadata for the three default scalability fixtures.
+/// Per-invocation capture and decoding bytes for the maintained population.
+/// Larger caller ceilings remain in force. This bounds measurement input, not
+/// solver work, answer counts or memory.
+pub const CAPTURE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Full atom occurrences accepted across one complete native report.
+pub const NATIVE_ATOMS: usize = 4 * 1024 * 1024;
+
+/// Value-node occurrences accepted across one complete native report.
+pub const NATIVE_VALUE_NODES: usize = 8 * 1024 * 1024;
+
+/// Raise per-invocation capture and reference-decoding ceilings for the entire
+/// maintained population. Preserve larger caller ceilings, timeouts, campaign
+/// capture/publication budgets and all solver profiles. Matrix execution honors
+/// the resulting request exactly; these presets are an explicit caller choice.
+#[must_use]
+pub fn limits(mut base: Limits) -> Limits {
+    base.process.max_output_bytes = base.process.max_output_bytes.max(CAPTURE_BYTES);
+    base.answers.max_input_bytes = base.answers.max_input_bytes.max(CAPTURE_BYTES);
+    base
+}
+
+/// Native normalization ceilings for the entire maintained population.
+///
+/// Compact schema-2 reports still charge full atom and value-node occurrences
+/// when a record reuses the atom table. The population includes complete reports
+/// with more than two million atoms and four million value nodes. Preserve
+/// larger caller ceilings and the independent per-value construction limits.
+/// The matrix report retains every resulting normalization ceiling.
+#[must_use]
+pub fn native_answers(mut base: native_json::Limits) -> native_json::Limits {
+    base.report.max_input_bytes = base.report.max_input_bytes.max(CAPTURE_BYTES);
+    base.max_atoms = base.max_atoms.max(NATIVE_ATOMS);
+    base.max_value_nodes = base.max_value_nodes.max(NATIVE_VALUE_NODES);
+    base
+}
+
+/// Reviewed metadata for the default scalability fixtures.
 pub const MANIFEST_SHA256: &str =
-    "f67762b32930c9bec259edc8e1d5925fc2734740f33f5d5751b20315c89abc19";
+    "1f978515ed0278391b6e952e5c3fed271886433d82a06498c01c3a745f7f1bcb";
 const SUDOKU_SHA256: &str = "9ee5cb65a0ad7e563af9378a46e04b3a19762850ce7cb476ad7d9adbe27466ef";
 const EINSTEIN_SHA256: &str = "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b";
 
@@ -64,7 +102,7 @@ fn fixtures(root: &Path, limits: WorkloadLimits) -> Result<Vec<Fixture>, Error> 
     if manifest.schema_version != 1
         || manifest.description.is_empty()
         || manifest.reference_toolchain != "clingo version 5.8.2"
-        || manifest.cases.len() != 3
+        || manifest.cases.len() != 4
     {
         return Err(Error::Configuration("unsupported scalability manifest"));
     }
@@ -100,8 +138,8 @@ fn workload(
     )
 }
 
-/// Admit queens at n=8, pigeonhole at h=7 and Mastermind at colors=6, with
-/// their original contracts.
+/// Admit the reviewed parametric programs at their default sizes, with
+/// their original complete-family contracts.
 /// `root` is the repository's `examples` directory.
 ///
 /// # Errors
@@ -172,9 +210,10 @@ pub fn einstein(root: &Path, limits: WorkloadLimits) -> Result<Workload, Error> 
     )
 }
 
-/// Queens at n=8/9/10, pigeonhole at h=5/6/7 and Mastermind at colors=5/6,
-/// followed by unchanged queens variant 02, SEND+MORE=MONEY, task allocation
-/// and the authored Sudoku grid. Einstein is an optional thirteenth case. Amended sizes are qualified against
+/// Queens at n=8/9/10, pigeonhole at h=5/6/7 and Mastermind at colors=5/6/8,
+/// nested Mastermind at colors=8, followed by unchanged queens variant 02,
+/// SEND+MORE=MONEY, task allocation and the authored Sudoku grid.
+/// Einstein is an optional fifteenth case. Amended sizes are qualified against
 /// a complete reference enumeration.
 ///
 /// # Errors
@@ -186,8 +225,8 @@ pub fn workloads(
     limits: WorkloadLimits,
 ) -> Result<Vec<Workload>, Error> {
     let fixtures = fixtures(root, limits)?;
-    let mut result = Vec::with_capacity(13);
-    let sizes: [&[i32]; 3] = [&[8, 9, 10], &[5, 6, 7], &[5, 6]];
+    let mut result = Vec::with_capacity(15);
+    let sizes: [&[i32]; 4] = [&[8, 9, 10], &[5, 6, 7], &[5, 6, 8], &[8]];
     for (fixture, sizes) in fixtures.iter().zip(sizes) {
         for &size in sizes {
             result.push(workload(root, fixture, size, limits)?);
@@ -207,10 +246,10 @@ pub fn workloads(
     Ok(result)
 }
 
-/// CPU eager/indexed region search at 1, 2, 4, 8 and 14 workers, with one
-/// completion worker. An optional expansion ceiling is retained in every profile.
+/// CPU eager/indexed region search at 1, 2, 4, 8 and 14 threads under the
+/// ordinary resource policy. An explicit memory allowance is retained in every profile.
 #[must_use]
-pub fn profiles(max_expansion_work: Option<usize>) -> Vec<NativeExecution> {
+pub fn profiles(memory_bytes: Option<u64>) -> Vec<NativeExecution> {
     const WORKERS: [NonZeroUsize; 5] = [
         NonZeroUsize::MIN,
         NonZeroUsize::new(2).unwrap(),
@@ -220,10 +259,10 @@ pub fn profiles(max_expansion_work: Option<usize>) -> Vec<NativeExecution> {
     ];
     WORKERS
         .map(|workers| NativeExecution {
-            workers,
+            threads: workers,
             formula_joins: Some(FormulaJoins::Indexed),
             search: Some(SearchMethod::Regions),
-            max_expansion_work,
+            memory_bytes,
             ..NativeExecution::default()
         })
         .to_vec()
@@ -232,7 +271,8 @@ pub fn profiles(max_expansion_work: Option<usize>) -> Vec<NativeExecution> {
 /// Run the maintained scalability population through the shared matrix owner.
 /// The request must select [`matrix::Suite::Scalability`]. Qualification-only
 /// and measurement plans use the same workloads, provenance and complete-family
-/// checks. All request limits are honored without raising them. The caller owns
+/// checks. All request limits are honored without raising them. Callers may apply
+/// [`limits`] and [`native_answers`] before constructing the request. The caller owns
 /// cancellation and publication of the returned report.
 ///
 /// # Errors

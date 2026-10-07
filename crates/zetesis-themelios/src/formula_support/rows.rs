@@ -55,6 +55,13 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
     }
 }
 
+/// The current generator may drain independently while a base row is suspended.
+#[derive(Clone, Copy)]
+pub(super) enum Advance {
+    Base,
+    Current,
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum Ownership {
     /// The consumer finishes reading before the next traversal step.

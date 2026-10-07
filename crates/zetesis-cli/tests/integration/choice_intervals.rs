@@ -116,11 +116,18 @@ fn explicit_lazy_device_choices_are_refused_before_discovery() {
 
 #[test]
 fn exhausted_choice_admission_never_emits_answers() {
-    for (flag, resource) in [
-        ("--max-atoms", FormulaResource::Atoms),
-        ("--max-substitutions", FormulaResource::Substitutions),
-    ] {
-        let (result, output, _) = solve("1 {p(1..4)} 1.", &[flag, "1"]);
+    for resource in [FormulaResource::Atoms, FormulaResource::Substitutions] {
+        let mut limits = zetesis_themelios::FormulaLimits::default();
+        if resource == FormulaResource::Atoms {
+            limits.theory.max_atoms = 1;
+        } else {
+            limits.max_substitutions = 1;
+        }
+        let (result, output) = crate::support::prepared::bounded_admission(
+            "1 {p(1..4)} 1.",
+            zetesis_themelios::ExpansionLimits::default(),
+            &limits,
+        );
         assert!(
             matches!(
                 result,
@@ -130,8 +137,8 @@ fn exhausted_choice_admission_never_emits_answers() {
                     ..
                 })) if actual == resource
             ),
-            "{flag}"
+            "{resource:?}"
         );
-        assert!(crate::support::human::preamble(&output), "{flag}: {output}");
+        assert!(output.is_empty(), "{resource:?}: {output}");
     }
 }

@@ -2,7 +2,6 @@
 
 use std::{io, num::NonZeroUsize};
 
-use clap::Parser;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, Admitted, ExpansionLimits, FormulaLimits, admit_extended, admit_formula,
@@ -158,10 +157,9 @@ fn scoring_stop_remains_distinct_from_publication() {
 
 #[test]
 fn missing_completion_prevents_a_success_footer() {
-    let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
     let document = crate::output::document_fixture::Document::new(&mut bytes, true).unwrap();
-    let failure = document.finish(Ok(Progress::new()), &options).unwrap_err();
+    let failure = document.finish(Ok(Progress::new()), 65_536).unwrap_err();
     assert!(matches!(*failure.cause, RunError::CompletionUnavailable));
     assert_eq!(failure.partial_report.as_ref().unwrap().completion, None);
     assert!(!failure.publication().unwrap().summary());
@@ -170,11 +168,10 @@ fn missing_completion_prevents_a_success_footer() {
 
 #[test]
 fn completion_fault_has_an_unavailable_json_outcome() {
-    let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
     let document = crate::output::document_fixture::Document::new(&mut bytes, true).unwrap();
     let failed = Progress::new().fail(RunError::CompletionUnavailable);
-    let failure = document.finish(Err(failed), &options).unwrap_err();
+    let failure = document.finish(Err(failed), 65_536).unwrap_err();
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(value["outcome"]["status"], "failed");
     assert_eq!(value["outcome"]["completion"], serde_json::Value::Null);
@@ -202,10 +199,9 @@ fn assert_status(progress: Progress, human: &str, json: &str, coverage: &str) {
     let text = String::from_utf8(bytes).unwrap();
     assert_eq!(text, human);
 
-    let options = crate::Options::try_parse_from(["zetesis", "--json"]).unwrap();
     let mut bytes = Vec::new();
     let document = crate::output::document_fixture::Document::new(&mut bytes, true).unwrap();
-    let report = document.finish(Ok(progress), &options).unwrap();
+    let report = document.finish(Ok(progress), 65_536).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(value["outcome"]["status"], json);
     assert_eq!(value["outcome"]["coverage"], coverage);

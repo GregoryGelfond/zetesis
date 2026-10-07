@@ -70,14 +70,14 @@ impl Route {
 }
 
 pub fn choices(atoms: usize) -> Theory {
-    let mut nodes = vec![Node::False];
+    let mut nodes = vec![Node::falsum()];
     let mut roots = Vec::new();
     for atom in 0..atoms {
         let offset = nodes.len();
         nodes.extend([
-            Node::Atom(atom),
-            Node::Implies(offset, 0),
-            Node::Or(offset, offset + 1),
+            Node::atom(atom),
+            Node::implies(offset, 0),
+            Node::or_pair([offset, offset + 1]),
         ]);
         roots.push(offset + 2);
     }

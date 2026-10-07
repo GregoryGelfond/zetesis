@@ -44,8 +44,8 @@ fn source_eligibility_keeps_the_original_reduct_subject() {
         let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
-            original.theory().nodes(),
-            observed.theory().nodes(),
+            (original.theory().nodes(), original.theory().operands()),
+            (observed.theory().nodes(), observed.theory().operands()),
             "{}",
             case.name
         );

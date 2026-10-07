@@ -898,14 +898,34 @@ impl fmt::Display for Profile<'_> {
         };
         write!(
             f,
-            "backend={}, grounder={}, oracle={}, workers={}, completion workers={}, batch={}",
+            "backend={}, grounder={}, oracle={}",
             field("backend"),
             field("grounder"),
-            field("oracle"),
-            field("workers"),
-            field("completion_workers"),
-            field("batch_size")
+            field("oracle")
         )?;
+        if self.0["resource_policy"] == "ordinary" {
+            write!(
+                f,
+                ", requested policy=ordinary, threads={}",
+                field("threads")
+            )?;
+            if let Some(bytes) = self.0["memory_bytes"].as_u64() {
+                write!(f, ", memory allowance={bytes} bytes")?;
+            } else {
+                write!(f, ", memory allowance=executable default")?;
+            }
+        } else {
+            write!(
+                f,
+                ", historical resource profile, workers={}, completion workers={}, batch={}",
+                field("workers"),
+                field("completion_workers"),
+                field("batch_size")
+            )?;
+            if let Some(bytes) = self.0["max_completion_scratch_bytes"].as_u64() {
+                write!(f, ", completion scratch limit={bytes} bytes")?;
+            }
+        }
         if let Some(seconds) = self.0["time_limit_seconds"].as_u64() {
             write!(f, ", time limit={seconds} s")?;
         }

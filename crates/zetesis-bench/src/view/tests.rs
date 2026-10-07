@@ -21,9 +21,7 @@ mod reports {
     pub(super) fn profiles() -> [NativeExecution; 2] {
         [1, 4].map(|workers| NativeExecution {
             grounder: Grounder::Auto,
-            workers: NonZeroUsize::new(workers).unwrap(),
-            completion_workers: NonZeroUsize::MIN,
-            batch_size: NonZeroUsize::new(64).unwrap(),
+            threads: NonZeroUsize::new(workers).unwrap(),
             ..NativeExecution::default()
         })
     }
@@ -155,10 +153,10 @@ fn summary_distinguishes_missing_and_zero_measurements() {
     assert!(!text.contains('\u{1b}'));
     assert_row(
         &text,
-        "Profile Backend Grounder Oracle Threads Completion Batch",
+        "Profile Backend Grounder Oracle Threads Memory bytes Deadline seconds",
     );
-    assert_row(&text, "1 cpu auto auto 1 1 64");
-    assert_row(&text, "2 cpu auto auto 4 1 64");
+    assert_row(&text, "1 cpu auto auto 1 default none");
+    assert_row(&text, "2 cpu auto auto 4 default none");
     assert_row(
         &text,
         "Workload Producer Qualified by Median ms Range ms RSS MiB All positions Detail",

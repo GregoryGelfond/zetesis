@@ -410,6 +410,7 @@ fn independent_expansion_budgets_and_zero_limits_are_enforced() {
         max_term_work: 0,
         max_templates: 0,
         max_values: 0,
+        max_family_bytes: 0,
         max_scalar_bytes: 0,
         max_origin_locations: 0,
         max_metadata_statements: 0,

@@ -42,7 +42,11 @@ pub(crate) fn solve(
         .projection()
         .is_some_and(zetesis_themelios::PreparedProjection::is_explicit)
     {
-        request = request.projected(zetesis_solve::ProjectionLimits::default());
+        request = request.projected(zetesis_solve::ProjectionLimits {
+            max_keys: usize::try_from(config.solve.max_projection_entries).unwrap_or(usize::MAX),
+            max_bytes: config.solve.max_projection_bytes,
+            max_work: config.solve.max_search_work,
+        });
     }
     let mut configuration = Configuration::new(config.solve.workers);
     let mut session = request.start_observed(&mut Observer::new(
@@ -144,13 +148,7 @@ pub(crate) fn check_cancellation(
 ) -> Result<Option<Progress>, PublicationFailure> {
     match cancellation.poll() {
         Ok(()) => Ok(None),
-        Err(stop) => {
-            let mut progress = Progress::new();
-            progress.apply(crate::SemanticOutcome::interrupted_before_start(
-                crate::Interruption::Preparation(stop),
-            ));
-            complete(renderer, diagnostics, progress, phases).map(Some)
-        }
+        Err(stop) => interrupted(stop, renderer, diagnostics, phases).map(Some),
     }
 }
 
@@ -196,6 +194,22 @@ fn acknowledge(
         progress.publication.summary = true;
     }
     Ok(())
+}
+
+/// Publish an interruption established by a checked preparation operation.
+/// Callers pass its typed stop, rather than polling after an unrelated failure;
+/// this preserves the operation's diagnostic and failure precedence.
+pub(crate) fn interrupted(
+    reason: zetesis_cpu::Stop,
+    renderer: &mut impl AnswerRenderer,
+    diagnostics: &mut Diagnostics<impl Write>,
+    phases: &Recorder,
+) -> Result<Progress, PublicationFailure> {
+    let mut progress = Progress::new();
+    progress.apply(crate::SemanticOutcome::interrupted_before_start(
+        crate::Interruption::Preparation(reason),
+    ));
+    complete(renderer, diagnostics, progress, phases)
 }
 
 #[cfg(test)]

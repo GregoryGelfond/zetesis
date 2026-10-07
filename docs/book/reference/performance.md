@@ -7,6 +7,11 @@ their own source revisions, workloads and measurement conditions.
 
 ## Recorded comparisons
 
+The [7 October 2026 CPU corpus comparison](cpu-corpus-20261007.md) records all
+94 cases for a 0.4.0 release-preparation candidate: 729.179 ms against
+804.916 ms for clingo in summed three-run medians, with 4 native wins.
+Most cases favor clingo; the page preserves every case and the candidate identity.
+
 The [grounding and formula preparation comparison](foundation-reuse.md) measures
 all 94 corpus programs before and after shared preparation, domain and primitive
 changes. Summed grounding time falls about 11%; process time falls about 3%,
@@ -117,15 +122,17 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-Both use twelve workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
-Mastermind at colors=5/6, three unchanged corpus cases (queens variant 02,
+Both use fourteen workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
+Mastermind at colors=5/6/8, nested Mastermind at colors=8,
+three unchanged corpus cases (queens variant 02,
 SEND+MORE=MONEY and task allocation), and the authored Sudoku grid.
-`--include-einstein` adds the unchanged riddle as a thirteenth workload. The test runs complete-family
+`--include-einstein` adds the unchanged riddle as a fifteenth workload. The test runs complete-family
 qualifications only. The benchmark qualifies clingo once per case, then measures
 each native thread profile separately. Reports retain all refusals and limits;
-the workload's inclusion is not a scaling claim. `--max-expansion-work` can set
-an explicit common grounding ceiling when needed, and its value remains part of
-the profile identity. See the [command guide](commands.md#check-conformance) for
+the workload's inclusion is not a scaling claim. `--memory` sets a common native
+memory allowance and remains part of the profile identity. Historical results
+with explicit work ceilings retain those ceilings in their evidence. See the
+[command guide](commands.md#check-conformance) for
 source roots, process bounds and the required new evidence destination.
 
 ## Read the measurements

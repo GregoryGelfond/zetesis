@@ -60,6 +60,7 @@ pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<R
         .map_err(|source| super::io(Path::new("private performance sources"), source))?;
     let mut report = Report {
         schema: if request.schedule.extended() { 2 } else { 1 },
+        native_resource_policy: "ordinary",
         manifest_sha256: examples::MANIFEST_SHA256,
         schedule: request.schedule.clone(),
         formula_joins: request.formula_joins,
@@ -335,9 +336,7 @@ fn arguments<'a>(
                 "eager",
                 "--oracle",
                 "auto",
-                "--workers",
-                "1",
-                "--completion-workers",
+                "--threads",
                 "1",
                 "--models",
                 "0",

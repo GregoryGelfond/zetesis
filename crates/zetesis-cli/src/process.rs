@@ -4,12 +4,12 @@ use std::io::{self, BufWriter, IsTerminal, Read, Write};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 use zetesis_presentation::{Streams, color_disabled, terminal_width};
-use zetesis_themelios::{BundleLimits, SourceBundle};
+use zetesis_themelios::SourceBundle;
 
 /// Process adapter. Exit 0 means a completed request; test uses 1 for a
 /// completed check with non-passing evidence. Exit 2 is an input/backend/output
-/// error, and 3 interrupted search or publication. Satisfiability and coverage are printed
-/// independently; this is not clingo's numeric exit-code protocol.
+/// error, and 3 interrupted preparation, search or publication. Satisfiability
+/// and coverage are printed independently; this is not clingo's numeric exit-code protocol.
 /// Standard output is explicitly flushed before returning. A flush failure is
 /// an output error, independently of any established semantic outcome.
 #[must_use]
@@ -229,13 +229,7 @@ fn load_input(options: &Options) -> Result<Input, RunError> {
     } else {
         let bundle = SourceBundle::load_many(
             std::iter::once(&options.input).chain(&options.additional_inputs),
-            BundleLimits {
-                max_roots: options.max_source_roots,
-                max_files: options.max_source_files,
-                max_file_bytes: options.max_source_bytes,
-                max_total_bytes: options.max_total_source_bytes,
-                max_include_depth: options.max_include_depth,
-            },
+            options.resources().bundle_limits(),
         )
         .map_err(RunError::BundleLoad)?;
         Ok(Input::Bundle(bundle))
@@ -243,7 +237,10 @@ fn load_input(options: &Options) -> Result<Input, RunError> {
 }
 
 fn read_source(options: &Options) -> io::Result<String> {
-    read_text(io::stdin().lock(), options.max_source_bytes)
+    read_text(
+        io::stdin().lock(),
+        options.resources().admission_options().max_source_bytes,
+    )
 }
 
 fn read_text(reader: impl Read, limit: usize) -> io::Result<String> {

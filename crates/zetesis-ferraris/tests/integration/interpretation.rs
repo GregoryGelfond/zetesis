@@ -4,7 +4,13 @@ use proptest::prelude::*;
 use zetesis_ferraris::{AdmissionError, AdmissionLimits, Interpretation, Theory};
 
 fn theory(atoms: usize) -> Theory {
-    Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap()
+    Theory::new(
+        atoms,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -22,7 +28,13 @@ fn invalid_atom_leaves_iterator_suffix_unconsumed() {
 #[test]
 fn packed_words_retain_exact_theory_identity() {
     let theory = theory(65);
-    let equal = Theory::new(65, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let equal = Theory::new(
+        65,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidate = Interpretation::new(&theory, [0, 32, 64]).unwrap();
     let mut words = candidate.words32();
     assert!(theory.same_instance(words.theory()));

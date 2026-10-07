@@ -105,6 +105,7 @@ pub(super) fn requirements(
     counts(
         narrow(theory.atom_count() as u128)?,
         narrow(theory.nodes().len() as u128)?,
+        narrow(theory.parts().occurrences() as u128)?,
         narrow(theory.roots().len() as u128)?,
         limits,
         narrow(candidates as u128)?,
@@ -114,20 +115,25 @@ pub(super) fn requirements(
 fn counts(
     atoms: u64,
     nodes: u64,
+    operands: u64,
     roots: u64,
     limits: Limits,
     candidates: u64,
 ) -> Result<CompletionScratch, Incomplete> {
     let (atoms, nodes, roots) = (u128::from(atoms), u128::from(nodes), u128::from(roots));
-    // Every node may be an implication. Bounds cover the parametric builder,
+    let operands = u128::from(operands);
+    // Each operand occurrence bounds one classical gate; every node may also
+    // be an implication with its parameter guard. These allocation-free source
+    // bounds cover the parametric builder,
     // not the former candidate-simplified encoder. Shape admission can refuse
     // before these upper bounds are reached; no preparation occurs here.
     // At most every retained clause contributes one shared unit index.
-    let variables = (3 * atoms + 3 * nodes).min(limits.reduct_admission.max_variables as u128);
-    let clauses =
-        (6 * nodes + 4 * atoms + roots + 1).min(limits.reduct_admission.max_clauses as u128);
-    let literals =
-        (14 * nodes + 10 * atoms + roots).min(limits.reduct_admission.max_literals as u128);
+    let variables =
+        (3 * atoms + operands + 2 * nodes).min(limits.reduct_admission.max_variables as u128);
+    let clauses = (3 * operands + 3 * nodes + 4 * atoms + roots + 1)
+        .min(limits.reduct_admission.max_clauses as u128);
+    let literals = (7 * operands + 7 * nodes + 10 * atoms + roots)
+        .min(limits.reduct_admission.max_literals as u128);
     Ok(CompletionScratch {
         shared_bytes: narrow(
             crate::prepared_reduct::retained_header_bytes()
@@ -162,13 +168,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_width_is_included_in_completion_shape_bounds() {
+        use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan};
+        let width = 129;
+        let theory = Theory::new(
+            2,
+            FormulaParts::new(
+                vec![
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::and_span(OperandSpan {
+                        start: 0,
+                        length: width,
+                    }),
+                ],
+                (0..width).map(|index| index % 2).collect(),
+            )
+            .unwrap(),
+            vec![2],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let source = requirements(&theory, Limits::default(), 1).unwrap();
+        let owner = PreparedReduct::prepare(
+            &theory,
+            crate::ReductPreparationLimits::default(),
+            &crate::Cancellation::default(),
+        )
+        .result
+        .unwrap();
+        let actual = prepared(&owner, 1).unwrap();
+        assert!(owner.cnf_shape().0 > theory.nodes().len());
+        assert!(source.shared_bytes >= actual.shared_bytes);
+        assert!(source.query_bytes >= actual.query_bytes);
+        assert_eq!(source.result_bytes, actual.result_bytes);
+    }
+
+    #[test]
     fn logical_byte_overflow_is_refused_before_allocation() {
         assert_eq!(
-            counts(u64::MAX, u64::MAX, u64::MAX, Limits::default(), 1),
+            counts(u64::MAX, u64::MAX, u64::MAX, u64::MAX, Limits::default(), 1),
             Err(Incomplete::CounterOverflow)
         );
         assert_eq!(
-            counts(0, 0, 0, Limits::default(), u64::MAX),
+            counts(0, 0, 0, 0, Limits::default(), u64::MAX),
             Err(Incomplete::CounterOverflow)
         );
         let limits = CompletionScratch {

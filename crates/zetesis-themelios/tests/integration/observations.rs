@@ -243,7 +243,10 @@ fn metadata_preserves_the_original_formula_and_source_identity() {
     )
     .unwrap();
     assert_eq!(plain.atoms(), observed.atoms());
-    assert_eq!(plain.theory().nodes(), observed.theory().nodes());
+    assert_eq!(
+        (plain.theory().nodes(), plain.theory().operands()),
+        (observed.theory().nodes(), observed.theory().operands())
+    );
     assert_eq!(plain.theory().roots(), observed.theory().roots());
     assert_eq!(plain.analyzed_program(), observed.analyzed_program());
     assert!(!observed.metadata().output().is_explicit());

@@ -46,7 +46,8 @@ fn formula(
     qualify(stderr, backend, batch_size, None, answer)
 }
 
-pub(crate) fn formula_for_request(
+#[cfg(test)]
+fn formula_for_request(
     stderr: &str,
     backend: Backend,
     batch_size: usize,
@@ -54,6 +55,35 @@ pub(crate) fn formula_for_request(
     answer: &Answer,
 ) -> Result<FormulaExecution, String> {
     qualify(stderr, backend, batch_size, Some(request), answer)
+}
+
+/// Ordinary controls do not prescribe a device batch or completion scratch
+/// share. Qualify every observed consistency relation, then verify that the
+/// reported completion plan stays inside the public thread/memory request.
+pub(crate) fn formula_for_policy(
+    stderr: &str,
+    backend: Backend,
+    threads: std::num::NonZeroUsize,
+    memory_bytes: Option<u64>,
+    answer: &Answer,
+) -> Result<FormulaExecution, String> {
+    let concurrency = route(stderr, backend)?.concurrency;
+    let storage = storage(stderr, concurrency.is_some())?;
+    let batch =
+        usize::try_from(storage.batch_limit).map_err(|_| "device batch does not fit host width")?;
+    let execution = qualify(stderr, backend, batch, None, answer)?;
+    if let Some(completion) = &execution.completion {
+        if u128::from(completion.requested_workers) > threads.get() as u128
+            || memory_bytes.is_some_and(|memory| {
+                completion.max_logical_scratch_bytes > memory || storage.byte_limit > memory
+            })
+        {
+            return Err("reported execution plan exceeds public resource controls".into());
+        }
+    } else if memory_bytes.is_some() {
+        return Err("legacy telemetry cannot establish an explicit memory allowance".into());
+    }
+    Ok(execution)
 }
 
 fn qualify(

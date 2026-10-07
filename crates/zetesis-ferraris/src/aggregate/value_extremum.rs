@@ -7,7 +7,7 @@ use super::{
     AggregateBuild, AggregateComparison, AggregateError, AggregateErrorKind, AggregateExtremum,
     AggregateLimits, AggregateProfile,
 };
-use crate::Node;
+use crate::{FormulaNodes, NodeView};
 
 /// One complete tuple's first value and OR-coalesced eligibility formula.
 /// Equal first values do not identify equal complete tuples.
@@ -33,7 +33,7 @@ pub struct ValueExtremumElement<V = Value> {
 /// # Errors
 /// Returns typed prefix, condition, resource, allocation or cancellation errors.
 pub fn append_value_extremum(
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     elements: &[ValueExtremumElement],
     extremum: AggregateExtremum,
     comparison: AggregateComparison,
@@ -66,7 +66,7 @@ pub fn append_value_extremum(
 /// Returns the same prefix, condition, resource, allocation and cancellation
 /// failures as [`append_value_extremum`], preserving the original DAG on refusal.
 pub fn append_value_extremum_refs<'a>(
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     elements: impl Iterator<Item = ValueExtremumElement<TermRef<'a>>>,
     extremum: AggregateExtremum,
     comparison: AggregateComparison,
@@ -75,7 +75,7 @@ pub fn append_value_extremum_refs<'a>(
     cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
     append(
-        Destination::unchecked(nodes),
+        Destination::retained(nodes.transaction()),
         elements,
         extremum,
         comparison,
@@ -96,14 +96,17 @@ pub(super) fn append<'a>(
 ) -> Result<AggregateBuild, AggregateError> {
     transaction(destination, limits, cancellation, |builder| {
         let prefix = validate_prefix(builder)?;
-        let falsum = builder.push(Node::False)?;
-        let truth = builder.push(Node::Implies(falsum, falsum))?;
+        let falsum = builder.push(NodeView::False)?;
+        let truth = builder.push(NodeView::Implies(falsum, falsum))?;
         let empty = match extremum {
             AggregateExtremum::Min => Value::Supremum,
             AggregateExtremum::Max => Value::Infimum,
         };
-        let mut inclusive = (bound == TermRef::from(&empty)).then_some(truth);
-        let mut strict = None;
+        let mut inclusive = Vec::new();
+        if bound == TermRef::from(&empty) {
+            builder.operand(&mut inclusive, truth)?;
+        }
+        let mut strict = Vec::new();
         for (index, element) in elements.enumerate() {
             builder.tick()?;
             if index >= limits.max_elements {
@@ -119,20 +122,15 @@ pub(super) fn append<'a>(
                 order
             };
             if order.is_ge() {
-                inclusive = Some(builder.join(inclusive, element.condition, false)?);
+                builder.operand(&mut inclusive, element.condition)?;
             }
             if order.is_gt() {
-                strict = Some(builder.join(strict, element.condition, false)?);
+                builder.operand(&mut strict, element.condition)?;
             }
         }
-        comparison_root(
-            builder,
-            extremum,
-            comparison,
-            inclusive.unwrap_or(falsum),
-            strict.unwrap_or(falsum),
-            falsum,
-        )
-        .map(|root| (root, AggregateProfile::Extremum))
+        let inclusive = builder.group(&inclusive, falsum, false)?;
+        let strict = builder.group(&strict, falsum, false)?;
+        comparison_root(builder, extremum, comparison, inclusive, strict, falsum)
+            .map(|root| (root, AggregateProfile::Extremum))
     })
 }

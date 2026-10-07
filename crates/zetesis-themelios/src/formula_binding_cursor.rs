@@ -1,4 +1,12 @@
-//! Per-relational-row scalar/range cursors over scoped term metadata.
+//! Scalar/range cursors over scoped term metadata and one immutable support.
+//!
+//! Backtracking rewinds an aggregate carrier while its declared inputs are
+//! unchanged; publishing a changed input invalidates it. An exhausted cursor
+//! can accept the next relational row under the same rule and support, keeping
+//! only carriers whose required inputs are still present and equal.
+
+#[cfg(test)]
+mod tests;
 
 use crate::ProgramSite;
 use crate::formula_support::{Context, GroundingWork};
@@ -159,7 +167,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     self.generator(
                         Generator {
                             literal: &literals[step.literal],
-                            required: Some(&step.required),
+                            required: Some(step.required(literals)),
                         },
                         computation,
                         limits,
@@ -241,12 +249,198 @@ impl<'a, 'source> Cursor<'a, 'source> {
         Ok(())
     }
     fn state(&mut self, state: State, location: ProgramSite) -> Result<(), FormulaFailure> {
-        self.value_frames -= usize::from(matches!(self.states[self.depth], State::Values { .. }));
+        self.state_at(self.depth, state, location)
+    }
+
+    fn state_at(
+        &mut self,
+        depth: usize,
+        state: State,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.value_frames -= usize::from(matches!(self.states[depth], State::Values { .. }));
         self.value_frames += usize::from(matches!(state, State::Values { .. }));
-        self.states[self.depth] = state;
+        self.states[depth] = state;
         // A list Binding's own lease includes its inline header. The enclosing
         // enum buffer accounts the remaining initialized and spare cell bytes.
         self.lease.observe(self.bytes(), location)
+    }
+
+    /// A deeper carrier can observe this output only through its checked
+    /// input list. Transitive consumers are invalidated when their intermediate
+    /// output is published. Unplanned generators conservatively lose reuse.
+    /// No new owner or input snapshot is retained; each visit is charged.
+    fn invalidate_dependents(
+        &mut self,
+        changed: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let current = usize::from(matches!(self.states[self.depth], State::Values { .. }));
+        if self.value_frames == current {
+            return Ok(());
+        }
+        for depth in self.depth + 1..self.generators.len() {
+            counters.work(limits, location)?;
+            if !matches!(self.states[depth], State::Values { .. }) {
+                continue;
+            }
+            let depends = if let Some(inputs) = self.generators[depth].required {
+                counters.charge_work(inputs.len() as u128, limits, location)?;
+                inputs.contains(&changed)
+            } else {
+                true
+            };
+            if depends {
+                self.state_at(depth, State::Fresh, location)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Continue this exact rule and immutable support with its next relational
+    /// row. The exhausted frame still owns its relational inputs; generated
+    /// outputs have been cleared, so dependent carriers conservatively expire.
+    /// Only the existing carrier and frame owners remain. Every input read is
+    /// charged, and a refusal leaves the old cursor exhausted with honest leases.
+    pub(super) fn restart(
+        &mut self,
+        values: Binding<'static>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        assert!(
+            self.finished,
+            "only an exhausted cursor accepts another row"
+        );
+        // Authenticate the new frame, including empty/missing input slots,
+        // before reusing even an input-free carrier. Both frames coexist here.
+        computation.allowance(&self.lease, limits, location)?;
+        values.view(computation.read(), limits, counters, location)?;
+        for depth in 0..self.states.len() {
+            counters.work(limits, location)?;
+            if matches!(self.states[depth], State::Values { .. })
+                && self.same_inputs(depth, &values, limits, counters, location)?
+            {
+                let State::Values { index, .. } = &mut self.states[depth] else {
+                    unreachable!("selected retained carrier")
+                };
+                *index = 0;
+            } else {
+                self.state_at(depth, State::Fresh, location)?;
+            }
+        }
+        counters.work(limits, location)?;
+        self.values = values;
+        self.depth = 0;
+        self.finished = false;
+        self.unavailable = 0;
+        self.failed_initialization = None;
+        Ok(())
+    }
+
+    fn same_inputs(
+        &self,
+        depth: usize,
+        values: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        let Some(inputs) = self.generators[depth].required else {
+            return Ok(false);
+        };
+        self.equal_inputs(inputs, values, limits, counters, location)
+    }
+
+    /// The previous continuation was fully visited under this same rule and
+    /// support. Reusing its existing frame needs no retained projected key.
+    /// The caller supplies the compiler's complete support-continuation reads;
+    /// this operation never authorizes eliding a formula witness.
+    pub(super) fn completed_with(
+        &self,
+        values: &Binding<'_>,
+        inputs: &[usize],
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        assert!(self.finished, "only complete continuations can be reused");
+        self.matches_inputs(values, inputs, context)
+    }
+
+    /// Compare unchanged relational inputs while this cursor is active or
+    /// complete. The caller's checked plan determines which inputs suffice;
+    /// this operation alone never authorizes skipping a continuation.
+    pub(super) fn matches_inputs(
+        &self,
+        values: &Binding<'_>,
+        inputs: &[usize],
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        computation.allowance(&self.lease, limits, location)?;
+        // Even an empty input list authenticates both canonical owners. The
+        // retained frame already passed prefix admission; its empty prefix
+        // checks scope without revisiting every unchanged slot.
+        self.values
+            .prefix(0)
+            .view(computation.read(), limits, counters, location)?;
+        values.view(computation.read(), limits, counters, location)?;
+        self.equal_inputs(inputs, values, limits, counters, location)
+    }
+
+    fn equal_inputs(
+        &self,
+        inputs: &[usize],
+        values: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        for &slot in inputs {
+            counters.work(limits, location)?;
+            if slot >= self.values.len()
+                || slot >= values.len()
+                || !self.values.is_bound(slot, location)?
+            {
+                return Ok(false);
+            }
+            let Some(key) = values
+                .slots()
+                .key(slot)
+                .map_err(|error| crate::formula_binding::assignment(error, location))?
+            else {
+                return Ok(false);
+            };
+            // Canonical identity equality preserves whole typed values; the
+            // coordinate order has no role in source comparisons or output.
+            if self
+                .values
+                .slots()
+                .compare_key(slot, &key)
+                .map_err(|error| crate::formula_binding::assignment(error, location))?
+                != std::cmp::Ordering::Equal
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     pub(super) fn reject(&mut self, location: ProgramSite) -> Result<(), FormulaFailure> {
@@ -368,6 +562,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         let target = target(self.generators[self.depth].literal).expect("generator target");
         match alternative {
             Alternative::Value(value) => {
+                self.invalidate_dependents(target, limits, counters, location)?;
                 counters.generated(&value, computation, limits, location)?;
                 self.values.extend_scope(
                     self.variables,
@@ -381,6 +576,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 Ok(true)
             }
             Alternative::Unavailable => {
+                self.invalidate_dependents(target, limits, counters, location)?;
                 self.values.extend_scope(
                     self.variables,
                     computation,
@@ -394,7 +590,14 @@ impl<'a, 'source> Cursor<'a, 'source> {
             }
             Alternative::Exhausted => {
                 self.values.clear(target, limits, counters, location)?;
-                self.state(State::Fresh, location)?;
+                if let State::Values { index, .. } = &mut self.states[self.depth] {
+                    // The complete carrier and its lease stay in their original
+                    // owner. A dependent predecessor invalidates it before the
+                    // next descent; an unrelated predecessor only rewinds it.
+                    *index = 0;
+                } else {
+                    self.state(State::Fresh, location)?;
+                }
                 Ok(false)
             }
         }

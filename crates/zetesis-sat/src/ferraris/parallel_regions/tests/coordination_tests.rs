@@ -18,20 +18,20 @@ fn search(workers: usize) -> (ParallelRegions, Arc<IndexedTheory>) {
 fn search_atoms(workers: usize, atoms: usize) -> (ParallelRegions, Arc<IndexedTheory>) {
     use zetesis_ferraris::Node;
 
-    let mut nodes = vec![Node::False];
+    let mut nodes = vec![Node::falsum()];
     let mut roots = Vec::new();
     for atom in 0..atoms {
         let index = nodes.len();
         nodes.extend([
-            Node::Atom(atom),
-            Node::Implies(index, 0),
-            Node::Or(index, index + 1),
+            Node::atom(atom),
+            Node::implies(index, 0),
+            Node::or_pair([index, index + 1]),
         ]);
         roots.push(index + 2);
     }
     let theory = Theory::new(
         atoms,
-        nodes,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
         roots,
         zetesis_ferraris::AdmissionLimits::default(),
     )

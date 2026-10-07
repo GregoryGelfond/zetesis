@@ -1,6 +1,6 @@
 //! Publication failures retain semantic evidence from real CPU completion batches.
 
-use crate::{Completion, Options, PublicationFailure, RunError, run_finalized_with_diagnostics};
+use crate::{Completion, Options, PublicationFailure, RunError};
 use clap::Parser;
 use std::{
     io::{self, Write},
@@ -9,8 +9,8 @@ use std::{
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
-fn options() -> Options {
-    let mut options = Options::try_parse_from([
+fn options() -> crate::publication_fixture::FormulaCase {
+    let options = Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
@@ -23,8 +23,9 @@ fn options() -> Options {
         "0",
     ])
     .unwrap();
-    options.batch_size = NonZeroUsize::new(3).unwrap();
-    options.completion_workers = NonZeroUsize::new(4).unwrap();
+    let mut options = crate::publication_fixture::FormulaCase::new(options);
+    options.config.solve.batch_size = NonZeroUsize::new(3).unwrap();
+    options.config.solve.completion_workers = NonZeroUsize::new(4).unwrap();
     options
 }
 
@@ -63,18 +64,13 @@ impl Write for FailAnswer {
 
 fn run(
     source: &str,
-    options: &Options,
+    options: &crate::publication_fixture::FormulaCase,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> PublicationFailure {
-    run_finalized_with_diagnostics(
-        source.into(),
-        options,
-        output,
-        diagnostics,
-        &Cancellation::default(),
-    )
-    .unwrap_err()
+    options
+        .run(source, output, diagnostics, &Cancellation::default())
+        .unwrap_err()
 }
 
 fn require_cpu_batches(failure: &PublicationFailure) {
@@ -147,8 +143,8 @@ impl Write for RefuseBound {
 #[test]
 fn failed_bound_diagnostics_leave_incumbents_unpublished() {
     let mut options = options();
-    options.stats = true;
-    options.statistics_view = crate::StatisticsView::Records;
+    options.presentation.stats = true;
+    options.presentation.statistics_view = crate::StatisticsView::Records;
     let mut output = Vec::new();
     let mut diagnostics = RefuseBound::default();
     let failure = run(
@@ -185,7 +181,7 @@ fn failed_bound_diagnostics_leave_incumbents_unpublished() {
 #[test]
 fn secondary_reporting_failure_preserves_primary_cause() {
     let mut options = options();
-    options.stats = true;
+    options.presentation.stats = true;
     let mut reference = Vec::new();
     let initial = run(
         "{a;b}.",
@@ -234,14 +230,14 @@ fn secondary_reporting_failure_preserves_primary_cause() {
 fn partial_answer_retains_unpublished_membership() {
     let options = options();
     let mut reference = Vec::new();
-    run_finalized_with_diagnostics(
-        "{a;b}.".into(),
-        &options,
-        &mut reference,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap();
+    options
+        .run(
+            "{a;b}.",
+            &mut reference,
+            &mut Vec::new(),
+            &Cancellation::default(),
+        )
+        .unwrap();
     let answer = std::str::from_utf8(&reference)
         .unwrap()
         .find("Answer:")
@@ -270,7 +266,7 @@ fn partial_answer_retains_unpublished_membership() {
 #[test]
 fn failed_answer_output_preserves_complete_optimum() {
     let mut options = options();
-    options.max_objective_bound_work = 0;
+    options.config.solve.max_objective_bound_work = 0;
     let failure = run(
         "{a;b}. #minimize{0:a;0:b}. #show.",
         &options,

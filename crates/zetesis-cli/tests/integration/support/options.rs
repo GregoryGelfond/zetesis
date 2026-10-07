@@ -1,10 +1,8 @@
 //! The command lines the tests parse into options, and the CPU session
 //! configuration they compare with.
 
-use std::num::NonZeroUsize;
-
 use clap::Parser;
-use zetesis_cli::{Backend, Options, SolveConfig};
+use zetesis_cli::{Options, SolveConfig};
 
 /// `zetesis ARGUMENTS`.
 pub fn plain(arguments: &[&str]) -> Options {
@@ -49,10 +47,5 @@ pub fn serial_with_statistics(arguments: &[&str], stats: bool) -> Options {
 
 /// The session configuration of [`serial`]: every model, from one CPU worker.
 pub fn serial_config() -> SolveConfig {
-    SolveConfig {
-        backend: Backend::Cpu,
-        workers: NonZeroUsize::MIN,
-        models: 0,
-        ..Default::default()
-    }
+    SolveConfig::from(&serial(&[]))
 }

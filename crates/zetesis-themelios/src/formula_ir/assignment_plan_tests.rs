@@ -22,6 +22,7 @@ fn aggregate(target: usize) -> LiteralIr {
     LiteralIr::Aggregate(AggregateIr {
         id: target,
         binding: Some(target),
+        family_inputs: Vec::new(),
         negation: DefaultNegation::None,
         function: AggregateFunction::Count,
         guards: vec![AggregateGuard {
@@ -92,7 +93,7 @@ fn readiness_orders_producers_before_consumers() {
         let actual: Vec<_> = plan
             .steps
             .iter()
-            .map(|step| (step.literal, step.produced, step.required.as_slice()))
+            .map(|step| (step.literal, step.produced, step.required(&body)))
             .collect();
         assert_eq!(actual, [(2, 2, &[][..]), (1, 1, &[][..]), (0, 0, &[1][..])]);
     });
@@ -143,6 +144,48 @@ fn plan_storage_is_reserved_before_scheduling() {
         resource: ExpansionResource::ScalarBytes, limit: 0, observed, ..
     }) if observed == (2 * std::mem::size_of::<Option<Step>>()) as u128)
     );
+}
+
+#[test]
+fn assignment_family_inputs_reserve_exact_storage() {
+    let bytes = std::mem::size_of::<usize>();
+    for limit in [bytes - 1, bytes] {
+        with_compiler(
+            ExpansionLimits {
+                max_scalar_bytes: limit,
+                ..Default::default()
+            },
+            |compiler| {
+                let LiteralIr::Aggregate(mut aggregate) = aggregate(0) else {
+                    unreachable!()
+                };
+                aggregate.elements.push(AggregateElementIr {
+                    family: crate::formula_ir::LocalFamily(0),
+                    // Only slot 1 belongs to the two-slot inherited frame.
+                    // The equality target and local tuple witness add no input.
+                    key: AggregateKey::Tuple(vec![CoreTerm::Variable(1), CoreTerm::Variable(2)]),
+                    condition: Vec::new(),
+                    variables: 3,
+                });
+                let result = compiler.assignment_family_inputs(&aggregate, 2);
+                if limit == bytes {
+                    assert_eq!(result.unwrap(), [1]);
+                    assert_eq!(compiler.budget.usage().scalar_bytes, bytes);
+                } else {
+                    assert!(matches!(
+                        result,
+                        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
+                            resource: ExpansionResource::ScalarBytes,
+                            limit: refused,
+                            observed,
+                            ..
+                        })) if refused == limit as u128 && observed == bytes as u128
+                    ));
+                    assert_eq!(compiler.budget.usage().scalar_bytes, 0);
+                }
+            },
+        );
+    }
 }
 
 #[test]
@@ -209,6 +252,7 @@ fn aggregate_inputs_exclude_local_witnesses() {
             )],
             variables: 3,
         });
+        aggregate.family_inputs = compiler.assignment_family_inputs(aggregate, 2).unwrap();
         let body = [
             instruction,
             LiteralIr::Atom(
@@ -220,7 +264,7 @@ fn aggregate_inputs_exclude_local_witnesses() {
             .assignment_plan(&body, 2, 2, &[])
             .map(Option::unwrap)
             .unwrap();
-        assert_eq!(plan.steps[0].required, [1]);
+        assert_eq!(plan.steps[0].required(&body), [1]);
         assert_eq!(plan.steps[0].produced, 0);
     });
 }
@@ -248,7 +292,7 @@ fn dependent_ranges_follow_complete_endpoint_bindings() {
             .collect::<Vec<_>>(),
         [2, 1, 0]
     );
-    assert_eq!(plan.steps[2].required, [1, 2]);
+    assert_eq!(plan.steps[2].required(&body), [1, 2]);
     assert!(plan.consumers);
 }
 
@@ -278,6 +322,7 @@ fn range_filters_do_not_produce_already_bound_targets() {
     });
 }
 
+/// Construct an already summarized aggregate for the scheduler boundary tests.
 fn reading_aggregate(target: usize, input: usize) -> LiteralIr {
     let mut literal = aggregate(target);
     let LiteralIr::Aggregate(aggregate) = &mut literal else {
@@ -289,6 +334,7 @@ fn reading_aggregate(target: usize, input: usize) -> LiteralIr {
         condition: Vec::new(),
         variables: target.max(input) + 1,
     });
+    aggregate.family_inputs = vec![input];
     literal
 }
 
@@ -306,11 +352,24 @@ fn aggregate_producers_follow_complete_inputs() {
     assert_eq!(
         plan.steps
             .iter()
-            .map(|step| (step.literal, step.required.as_slice()))
+            .map(|step| (step.literal, step.required(&body)))
             .collect::<Vec<_>>(),
         [(2, &[][..]), (1, &[2][..]), (0, &[1][..])]
     );
     assert!(plan.consumers);
+}
+
+#[test]
+fn aggregate_steps_borrow_the_family_summary() {
+    let body = [reading_aggregate(0, 1), aggregate(1)];
+    let plan = plan(&body, 2, ExpansionLimits::default()).unwrap();
+    let LiteralIr::Aggregate(aggregate) = &body[0] else {
+        unreachable!()
+    };
+    assert!(std::ptr::eq(
+        plan.steps[1].required(&body),
+        aggregate.family_inputs.as_slice(),
+    ));
 }
 
 #[test]
@@ -366,7 +425,7 @@ fn conditional_outer_reads_mark_objective_consumers() {
         assert_eq!(plan.steps.len(), 1);
         assert_eq!(plan.steps[0].literal, 0);
         assert_eq!(plan.steps[0].produced, 0);
-        assert!(plan.steps[0].required.is_empty());
+        assert!(plan.steps[0].required(&body).is_empty());
     });
 }
 
@@ -388,6 +447,7 @@ fn comparison_guard(bounds: &[usize]) -> LiteralIr {
     LiteralIr::Aggregate(AggregateIr {
         id: 9,
         binding: None,
+        family_inputs: Vec::new(),
         negation: DefaultNegation::NotNot,
         function: AggregateFunction::Count,
         guards: bounds
@@ -415,7 +475,7 @@ fn nonbinding_guards_do_not_add_plan_steps() {
     assert_eq!(
         plan.steps
             .iter()
-            .map(|step| (step.literal, step.produced, step.required.as_slice()))
+            .map(|step| (step.literal, step.produced, step.required(&body)))
             .collect::<Vec<_>>(),
         [(2, 1, &[][..]), (1, 0, &[1][..])]
     );
@@ -448,6 +508,7 @@ fn nonbinding_element(key: AggregateKey, condition: Vec<LiteralIr>) -> LiteralIr
     LiteralIr::Aggregate(AggregateIr {
         id: 9,
         binding: None,
+        family_inputs: Vec::new(),
         negation: DefaultNegation::None,
         function: AggregateFunction::Count,
         guards: Vec::new(),
@@ -482,7 +543,7 @@ fn nonbinding_tuple_keys_mark_objective_consumers() {
             assert!(plan.consumers, "{negation:?}, reversed={reversed}");
             assert_eq!(plan.steps.len(), 1, "a comparison is not a producer");
             assert_eq!(plan.steps[0].produced, 0);
-            assert!(plan.steps[0].required.is_empty());
+            assert!(plan.steps[0].required(&body).is_empty());
         }
     }
 }
@@ -543,7 +604,7 @@ fn nonbinding_conditions_read_aggregate_descendants() {
                 .map(Option::unwrap)
                 .unwrap();
             assert!(plan.consumers);
-            assert_eq!(plan.steps[1].required, [0]);
+            assert_eq!(plan.steps[1].required(&body), [0]);
         }
     });
 }
@@ -566,7 +627,7 @@ fn nonbinding_local_reads_do_not_alias_outer_slots() {
             .map(Option::unwrap)
             .unwrap();
         assert!(!plan.consumers);
-        assert!(plan.steps[0].required.is_empty());
+        assert!(plan.steps[0].required(&body).is_empty());
     });
 }
 
@@ -620,10 +681,10 @@ fn parsed_nonbinding_reads_preserve_outer_scope() {
         let compiled = with_compiler(ExpansionLimits::default(), |compiler| {
             compiler.rule(rule, Vec::new(), None).unwrap()
         });
-        let plan = compiled.bindings.unwrap();
+        let plan = compiled.bindings.as_ref().unwrap();
         assert_eq!(plan.consumers, consumed, "{text}");
         assert_eq!(plan.steps.len(), 1, "the comparison adds no producer");
-        assert!(plan.steps[0].required.is_empty());
+        assert!(plan.steps[0].required(&compiled.body).is_empty());
     }
 }
 
@@ -697,4 +758,56 @@ fn multiple_aggregates_require_conservative_eligibility() {
     );
     assert!(prepared.objectives[0].needs_eligibility_query);
     assert!(prepared.objectives[0].priority_sources.is_empty());
+}
+
+#[test]
+fn continuation_inputs_reserve_exact_storage() {
+    fn summary(compiler: &mut Compiler<'_>) -> (usize, Result<Option<Vec<usize>>, FormulaFailure>) {
+        let witness = atom(
+            compiler,
+            "d",
+            &[CoreTerm::Variable(0), CoreTerm::Variable(1)],
+        );
+        let head = HeadIr::Normal(Some(atom(
+            compiler,
+            "q",
+            &[CoreTerm::Variable(0), CoreTerm::Variable(2)],
+        )));
+        let body = [
+            LiteralIr::Atom(DefaultNegation::None, witness),
+            aggregate(2),
+        ];
+        let plan = compiler.assignment_plan(&body, 3, 3, &[]).unwrap().unwrap();
+        let before = compiler.budget.usage().scalar_bytes;
+        (before, compiler.continuation_inputs(&body, &head, 3, &plan))
+    }
+    let before = with_compiler(ExpansionLimits::default(), |compiler| {
+        let (before, result) = summary(compiler);
+        assert_eq!(result.unwrap().unwrap(), [0]);
+        before
+    });
+    let bytes = std::mem::size_of::<usize>();
+    for allowance in [bytes - 1, bytes] {
+        with_compiler(
+            ExpansionLimits {
+                max_scalar_bytes: before + allowance,
+                ..Default::default()
+            },
+            |compiler| {
+                let (prior, result) = summary(compiler);
+                assert_eq!(prior, before);
+                if allowance == bytes {
+                    assert_eq!(result.unwrap().unwrap(), [0]);
+                    assert_eq!(compiler.budget.usage().scalar_bytes, before + bytes);
+                } else {
+                    assert!(
+                        matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
+                    resource: ExpansionResource::ScalarBytes, limit, observed, ..
+                })) if limit == (before + allowance) as u128 && observed == (before + bytes) as u128)
+                    );
+                    assert_eq!(compiler.budget.usage().scalar_bytes, before);
+                }
+            },
+        );
+    }
 }

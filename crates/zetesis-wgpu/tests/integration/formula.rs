@@ -1,10 +1,11 @@
 //! Portable formula layout, shader validation and independent propagation laws.
 
-use zetesis_ferraris::{AdmissionLimits, Node, Theory};
+use zetesis_ferraris::{AdmissionLimits, Node, NodeView, Theory};
 use zetesis_wgpu::{FormulaLimits, FormulaVerdict, GateProjection, ResidualReason};
 
 mod gate_transfer;
 mod projection;
+pub(crate) mod wide;
 
 #[test]
 fn cooperative_formula_shader_validates_without_optional_capabilities() {
@@ -28,13 +29,13 @@ fn cooperative_formula_shader_validates_without_optional_capabilities() {
 }
 fn values(theory: &Theory, bits: usize, frozen: Option<&[bool]>) -> Vec<bool> {
     let mut out = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let truth = match *node {
-            Node::False => false,
-            Node::Atom(a) => bits & (1 << a) != 0,
-            Node::And(a, b) => out[a] && out[b],
-            Node::Or(a, b) => out[a] || out[b],
-            Node::Implies(a, b) => !out[a] || out[b],
+    for index in 0..theory.view().len() {
+        let truth = match theory.view().node(index).unwrap() {
+            NodeView::False => false,
+            NodeView::Atom(a) => bits & (1 << a) != 0,
+            NodeView::And(children) => children.iter().all(|&child| out[child]),
+            NodeView::Or(children) => children.iter().any(|&child| out[child]),
+            NodeView::Implies(a, b) => !out[a] || out[b],
         };
         out.push(truth && frozen.is_none_or(|mask| mask[index]));
     }
@@ -45,7 +46,7 @@ fn model(theory: &Theory, bits: usize, frozen: Option<&[bool]>) -> bool {
     theory.roots().iter().all(|&root| out[root])
 }
 fn variable(theory: &Theory, node: usize) -> usize {
-    if let Node::Atom(atom) = theory.nodes()[node] {
+    if let NodeView::Atom(atom) = theory.view().node(node).unwrap() {
         atom
     } else {
         theory.atom_count() + node
@@ -53,13 +54,13 @@ fn variable(theory: &Theory, node: usize) -> usize {
 }
 // A scalar TEST-ONLY specification of propagation. The independent model
 // definition above checks its completed refutations; this is not GPU execution.
-fn row_support(node: Node, ids: [usize; 3], domains: &[u8]) -> [u8; 3] {
+fn row_support(node: NodeView<'_>, ids: [usize; 3], domains: &[u8]) -> [u8; 3] {
     let mut permitted = [0u8; 3];
     for x in [false, true] {
         for y in [false, true] {
             let z = match node {
-                Node::And(..) => x && y,
-                Node::Or(..) => x || y,
+                NodeView::And(..) => x && y,
+                NodeView::Or(..) => x || y,
                 _ => !x || y,
             };
             let tuple = [x, y, z];
@@ -77,12 +78,12 @@ fn row_support(node: Node, ids: [usize; 3], domains: &[u8]) -> [u8; 3] {
     permitted
 }
 
-fn bitwise_support(node: Node, ids: [usize; 3], domains: &[u8]) -> [u8; 3] {
+fn bitwise_support(node: NodeView<'_>, ids: [usize; 3], domains: &[u8]) -> [u8; 3] {
     use gate_transfer::{Aliases, Domains, Operation, bitwise};
     let operation = match node {
-        Node::And(..) => Operation::And,
-        Node::Or(..) => Operation::Or,
-        Node::Implies(..) => Operation::Implies,
+        NodeView::And(..) => Operation::And,
+        NodeView::Or(..) => Operation::Or,
+        NodeView::Implies(..) => Operation::Implies,
         _ => panic!("only enabled connectives enter projection"),
     };
     let [left, right, output] = ids.map(|id| u32::try_from(id).unwrap());
@@ -93,6 +94,52 @@ fn bitwise_support(node: Node, ids: [usize; 3], domains: &[u8]) -> [u8; 3] {
         Domains::new(observed[0], observed[1], observed[2]).unwrap(),
     )
     .masks()
+}
+
+// Same two-pass native transfer as the shader; checked below against independently
+// enumerated Boolean completions, including repeated physical child aliases.
+fn group_allowed(
+    conjunction: bool,
+    ids: &[usize],
+    observed: &[u8],
+    output: u8,
+) -> (u8, Option<(usize, u8)>) {
+    let all_bit = if conjunction { 2 } else { 1 };
+    let witness_bit = 3 ^ all_bit;
+    let all_possible = observed.iter().all(|d| d & all_bit != 0);
+    let mut witness = None;
+    let mut multiple = false;
+    for (&slot, &domain) in ids.iter().zip(observed) {
+        if domain & witness_bit != 0 {
+            multiple |= witness.is_some_and(|old| old != slot);
+            witness = Some(slot);
+        }
+    }
+    let allowed = if observed.contains(&0) {
+        0
+    } else {
+        (if all_possible { all_bit } else { 0 }) | (if witness.is_some() { witness_bit } else { 0 })
+    };
+    let forced = match output & allowed {
+        value if value == all_bit => Some((usize::MAX, all_bit)),
+        value if value == witness_bit && !multiple => witness.map(|slot| (slot, witness_bit)),
+        _ => None,
+    };
+    (allowed, forced)
+}
+fn group_support(conjunction: bool, ids: &[usize], output: usize, domains: &mut [u8]) {
+    let observed: Vec<_> = ids.iter().map(|&id| domains[id]).collect();
+    let (allowed, forced) = group_allowed(conjunction, ids, &observed, domains[output]);
+    domains[output] &= allowed;
+    if let Some((slot, bit)) = forced {
+        if slot == usize::MAX {
+            for &id in ids {
+                domains[id] &= bit;
+            }
+        } else {
+            domains[slot] &= bit;
+        }
+    }
 }
 
 fn propagate_with(
@@ -121,12 +168,28 @@ fn propagate_with(
     }
     for _ in 0..round_limit {
         let before = domains.clone();
-        for (n, node) in theory.nodes().iter().enumerate() {
-            if !mask[n] {
+        for (n, enabled) in mask.iter().copied().enumerate() {
+            if !enabled {
                 continue;
             }
-            let (Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b)) = *node else {
-                continue;
+            let node = theory.view().node(n).unwrap();
+            let (a, b) = match node {
+                NodeView::And(children) | NodeView::Or(children) if children.len() > 2 => {
+                    let ids: Vec<_> = children
+                        .iter()
+                        .map(|&child| variable(theory, child))
+                        .collect();
+                    group_support(
+                        matches!(node, NodeView::And(_)),
+                        &ids,
+                        variable(theory, n),
+                        &mut domains,
+                    );
+                    continue;
+                }
+                NodeView::And(children) | NodeView::Or(children) => (children[0], children[1]),
+                NodeView::Implies(a, b) => (a, b),
+                _ => continue,
             };
             let ids = [
                 variable(theory, a),
@@ -134,8 +197,8 @@ fn propagate_with(
                 variable(theory, n),
             ];
             let permitted = match projection {
-                GateProjection::Enumerated => row_support(*node, ids, &domains),
-                GateProjection::Bitwise => bitwise_support(*node, ids, &domains),
+                GateProjection::Enumerated => row_support(node, ids, &domains),
+                GateProjection::Bitwise => bitwise_support(node, ids, &domains),
             };
             for i in 0..3 {
                 domains[ids[i]] &= permitted[i];
@@ -185,21 +248,26 @@ fn projections_preserve_frozen_query_completions() {
         for left in 0..4 {
             for right in 0..4 {
                 let mut nodes = vec![
-                    Node::False,
-                    Node::Atom(0),
-                    Node::Atom(1),
-                    Node::Implies(1, 0),
+                    Node::falsum(),
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::implies(1, 0),
                 ];
                 nodes.push(match operator {
-                    0 => Node::And(left, right),
-                    1 => Node::Or(left, right),
-                    _ => Node::Implies(left, right),
+                    0 => Node::and_pair([left, right]),
+                    1 => Node::or_pair([left, right]),
+                    _ => Node::implies(left, right),
                 });
                 // Context mixes positive recursion, choices and shared children.
-                nodes.extend([Node::Implies(4, 1), Node::Or(2, 3)]);
+                nodes.extend([Node::implies(4, 1), Node::or_pair([2, 3])]);
                 for roots in [vec![4], vec![5], vec![4, 6], vec![]] {
-                    let theory =
-                        Theory::new(3, nodes.clone(), roots, AdmissionLimits::default()).unwrap();
+                    let theory = Theory::new(
+                        3,
+                        zetesis_ferraris::FormulaParts::new(nodes.clone(), Vec::new()).unwrap(),
+                        roots,
+                        AdmissionLimits::default(),
+                    )
+                    .unwrap();
                     for candidate in 0..8 {
                         let mask = values(&theory, candidate, None);
                         let stable = model(&theory, candidate, None)
@@ -235,7 +303,13 @@ fn projections_preserve_frozen_query_completions() {
 }
 #[test]
 fn empty_queries_and_inactive_composites_do_not_forge_stability() {
-    let empty = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let empty = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     for projection in GateProjection::ALL {
         assert_eq!(
             propagate_with(&empty, 0, 1, projection),
@@ -248,12 +322,16 @@ fn empty_queries_and_inactive_composites_do_not_forge_stability() {
     }
     let theory = Theory::new(
         1,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Implies(1, 0),
-            Node::Implies(2, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::implies(2, 0),
+            ],
+            Vec::new(),
+        )
+        .unwrap(),
         vec![3],
         AdmissionLimits::default(),
     )

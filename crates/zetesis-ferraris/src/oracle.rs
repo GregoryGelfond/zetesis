@@ -1,5 +1,5 @@
 use crate::{
-    EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, Node,
+    EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
 };
 use zetesis_cpu::{Cancellation, Stop};
@@ -8,7 +8,7 @@ use zetesis_cpu::{Cancellation, Stop};
 /// never a proof of stability or nonminimality.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Charged node evaluations, root tests, atom scans and subset-bit operations.
+    /// Charged node and operand evaluations, root tests, atom scans and subset-bit operations.
     pub max_work: u64,
     /// Maximum number of proper subsets checked against a frozen reduct.
     pub max_subsets: u64,
@@ -114,20 +114,60 @@ pub(super) fn evaluate(
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
     output.clear();
-    for (index, node) in theory.nodes().iter().enumerate() {
+    let view = theory.view();
+    for index in 0..view.len() {
         work.tick()?;
-        let value = match *node {
-            Node::Atom(atom) => interpretation.contains(atom),
-            Node::False => false,
-            Node::And(a, b) => output[a] && output[b],
-            Node::Or(a, b) => output[a] || output[b],
-            Node::Implies(a, b) => !output[a] || output[b],
-        };
+        let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
+        let value = evaluate_node(node, interpretation, output, work)?;
         // A maximal M-false subformula becomes falsum. Masking every M-false
         // node has the same root meaning and avoids materializing a new DAG.
         output.push(value && frozen.is_none_or(|mask| mask[index]));
     }
     Ok(())
+}
+
+/// Compute one node from its complete predecessor values. The caller publishes
+/// its result only after this read-only phase finishes, including all child work.
+fn evaluate_node(
+    node: NodeView<'_>,
+    interpretation: &Interpretation,
+    values: &[bool],
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    match node {
+        NodeView::Atom(atom) => Ok(interpretation.contains(atom)),
+        NodeView::False => Ok(false),
+        NodeView::And(operands) => evaluate_operands(operands, values, true, work),
+        NodeView::Or(operands) => evaluate_operands(operands, values, false, work),
+        NodeView::Implies(a, b) => {
+            work.tick()?;
+            let antecedent = values[a];
+            work.tick()?;
+            let consequent = values[b];
+            Ok(!antecedent || consequent)
+        }
+    }
+}
+
+/// Read every operand, including duplicates and operands after the result is
+/// decided. A failed tick leaves the enclosing node unpublished in the output.
+fn evaluate_operands(
+    operands: &[usize],
+    values: &[bool],
+    conjunction: bool,
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    let mut value = conjunction;
+    for &operand in operands {
+        work.tick()?;
+        let child = values[operand];
+        value = if conjunction {
+            value & child
+        } else {
+            value | child
+        };
+    }
+    Ok(value)
 }
 
 pub(super) fn failed_root(
@@ -377,7 +417,13 @@ mod tests {
 
     #[test]
     fn selection_stops_retain_the_exact_scanned_prefix() {
-        let theory = Theory::new(130, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            130,
+            crate::FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let atoms = [0, 63, 64, 129];
         let candidate = Interpretation::new(&theory, atoms).unwrap();
         let cancellation = Cancellation::default();
@@ -411,7 +457,13 @@ mod tests {
 
     #[test]
     fn carry_stops_retain_completed_bit_updates() {
-        let theory = Theory::new(130, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            130,
+            crate::FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let cancellation = Cancellation::default();
         // The carry clears 0 and 63, sets 64, then stops before reaching 129.
         let expected: [&[usize]; 5] = [&[0, 63], &[63], &[], &[64], &[64]];
@@ -442,7 +494,13 @@ mod tests {
 
     #[test]
     fn empty_atom_scan_performs_no_poll() {
-        let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            0,
+            crate::FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let candidate = Interpretation::new(&theory, []).unwrap();
         let cancellation = Cancellation::default();
         cancellation.cancel();
@@ -459,7 +517,13 @@ mod tests {
 
     #[test]
     fn empty_carry_performs_no_poll() {
-        let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            0,
+            crate::FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let mut subset = Interpretation::new(&theory, []).unwrap();
         let cancellation = Cancellation::default();
         cancellation.cancel();

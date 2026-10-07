@@ -87,8 +87,8 @@ fn optional_planning_preserves_original_formula_bytes() {
         let baseline = admitted(source, false);
         let planned = admitted(source, true);
         assert_eq!(
-            baseline.theory().nodes(),
-            planned.theory().nodes(),
+            (baseline.theory().nodes(), baseline.theory().operands()),
+            (planned.theory().nodes(), planned.theory().operands()),
             "{source}"
         );
         assert_eq!(
@@ -614,7 +614,10 @@ fn count_aliases_do_not_certify_atom_partitions() {
             .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
             .unwrap();
         assert!(matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)));
-        assert_eq!(planned.theory().nodes(), original.theory().nodes());
+        assert_eq!(
+            (planned.theory().nodes(), planned.theory().operands()),
+            (original.theory().nodes(), original.theory().operands())
+        );
         assert_eq!(planned.theory().roots(), original.theory().roots());
         assert_eq!(native(&planned), native(&original));
     }
@@ -745,7 +748,10 @@ fn count_plans_preserve_the_queens_families() {
             ordinary.source().expect("source input").text()
         );
         assert_eq!(planned.atoms(), ordinary.atoms());
-        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(
+            (planned.theory().nodes(), planned.theory().operands()),
+            (ordinary.theory().nodes(), ordinary.theory().operands())
+        );
         assert_eq!(planned.theory().roots(), ordinary.theory().roots());
         assert_eq!(planned.formula_origins(), ordinary.formula_origins());
         let expected = native(&ordinary);

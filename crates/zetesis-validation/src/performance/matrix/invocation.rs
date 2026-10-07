@@ -6,7 +6,8 @@ use crate::selected::NativeExecution;
 /// No probing, fallback or solver heuristic change is performed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NativeInvocation {
-    /// Existing flat `zetesis --backend … --workers …` interface.
+    /// Historical flat spelling. The requested policy remains ordinary public
+    /// controls; older executables retain their own effective defaults.
     #[default]
     Legacy,
     /// Explicit `zetesis solve --backend … --threads …` interface.
@@ -19,12 +20,13 @@ impl NativeInvocation {
     #[must_use]
     pub fn arguments(self, execution: &NativeExecution) -> Vec<OsString> {
         let mut arguments = execution.arguments();
-        if self == Self::Solve {
+        if self == Self::Legacy {
             for argument in &mut arguments {
-                if argument == "--workers" {
-                    *argument = "--threads".into();
+                if argument == "--threads" {
+                    *argument = "--workers".into();
                 }
             }
+        } else {
             // The profile always requests complete enumeration. The explicit
             // command has one canonical spelling for that semantic selection.
             if let Some(models) = arguments.iter().position(|value| value == "--models") {

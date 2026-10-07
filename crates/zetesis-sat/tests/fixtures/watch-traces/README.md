@@ -8,10 +8,18 @@ The source identities distinguish the reference implementation from the
 implementation under test. These are deterministic traversal fixtures, not timing
 or answer-set acceptance evidence.
 
-The six queens inputs are the clean, unchanged N=8 examples included directly
-by `src/search/tests/watch_traces.rs`. A private test exercises the real formula
-encoder and retained candidate cursor. Each record contains formula and CNF
-dimensions, ordered semantic candidate identities, all four cumulative search
+The six queens inputs are fixed admitted theories in `queens-01.rs` through
+`queens-06.rs`. They were captured from the unchanged N=8 examples under
+`examples/correctness/standalone/n-queens/` at commit
+`80df23ef6134959dcb5e42fcba265d2a4a525de1`, using `admit_formula` with default
+admission, expansion and formula limits. Atom counts, node order, both child
+indices and root order were copied without transformation. The old binary nodes
+use the current pair constructors and an empty operand arena. `Theory::new`
+validates each frozen input before the current encoder and retained candidate
+cursor run. This input capture is separate from the original trace provenance
+above; all six unchanged reference records must agree exactly. Each record
+contains formula and CNF dimensions, ordered semantic candidate identities, all
+four cumulative search
 counters after candidate construction, and the final exhaustion or stop. Exact
 semantic blocks are appended after each candidate. No clingo call, certificate
 check, objective work, timing or stable-model claim belongs to this trace.
@@ -26,11 +34,13 @@ separate from the original trace provenance above. The test validates those
 four atoms, 45 nodes and nine roots through `Theory::new`, then runs the current
 encoder and cursor against the unchanged reference records.
 
-The fixed input keeps exact search-work tests independent of equivalent
-frontend DAG layouts. In particular, sharing a threshold table across choice
-guards changes intermediate node order and the historical first-true-literal
-rescan charges. Current source lowering is covered by the frontend aggregate
-and choice tests; the six queens traces above still admit their source inputs.
+These fixed inputs keep exact search-work tests independent of equivalent
+frontend DAG layouts. Sharing a threshold table across choice guards changes
+intermediate node order and the historical first-true-literal rescan charges.
+Transposing complete support guards and grouping source conjunctions can also
+change the CNF and candidate traversal. Current source lowering remains covered
+by the frontend tests and source oracle comparisons; these historical watch
+regressions retain their original candidate identities, counters and outcomes.
 
 The complete historical traversal consumes 2,294 work units and nine decisions.
 A run with precisely those ceilings must reproduce it, so the same record is that
@@ -58,3 +68,12 @@ build asserts. The observer restores that scan's historical charge for each
 candidate, one unit per literal up to and including the first true one in every
 base clause, so these records stay comparable; solver statistics count only
 performed work.
+
+Native formula encoding also charges every operand occurrence once while
+building its classical gate view, including both implication operands. This is
+one setup charge E before any search observation. The reference observer
+subtracts exactly the admitted theory's E from each cumulative work record;
+it leaves every other counter, candidate and terminal outcome intact. The
+four-atom input has E = 80, so its actual inclusive work ceiling adds 80 before
+subtracting the independently observed watch, witness and exclusion savings.
+The historical fixture files and their original provenance remain unchanged.

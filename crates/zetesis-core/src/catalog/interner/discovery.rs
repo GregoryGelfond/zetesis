@@ -4,7 +4,7 @@
 //! committed/pending map, so canonical-only rows retained after refusal allocate
 //! no inverse entries. Both AVL views publish with that map in one transaction.
 
-use super::{AtomAppender, AtomId, Failure, Index, Limits, Link, Node, Step};
+use super::{AtomAppender, AtomId, Failure, Index, Limits, Node, Planned, Step};
 use super::{cells, index, path_bound, position, reserve};
 
 pub(super) fn identity(committed: &[AtomId], pending: &[AtomId], id: usize) -> Option<AtomId> {
@@ -34,6 +34,11 @@ pub(super) fn find<E>(
     )
 }
 
+pub(super) struct Plan {
+    pub nodes: Planned,
+    pub increasing: bool,
+}
+
 impl AtomAppender<'_> {
     /// Prepare the inverse insertion after canonical admission, without changing
     /// its published links. The caller publishes both indexes only after every
@@ -44,19 +49,19 @@ impl AtomAppender<'_> {
         extra: u128,
         limits: Limits,
         before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Link, Failure<E>> {
+    ) -> Result<Plan, Failure<E>> {
+        let retained = self.spines.discovery.take();
         let id = self.len();
         let bound = path_bound(id.checked_add(1).ok_or(Failure::Overflow)?);
         let fixed = self.storage_bytes() + extra
             - cells::<Node>(self.discovery.nodes.capacity())
             - cells::<Step>(self.discovery.path.capacity());
         let mut checked = || before().map_err(Failure::Stopped);
-        let Index {
-            nodes, path, root, ..
-        } = &mut *self.discovery;
-        let live = fixed + cells::<Node>(nodes.capacity()) + cells::<Step>(path.capacity());
+        let live = fixed
+            + cells::<Node>(self.discovery.nodes.capacity())
+            + cells::<Step>(self.discovery.path.capacity());
         reserve(
-            nodes,
+            &mut self.discovery.nodes,
             1,
             limits.max_atoms,
             live,
@@ -64,8 +69,23 @@ impl AtomAppender<'_> {
             limits,
             &mut checked,
         )?;
-        path.clear();
-        let mut cursor = *root;
+        let reuse = if let Some(spine) = retained {
+            checked()?;
+            spine.matches(self.discovery, self.discovery.root, spine.last())
+                && atom
+                    > identity(self.committed, self.pending, spine.last())
+                        .expect("published right-spine discovery")
+        } else {
+            false
+        };
+        let Index {
+            nodes, path, root, ..
+        } = &mut *self.discovery;
+        if !reuse {
+            path.clear();
+        }
+        let mut increasing = true;
+        let mut cursor = if reuse { None } else { *root };
         while let Some(next) = cursor {
             checked()?;
             let position = position(next);
@@ -77,6 +97,7 @@ impl AtomAppender<'_> {
             }
             let node = nodes[position];
             let right = order.is_gt();
+            increasing &= right;
             let live = fixed + cells::<Node>(nodes.capacity()) + cells::<Step>(path.capacity());
             reserve(
                 path,
@@ -113,6 +134,8 @@ impl AtomAppender<'_> {
             right: false,
             changed: true,
         });
-        self.discovery.plan(id, &mut checked)
+        self.discovery
+            .plan_changes_from(self.discovery.root, id, &mut checked)
+            .map(|nodes| Plan { nodes, increasing })
     }
 }

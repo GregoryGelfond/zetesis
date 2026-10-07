@@ -1,5 +1,7 @@
 // Equality IDs belong to the prepared relation's dictionary. They carry no
-// arithmetic, term-order or candidate-membership interpretation.
+// arithmetic, term-order or candidate-membership interpretation. The first
+// two words per column are its absolute payload word offset and cell width.
+// Host-checked widths are 8, 16 or 32; each column starts at a word boundary.
 struct Dimensions {
     rows: u32, columns: u32, queries: u32, words: u32,
     epoch: u32, tiles: u32, reserved1: u32, reserved2: u32,
@@ -29,7 +31,12 @@ fn select_rows(@builtin(workgroup_id) group: vec3<u32>,
         // retains the declared full-scan equality-work accounting.
         for (var offset = 0u; offset < query.count; offset++) {
             let equality = equalities[query.first + offset];
-            let equal = columns[equality.column * shape.rows + row] == equality.value;
+            let first = columns[equality.column * 2u];
+            let bits = columns[equality.column * 2u + 1u];
+            let lanes = BITS_PER_WORD / bits;
+            let encoded = columns[first + row / lanes];
+            let value = (encoded >> ((row % lanes) * bits)) & (0xffffffffu >> (32u - bits));
+            let equal = value == equality.value;
             accepted = accepted && equal;
         }
     }

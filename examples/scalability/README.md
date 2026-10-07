@@ -16,6 +16,7 @@ identity; increasing a parameter can instead reach a solver or campaign limit.
 | `n-queens.lp` | enumeration | `#const n` (board size) | `n=8`: 92 answer sets |
 | `pigeonhole.lp` | unsatisfiability | `#const h` (holes; `h+1` pigeons) | `h=7`: UNSAT |
 | `mastermind.lp` | many-answer enumeration | `#const colors` (6 pegs) | `colors=6`: 6080 answer sets |
+| `mastermind-nested.lp` | nested aggregate assignments | `#const colors` (6 pegs, seven guesses) | `colors=8`: one answer set |
 
 `n-queens.lp` grows steeply (n=12 → 14200 answer sets, n=13 → 73712), exercising
 both region enumeration and grounding as `n` rises. `pigeonhole.lp` is
@@ -23,9 +24,15 @@ unsatisfiable by construction and measures the work of *proving* unsatisfiabilit
 `mastermind.lp` lists every secret code of six pegs consistent with one scored
 guess, counting colour matches with aggregates; its answers grow with the number
 of colours (5 → 976, 6 → 6080, 7 → 19600, 8 → 45832), so it measures
-per-answer checking and delivery. Larger colour counts exceed the default
-evidence-capture limits of the maintained population, which therefore stops at
-`colors=6`; run them directly by editing `#const colors`.
+per-answer checking and delivery. The maintained population includes
+`colors=8`; its report-reading limits account for that complete answer family
+without increasing the solver's resource limits. Larger instances can exceed
+either solver or measurement limits; keep the resulting refusal with the record.
+
+`mastermind-nested.lp` composes counts, minima and sums to score seven guesses.
+Its unique secret is `8,5,8,5,3,4`. Repeated guess positions exercise whether
+grounding shares an aggregate's unchanged inputs. The source is authored for
+this corpus.
 
 ## Run an example
 
@@ -52,8 +59,9 @@ the unchanged source hash, edit and resulting source hash.
 ## Check and measure thread scaling
 
 The maintained `zetesis test scalability` and `zetesis-bench run --suite
-scalability` commands use one library-owned population of twelve workloads:
-queens at n=8/9/10, pigeonhole at h=5/6/7, Mastermind at colors=5/6, the established correctness queens variant
+scalability` commands use one library-owned population of fourteen workloads:
+queens at n=8/9/10, pigeonhole at h=5/6/7, Mastermind at colors=5/6/8,
+nested Mastermind at colors=8, the established correctness queens variant
 02, SEND+MORE=MONEY and task-allocation cases, and the authored
 [Sudoku grid](../sudoku.lp). Sudoku has eight givens per row and exercises
 grounding and language handling. Test qualifications request CPU eager/indexed
@@ -68,7 +76,7 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-`--include-einstein` adds the unchanged Einstein riddle as a thirteenth workload.
+`--include-einstein` adds the unchanged Einstein riddle as a fifteenth workload.
 An explicit `--max-expansion-work 300000000` can be supplied when studying that input; the
 override is retained in every native profile. No limit is raised silently.
 
@@ -103,7 +111,7 @@ enumeration, the answer-set count), and the source SHA-256. The contracts are th
 expected complete results. `cargo test --locked -p zetesis-validation --test
 integration authored_examples::` checks source integrity and contract registration without
 solving large instances. `scripts/check.sh oracle` also runs the complete clingo
-contracts for both defaults, Sudoku and Einstein. Native default checks live
+contracts for all defaults, Sudoku and Einstein. Native default checks live
 in `zetesis-cli/tests/integration/authored_examples.rs`, including Sudoku and
 Einstein with automatic grounding and unchanged resource defaults. These
 checks run in the portable test suite.

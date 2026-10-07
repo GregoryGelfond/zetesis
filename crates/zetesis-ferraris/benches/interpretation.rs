@@ -15,7 +15,13 @@ use zetesis_ferraris::{AdmissionError, AdmissionLimits, Interpretation, Theory};
 const LARGE: usize = 32_768;
 
 fn theory(atoms: usize) -> Theory {
-    Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap()
+    Theory::new(
+        atoms,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn verify(

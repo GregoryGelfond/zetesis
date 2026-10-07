@@ -383,7 +383,10 @@ fn logical_extrema_do_not_certify_atom_counts() {
             zetesis_themelios::CountPlanStatus::NoPlan(_)
         ));
         assert_eq!(planned.atoms(), ordinary.atoms());
-        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(
+            (planned.theory().nodes(), planned.theory().operands()),
+            (ordinary.theory().nodes(), ordinary.theory().operands())
+        );
         assert_eq!(planned.theory().roots(), ordinary.theory().roots());
     }
 }

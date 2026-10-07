@@ -134,18 +134,18 @@ fn stable_models(theory: &Theory) -> BTreeSet<Vec<usize>> {
 #[test]
 fn renamed_ferraris_models_match_independent_subset_enumeration() {
     let original = [
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Atom(3),
-        Node::False,
-        Node::Implies(0, 4),
-        Node::Implies(1, 4),
-        Node::Or(0, 5),
-        Node::Or(1, 6),
-        Node::Or(0, 1),
-        Node::Implies(9, 2),
-        Node::Implies(2, 4),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::atom(3),
+        Node::falsum(),
+        Node::implies(0, 4),
+        Node::implies(1, 4),
+        Node::or_pair([0, 5]),
+        Node::or_pair([1, 6]),
+        Node::or_pair([0, 1]),
+        Node::implies(9, 2),
+        Node::implies(2, 4),
     ];
     for roots_mask in 0..16 {
         let roots: Vec<_> = [7, 8, 10, 11]
@@ -155,16 +155,21 @@ fn renamed_ferraris_models_match_independent_subset_enumeration() {
             .map(|(_, root)| root)
             .collect();
         for order in permutations() {
+            let original_parts =
+                zetesis_ferraris::FormulaParts::new(original.to_vec(), vec![]).unwrap();
             let nodes = original
                 .iter()
-                .map(|&node| match node {
-                    Node::Atom(atom) => Node::Atom(order[atom]),
-                    other => other,
-                })
+                .enumerate()
+                .map(
+                    |(index, &node)| match original_parts.view().node(index).unwrap() {
+                        zetesis_ferraris::NodeView::Atom(atom) => Node::atom(order[atom]),
+                        _ => node,
+                    },
+                )
                 .collect();
             let theory = Theory::new(
                 4,
-                nodes,
+                zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
                 roots.clone(),
                 zetesis_ferraris::AdmissionLimits::default(),
             )
@@ -260,15 +265,19 @@ fn work_decision_and_control_stops_remain_inconclusive_with_exact_accounting() {
 fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity() {
     let aliases = Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::False,
-            Node::Implies(0, 2),
-            Node::Implies(1, 2),
-            Node::Or(0, 3),
-            Node::Or(1, 4),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 2),
+                Node::implies(1, 2),
+                Node::or_pair([0, 3]),
+                Node::or_pair([1, 4]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![5, 6],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -292,7 +301,11 @@ fn compacted_aliases_need_no_auxiliary_but_remaining_gate_needs_fresh_capacity()
     );
     let gate = Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)],
+        zetesis_ferraris::FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+            vec![],
+        )
+        .unwrap(),
         vec![2],
         zetesis_ferraris::AdmissionLimits::default(),
     )

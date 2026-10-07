@@ -168,7 +168,10 @@ fn foreign_priority_slots_obey_missing_zero_comparison() {
 #[test]
 fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
     let input = formula("1{a;b}1.p:-p.#minimize{1@0,k:a;1@0,k:b}.");
-    let original_nodes = input.theory().nodes().to_vec();
+    let original_nodes = (
+        input.theory().nodes().to_vec(),
+        input.theory().operands().to_vec(),
+    );
     let mut baseline = StableModels::new(
         input.theory(),
         zetesis_sat::Limits::default(),
@@ -219,7 +222,10 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
         .collect();
     assert!(restricted.exhausted());
     assert_eq!(actual, expected);
-    assert_eq!(input.theory().nodes(), original_nodes);
+    assert_eq!(
+        (input.theory().nodes(), input.theory().operands()),
+        (original_nodes.0.as_slice(), original_nodes.1.as_slice())
+    );
 }
 
 #[test]

@@ -1,13 +1,11 @@
 //! Ordinary source execution preserves exact reduct, objective and publication contracts.
-use crate::support::runs::detailed as solve;
+use crate::support::prepared;
+use crate::support::runs::detailed as cli_solve;
 use clap::Parser;
-use zetesis_cli::{
-    Completion, Options, Oracle, RunFailure, SolvePhase, StatisticsView,
-    run_detailed_with_diagnostics,
-};
+use zetesis_cli::{Completion, Options, Oracle, RunFailure, SolvePhase, StatisticsView};
 use zetesis_cpu::Cancellation;
 
-fn options(oracle: Oracle, workers: usize) -> Options {
+fn options(oracle: Oracle) -> Options {
     let mut o =
         // The reference allowance: the printed storage limit is the library's.
         Options::try_parse_from([
@@ -26,8 +24,27 @@ fn options(oracle: Oracle, workers: usize) -> Options {
     // The batched completion protocol these tests exercise is the clause
     // method's.
     o.search = zetesis_cli::SearchMethod::Clauses;
-    o.completion_workers = std::num::NonZeroUsize::new(workers).unwrap();
     o
+}
+fn config(oracle: Oracle, workers: usize) -> zetesis_cli::PublicationConfig {
+    let mut config = zetesis_cli::PublicationConfig::from(&options(oracle));
+    config.solve.completion_workers = std::num::NonZeroUsize::new(workers).unwrap();
+    config
+}
+fn solve(
+    source: &str,
+    config: &zetesis_cli::PublicationConfig,
+) -> (zetesis_cli::Report, String, String) {
+    let mut output = Vec::new();
+    let report = prepared::human(
+        source,
+        config,
+        &mut output,
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    (report, String::from_utf8(output).unwrap(), String::new())
 }
 fn answers(text: &str) -> Vec<&str> {
     let mut a = text
@@ -46,7 +63,7 @@ fn ordinary_certified_models_optimum_ties_and_hidden_displays_match_explicit_red
         "1{a;b}1. {hidden}. #minimize{1,a:a;1,b:b}. #show.",
         "1{a;b}1. #minimize{1,a:a;2,b:b}. #show picked:a.",
     ] {
-        let (baseline, bout, _) = solve(source, &options(Oracle::Countermodel, 1));
+        let (baseline, bout, _) = cli_solve(source, &options(Oracle::Countermodel));
         assert!(
             baseline
                 .countermodel_statistics
@@ -55,7 +72,12 @@ fn ordinary_certified_models_optimum_ties_and_hidden_displays_match_explicit_red
                 .is_none()
         );
         for workers in [1, 4] {
-            let (r, out, diag) = solve(source, &options(Oracle::Auto, workers));
+            let (r, out, diag) = if workers == 1 {
+                cli_solve(source, &options(Oracle::Auto))
+            } else {
+                solve(source, &config(Oracle::Auto, workers))
+            };
+
             assert_eq!(r.completion, Completion::Exhausted);
             assert_eq!(answers(&out), answers(&bout));
             assert_eq!(r.models, baseline.models);
@@ -69,9 +91,11 @@ fn ordinary_certified_models_optimum_ties_and_hidden_displays_match_explicit_red
             assert!(c.stable > 0);
             assert_eq!(s.countermodel_queries, 0);
             assert_eq!(c.failed, 0);
-            assert!(diag.contains("Membership: checked tight support certificate"));
-            assert!(diag.contains("class certificate: eligible=true"));
-            assert!(diag.contains("storage limit=268435456"));
+            if workers == 1 {
+                assert!(diag.contains("Membership: checked tight support certificate"));
+                assert!(diag.contains("class certificate: eligible=true"));
+                assert!(diag.contains("storage limit=268435456"));
+            }
             let timing = r.phase_timings.unwrap();
             assert_eq!(timing.get(SolvePhase::CertificateSetup).unwrap().calls, 1);
             assert_eq!(
@@ -94,8 +118,8 @@ fn ordinary_certified_models_optimum_ties_and_hidden_displays_match_explicit_red
 #[test]
 fn unsupported_class_falls_back_and_explicit_general_oracle_keeps_comparison_path() {
     let source = "a|b. a:-b. b:-a.";
-    let (general, expected, _) = solve(source, &options(Oracle::Countermodel, 1));
-    let (auto, actual, diag) = solve(source, &options(Oracle::Auto, 1));
+    let (general, expected, _) = cli_solve(source, &options(Oracle::Countermodel));
+    let (auto, actual, diag) = cli_solve(source, &options(Oracle::Auto));
     assert_eq!(answers(&actual), answers(&expected));
     let s = auto.countermodel_statistics.unwrap();
     assert_eq!(
@@ -107,32 +131,38 @@ fn unsupported_class_falls_back_and_explicit_general_oracle_keeps_comparison_pat
     );
     assert!(s.certified.unwrap().refusal.is_some());
     assert!(diag.contains("optional class certificate refused"));
-    let mut limited = options(Oracle::Auto, 1);
-    limited.max_completion_scratch_bytes = Some(0);
-    let (r, _, diag) = solve("1{a;b}1.", &limited);
+    let mut limited = config(Oracle::Auto, 1);
+    limited.solve.max_completion_scratch_bytes = 0;
+    let (r, _, _) = solve("1{a;b}1.", &limited);
     assert_eq!(r.completion, Completion::Exhausted);
-    assert!(r.countermodel_statistics.unwrap().countermodel_queries > 0);
-    assert!(diag.contains("optional class certificate refused"));
-    assert!(diag.contains("storage limit=0"));
+    let statistics = r.countermodel_statistics.unwrap();
+    assert!(statistics.countermodel_queries > 0);
+    assert_eq!(
+        statistics.certified.unwrap().tight_refusal,
+        Some(zetesis_ferraris::TightError::Limit(
+            zetesis_ferraris::TightResource::Bytes
+        ))
+    );
 }
 #[test]
 fn early_requested_models_and_writer_failure_keep_unpublished_certified_models_explicit() {
-    let mut o = options(Oracle::Auto, 4);
-    o.models = 1;
+    let mut o = config(Oracle::Auto, 4);
+    o.solve.models = 1;
     let (r, _, _) = solve("1{a;b;c}1.", &o);
     assert_eq!(r.completion, Completion::RequestedModels);
     assert_eq!(r.models, 1);
     let e = r.formula_execution.unwrap();
     assert_eq!(e.queued_models, 2);
     assert_eq!(r.countermodel_statistics.unwrap().stable_models, 3);
-    let failure: RunFailure = run_detailed_with_diagnostics(
-        "1{a;b;c}1.".into(),
+    let failure: RunFailure = prepared::human(
+        "1{a;b;c}1.",
         &o,
         &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
         &mut Vec::new(),
         &Cancellation::default(),
     )
     .unwrap_err();
+
     let p = failure.partial_report.unwrap();
     assert_eq!(p.published_models, 0);
     assert_eq!(p.verified_models, 3);

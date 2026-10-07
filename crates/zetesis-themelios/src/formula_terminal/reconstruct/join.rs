@@ -4,15 +4,11 @@
 //! selected rows. Every level's checkpoint separates its captures from that
 //! prefix. The finite row cursors and depth delimit the remaining traversal.
 
-use themelios_program::program::DefaultNegation;
-use zetesis_core::{
-    AtomRows, BindingView, Model, PatternRef, TemplateComponentsRef, UnificationFailure,
-};
+use zetesis_core::{AtomRows, BindingView, Model, PatternRef, UnificationFailure};
 use zetesis_core::{atom_interner::AtomInterner, catalog::TermRef};
 
-use super::{ReconstructionError, Work};
-use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
-use crate::formula_support::{StorageLease, components};
+use super::{ReconstructionError, Work, plan::Rule};
+use crate::formula_support::StorageLease;
 
 struct Level<'plan, 'model> {
     pattern: PatternRef<'plan>,
@@ -30,8 +26,8 @@ struct Frame<'plan, 'model> {
 
 impl<'plan, 'model> Frame<'plan, 'model> {
     fn new(
-        rule: &RuleIr,
-        components: TemplateComponentsRef<'plan>,
+        rule: &Rule<'plan>,
+        patterns: &[PatternRef<'plan>],
         model: &'model Model,
         writer: &AtomInterner,
         work: &mut Work<'_>,
@@ -62,7 +58,7 @@ impl<'plan, 'model> Frame<'plan, 'model> {
         let slots_and_trail = slots_bytes + frame.trail.capacity() * size_of::<usize>();
         work.reserve(
             &mut frame.levels,
-            rule.body.len(),
+            patterns.len(),
             &mut frame.lease,
             size_of::<Self>() + slots_and_trail,
             writer,
@@ -71,12 +67,8 @@ impl<'plan, 'model> Frame<'plan, 'model> {
             work.permit()?;
             frame.slots.push(None);
         }
-        for literal in &rule.body {
+        for &pattern in patterns {
             work.permit()?;
-            let LiteralIr::Atom(DefaultNegation::None, pattern) = literal else {
-                return Err(components::missing(rule.location).into());
-            };
-            let pattern = pattern.get(components, work.limits, work.counters, rule.location)?;
             let rows = model
                 .lookup()
                 .predicate_with(pattern.predicate(), || work.permit())?;
@@ -102,17 +94,14 @@ impl<'plan, 'model> Frame<'plan, 'model> {
 }
 
 pub(super) fn derive(
-    rule: &RuleIr,
-    components: TemplateComponentsRef<'_>,
+    rule: &Rule<'_>,
+    patterns: &[PatternRef<'_>],
     model: &Model,
     writer: &mut AtomInterner,
     work: &mut Work<'_>,
 ) -> Result<(), ReconstructionError> {
-    let HeadIr::Normal(Some(head)) = &rule.head else {
-        return Err(components::missing(rule.location).into());
-    };
-    let head = head.get(components, work.limits, work.counters, rule.location)?;
-    let mut frame = Frame::new(rule, components, model, writer, work)?;
+    let head = rule.head;
+    let mut frame = Frame::new(rule, patterns, model, writer, work)?;
     if frame.levels.is_empty() {
         return emit(head, &frame.slots, writer, work);
     }

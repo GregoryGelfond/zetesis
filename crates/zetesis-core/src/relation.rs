@@ -39,8 +39,14 @@ mod storage;
 mod selection;
 mod catalog;
 mod dictionary;
+mod column;
 
-pub use catalog::{Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, Runs};
+use column::OwnedColumn;
+pub use column::{Column, Values as ColumnValues};
+
+pub use catalog::{
+    Appended, Appender, Canonical, Catalog, CatalogFailure, Insertion, Lookup, Preparation, Runs,
+};
 
 pub use selection::{
     Equality, EqualityAttempt, Mask, Query, QueryAttempt, QueryFailure, Selection,
@@ -210,7 +216,7 @@ pub struct Relation<'source> {
 struct Layout {
     dictionary: Vec<Cell>,
     index: DictionaryIndex,
-    columns: Vec<Vec<u32>>,
+    columns: Vec<OwnedColumn>,
 }
 
 enum DictionaryIndex {
@@ -375,6 +381,11 @@ impl<'source> Relation<'source> {
         )
     }
 
+    /// Canonical prefix authenticating every source occurrence, when present.
+    pub(crate) fn canonical_read(&self) -> Option<crate::catalog::CatalogRead<'source>> {
+        self.source.read()
+    }
+
     /// The full signed predicate. Constant-time borrowed view.
     #[must_use]
     pub const fn predicate(&self) -> PredicateRef<'source> {
@@ -393,26 +404,26 @@ impl<'source> Relation<'source> {
         self.storage
     }
 
-    /// Borrow one contiguous equality-ID column in original row order.
+    /// Borrow one width-aware equality-ID column in original row order.
     ///
     /// IDs are meaningful only with this relation's dictionary. They must not
     /// be interpreted as numbers, term-order ranks or candidate truth.
     #[must_use]
-    pub fn column(&self, column: usize) -> Option<&[u32]> {
+    pub fn column(&self, column: usize) -> Option<Column<'_>> {
         if column >= self.predicate.arity() {
             return None;
         }
-        self.layout.columns.get(column).map(Vec::as_slice)
+        self.layout.columns.get(column).map(OwnedColumn::view)
     }
 
     /// Borrow columns in original argument order without packing or allocation.
     ///
-    /// Exactly arity slices are returned, each containing `row_count` IDs.
-    /// Nullary relations yield no slices. A device consumer may copy these
-    /// slices consecutively into its admitted column-major upload buffer.
+    /// Exactly arity views are returned, each containing `row_count` IDs.
+    /// Nullary relations yield no views. Width affects physical storage only;
+    /// consumers decode the same logical identifiers without a second owner.
     #[must_use]
-    pub fn columns(&self) -> impl ExactSizeIterator<Item = &[u32]> {
-        self.layout.columns.iter().map(Vec::as_slice)
+    pub fn columns(&self) -> impl ExactSizeIterator<Item = Column<'_>> {
+        self.layout.columns.iter().map(OwnedColumn::view)
     }
 
     /// Access a typed row occurrence without allocating or cloning an atom.
@@ -466,6 +477,11 @@ pub struct Row<'owner, 'source> {
 }
 
 impl<'source> Row<'_, 'source> {
+    /// The exact immutable relation, independent of equal tuple content.
+    pub(crate) fn belongs_to(&self, relation: &Relation<'_>) -> bool {
+        self.relation.same_owner(relation)
+    }
+
     /// Borrow this complete source occurrence without copying its arguments.
     /// The row's checked position resolves through the relation's original
     /// occurrence map; dictionary order is not atom identity.
@@ -525,7 +541,7 @@ impl<'source> Row<'_, 'source> {
     /// The value borrows the source and can outlive this row and relation view.
     #[must_use]
     pub fn value(&self, column: usize) -> Option<TermRef<'source>> {
-        let id = *self.relation.column(column)?.get(self.position)?;
+        let id = self.relation.column(column)?.get(self.position)?;
         self.relation
             .layout
             .dictionary

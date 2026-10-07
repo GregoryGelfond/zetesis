@@ -72,3 +72,46 @@ fn other_spellings_of_seconds_read_as_no_time() {
         assert_eq!(decimal_seconds_ns(text), None, "{text}");
     }
 }
+
+#[test]
+fn historical_profiles_keep_their_bounded_policy() {
+    let historical = serde_json::json!({"backend":"cpu", "grounder":"eager", "oracle":"auto", "workers":2, "completion_workers":1, "batch_size":64, "max_expansion_work":10_000_000});
+    let shown = super::Profile(&historical).to_string();
+    assert!(shown.contains("historical resource profile"));
+    assert!(shown.contains("expansion work limit=10000000"));
+    assert!(!shown.contains("requested policy=ordinary"));
+}
+
+#[test]
+fn ordinary_profiles_do_not_imply_unlimited_execution() {
+    let profile = serde_json::to_value(crate::selected::NativeExecution {
+        memory_bytes: Some(123),
+        ..Default::default()
+    })
+    .unwrap();
+    let shown = super::Profile(&profile).to_string();
+    assert!(shown.contains("requested policy=ordinary"));
+    assert!(shown.contains("memory allowance=123 bytes"));
+    assert!(!shown.contains("unlimited"));
+    assert!(!shown.contains("completion workers"));
+}
+
+#[test]
+fn historical_and_ordinary_profile_identities_remain_distinct() {
+    let historical = serde_json::json!({"backend":"cpu", "grounder":"eager", "oracle":"auto", "workers":1, "completion_workers":1, "batch_size":64});
+    let ordinary = serde_json::to_value(crate::selected::NativeExecution::default()).unwrap();
+    let report = |profile| serde_json::json!({"report":{"plan":{"profiles":[profile]}}});
+    let old = report(historical);
+    let new = report(ordinary);
+    let old = super::profiles(&super::Labelled {
+        label: "old",
+        report: &old,
+    })
+    .unwrap();
+    let new = super::profiles(&super::Labelled {
+        label: "new",
+        report: &new,
+    })
+    .unwrap();
+    assert_ne!(old, new);
+}

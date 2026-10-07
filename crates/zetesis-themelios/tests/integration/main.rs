@@ -92,6 +92,7 @@ mod objective_head_producers;
 mod objective_language_boundaries;
 mod objective_literal_weights;
 mod objective_measure_carriers;
+mod objective_native;
 mod objective_pools;
 mod objective_priorities;
 mod objective_priority_certificates;

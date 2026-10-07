@@ -10,12 +10,12 @@ fn guard(conjunction: bool) -> Theory {
     theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
+            Node::atom(0),
+            Node::atom(1),
             if conjunction {
-                Node::And(0, 1)
+                Node::and_pair([0, 1])
             } else {
-                Node::Or(0, 1)
+                Node::or_pair([0, 1])
             },
         ],
         vec![2],
@@ -107,20 +107,20 @@ fn generation_overflow_preserves_the_active_bound() {
     let original = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::or_pair([0, 2]),
         ],
         vec![3],
     );
     let mut search =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
-    let first = theory(1, vec![Node::Atom(0)], vec![0]);
+    let first = theory(1, vec![Node::atom(0)], vec![0]);
     search.tighten_candidate_bound(&first).unwrap();
     search.bound_generation = u64::MAX;
     let before = search.statistics();
-    let stronger = theory(1, vec![Node::False], vec![0]);
+    let stronger = theory(1, vec![Node::falsum()], vec![0]);
     assert_eq!(
         search.tighten_candidate_bound(&stronger),
         Err(Incomplete::CounterOverflow)
@@ -226,7 +226,7 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     .unwrap();
     let permanent = theory(
         2,
-        vec![Node::Atom(0), Node::False, Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::falsum(), Node::implies(0, 1)],
         vec![2],
     );
     let permanent_index = Narrower::new(&permanent);

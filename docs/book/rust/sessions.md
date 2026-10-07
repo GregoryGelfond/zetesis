@@ -29,6 +29,33 @@ Formula and device execution do not inherit this unused reservation. With valid
 policies, an already cancelled request stops before executor resource checks
 and allocation; an incompatible policy remains a setup error.
 
+For ordinary resource policy, derive preparation and execution settings together:
+
+```rust
+# extern crate zetesis_solve;
+# extern crate zetesis_themelios;
+use std::num::NonZeroUsize;
+use zetesis_solve::Resources;
+
+let resources = Resources::new(512 * 1024 * 1024, NonZeroUsize::new(4).unwrap());
+let input = zetesis_themelios::admit_formula(
+    "1 { a; b } 1.".into(),
+    resources.admission_options(),
+    resources.expansion_limits(),
+    resources.formula_limits(),
+)?;
+let config = resources.solve_config();
+assert_eq!(config.workers.get(), 4);
+# let _ = input;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+This policy derives named storage capacities from memory and keeps work as
+checked statistics without a selected operation-count cutoff. The independent
+capacities are not a global resident-memory guarantee. Explicit limit fields
+remain available when an embedding needs a bounded operation; optional analyses
+and device dispatches also retain internal effort bounds.
+
 ## Pulling and stopping
 
 `Session` is a fused iterator of `Result<AnswerSet, SolveFailure>`. Each
@@ -235,8 +262,8 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-hybrid
 
 `SolveConfig::constraints` supplies cumulative `ConstraintCheckLimits` for that
 session: charged work, substitutions and structural-capture reservations. The
-retained `max_scalar_bytes` field bounds requested capture-delta bytes; those
-cells borrow canonical terms. Flat binding copies retain IDs and frozen
+retained `max_scalar_bytes` field bounds requested capture-delta capacity growth;
+each join reuses those cells, which borrow canonical terms. Flat binding copies retain IDs and frozen
 constructor lookup reuses admitted terms, so neither adds a scalar-byte charge.
 Their physical storage remains under the admitted support allowance. The
 `scalar_bytes` receipt is cumulative reserved bytes, not live capacity or RSS.
@@ -418,6 +445,11 @@ available without timing instrumentation. CLI phase schema 4 introduced
 `answer_reconstruction`; schema 5 adds `model_construction`. Maintained readers
 accept schemas 1–4 without inventing measurements absent from older records.
 
+Reconstruction prepares immutable rule patterns on its first attempted answer.
+The first call includes that preparation work; later calls reuse the patterns
+but still account for their retained storage. Truth selections, bindings and
+cursors remain private to each answer. Per-answer allowances are unchanged.
+
 Formula sessions prepare one semantic ordering of their fixed atom catalog.
 Each verified interpretation selects positions through this ordering before
 scoring or output. The catalog remains the authority for atom contents; ranks
@@ -426,11 +458,19 @@ CPU and device membership paths use the same model construction.
 
 `SemanticOutcome::model_construction()` retains accepted work, prepared rank
 capacity, peak construction metadata and completed model count, even without
-timing instrumentation. `SolveConfig::max_model_work` bounds cumulative ordering
-and selection work; `max_model_bytes` bounds prepared ranks plus active
-construction metadata. This byte scope excludes the borrowed catalog and earlier
-models, whose owners account for their storage separately. The limits default
-to one billion operations and 64 MiB; `for_allowance` scales only the byte limit.
+timing instrumentation. `SolveConfig::max_model_work` bounds each selection's
+work; one-time order preparation has a separate allowance of the same size.
+Every attempt starts with its own full allowance, while the receipt retains
+accepted work cumulatively, including failed attempts. A refused operation is
+not charged. Overflow of the cumulative work or completed-model counter is a
+`SolveError::ModelStatisticsOverflow`, before an unrecorded operation or model
+can be published. The work interruption's proposed count is local to the
+refused preparation or selection; JSON's `required` carries that count, while
+`statistics.model_construction.work` remains cumulative. `max_model_bytes`
+bounds prepared ranks plus active construction metadata. This byte scope excludes the borrowed catalog and earlier
+models, whose owners account for their storage separately. Ordinary policy
+derives the byte capacity from memory and uses the work counter's representation
+maximum. A library caller can select a smaller work allowance explicitly.
 Cancellation or either bound interrupts enumeration with a typed reason. It does
 not turn a verified but unconstructed answer into a published model, establish
 UNSAT, or prove an incumbent optimal.

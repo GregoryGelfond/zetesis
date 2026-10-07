@@ -5,7 +5,7 @@ use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateLimits, AggregateProfile,
 };
-use crate::Node;
+use crate::{FormulaNodes, NodeView};
 
 /// A finite extremum with the source language's empty-set convention.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,7 +60,7 @@ impl From<i32> for ExtremumBound {
 /// # Errors
 /// Returns a typed input, resource, allocation, cancellation or arithmetic error.
 pub fn append_extremum(
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     elements: &[AggregateElement],
     extremum: AggregateExtremum,
     comparison: AggregateComparison,
@@ -69,7 +69,7 @@ pub fn append_extremum(
     cancellation: &Cancellation,
 ) -> Result<AggregateBuild, AggregateError> {
     append(
-        Destination::unchecked(nodes),
+        Destination::retained(nodes.transaction()),
         elements,
         extremum,
         comparison,
@@ -95,15 +95,15 @@ pub(super) fn append(
 }
 
 fn compile(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     extremum: AggregateExtremum,
     comparison: AggregateComparison,
     bound: ExtremumBound,
 ) -> Result<usize, AggregateErrorKind> {
     validate(builder, elements)?;
-    let falsum = builder.push(Node::False)?;
-    let truth = builder.push(Node::Implies(falsum, falsum))?;
+    let falsum = builder.push(NodeView::False)?;
+    let truth = builder.push(NodeView::Implies(falsum, falsum))?;
     // G is max >= bound / min <= bound. H is the corresponding strict
     // comparison. Both are monotone in eligible tuples, including sentinels.
     let (inclusive, strict) = witnesses(builder, elements, extremum, bound, falsum, truth)?;
@@ -111,7 +111,7 @@ fn compile(
 }
 
 pub(super) fn comparison_root(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     extremum: AggregateExtremum,
     comparison: AggregateComparison,
     inclusive: usize,
@@ -126,23 +126,23 @@ pub(super) fn comparison_root(
         return Ok(inclusive);
     }
     if comparison == negative {
-        return builder.push(Node::Implies(inclusive, falsum));
+        return builder.push(NodeView::Implies(inclusive, falsum));
     }
     match comparison {
         AggregateComparison::Eq => {
-            let below_strict = builder.push(Node::Implies(strict, falsum))?;
-            builder.push(Node::And(inclusive, below_strict))
+            let below_strict = builder.push(NodeView::Implies(strict, falsum))?;
+            builder.push(NodeView::And(&[inclusive, below_strict]))
         }
-        AggregateComparison::Ne => builder.push(Node::Implies(inclusive, strict)),
+        AggregateComparison::Ne => builder.push(NodeView::Implies(inclusive, strict)),
         AggregateComparison::Gt | AggregateComparison::Lt => Ok(strict),
         AggregateComparison::Ge | AggregateComparison::Le => {
-            builder.push(Node::Implies(strict, falsum))
+            builder.push(NodeView::Implies(strict, falsum))
         }
     }
 }
 
 fn witnesses(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     extremum: AggregateExtremum,
     bound: ExtremumBound,
@@ -153,8 +153,11 @@ fn witnesses(
         AggregateExtremum::Max => ExtremumBound::NegativeInfinity,
         AggregateExtremum::Min => ExtremumBound::PositiveInfinity,
     };
-    let mut inclusive = (bound == empty).then_some(truth);
-    let mut strict = None;
+    let mut inclusive = Vec::new();
+    if bound == empty {
+        builder.operand(&mut inclusive, truth)?;
+    }
+    let mut strict = Vec::new();
     for element in elements {
         builder.tick()?;
         let value = ExtremumBound::Number(i64::from(element.weight));
@@ -163,11 +166,14 @@ fn witnesses(
             AggregateExtremum::Min => bound.cmp(&value),
         };
         if order.is_ge() {
-            inclusive = Some(builder.join(inclusive, element.condition, false)?);
+            builder.operand(&mut inclusive, element.condition)?;
         }
         if order.is_gt() {
-            strict = Some(builder.join(strict, element.condition, false)?);
+            builder.operand(&mut strict, element.condition)?;
         }
     }
-    Ok((inclusive.unwrap_or(falsum), strict.unwrap_or(falsum)))
+    Ok((
+        builder.group(&inclusive, falsum, false)?,
+        builder.group(&strict, falsum, false)?,
+    ))
 }

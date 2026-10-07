@@ -30,7 +30,7 @@ impl<'a> From<&'a Term> for TemplateTerm<'a> {
     }
 }
 impl<'a> TemplateTerm<'a> {
-    fn admitted(program: Read<'a>, term: TermData) -> Self {
+    pub(crate) fn admitted(program: Read<'a>, term: TermData) -> Self {
         match term {
             TermData::Variable(variable) => Self::Variable(variable),
             TermData::Constant(id) => Self::Constant(catalog::term(program, id)),
@@ -86,6 +86,13 @@ impl<'a> PatternRef<'a> {
             });
         }
         Ok(Self(PatternSource::Parts(predicate, terms)))
+    }
+
+    pub(crate) fn admitted_parts(self) -> Option<(Read<'a>, &'a PatternData)> {
+        match self.0 {
+            PatternSource::Admitted(read, pattern) => Some((read, pattern)),
+            PatternSource::Ingress(_) | PatternSource::Parts(_, _) => None,
+        }
     }
 
     pub(crate) fn is_ingress(self) -> bool {

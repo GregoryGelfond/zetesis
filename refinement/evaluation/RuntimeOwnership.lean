@@ -1,4 +1,5 @@
 import OwnerExternals
+import OwnerValues
 
 /-!
 # Immutable shared-owner contracts
@@ -18,19 +19,6 @@ global-allocator use, as documented in OwnerExternals.
 namespace RuntimeOwnership
 
 open Aeneas Aeneas.Std Result
-
-/-- The active representation is shared with extraction, not copied into a
-second ownership model. -/
-abbrev ArcView (α : Type) := alloc.sync.Arc α
-
-/-- A heap describes the immutable value at each live identity. Absence is not
-an allocation failure result; this module performs no allocation. -/
-abbrev Heap (α : Type) := Nat → Option α
-
-/-- A view reads the value stored at its owner in the common immutable heap.
-Two inconsistent payloads cannot both satisfy this relation at the same owner. -/
-def Consistent {α : Type} (heap : Heap α) (view : ArcView α) : Prop :=
-  heap view.owner = some view.value
 
 /-- The external clone retains the complete input view, introducing no owner. -/
 theorem clone_exact {α A : Type}
@@ -56,18 +44,6 @@ theorem ptr_eq_exact {α : Type} (allocator : Type) (left right : ArcView α) :
     alloc.sync.Arc.ptr_eq allocator left right = ok true ↔ left.owner = right.owner := by
   simp [alloc.sync.Arc.ptr_eq]
 
-/-- Consistent views of the same immutable allocation have the same value.
-The common heap is essential: each view reads the same table entry. -/
-theorem same_owner_value {α : Type} (heap : Heap α) (left right : ArcView α)
-    (leftValid : Consistent heap left) (rightValid : Consistent heap right)
-    (same : left.owner = right.owner) : left.value = right.value := by
-  have sameEntry : some left.value = some right.value := by
-    calc
-      some left.value = heap left.owner := leftValid.symm
-      _ = heap right.owner := congrArg heap same
-      _ = some right.value := rightValid
-  exact Option.some.inj sameEntry
-
 /-- A successful external owner comparison permits transporting immutable data
 only for views consistent with the same heap. -/
 theorem accepted_owner_value {α : Type} (allocator : Type)
@@ -75,7 +51,8 @@ theorem accepted_owner_value {α : Type} (allocator : Type)
     (leftValid : Consistent heap left) (rightValid : Consistent heap right)
     (accepted : alloc.sync.Arc.ptr_eq allocator left right = ok true) :
     left.value = right.value := by
-  have same : left.owner = right.owner := (ptr_eq_exact allocator left right).mp accepted
+  have same : left.owner = right.owner := by
+    exact (ptr_eq_exact allocator left right).mp accepted
   exact same_owner_value heap left right leftValid rightValid same
 
 /-- Identical data in distinct allocations still fail the external owner test.

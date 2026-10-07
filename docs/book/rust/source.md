@@ -476,7 +476,8 @@ alternatives, and `streamed_instances()` counts scalar-selected instances visite
 during admission; neither is a retained instance store.
 
 `checker(limits)` gives each check its own work and substitution limits, plus a
-byte allowance for structural capture deltas: the first check's allowance also
+byte allowance for structural capture-delta capacity growth within each join:
+the first check's allowance also
 covers the checker's preparation, and each later check is measured from the
 charges accepted when the previous one ended. The limits bound the work spent
 on one candidate, never the number of candidates. A refusal reports the check's
@@ -543,9 +544,11 @@ before preparation. The default is 128 MiB for the support authority's canonical
 payload, identity indexes and current prefix, plus relation metadata, postings,
 borrowed snapshots, query capacity and construction scratch. Canonical support
 payload is counted by its authority once. Allocator/tree/control-runtime overhead
-and unrelated grounding state remain separate; this is not a total-memory bound. The CLI exposes the same
-allowance as `--max-support-bytes` in `--help-all`. This is an admission limit;
-`SolveConfig` applies after the formula owner has already been constructed.
+and unrelated grounding state remain separate; this is not a total-memory bound.
+For the ordinary resource policy, use `zetesis_solve::Resources` to derive
+admission, expansion, formula and session settings from one memory allowance
+and thread count. The CLI uses this same policy. `SolveConfig` alone applies
+after the formula owner has already been constructed.
 
 Choose positive joins separately through the preparation's
 `with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
@@ -612,10 +615,13 @@ IDs. This avoids rebuilding typed values during guard preparation. Candidate
 metadata remains bounded by charged work outside the support-byte allowance;
 canonical payload and guard workspace retain their separate storage accounting.
 
-This complete example compares admitted atoms, nodes, roots and provenance,
-observes an actual typed `Analysis` and positive guard activity, and checks both
-local widening and a stopped analysis. It materializes theories without solving
-for answer sets or measuring elapsed time.
+This complete example compares admitted atoms, nodes, operand storage, roots
+and provenance, observes an actual typed `Analysis` and positive guard activity,
+and checks both local widening and a stopped analysis. Its connected join order
+is `a`, `c`, `b`: guards reduce final-rule probes from thirteen to seven by
+skipping empty postings, while both routes offer sixteen rows. Six rows are
+rejected during completion and six during final instantiation. The example
+materializes theories without solving for answer sets or measuring elapsed time.
 
 ```rust
 # extern crate themelios_base;

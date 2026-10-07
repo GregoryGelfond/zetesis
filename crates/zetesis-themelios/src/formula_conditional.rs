@@ -4,7 +4,7 @@ use crate::formula_binding::Binding;
 
 use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
-use zetesis_ferraris::Node;
+use zetesis_ferraris::NodeView as Node;
 
 use crate::FormulaFailure;
 use crate::formula_conditional_ir::{

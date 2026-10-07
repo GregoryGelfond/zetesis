@@ -28,7 +28,7 @@ fn installed_run_defaults_to_canonical_solve() {
         options.threads.get(),
         std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
     );
-    assert_eq!(options.completion_workers.get(), 1);
+    assert_eq!(options.memory, None);
     assert_eq!(options.clingo_threads.get(), 1);
     assert_eq!(
         options.plan().unwrap().suite(),
@@ -102,10 +102,8 @@ fn grounder_comparison_varies_only_materialization() {
         "--compare-grounders",
         "--threads",
         "4",
-        "--completion-workers",
-        "2",
-        "--batch-size",
-        "17",
+        "--memory",
+        "300000000",
     ]) else {
         panic!("expected run")
     };
@@ -115,9 +113,8 @@ fn grounder_comparison_varies_only_materialization() {
     };
     assert_eq!(eager.grounder, Grounder::Eager);
     assert_eq!(lazy.grounder, Grounder::Lazy);
-    assert_eq!(eager.workers.get(), 4);
-    assert_eq!(eager.completion_workers.get(), 2);
-    assert_eq!(eager.batch_size.get(), 17);
+    assert_eq!(eager.threads.get(), 4);
+    assert_eq!(eager.memory_bytes, Some(300_000_000));
     let normalized = zetesis_validation::selected::NativeExecution {
         grounder: eager.grounder,
         ..*lazy
@@ -305,8 +302,8 @@ fn profile_axes_combine_into_their_product() {
         "--compare-grounders",
         "--compare-threads",
         "1,2",
-        "--batch-size",
-        "17",
+        "--memory",
+        "300000000",
     ]) else {
         panic!("expected run")
     };
@@ -314,7 +311,7 @@ fn profile_axes_combine_into_their_product() {
     let axes: Vec<_> = plan
         .profiles()
         .iter()
-        .map(|profile| (profile.backend, profile.grounder, profile.workers.get()))
+        .map(|profile| (profile.backend, profile.grounder, profile.threads.get()))
         .collect();
     let mut expected = Vec::new();
     for backend in [Backend::Cpu, Backend::Gpu(None)] {
@@ -328,7 +325,7 @@ fn profile_axes_combine_into_their_product() {
     assert!(
         plan.profiles()
             .iter()
-            .all(|profile| profile.batch_size.get() == 17)
+            .all(|profile| profile.memory_bytes == Some(300_000_000))
     );
     assert_eq!(
         RunOptions::reference_policy(&plan),
@@ -430,4 +427,20 @@ fn compare_prints_markdown_or_json_but_not_both() {
     ])
     .unwrap_err();
     assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn run_refuses_removed_solver_internal_controls() {
+    for flag in [
+        "--completion-workers",
+        "--batch-size",
+        "--max-expansion-work",
+    ] {
+        let error = Cli::try_parse_from(["zetesis-bench", "run", flag, "1"]).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::UnknownArgument,
+            "{flag}"
+        );
+    }
 }

@@ -591,8 +591,14 @@ fn coherent_row<E>(
         let previous = first_columns[variable];
         if previous != column {
             work.tick(1)?;
-            if relation.column(column).ok_or(Cause::Relation)?[row]
-                != relation.column(previous).ok_or(Cause::Relation)?[row]
+            if relation
+                .column(column)
+                .and_then(|values| values.get(row))
+                .ok_or(Cause::Relation)?
+                != relation
+                    .column(previous)
+                    .and_then(|values| values.get(row))
+                    .ok_or(Cause::Relation)?
             {
                 return Ok(false);
             }

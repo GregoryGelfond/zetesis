@@ -14,7 +14,7 @@ use crate::support::region_filters::{ROUTES, Route, choices};
 fn disjunction(atoms: usize) -> Theory {
     theory(
         atoms,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     )
 }
@@ -22,7 +22,7 @@ fn disjunction(atoms: usize) -> Theory {
 fn conjunction(atoms: usize) -> Theory {
     theory(
         atoms,
-        vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
         vec![2],
     )
 }
@@ -32,7 +32,7 @@ fn tightening_keeps_permanent_restrictions_added_after_a_bound() {
     let original = choices(3);
     let permanent = theory(
         3,
-        vec![Node::Atom(2), Node::False, Node::Implies(0, 1)],
+        vec![Node::atom(2), Node::falsum(), Node::implies(0, 1)],
         vec![2],
     );
     for route in ROUTES {
@@ -50,10 +50,10 @@ fn a_bound_does_not_support_original_atoms() {
     let original = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
         ],
         vec![2, 3],
     );
@@ -103,7 +103,7 @@ fn tightening_preserves_pending_candidates_for_original_membership() {
         assert!(matches!(failed, Err(BatchError::Checker("retry"))));
         let before = search.statistics().candidates;
         search
-            .tighten_candidate_bound(&theory(3, vec![Node::False], vec![0]))
+            .tighten_candidate_bound(&theory(3, vec![Node::falsum()], vec![0]))
             .unwrap();
         let completed = search
             .next_batch(batch(3), |subject, candidates| {
@@ -149,7 +149,7 @@ fn active_workers_preserve_every_model_under_the_latest_bound() {
 
 #[test]
 fn positive_cursor_checks_the_current_bound() {
-    let original = theory(1, vec![Node::Atom(0)], vec![0]);
+    let original = theory(1, vec![Node::atom(0)], vec![0]);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
         assert!(
@@ -166,7 +166,7 @@ fn positive_cursor_checks_the_current_bound() {
         ));
         search.tighten_candidate_bound(&original).unwrap();
         search
-            .tighten_candidate_bound(&theory(1, vec![Node::False], vec![0]))
+            .tighten_candidate_bound(&theory(1, vec![Node::falsum()], vec![0]))
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
         assert_eq!(search.statistics().candidates, 0);
@@ -180,7 +180,7 @@ fn empty_universe_bounds_can_exclude_the_empty_interpretation() {
         let mut search = route.search(&original, Cancellation::default());
         search.tighten_candidate_bound(&original).unwrap();
         search
-            .tighten_candidate_bound(&theory(0, vec![Node::False], vec![0]))
+            .tighten_candidate_bound(&theory(0, vec![Node::falsum()], vec![0]))
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
     }
@@ -200,7 +200,7 @@ fn clauses_retain_equivalent_bounds_and_independent_restrictions() {
     search
         .restrict_candidates(&theory(
             3,
-            vec![Node::Atom(2), Node::False, Node::Implies(0, 1)],
+            vec![Node::atom(2), Node::falsum(), Node::implies(0, 1)],
             vec![2],
         ))
         .unwrap();

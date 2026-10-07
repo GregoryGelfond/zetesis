@@ -466,7 +466,10 @@ impl<'a> TermRef<'a> {
 
     /// Compare in ASP term order with a check before every navigation step,
     /// descriptor comparison and compared text-byte pair. Equal canonical
-    /// identities require one check and no payload traversal. No payload is copied.
+    /// identities require one check and no payload traversal. Between canonical
+    /// terms, the descriptor check also admits exact shared text identity; that
+    /// text needs no byte visits. Other text and ingress/mixed-input traces keep
+    /// their ordinary checks. No payload is copied.
     ///
     /// # Errors
     /// Returns the caller's first refusal without claiming an ordering.
@@ -491,7 +494,9 @@ impl<'a> TermRef<'a> {
     /// this a different work schedule from [`Value::compare_identity_with`].
     /// It allocates nothing and does not inspect an unneeded payload suffix.
     /// Equal canonical identities require one check and no payload traversal.
-    /// Two complete ingress values retain their legacy comparison trace.
+    /// Between canonical terms, exact shared immutable text needs only the
+    /// descriptor check; kind, sign, arity and descendants still determine order.
+    /// Other text keeps its byte checks. Ingress and mixed-input traces are unchanged.
     ///
     /// # Errors
     /// Returns the first callback error before its operation, without an ordering.

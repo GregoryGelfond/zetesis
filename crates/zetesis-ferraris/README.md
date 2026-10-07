@@ -5,7 +5,11 @@ oracle in `zetesis-cpu` computes a least closure. A general reduct may have
 incomparable minimal models; this kernel checks proper subsets instead.
 
 The input is a bounded, immutable DAG of atoms, falsum, conjunction, disjunction,
-and implication, plus asserted roots. Default negation is implication to falsum.
+and implication, plus asserted roots. `FormulaParts` owns raw nodes and their
+operand arena together. Conjunction/disjunction pairs are inline; wider groups
+retain one arena row. `NodeView` exposes every logical child independently of
+that storage. `Theory::new` validates the paired graph and asserted roots.
+Default negation is implication to falsum.
 One pass computes the candidate's classical truth mask. A second transform
 evaluates the frozen reduct in a proposed countermodel: every candidate-false
 node becomes falsum. The checker rejects a classical nonmodel immediately,
@@ -41,8 +45,8 @@ view from unverified bits or retain it while overwriting the workspace. A
 successful evaluation can report a nonmodel. It does not establish an answer set.
 
 The workspace retains capacity across candidates and independently admitted
-theories, recomputing all values on every call. Work counts node and root visits;
-bytes include its header and actual Boolean-vector capacity. A lowered byte
+theories, recomputing all values on every call. Work counts nodes, every logical
+child occurrence and root visits; bytes include its header and actual Boolean-vector capacity. A lowered byte
 ceiling includes capacity retained by earlier calls. Cancellation, deadlines,
 allocation and resource failures expose no truth view and retain their consumed
 work and storage receipt. Borrowed inputs and allocator bookkeeping are excluded.
@@ -60,9 +64,10 @@ No candidate words or original DAG are copied; `candidate()` and `theory()`
 expose the bound subject. A frozen value is neither a model certificate nor an
 answer set. Use the checked membership API for that conclusion.
 
-Construction charges one evaluation per DAG node and retains one Boolean per
-node. Each query allocates its own temporary Boolean workspace and charges one
-evaluation per node, followed by root tests through the first failure. The value
+Construction charges one visit per DAG node and per logical child occurrence,
+including repeated children, and retains one Boolean per node. Each query
+allocates its own temporary Boolean workspace and charges the same node and
+operand visits, followed by root tests through the first failure. The value
 is immutable and can be shared between independent callers. Construction and
 each query have separate work budgets; these operations perform no subset search.
 Cancellation, deadlines, foreign identity, allocation failure and exhausted
@@ -314,10 +319,16 @@ stream plus linear row scans and storage initialization: O(rows + incidences)
 placement work, with one temporary cursor word per row. Enumerating the source
 streams also scans the nodes or producer records twice per map, so total added
 construction remains linear in nodes, atoms, producer records and incidences.
-There is no per-row allocation. The existing chain-building algorithm and its temporary operands are unchanged.
-The logical indexing receipt remains one visit per theory node; these storage
-construction passes are outside that receipt, just as allocation and the
-existing chain-building passes were. Propagation's charged reads are unchanged.
+There is no per-row allocation. Chain preparation first identifies interiors
+with one parent and the same connective, excluding asserted roots. It then
+collects each final chain once, preserving its distinct leaves in left-to-right
+order. A node-indexed mark avoids repeated leaf searches. Preparation takes
+O(N + E + roots) work and O(N) temporary storage; it does not copy every growing
+prefix into its parent. Admitted theories retain native operand groups, while
+shared and asserted nodes remain chain boundaries. The logical indexing receipt
+counts every node and child occurrence. Additional storage construction passes
+remain separate from that receipt, as do allocations and chain preparation.
+Propagation charges the actual operand reads.
 
 `Narrower::try_new` returns `Stop::Allocation` if compact incidence sizes overflow
 or their storage cannot be reserved. Operational SAT callers propagate that
@@ -433,9 +444,9 @@ receipts, not process RSS. Refusal returns its typed cause and accounted prefix.
 ## Finite scalar aggregates
 
 `append_aggregate(nodes, elements, comparison, bound, limits, control)` appends a
-formula to an existing topological `Vec<Node>`. It returns an absolute root index,
-appended-node count, translation profile and statistics. The root is not asserted
-and no surrounding rule is added. Every new node is an ordinary connective;
+formula to a paired `FormulaNodes` owner. It returns an absolute root index,
+appended-node and operand counts, translation profile and statistics. The root
+is not asserted and no surrounding rule is added. Every new node is an ordinary connective;
 compilation introduces no semantic atoms or separate support rules.
 
 Each `AggregateElement { weight: i32, condition: usize }` represents one distinct
@@ -460,7 +471,9 @@ The general translation uses one implication for every failing subset Δ:
 AND over failing Δ: (AND of conditions in Δ) -> (OR of conditions outside Δ)
 ```
 
-Empty conjunction/disjunction mean true/false. This is the finite formula
+Empty conjunction/disjunction mean true/false. Each complete subset antecedent,
+consequent and failing-clause conjunction with at least two children retains
+one native group; singleton groups reuse their child. This is the finite formula
 translation from [Abstract Gringo, corrected v2, §4.7](https://arxiv.org/pdf/1507.06576v2).
 Tuple grouping preserves each tuple's eligibility in both the candidate and the
 frozen reduct because disjunction preserves the union of its alternative supports.
@@ -490,23 +503,41 @@ been refined into Lean.
 
 ## Shared comparison families
 
-`FormulaNodes` owns a growing node vector when several compilations share it.
-Its scalar, family and extremum append methods use the same compilers as the
-free functions, while retaining the extent of completed prefix validation.
-Read access is immutable; appends leave an unchecked suffix, and truncation or
-suffix extraction clamps the retained extent. Reusing that extent changes
-validation work, not formula nodes, roots or aggregate semantics. Every call
-still checks limits, elements and cancellation. A failed transaction removes
-its appended nodes and reports its spent work. Consuming `into_vec()` releases
-the owner; constructing another owner from those nodes requires validation again.
-Raw-vector free functions continue to validate the whole prefix each time.
+`FormulaNodes` owns growing node and operand buffers when compilations share a
+formula. Its scalar, family and extremum methods and the free functions use the
+same paired owner and retain completed topology validation. Raw `FormulaParts`
+ingress starts unchecked. Checked appends extend a fully validated prefix;
+they cannot skip an unchecked raw prefix. Read access leaves earlier rows
+immutable. `FormulaTransaction` commits or rolls back both suffixes; detachment
+returns a paired suffix with absolute child IDs and rebased arena spans.
+Rollback and detachment restore the checkpoint's validation frontier as well as
+its buffer lengths. Reserved capacities may remain larger after refusal.
+
+Every call still checks node and operand ceilings, tuple conditions and control.
+A failed compiler reports its spent work without returning a formula. Consuming
+`into_parts()` transfers both buffers and discards validation evidence; a new
+owner validates that raw prefix again. There is no node-only extraction or
+truncation path. Reuse changes validation work, not aggregate semantics.
+
+`FormulaNodes::prepare_admission(atoms, roots, limits)` instead consumes the owner
+and retains its topology evidence in one opaque `TheoryAdmission`. Its `work()`
+reports the full remaining scan charge of the fixed `admit()` route: `2N + R`
+for completed topology, or `2N + E + R` for raw or incompletely checked input.
+Both routes independently recount logical occurrences, inspect every node for
+atom-universe validity and check every root. Dimension, arena and padding bounds
+remain unchanged. This is a documented pre-admission scan charge, not elapsed
+instructions or the actual prefix visited before an early refusal. Preparing
+moves the buffers without allocation or copies; successful admission retains the
+usual shared handle allocation. Raw `Theory::new` keeps its complete validator.
+The consuming door depends additionally on the transaction/frontier lifecycle;
+that correspondence is distinct from the raw-constructor proof.
 
 `append_aggregate_family(nodes, elements, guards, limits, control)` compiles an
 ordered list of `AggregateGuard { comparison, bound }` against one identical
 coalesced element family. It returns one root per guard, preserving order and
 duplicate requests. `AggregateFamilyLimits` contains the existing aggregate
 limits plus `max_guards`, which bounds the output-root vector independently.
-The original single-guard API and its accounting contract remain unchanged.
+The single-guard operation uses the same ownership and accounting contract.
 
 For nonnegative weights, the family constructs one threshold table through the
 largest needed nonconstant threshold. Every requested inequality or equality
@@ -642,8 +673,12 @@ clingo compatibility claim follows from the successful kernel tests.
 ## Aggregate compilation bounds
 
 `AggregateLimits` independently caps input elements, absolute total DAG nodes,
-charged work, peak temporary state cells and enumerated subsets. The threshold
-profile uses two rows of threshold indices and takes work proportional to the
+logical child occurrences, charged work, peak threshold/subset-state cells and
+enumerated subsets. `max_operands` bounds both logical occurrences and raw arena
+length, including the existing prefix; inline pairs and implications each count
+two occurrences. Each temporary connective row obeys that same inclusive bound.
+Complete extrema witness sets retain native disjunctions without DP states.
+The threshold profile uses two rows of threshold indices and takes work proportional to the
 number of elements times the scalar threshold; its arithmetic complexity is
 pseudopolynomial. Large weights or bounds can trigger `StateLimit` even with few
 elements. Signed compilation is exponential and admits the entire subset count
@@ -654,12 +689,13 @@ with a zero subset budget.
 Existing edge topology and element indices are checked under the work budget.
 `Theory::new` remains responsible for validating atom-universe indices. Every
 charged operation polls shared cancellation/deadline control; storage reservations
-and arithmetic are checked. The state count excludes DAG storage and allocator
-overhead. All ceilings are inclusive, and zero is a real ceiling.
+and arithmetic are checked. The state count excludes DAG storage, temporary
+connective operand rows and allocator overhead; operand rows have their separate
+ceiling. All ceilings are inclusive, and zero is a real ceiling.
 
-On failure, appended nodes are removed and the original prefix and length are
-preserved; vector capacity may have changed. Error statistics report work done
-before rollback. Callers maintain origin tables separately and can clamp the total
+On failure, both appended suffixes are removed and the original node and operand
+prefixes remain unchanged; reserved capacities may have changed. Error statistics
+report work done before rollback. Callers maintain origin tables separately and can clamp the total
 node limit to the number of origins they can admit. Any stopped compilation is a
 refusal, never an unsatisfiable formula.
 

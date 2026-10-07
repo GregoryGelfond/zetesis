@@ -2,7 +2,10 @@
 //! canonical source view, for a single file and an included one alike.
 
 use std::fs;
-use std::process::{Command, Stdio};
+use zetesis_themelios::{
+    BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, SourceBundle,
+    admit_bundle_formula,
+};
 
 /// A choice and a count aggregate: formula admission, whose work ceiling a
 /// tiny allowance trips at the aggregate rule on line 3, column 1.
@@ -13,21 +16,20 @@ fn refusal(files: &[(&str, &str)]) -> String {
     for (name, text) in files {
         fs::write(directory.path().join(name), text).unwrap();
     }
-    let output = Command::new(env!("CARGO_BIN_EXE_zetesis"))
-        .args([
-            "--backend",
-            "cpu",
-            "--color",
-            "never",
-            "--max-expansion-work",
-            "20",
-        ])
-        .arg(directory.path().join("entry.lp"))
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert_eq!(output.status.code(), Some(2));
-    String::from_utf8(output.stderr).unwrap()
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let limits = FormulaLimits {
+        max_work: 20,
+        ..FormulaLimits::default()
+    };
+    let failure = admit_bundle_formula(
+        bundle,
+        BundleAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        limits,
+    )
+    .unwrap_err();
+    zetesis_cli::RunError::FormulaBundleAdmission(failure).to_string()
 }
 
 #[test]
@@ -57,21 +59,20 @@ fn a_program_wide_refusal_claims_no_line_or_column() {
         "{ a(1..3) }.\nb(X) :- a(X).\nc(X) :- b(X).\nd :- #count{ X : c(X) } >= 2.\n",
     )
     .unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_zetesis"))
-        .args([
-            "--backend",
-            "cpu",
-            "--color",
-            "never",
-            "--max-support-rounds",
-            "1",
-        ])
-        .arg(directory.path().join("entry.lp"))
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    let diagnostic = String::from_utf8(output.stderr).unwrap();
-    assert_eq!(output.status.code(), Some(2), "{diagnostic}");
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let limits = FormulaLimits {
+        max_support_rounds: 1,
+        ..FormulaLimits::default()
+    };
+    let failure = admit_bundle_formula(
+        bundle,
+        BundleAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        limits,
+    )
+    .unwrap_err();
+    let diagnostic = zetesis_cli::RunError::FormulaBundleAdmission(failure).to_string();
     assert!(
         diagnostic.contains("entry.lp: while admitting the program"),
         "{diagnostic}"

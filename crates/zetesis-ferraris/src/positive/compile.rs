@@ -2,8 +2,10 @@
 
 use std::mem::size_of;
 
+use zetesis_cpu::Stop;
+
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};
-use crate::{Interpretation, Node, Theory};
+use crate::{Interpretation, NodeView, Theory};
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -11,7 +13,7 @@ enum Kind {
     False,
     True,
     Atom,
-    And,
+    And(usize),
     Or,
 }
 
@@ -21,8 +23,8 @@ impl Kind {
     }
     fn waiting(self) -> State {
         match self {
-            Self::Atom | Self::Or => State::AwaitingOne,
-            Self::And => State::AwaitingTwo,
+            Self::Atom | Self::Or => State::Awaiting(1),
+            Self::And(arity) => State::Awaiting(arity),
             Self::Unsupported | Self::False | Self::True => State::Inactive,
         }
     }
@@ -34,8 +36,7 @@ impl Kind {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum State {
     Inactive,
-    AwaitingOne,
-    AwaitingTwo,
+    Awaiting(usize),
     True,
 }
 
@@ -93,7 +94,7 @@ pub(super) fn build(
     let mut states = budget.reserve(vertices)?;
     for _ in 0..theory.atom_count() {
         budget.tick()?;
-        states.push(State::AwaitingOne);
+        states.push(State::Awaiting(1));
     }
     for kind in &kinds {
         budget.tick()?;
@@ -134,22 +135,53 @@ fn initialized<T: Copy>(
 
 fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, PositiveError> {
     let mut kinds: Vec<Kind> = budget.reserve(theory.nodes().len())?;
-    for node in theory.nodes() {
+    let view = theory.view();
+    for index in 0..view.len() {
         budget.tick()?;
-        kinds.push(match *node {
-            Node::Atom(_) => Kind::Atom,
-            Node::False => Kind::False,
-            Node::And(a, b) if kinds[a].monotone() && kinds[b].monotone() => Kind::And,
-            Node::Or(a, b) if kinds[a].monotone() && kinds[b].monotone() => Kind::Or,
-            Node::Implies(a, b)
-                if theory.nodes()[a] == Node::False && theory.nodes()[b] == Node::False =>
-            {
-                Kind::True
+        kinds.push(match view.node(index).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Atom(_) => Kind::Atom,
+            NodeView::False => Kind::False,
+            NodeView::And(operands) => {
+                if monotone_operands(operands, &kinds, budget)? {
+                    Kind::And(operands.len())
+                } else {
+                    Kind::Unsupported
+                }
             }
-            Node::And(_, _) | Node::Or(_, _) | Node::Implies(_, _) => Kind::Unsupported,
+            NodeView::Or(operands) => {
+                if monotone_operands(operands, &kinds, budget)? {
+                    Kind::Or
+                } else {
+                    Kind::Unsupported
+                }
+            }
+            NodeView::Implies(a, b) => {
+                budget.tick()?;
+                let left = view.node(a).map_err(|_| Stop::InvalidProgram)?;
+                budget.tick()?;
+                let right = view.node(b).map_err(|_| Stop::InvalidProgram)?;
+                if left == NodeView::False && right == NodeView::False {
+                    Kind::True
+                } else {
+                    Kind::Unsupported
+                }
+            }
         });
     }
     Ok(kinds)
+}
+
+fn monotone_operands(
+    operands: &[usize],
+    kinds: &[Kind],
+    budget: &mut Budget<'_>,
+) -> Result<bool, PositiveError> {
+    let mut monotone = true;
+    for &child in operands {
+        budget.tick()?;
+        monotone &= kinds[child].monotone();
+    }
+    Ok(monotone)
 }
 
 /// The same finite edge stream is counted then written into reserved CSR slots.
@@ -163,15 +195,21 @@ fn edges(
     mut visit: impl FnMut(usize, usize, &mut Budget<'_>) -> Result<(), PositiveError>,
 ) -> Result<(), PositiveError> {
     let atoms = theory.atom_count();
-    for (index, node) in theory.nodes().iter().enumerate() {
+    for (index, &kind) in kinds.iter().enumerate() {
         budget.tick()?;
-        match (kinds[index], *node) {
-            (Kind::Atom, Node::Atom(atom)) => {
+        match (
+            kind,
+            theory
+                .view()
+                .node(index)
+                .map_err(|_| Stop::InvalidProgram)?,
+        ) {
+            (Kind::Atom, NodeView::Atom(atom)) => {
                 budget.tick()?;
                 visit(atom, atoms + index, budget)?;
             }
-            (Kind::And, Node::And(a, b)) | (Kind::Or, Node::Or(a, b)) => {
-                for child in [a, b] {
+            (Kind::And(_), NodeView::And(operands)) | (Kind::Or, NodeView::Or(operands)) => {
+                for &child in operands {
                     budget.tick()?;
                     visit(atoms + child, atoms + index, budget)?;
                 }
@@ -194,11 +232,17 @@ fn producer(
     root: usize,
     kinds: &[Kind],
 ) -> Result<Option<(usize, usize)>, PositiveError> {
-    match theory.nodes()[root] {
-        Node::Atom(_) | Node::False => Ok(None),
-        Node::Implies(_, head) if theory.nodes()[head] == Node::False => Ok(None),
-        Node::Implies(body, head) => {
-            let Node::Atom(atom) = theory.nodes()[head] else {
+    match theory.view().node(root).map_err(|_| Stop::InvalidProgram)? {
+        NodeView::Atom(_) | NodeView::False => Ok(None),
+        NodeView::Implies(_, head)
+            if theory.view().node(head).map_err(|_| Stop::InvalidProgram)? == NodeView::False =>
+        {
+            Ok(None)
+        }
+        NodeView::Implies(body, head) => {
+            let NodeView::Atom(atom) =
+                theory.view().node(head).map_err(|_| Stop::InvalidProgram)?
+            else {
                 return Err(PositiveError::UnsupportedRoot { root });
             };
             if !kinds[body].monotone() {

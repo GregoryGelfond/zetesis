@@ -15,12 +15,16 @@ use zetesis_ferraris::{
 fn theory() -> Theory {
     Theory::new(
         1,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Implies(1, 0),
-            Node::Implies(2, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::implies(2, 0),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![],
         AdmissionLimits::default(),
     )
@@ -412,7 +416,8 @@ fn eligibility_uses_original_node_truth_before_freezing() {
         .unwrap();
     assert_eq!(observations.original(), [true, false, true]);
     assert_eq!(observations.frozen(), Some(&[false, false, true][..]));
-    assert_eq!(observations.statistics().work, 14);
+    // Each phase visits four nodes, four implication operands, and three tuple occurrences.
+    assert_eq!(observations.statistics().work, 2 * (4 + 4 + 3));
 }
 
 #[test]
@@ -422,7 +427,8 @@ fn foreign_interpretations_cannot_acquire_eligibility() {
     let actual = Interpretation::new(&theory, []).unwrap();
     let foreign = Theory::new(
         theory.atom_count(),
-        theory.nodes().to_vec(),
+        zetesis_ferraris::FormulaParts::new(theory.nodes().to_vec(), theory.operands().to_vec())
+            .unwrap(),
         theory.roots().to_vec(),
         AdmissionLimits::default(),
     )
@@ -447,7 +453,8 @@ fn acquisition_refuses_incomplete_prefix_work() {
     let theory = theory();
     let group = group(&theory);
     let candidate = Interpretation::new(&theory, [0]).unwrap();
-    for maximum in 0..=14 {
+    let exact = 2 * (4 + 4 + 3);
+    for maximum in 0..=exact {
         let limits = native::EligibilityLimits {
             max_work: maximum,
             ..native::EligibilityLimits::default()
@@ -458,7 +465,7 @@ fn acquisition_refuses_incomplete_prefix_work() {
             limits,
             &Cancellation::default(),
         ) {
-            Ok(_) => assert_eq!(maximum, 14),
+            Ok(_) => assert_eq!(maximum, exact),
             Err(error) => {
                 assert_eq!(error.kind(), ErrorKind::Limit(Resource::Work));
                 assert_eq!(error.statistics().work, maximum);

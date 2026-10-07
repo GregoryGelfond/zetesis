@@ -93,7 +93,10 @@ fn independent_unsigned_groups_keep_count_plans() {
         assert_eq!(plan.consequence_count(), 2);
         assert!(planned.theory().same_instance(plan.original_theory()));
         assert_eq!(planned.atoms(), ordinary.atoms());
-        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(
+            (planned.theory().nodes(), planned.theory().operands()),
+            (ordinary.theory().nodes(), ordinary.theory().operands())
+        );
         assert_eq!(planned.theory().roots(), ordinary.theory().roots());
     }
 }

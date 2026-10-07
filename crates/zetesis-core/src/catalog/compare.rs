@@ -229,6 +229,7 @@ impl Order {
         self,
         left: ValueNodeRef<'_>,
         right: ValueNodeRef<'_>,
+        canonical_text: bool,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Ordering, E> {
         before()?;
@@ -236,7 +237,12 @@ impl Order {
             Self::Storage { metered } | Self::Asp { metered } => metered,
         };
         let text = |left: &str, right: &str| {
-            if metered {
+            // The descriptor permit covers this constant-size identity check.
+            // Equal complete immutable slices have equal bytes; their addresses
+            // establish no ordering when either the address or length differs.
+            if canonical_text && std::ptr::eq(left, right) {
+                Ok(Ordering::Equal)
+            } else if metered {
                 crate::identity::bytes(left.as_bytes(), right.as_bytes(), before)
             } else {
                 Ok(left.cmp(right))
@@ -255,6 +261,9 @@ fn nodes_with<E>(
     order: Order,
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<Ordering, E> {
+    // Keep ingress and mixed-input work traces unchanged. Canonical/derived
+    // nodes may borrow the same text payload even when their terms differ.
+    let canonical_text = matches!((&left, &right), (Nodes::Canonical(_), Nodes::Canonical(_)));
     let left_root = left.take_root(before)?;
     let right_root = right.take_root(before)?;
     if matches!(order, Order::Storage { .. }) {
@@ -265,7 +274,7 @@ fn nodes_with<E>(
             return Ok(comparison);
         }
     }
-    let comparison = order.compare(left_root, right_root, before)?;
+    let comparison = order.compare(left_root, right_root, canonical_text, before)?;
     if !comparison.is_eq() || (arity(left_root) == 0 && arity(right_root) == 0) {
         return Ok(comparison);
     }
@@ -276,7 +285,7 @@ fn nodes_with<E>(
             before()?;
             return Ok(left.is_some().cmp(&right.is_some()));
         };
-        let comparison = order.compare(left, right, before)?;
+        let comparison = order.compare(left, right, canonical_text, before)?;
         if !comparison.is_eq() {
             return Ok(comparison);
         }
@@ -465,6 +474,9 @@ mod identity_tests;
 
 #[cfg(test)]
 mod root_tests;
+
+#[cfg(test)]
+mod text_tests;
 
 #[cfg(test)]
 mod tests {

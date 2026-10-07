@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use zetesis_core::catalog::{AtomRef, Atoms, TermRef};
 use zetesis_core::{AtomIndex, AtomIndexError, AtomRows, PatternRef, TemplateTerm, ValueNodeRef};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{AggregateElement, Node, Theory};
+use zetesis_ferraris::{AggregateElement, FormulaNodes, NodeView, Theory};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplateRef};
 
 use super::{
@@ -21,7 +21,7 @@ struct Key<'a> {
 struct Compiler<'a> {
     work: Work<'a>,
     index: AtomIndex<'a>,
-    nodes: Vec<Node>,
+    nodes: FormulaNodes,
     keys: Vec<Key<'a>>,
     truth: usize,
 }
@@ -46,7 +46,7 @@ pub(super) fn compile(
     if atoms.len() > limits.max_atoms {
         return Err(work.limit(Resource::Atoms));
     }
-    let mut nodes = Vec::new();
+    let mut nodes = FormulaNodes::default();
     // The existing atom ceiling admits both O(n) index orders and reusable
     // merge scratch. Only integer row IDs are allocated; payload remains here.
     let index =
@@ -56,10 +56,10 @@ pub(super) fn compile(
             AtomIndexError::Duplicate { .. } => work.error(Kind::AtomCatalog),
         })?;
     for index in 0..atoms.len() {
-        work.node(&mut nodes, Node::Atom(index))?;
+        work.node(&mut nodes, NodeView::Atom(index))?;
     }
-    let falsum = work.node(&mut nodes, Node::False)?;
-    let truth = work.node(&mut nodes, Node::Implies(falsum, falsum))?;
+    let falsum = work.node(&mut nodes, NodeView::False)?;
+    let truth = work.node(&mut nodes, NodeView::Implies(falsum, falsum))?;
     let mut compiler = Compiler {
         work,
         index,
@@ -91,7 +91,7 @@ pub(super) fn compile(
     Ok(ObjectivePlan {
         original: original.clone(),
         objectives: objectives.clone(),
-        nodes: compiler.nodes,
+        nodes: compiler.nodes.into_parts(),
         levels,
         statistics: compiler.work.statistics,
     })
@@ -244,19 +244,21 @@ impl<'a> Compiler<'a> {
                 .expect("bounded condition operation");
             let node = match operation {
                 ConditionNode::Boolean(true) => self.truth,
-                ConditionNode::Boolean(false) => self.work.node(&mut self.nodes, Node::False)?,
+                ConditionNode::Boolean(false) => {
+                    self.work.node(&mut self.nodes, NodeView::False)?
+                }
                 ConditionNode::Atom(atom) => self.condition_atom(atom)?,
                 ConditionNode::Not(operand) => {
-                    let falsum = self.work.node(&mut self.nodes, Node::False)?;
+                    let falsum = self.work.node(&mut self.nodes, NodeView::False)?;
                     self.work
-                        .node(&mut self.nodes, Node::Implies(nodes[operand], falsum))?
+                        .node(&mut self.nodes, NodeView::Implies(nodes[operand], falsum))?
                 }
                 ConditionNode::And(left, right) => self
                     .work
-                    .node(&mut self.nodes, Node::And(nodes[left], nodes[right]))?,
+                    .node(&mut self.nodes, NodeView::And(&[nodes[left], nodes[right]]))?,
                 ConditionNode::Or(left, right) => self
                     .work
-                    .node(&mut self.nodes, Node::Or(nodes[left], nodes[right]))?,
+                    .node(&mut self.nodes, NodeView::Or(&[nodes[left], nodes[right]]))?,
             };
             nodes.push(node);
         }
@@ -269,7 +271,7 @@ impl<'a> Compiler<'a> {
         }
         // Atoms outside the caller's complete catalog are false in every
         // represented candidate. Querying one must not enlarge that catalog.
-        self.work.node(&mut self.nodes, Node::False)
+        self.work.node(&mut self.nodes, NodeView::False)
     }
 }
 
@@ -334,7 +336,7 @@ fn compare_identity(
 
 fn active<'a>(
     work: &mut Work<'_>,
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     keys: &mut Vec<Key<'a>>,
     truth: usize,
     template: ObjectiveTemplateRef<'a>,
@@ -371,14 +373,11 @@ fn active<'a>(
         let term = template.tuple().at(index).expect("bounded tuple field");
         tuple.push(resolve(work, term, binding)?);
     }
-    let mut condition = truth;
-    for atom in chosen {
-        condition = if condition == truth {
-            *atom
-        } else {
-            work.node(nodes, Node::And(condition, *atom))?
-        };
-    }
+    let condition = if chosen.is_empty() {
+        truth
+    } else {
+        work.node(nodes, NodeView::And(chosen))?
+    };
     contribute(
         work,
         nodes,
@@ -415,7 +414,7 @@ fn key_order(
 }
 fn contribute<'a>(
     work: &mut Work<'_>,
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     keys: &mut Vec<Key<'a>>,
     key: Key<'a>,
 ) -> Result<(), ObjectiveBoundError> {
@@ -428,8 +427,10 @@ fn contribute<'a>(
             Ordering::Greater => high = middle,
             Ordering::Equal => {
                 if keys[middle].condition != key.condition {
-                    keys[middle].condition =
-                        work.node(nodes, Node::Or(keys[middle].condition, key.condition))?;
+                    keys[middle].condition = work.node(
+                        nodes,
+                        NodeView::Or(&[keys[middle].condition, key.condition]),
+                    )?;
                 }
                 return Ok(());
             }

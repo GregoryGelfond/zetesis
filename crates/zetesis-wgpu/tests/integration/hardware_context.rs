@@ -49,7 +49,13 @@ fn compose(backend: GpuApi) {
         .unwrap();
     // These are two different subjects on the same device. Equal bit widths are
     // not used to reinterpret row masks as candidate or aggregate membership.
-    let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidates = [
         Interpretation::new(&theory, []).unwrap(),
         Interpretation::new(&theory, [0]).unwrap(),

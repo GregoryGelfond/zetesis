@@ -40,9 +40,15 @@ impl Fixture {
 
     fn stable(universe: usize, atoms: &[usize]) -> Self {
         assert!(!atoms.is_empty());
-        let nodes = atoms.iter().copied().map(Node::Atom).collect();
+        let nodes = atoms.iter().copied().map(Node::atom).collect();
         let roots = (0..atoms.len()).collect();
-        let theory = Theory::new(universe, nodes, roots, AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            universe,
+            zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+            roots,
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let count = u64::try_from(atoms.len()).unwrap();
         let states = 1_u64 << count;
         // Roots follow the counter's selected-atom order. Proper subsets make
@@ -56,8 +62,13 @@ impl Fixture {
     }
 
     fn not_model() -> Self {
-        let theory =
-            Theory::new(130, vec![Node::False], vec![0], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            130,
+            zetesis_ferraris::FormulaParts::new(vec![Node::falsum()], vec![]).unwrap(),
+            vec![0],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         Self::new(
             &theory,
             &[63, 64, 65, 129],
@@ -70,7 +81,13 @@ impl Fixture {
     }
 
     fn empty_countermodel() -> Self {
-        let theory = Theory::new(130, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            130,
+            zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         Self::new(
             &theory,
             &[63, 64, 65, 129],

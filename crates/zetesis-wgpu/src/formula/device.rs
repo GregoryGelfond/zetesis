@@ -188,8 +188,10 @@ impl GpuFormulaOracle {
     /// subset query. Results retain input order and no partial batch is returned.
     /// Clones of one Theory reuse its graph; independent equal theories do not.
     /// Exact candidate-count transport is replaced when that count changes.
-    /// A cold subject is prepared in O(nodes + roots + levels) host work, outside
-    /// the per-candidate device-work limit. Its upload buffers are released after
+    /// A cold subject is prepared in O(nodes + edges + roots + levels) host work, outside
+    /// the per-candidate device-work limit. One buffer retains fixed headers and
+    /// complete native operand rows; no binary expansion or per-candidate graph
+    /// copy is made. Its upload buffers are released after
     /// device copies are created. Pure chains retain serial truth; other DAGs
     /// distribute independent nodes by dependency level. Narrow levels can incur
     /// synchronization cost without useful parallelism; no crossover is assumed.

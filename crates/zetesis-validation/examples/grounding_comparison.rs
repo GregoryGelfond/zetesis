@@ -111,8 +111,7 @@ const REFERENCE: matrix::ReferencePolicy = matrix::ReferencePolicy::Qualificatio
 fn plan(workers: NonZeroUsize) -> Result<matrix::Plan, performance::Error> {
     let profile = NativeExecution {
         backend: Backend::Cpu,
-        workers,
-        completion_workers: NonZeroUsize::MIN,
+        threads: workers,
         formula_joins: Some(FormulaJoins::Indexed),
         search: Some(SearchMethod::Regions),
         ..NativeExecution::default()

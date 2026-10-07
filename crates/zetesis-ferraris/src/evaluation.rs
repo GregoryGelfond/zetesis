@@ -9,7 +9,7 @@ use zetesis_cpu::{Cancellation, Stop};
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
 pub struct EvaluationLimits {
-    /// One unit per formula node and tested asserted root.
+    /// One unit per formula node, operand occurrence and tested asserted root.
     pub max_work: u64,
     /// Workspace header plus actual truth-vector capacity, in bytes.
     /// The borrowed interpretation and theory are excluded.
@@ -203,7 +203,7 @@ impl FormulaEvaluation<'_> {
 pub struct EvaluationAttempt<'a> {
     /// A truth view exists only after node evaluation and satisfaction complete.
     pub result: Result<FormulaEvaluation<'a>, EvaluationError>,
-    /// Charged node/root visits, including on interruption.
+    /// Charged node, operand and root visits, including on interruption.
     pub work: u64,
     /// Workspace header plus actual capacity after this attempt.
     pub retained_bytes: u128,

@@ -508,6 +508,41 @@ impl<'a> AssignmentSlice<'a> {
             .ok_or(AssignmentError::Unbound { slot })?;
         Ok(id.cmp(&key.id))
     }
+    /// Compare two present slots by canonical identity order without allocating
+    /// or cloning a vocabulary witness. This is not ASP term order.
+    /// As with `compare_key`, vocabulary authentication precedes slot checks;
+    /// this operation then checks the left slot before the right slot.
+    /// Equality does not establish readability through a particular snapshot;
+    /// use the ordinary checked reader or `bind_with` at that boundary.
+    /// # Errors
+    /// Refuses foreign vocabularies, invalid slots and absent values.
+    pub fn compare_slot(
+        self,
+        slot: usize,
+        other: AssignmentSlice<'_>,
+        other_slot: usize,
+    ) -> Result<std::cmp::Ordering, AssignmentError> {
+        if !self.scope.same(other.scope) {
+            return Err(ReadError::ForeignCatalog.into());
+        }
+        let left = self
+            .slots
+            .get(slot)
+            .ok_or(AssignmentError::Slot {
+                slot,
+                len: self.len(),
+            })?
+            .ok_or(AssignmentError::Unbound { slot })?;
+        let right = other
+            .slots
+            .get(other_slot)
+            .ok_or(AssignmentError::Slot {
+                slot: other_slot,
+                len: other.len(),
+            })?
+            .ok_or(AssignmentError::Unbound { slot: other_slot })?;
+        Ok(left.cmp(&right))
+    }
     /// Copy only ID slots, with one witness for the resulting frame.
     /// # Errors
     /// Returns named capacity or caller refusal; no partial frame is returned.

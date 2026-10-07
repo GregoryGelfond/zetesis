@@ -43,25 +43,17 @@ fn diagnostic_formatting_stops_at_the_json_ceiling() {
 
 #[test]
 fn legacy_metadata_cannot_establish_optimality() {
-    let options = Options::parse_from([
-        "zetesis",
-        "--json",
-        "--backend",
-        "cpu",
-        "--models",
-        "0",
-        "--max-json-record-bytes",
-        "1000",
-    ]);
+    let options = Options::parse_from(["zetesis", "--json", "--backend", "cpu", "--models", "0"]);
     let source = format!("p(\"{}\"). #minimize{{0@1,k:p(X)}}.", "x".repeat(1500));
-    let failure = crate::run_detailed_with_diagnostics(
-        source,
-        &options,
+    let failure = crate::publication_fixture::json(
+        &source,
+        &crate::PublicationConfig::from(&options),
+        1000,
         &mut Vec::new(),
-        &mut io::sink(),
         &zetesis_cpu::Cancellation::default(),
     )
-    .unwrap_err();
+    .unwrap_err()
+    .into_legacy();
     let partial = failure.partial_report.as_ref().unwrap();
     assert_eq!(partial.completion, Some(crate::Completion::Exhausted));
     assert!(partial.optimization.is_some());
@@ -191,7 +183,7 @@ fn failed_flush_prevents_a_later_json_footer() {
     let error = document
         .finish(
             Err(RunError::Input(io::Error::other("original cause")).into()),
-            &Options::parse_from(["zetesis", "--json"]),
+            65_536,
         )
         .unwrap_err();
     assert!(error.to_string().contains("original cause"));

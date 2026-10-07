@@ -184,7 +184,7 @@ output to false. Removing unused leaf slots cannot re-enable that connective.
 
 This uses the variable-independent relation contract in
 [`Propagation.narrow_models_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Propagation.lean)
-and the alias-aware finite transfer in
+and, for binary gates, the alias-aware finite transfer in
 [`GateProjection`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateProjection.lean).
 The dense mapping's coverage, injectivity outside leaf aliases, initialized
 address range and checked world offsets are Rust/WGSL correspondence obligations;
@@ -192,7 +192,18 @@ those abstract laws do not certify the packing or physical execution.
 
 ### The gate transfer
 
-Each enabled connective narrows its three positions through a finite gate
+Native conjunctions and disjunctions use a shared operand reduction under both
+projection policies. It first reads every child domain and intersects the
+possible output values. A forced conjunction true or disjunction false narrows
+every operand. The dual forced output narrows a witness only when all possible
+witness occurrences name one distinct physical slot. Repeated atom leaves may
+alias that slot; counting positions would miss this distinction. Composite
+outputs occupy their own slots. The operation preserves satisfying completions
+under monotone concurrent narrowing, without claiming exact projection of
+inconsistent observations of repeated aliases. Frozen-false groups remain
+disabled, and quiescence remains a residual query.
+
+Each enabled binary connective narrows its three positions through a finite gate
 transfer. `GateProjection::Enumerated`, the default, enumerates the relation's
 rows; `GateProjection::Bitwise` is an explicit optional implementation. The
 [device constructors](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/device.rs) accept
@@ -300,8 +311,13 @@ allocator overhead and rounding outside the measured catalog/ordered-ID
 capacities, and backend-private transport are also outside that envelope.
 The backend must bound its own transport; this is not a process RSS ceiling.
 
-Source scans also have an independent `max_scan_bytes` allowance, 128 MiB by
-default in both `source::ScanLimits` and lazy `Limits`. It admits actual borrowed
+Source scans also have an independent `max_scan_bytes` allowance, 128 MiB in
+the low-level `source::ScanLimits` and lazy `Limits` defaults. Ordinary shared
+CPU and lazy GPU sessions derive it from their host batch allowance. They reserve
+1/32 of that allowance for an instance inside the host envelope, leaving room
+for simultaneous catalog, mask and chunk storage. Scan scratch remains an
+independent capacity; these shares do not form a process RSS limit.
+The scan allowance admits actual borrowed
 row-directory and row-buffer capacities, assignment/cursor/undo scratch, and one
 offered instance's key buffer, including buffer-growth overlap. The Program and
 catalog payload, world masks and callback-owned chunks remain under their own

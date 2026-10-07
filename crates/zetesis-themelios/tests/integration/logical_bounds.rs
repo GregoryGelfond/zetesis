@@ -117,7 +117,10 @@ fn logical_guards_do_not_certify_numeric_count_plans() {
         .unwrap();
         assert!(matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)));
         assert_eq!(ordinary.atoms(), planned.atoms());
-        assert_eq!(ordinary.theory().nodes(), planned.theory().nodes());
+        assert_eq!(
+            (ordinary.theory().nodes(), ordinary.theory().operands()),
+            (planned.theory().nodes(), planned.theory().operands())
+        );
         assert_eq!(ordinary.theory().roots(), planned.theory().roots());
     }
 }
@@ -145,7 +148,10 @@ fn independent_numeric_groups_retain_count_plans() {
     assert_eq!(plan.consequence_count(), 2);
     assert!(planned.theory().same_instance(plan.original_theory()));
     assert_eq!(ordinary.atoms(), planned.atoms());
-    assert_eq!(ordinary.theory().nodes(), planned.theory().nodes());
+    assert_eq!(
+        (ordinary.theory().nodes(), ordinary.theory().operands()),
+        (planned.theory().nodes(), planned.theory().operands())
+    );
     assert_eq!(ordinary.theory().roots(), planned.theory().roots());
 }
 

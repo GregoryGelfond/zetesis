@@ -7,6 +7,7 @@ mod query_attempt;
 mod query_metering;
 mod equality_attempt;
 mod canonical;
+mod compact;
 
 fn predicate(arity: usize) -> Predicate {
     Predicate::new("relation", arity).unwrap()
@@ -148,7 +149,7 @@ fn nullary_row_count_remains_explicit() {
     let singleton = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     let empty = Relation::from_atoms(&signature, &[], Limits::default()).unwrap();
     assert_eq!(singleton.columns().len(), 0);
-    assert!(empty.columns().all(<[u32]>::is_empty));
+    assert!(empty.columns().all(Column::is_empty));
     assert_eq!(singleton.row_count(), 1);
     assert_eq!(empty.row_count(), 0);
 }

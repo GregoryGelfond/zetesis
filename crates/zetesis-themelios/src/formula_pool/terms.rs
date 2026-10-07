@@ -131,22 +131,21 @@ fn product(
     )?;
     // Reserve selected term/text copies, the output root and cursor cells before
     // retaining the family. This is cumulative logical payload, not allocator RSS.
-    budget.charge(
-        ExpansionResource::ScalarBytes,
-        count
-            .saturating_mul(
-                footprint
-                    .bytes
-                    .saturating_mul(2)
-                    .saturating_add((std::mem::size_of::<Term>() + name_bytes) as u128),
-            )
-            .saturating_add(arguments.len() as u128 * std::mem::size_of::<usize>() as u128),
-        location,
-    )?;
+    let bytes = count
+        .saturating_mul(
+            footprint
+                .bytes
+                .saturating_mul(2)
+                .saturating_add((std::mem::size_of::<Term>() + name_bytes) as u128),
+        )
+        .saturating_add(arguments.len() as u128 * std::mem::size_of::<usize>() as u128);
+    budget.charge(ExpansionResource::ScalarBytes, bytes, location)?;
+    budget.check_family(bytes, location)?;
     let count = usize::try_from(count).expect("finite value allowance fits usize");
     let mut output = Vec::with_capacity(count);
     let mut positions = vec![0; arguments.len()];
     for _ in 0..count {
+        budget.poll(location)?;
         let selected = arguments
             .iter()
             .zip(&positions)
@@ -163,3 +162,6 @@ fn product(
     }
     Ok(Term::pool(output).expect("source pool products are nonempty"))
 }
+
+#[cfg(test)]
+mod tests;

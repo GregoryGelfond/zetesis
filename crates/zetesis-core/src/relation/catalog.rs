@@ -7,16 +7,21 @@ use crate::{
     catalog::{
         AtomRef, Atoms, CatalogRead, DeclaredPredicate, Member, Membership, PredicateRef, TermRef,
     },
-    ordered_index::{self, Directions, Index, Link, Node, Step},
+    ordered_index::{
+        self, Directions, Index, Node, Planned, Step,
+        spine::{self, RightSpine},
+    },
 };
 
 mod plan;
+mod appender;
+pub use appender::{Appended, Appender};
 mod ordered;
 pub use ordered::{Canonical, Preparation, Runs};
 
 use super::{
     Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
-    Storage, Work, ceiling,
+    Storage, Work, ceiling, column::OwnedColumn,
 };
 
 /// One signed predicate's unique atom membership and appendable equality layout.
@@ -35,7 +40,11 @@ use super::{
 /// opaque bucket/control allocation. Fixed-ID hash operations each admit one
 /// container operation; their internal probes are not individually cancellable.
 ///
-/// Row membership visits O(log n) nodes. Same-vocabulary dictionary lookup uses
+/// Row membership visits O(log n) nodes. Increasing insertion retains the
+/// published right spine in the existing mutation buffer. It compares against
+/// the actual maximum, reuses the unchanged path prefix, and refreshes only the
+/// changed suffix after the complete row commits. Other row-path writers revoke
+/// that certificate before preparing a mutation. Same-vocabulary dictionary lookup uses
 /// expected O(1) fixed-ID hashing (O(d) worst case); foreign lookup and new-value
 /// placement visit O(log d) semantic nodes, with typed descriptor/text-prefix
 /// comparison work additional. Inserting a
@@ -50,6 +59,8 @@ pub struct Catalog {
     /// The last row in typed order: it changes only when a row arrives
     /// beyond it.
     last_row: Option<usize>,
+    /// Published all-right path in `rows.path`, revoked before mutation.
+    spine: Option<RightSpine>,
     ordered: ordered::Ordered,
     layout: Layout,
     encoding_bytes: u128,
@@ -128,13 +139,14 @@ impl Catalog {
             let mut columns = work.reserve(arity)?;
             for _ in 0..arity {
                 work.tick(1)?;
-                columns.push(Vec::new());
+                columns.push(OwnedColumn::new());
             }
             Ok(Self {
                 membership,
                 arity,
                 rows: Index::default(),
                 last_row: None,
+                spine: None,
                 ordered: ordered::Ordered::default(),
                 layout: Layout {
                     dictionary: Vec::new(),
@@ -205,7 +217,7 @@ impl Catalog {
     /// # Errors
     /// Refuses shape/capacity or reset work without changing the published extent.
     pub fn clear(&mut self, limits: Limits) -> Result<Storage, CatalogFailure> {
-        const RESET_BOOKKEEPING: u128 = 12;
+        const RESET_BOOKKEEPING: u128 = 13;
         let mut work = self.work(limits)?;
         let DictionaryIndex::Append(index) = &self.layout.index else {
             unreachable!("catalog owns an append index");
@@ -221,6 +233,7 @@ impl Catalog {
             unreachable!("catalog owns an append index");
         };
         self.membership.clear();
+        self.spine = None;
         self.rows.nodes.clear();
         self.rows.path.clear();
         self.rows.root = None;
@@ -333,11 +346,19 @@ impl Catalog {
         limits: Limits,
     ) -> Result<Insertion, CatalogFailure> {
         let mut work = self.work(limits)?;
-        self.insert_inner(atom, &mut work)
+        let mut plan = plan::Plan::default();
+        self.insert_inner(atom, &mut plan, plan::Admission::Temporary, &mut work)
             .map_err(|error| self.failed(error, &work))
     }
 
-    fn insert_inner(&mut self, atom: AtomRef<'_>, work: &mut Work) -> Result<Insertion, Failure> {
+    fn insert_inner(
+        &mut self,
+        atom: AtomRef<'_>,
+        plan: &mut plan::Plan,
+        admission: plan::Admission,
+        work: &mut Work,
+    ) -> Result<Insertion, Failure> {
+        plan.clear();
         work.tick(1)?;
         let member = self.membership.member(atom).map_err(Failure::Read)?;
         let atom = member.atom();
@@ -346,15 +367,10 @@ impl Catalog {
         let atoms = self.membership.bind(member.read()).map_err(Failure::Read)?;
         let value = |column| atom.values().at(column).expect("checked atom arity");
         // A row beyond the last in order is placed without a search.
-        let last = ordered_index::last(
-            &self.rows.nodes,
-            self.rows.root,
-            self.last_row,
-            work,
-            |work| work.tick(1),
-            |row, work| compare_row(atoms, row, &value, work),
-            |right| route.push(right).expect("AVL height fits two words"),
-        )?;
+        let last =
+            ordered_index::compare_last(self.rows.root, self.last_row, work, |row, work| {
+                compare_row(atoms, row, &value, work)
+            })?;
         // An empty tree's first row is its last, as is a row beyond the last.
         let extends = matches!(last, ordered_index::Last::Beyond) || self.rows.root.is_none();
         let found = match last {
@@ -377,17 +393,38 @@ impl Catalog {
             row as u128 + 1,
             work.limits.max_rows as u128,
         )?;
-        let row_root = plan::row(&mut self.rows, row, &route, work)?;
-        let plan = plan::values(&mut self.layout, atoms, atom, self.encoding_bytes, work)?;
-        self.reserve(&plan, work)?;
-        let insertion = self.publish(member, row_root, plan, work);
-        if extends {
-            self.last_row = Some(insertion.row);
+        let path = if matches!(last, ordered_index::Last::Beyond) {
+            plan::RowPath::BeyondLast(self.last_row.expect("checked semantic maximum"))
+        } else {
+            plan::RowPath::Recorded(&route)
+        };
+        // Take authority before the first mutation of the shared path buffer.
+        // Later dictionary/reservation refusal cannot leave tentative cells
+        // reusable as a published spine.
+        let retained = self.spine.take();
+        let row_plan = plan::row(&mut self.rows, row, path, retained, work)?;
+        if matches!(admission, plan::Admission::Temporary) {
+            work.include(size_of::<plan::Plan>())?;
         }
-        Ok(insertion)
+        plan::values(
+            &mut self.layout,
+            atoms,
+            atom,
+            self.encoding_bytes,
+            plan,
+            work,
+        )?;
+        self.reserve(plan, row_plan, extends, work)?;
+        Ok(self.publish(member, row_plan, plan, extends, work))
     }
 
-    fn reserve(&mut self, plan: &plan::Plan, work: &mut Work) -> Result<(), Failure> {
+    fn reserve(
+        &mut self,
+        plan: &plan::Plan,
+        row: Planned,
+        increasing: bool,
+        work: &mut Work,
+    ) -> Result<(), Failure> {
         work.grow(&mut self.membership.ids, 1)?;
         work.grow(&mut self.rows.nodes, 1)?;
         work.grow(&mut self.layout.dictionary, plan.added.len())?;
@@ -396,27 +433,31 @@ impl Catalog {
         };
         work.grow(&mut index.order.nodes, plan.added.len())?;
         index.identities.reserve(plan.added.len(), work)?;
-        for column in &mut self.layout.columns {
-            work.grow(column, 1)?;
+        for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
+            column.reserve(id, work)?;
         }
         // Publication has no callbacks, allocations, payload comparisons or
         // failure. Include each fixed-ID hash insertion, row-path inspection
         // and tentative patch write before beginning the indivisible writes.
         work.tick(
-            self.rows.path.len() as u128
+            (self.rows.path.len() - row.changed_from) as u128
                 + plan.ids.len() as u128
                 + plan.added.len() as u128 * 3
                 + plan.patches.len() as u128
                 + 3,
         )?;
+        if increasing {
+            spine::admit(&self.rows, row, &mut || work.tick(1))?;
+        }
         Ok(())
     }
 
     fn publish(
         &mut self,
         member: Member<'_>,
-        row_root: Link,
-        plan: plan::Plan,
+        row_plan: Planned,
+        plan: &plan::Plan,
+        increasing: bool,
         work: &mut Work,
     ) -> Insertion {
         let row = self.len();
@@ -440,10 +481,14 @@ impl Catalog {
         for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.push(id);
         }
-        self.rows.publish(row_root);
+        self.rows.publish_nodes_from(row_plan.changed_from);
+        self.rows.root = row_plan.root;
         self.membership.publish(member);
         self.encoding_bytes = plan.encoding_bytes;
-        plan.release(work);
+        if increasing {
+            self.last_row = Some(row);
+            self.spine = Some(spine::retain(&mut self.rows, row_plan, row));
+        }
         Insertion {
             row,
             inserted: true,
@@ -487,6 +532,12 @@ impl Catalog {
     }
 
     fn work(&self, limits: Limits) -> Result<Work, CatalogFailure> {
+        self.work_with(limits, 0)
+    }
+
+    fn work_with(&self, limits: Limits, scratch: usize) -> Result<Work, CatalogFailure> {
+        let retained = self.retained_bytes();
+        let bytes = retained as u128 + scratch as u128;
         let build = (|| {
             ceiling(Resource::Rows, self.len() as u128, limits.max_rows as u128)?;
             ceiling(
@@ -499,13 +550,13 @@ impl Catalog {
                 self.layout.dictionary.len() as u128,
                 limits.max_values as u128,
             )?;
-            Work::new(limits, self.retained_bytes() as u128)
+            Work::new(limits, bytes)
         })();
         build.map_err(|error| CatalogFailure {
             error,
             work: 0,
-            retained_bytes: self.retained_bytes(),
-            peak_construction_bytes: self.retained_bytes(),
+            retained_bytes: retained,
+            peak_construction_bytes: retained.saturating_add(scratch),
         })
     }
 
@@ -533,12 +584,12 @@ impl Catalog {
                     index_bytes(&index.order) + index.identities.bytes()
                 }
             }
-            + self.layout.columns.capacity() * size_of::<Vec<u32>>()
+            + self.layout.columns.capacity() * size_of::<OwnedColumn>()
             + self
                 .layout
                 .columns
                 .iter()
-                .map(|column| column.capacity() * size_of::<u32>())
+                .map(OwnedColumn::retained_bytes)
                 .sum::<usize>()
     }
 

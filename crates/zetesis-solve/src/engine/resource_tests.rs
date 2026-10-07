@@ -24,6 +24,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
             owner.program(),
             None,
             &resources,
+            &Cancellation::default(),
             &mut crate::execution_observation::Ignore,
             &crate::phase_timing::Recorder::new(false),
         )
@@ -69,6 +70,7 @@ fn cpu_keeps_its_route(context: &GpuContext, grounder: Grounder) {
             owner.program(),
             None,
             &resources,
+            &Cancellation::default(),
             &mut observations,
             &phases,
         )

@@ -69,14 +69,7 @@ pub(crate) fn write_model_record(
         .checked_sub(overhead)
         .ok_or(RunError::JsonRecord(ViewError::Bytes))?;
     let record = view
-        .record(
-            atoms,
-            zetesis_themelios::observation::ViewLimits {
-                max_bytes: maximum,
-                ..Default::default()
-            },
-            cancellation,
-        )
+        .record(atoms, model_limits(maximum), cancellation)
         .map_err(RunError::JsonRecord)?;
     cancellation
         .poll()
@@ -89,6 +82,16 @@ pub(crate) fn write_model_record(
     Ok(())
 }
 
+// Record storage and traversal depth remain bounded. Ordinary encoding counts
+// work up to its representation and observes the supplied cancellation token.
+fn model_limits(max_bytes: usize) -> zetesis_themelios::observation::ViewLimits {
+    zetesis_themelios::observation::ViewLimits {
+        max_bytes,
+        max_work: u64::MAX,
+        ..Default::default()
+    }
+}
+
 /// JSON for failures that precede the ordinary source/bundle driver entry.
 pub(crate) fn input_failure(
     output: &mut impl Write,
@@ -96,8 +99,11 @@ pub(crate) fn input_failure(
     options: &Options,
 ) -> RunFailure {
     use crate::AnswerRenderer;
-    let mut renderer =
-        crate::JsonRenderer::new(output, options.max_json_record_bytes, options.max_atoms);
+    let mut renderer = crate::JsonRenderer::new(
+        output,
+        options.resources().json_record_bytes(),
+        options.resources().formula_limits().theory.max_atoms,
+    );
     match renderer.begin() {
         Ok(()) => crate::publication::finalize(&mut renderer, Err(failure.into()))
             .expect_err("input failure remains failed")

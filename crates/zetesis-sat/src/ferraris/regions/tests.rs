@@ -19,12 +19,16 @@ use zetesis_ferraris::{AdmissionLimits, Node};
 fn cycle() -> Theory {
     Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::implies(0, 1),
+                Node::implies(1, 0),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![2, 3],
         AdmissionLimits::default(),
     )
@@ -36,7 +40,11 @@ fn cycle() -> Theory {
 fn positive() -> Theory {
     Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+        zetesis_ferraris::FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
+            vec![],
+        )
+        .unwrap(),
         vec![0, 2],
         AdmissionLimits::default(),
     )
@@ -55,8 +63,8 @@ fn budget(cancellation: &Cancellation, work: u64) -> Budget<'_> {
     }
 }
 
-fn nodes(theory: &Theory) -> u64 {
-    u64::try_from(theory.nodes().len()).unwrap()
+fn indexing_work(theory: &Theory) -> u64 {
+    u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap()
 }
 
 fn extraction(theory: &Theory) -> u64 {
@@ -110,26 +118,23 @@ fn an_enumeration_builds_one_original_index() {
         // The walk's receipts carry the index once; the queries share it.
         assert_eq!(
             statistics.regions.unwrap().counts.work,
-            PARENT_CYCLE_REGIONS_WORK,
+            CYCLE_REGIONS_WORK,
             "{route}"
         );
+        assert_eq!(statistics.reduct.regions.work, CYCLE_REDUCT_WORK, "{route}");
         assert_eq!(
-            statistics.reduct.regions.work, PARENT_CYCLE_REDUCT_WORK,
-            "{route}"
-        );
-        assert_eq!(
-            statistics.search.work, PARENT_CYCLE_SEARCH_WORK,
+            statistics.search.work, CYCLE_SEARCH_WORK,
             "{route} with {workers} workers"
         );
     }
 }
 
-/// The parent head's receipts for a complete enumeration of `cycle()`, on
-/// every region route: building the index when the walk starts changes no
-/// walking run's totals.
-const PARENT_CYCLE_REGIONS_WORK: u64 = 32;
-const PARENT_CYCLE_REDUCT_WORK: u64 = 18;
-const PARENT_CYCLE_SEARCH_WORK: u64 = 54;
+/// Complete receipts on every region route. The original index costs N + E
+/// = 4 + 4, counted once beside 28 producer/walk operations. The reduct walks
+/// reuse that index. Search also charges two splits and two subset-atom reads.
+const CYCLE_REGIONS_WORK: u64 = 28 + 8;
+const CYCLE_REDUCT_WORK: u64 = 18;
+const CYCLE_SEARCH_WORK: u64 = CYCLE_REGIONS_WORK + CYCLE_REDUCT_WORK + 4;
 
 #[test]
 fn a_positive_certificate_route_builds_no_index() {
@@ -196,7 +201,7 @@ fn a_refused_index_charge_builds_nothing_and_stops_incomplete() {
         // Room for the extraction, one unit short of the index.
         let limits = Limits {
             search: SearchLimits {
-                max_work: setup + nodes(&theory) - 1,
+                max_work: setup + indexing_work(&theory) - 1,
                 ..SearchLimits::default()
             },
             ..Limits::default()
@@ -229,7 +234,7 @@ fn a_build_failing_after_its_charge_keeps_the_charge_in_both_receipts() {
         assert!(search.index.get().is_none(), "{route}");
         assert_eq!(hooks::builds(&theory), 1, "{route} with {workers} workers");
         let statistics = search.statistics();
-        let charged = extraction(&theory) + nodes(&theory);
+        let charged = extraction(&theory) + indexing_work(&theory);
         assert_eq!(statistics.search.work, charged, "{route}");
         assert_eq!(statistics.regions.unwrap().counts.work, charged, "{route}");
     }
@@ -250,7 +255,7 @@ fn a_refused_charge_leaves_the_owner_unbuilt() {
         Err(Incomplete::WorkLimit)
     );
     // The charge is the index's documented cost, known before building.
-    assert_eq!(asked, Some(nodes(&theory)));
+    assert_eq!(asked, Some(indexing_work(&theory)));
     assert!(owner.get().is_none());
     assert_eq!(hooks::builds(&theory), 0);
 }
@@ -303,7 +308,7 @@ fn a_built_index_needs_no_second_grant() {
     let mut owner = OriginalIndex::new(&theory);
     owner.ensure(|work| budget.charge(work)).unwrap();
     let paid = budget.statistics;
-    assert_eq!(paid.work, nodes(&theory));
+    assert_eq!(paid.work, indexing_work(&theory));
     budget.limits.max_work = paid.work;
     let index = Arc::clone(
         owner
@@ -334,7 +339,7 @@ fn a_built_index_needs_no_second_grant() {
 fn standalone_membership_charges_its_one_index() {
     let theory = cycle();
     let candidate = Interpretation::new(&theory, []).unwrap();
-    let required = nodes(&theory);
+    let required = indexing_work(&theory);
     let cancellation = Cancellation::default();
     for (ceiling, builds) in [(required - 1, 0), (required, 1)] {
         let mut budget = budget(&cancellation, ceiling);
@@ -395,7 +400,7 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
     let mut statistics = Statistics::default();
     // Truth fits exactly. Scratch preparation grows the pending mask before
     // the query's first charged read is refused by the work ceiling.
-    let limit = u64::try_from(state.workspace.retained_bytes()).unwrap() + nodes(&theory);
+    let limit = u64::try_from(state.workspace.retained_bytes()).unwrap() + indexing_work(&theory);
     assert!(matches!(
         state.check(
             &theory,

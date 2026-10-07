@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyBuild,
-    AggregateFamilyLimits, AggregateGuard, Node, Theory, append_aggregate_family,
+    AggregateFamilyLimits, AggregateGuard, FormulaNodes, NodeView, Theory, append_aggregate_family,
 };
 use zetesis_objective::Score;
 
@@ -24,6 +24,7 @@ pub(super) fn compile(
         cancellation,
         limits: ObjectivePlanLimits {
             max_nodes: limits.aggregate.max_nodes,
+            max_operands: limits.aggregate.max_operands,
             max_work: limits.max_work,
             ..ObjectivePlanLimits::default()
         },
@@ -31,12 +32,17 @@ pub(super) fn compile(
         statistics: ObjectiveBoundStatistics::default(),
     };
     work.tick()?;
-    let mut nodes = Vec::new();
-    for node in &plan.nodes {
-        work.node(&mut nodes, *node)?;
+    let mut nodes = FormulaNodes::default();
+    for index in 0..plan.nodes.view().len() {
+        let node = plan
+            .nodes
+            .view()
+            .node(index)
+            .map_err(|error| work.error(Kind::Theory(error)))?;
+        work.node(&mut nodes, node)?;
     }
-    let falsum = work.node(&mut nodes, Node::False)?;
-    let mut root = work.node(&mut nodes, Node::Implies(falsum, falsum))?;
+    let falsum = work.node(&mut nodes, NodeView::False)?;
+    let mut root = work.node(&mut nodes, NodeView::Implies(falsum, falsum))?;
     let mut costs = BTreeMap::new();
     for priority in plan.levels.keys() {
         work.tick()?;
@@ -57,21 +63,36 @@ pub(super) fn compile(
             &mut work,
         )?;
         let build = family(&mut nodes, &elements, bound, limits, &mut work)?;
-        let suffix = work.node(&mut nodes, Node::And(build.roots()[1], root))?;
-        root = work.node(&mut nodes, Node::Or(build.roots()[0], suffix))?;
+        let suffix = work.node(&mut nodes, NodeView::And(&[build.roots()[1], root]))?;
+        root = work.node(&mut nodes, NodeView::Or(&[build.roots()[0], suffix]))?;
     }
-    // Account for the final independent topology validation before admitting it.
-    for _ in &nodes {
+    // Account for the admission's independent count and topology passes.
+    for index in 0..nodes.view().len() {
         work.tick()?;
+        work.tick()?;
+        let node = nodes
+            .view()
+            .node(index)
+            .map_err(|error| work.error(Kind::Theory(error)))?;
+        let occurrences = match node {
+            NodeView::And(row) | NodeView::Or(row) => row.len(),
+            NodeView::Implies(_, _) => 2,
+            NodeView::Atom(_) | NodeView::False => 0,
+        };
+        for _ in 0..occurrences {
+            work.tick()?;
+        }
     }
+    work.tick()?;
     let theory = Theory::new(
         plan.original.atom_count(),
-        nodes,
+        nodes.into_parts(),
         vec![root],
         AdmissionLimits {
             max_atoms: plan.original.atom_count(),
             max_nodes: limits.aggregate.max_nodes,
             max_roots: 1,
+            max_operands: limits.aggregate.max_operands,
         },
     )
     .map_err(|error| work.error(Kind::Theory(error)))?;
@@ -83,7 +104,7 @@ pub(super) fn compile(
 }
 
 fn family(
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     elements: &[AggregateElement],
     bound: i64,
     limits: ObjectiveBoundLimits,
@@ -121,6 +142,6 @@ fn family(
         }
     };
     work.account(build.statistics().work)?;
-    work.statistics.nodes = nodes.len();
+    work.statistics.nodes = nodes.view().len();
     Ok(build)
 }

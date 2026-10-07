@@ -23,6 +23,26 @@ fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String,
         String::from_utf8(diagnostics).unwrap(),
     )
 }
+fn bounded(
+    source: &str,
+    config: &zetesis_cli::PublicationConfig,
+) -> (Result<Report, RunError>, String, String) {
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let result = crate::support::prepared::human(
+        source,
+        config,
+        &mut output,
+        &mut diagnostics,
+        &Cancellation::default(),
+    )
+    .map_err(|failure| *failure.cause);
+    (
+        result,
+        String::from_utf8(output).unwrap(),
+        String::from_utf8(diagnostics).unwrap(),
+    )
+}
 #[test]
 fn auto_observation_uses_original_models_and_separate_output_channels() {
     let (result, output, diagnostics) = solve("a. #show a.", &["--stats"]);
@@ -46,11 +66,10 @@ fn hidden_full_models_and_every_optimal_tie_keep_their_multiplicity() {
         "{a;b}. #show. #show x. #minimize{0@1,k:a}.",
         "{a;b}. #show. #show x. #maximize{0@1,k:a}.",
     ] {
-        for bounds in ["0", "10000000"] {
-            let (result, output, _) = solve(
-                source,
-                &["--models", "0", "--max-objective-bound-work", bounds],
-            );
+        for bounds in [0, 10_000_000] {
+            let mut config = crate::support::prepared::config(&[]);
+            config.solve.max_objective_bound_work = bounds;
+            let (result, output, _) = bounded(source, &config);
             let report = result.unwrap();
             assert_eq!(report.completion, Completion::Exhausted);
             assert_eq!(report.models, 4);
@@ -81,25 +100,35 @@ fn incompatible_observation_routes_are_refused_without_fallback() {
 }
 #[test]
 fn observation_failures_emit_no_partial_answer_or_false_completion() {
-    for (flag, value, resource) in [
-        ("--max-observation-work", "0", Resource::Work),
-        ("--max-observation-bindings", "0", Resource::Bindings),
-        ("--max-observation-terms", "0", Resource::Terms),
-        ("--max-observation-bytes", "0", Resource::OutputBytes),
+    for resource in [
+        Resource::Work,
+        Resource::Bindings,
+        Resource::Terms,
+        Resource::OutputBytes,
     ] {
         for source in ["a. #show a.", "a. #show a. #minimize{0:a}."] {
-            let (result, output, _) = solve(source, &[flag, value]);
+            let mut config = crate::support::prepared::config(&[]);
+            match resource {
+                Resource::Work => config.observations.max_work = 0,
+                Resource::Bindings => config.observations.max_bindings = 0,
+                Resource::Terms => config.observations.max_terms = 0,
+                Resource::OutputBytes => config.observations.max_output_bytes = 0,
+                _ => unreachable!("the test enumerates these four resource boundaries"),
+            }
+            let (result, output, _) = bounded(source, &config);
             assert!(
                 matches!(result, Err(RunError::Observation(error)) if matches!(error.kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)),
-                "{flag}"
+                "{resource:?}"
             );
-            assert!(crate::support::human::preamble(&output), "{flag}: {output}");
+            assert!(
+                crate::support::human::preamble(&output),
+                "{resource:?}: {output}"
+            );
         }
     }
-    let (result, output, _) = solve(
-        "a.b.c.d.e.f.g.h. #show x.",
-        &["--max-observation-bytes", "20"],
-    );
+    let mut config = crate::support::prepared::config(&[]);
+    config.observations.max_output_bytes = 20;
+    let (result, output, _) = bounded("a.b.c.d.e.f.g.h. #show x.", &config);
     assert!(matches!(
         result,
         Err(RunError::ObservationOutputLimit { .. })
@@ -109,18 +138,10 @@ fn observation_failures_emit_no_partial_answer_or_false_completion() {
 #[test]
 fn plain_models_do_not_consume_observation_work() {
     let answer = "Answer: 1\na\n";
-    let record_limit = answer.len().to_string();
-    let (result, output, _) = solve(
-        "a.",
-        &[
-            "--backend",
-            "cpu",
-            "--max-observation-work",
-            "0",
-            "--max-observation-bytes",
-            &record_limit,
-        ],
-    );
+    let mut config = crate::support::prepared::config(&[]);
+    config.observations.max_work = 0;
+    config.observations.max_output_bytes = answer.len();
+    let (result, output, _) = bounded("a.", &config);
     assert_eq!(result.unwrap().models, 1);
     assert!(output.contains("Answer: 1\na\n"));
 }

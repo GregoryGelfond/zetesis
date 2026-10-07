@@ -68,7 +68,7 @@ impl OriginalIndex {
     /// The index, built on the first call that finds none.
     ///
     /// Before building, `charge` receives the index's documented cost: one
-    /// work unit per node of the theory, which equals the built narrower's
+    /// work unit per node and operand occurrence of the theory, which equals the built narrower's
     /// [`Narrower::work`] and is known before building. A refused charge
     /// builds nothing and leaves the owner unbuilt. An admitted charge stays
     /// admitted even if the build then fails, as a failed narrowing keeps
@@ -85,8 +85,10 @@ impl OriginalIndex {
         let index = if let Some(index) = self.index.take() {
             index
         } else {
-            let work = u64::try_from(self.theory.nodes().len())
-                .map_err(|_| Incomplete::CounterOverflow)?;
+            let work = u64::try_from(
+                self.theory.nodes().len() as u128 + self.theory.parts().occurrences() as u128,
+            )
+            .map_err(|_| Incomplete::CounterOverflow)?;
             charge(work)?;
             let narrower = build(&self.theory)?;
             debug_assert_eq!(narrower.work(), work, "the charge is the index's work");

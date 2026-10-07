@@ -2,9 +2,10 @@
 
 use std::num::NonZeroUsize;
 
-use crate::support::runs::detailed as solve;
+use crate::support::prepared;
+use crate::support::runs::detailed as cli_solve;
 use clap::Parser;
-use zetesis_cli::{Completion, Interruption, Options, RunError, run_detailed_with_diagnostics};
+use zetesis_cli::{Completion, Interruption, Options, RunError};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 
@@ -12,8 +13,8 @@ use zetesis_test_support::io::FailAt;
 
 /// The batched completion and its pool belong to the clause search; the
 /// region walk decides its leaves in its workers.
-fn options(workers: usize, batch: usize) -> Options {
-    let mut options = Options::try_parse_from([
+fn options() -> Options {
+    Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
@@ -25,10 +26,27 @@ fn options(workers: usize, batch: usize) -> Options {
         "0",
         "--stats",
     ])
+    .unwrap()
+}
+
+fn config(workers: usize, batch: usize) -> zetesis_cli::PublicationConfig {
+    let mut config = zetesis_cli::PublicationConfig::from(&options());
+    config.solve.completion_workers = NonZeroUsize::new(workers).unwrap();
+    config.solve.batch_size = NonZeroUsize::new(batch).unwrap();
+    config
+}
+
+fn solve(source: &str, config: &zetesis_cli::PublicationConfig) -> (zetesis_cli::Report, String) {
+    let mut output = Vec::new();
+    let report = prepared::human(
+        source,
+        config,
+        &mut output,
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
     .unwrap();
-    options.completion_workers = NonZeroUsize::new(workers).unwrap();
-    options.batch_size = NonZeroUsize::new(batch).unwrap();
-    options
+    (report, String::from_utf8(output).unwrap())
 }
 
 fn answers(output: &str) -> Vec<&str> {
@@ -53,12 +71,12 @@ fn ordinary_cpu_pools_preserve_complete_ordered_answers_and_optimum_ties() {
         "a :- b. b :- a.",
         ":-.",
     ] {
-        let reference = solve(source, &options(1, 3));
+        let reference = solve(source, &config(1, 3));
         assert_eq!(reference.0.completion, Completion::Exhausted);
         assert!(reference.0.formula_execution.is_none());
         for workers in [2, 4] {
             for batch in [1, 3, 7] {
-                let actual = solve(source, &options(workers, batch));
+                let actual = solve(source, &config(workers, batch));
                 assert_eq!(actual.0.completion, Completion::Exhausted, "{source}");
                 assert_eq!(answers(&actual.1), answers(&reference.1), "{source}");
                 assert_eq!(actual.0.models, reference.0.models);
@@ -95,11 +113,8 @@ fn ordinary_cpu_pools_preserve_complete_ordered_answers_and_optimum_ties() {
                 assert!(execution.completion.effective_workers <= workers.min(batch));
                 assert!(
                     execution.completion.peak_scratch_bytes
-                        <= zetesis_cli::SolveConfig::from(&options(workers, batch))
-                            .max_completion_scratch_bytes
+                        <= config(workers, batch).solve.max_completion_scratch_bytes
                 );
-                assert!(actual.2.contains("backend=cpu batched exact completion"));
-                assert!(!actual.2.contains("backend=hybrid"));
                 if actual.0.checked > 0 {
                     assert!(execution.completion.wall.unwrap().calls > 0);
                     assert_eq!(
@@ -115,8 +130,8 @@ fn ordinary_cpu_pools_preserve_complete_ordered_answers_and_optimum_ties() {
 #[test]
 fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
     for workers in [2, 4] {
-        let mut options = options(workers, 3);
-        options.max_completion_scratch_bytes = Some(0);
+        let mut options = config(workers, 3);
+        options.solve.max_completion_scratch_bytes = 0;
         let limited = solve("{a;b}.", &options);
         assert_eq!(limited.0.completion, Completion::Interrupted);
         assert_eq!(
@@ -129,8 +144,8 @@ fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
         assert_eq!(execution.completion.entered, 0);
         assert_eq!(execution.completion.peak_scratch_bytes, 0);
         assert!(!limited.1.contains("UNSATISFIABLE"));
-        options.max_completion_scratch_bytes = Some(256 * 1024 * 1024);
-        options.models = 1;
+        options.solve.max_completion_scratch_bytes = 256 * 1024 * 1024;
+        options.solve.models = 1;
         let limited = solve("{a;b}.", &options);
         assert_eq!(limited.0.completion, Completion::RequestedModels);
         assert_eq!(limited.0.models, 1);
@@ -149,14 +164,15 @@ fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
 fn output_failure_preserves_verified_queued_models_after_join() {
     for workers in [2, 4] {
         let mut writer = FailAt::new(b"Answer:");
-        let failure = run_detailed_with_diagnostics(
-            "{a;b}.".into(),
-            &options(workers, 3),
+        let failure = prepared::human(
+            "{a;b}.",
+            &config(workers, 3),
             &mut writer,
             &mut Vec::new(),
             &Cancellation::default(),
         )
         .unwrap_err();
+
         assert!(matches!(*failure.cause, RunError::Output(_)));
 
         let partial = failure.partial_report.unwrap();
@@ -179,14 +195,16 @@ fn output_failure_preserves_verified_queued_models_after_join() {
 
 #[test]
 fn default_scalar_cursor_keeps_its_existing_storage_contract() {
-    let mut options = options(1, 3);
-    options.max_completion_scratch_bytes = Some(0);
+    let mut options = config(1, 3);
+    options.solve.max_completion_scratch_bytes = 0;
     let actual = solve("{a;b}.", &options);
     assert_eq!(actual.0.completion, Completion::Exhausted);
     assert_eq!(actual.0.models, 4);
     assert!(actual.0.formula_execution.is_none());
+    let ordinary = cli_solve("{a;b}.", &self::options());
+    assert_eq!(answers(&actual.1), answers(&ordinary.1));
     assert!(
-        actual
+        ordinary
             .2
             .contains("batch-completion scratch limit=inapplicable")
     );
@@ -195,11 +213,18 @@ fn default_scalar_cursor_keeps_its_existing_storage_contract() {
 #[test]
 fn native_parallel_statistics_do_not_claim_scalar_execution() {
     for workers in [4, 14] {
-        let mut configured = options(1, 3);
+        let mut configured = options();
         configured.search = zetesis_cli::SearchMethod::Regions;
         configured.workers = NonZeroUsize::new(workers).unwrap();
-        configured.max_completion_scratch_bytes = Some(0);
-        let actual = solve("{a;b}.", &configured);
+        let actual = cli_solve("{a;b}.", &configured);
+        let mut bounded = zetesis_cli::PublicationConfig::from(&configured);
+        bounded.solve.max_completion_scratch_bytes = 0;
+        let (bounded_report, bounded_output) = solve("{a;b}.", &bounded);
+        assert_eq!(bounded_report.completion, Completion::Exhausted);
+        let mut bounded_models = answers(&bounded_output);
+        bounded_models.sort_unstable();
+        assert_eq!(bounded_models, ["", "a", "a b", "b"]);
+        assert!(bounded_report.formula_execution.is_none());
         assert_eq!(actual.0.completion, Completion::Exhausted);
         let mut models = answers(&actual.1);
         models.sort_unstable();
@@ -233,8 +258,8 @@ fn negative_head_formulas_compose_with_bounded_parallel_completion() {
         expected.sort();
         for workers in [2, 4] {
             for batch in [1, 3] {
-                let (report, output, _) =
-                    solve(case["source"].as_str().unwrap(), &options(workers, batch));
+                let (report, output) =
+                    solve(case["source"].as_str().unwrap(), &config(workers, batch));
                 assert_eq!(report.completion, Completion::Exhausted);
                 let mut actual: Vec<Vec<_>> = answers(&output)
                     .iter()

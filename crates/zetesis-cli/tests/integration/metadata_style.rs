@@ -25,8 +25,6 @@ fn options(mode: ColorMode) -> Options {
         "--workers",
         "1",
         // Keep formatting and writer-boundary checks independent of hardware.
-        "--batch-size",
-        "16",
         "--models",
         "0",
     ])

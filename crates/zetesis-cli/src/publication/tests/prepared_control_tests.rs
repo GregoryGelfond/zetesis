@@ -23,7 +23,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
         &mut crate::HumanRenderer::new(
             std::io::sink(),
             crate::ColorMode::Never,
-            options.max_observation_bytes,
+            options.resources().observation_limits().max_output_bytes,
         ),
         &mut crate::presentation::Diagnostics::new(std::io::sink(), crate::ColorMode::Never),
         &cancellation,

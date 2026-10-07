@@ -7,7 +7,7 @@ use zetesis_ferraris::{Node, Theory};
 fn theory(root: usize) -> Theory {
     Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap(),
         vec![root],
         zetesis_ferraris::AdmissionLimits::default(),
     )

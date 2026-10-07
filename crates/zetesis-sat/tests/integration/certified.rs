@@ -163,24 +163,24 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
         theory(3, vec![], vec![]),
         theory(
             2,
-            vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+            vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
             vec![0, 2],
         ),
         // Positive cycle and general disjunction are certificate refusals.
-        theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]),
+        theory(1, vec![Node::atom(0), Node::implies(0, 0)], vec![1]),
         theory(
             2,
-            vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
             vec![2],
         ),
         // A frozen requirement cannot give an unsupported atom a producer.
         theory(
             1,
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Implies(0, 1),
-                Node::Implies(2, 1),
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::implies(2, 1),
             ],
             vec![3],
         ),
@@ -332,7 +332,9 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
     let plan_bytes = probe.statistics().construction_bytes;
     // A work refusal is independently reproducible without conflating bytes.
     let limits = Limits {
-        max_verification_work: original.nodes().len() as u64 + original.roots().len() as u64,
+        max_verification_work: (original.nodes().len()
+            + original.parts().occurrences()
+            + original.roots().len()) as u64,
         ..Default::default()
     };
     // Initial proposal validation fits this exact amount; ranked support needs more.
@@ -366,7 +368,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
 #[test]
 fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     let original = three_choices();
-    let restriction = theory(3, vec![Node::Atom(0)], vec![0]);
+    let restriction = theory(3, vec![Node::atom(0)], vec![0]);
     let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
     stream
         .enable_certified_checking(TightPlanLimits::default())

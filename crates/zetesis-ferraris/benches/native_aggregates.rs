@@ -177,7 +177,13 @@ fn world(theory: &Theory, bits: usize) -> Interpretation {
 }
 
 fn lower(group: &Group, bound: i32) -> Theory {
-    let mut nodes = group.theory().nodes().to_vec();
+    let mut nodes = zetesis_ferraris::FormulaNodes::new(
+        zetesis_ferraris::FormulaParts::new(
+            group.theory().nodes().to_vec(),
+            group.theory().operands().to_vec(),
+        )
+        .unwrap(),
+    );
     let root = match group.function() {
         Function::Min | Function::Max => {
             let elements: Vec<_> = group
@@ -240,7 +246,7 @@ fn lower(group: &Group, bound: i32) -> Theory {
     };
     Theory::new(
         group.theory().atom_count(),
-        nodes,
+        nodes.into_parts(),
         vec![root],
         AdmissionLimits::default(),
     )

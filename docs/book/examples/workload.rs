@@ -38,8 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let profile = NativeExecution {
         backend: Backend::Cpu,
         grounder: Grounder::Eager,
-        workers: NonZeroUsize::MIN,
-        completion_workers: NonZeroUsize::MIN,
+        threads: NonZeroUsize::MIN,
         ..NativeExecution::default()
     };
     let request = matrix::Request {

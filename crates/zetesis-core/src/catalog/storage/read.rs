@@ -10,6 +10,13 @@ use super::{
 
 #[derive(Clone, Debug)]
 pub(crate) struct AtomScope(Arc<Owner>);
+impl Store {
+    /// A live writer always has an atom owner, unlike a vocabulary-only view.
+    pub(crate) fn atom_scope(&self) -> AtomScope {
+        AtomScope(Arc::clone(&self.atom_owner))
+    }
+}
+
 impl AtomScope {
     /// Whether anything besides this handle refers to the owner. A count of
     /// one cannot rise again: a handle is made only by cloning another.

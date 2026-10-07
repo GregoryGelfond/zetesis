@@ -17,16 +17,16 @@ fn choices() -> Theory {
     theory(
         3,
         vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Implies(1, 0),
-            Node::Or(1, 4),
-            Node::Implies(2, 0),
-            Node::Or(2, 6),
-            Node::Implies(3, 0),
-            Node::Or(3, 8),
+            Node::falsum(),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 0),
+            Node::or_pair([1, 4]),
+            Node::implies(2, 0),
+            Node::or_pair([2, 6]),
+            Node::implies(3, 0),
+            Node::or_pair([3, 8]),
         ],
         vec![5, 7, 9],
     )
@@ -146,19 +146,19 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
     for left in 0..3 {
         for right in 0..3 {
             for connective in [
-                Node::And(left, right),
-                Node::Or(left, right),
-                Node::Implies(left, right),
+                Node::and_pair([left, right]),
+                Node::or_pair([left, right]),
+                Node::implies(left, right),
             ] {
                 for roots in [vec![], vec![3], vec![4], vec![3, 4]] {
                     let t = theory(
                         2,
                         vec![
-                            Node::Atom(0),
-                            Node::Atom(1),
-                            Node::False,
+                            Node::atom(0),
+                            Node::atom(1),
+                            Node::falsum(),
                             connective,
-                            Node::Implies(3, 2),
+                            Node::implies(3, 2),
                         ],
                         roots,
                     );
@@ -190,7 +190,7 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
     for t in [
         choices(),
         theory(0, vec![], vec![]),
-        theory(0, vec![Node::False], vec![0]),
+        theory(0, vec![Node::falsum()], vec![0]),
     ] {
         for count in [1, 3, 8, 32] {
             assert_same_family_accounting(
@@ -339,7 +339,7 @@ fn checker_retry_restriction_and_failed_certificate_preserve_the_owned_batch() {
     let mut search = partial(Limits::default(), &mut pool);
     assert_eq!(pool.last_statistics(), None);
     let original = search.theory().clone();
-    let restriction = theory(3, vec![Node::False], vec![0]);
+    let restriction = theory(3, vec![Node::falsum()], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     let result = search.next_batch_with_completion(batch(3), &mut pool, |theory, candidates| {
         assert!(theory.same_instance(&original));

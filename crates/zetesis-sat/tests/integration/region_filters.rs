@@ -21,7 +21,7 @@ fn absent_filter_has_no_receipt() {
 
 #[test]
 fn filter_reads_original_narrowing_before_membership() {
-    let subject = theory(1, vec![Node::Atom(0)], vec![0]);
+    let subject = theory(1, vec![Node::atom(0)], vec![0]);
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search.enable_phase_timing();
@@ -66,10 +66,10 @@ fn original_filter_never_excludes_reduct_countermodels() {
     let subject = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
         ],
         vec![2, 3],
     );
@@ -304,7 +304,7 @@ fn cancellation_inside_a_filter_stops_without_exhaustion() {
 
 #[test]
 fn core_refutation_never_prepares_an_external_checker() {
-    let subject = theory(0, vec![Node::False], vec![0]);
+    let subject = theory(0, vec![Node::falsum()], vec![0]);
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search
@@ -320,7 +320,7 @@ fn core_refutation_never_prepares_an_external_checker() {
 
 #[test]
 fn empty_final_pull_never_prepares_an_external_checker() {
-    let subject = theory(1, vec![Node::Atom(0)], vec![0]);
+    let subject = theory(1, vec![Node::atom(0)], vec![0]);
     for route in ROUTES {
         let mut search = route.search(&subject, Cancellation::default());
         search

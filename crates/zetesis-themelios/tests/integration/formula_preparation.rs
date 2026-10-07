@@ -172,7 +172,10 @@ fn grounding_resumes_the_expansion_budget() {
     .unwrap();
     assert_eq!(exact.expansion_usage(), baseline.expansion_usage());
     assert_eq!(exact.atoms(), baseline.atoms());
-    assert_eq!(exact.theory().nodes(), baseline.theory().nodes());
+    assert_eq!(
+        (exact.theory().nodes(), exact.theory().operands()),
+        (baseline.theory().nodes(), baseline.theory().operands())
+    );
     assert_eq!(exact.theory().roots(), baseline.theory().roots());
 }
 
@@ -263,8 +266,8 @@ fn explicit_preparation_preserves_the_admitted_theory() {
         let actual = prepared.ground().unwrap();
         assert_eq!(actual.atoms(), expected.atoms(), "{source}");
         assert_eq!(
-            actual.theory().nodes(),
-            expected.theory().nodes(),
+            (actual.theory().nodes(), actual.theory().operands()),
+            (expected.theory().nodes(), expected.theory().operands()),
             "{source}"
         );
         assert_eq!(
@@ -359,7 +362,10 @@ fn bundle_preparation_preserves_all_original_sources() {
     )
     .unwrap();
     assert_eq!(actual.atoms(), expected.atoms());
-    assert_eq!(actual.theory().nodes(), expected.theory().nodes());
+    assert_eq!(
+        (actual.theory().nodes(), actual.theory().operands()),
+        (expected.theory().nodes(), expected.theory().operands())
+    );
     assert_eq!(actual.theory().roots(), expected.theory().roots());
     assert_eq!(actual.formula_origins(), expected.formula_origins());
     assert_eq!(actual.metadata(), &metadata);
@@ -436,7 +442,10 @@ fn explicit_base_preserves_prepared_bundle_semantics() {
     )
     .unwrap();
     assert_eq!(actual.atoms(), expected.atoms());
-    assert_eq!(actual.theory().nodes(), expected.theory().nodes());
+    assert_eq!(
+        (actual.theory().nodes(), actual.theory().operands()),
+        (expected.theory().nodes(), expected.theory().operands())
+    );
     assert_eq!(actual.theory().roots(), expected.theory().roots());
     assert_eq!(actual.metadata().output(), expected.metadata().output());
 }
@@ -692,4 +701,35 @@ fn a_formula_admission_reports_the_charges_its_preparation_made() {
     let usage = admitted.expansion_usage();
     assert_eq!(usage.templates, 4);
     assert_eq!(usage.values, 6);
+}
+
+#[test]
+fn native_source_groups_obey_operand_ceiling() {
+    let source = "a;b;c;d.";
+    let admit = |limits| {
+        admit_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            limits,
+        )
+    };
+    let full = admit(FormulaLimits::default()).unwrap();
+    assert!((0..full.theory().view().len()).any(|index| matches!(full.theory().view().node(index).unwrap(), zetesis_ferraris::NodeView::Or(row) if row.len() == 4)));
+    let count = full.theory().parts().occurrences();
+    let mut limits = FormulaLimits::default();
+    limits.theory.max_operands = count;
+    let exact = admit(limits).unwrap();
+    assert_eq!(
+        (exact.theory().nodes(), exact.theory().operands()),
+        (full.theory().nodes(), full.theory().operands())
+    );
+    limits.theory.max_operands = count - 1;
+    assert!(
+        matches!(admit(limits), Err(FormulaFailure::Limit {resource: FormulaResource::Operands, limit, observed, ..}) if limit == (count - 1) as u128 && observed == count as u128)
+    );
+    assert_eq!(
+        crate::support::finite_bindings::native(&full),
+        crate::support::finite_bindings::expected(&[&["a"], &["b"], &["c"], &["d"]])
+    );
 }

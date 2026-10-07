@@ -4,8 +4,6 @@ use std::num::NonZeroUsize;
 
 use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
-const DEFAULT_MAX_SUBSTITUTIONS: usize = 10_000_000;
-
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
 /// candidate; shared CPU rounds separate collective source and per-world work.
@@ -29,16 +27,19 @@ pub struct SolveConfig {
     pub stats: bool,
     /// Per-check streamed-constraint limits for a hybrid formula session.
     /// Independent of core candidate/reduct work; eager sessions do not use them.
-    /// The default substitution ceiling matches the ordinary session allowance.
+    /// Ordinary sessions retain only representational work/substitution maxima.
     pub constraints: zetesis_themelios::ConstraintCheckLimits,
     /// Maximum yielded models or retained optimum ties; zero requests all.
     pub models: usize,
-    /// Cumulative candidate restriction or formula encoding and search work.
+    /// Explicit cumulative candidate restriction, encoding and search allowance.
+    /// Ordinary policy sets the counter representation maximum.
     pub max_search_work: u64,
     /// Cumulative formula branch decisions.
     pub max_search_decisions: u64,
-    /// Cumulative prepared-order and selected-model construction work per formula
-    /// session, including failed attempts. Independent of membership and scoring.
+    /// Work per verified formula model's construction. One-time preparation of
+    /// the catalog's semantic order has a separate allowance of this same size.
+    /// Failed attempts retain their accepted work in cumulative statistics.
+    /// Independent of membership, reconstruction and scoring.
     pub max_model_work: u64,
     /// Peak live model-construction metadata: the prepared order and private
     /// selection/publication buffers, including actual growth overlap. Excludes
@@ -98,7 +99,7 @@ pub struct SolveConfig {
     /// Optional class preparation/checking uses this ceiling independently;
     /// it is not a combined cap on class storage plus completion storage.
     pub max_completion_scratch_bytes: u64,
-    /// Maximum candidate seeds or formula candidates.
+    /// Explicit candidate-count ceiling; ordinary policy uses its representation maximum.
     pub max_candidates: u64,
     /// Maximum incrementally retained gate atoms.
     pub max_carrier_atoms: usize,
@@ -146,67 +147,20 @@ pub struct SolveConfig {
     pub max_ground_rules: usize,
     /// Maximum accounted pending/GPU batch payload bytes. Lazy GPU splits this
     /// allowance equally between source coordination and transient transport.
-    /// Shared CPU rounds use the full allowance for source and world state;
-    /// allocator, tree and driver overhead are outside the payload bound.
+    /// Shared CPU rounds use the full allowance for source and world state.
+    /// Both routes derive source-scan scratch from their host share and eagerly
+    /// reserve 1/32 of that share for one instance's referenced identity and key
+    /// metadata. The remaining host envelope admits catalog, masks and chunks;
+    /// the scan workspace has its own independent bound. These conservative
+    /// capacities exclude the overhead named by each owner and are not RSS.
     pub max_batch_bytes: u64,
 }
 
 impl SolveConfig {
-    /// Shared ordinary-solve defaults used by both library sessions and CLI flags.
-    /// These finite session allowances differ from standalone primitive defaults.
-    /// Logical work ceilings do not impose a wall-clock deadline or remove the
-    /// independently configured source, storage and materialization limits.
-    /// The retained-storage byte ceilings are shares of [`Self::REFERENCE_MEMORY`];
-    /// [`Self::for_allowance`] scales them by a session's allowance and
-    /// shares the closure ceiling by its workers, which is how the command
-    /// takes the host's memory and parallelism. Cumulative scalar-copy limits
-    /// count work across source checks and are not scaled with retained storage.
-    pub const DEFAULT: Self = Self {
-        backend: Backend::Cpu,
-        grounder: Grounder::Auto,
-        source_batching: SourceBatching::Independent,
-        oracle: Oracle::Auto,
-        search: SearchMethod::Regions,
-        stats: false,
-        constraints: zetesis_themelios::ConstraintCheckLimits {
-            max_substitutions: DEFAULT_MAX_SUBSTITUTIONS as u64,
-            ..zetesis_themelios::ConstraintCheckLimits::DEFAULT
-        },
-        models: 1,
-        max_search_work: 10_000_000_000,
-        max_search_decisions: 10_000_000,
-        max_model_work: 1_000_000_000,
-        max_model_bytes: 67_108_864,
-        max_projection_entries: zetesis_sat::ProjectionLimits::DEFAULT.max_entries,
-        max_projection_nodes: zetesis_sat::ProjectionLimits::DEFAULT.max_nodes,
-        max_projection_bytes: zetesis_sat::ProjectionLimits::DEFAULT.max_bytes,
-        max_objective_work: 100_000_000,
-        max_objective_bound_work: 10_000_000,
-        max_objective_bindings: 1_000_000,
-        max_objective_keys: 1_000_000,
-        max_objective_key_bytes: 67_108_864,
-        max_optimal_models: 100_000,
-        max_optimal_atoms: 1_000_000,
-        max_optimal_bytes: 67_108_864,
-        batch_size: NonZeroUsize::new(64).unwrap(),
-        workers: NonZeroUsize::new(4).unwrap(),
-        completion_workers: NonZeroUsize::new(1).unwrap(),
-        max_reduct_bytes: zetesis_sat::ReductPreparationLimits::DEFAULT_BYTES,
-        max_completion_scratch_bytes: 268_435_456,
-        max_candidates: 10_000_000,
-        max_carrier_atoms: 4_096,
-        max_candidate_bytes: 67_108_864,
-        max_work: 100_000_000,
-        max_closure_bytes: 134_217_728,
-        max_closure_batch_bytes: zetesis_cpu::BatchOracle::DEFAULT_CLOSURE_BYTES,
-        gpu_formula_work: 100_000_000,
-        gpu_formula_rounds: 64,
-        max_source_work: 10_000_000,
-        max_atoms: 1_000_000,
-        max_substitutions: DEFAULT_MAX_SUBSTITUTIONS,
-        max_ground_rules: 1_000_000,
-        max_batch_bytes: 67_108_864,
-    };
+    /// Shared ordinary defaults, derived from [`crate::Resources::DEFAULT`].
+    /// Mandatory work and traversal counters have only representation maxima;
+    /// memory-derived capacities and bounded optional/device operations remain.
+    pub const DEFAULT: Self = crate::Resources::DEFAULT.solve_config();
 }
 
 impl SolveConfig {
@@ -231,46 +185,15 @@ impl Default for SolveConfig {
 }
 
 impl SolveConfig {
-    /// Two gibibytes: the memory allowance the byte ceilings of
-    /// [`Self::DEFAULT`] are the shares of.
-    pub const REFERENCE_MEMORY: u64 = 2 * 1024 * 1024 * 1024;
+    /// Reference memory used by the shared ordinary resource policy.
+    pub const REFERENCE_MEMORY: u64 = crate::Resources::REFERENCE_MEMORY;
 
-    /// The defaults for a session allowed `memory` bytes over `workers`:
-    /// [`Self::DEFAULT`] with the ten byte ceilings that bound retained
-    /// storage scaled by `memory` over [`Self::REFERENCE_MEMORY`], each
-    /// saturating at its type's maximum, and the per-closure allowance each
-    /// worker's share of the scaled collective closure ceiling, so that the
-    /// product checked by CPU closure setup holds. The projection, objective
-    /// key, incumbent, model construction, reduct, completion scratch, candidate, collective
-    /// closure and batch ceilings scale; work, count and structural
-    /// ceilings, and the ceilings of source admission, do not. Constant
-    /// time.
+    /// Ordinary session policy for this memory allowance and worker capacity.
+    /// Source and output consumers use the same [`crate::Resources`] owner to
+    /// derive their capacities. These independent named shares are not RSS.
     #[must_use]
     pub fn for_allowance(memory: u64, workers: NonZeroUsize) -> Self {
-        let scale_u64 = |default: u64| {
-            let scaled =
-                u128::from(default) * u128::from(memory) / u128::from(Self::REFERENCE_MEMORY);
-            u64::try_from(scaled).unwrap_or(u64::MAX)
-        };
-        let scale_usize = |default: usize| {
-            usize::try_from(scale_u64(u64::try_from(default).unwrap_or(u64::MAX)))
-                .unwrap_or(usize::MAX)
-        };
-        let max_closure_batch_bytes = scale_usize(Self::DEFAULT.max_closure_batch_bytes);
-        Self {
-            workers,
-            max_projection_bytes: scale_usize(Self::DEFAULT.max_projection_bytes),
-            max_objective_key_bytes: scale_usize(Self::DEFAULT.max_objective_key_bytes),
-            max_optimal_bytes: scale_usize(Self::DEFAULT.max_optimal_bytes),
-            max_model_bytes: scale_usize(Self::DEFAULT.max_model_bytes),
-            max_reduct_bytes: scale_u64(Self::DEFAULT.max_reduct_bytes),
-            max_completion_scratch_bytes: scale_u64(Self::DEFAULT.max_completion_scratch_bytes),
-            max_candidate_bytes: scale_usize(Self::DEFAULT.max_candidate_bytes),
-            max_closure_bytes: max_closure_batch_bytes / workers.get(),
-            max_closure_batch_bytes,
-            max_batch_bytes: scale_u64(Self::DEFAULT.max_batch_bytes),
-            ..Self::DEFAULT
-        }
+        crate::Resources::new(memory, workers).solve_config()
     }
 }
 

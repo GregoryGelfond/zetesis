@@ -2,8 +2,11 @@
 
 `zetesis-ferraris` accepts an already finite formula DAG. Every edge refers to a
 preceding node. Roots are the formulas asserted by the theory; their conjunction
-is the semantic input. `Theory::new` checks this shape and transfers the vectors
-without grounding or searching.
+is the semantic input. `FormulaParts` owns the node vector and operand arena
+as one pair. Two-child conjunctions and disjunctions use inline pairs; wider
+rows refer to the arena. `Theory::new` checks the complete shape and transfers
+both buffers with the roots, without grounding or searching. Semantic inspection
+uses `theory.view().node(index)` to borrow the entire `NodeView` operand row.
 
 Here atom indices `0` and `1` denote `a` and `b`. The theory is `a | b.`.
 The candidate `{a,b}` satisfies the theory but has a proper-subset reduct model:
@@ -31,8 +34,9 @@ comparisons; use the ordinary session for the composed native search.
 ## Preserve the subject
 
 An `Interpretation` belongs to one immutable `Theory`. Cloning the theory shares
-identity. Independently constructing equal node lists produces another identity,
-and passing an interpretation from it returns `Stop::WrongProgram`.
+identity. Independently constructing equal paired formula storage produces
+another identity, and passing an interpretation from it returns
+`Stop::WrongProgram`.
 
 `Interpretation::try_clone` copies the packed words while sharing that exact
 theory owner. It takes O(ceil(U/64)) time and owned words for a universe of U
@@ -80,15 +84,18 @@ candidate requires another freeze.
 
 ## Cost and limits
 
-Formula evaluation walks the topological nodes and asserted roots. The current
+Formula evaluation walks the topological nodes, every child occurrence and
+asserted roots. The current
 `models_reduct` convenience operation evaluates the candidate and tested
 interpretation on each call, under one combined work budget. A caller must
 account for that repeated work.
 
-For `N` nodes, `FrozenReduct::new` charges `N` node evaluations and retains `N`
-Boolean values, borrowing the candidate's packed words. A query charges `N`
-node evaluations plus root tests through the first false root, and uses `N`
-temporary Boolean values. Construction and each query have independent limits;
+For `N` nodes and `E` logical child occurrences, `FrozenReduct::new` charges
+`N + E` operations and retains `N` Boolean values, borrowing the candidate's
+packed words. Duplicate children count separately, including both children of
+an inline pair or implication. A query charges `N + E` operations plus root
+tests through the first false root, and uses `N` temporary Boolean values.
+Construction and each query have independent limits;
 those per-call budgets do not establish a cumulative campaign bound. Neither
 operation consumes a subset budget.
 

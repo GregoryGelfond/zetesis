@@ -3,8 +3,8 @@
 mod device;
 mod packing;
 mod preparation;
-mod projection;
 mod profile;
+mod projection;
 mod transport;
 
 use std::time::Duration;
@@ -30,13 +30,13 @@ pub struct FormulaLimits {
     /// original truth, then returns an explicit round-limit residual.
     pub max_rounds: u32,
     /// Maximum charged device work per candidate. Setup costs
-    /// `2*nodes+atoms+roots+levels` for two node walks, semantic-atom
+    /// `2*nodes+edges+atoms+roots+levels` for two node walks, all child occurrences, semantic-atom
     /// initialization, root visits and dependency-level synchronization.
     /// Pure chains and empty graphs select serial truth and charge zero levels;
     /// other DAGs charge their number of occupied dependency levels.
-    /// leaf nodes are visited but need no separate domain initialization store.
-    /// A sweep reserves `9*nodes+atoms+65` units, including eight possible gate
-    /// truth-table rows per node, 64 lane-summary merges and one strict-subset
+    /// Leaf nodes are visited but need no separate domain initialization store.
+    /// A sweep reserves `9*nodes+2*edges+atoms+65` units, including eight possible gate
+    /// truth-table rows per binary node, two native operand walks, 64 lane-summary merges and one strict-subset
     /// projection. These are policy units, not raw GPU instructions.
     /// Inactive nodes still consume their allowance.
     /// A budget below mandatory setup is refused before dispatch.

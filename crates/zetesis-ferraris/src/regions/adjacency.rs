@@ -26,9 +26,19 @@ impl Adjacency {
         rows: usize,
         edges: impl Iterator<Item = (usize, usize)> + Clone,
     ) -> Result<Self, Stop> {
+        Self::try_build(rows, edges.map(Ok))
+    }
+
+    /// Build the same ordered rows from fallible reads. Either pass preserves
+    /// the original read failure and publishes no partial adjacency.
+    pub(super) fn try_build(
+        rows: usize,
+        edges: impl Iterator<Item = Result<(usize, usize), Stop>> + Clone,
+    ) -> Result<Self, Stop> {
         let length = rows.checked_add(1).ok_or(Stop::Allocation)?;
         let mut offsets = zeros(length)?;
-        for (row, _) in edges.clone() {
+        for edge in edges.clone() {
+            let (row, _) = edge?;
             let after = row.checked_add(1).ok_or(Stop::Allocation)?;
             let count = offsets.get_mut(after).ok_or(Stop::Allocation)?;
             *count = count.checked_add(1).ok_or(Stop::Allocation)?;
@@ -44,7 +54,8 @@ impl Adjacency {
             .try_reserve_exact(rows)
             .map_err(|_| Stop::Allocation)?;
         cursors.extend_from_slice(&offsets[..rows]);
-        for (row, entry) in edges {
+        for edge in edges {
+            let (row, entry) = edge?;
             let cursor = cursors.get_mut(row).ok_or(Stop::Allocation)?;
             if *cursor >= offsets[row + 1] {
                 return Err(Stop::Allocation);

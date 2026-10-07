@@ -115,12 +115,16 @@ fn candidate_consequences_preserve_independent_stability() {
 fn a_candidate_bound_does_not_supply_reduct_support() {
     let original = Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::implies(0, 1),
+                Node::implies(1, 0),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![2, 3],
         AdmissionLimits::default(),
     )
@@ -153,7 +157,13 @@ fn a_candidate_bound_does_not_supply_reduct_support() {
 
 #[test]
 fn shape_validation_does_not_certify_theory_entailment() {
-    let original = Theory::new(1, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let original = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let groups = [Group {
         members: &[0],
         upper: 1,

@@ -81,7 +81,7 @@ pub enum SolveError {
     Words(zetesis_core::WordError),
     /// An accepted interpretation could not retain its checked atom selection.
     Model(zetesis_core::ModelError),
-    /// Cumulative completed model constructions cannot represent another model.
+    /// Cumulative model-construction work or completed count cannot represent another operation.
     ModelStatisticsOverflow,
     /// Membership execution ended without exhausted candidate coverage.
     CandidateStreamNotExhausted,

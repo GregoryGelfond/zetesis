@@ -408,8 +408,8 @@ This conservative guard also covers eager and shared CPU closure execution;
 formula and device routes apply their own resource checks instead.
 `SolveConfig::validate` checks representation-independent policies. With valid
 policies, an already cancelled session stops before executor resource checks.
-The command derives `L` as each worker's share of the collective ceiling when
-`--max-closure-bytes` is not given. At most
+The ordinary resource policy derives `L` as each worker's share of the
+collective capacity selected by `--memory`. At most
 `min(submitted candidates, worker count)` workspaces are
 assigned, each to a contiguous candidate range; candidates inside one range run
 sequentially. An empty batch admits only retained collective capacity and does
@@ -419,7 +419,8 @@ allocator overhead are separate owners.
 Ordinary sessions map `SolveConfig::max_source_work` to immutable preparation
 work and `max_closure_batch_bytes` to both preparation storage and the collective
 owner allowance. Candidate closure work retains its separate `max_work` counter.
-The existing CLI options expose these bounds without a combined work quota.
+Bounded library callers can select these work ceilings. Ordinary command
+execution uses checked counter maxima without a selected work quota.
 A preparation stop is distinct from an individual candidate stop; neither
 establishes candidate exhaustion. A collective reservation refusal starts no
 candidate and releases the admission slot.

@@ -84,6 +84,8 @@ mod formula_tight;
 mod completion_accounting;
 mod formula_queue;
 mod solve_config;
+mod resources;
+pub use resources::Resources;
 mod semantic_outcome;
 mod lazy_execution;
 mod shared_execution;

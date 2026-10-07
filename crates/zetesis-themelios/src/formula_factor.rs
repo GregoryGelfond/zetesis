@@ -1,10 +1,16 @@
 //! Existential body components over fixed head bindings in completed support.
 
+mod continuations;
 mod plan;
+pub(super) use continuations::rule as continuations;
+#[cfg(test)]
+pub(crate) mod testing;
+#[cfg(test)]
+mod witnesses;
 
 use zetesis_core::catalog::AssignmentError;
 use zetesis_core::{PatternRef, TemplateTerm as Term};
-use zetesis_ferraris::Node;
+use zetesis_ferraris::NodeView as Node;
 
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;

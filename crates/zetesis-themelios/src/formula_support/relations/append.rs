@@ -34,6 +34,10 @@ impl<'a> SupportAppend<'a> {
         self.owner.read()
     }
 
+    pub(in crate::formula_support) fn term_lookup(&self) -> atom_interner::TermLookup<'_> {
+        self.owner.term_lookup()
+    }
+
     pub(in crate::formula_support) fn import(
         &mut self,
         value: TermRef<'_>,

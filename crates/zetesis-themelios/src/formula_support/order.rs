@@ -8,13 +8,22 @@
 //! 1. an occurrence whose variables are all bound is a test, offering at most
 //!    one row per prefix row and never widening the join, so it precedes
 //!    every generator;
-//! 2. among generators, the one offered fewer rows: a relation's size, or
-//!    within a semi-naive round the rows its partition offers, so that the
-//!    pivot occurrence's new rows are joined first when they are the fewest;
-//! 3. among relations of one size, the occurrence that decides the most
-//!    comparisons still waiting on its variables, then the one that binds
-//!    the most variables such comparisons wait on;
-//! 4. otherwise the earlier occurrence of the canonical body.
+//! 2. among generators, an empty source first, then an occurrence that decides
+//!    more waiting comparisons, so their result is checked before deeper joins;
+//! 3. among equally decisive generators, an occurrence with a known whole
+//!    argument before an independent domain: its constant or bound flat slot
+//!    can use the ordinary equality posting;
+//! 4. among otherwise equal generators, the one offered fewer rows: a relation's
+//!    size, or within a semi-naive round the rows its partition offers;
+//! 5. among relations of one size, the occurrence that binds the most variables
+//!    still needed by waiting comparisons;
+//! 6. otherwise the earlier occurrence of the canonical body.
+//!
+//! A known argument is a scheduling preference, not a fanout bound: a skewed
+//! posting may contain every source row. A ready comparison may also accept
+//! every row; its priority is a checking opportunity, not a selectivity estimate.
+//! Nested bound slots do not count unless
+//! their complete flat argument is already bound. No row or binding is removed.
 //!
 //! Every order yields the same complete bindings, since the join is a
 //! conjunction, and the semi-naive partition is by source occurrence and
@@ -345,6 +354,27 @@ fn is_test(
     Ok(all)
 }
 
+/// Only complete arguments can restrict the existing posting probe. A nested
+/// variable of a structural pattern does not bind its private whole-value slot.
+fn has_bound_argument(
+    occurrence: &PatternOccurrence<'_>,
+    bound: &[bool],
+    budget: &mut Budget,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    work(budget, 1, location)?;
+    let terms = occurrence.atom().terms();
+    for column in 0..terms.len() {
+        work(budget, 1, location)?;
+        match terms.at(column).expect("checked pattern arity") {
+            TemplateTerm::Constant(_) => return Ok(true),
+            TemplateTerm::Variable(variable) if is_bound(bound, variable) => return Ok(true),
+            TemplateTerm::Variable(_) => {}
+        }
+    }
+    Ok(false)
+}
+
 /// What the prefixes of one join order decide: for each literal, the depth
 /// at which its comparison is decided, and whether some check waits for the
 /// complete row.
@@ -526,10 +556,18 @@ fn arrange_with(
                 decides += usize::from(comparison.decided_by(occurrence, bound, budget, location)?);
                 advances += comparison.advanced_by(occurrence, bound, budget, location)?;
             }
+            let test = is_test(occurrence, bound, budget, location)?;
+            // Tests keep their existing order. Only a nonempty generator needs
+            // the additional metadata scan: empty sources cannot yield a row.
+            let independent = !test
+                && offered[candidate] != 0
+                && !has_bound_argument(occurrence, bound, budget, location)?;
             let rank = (
-                !is_test(occurrence, bound, budget, location)?,
-                offered[candidate],
+                !test,
+                offered[candidate] != 0,
                 Reverse(decides),
+                independent,
+                offered[candidate],
                 Reverse(advances),
                 occurrence.source,
             );

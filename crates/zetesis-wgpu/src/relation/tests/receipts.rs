@@ -136,14 +136,15 @@ fn later_tiles_cannot_reuse_missing_or_foreign_receipts() {
 fn tile_receipt_costs_are_inclusively_admitted() {
     // Two queries, one with one equality: work is
     // 2*(64*T + 32*W + T) + rows. Expected bytes include both device result
-    // buffers, resident columns and the three minimum host vectors/parameters.
+    // buffers, one byte-width column (8 header bytes + word-padded cells),
+    // and the three minimum host vectors/parameters.
     for (rows, result, transport, accounted, work) in [
-        (63, 56, 184, 524, 321),
-        (64, 56, 184, 528, 322),
-        (65, 104, 280, 636, 517),
-        (127, 112, 296, 908, 643),
-        (128, 112, 296, 912, 644),
-        (129, 160, 392, 1020, 839),
+        (63, 56, 184, 344, 321),
+        (64, 56, 184, 344, 322),
+        (65, 104, 280, 452, 517),
+        (127, 112, 296, 536, 643),
+        (128, 112, 296, 536, 644),
+        (129, 160, 392, 644, 839),
     ] {
         let (predicate, atoms) = source(rows);
         let relation =

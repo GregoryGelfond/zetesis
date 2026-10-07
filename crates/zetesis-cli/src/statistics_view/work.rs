@@ -170,7 +170,7 @@ fn model_construction(
     rows.push(count(
         "Model construction work",
         statistics.work,
-        "prepared semantic ranks and selected positions",
+        "cumulative prepared semantic ranks and selected positions",
     ));
     rows.push(count(
         "Prepared model order bytes",

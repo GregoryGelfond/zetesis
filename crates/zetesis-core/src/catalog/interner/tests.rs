@@ -1,6 +1,7 @@
 //! Exact denotation, AVL shape, transaction refusal and scoped prefix controls.
 
 mod probes;
+mod spine_tests;
 mod discovery_tests;
 mod ordering_tests;
 mod prepared_tests;

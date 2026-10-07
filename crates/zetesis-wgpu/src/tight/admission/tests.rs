@@ -9,7 +9,13 @@ fn atomic(device: &wgpu::Limits) -> Packing<'_> {
 }
 
 fn certificate() -> TightPlan {
-    let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     TightPlan::compile(
         &theory,
         TightPlanLimits::default(),

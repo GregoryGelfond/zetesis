@@ -21,6 +21,7 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 pub(super) struct CoordinateMap<K, V> {
     entries: Vec<(K, V)>,
     lease: StorageLease,
+    owns_header: bool,
 }
 
 /// Terminal entries retain the map's allocation and receipt after coordinate
@@ -56,7 +57,27 @@ impl<K: Copy + Ord, V: Copy> CoordinateMap<K, V> {
         Ok(Self {
             entries: Vec::new(),
             lease,
+            owns_header: true,
         })
+    }
+
+    /// Move the inline header into an already leased enclosing owner. The map
+    /// continues to own every entry allocation and replacement peak. The caller
+    /// must include this entire header in its own admitted capacity before the
+    /// move; subsequent reservations charge only the separately owned entries.
+    pub(super) fn into_embedded(mut self, location: ProgramSite) -> Result<Self, FormulaFailure> {
+        self.owns_header = false;
+        self.lease
+            .observe(self.entries.capacity() * size_of::<(K, V)>(), location)?;
+        Ok(self)
+    }
+
+    fn header(&self) -> usize {
+        if self.owns_header {
+            size_of::<Self>()
+        } else {
+            0
+        }
     }
 
     pub(super) fn len(&self) -> usize {
@@ -83,11 +104,12 @@ impl<K: Copy + Ord, V: Copy> CoordinateMap<K, V> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
+        let header = self.header();
         reserve(
             &mut self.entries,
             additional,
             &mut self.lease,
-            size_of::<Self>(),
+            header,
             Context::new(computation, limits, counters, location),
         )
     }

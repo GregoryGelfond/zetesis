@@ -37,14 +37,13 @@ pub struct Request {
     pub native_oracle: NativeOracle,
     /// Native hardware policy; explicit GPU policies are passed through unchanged.
     pub native_backend: Backend,
-    /// Positive native candidate batch size, recorded and passed to zetesis.
-    pub native_batch_size: NonZeroUsize,
-    /// Positive exact formula completion worker request, separate from closure workers.
-    pub native_completion_workers: NonZeroUsize,
-    /// Logical completion-batch scratch bytes; zero is a valid native refusal budget.
-    pub native_max_completion_scratch_bytes: u64,
-    /// Capture native statistics; also enabled for physical formula campaigns
-    /// or multiple requested completion workers.
+    /// Requested native worker threads.
+    pub native_threads: NonZeroUsize,
+    /// Explicit named-memory allowance; absent preserves the executable default.
+    pub native_memory_bytes: Option<u64>,
+    /// Cooperative solver deadline, separate from the harness child timeout.
+    pub native_time_limit_seconds: Option<std::num::NonZeroU64>,
+    /// Capture native statistics; also enabled for physical formula campaigns.
     pub native_stats: bool,
     /// Run/check the reference only; success does not establish native support.
     pub reference_only: bool,
@@ -62,7 +61,7 @@ impl Request {
     }
 
     pub(super) fn effective_native_stats(&self) -> bool {
-        self.native_stats || self.physical_formula() || self.native_completion_workers.get() > 1
+        self.native_stats || self.physical_formula()
     }
 }
 
@@ -76,9 +75,9 @@ impl Default for Request {
             zetesis: PathBuf::from("zetesis"),
             native_oracle: NativeOracle::Auto,
             native_backend: Backend::Cpu,
-            native_batch_size: NonZeroUsize::new(64).unwrap(),
-            native_completion_workers: NonZeroUsize::new(1).unwrap(),
-            native_max_completion_scratch_bytes: 268_435_456,
+            native_threads: NonZeroUsize::MIN,
+            native_memory_bytes: None,
+            native_time_limit_seconds: None,
             native_stats: false,
             reference_only: false,
             timeout_ms: 30_000,

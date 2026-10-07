@@ -19,6 +19,27 @@ fn solve(source: &str, arguments: &[&str]) -> (Report, String) {
     (report, String::from_utf8(output).unwrap())
 }
 
+fn bounded(
+    source: &str,
+    arguments: &[&str],
+    change: impl FnOnce(&mut zetesis_cli::SolveConfig),
+) -> (Report, String) {
+    let options =
+        Options::try_parse_from(["zetesis"].into_iter().chain(arguments.iter().copied())).unwrap();
+    let mut config = zetesis_cli::PublicationConfig::from(&options);
+    change(&mut config.solve);
+    let mut output = Vec::new();
+    let report = crate::support::prepared::human(
+        source,
+        &config,
+        &mut output,
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    (report, String::from_utf8(output).unwrap())
+}
+
 #[test]
 fn default_request_proves_optimum_before_returning_one_model() {
     let (report, text) = solve("1 {a;b} 1. #minimize { 5,a:a; 2,b:b }.", &[]);
@@ -45,10 +66,9 @@ fn default_request_proves_optimum_before_returning_one_model() {
             .candidate_restrictions,
         1
     );
-    let (unpruned, _) = solve(
-        "1 {a;b} 1. #minimize { 5,a:a; 2,b:b }.",
-        &["--max-objective-bound-work", "0"],
-    );
+    let (unpruned, _) = bounded("1 {a;b} 1. #minimize { 5,a:a; 2,b:b }.", &[], |config| {
+        config.max_objective_bound_work = 0;
+    });
     assert_eq!(unpruned.optimization.unwrap().scored_models, 2);
 }
 
@@ -78,10 +98,9 @@ fn every_hidden_model_is_scored_without_bound_pruning() {
     // With pruning, a dominated model goes unscored when another worker's
     // incumbent bound reaches it first. Without it, every stable model is
     // scored exactly once, identical displays included.
-    let (all, _) = solve(
-        HIDDEN_TIES,
-        &["--models", "0", "--max-objective-bound-work", "0"],
-    );
+    let (all, _) = bounded(HIDDEN_TIES, &["--models", "0"], |config| {
+        config.max_objective_bound_work = 0;
+    });
     assert_eq!(all.optimization.unwrap().scored_models, 4);
 }
 
@@ -114,23 +133,22 @@ fn absent_objectives_and_present_zero_cost_remain_distinct() {
 #[test]
 fn every_objective_and_incumbent_bound_is_incomplete_never_optimal() {
     let source = "{a}. #minimize { 0,k:a }.";
-    for arguments in [
-        vec!["--max-objective-work", "0"],
-        vec!["--max-objective-bindings", "0"],
-        vec!["--max-objective-keys", "0"],
-        vec!["--max-objective-key-bytes", "0"],
-        vec!["--max-optimal-models", "0"],
-        vec!["--max-optimal-atoms", "0"],
-        vec!["--max-optimal-bytes", "0"],
-        vec!["--max-candidates", "1"],
-    ] {
-        let mut args = vec!["--models", "0"];
-        args.extend(arguments);
-        let (report, text) = solve(source, &args);
+    let limits: [fn(&mut zetesis_cli::SolveConfig); 8] = [
+        |config| config.max_objective_work = 0,
+        |config| config.max_objective_bindings = 0,
+        |config| config.max_objective_keys = 0,
+        |config| config.max_objective_key_bytes = 0,
+        |config| config.max_optimal_models = 0,
+        |config| config.max_optimal_atoms = 0,
+        |config| config.max_optimal_bytes = 0,
+        |config| config.max_candidates = 1,
+    ];
+    for (index, limit) in limits.into_iter().enumerate() {
+        let (report, text) = bounded(source, &["--models", "0"], limit);
         assert_eq!(
             report.completion,
             Completion::Interrupted,
-            "{args:?}: {text}"
+            "limit {index}: {text}"
         );
         assert!(text.contains("INCOMPLETE:"));
         assert!(!text.contains("OPTIMUM FOUND"));
@@ -149,10 +167,9 @@ fn incumbent_bounds_preserve_all_optimal_models_and_lexicographic_costs() {
         "{a;b}. #minimize { 0,k:a; 0,j:b }.",
     ] {
         let (pruned, output) = solve(source, &["--models", "0"]);
-        let (unpruned, baseline) = solve(
-            source,
-            &["--models", "0", "--max-objective-bound-work", "0"],
-        );
+        let (unpruned, baseline) = bounded(source, &["--models", "0"], |config| {
+            config.max_objective_bound_work = 0;
+        });
         assert_eq!(
             pruned.completion,
             Completion::Exhausted,
@@ -184,14 +201,12 @@ fn incumbent_bounds_preserve_all_optimal_models_and_lexicographic_costs() {
 #[test]
 fn refused_optional_bound_preserves_exact_unpruned_completion() {
     let source = "1 {a;b} 1. #minimize { 5,a:a; 2,b:b }.";
-    let (report, output) = solve(
-        source,
-        &["--models", "0", "--max-objective-bound-work", "1"],
-    );
-    let (baseline, expected) = solve(
-        source,
-        &["--models", "0", "--max-objective-bound-work", "0"],
-    );
+    let (report, output) = bounded(source, &["--models", "0"], |config| {
+        config.max_objective_bound_work = 1;
+    });
+    let (baseline, expected) = bounded(source, &["--models", "0"], |config| {
+        config.max_objective_bound_work = 0;
+    });
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(answer_records(&output), answer_records(&expected));
     assert_eq!(

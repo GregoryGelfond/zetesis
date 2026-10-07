@@ -1,50 +1,75 @@
 //! Frozen candidate traces from the unpacked watch implementation at 78a069b.
 //! These fixtures compare ordered semantic candidates, every cumulative search
 //! counter, and terminal outcomes under the explicit reference cost map below.
-//! They do not assert stable-model membership. The four-atom input preserves
-//! its admitted DAG so equivalent frontend layouts cannot change this trace.
+//! They do not assert stable-model membership. The admitted inputs preserve
+//! their DAGs so equivalent frontend layouts cannot change these traces.
 
 use std::fmt::Write as _;
 
 #[path = "../../../tests/fixtures/watch-traces/choices.rs"]
 mod choices;
 
-use zetesis_ferraris::Theory;
+#[path = "../../../tests/fixtures/watch-traces/queens-01.rs"]
+mod queens01;
+
+#[path = "../../../tests/fixtures/watch-traces/queens-02.rs"]
+mod queens02;
+
+#[path = "../../../tests/fixtures/watch-traces/queens-03.rs"]
+mod queens03;
+
+#[path = "../../../tests/fixtures/watch-traces/queens-04.rs"]
+mod queens04;
+
+#[path = "../../../tests/fixtures/watch-traces/queens-05.rs"]
+mod queens05;
+
+#[path = "../../../tests/fixtures/watch-traces/queens-06.rs"]
+mod queens06;
+
+use zetesis_ferraris::{Node, Theory};
 
 use super::{Budget, Cursor, LocalQuota};
 use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics, Solve, encoding};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
-const QUEENS: [&str; 6] = [
-    include_str!("../../../../../examples/correctness/standalone/n-queens/variant-01.lp"),
-    include_str!("../../../../../examples/correctness/standalone/n-queens/variant-02.lp"),
-    include_str!("../../../../../examples/correctness/standalone/n-queens/variant-03.lp"),
-    include_str!("../../../../../examples/correctness/standalone/n-queens/variant-04.lp"),
-    include_str!("../../../../../examples/correctness/standalone/n-queens/variant-05.lp"),
-    include_str!("../../../../../examples/correctness/standalone/n-queens/variant-06.lp"),
+const QUEENS: [(usize, &[Node], &[usize]); 6] = [
+    (queens01::ATOMS, &queens01::NODES, &queens01::ROOTS),
+    (queens02::ATOMS, &queens02::NODES, &queens02::ROOTS),
+    (queens03::ATOMS, &queens03::NODES, &queens03::ROOTS),
+    (queens04::ATOMS, &queens04::NODES, &queens04::ROOTS),
+    (queens05::ATOMS, &queens05::NODES, &queens05::ROOTS),
+    (queens06::ATOMS, &queens06::NODES, &queens06::ROOTS),
 ];
 
-fn choice_theory() -> Theory {
+fn admitted(atoms: usize, nodes: &[Node], roots: &[usize]) -> Theory {
     Theory::new(
-        choices::ATOMS,
-        choices::NODES.to_vec(),
-        choices::ROOTS.to_vec(),
+        atoms,
+        zetesis_ferraris::FormulaParts::new(nodes.to_vec(), vec![]).unwrap(),
+        roots.to_vec(),
         zetesis_ferraris::AdmissionLimits::default(),
     )
     .unwrap()
 }
 
+fn choice_theory() -> Theory {
+    admitted(choices::ATOMS, &choices::NODES, &choices::ROOTS)
+}
+
 fn choice_work() -> u64 {
-    // The frozen generic trace takes 2294 operations. Compare that entire
-    // trace before subtracting elided watch positions, the witness rescans
-    // and the exact exclusion cost reduction for its ten distinct four-atom
-    // projections.
-    let traced = trace(&choice_theory(), true, SearchLimits::default());
+    // The frozen generic trace takes 2294 operations. The current encoder
+    // additionally charges each operand once. Restore that setup cost before
+    // subtracting elided watch positions, witness rescans and exact exclusion
+    // savings for the ten distinct four-atom projections.
+    let theory = choice_theory();
+    let encoding_operands = u64::try_from(theory.parts().occurrences()).unwrap();
+    assert_eq!(encoding_operands, 80);
+    let traced = trace(&theory, true, SearchLimits::default());
     assert_eq!(
         traced.record,
         include_str!("../../../tests/fixtures/watch-traces/refined.txt")
     );
-    2294 - reference_statistics(SearchStatistics::default(), 4, 10, traced.rescanned).work
+    2294 + encoding_operands
+        - reference_statistics(SearchStatistics::default(), 4, 10, traced.rescanned, 0).work
 }
 
 /// The record of one traversal and the witness-rescan charges the historical
@@ -79,6 +104,7 @@ fn reference_statistics(
     width: usize,
     excluded: u64,
     rescanned: u64,
+    encoding_operands: u64,
 ) -> SearchStatistics {
     let profile = super::propagation_profile::snapshot();
     let omitted = profile
@@ -102,18 +128,12 @@ fn reference_statistics(
             .checked_add((u64::try_from(width).unwrap() * 2 - 2) * excluded)
             .unwrap()
     };
+    // The original-only encoder now reads every operand once, including
+    // implication operands. Historical fixtures charged the node/gate visits
+    // but not these E reads. Every recorded observation follows completed
+    // encoding, so remove that one setup charge solely in this reference map.
+    actual.work = actual.work.checked_sub(encoding_operands).unwrap();
     actual
-}
-
-fn source_trace(source: &str, refined: bool, limits: SearchLimits) -> Trace {
-    let admitted = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    trace(admitted.theory(), refined, limits)
 }
 
 fn trace(theory: &Theory, refined: bool, limits: SearchLimits) -> Trace {
@@ -126,6 +146,7 @@ fn trace(theory: &Theory, refined: bool, limits: SearchLimits) -> Trace {
         statistics: SearchStatistics::default(),
     };
     let cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut charged).unwrap();
+    let encoding_operands = u64::try_from(theory.parts().occurrences()).unwrap();
     let mut cursor =
         Cursor::projected(theory.atom_count(), crate::ProjectionLimits::default()).unwrap();
     if refined {
@@ -160,7 +181,8 @@ fn trace(theory: &Theory, refined: bool, limits: SearchLimits) -> Trace {
                         charged.statistics,
                         theory.atom_count(),
                         excluded,
-                        rescanned
+                        rescanned,
+                        encoding_operands
                     )
                 )
                 .unwrap();
@@ -172,7 +194,8 @@ fn trace(theory: &Theory, refined: bool, limits: SearchLimits) -> Trace {
                             charged.statistics,
                             theory.atom_count(),
                             excluded,
-                            rescanned
+                            rescanned,
+                            encoding_operands
                         )
                     )
                     .unwrap();
@@ -188,7 +211,8 @@ fn trace(theory: &Theory, refined: bool, limits: SearchLimits) -> Trace {
                         charged.statistics,
                         theory.atom_count(),
                         excluded,
-                        rescanned
+                        rescanned,
+                        encoding_operands
                     )
                 )
                 .unwrap();
@@ -209,9 +233,10 @@ fn replacement_elision_preserves_queens_reference_traces() {
         include_str!("../../../tests/fixtures/watch-traces/queens-05.txt"),
         include_str!("../../../tests/fixtures/watch-traces/queens-06.txt"),
     ];
-    for (source, expected) in QUEENS.into_iter().zip(expected) {
+    for ((atoms, nodes, roots), expected) in QUEENS.into_iter().zip(expected) {
+        let theory = admitted(atoms, nodes, roots);
         assert_eq!(
-            source_trace(source, false, SearchLimits::default()).record,
+            trace(&theory, false, SearchLimits::default()).record,
             expected
         );
     }

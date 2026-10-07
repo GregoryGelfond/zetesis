@@ -18,7 +18,7 @@ use crate::{Publication, PublicationFailure, PublicationStop, RunError, Semantic
 /// Solver and observation policy for publication of an already prepared input.
 /// Renderer-specific byte limits, styling and output state belong to the chosen
 /// renderer. Construction uses ordinary typed values and does not parse arguments.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct PublicationConfig {
     /// Exact solver execution and answer-selection limits.
     pub solve: crate::SolveConfig,
@@ -26,17 +26,21 @@ pub struct PublicationConfig {
     pub observations: Limits,
 }
 
+impl Default for PublicationConfig {
+    fn default() -> Self {
+        let resources = zetesis_solve::Resources::default();
+        Self {
+            solve: resources.solve_config(),
+            observations: resources.observation_limits(),
+        }
+    }
+}
+
 impl From<&crate::Options> for PublicationConfig {
     fn from(options: &crate::Options) -> Self {
         Self {
             solve: options.into(),
-            observations: Limits {
-                max_work: options.max_observation_work,
-                max_bindings: options.max_observation_bindings,
-                max_terms: options.max_observation_terms,
-                max_output_bytes: options.max_observation_bytes,
-                ..Default::default()
-            },
+            observations: options.resources().observation_limits(),
         }
     }
 }

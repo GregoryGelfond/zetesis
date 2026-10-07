@@ -13,15 +13,19 @@ fn choices() -> Theory {
     // Two independent choices: every one of the four interpretations is stable.
     Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
-            Node::Atom(1),
-            Node::Implies(4, 1),
-            Node::Or(4, 5),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::or_pair([0, 2]),
+                Node::atom(1),
+                Node::implies(4, 1),
+                Node::or_pair([4, 5]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3, 6],
         AdmissionLimits::default(),
     )
@@ -107,7 +111,13 @@ fn history_refusals_preserve_the_checked_answer() {
 
 #[test]
 fn checker_retry_keeps_the_original_history_stop() {
-    let input = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let input = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let mut search = by_clauses(
         &input,
         Limits {

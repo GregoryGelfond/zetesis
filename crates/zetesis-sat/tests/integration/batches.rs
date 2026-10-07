@@ -69,19 +69,19 @@ fn generated_original_and_frozen_formulas_match_complete_reference_in_irregular_
     for left in 0..3 {
         for right in 0..3 {
             for connective in [
-                Node::And(left, right),
-                Node::Or(left, right),
-                Node::Implies(left, right),
+                Node::and_pair([left, right]),
+                Node::or_pair([left, right]),
+                Node::implies(left, right),
             ] {
                 for roots in [vec![], vec![3], vec![4], vec![3, 4]] {
                     let t = theory(
                         2,
                         vec![
-                            Node::Atom(0),
-                            Node::Atom(1),
-                            Node::False,
+                            Node::atom(0),
+                            Node::atom(1),
+                            Node::falsum(),
                             connective,
-                            Node::Implies(3, 2),
+                            Node::implies(3, 2),
                         ],
                         roots,
                     );
@@ -96,7 +96,7 @@ fn generated_original_and_frozen_formulas_match_complete_reference_in_irregular_
         collect(&three_choices(), count, true);
     }
     collect(&theory(0, vec![], vec![]), 3, false);
-    collect(&theory(0, vec![Node::False], vec![0]), 3, true);
+    collect(&theory(0, vec![Node::falsum()], vec![0]), 3, true);
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn restrictions_do_not_discard_pending_old_region_candidates_or_change_the_reduc
     let t = three_choices();
     let mut search = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
     let _ = search.next_batch(limits(3), |_, _| Err::<Vec<BatchVerdict>, _>("retry"));
-    let restriction = theory(3, vec![Node::False], vec![0]);
+    let restriction = theory(3, vec![Node::falsum()], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     assert_eq!(search.batch_statistics().pending, 3);
     let old_region = search.next_batch(limits(3), residual).unwrap();

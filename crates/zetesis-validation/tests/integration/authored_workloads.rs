@@ -202,14 +202,13 @@ fn scaling_profiles_vary_only_the_requested_region_workers() {
     assert_eq!(
         profiles
             .iter()
-            .map(|profile| profile.workers.get())
+            .map(|profile| profile.threads.get())
             .collect::<Vec<_>>(),
         [1, 2, 4, 8, 14]
     );
     for profile in &profiles {
-        assert_eq!(profile.completion_workers.get(), 1);
         let normalized = NativeExecution {
-            workers: profiles[0].workers,
+            threads: profiles[0].threads,
             ..*profile
         };
         assert_eq!(
@@ -220,24 +219,21 @@ fn scaling_profiles_vary_only_the_requested_region_workers() {
 }
 
 #[test]
-fn expansion_overrides_are_retained_in_every_profile() {
+fn memory_allowances_are_retained_in_every_profile() {
     for profile in scalability::profiles(Some(300_000_000)) {
         assert_eq!(
-            serde_json::to_value(profile).unwrap()["max_expansion_work"],
+            serde_json::to_value(profile).unwrap()["memory_bytes"],
             300_000_000
         );
     }
 }
 
 #[test]
-fn expansion_overrides_reach_both_native_interfaces() {
+fn memory_allowances_reach_both_native_interfaces() {
     for profile in scalability::profiles(Some(300_000_000)) {
         for invocation in [NativeInvocation::Legacy, NativeInvocation::Solve] {
             let args = invocation.arguments(&profile);
-            let position = args
-                .iter()
-                .position(|arg| arg == "--max-expansion-work")
-                .unwrap();
+            let position = args.iter().position(|arg| arg == "--memory").unwrap();
             assert_eq!(args[position + 1], "300000000");
         }
     }

@@ -118,7 +118,10 @@ fn raised_formula_preserves_source_semantics() {
     let source = formula(SOURCE);
     assert!(std::ptr::eq(typed.original_program(), program.as_ref()));
     assert_eq!(typed.atoms(), source.atoms());
-    assert_eq!(typed.theory().nodes(), source.theory().nodes());
+    assert_eq!(
+        (typed.theory().nodes(), typed.theory().operands()),
+        (source.theory().nodes(), source.theory().operands())
+    );
     assert_eq!(typed.theory().roots(), source.theory().roots());
     assert_eq!(typed.metadata().output(), source.metadata().output());
     let expected = exhaustive(&source);

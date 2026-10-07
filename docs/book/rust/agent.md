@@ -78,7 +78,7 @@ control of the native session API.
 
 The query API deliberately adopts the **Gelfond–Kahl three-valued reading**:
 Definition 2.2.2 with the authors' errata, as specified in the
-[pinned themelios query design, §2.2](https://github.com/GregoryGelfond/themelios/blob/3339a8abed1e00f21e42c2b3ed2677c16248eda5/docs/design/query.md).
+[pinned themelios query design, §2.2](https://github.com/GregoryGelfond/themelios/blob/4c163d0d07cf67180354d9b605e19df2d355529e/docs/design/query.md).
 
 `Query::of` constructs a ground literal query. Within one answer set, a literal
 is true if present, false if its strong contrary is present, and unknown
@@ -138,6 +138,12 @@ each question. It does not claim incremental ground-state reuse.
 `Solver::new(Config)` selects grounding, worker count and resource allowances.
 The default worker count comes from the host. This adapter currently executes on
 the CPU; enabling GPU support elsewhere in a Cargo build does not change that.
+`Config::memory` determines named preparation, execution and output capacities
+through `zetesis_solve::Resources`. They are derived when used, so changing the
+allowance does not leave stale defaults in another phase. The library default
+is two GiB. This is not a process RSS cap; independent capacities and untracked
+allocator or thread-stack storage can overlap. Ordinary runs have no selected
+operation-count ceiling.
 
 | Grounder | Preparation |
 | --- | --- |

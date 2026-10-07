@@ -30,49 +30,26 @@ answer-set semantics of the resulting program. See
 [`SourceBundle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/bundle.rs)
 for canonical identity, path and resource requirements.
 
-Formula admission has independent inclusive ceilings. `--max-atoms` and
-`--max-ground-rules` set the ordinary CLI's formula atom and theory-root limits
-directly, each defaulting to 1,000,000. They can raise or lower those limits;
-there is no hidden clamp to the standalone formula library's defaults of 65,536
-atoms and 262,144 roots. Formula nodes retain their independent 1,048,576 limit.
+Ordinary execution derives source, formula, support and output capacities from
+one memory allowance and a thread count. Formula atoms, nodes, roots and child
+occurrences have separate named storage capacities; repeated children still
+count separately. Domain values and generated values are sets: retained payload
+is counted once per distinct value, regardless of how often it is encountered.
+The allowance is not a process resident-memory cap.
 
-Value and round limits count different populations:
+There is no user-selected work, substitution or support-round ceiling. Those
+operations remain counted by checked counters for statistics. Cancellation and
+an optional deadline can stop execution. Finite representation and recursive
+input-depth checks remain, as do internal bounds on optional analyses and GPU
+dispatches. Exhaustion or refusal cannot establish completed support,
+unsatisfiability or optimality.
 
-| Option | Population and lifetime | Default |
-| --- | --- | --- |
-| `--max-domain-values` | Distinct source values across the selected admission profile | 1,000,000 for both profiles |
-| `--max-assignment-values` | Candidate values in one formula assignment, range or objective-presence subset | 1,000,000 per operation |
-| `--max-generated-values` | Distinct generated binding values across formula grounding: support, objective preparation and final instantiation | 1,000,000 cumulatively |
-| `--max-support-rounds` | Complete eager possible-support rounds, including the final no-change round | 1,000,000 |
-
-The domain and generated populations are sets, not counters: each distinct
-value is retained once so that its payload is charged to the byte budget once,
-however many source terms or generator steps produce it.
-
-An explicit domain override applies to both profiles. The assignment and
-generated-value limits are independent: many small assignments can exceed the
-cumulative generated-value limit. Support rounds are not a direct recursion-depth
-measure. Exhaustion refuses admission and cannot establish completed support or
-unsatisfiability. Zero is a real limit for every resource.
-
-Without `--max-expansion-work`, ordinary admission preserves the independent
-library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
-formula-grounding operations.
-`--max-expansion-bytes` separately bounds the canonical payload the grounder
-retains, 16 MiB by default, counted once per retained atom. An explicit work
-value overrides both work ceilings; each counter applies it independently. `--stats` reports both effective limits.
-Formula work includes checked atom comparisons, index construction, copying and
-commit operations. Accounting these operations changes the work needed to admit
-a source; formula admission now uses its library default instead of the earlier
-shared 1,048,576 default. Explicit lower overrides remain effective. These finite
-operation ceilings are neither a summed request budget, elapsed-time limits nor
-performance measurements. Separate source, value, atom and storage bounds remain.
-
-`--stats` reports both requested grounding limits and formula profile ceilings.
-Library callers configure formula limits through
-[`FormulaLimits`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs),
-with the same checked refusal contracts. Relational lazy execution has its own
-source-work and derived-atom limits; these formula limits do not describe it.
+Library callers can select explicit bounds through
+[`FormulaLimits`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs)
+and the corresponding relational limit types. For the same policy as the CLI,
+use `zetesis_solve::Resources` to derive admission, grounding and execution
+settings together. Zero memory is a real limit, not a request for unlimited
+storage. See [resource controls](commands.md#choose-execution-and-limits).
 
 ## Rules, terms, and bindings
 
@@ -508,15 +485,15 @@ query; it does not supply support or change either cost.
 Scoped body compilation uses a separate value domain and transient formula
 storage. Each completed eligible row undergoes required body validation before
 activity exclusion or numeric selection. Only retained numeric rows allocate
-closed objective query nodes. `FormulaLimits::max_objective_formula_atoms` and
-`max_objective_formula_nodes` bound each transient body independently of the
-original theory and retained `objective.max_condition_nodes`; cumulative source
+closed objective query nodes. `FormulaLimits::max_objective_formula_atoms`,
+`max_objective_formula_nodes` and `max_objective_formula_operands` bound each
+transient body independently of the original theory and retained `objective.max_condition_nodes`; cumulative source
 work and value budgets still apply. The [scoped objective contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_scopes.rs)
 check full costs, scope, required errors and independent limits.
 
 Transient rich producer and projection-condition validation instead apply
-`theory.max_atoms` and `theory.max_nodes` independently to each temporary
-builder. They do not add atoms or roots to the original theory.
+`theory.max_atoms`, `theory.max_nodes` and `theory.max_operands` independently
+to each temporary builder. They do not add atoms or roots to the original theory.
 `max_objective_presence_entries` bounds shared source-activity planning slots,
 including predicate and scope traversal and simultaneous old/new activity
 tables, as well as objective-presence carriers. These limits count their stated

@@ -7,6 +7,7 @@ use crate::relation::{Failure, Limits, Relation, Resource, Storage};
 use crate::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 
 mod dictionary;
+mod spine;
 
 fn atom(left: i32, right: i32) -> Atom {
     Atom::new(
@@ -106,13 +107,24 @@ fn ids(catalog: &Fixture) -> Vec<usize> {
 fn insertion_preserves_existing_equality_ids() {
     let mut catalog = owner();
     catalog.insert(&atom(9, 3), Limits::default()).unwrap();
-    let before: Vec<Vec<u32>> = catalog.view().columns().map(<[u32]>::to_vec).collect();
+    let before: Vec<Vec<u32>> = catalog
+        .view()
+        .columns()
+        .map(|column| column.iter().collect::<Vec<_>>())
+        .collect();
     for tuple in [atom(1, 8), atom(8, 1), atom(3, 3), atom(0, 9)] {
         catalog.insert(&tuple, Limits::default()).unwrap();
     }
     let view = catalog.view();
     for (column, previous) in before.iter().enumerate() {
-        assert_eq!(&view.column(column).unwrap()[..previous.len()], previous);
+        assert_eq!(
+            view.column(column)
+                .unwrap()
+                .iter()
+                .take(previous.len())
+                .collect::<Vec<_>>(),
+            *previous
+        );
     }
     for (row, original) in catalog.atoms().iter().enumerate() {
         for column in 0..2 {
@@ -221,10 +233,12 @@ fn views_do_not_rebuild_the_layout() {
     let second = catalog.view();
     assert_eq!(first.storage().construction_work, 0);
     assert_eq!(second.storage().construction_work, 0);
-    assert!(std::ptr::eq(
-        first.column(0).unwrap().as_ptr(),
-        second.column(0).unwrap().as_ptr()
-    ));
+    let (crate::relation::Column::U8(first_cells), crate::relation::Column::U8(second_cells)) =
+        (first.column(0).unwrap(), second.column(0).unwrap())
+    else {
+        panic!("small relation keeps byte cells");
+    };
+    assert!(std::ptr::eq(first_cells, second_cells));
     let query = first.query(&[], Limits::default()).unwrap();
     let rows = second.all(Limits::default()).unwrap();
     assert!(matches!(
@@ -559,7 +573,11 @@ fn refused_rotation_preserves_the_published_extent() {
             .into_iter()
             .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
             .collect();
-        let original_ids: Vec<Vec<u32>> = catalog.view().columns().map(<[u32]>::to_vec).collect();
+        let original_ids: Vec<Vec<u32>> = catalog
+            .view()
+            .columns()
+            .map(|column| column.iter().collect::<Vec<_>>())
+            .collect();
         let failure = catalog
             .insert(
                 &rotating_tuple(),
@@ -579,7 +597,7 @@ fn refused_rotation_preserves_the_published_extent() {
             catalog
                 .view()
                 .columns()
-                .map(<[u32]>::to_vec)
+                .map(|column| column.iter().collect::<Vec<_>>())
                 .collect::<Vec<_>>(),
             original_ids
         );
@@ -699,7 +717,12 @@ fn clear_starts_a_new_local_extent() {
     let receipt = catalog.clear(Limits::default()).unwrap();
     assert!(catalog.atoms().is_empty());
     assert!(catalog.ordered().unwrap().is_empty());
-    assert!(catalog.view().columns().all(<[u32]>::is_empty));
+    assert!(
+        catalog
+            .view()
+            .columns()
+            .all(crate::relation::Column::is_empty)
+    );
     assert_eq!(
         catalog.lookup(&atom(9, 3), Limits::default()).unwrap().row,
         None
@@ -708,8 +731,14 @@ fn clear_starts_a_new_local_extent() {
     assert!(catalog.retained_bytes() > owner().retained_bytes());
     let inserted = catalog.insert(&atom(7, 2), Limits::default()).unwrap();
     assert_eq!(inserted.row, 0);
-    assert_eq!(catalog.view().column(0), Some([0].as_slice()));
-    assert_eq!(catalog.view().column(1), Some([1].as_slice()));
+    assert_eq!(
+        catalog.view().column(0).unwrap().iter().collect::<Vec<_>>(),
+        [0]
+    );
+    assert_eq!(
+        catalog.view().column(1).unwrap().iter().collect::<Vec<_>>(),
+        [1]
+    );
     dictionary::assert_translation(&catalog);
     // Clearing extensional truth neither transfers nor deletes canonical identity.
     assert_eq!(catalog.authority.get(0).unwrap(), atom(9, 3));
@@ -747,8 +776,14 @@ fn refused_clear_preserves_the_prepared_extent() {
     );
     assert_eq!(catalog.atoms(), [atom(9, 3)]);
     assert_eq!(ids(&catalog), [0]);
-    assert_eq!(catalog.view().column(0), Some([0].as_slice()));
-    assert_eq!(catalog.view().column(1), Some([1].as_slice()));
+    assert_eq!(
+        catalog.view().column(0).unwrap().iter().collect::<Vec<_>>(),
+        [0]
+    );
+    assert_eq!(
+        catalog.view().column(1).unwrap().iter().collect::<Vec<_>>(),
+        [1]
+    );
     catalog
         .clear(Limits {
             max_work: required,

@@ -459,3 +459,249 @@ fn assigned_atom_refusal_withholds_discovery() {
 }
 
 mod projected;
+
+fn constructor_query_owner() -> (AtomInterner, crate::catalog::TermAssignment, TermKey) {
+    let (mut owner, first) = imported(&Value::Number(7));
+    let (_, mut append) = owner.split();
+    let second = append
+        .import_term_with(
+            (&Value::Number(8)).into(),
+            TermLimits::default(),
+            limits(),
+            SUCCESS,
+        )
+        .unwrap();
+    let mut values = append.read().assignment();
+    values.resize_with(2, usize::MAX, SUCCESS).unwrap();
+    values.set_with(0, &first, SUCCESS).unwrap();
+    values.set_with(1, &second, SUCCESS).unwrap();
+    let expected = append
+        .construct_term_with(
+            ValueNodeRef::Tuple { arity: 3 },
+            values.as_slice(),
+            &[0, 1, 0],
+            TermLimits::default(),
+            limits(),
+            SUCCESS,
+        )
+        .unwrap();
+    (owner, values, expected)
+}
+
+#[test]
+fn appender_lookup_preserves_ordered_constructor_identity() {
+    let (mut owner, values, expected) = constructor_query_owner();
+    let (_, append) = owner.split();
+    let before = (
+        append.len(),
+        append.storage_bytes(),
+        append.storage_peak_bytes(),
+    );
+    {
+        let mut lookup = append.term_lookup();
+        let found = lookup
+            .find_constructed_with(
+                ValueNodeRef::Tuple { arity: 3 },
+                values.as_slice(),
+                &[0, 1, 0],
+                TermLimits::default(),
+                limits(),
+                SUCCESS,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.id, expected.id);
+        assert!(found.scope.same(&expected.scope));
+        assert!(
+            lookup
+                .find_constructed_with(
+                    ValueNodeRef::Tuple { arity: 3 },
+                    values.as_slice(),
+                    &[1, 0, 0],
+                    TermLimits::default(),
+                    limits(),
+                    SUCCESS
+                )
+                .unwrap()
+                .is_none()
+        );
+    }
+    assert_eq!(
+        (
+            append.len(),
+            append.storage_bytes(),
+            append.storage_peak_bytes()
+        ),
+        before
+    );
+}
+
+#[test]
+fn appender_queries_do_not_retain_absence_after_growth() {
+    let (mut owner, values, _) = constructor_query_owner();
+    let (_, mut append) = owner.split();
+    assert!(
+        append
+            .term_lookup()
+            .find_constructed_with(
+                ValueNodeRef::Tuple { arity: 2 },
+                values.as_slice(),
+                &[1, 0],
+                TermLimits::default(),
+                limits(),
+                SUCCESS
+            )
+            .unwrap()
+            .is_none()
+    );
+    let expected = append
+        .construct_term_with(
+            ValueNodeRef::Tuple { arity: 2 },
+            values.as_slice(),
+            &[1, 0],
+            TermLimits::default(),
+            limits(),
+            SUCCESS,
+        )
+        .unwrap();
+    let found = append
+        .term_lookup()
+        .find_constructed_with(
+            ValueNodeRef::Tuple { arity: 2 },
+            values.as_slice(),
+            &[1, 0],
+            TermLimits::default(),
+            limits(),
+            SUCCESS,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(found.id, expected.id);
+    assert!(found.scope.same(&expected.scope));
+    assert!(append.is_empty());
+}
+
+#[test]
+fn appender_query_refusals_leave_the_owner_unchanged() {
+    let (mut owner, values, _) = constructor_query_owner();
+    let (_, append) = owner.split();
+    let before = (
+        append.len(),
+        append.storage_bytes(),
+        append.storage_peak_bytes(),
+    );
+    let mut calls = 0;
+    append
+        .term_lookup()
+        .find_constructed_with(
+            ValueNodeRef::Tuple { arity: 3 },
+            values.as_slice(),
+            &[0, 1, 0],
+            TermLimits::default(),
+            limits(),
+            || {
+                calls += 1;
+                SUCCESS()
+            },
+        )
+        .unwrap();
+    for cut in 0..=calls {
+        let mut visited = 0;
+        let result = append.term_lookup().find_constructed_with(
+            ValueNodeRef::Tuple { arity: 3 },
+            values.as_slice(),
+            &[0, 1, 0],
+            TermLimits::default(),
+            limits(),
+            || {
+                if visited == cut {
+                    Err(cut)
+                } else {
+                    visited += 1;
+                    Ok(())
+                }
+            },
+        );
+        if cut == calls {
+            assert!(result.unwrap().is_some());
+        } else {
+            assert!(
+                matches!(result, Err(AssignedFailure::Interner(Failure::Stopped(at))) if at == cut)
+            );
+        }
+        assert_eq!(visited, cut);
+        assert_eq!(
+            (
+                append.len(),
+                append.storage_bytes(),
+                append.storage_peak_bytes()
+            ),
+            before
+        );
+    }
+}
+
+#[test]
+fn appender_lookup_charges_its_actual_temporary_peak() {
+    let (mut owner, values, _) = constructor_query_owner();
+    let (_, append) = owner.split();
+    let before = (append.storage_bytes(), append.storage_peak_bytes());
+    let mut measured = append.term_lookup();
+    measured
+        .find_constructed_with(
+            ValueNodeRef::Tuple { arity: 3 },
+            values.as_slice(),
+            &[0, 1, 0],
+            TermLimits::default(),
+            limits(),
+            SUCCESS,
+        )
+        .unwrap();
+    let exact = measured.storage_peak();
+    assert!(exact > before.0);
+    let limited = |max_bytes| Limits {
+        max_bytes,
+        ..limits()
+    };
+    assert!(
+        matches!(append.term_lookup().find_constructed_with(ValueNodeRef::Tuple { arity: 3 }, values.as_slice(), &[0,1,0], TermLimits::default(), limited(exact - 1), SUCCESS),
+        Err(AssignedFailure::Interner(Failure::Bytes { required, limit })) if required == exact && limit == exact - 1)
+    );
+    assert!(
+        append
+            .term_lookup()
+            .find_constructed_with(
+                ValueNodeRef::Tuple { arity: 3 },
+                values.as_slice(),
+                &[0, 1, 0],
+                TermLimits::default(),
+                limited(exact),
+                SUCCESS
+            )
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        (append.storage_bytes(), append.storage_peak_bytes()),
+        before
+    );
+}
+
+#[test]
+fn appender_constructor_queries_reject_foreign_assignments() {
+    let (mut owner, _, _) = constructor_query_owner();
+    let (_, foreign, _) = constructor_query_owner();
+    assert!(matches!(
+        owner.appender().term_lookup().find_constructed_with(
+            ValueNodeRef::Tuple { arity: 3 },
+            foreign.as_slice(),
+            &[0, 1, 0],
+            TermLimits::default(),
+            limits(),
+            SUCCESS
+        ),
+        Err(AssignedFailure::Assignment(AssignmentError::Read(
+            ReadError::ForeignCatalog
+        )))
+    ));
+}

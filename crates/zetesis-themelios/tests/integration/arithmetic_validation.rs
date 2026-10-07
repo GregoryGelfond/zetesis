@@ -297,8 +297,8 @@ fn rejected_scopes_do_not_add_theory_or_objectives() {
         let admitted = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(admitted.atoms(), original.atoms(), "{source}");
         assert_eq!(
-            admitted.theory().nodes(),
-            original.theory().nodes(),
+            (admitted.theory().nodes(), admitted.theory().operands()),
+            (original.theory().nodes(), original.theory().operands()),
             "{source}"
         );
         assert_eq!(
@@ -630,4 +630,38 @@ fn separate_authored_local_elements_do_not_share_a_witness() {
     ] {
         refused(&format!("d(0).{rule}"), &EvaluationError::Undefined);
     }
+}
+
+#[test]
+fn fact_blocked_producers_preserve_downstream_overflow() {
+    // Support is a source-admission carrier. The locally total h producer
+    // remains in it even though no answer set can contain its head.
+    refused(
+        "blocked. d(2147483647). h(X):-d(X),not blocked. k(X+1):-h(X).",
+        &EvaluationError::Overflow,
+    );
+}
+
+#[test]
+fn fact_blocked_producers_preserve_downstream_undefined() {
+    refused(
+        "blocked. d(0). h(X):-d(X),not blocked. k(1/X):-h(X).",
+        &EvaluationError::Undefined,
+    );
+}
+
+#[test]
+fn removing_a_blocked_producer_changes_overflow_admission() {
+    assert_eq!(
+        admitted("blocked. d(2147483647). k(X+1):-h(X)."),
+        family(&["blocked", "d(2147483647)"]),
+    );
+}
+
+#[test]
+fn removing_a_blocked_producer_changes_undefined_admission() {
+    assert_eq!(
+        admitted("blocked. d(0). k(1/X):-h(X)."),
+        family(&["blocked", "d(0)"]),
+    );
 }

@@ -6,6 +6,9 @@ use crate::{AtomKey, PatternTerms, TemplateTerm, ordered_index};
 
 use super::Failure;
 use super::index::{Link, Node};
+use super::terms::RowColumn;
+use crate::relation::Row;
+use crate::template::catalog::TermData;
 
 /// Unauthenticated coordinates require the general semantic lookup. A local
 /// miss, by contrast, establishes absence from the exact canonical row index.
@@ -19,12 +22,16 @@ pub(super) enum Identity {
 pub(super) enum ProjectionSource<'a> {
     Slots(&'a [usize]),
     Pattern(PatternTerms<'a>),
+    Admitted(storage::Read<'a>, &'a [TermData]),
+    Rows(&'a RowArguments<'a>),
 }
 impl<'a> ProjectionSource<'a> {
     pub(super) fn len(self) -> usize {
         match self {
             Self::Slots(slots) => slots.len(),
             Self::Pattern(terms) => terms.len(),
+            Self::Admitted(_, terms) => terms.len(),
+            Self::Rows(rows) => rows.terms.len(),
         }
     }
 
@@ -32,6 +39,35 @@ impl<'a> ProjectionSource<'a> {
         match self {
             Self::Slots(slots) => TemplateTerm::Variable(slots[column]),
             Self::Pattern(terms) => terms.at(column).expect("projected argument arity"),
+            Self::Admitted(read, terms) => TemplateTerm::admitted(read, terms[column]),
+            Self::Rows(rows) => TemplateTerm::Constant(rows.argument(column)),
+        }
+    }
+}
+
+/// Checked relation coordinates stay borrowed until canonical publication.
+/// The source plan authenticates the pattern, relation owners and selected rows;
+/// this accessor has no caller code, deferred validation or tuple allocation.
+pub(super) struct RowArguments<'a> {
+    pub(super) source: storage::Read<'a>,
+    pub(super) terms: &'a [TermData],
+    pub(super) columns: &'a [Option<RowColumn>],
+    pub(super) rows: &'a [Row<'a, 'a>],
+}
+
+impl<'a> RowArguments<'a> {
+    pub(super) fn argument(&self, column: usize) -> TermRef<'a> {
+        match self.terms[column] {
+            TermData::Constant(id) => TermRef::new(self.source, id)
+                .expect("prepared constant belongs to the admitted pattern"),
+            TermData::Variable(_) => {
+                let column = self.columns[column].expect("prepared variable has a row column");
+                self.rows[column.input]
+                    .atom()
+                    .values()
+                    .at(column.column)
+                    .expect("prepared source column is inside its predicate")
+            }
         }
     }
 }
@@ -48,12 +84,27 @@ pub(super) struct Projected<'a> {
 
 impl Projected<'_> {
     pub(super) const HEADER_BYTES: u128 = size_of::<Self>() as u128;
+    pub(super) const MAX_BYTES: u128 = Self::HEADER_BYTES + size_of::<RowArguments<'_>>() as u128;
+
+    fn extra_bytes(&self) -> u128 {
+        Self::HEADER_BYTES
+            + match self.arguments {
+                ProjectionSource::Rows(_) => size_of::<RowArguments<'_>>() as u128,
+                _ => 0,
+            }
+    }
 
     /// The source is immutable and fully validated before this accessor runs.
     /// Admitted constants may resolve immutable segment metadata; this is not
     /// necessarily a raw constant-time ID load. No user callback, allocation or
     /// recoverable validation occurs during prepared row publication.
     fn argument(&self, column: usize) -> TermId {
+        if let ProjectionSource::Admitted(_, terms) = self.arguments {
+            return match terms[column] {
+                TermData::Variable(slot) => self.values[slot].expect("validated bound slot"),
+                TermData::Constant(id) => id,
+            };
+        }
         match self.arguments.at(column) {
             TemplateTerm::Variable(slot) => self.values[slot].expect("validated bound slot"),
             TemplateTerm::Constant(term) => {
@@ -145,7 +196,7 @@ impl<'a> Query<'a> {
 
     pub(super) fn extra_bytes(self) -> u128 {
         match self {
-            Self::Projected(_) => Projected::HEADER_BYTES,
+            Self::Projected(projected) => projected.extra_bytes(),
             Self::Atom(_) | Self::SignedAtom(_, _) | Self::Key(_) => 0,
         }
     }

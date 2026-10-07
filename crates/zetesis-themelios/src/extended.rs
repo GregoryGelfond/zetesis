@@ -65,8 +65,9 @@ pub(crate) struct Compilation {
 pub(crate) fn admit_parsed(
     source: ParsedSource,
     limits: ExpansionLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-    match compile_parsed(&source, limits) {
+    match compile_parsed(&source, limits, cancellation) {
         Ok(compiled) => Ok(Admitted {
             program: compiled.program,
             source: source.into_source(),
@@ -81,9 +82,17 @@ pub(crate) fn admit_parsed(
 fn compile_parsed(
     source: &ParsedSource,
     limits: ExpansionLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<Compilation, ExpansionFailure> {
     let parsed = source.parsed();
     let options = source.options();
+    let location = Location {
+        source: source.source().id(),
+        span: source.source().span(),
+    };
+    let budget =
+        Budget::new(limits, options.core_limits.max_templates).with_cancellation(cancellation);
+    budget.poll(location.into())?;
     profile::check_extended(parsed, options)?;
     check_definitions(parsed, limits)?;
     metadata::check_count(parsed, limits, &mut 0)?;
@@ -91,16 +100,13 @@ fn compile_parsed(
     if !raised.diagnostics().is_empty() {
         return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
     }
+    budget.poll(location.into())?;
     let mut source_metadata = metadata::Builder::default();
     metadata::collect(raised.program(), &mut source_metadata)?;
-    let location = Location {
-        source: source.source().id(),
-        span: source.source().span(),
-    };
     compile_owned(
         raised.program(),
         options.core_limits,
-        limits,
+        budget,
         location.into(),
         source_metadata.finish(location.into())?,
     )
@@ -111,11 +117,10 @@ fn compile_parsed(
 pub(crate) fn compile_owned(
     source: &SourceProgram,
     core_limits: AdmissionLimits,
-    limits: ExpansionLimits,
+    mut budget: Budget,
     location: ProgramSite,
     metadata: SourceMetadata,
 ) -> Result<Compilation, ExpansionFailure> {
-    let mut budget = Budget::new(limits, core_limits.max_templates);
     let (program, template_origins) = compile_relational(
         source,
         core_limits,
@@ -125,6 +130,7 @@ pub(crate) fn compile_owned(
         |carrier, _| parsed_origins(carrier),
         |location| ProgramSite::from(*location),
     )?;
+    budget.poll(location)?;
     Ok(Compilation {
         program,
         template_origins,

@@ -67,18 +67,21 @@ impl Compiler<'_> {
             count.saturating_mul(scan.nodes + 1),
             self.location,
         )?;
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            count.saturating_mul(
-                scan.bytes.saturating_mul(4)
-                    + std::mem::size_of::<Condition>() as u128
-                    + fields.len() as u128 * std::mem::size_of::<Term>() as u128,
-            ),
+        let bytes = count.saturating_mul(
+            scan.bytes.saturating_mul(4)
+                + std::mem::size_of::<Condition>() as u128
+                + fields.len() as u128 * std::mem::size_of::<Term>() as u128,
+        );
+        self.budget
+            .charge(ExpansionResource::ScalarBytes, bytes, self.location)?;
+        self.budget.check_family(
+            bytes.saturating_add(count.saturating_mul(std::mem::size_of::<Vec<Term>>() as u128)),
             self.location,
         )?;
         let count = usize::try_from(count).expect("finite value allowance bounds occurrences");
         let mut result = Vec::with_capacity(count);
         for mut position in 0..count {
+            self.budget.poll(self.location)?;
             let mut stride = count;
             let mut terms = Vec::with_capacity(fields.len());
             for term in fields {

@@ -39,15 +39,26 @@ pub struct OutputLimits {
     pub construction: observation::ConstructionLimits,
 }
 
+impl OutputLimits {
+    /// Ordinary output capacities from the same resource policy as source and
+    /// solving. The symbol-work counter has only its representation maximum.
+    #[must_use]
+    pub fn for_resources(resources: zetesis_solve::Resources) -> Self {
+        Self {
+            max_atoms: resources.formula_limits().theory.max_atoms,
+            max_atom_bytes: resources.json_record_bytes() as u128,
+            max_symbol_work: u64::MAX,
+            observation: resources.observation_limits(),
+            construction: observation::ConstructionLimits {
+                max_bytes: resources.json_record_bytes(),
+            },
+        }
+    }
+}
+
 impl Default for OutputLimits {
     fn default() -> Self {
-        Self {
-            max_atoms: zetesis_solve::SolveConfig::DEFAULT.max_atoms,
-            max_atom_bytes: observation::ConstructionLimits::default().max_bytes as u128,
-            max_symbol_work: zetesis_solve::SolveConfig::DEFAULT.max_model_work,
-            observation: observation::Limits::default(),
-            construction: observation::ConstructionLimits::default(),
-        }
+        Self::for_resources(zetesis_solve::Resources::default())
     }
 }
 

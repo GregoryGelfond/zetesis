@@ -1,6 +1,6 @@
 //! Bounded equality filtering over a borrowed immutable relation snapshot.
 //!
-//! Uploaded u32 columns use the core Relation's local equality dictionary.
+//! Packed column words use the core Relation's local equality dictionary.
 //! They are derived coordinates, not canonical term IDs or arithmetic values.
 //! The Relation resolves typed query terms (including foreign-catalog terms)
 //! into that dictionary; preparation and filtering require the same Relation
@@ -91,7 +91,7 @@ pub struct RelationGpuStats {
     pub rows: u64,
     /// Input query occurrences, including repetitions.
     pub queries: u64,
-    /// Resident uploaded column payload, including empty-buffer padding.
+    /// Resident column headers and packed cell payload, including buffer padding.
     pub column_bytes: u64,
     /// Uniform, query, equality, result and readback payload.
     pub transport_bytes: u64,

@@ -358,15 +358,15 @@ fn formula_values(
     bits: usize,
     frozen: Option<&[bool]>,
 ) -> Vec<bool> {
-    use zetesis_ferraris::Node;
     let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let truth = match *node {
-            Node::False => false,
-            Node::Atom(atom) => bits & (1 << atom) != 0,
-            Node::And(a, b) => result[a] && result[b],
-            Node::Or(a, b) => result[a] || result[b],
-            Node::Implies(a, b) => !result[a] || result[b],
+    for index in 0..theory.view().len() {
+        let node = theory.view().node(index).unwrap();
+        let truth = match node {
+            zetesis_ferraris::NodeView::False => false,
+            zetesis_ferraris::NodeView::Atom(atom) => bits & (1 << atom) != 0,
+            zetesis_ferraris::NodeView::And(row) => row.iter().all(|&child| result[child]),
+            zetesis_ferraris::NodeView::Or(row) => row.iter().any(|&child| result[child]),
+            zetesis_ferraris::NodeView::Implies(a, b) => !result[a] || result[b],
         };
         result.push(truth && frozen.is_none_or(|mask| mask[index]));
     }
@@ -385,17 +385,21 @@ fn signed_structural_choices_match_manual_formulas_in_every_frozen_world() {
     let negative = 1 - positive;
     let manual = Theory::new(
         2,
-        vec![
-            Node::False,
-            Node::Atom(positive),
-            Node::Atom(negative),
-            Node::Implies(1, 0),
-            Node::Implies(2, 0),
-            Node::Or(1, 3),
-            Node::Or(2, 4),
-            Node::And(1, 2),
-            Node::Implies(7, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(positive),
+                Node::atom(negative),
+                Node::implies(1, 0),
+                Node::implies(2, 0),
+                Node::or_pair([1, 3]),
+                Node::or_pair([2, 4]),
+                Node::and_pair([1, 2]),
+                Node::implies(7, 0),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![5, 6, 8],
         zetesis_ferraris::AdmissionLimits::default(),
     )

@@ -46,7 +46,13 @@ fn original_rejection_cannot_yield_a_stable_receipt() {
 #[test]
 fn nonminimality_cannot_yield_a_stable_receipt() {
     // An unsupported true atom satisfies the empty theory but is not stable.
-    let theory = Theory::new(1, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let decision = check_interpretation(
         Interpretation::new(&theory, [0]).unwrap(),
         Limits::default(),

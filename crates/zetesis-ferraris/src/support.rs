@@ -1,11 +1,11 @@
 //! Necessary support for complete mixed ordinary/atomic-choice theories.
 
-use crate::{AdmissionError, AdmissionLimits, Node, Theory};
+use crate::{AdmissionError, AdmissionLimits, FormulaNodes, NodeView, Theory};
 use zetesis_cpu::{Cancellation, Stop};
 
 /// Bounds for constructing a candidate-only support restriction. Formula
 /// dimensions bound retained nodes, roots and atom-indexed scratch. Work counts
-/// original-node/root visits, head traversal, construction and final validation.
+/// original-node/operand/root visits, head traversal, construction and final validation.
 /// A root visit includes bounded exact atomic-choice recognition.
 #[derive(Clone, Copy, Debug)]
 pub struct SupportLimits {
@@ -78,7 +78,7 @@ pub struct SupportAttempt {
 ///
 /// The returned theory is only an outer-query restriction. It must not replace
 /// the original theory or be frozen in its place. Recognition and construction
-/// are iterative; scratch is linear in original nodes, atoms and the largest
+/// are iterative; scratch is linear in original nodes, operand occurrences, atoms and the largest
 /// distinct head. Work is linear in their traversals and constructed nodes.
 #[must_use]
 pub fn support_restriction(
@@ -90,7 +90,7 @@ pub fn support_restriction(
         limits,
         cancellation,
         work: 0,
-        nodes: Vec::new(),
+        nodes: FormulaNodes::default(),
     };
     let result = builder.build(theory);
     SupportAttempt {
@@ -103,7 +103,7 @@ struct Builder<'a> {
     limits: SupportLimits,
     cancellation: &'a Cancellation,
     work: u64,
-    nodes: Vec<Node>,
+    nodes: FormulaNodes,
 }
 
 impl Builder<'_> {
@@ -116,17 +116,41 @@ impl Builder<'_> {
         Ok(())
     }
 
-    fn push(&mut self, node: Node) -> Result<usize, SupportError> {
+    fn push(&mut self, node: NodeView<'_>) -> Result<usize, SupportError> {
         self.tick()?;
-        if self.nodes.len() == self.limits.admission.max_nodes {
-            return Err(AdmissionError::Limit.into());
+        match node {
+            NodeView::And(operands) | NodeView::Or(operands) => {
+                for _ in operands {
+                    self.tick()?;
+                }
+            }
+            NodeView::Implies(_, _) => {
+                self.tick()?;
+                self.tick()?;
+            }
+            NodeView::Atom(_) | NodeView::False => {}
         }
-        self.nodes
-            .try_reserve(1)
-            .map_err(|_| AdmissionError::Allocation)?;
-        let index = self.nodes.len();
-        self.nodes.push(node);
+        let mut transaction = self.nodes.transaction();
+        let index = transaction.push(
+            node,
+            self.limits.admission.max_nodes,
+            self.limits.admission.max_operands,
+        )?;
+        transaction.commit();
         Ok(index)
+    }
+
+    fn ordinary_operands(
+        &mut self,
+        operands: &[usize],
+        ordinary: &[bool],
+    ) -> Result<bool, SupportError> {
+        let mut all = true;
+        for &child in operands {
+            self.tick()?;
+            all &= ordinary[child];
+        }
+        Ok(all)
     }
 
     fn applicable(&mut self, theory: &Theory) -> Result<bool, SupportError> {
@@ -134,15 +158,17 @@ impl Builder<'_> {
         if theory.atom_count() > self.limits.admission.max_atoms
             || theory.atom_count() > self.limits.admission.max_roots
             || theory.nodes().len() > self.limits.admission.max_nodes
+            || theory.parts().occurrences() > self.limits.admission.max_operands
+            || theory.operands().len() > self.limits.admission.max_operands
         {
             return Err(AdmissionError::Limit.into());
         }
         let mut ordinary = reserve(theory.nodes().len())?;
-        for node in theory.nodes() {
+        for index in 0..theory.view().len() {
             self.tick()?;
-            ordinary.push(match *node {
-                Node::Atom(_) | Node::False => true,
-                Node::Or(left, right) => ordinary[left] && ordinary[right],
+            ordinary.push(match theory.view().node(index)? {
+                NodeView::Atom(_) | NodeView::False => true,
+                NodeView::Or(operands) => self.ordinary_operands(operands, &ordinary)?,
                 _ => false,
             });
         }
@@ -151,14 +177,14 @@ impl Builder<'_> {
         let mut disjunctive = false;
         for &root in theory.roots() {
             self.tick()?;
-            let head = match theory.nodes()[root] {
-                Node::Implies(_, head) => head,
+            let head = match theory.view().node(root)? {
+                NodeView::Implies(_, head) => head,
                 _ => root,
             };
             if !ordinary[head] && crate::atomic_choice::atom(theory, head).is_none() {
                 return Ok(false);
             }
-            disjunctive |= ordinary[head] && matches!(theory.nodes()[head], Node::Or(_, _));
+            disjunctive |= ordinary[head] && matches!(theory.view().node(head)?, NodeView::Or(_));
         }
         Ok(disjunctive)
     }
@@ -167,11 +193,11 @@ impl Builder<'_> {
         if !self.applicable(theory)? {
             return Ok(None);
         }
-        for &node in theory.nodes() {
-            self.push(node)?;
+        for index in 0..theory.view().len() {
+            self.push(theory.view().node(index)?)?;
         }
-        let falsum = self.push(Node::False)?;
-        let verum = self.push(Node::Implies(falsum, falsum))?;
+        let falsum = self.push(NodeView::False)?;
+        let verum = self.push(NodeView::Implies(falsum, falsum))?;
         let mut support = self.filled(theory.atom_count(), falsum)?;
         let mut visited_nodes = self.filled(theory.nodes().len(), None)?;
         let mut visited_atoms = self.filled(theory.atom_count(), None)?;
@@ -180,14 +206,14 @@ impl Builder<'_> {
         let mut prefix = reserve(theory.atom_count())?;
         for (ordinal, &root) in theory.roots().iter().enumerate() {
             self.tick()?;
-            let (body, head) = match theory.nodes()[root] {
-                Node::Implies(body, head) => (body, head),
+            let (body, head) = match theory.view().node(root)? {
+                NodeView::Implies(body, head) => (body, head),
                 _ => (verum, root),
             };
             if let Some(atom) = crate::atomic_choice::atom(theory, head) {
                 // A selected choice head needs its original body's permission,
                 // independently of any other ordinary producer's true heads.
-                support[atom] = self.push(Node::Or(support[atom], body))?;
+                support[atom] = self.push(NodeView::Or(&[support[atom], body]))?;
                 continue;
             }
             heads.clear();
@@ -199,18 +225,21 @@ impl Builder<'_> {
                     continue;
                 }
                 visited_nodes[node] = Some(ordinal);
-                match theory.nodes()[node] {
-                    Node::Atom(atom) if visited_atoms[atom] != Some(ordinal) => {
+                match theory.view().node(node)? {
+                    NodeView::Atom(atom) if visited_atoms[atom] != Some(ordinal) => {
                         visited_atoms[atom] = Some(ordinal);
                         heads.push(atom);
                     }
-                    Node::Or(left, right) => {
-                        // Each original node expands once per root, so at most
-                        // two pending edges per original node can be retained.
+                    NodeView::Or(operands) => {
+                        // Each original node expands once per root; the pending
+                        // stack is bounded by admitted operand occurrences.
                         stack
-                            .try_reserve(2)
+                            .try_reserve(operands.len())
                             .map_err(|_| AdmissionError::Allocation)?;
-                        stack.extend([right, left]);
+                        for &child in operands.iter().rev() {
+                            self.tick()?;
+                            stack.push(child);
+                        }
                     }
                     _ => {}
                 }
@@ -220,29 +249,34 @@ impl Builder<'_> {
             for &atom in &heads {
                 self.tick()?;
                 prefix.push(before);
-                let atom_node = self.push(Node::Atom(atom))?;
-                let negative = self.push(Node::Implies(atom_node, falsum))?;
-                before = self.push(Node::And(before, negative))?;
+                let atom_node = self.push(NodeView::Atom(atom))?;
+                let negative = self.push(NodeView::Implies(atom_node, falsum))?;
+                before = self.push(NodeView::And(&[before, negative]))?;
             }
             let mut after = verum;
             for (&atom, &before) in heads.iter().zip(&prefix).rev() {
                 self.tick()?;
-                let witness = self.push(Node::And(before, after))?;
-                support[atom] = self.push(Node::Or(support[atom], witness))?;
-                let atom_node = self.push(Node::Atom(atom))?;
-                let negative = self.push(Node::Implies(atom_node, falsum))?;
-                after = self.push(Node::And(negative, after))?;
+                let witness = self.push(NodeView::And(&[before, after]))?;
+                support[atom] = self.push(NodeView::Or(&[support[atom], witness]))?;
+                let atom_node = self.push(NodeView::Atom(atom))?;
+                let negative = self.push(NodeView::Implies(atom_node, falsum))?;
+                after = self.push(NodeView::And(&[negative, after]))?;
             }
         }
         let mut roots = reserve(theory.atom_count())?;
         for (atom, body) in support.into_iter().enumerate() {
             self.tick()?;
-            let atom = self.push(Node::Atom(atom))?;
-            roots.push(self.push(Node::Implies(atom, body))?);
+            let atom = self.push(NodeView::Atom(atom))?;
+            roots.push(self.push(NodeView::Implies(atom, body))?);
         }
-        // Theory admission checks each node and root. Charge that validation
+        // Theory admission recounts each node, then validates nodes, operands
+        // and roots. Charge that validation
         // before ownership transfer; a failed attempt retains this work.
-        for _ in 0..self.nodes.len() {
+        for _ in 0..self.nodes.parts().nodes().len() {
+            self.tick()?;
+            self.tick()?;
+        }
+        for _ in 0..self.nodes.parts().occurrences() {
             self.tick()?;
         }
         for _ in 0..roots.len() {
@@ -250,7 +284,7 @@ impl Builder<'_> {
         }
         Theory::new(
             theory.atom_count(),
-            std::mem::take(&mut self.nodes),
+            std::mem::take(&mut self.nodes).into_parts(),
             roots,
             self.limits.admission,
         )

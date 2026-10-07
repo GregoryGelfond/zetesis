@@ -19,7 +19,7 @@ pub(super) fn exclude(
 ) -> Result<(), Incomplete> {
     let theory = zetesis_ferraris::Theory::new(
         values.len(),
-        vec![],
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )

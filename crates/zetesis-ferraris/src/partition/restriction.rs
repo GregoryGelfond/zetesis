@@ -3,8 +3,8 @@
 use std::fmt;
 
 use crate::{
-    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits, Node,
-    Theory, append_aggregate,
+    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
+    FormulaNodes, NodeView, Theory,
 };
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -145,7 +145,7 @@ impl Plan {
         cancellation: &Cancellation,
     ) -> Result<Restriction, RestrictionError> {
         let mut builder = Builder {
-            nodes: Vec::new(),
+            nodes: FormulaNodes::default(),
             roots: Vec::new(),
             work: 0,
             limits,
@@ -165,7 +165,7 @@ impl Plan {
 }
 
 struct Builder<'a> {
-    nodes: Vec<Node>,
+    nodes: FormulaNodes,
     roots: Vec<usize>,
     work: u64,
     limits: RestrictionLimits,
@@ -179,7 +179,7 @@ impl Builder<'_> {
             return Err(RestrictionErrorKind::Atoms);
         }
         if plan.inconsistent() {
-            let falsum = self.node(Node::False)?;
+            let falsum = self.node(NodeView::False)?;
             self.root(falsum)?;
         } else {
             for group in plan.consequences() {
@@ -193,7 +193,7 @@ impl Builder<'_> {
         self.poll()?;
         let theory = Theory::new(
             plan.atom_count(),
-            std::mem::take(&mut self.nodes),
+            std::mem::take(&mut self.nodes).into_parts(),
             std::mem::take(&mut self.roots),
             self.limits.theory,
         )
@@ -211,7 +211,7 @@ impl Builder<'_> {
             .try_reserve_exact(members.len())
             .map_err(|_| RestrictionErrorKind::Stopped(Stop::Allocation))?;
         for &atom in members {
-            let condition = self.node(Node::Atom(atom))?;
+            let condition = self.node(NodeView::Atom(atom))?;
             elements.push(AggregateElement {
                 condition,
                 weight: 1,
@@ -220,9 +220,9 @@ impl Builder<'_> {
         let bound = i64::try_from(lower).map_err(|_| RestrictionErrorKind::Overflow)?;
         let mut limits = self.limits.aggregate;
         limits.max_nodes = limits.max_nodes.min(self.limits.theory.max_nodes);
+        limits.max_operands = limits.max_operands.min(self.limits.theory.max_operands);
         limits.max_work = limits.max_work.min(self.limits.max_work - self.work);
-        let result = append_aggregate(
-            &mut self.nodes,
+        let result = self.nodes.append_aggregate(
             &elements,
             AggregateComparison::Ge,
             bound,
@@ -257,16 +257,20 @@ impl Builder<'_> {
         Ok(())
     }
 
-    fn node(&mut self, node: Node) -> Result<usize, RestrictionErrorKind> {
+    fn node(&mut self, node: NodeView<'_>) -> Result<usize, RestrictionErrorKind> {
         self.tick()?;
-        if self.nodes.len() == self.limits.theory.max_nodes {
+        if self.nodes.parts().nodes().len() == self.limits.theory.max_nodes {
             return Err(RestrictionErrorKind::Nodes);
         }
-        self.nodes
-            .try_reserve(1)
-            .map_err(|_| RestrictionErrorKind::Stopped(Stop::Allocation))?;
-        let index = self.nodes.len();
-        self.nodes.push(node);
+        let mut transaction = self.nodes.transaction();
+        let index = transaction
+            .push(
+                node,
+                self.limits.theory.max_nodes,
+                self.limits.theory.max_operands,
+            )
+            .map_err(RestrictionErrorKind::Theory)?;
+        transaction.commit();
         Ok(index)
     }
 

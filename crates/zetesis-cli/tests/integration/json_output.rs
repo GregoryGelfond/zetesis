@@ -13,6 +13,8 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
+type LimitChange = fn(&mut zetesis_cli::SolveConfig);
+
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
         [
@@ -44,6 +46,59 @@ fn solve(source: &str, options: &Options) -> (Result<Report, RunFailure>, Json) 
     (result, value)
 }
 
+/// Keep bounded library/renderer tests independent of the public CLI policy.
+fn bounded(
+    source: &str,
+    options: &Options,
+    change: impl FnOnce(&mut zetesis_cli::PublicationConfig),
+    maximum: Option<usize>,
+) -> (Result<Report, RunFailure>, Json) {
+    let mut config = zetesis_cli::PublicationConfig::from(options);
+    change(&mut config);
+    let mut output = Vec::new();
+    let result = prepared_json(
+        source,
+        options,
+        &config,
+        maximum.unwrap_or(options.resources().json_record_bytes()),
+        &mut output,
+    );
+    let value = serde_json::from_slice(&output)
+        .unwrap_or_else(|error| panic!("{error}: {}", String::from_utf8_lossy(&output)));
+    (result, value)
+}
+
+fn prepared_json(
+    source: &str,
+    options: &Options,
+    config: &zetesis_cli::PublicationConfig,
+    maximum: usize,
+    output: &mut impl Write,
+) -> Result<Report, RunFailure> {
+    let mut renderer = zetesis_cli::JsonRenderer::new(
+        output,
+        maximum,
+        options.resources().formula_limits().theory.max_atoms,
+    );
+    if config.solve.oracle == zetesis_cli::Oracle::Closure {
+        crate::support::prepared::relational(
+            source,
+            config,
+            &mut renderer,
+            &mut io::sink(),
+            &Cancellation::default(),
+        )
+    } else {
+        crate::support::prepared::formula(
+            source,
+            config,
+            &mut renderer,
+            &mut io::sink(),
+            &Cancellation::default(),
+        )
+    }
+}
+
 fn hidden_choices(oracle: &str) -> (Report, Json) {
     let (result, value) = solve("{a}. {b}. #show.", &options(&["--oracle", oracle]));
     (result.unwrap(), value)
@@ -51,13 +106,16 @@ fn hidden_choices(oracle: &str) -> (Report, Json) {
 
 #[test]
 fn model_construction_refusal_retains_its_reason() {
-    for (flag, resource, code) in [
-        ("--max-model-work", "work", "work_limit"),
-        ("--max-model-bytes", "bytes", "bytes_limit"),
-    ] {
-        let (report, document) = solve(
+    let cases: [(LimitChange, &str, &str); 2] = [
+        (|config| config.max_model_work = 0, "work", "work_limit"),
+        (|config| config.max_model_bytes = 0, "bytes", "bytes_limit"),
+    ];
+    for (limit, resource, code) in cases {
+        let (report, document) = bounded(
             "a | b.",
-            &options(&["--oracle", "countermodel", "--stats", flag, "0"]),
+            &options(&["--oracle", "countermodel", "--stats"]),
+            |config| limit(&mut config.solve),
+            None,
         );
         assert_eq!(report.unwrap().completion, Completion::Interrupted);
         let outcome = &document["outcome"];
@@ -100,6 +158,36 @@ fn completed_models_retain_construction_receipts() {
         u128::from(published["peak_bytes"].as_u64().unwrap()),
         receipt.peak_bytes
     );
+}
+
+#[test]
+fn construction_work_receipts_remain_cumulative() {
+    let source = "{a;b}.";
+    let (baseline, _) = solve(source, &options(&["--oracle", "countermodel", "--stats"]));
+    let baseline = baseline.unwrap();
+    assert_eq!(baseline.completion, Completion::Exhausted);
+    assert_eq!(baseline.models, 4);
+    let receipt = baseline.model_construction.unwrap();
+    // Every individual attempt fits below their sum, which must not become
+    // a session-wide allowance again. The JSON receipt still records that sum.
+    let limit = receipt.work - 1;
+    let (report, document) = bounded(
+        source,
+        &options(&["--oracle", "countermodel", "--stats"]),
+        |config| {
+            config.solve.max_model_work = limit;
+        },
+        None,
+    );
+    let report = report.unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, baseline.models);
+    assert_eq!(report.model_construction, Some(receipt));
+    assert!(document["outcome"]["interruption"].is_null());
+    let published = &document["statistics"]["model_construction"];
+    assert_eq!(published["work"], receipt.work);
+    assert!(published["work"].as_u64().unwrap() > limit);
+    assert_eq!(published["constructed"], 4);
 }
 
 #[test]
@@ -264,17 +352,11 @@ fn region_statistics_identify_the_support_cut() {
 
 #[test]
 fn completion_statistics_distinguish_requested_storage() {
-    let (report, value) = solve(
+    let (report, value) = bounded(
         "{a;b}.",
-        &options(&[
-            "--stats",
-            "--oracle",
-            "countermodel",
-            "--search",
-            "clauses",
-            "--completion-workers",
-            "2",
-        ]),
+        &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
+        |config| config.solve.completion_workers = std::num::NonZeroUsize::new(2).unwrap(),
+        None,
     );
     let measured = report.unwrap().formula_execution.unwrap().completion;
     let stats = &value["statistics"]["execution"]["completion"];
@@ -346,20 +428,36 @@ fn candidate_statistics_say_when_the_root_narrowing_refuted_every_seed() {
 
 #[test]
 fn interrupted_restriction_work_remains_visible() {
-    let (report, value) = solve(
+    let (report, value) = bounded(
         "{a}. {b}. :- a,b.",
-        &options(&["--stats", "--grounder", "lazy", "--max-search-work", "1"]),
+        &options(&["--stats", "--grounder", "lazy", "--oracle", "closure"]),
+        |config| {
+            config.solve.max_search_work = 1;
+        },
+        None,
     );
     let report = report.unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
-    assert_eq!(value["statistics"]["candidate_restrictions"]["work"], 1);
+    assert!(report.countermodel_statistics.is_none());
+    let receipt = report
+        .candidate_statistics
+        .expect("closure restriction route was entered");
+    assert_eq!(receipt.restriction_work, 1);
+    assert_eq!(
+        value["statistics"]["candidate_restrictions"]["work"],
+        receipt.restriction_work
+    );
     assert_eq!(value["outcome"]["coverage"], "partial");
 }
 
 fn priority_ties(bounds: &str) -> (Report, Json) {
-    let (result, value) = solve(
+    let (result, value) = bounded(
         "a. {b;c}. #show a. #minimize{0@2,k:a;0@-1,j:b}.",
-        &options(&["--max-objective-bound-work", bounds]),
+        &options(&[]),
+        |config| {
+            config.solve.max_objective_bound_work = bounds.parse().unwrap();
+        },
+        None,
     );
     (result.unwrap(), value)
 }
@@ -423,16 +521,14 @@ fn model_caps_leave_coverage_partial() {
 #[test]
 fn interruption_retains_an_unproved_incumbent() {
     // The incumbent records established evidence while its optimality remains open.
-    let (result, value) = solve(
+    let (result, value) = bounded(
         "1 {a;b} 1. #minimize{1,a:a;2,b:b}.",
-        &options(&[
-            "--oracle",
-            "countermodel",
-            "--max-candidates",
-            "1",
-            "--max-objective-bound-work",
-            "0",
-        ]),
+        &options(&["--oracle", "countermodel"]),
+        |config| {
+            config.solve.max_candidates = 1;
+            config.solve.max_objective_bound_work = 0;
+        },
+        None,
     );
     let report = result.unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
@@ -483,7 +579,14 @@ fn admission_failures_publish_error_documents() {
 
 #[test]
 fn observation_refusals_retain_verified_evidence() {
-    let (result, value) = solve("a. #show a.", &options(&["--max-observation-work", "0"]));
+    let (result, value) = bounded(
+        "a. #show a.",
+        &options(&[]),
+        |config| {
+            config.observations.max_work = 0;
+        },
+        None,
+    );
     assert!(result.is_err());
     assert_eq!(value["outcome"]["status"], "failed");
     assert_eq!(value["outcome"]["error"]["kind"], "observation");
@@ -500,9 +603,11 @@ fn observation_refusals_retain_verified_evidence() {
 }
 
 fn formula_statistics() -> (Report, Json) {
-    let (result, value) = solve(
+    let (result, value) = bounded(
         "a | b.",
-        &options(&["--stats", "--completion-workers", "2"]),
+        &options(&["--stats"]),
+        |config| config.solve.completion_workers = std::num::NonZeroUsize::new(2).unwrap(),
+        None,
     );
     (result.unwrap(), value)
 }
@@ -574,7 +679,7 @@ fn write_failure_preserves_the_committed_prefix() {
 #[test]
 fn model_ceiling_precedes_publication() {
     let source = format!("p(\"{}\").", "x".repeat(1500));
-    let (result, value) = solve(&source, &options(&["--max-json-record-bytes", "1000"]));
+    let (result, value) = bounded(&source, &options(&[]), |_| {}, Some(1000));
     assert!(matches!(
         *result.unwrap_err().cause,
         RunError::JsonRecord(_)
@@ -587,12 +692,13 @@ fn model_ceiling_precedes_publication() {
 #[test]
 fn zero_ceiling_prevents_document_completion() {
     let mut output = Vec::new();
-    let failure = run_detailed_with_diagnostics(
-        "a.".into(),
-        &options(&["--max-json-record-bytes", "0"]),
+    let configured = options(&[]);
+    let failure = prepared_json(
+        "a.",
+        &configured,
+        &zetesis_cli::PublicationConfig::from(&configured),
+        0,
         &mut output,
-        &mut io::sink(),
-        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(*failure.cause, RunError::JsonRecord(_)));
@@ -724,7 +830,7 @@ fn tie_write_failure_preserves_semantic_coverage() {
 #[test]
 fn view_refusal_preserves_proved_optimality() {
     let source = format!("p(\"{}\"). #minimize{{0@1,k:p(X)}}.", "x".repeat(1500));
-    let (result, value) = solve(&source, &options(&["--max-json-record-bytes", "1000"]));
+    let (result, value) = bounded(&source, &options(&[]), |_| {}, Some(1000));
     let partial = result.unwrap_err().partial_report.unwrap();
     assert_eq!(partial.completion, Some(Completion::Exhausted));
     assert_eq!((partial.published_models, partial.verified_models), (0, 1));
@@ -782,81 +888,81 @@ fn stage_views_preserve_the_typed_partition() {
 
 #[test]
 fn resource_stops_encode_partial_coverage() {
-    let cases: &[(&str, &[&str], &str, &str)] = &[
+    type Case = (
+        &'static str,
+        &'static [&'static str],
+        LimitChange,
+        &'static str,
+        &'static str,
+    );
+    let cases: &[Case] = &[
         (
             "a.",
-            &[
-                "--oracle",
-                "closure",
-                "--grounder",
-                "lazy",
-                "--max-closure-bytes",
-                "0",
-            ],
+            &["--oracle", "closure", "--grounder", "lazy"],
+            |c| c.max_closure_bytes = 0,
             "preparation",
             "storage_limit",
         ),
         (
             "{a}.",
-            &["--oracle", "closure", "--max-work", "0"],
+            &["--oracle", "closure"],
+            |c| c.max_work = 0,
             "oracle",
             "work_limit",
         ),
         (
             "a.",
-            &[
-                "--oracle",
-                "closure",
-                "--grounder",
-                "lazy",
-                "--max-atoms",
-                "0",
-            ],
+            &["--oracle", "closure", "--grounder", "lazy"],
+            |c| c.max_atoms = 0,
             "oracle",
             "derived_atom_limit",
         ),
         (
             "{a}.",
-            &["--oracle", "closure", "--max-candidates", "0"],
+            &["--oracle", "closure"],
+            |c| c.max_candidates = 0,
             "oracle",
             "candidate_limit",
         ),
         (
             "{a}.",
-            &["--oracle", "closure", "--max-carrier-atoms", "0"],
+            &["--oracle", "closure"],
+            |c| c.max_carrier_atoms = 0,
             "oracle",
             "carrier_limit",
         ),
         (
             "{a;b}.",
-            &["--oracle", "countermodel", "--max-search-work", "0"],
+            &["--oracle", "countermodel"],
+            |c| c.max_search_work = 0,
             "countermodel",
             "work_limit",
         ),
         (
             "{a;b}.",
-            &["--oracle", "countermodel", "--max-search-decisions", "0"],
+            &["--oracle", "countermodel"],
+            |c| c.max_search_decisions = 0,
             "countermodel",
             "decision_limit",
         ),
         (
             "a | b.",
-            &[
-                "--oracle",
-                "countermodel",
-                "--search",
-                "clauses",
-                "--completion-workers",
-                "2",
-                "--max-completion-scratch-bytes",
-                "0",
-            ],
+            &["--oracle", "countermodel", "--search", "clauses"],
+            |c| {
+                c.completion_workers = std::num::NonZeroUsize::new(2).unwrap();
+                c.max_completion_scratch_bytes = 0;
+            },
             "countermodel",
             "completion_scratch",
         ),
     ];
-    for &(source, extra, kind, code) in cases {
-        let (result, value) = solve(source, &options(extra));
+    for &(source, extra, limit, kind, code) in cases {
+        let (result, value) = bounded(
+            source,
+            &options(extra),
+            |config| limit(&mut config.solve),
+            None,
+        );
         let report = result.unwrap();
         assert_eq!(report.completion, Completion::Interrupted, "{extra:?}");
         assert!(report.interruption.is_some());
@@ -872,18 +978,24 @@ fn resource_stops_encode_partial_coverage() {
 
 #[test]
 fn objective_refusals_publish_no_incumbent() {
-    for (flag, code) in [
-        ("--max-objective-work", "work_limit"),
-        ("--max-objective-bindings", "binding_limit"),
-        ("--max-objective-keys", "key_limit"),
-        ("--max-objective-key-bytes", "key_bytes_limit"),
-    ] {
-        let (result, value) = solve(
+    let cases: [(LimitChange, &str); 4] = [
+        (|c| c.max_objective_work = 0, "work_limit"),
+        (|c| c.max_objective_bindings = 0, "binding_limit"),
+        (|c| c.max_objective_keys = 0, "key_limit"),
+        (|c| c.max_objective_key_bytes = 0, "key_bytes_limit"),
+    ];
+    for (limit, code) in cases {
+        let (result, value) = bounded(
             "a. #minimize{1@0,k:a}.",
-            &options(&[flag, "0", "--max-objective-bound-work", "0"]),
+            &options(&[]),
+            |config| {
+                config.solve.max_objective_bound_work = 0;
+                limit(&mut config.solve);
+            },
+            None,
         );
         let report = result.unwrap();
-        assert_eq!(report.completion, Completion::Interrupted, "{flag}");
+        assert_eq!(report.completion, Completion::Interrupted, "{code}");
         assert_eq!(value["outcome"]["status"], "incomplete");
         assert_eq!(value["outcome"]["verified_models"], 1);
         assert_eq!(value["outcome"]["published_models"], 0);
@@ -907,21 +1019,16 @@ fn objective_refusals_publish_no_incumbent() {
 fn projection_limits_preserve_checked_partial_answers() {
     // The projection history belongs to the clauses proposer; regions keep
     // no exclusion index and never reach these limits.
-    for (flag, code) in [
-        ("--max-projection-entries", "projection_entries"),
-        ("--max-projection-nodes", "projection_nodes"),
-    ] {
-        let (result, value) = solve(
+    let cases: [(LimitChange, &str); 2] = [
+        (|c| c.max_projection_entries = 0, "projection_entries"),
+        (|c| c.max_projection_nodes = 0, "projection_nodes"),
+    ];
+    for (limit, code) in cases {
+        let (result, value) = bounded(
             "{a;b}.",
-            &options(&[
-                "--oracle",
-                "countermodel",
-                "--search",
-                "clauses",
-                "--stats",
-                flag,
-                "0",
-            ]),
+            &options(&["--oracle", "countermodel", "--search", "clauses", "--stats"]),
+            |config| limit(&mut config.solve),
+            None,
         );
         let report = result.unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
@@ -949,17 +1056,23 @@ fn projection_limits_preserve_checked_partial_answers() {
 
 #[test]
 fn incumbent_refusals_publish_no_model() {
-    for (flag, code) in [
-        ("--max-optimal-models", "models"),
-        ("--max-optimal-atoms", "atoms"),
-        ("--max-optimal-bytes", "bytes"),
-    ] {
-        let (result, value) = solve(
+    let cases: [(LimitChange, &str); 3] = [
+        (|c| c.max_optimal_models = 0, "models"),
+        (|c| c.max_optimal_atoms = 0, "atoms"),
+        (|c| c.max_optimal_bytes = 0, "bytes"),
+    ];
+    for (limit, code) in cases {
+        let (result, value) = bounded(
             "a. #minimize{1@0,k:a}.",
-            &options(&[flag, "0", "--max-objective-bound-work", "0"]),
+            &options(&[]),
+            |config| {
+                config.solve.max_objective_bound_work = 0;
+                limit(&mut config.solve);
+            },
+            None,
         );
         let report = result.unwrap();
-        assert_eq!(report.completion, Completion::Interrupted, "{flag}");
+        assert_eq!(report.completion, Completion::Interrupted, "{code}");
         assert_eq!(value["outcome"]["status"], "incomplete");
         assert_eq!(value["outcome"]["verified_models"], 1);
         assert_eq!(value["outcome"]["published_models"], 0);
@@ -978,14 +1091,14 @@ fn incumbent_refusals_publish_no_model() {
 fn unretained_ties_remain_in_score_counts() {
     // A fully scored tie that could not be retained still belongs in the score
     // count. Published models are only the earlier retained, valid incumbent.
-    let (result, value) = solve(
+    let (result, value) = bounded(
         "{a}. #minimize{0@0,k:a}.",
-        &options(&[
-            "--max-optimal-models",
-            "1",
-            "--max-objective-bound-work",
-            "0",
-        ]),
+        &options(&[]),
+        |config| {
+            config.solve.max_optimal_models = 1;
+            config.solve.max_objective_bound_work = 0;
+        },
+        None,
     );
     let best = result.unwrap().optimization.unwrap();
     assert_eq!((best.tied_models, best.scored_models), (2, 2));
@@ -1048,14 +1161,7 @@ fn setup_refusals_have_unavailable_coverage() {
         ("p(.", vec!["--oracle", "countermodel"], "formula_admission"),
         (
             "a.",
-            vec![
-                "--oracle",
-                "closure",
-                "--grounder",
-                "eager",
-                "--max-ground-rules",
-                "0",
-            ],
+            vec!["--oracle", "closure", "--grounder", "eager"],
             "static",
         ),
     ] {
@@ -1066,7 +1172,16 @@ fn setup_refusals_have_unavailable_coverage() {
         if kind == "expansion" {
             configured.backend = zetesis_cli::Backend::Gpu(None);
         }
-        let (result, value) = solve(source, &configured);
+        let (result, value) = if kind == "static" {
+            bounded(
+                source,
+                &configured,
+                |config| config.solve.max_ground_rules = 0,
+                None,
+            )
+        } else {
+            solve(source, &configured)
+        };
         let failure = result.unwrap_err();
         assert!(failure.partial_report.is_none(), "{extra:?}: {failure:?}");
         assert_eq!(value["outcome"]["error"]["kind"], kind);
@@ -1125,29 +1240,6 @@ fn statistics_failure_preserves_exhaustion() {
 }
 
 #[test]
-fn statistics_failure_preserves_observation_cause() {
-    let source = format!(
-        "p(\"{}\"). #show shown:p(X). #minimize{{0@1,k:p(X)}}.",
-        "x".repeat(1500)
-    );
-    let mut configured = options(&["--stats"]);
-    configured.max_observation_work = 0;
-    let (failure, value) = statistics_write_failure(source, &configured);
-    let partial = failure.partial_report.unwrap();
-    assert!(partial.summary_published);
-    assert_eq!(partial.completion, Some(Completion::Exhausted));
-    assert_eq!(value["outcome"]["status"], "failed");
-    assert_eq!(value["outcome"]["coverage"], "exhausted");
-    assert_eq!(value["outcome"]["optimization"]["optimal"], true);
-    assert!(value["statistics"]["stage_timings"].is_object());
-    assert_eq!(value["outcome"]["error"]["secondary_output_failure"], true);
-    assert!(matches!(*failure.cause, RunError::Observation(_)));
-    assert!(failure.secondary_output.is_some());
-    assert_eq!(value["outcome"]["error"]["kind"], "observation");
-    assert_eq!((partial.published_models, partial.verified_models), (0, 1));
-}
-
-#[test]
 fn footer_write_failure_is_secondary() {
     // The original source refusal remains authoritative after any footer prefix.
     let configured = options(&[]);
@@ -1188,12 +1280,13 @@ fn footer_write_failure_is_secondary() {
 
 fn empty_model_document() -> (Vec<u8>, usize) {
     let mut reference = Vec::new();
-    run_detailed_with_diagnostics(
-        String::new(),
-        &options(&[]),
+    let configured = options(&[]);
+    prepared_json(
+        "",
+        &configured,
+        &zetesis_cli::PublicationConfig::from(&configured),
+        configured.resources().json_record_bytes(),
         &mut reference,
-        &mut io::sink(),
-        &Cancellation::default(),
     )
     .unwrap();
     let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
@@ -1206,15 +1299,14 @@ fn terminal_ceiling_is_inclusive() {
     let footer_bytes = reference.len() - model_end;
     assert!(footer_bytes > model_end);
     for maximum in [footer_bytes - 1, footer_bytes, footer_bytes + 1] {
-        let mut configured = options(&[]);
-        configured.max_json_record_bytes = maximum;
+        let configured = options(&[]);
         let mut bytes = Vec::new();
-        let result = run_detailed_with_diagnostics(
-            String::new(),
+        let result = prepared_json(
+            "",
             &configured,
+            &zetesis_cli::PublicationConfig::from(&configured),
+            maximum,
             &mut bytes,
-            &mut io::sink(),
-            &Cancellation::default(),
         );
         if maximum < footer_bytes {
             assert!(matches!(
@@ -1235,15 +1327,15 @@ fn terminal_refusal_preserves_published_models() {
     let (reference, model_end) = empty_model_document();
     let footer_bytes = reference.len() - model_end;
     assert!(footer_bytes > model_end);
-    let mut configured = options(&[]);
-    configured.max_json_record_bytes = footer_bytes - 1;
+    let configured = options(&[]);
+    let maximum = footer_bytes - 1;
     let mut bytes = Vec::new();
-    let failure = run_detailed_with_diagnostics(
-        String::new(),
+    let failure = prepared_json(
+        "",
         &configured,
+        &zetesis_cli::PublicationConfig::from(&configured),
+        maximum,
         &mut bytes,
-        &mut io::sink(),
-        &Cancellation::default(),
     )
     .unwrap_err();
     assert!(matches!(

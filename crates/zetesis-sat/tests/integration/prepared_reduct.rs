@@ -109,10 +109,10 @@ fn false_original_implication_does_not_retain_classical_equivalence() {
     let input = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(2, 0),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::implies(2, 0),
         ],
         vec![3],
     );
@@ -137,7 +137,7 @@ fn false_original_implication_does_not_retain_classical_equivalence() {
 fn unmentioned_atoms_and_empty_universe_preserve_strict_subset() {
     compare(&theory(3, vec![], vec![]));
     compare(&theory(0, vec![], vec![]));
-    compare(&theory(0, vec![Node::False], vec![0]));
+    compare(&theory(0, vec![Node::falsum()], vec![0]));
 }
 
 #[test]
@@ -145,13 +145,13 @@ fn changing_choice_parameters_preserves_the_complete_family() {
     compare(&theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::False,
-            Node::Implies(0, 2),
-            Node::Or(0, 3),
-            Node::Implies(1, 2),
-            Node::Or(1, 5),
+            Node::atom(0),
+            Node::atom(1),
+            Node::falsum(),
+            Node::implies(0, 2),
+            Node::or_pair([0, 3]),
+            Node::implies(1, 2),
+            Node::or_pair([1, 5]),
         ],
         vec![4, 6],
     ));
@@ -159,8 +159,8 @@ fn changing_choice_parameters_preserves_the_complete_family() {
 
 #[test]
 fn foreign_equal_theory_is_refused_without_changing_workspace() {
-    let input = theory(1, vec![Node::Atom(0)], vec![0]);
-    let foreign = theory(1, vec![Node::Atom(0)], vec![0]);
+    let input = theory(1, vec![Node::atom(0)], vec![0]);
+    let foreign = theory(1, vec![Node::atom(0)], vec![0]);
     let prepared = prepare(&input);
     assert!(prepared.same_owner(&prepared.clone()));
     assert!(!prepared.same_owner(&prepare(&input)));
@@ -188,7 +188,7 @@ fn foreign_equal_theory_is_refused_without_changing_workspace() {
 fn every_preparation_work_refusal_preserves_the_exact_prefix() {
     let input = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
         vec![2],
     );
     let required = prepare(&input).statistics().work;
@@ -221,7 +221,7 @@ fn every_preparation_work_refusal_preserves_the_exact_prefix() {
 
 #[test]
 fn refused_preparation_capacity_is_not_reported_as_allocated_peak() {
-    let input = theory(1, vec![Node::Atom(0)], vec![0]);
+    let input = theory(1, vec![Node::atom(0)], vec![0]);
     let full = prepare(&input).statistics();
     let failure = PreparedReduct::prepare(
         &input,
@@ -244,7 +244,7 @@ fn refused_preparation_capacity_is_not_reported_as_allocated_peak() {
 fn every_cold_query_work_stop_allows_a_complete_retry() {
     let input = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     );
     let prepared = prepare(&input);
@@ -313,7 +313,7 @@ fn every_cold_query_work_stop_allows_a_complete_retry() {
 
 #[test]
 fn original_evaluation_stop_never_enters_subset_search() {
-    let input = theory(1, vec![Node::Atom(0)], vec![0]);
+    let input = theory(1, vec![Node::atom(0)], vec![0]);
     let (result, receipt) = prepare(&input).check(
         &candidate(&input, 1),
         &mut ReductWorkspace::default(),
@@ -333,7 +333,7 @@ fn original_evaluation_stop_never_enters_subset_search() {
 
 #[test]
 fn cancellation_precedes_query_storage_admission() {
-    let input = theory(1, vec![Node::Atom(0)], vec![0]);
+    let input = theory(1, vec![Node::atom(0)], vec![0]);
     let prepared = prepare(&input);
     let cancellation = Cancellation::default();
     cancellation.cancel();
@@ -413,13 +413,50 @@ proptest! {
         operations in prop::collection::vec((0u8..3, any::<u8>(), any::<u8>()), 0..10),
         roots in prop::collection::vec(any::<u8>(), 0..5),
     ) {
-        let mut nodes = vec![Node::Atom(0), Node::Atom(1), Node::False];
+        let mut nodes = vec![Node::atom(0), Node::atom(1), Node::falsum()];
         for (kind, left, right) in operations {
             let left = usize::from(left) % nodes.len();
             let right = usize::from(right) % nodes.len();
-            nodes.push(match kind { 0 => Node::And(left, right), 1 => Node::Or(left, right), _ => Node::Implies(left, right) });
+            nodes.push(match kind { 0 => Node::and_pair([left, right]), 1 => Node::or_pair([left, right]), _ => Node::implies(left, right) });
         }
         let roots = roots.into_iter().map(|root| usize::from(root) % nodes.len()).collect();
         compare(&theory(2, nodes, roots));
+    }
+}
+
+#[test]
+fn prepared_queries_preserve_native_wide_duplicate_groups() {
+    for width in [3, 65, 129] {
+        let input = Theory::new(
+            2,
+            zetesis_ferraris::FormulaParts::new(
+                vec![
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::falsum(),
+                    Node::implies(0, 2),
+                    Node::or_span(zetesis_ferraris::OperandSpan {
+                        start: 0,
+                        length: width,
+                    }),
+                    Node::and_span(zetesis_ferraris::OperandSpan {
+                        start: width,
+                        length: width,
+                    }),
+                    Node::implies(5, 1),
+                ],
+                (0..width)
+                    .map(|index| if index % 2 == 0 { 0 } else { 3 })
+                    .chain((0..width).map(|index| if index % 2 == 0 { 4 } else { 1 }))
+                    .collect(),
+            )
+            .unwrap(),
+            vec![4, 6],
+            zetesis_ferraris::AdmissionLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(input.nodes().len(), 7);
+        assert_eq!(input.operands().len(), 2 * width);
+        compare(&input);
     }
 }

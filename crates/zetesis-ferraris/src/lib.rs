@@ -46,7 +46,8 @@ pub use regions::{
     RegionLimits, producers,
 };
 pub use theory::{
-    AdmissionError, AdmissionLimits, Interpretation, InterpretationWords, Node, Theory,
+    AdmissionError, AdmissionLimits, FormulaParts, FormulaSuffix, FormulaTransaction, FormulaView,
+    Interpretation, InterpretationWords, Node, NodeView, OperandSpan, Theory, TheoryAdmission,
 };
 pub use zetesis_cpu::regions::{Narrowing, Region};
 

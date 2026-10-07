@@ -6,6 +6,9 @@ use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection, runtime};
 use zetesis_core::relation::{Failure, Query, Relation};
 use zetesis_cpu::Cancellation;
 
+// Poll before each additional 4 KiB of packed payload writes.
+const PACK_CONTROL_BYTES: usize = 4096;
+
 /// Reusable real-device pipeline for checked relation equality filtering.
 ///
 /// A prepared relation exclusively borrows the executor. No global cache,
@@ -373,8 +376,9 @@ fn adapter_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
     Ok(())
 }
 
-/// Copy ordered columns directly into the mapped upload buffer. No temporary
-/// packed host vector or duplicated logical tuple owner is retained.
+/// Pack the authoritative columns directly into the mapped device buffer.
+/// Headers contain absolute word offsets and widths; unused lanes are zero.
+/// No temporary host vector or second logical tuple owner is retained.
 fn upload_columns(
     device: &wgpu::Device,
     relation: &Relation<'_>,
@@ -392,29 +396,103 @@ fn upload_columns(
             .slice(..)
             .get_mapped_range_mut()
             .map_err(|error| GpuError::new(GpuErrorKind::Validation, error.to_string()))?;
-        if relation.row_count() == 0 || relation.predicate().arity() == 0 {
-            mapped.copy_from_slice(bytemuck::bytes_of(&0_u32));
-        } else {
-            let mut offset = 0_usize;
-            for source in relation.columns() {
-                cancellation()?;
-                let source = bytemuck::cast_slice(source);
-                let end = offset
-                    .checked_add(source.len())
-                    .filter(|&end| end <= mapped.len())
-                    .ok_or_else(|| capacity("relation column exceeds mapped upload"))?;
-                mapped.slice(offset..end).copy_from_slice(source);
-                offset = end;
-            }
-            if offset != mapped.len() {
-                return Err(capacity("relation columns do not fill mapped upload"));
-            }
-        }
-        cancellation()
+        pack_columns(relation, mapped.slice(..), &mut cancellation)
     })();
     buffer.unmap();
     copied?;
     Ok(buffer)
+}
+
+fn pack_columns(
+    relation: &Relation<'_>,
+    mut target: wgpu::WriteOnly<'_, [u8]>,
+    cancellation: &mut impl FnMut() -> Result<(), GpuError>,
+) -> Result<(), GpuError> {
+    use zetesis_core::relation::Column;
+
+    let mut offset = relation
+        .predicate()
+        .arity()
+        .checked_mul(2)
+        .ok_or_else(|| capacity("relation column header exceeds host indexing"))?;
+    if offset == 0 {
+        write_word(&mut target, 0, 0)?;
+    }
+    for (column, source) in relation.columns().enumerate() {
+        cancellation()?;
+        let first =
+            u32::try_from(offset).map_err(|_| capacity("relation payload offset exceeds u32"))?;
+        write_word(&mut target, column * 2, first)?;
+        write_word(&mut target, column * 2 + 1, source.bits())?;
+        let words = source.len().div_ceil((32 / source.bits()) as usize);
+        let end = offset
+            .checked_add(words)
+            .ok_or_else(|| capacity("relation payload end exceeds host indexing"))?;
+        let first_byte = offset
+            .checked_mul(4)
+            .ok_or_else(|| capacity("relation payload byte offset exceeds host indexing"))?;
+        let end_byte = end
+            .checked_mul(4)
+            .ok_or_else(|| capacity("relation payload byte end exceeds host indexing"))?;
+        if end_byte > target.len() {
+            return Err(capacity("relation column exceeds mapped upload"));
+        }
+        let payload = target.slice(first_byte..end_byte);
+        match source {
+            Column::U8(values) => pack_cells(values, 8, payload, cancellation)?,
+            Column::U16(values) => pack_cells(values, 16, payload, cancellation)?,
+            Column::U32(values) => pack_cells(values, 32, payload, cancellation)?,
+        }
+        offset = end;
+    }
+    if offset.max(1).checked_mul(4) != Some(target.len()) {
+        return Err(capacity("relation columns do not fill mapped upload"));
+    }
+    cancellation()
+}
+
+fn write_word(
+    target: &mut wgpu::WriteOnly<'_, [u8]>,
+    word: usize,
+    value: u32,
+) -> Result<(), GpuError> {
+    let start = word
+        .checked_mul(4)
+        .ok_or_else(|| capacity("relation word byte offset exceeds host indexing"))?;
+    let end = start
+        .checked_add(4)
+        .ok_or_else(|| capacity("relation word byte end exceeds host indexing"))?;
+    if end > target.len() {
+        return Err(capacity("relation header exceeds mapped upload"));
+    }
+    target
+        .slice(start..end)
+        .copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+fn pack_cells<T: Copy + Into<u32>>(
+    values: &[T],
+    bits: u32,
+    target: wgpu::WriteOnly<'_, [u8]>,
+    cancellation: &mut impl FnMut() -> Result<(), GpuError>,
+) -> Result<(), GpuError> {
+    let lanes = (32 / bits) as usize;
+    if values.len().div_ceil(lanes).checked_mul(4) != Some(target.len()) {
+        return Err(capacity("relation cells do not fill packed payload"));
+    }
+    let (words, _) = target.into_chunks::<4>();
+    for (word, (cells, bytes)) in values.chunks(lanes).zip(words).enumerate() {
+        if word % (PACK_CONTROL_BYTES / 4) == 0 {
+            cancellation()?;
+        }
+        let mut packed = 0_u32;
+        for (lane, &cell) in cells.iter().enumerate() {
+            packed |= cell.into() << (lane * bits as usize);
+        }
+        bytes.write(packed.to_le_bytes());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -61,3 +61,11 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn failed_edge_reads_keep_their_original_stop() {
+    for stop in [Stop::InvalidProgram, Stop::Allocation] {
+        let edges = [Ok((0, 7)), Err(stop)].into_iter();
+        assert_eq!(Adjacency::try_build(1, edges).unwrap_err(), stop);
+    }
+}

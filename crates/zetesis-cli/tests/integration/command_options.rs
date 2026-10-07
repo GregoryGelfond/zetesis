@@ -3,12 +3,12 @@
 use clap::error::ErrorKind;
 use zetesis_cli::{Backend, Grounder, Invocation, Options, StatisticsView};
 
-fn solve(arguments: &[&str]) -> Box<Options> {
+fn solve(arguments: &[&str]) -> Options {
     let Invocation::Solve(options) = Invocation::try_parse_from(arguments.iter().copied()).unwrap()
     else {
         panic!("expected a solve invocation");
     };
-    options
+    *options
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn short_solve_help_groups_everyday_controls() {
         "--backend",
         "--grounder",
         "--threads",
-        "--memory-budget",
+        "--memory",
     ] {
         assert!(text.contains(expected), "missing {expected}");
     }
@@ -214,7 +214,7 @@ fn old_execution_spellings_remain_solve_aliases() {
 }
 
 #[test]
-fn advanced_help_preserves_resource_contracts() {
+fn advanced_help_preserves_public_resource_contracts() {
     for arguments in [
         vec!["zetesis", "help", "solve", "--advanced"],
         vec!["zetesis", "solve", "--help-all"],
@@ -223,8 +223,9 @@ fn advanced_help_preserves_resource_contracts() {
         let error = Invocation::try_parse_from(arguments).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::DisplayHelp);
         let text = error.to_string();
-        assert!(text.contains("--max-search-work"));
-        assert!(text.contains("not resident memory"));
+        assert!(!text.contains("--max-"));
+        assert!(text.contains("--memory"));
+        assert!(text.contains("not a resident-memory limit"));
         assert!(text.contains("unproved incumbents"));
     }
 }

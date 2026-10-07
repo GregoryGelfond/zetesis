@@ -190,7 +190,11 @@ impl Observation {
                         .compare_ref_with(value, || self.tick())?
                         .is_eq()
                     {
-                        id = Some(relation.relation.column(position).expect("source column")[row]);
+                        id = relation
+                            .relation
+                            .column(position)
+                            .expect("source column")
+                            .get(row);
                         break;
                     }
                 }

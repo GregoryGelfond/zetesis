@@ -5,7 +5,7 @@ use super::FormulaLimits;
 use super::packing::{Graph, Plan, Schedule, Shape, address, capacity, vector};
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Node, Theory};
+use zetesis_ferraris::{NodeView, Theory};
 
 pub(super) struct Preparation {
     shape: Shape,
@@ -144,39 +144,50 @@ fn pack_depths(
     cancellation: &Cancellation,
 ) -> Result<u32, GpuError> {
     let mut levels = 0;
-    for node in shape.theory.nodes() {
+    let mut tail = 0;
+    for index in 0..shape.theory.view().len() {
         poll(cancellation)?;
-        let (tag, left, right) = match *node {
-            Node::False => (0, 0, 0),
-            Node::Atom(atom) => (1, address(atom)?, 0),
-            Node::And(a, b) => (2, address(a)?, address(b)?),
-            Node::Or(a, b) => (3, address(a)?, address(b)?),
-            Node::Implies(a, b) => (4, address(a)?, address(b)?),
+        let node = shape
+            .theory
+            .view()
+            .node(index)
+            .expect("admitted formula node");
+        let mut header = crate::formula_graph::header(node, &mut tail)?;
+        let child_depth = |index: usize| -> Result<u32, GpuError> {
+            nodes
+                .get(index * 4 + 3)
+                .copied()
+                .ok_or_else(|| capacity("formula depth child is not a prior node"))
         };
-        let depth = if tag < 2 {
-            0
-        } else {
-            let child = |index: u32| -> Result<u32, GpuError> {
-                nodes
-                    .get(index as usize * 4 + 3)
-                    .copied()
-                    .ok_or_else(|| capacity("formula depth child is not a prior node"))
-            };
-            child(left)?
-                .max(child(right)?)
+        let depth = match node {
+            NodeView::False | NodeView::Atom(_) => 0,
+            NodeView::Implies(left, right) => child_depth(left)?
+                .max(child_depth(right)?)
                 .checked_add(1)
-                .ok_or_else(|| capacity("formula dependency depth overflows"))?
+                .ok_or_else(|| capacity("formula dependency depth overflows"))?,
+            NodeView::And(children) | NodeView::Or(children) => {
+                let mut depth = 0;
+                for &child in children {
+                    poll(cancellation)?;
+                    depth = depth.max(child_depth(child)?);
+                }
+                depth
+                    .checked_add(1)
+                    .ok_or_else(|| capacity("formula dependency depth overflows"))?
+            }
         };
         levels = levels.max(
             depth
                 .checked_add(1)
                 .ok_or_else(|| capacity("formula levels overflow"))?,
         );
-        nodes.extend([tag, left, right, depth]);
+        header[3] = depth;
+        nodes.extend(header);
     }
-    if nodes.is_empty() {
-        nodes.extend([0; 4]);
+    if tail != shape.wide_words {
+        return Err(capacity("formula operand coverage differs"));
     }
+    crate::formula_graph::append_operands(&shape.theory, nodes, cancellation)?;
     Ok(levels)
 }
 

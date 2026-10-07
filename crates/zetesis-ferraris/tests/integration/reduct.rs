@@ -39,11 +39,11 @@ impl Expr {
     }
     fn emit(&self, nodes: &mut Vec<Node>) -> usize {
         let node = match self {
-            Self::False => Node::False,
-            Self::Atom(atom) => Node::Atom(usize::from(*atom)),
-            Self::And(a, b) => Node::And(a.emit(nodes), b.emit(nodes)),
-            Self::Or(a, b) => Node::Or(a.emit(nodes), b.emit(nodes)),
-            Self::Imp(a, b) => Node::Implies(a.emit(nodes), b.emit(nodes)),
+            Self::False => Node::falsum(),
+            Self::Atom(atom) => Node::atom(usize::from(*atom)),
+            Self::And(a, b) => Node::and_pair([a.emit(nodes), b.emit(nodes)]),
+            Self::Or(a, b) => Node::or_pair([a.emit(nodes), b.emit(nodes)]),
+            Self::Imp(a, b) => Node::implies(a.emit(nodes), b.emit(nodes)),
         };
         nodes.push(node);
         nodes.len() - 1
@@ -52,7 +52,13 @@ impl Expr {
 fn theory(formulas: &[Expr]) -> Theory {
     let mut nodes = Vec::new();
     let roots = formulas.iter().map(|expr| expr.emit(&mut nodes)).collect();
-    Theory::new(2, nodes, roots, AdmissionLimits::default()).unwrap()
+    Theory::new(
+        2,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 fn compare(formulas: &[Expr]) {
     let program = theory(formulas);
@@ -181,14 +187,14 @@ fn disjunctive_reduct_has_incomparable_minimal_models() {
 #[test]
 fn first_countermodel_needs_no_following_carry() {
     let program = theory(&[Expr::Or(Box::new(Expr::Atom(0)), Box::new(Expr::Atom(1)))]);
-    // Original evaluation and roots cost four, the atom scan two, the empty
-    // subset four, its carry one, and the first countermodel four. No carry
+    // Original node/operand evaluation and roots cost six, the atom scan two,
+    // the empty subset six, its carry one, and the first countermodel six. No carry
     // may follow the witness: the exact allowance is already consumed.
     let result = check(
         &program,
         &interpretation(&program, 3),
         Limits {
-            max_work: 15,
+            max_work: 21,
             max_subsets: 2,
         },
         &Cancellation::default(),
@@ -198,7 +204,7 @@ fn first_countermodel_needs_no_following_carry() {
         panic!("expected first proper-subset countermodel")
     };
     assert_eq!(witness.atoms().collect::<Vec<_>>(), vec![0]);
-    assert_eq!(result.statistics().work, 15);
+    assert_eq!(result.statistics().work, 21);
     assert_eq!(result.statistics().subsets, 2);
 }
 
@@ -305,7 +311,13 @@ fn work_and_subset_limits_do_not_certify_partial_search() {
 
 #[test]
 fn identity_admission_and_word_boundaries() {
-    let program = Theory::new(65, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let program = Theory::new(
+        65,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let model = Interpretation::new(&program, [0, 64, 64]).unwrap();
     assert_eq!(model.atoms().collect::<Vec<_>>(), vec![0, 64]);
     assert!(!model.contains(65));
@@ -319,7 +331,13 @@ fn identity_admission_and_word_boundaries() {
     assert!(
         matches!(result.verdict(),Verdict::NonMinimal { witness } if witness.atoms().next().is_none())
     );
-    let foreign = Theory::new(65, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let foreign = Theory::new(
+        65,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     assert_eq!(
         check(
             &foreign,
@@ -335,15 +353,30 @@ fn identity_admission_and_word_boundaries() {
         AdmissionError::Atom
     );
     assert!(matches!(
-        Theory::new(1, vec![Node::And(0, 0)], vec![], AdmissionLimits::default()),
+        Theory::new(
+            1,
+            zetesis_ferraris::FormulaParts::new(vec![Node::and_pair([0, 0])], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default()
+        ),
         Err(AdmissionError::Edge)
     ));
     assert!(matches!(
-        Theory::new(1, vec![Node::Atom(1)], vec![], AdmissionLimits::default()),
+        Theory::new(
+            1,
+            zetesis_ferraris::FormulaParts::new(vec![Node::atom(1)], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default()
+        ),
         Err(AdmissionError::Atom)
     ));
     assert!(matches!(
-        Theory::new(1, vec![], vec![0], AdmissionLimits::default()),
+        Theory::new(
+            1,
+            zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+            vec![0],
+            AdmissionLimits::default()
+        ),
         Err(AdmissionError::Root)
     ));
 }
@@ -354,15 +387,19 @@ fn shared_dag_nodes_preserve_frozen_truth_under_multiple_roots() {
     // contexts. The independent tree repeats syntax instead of sharing slots.
     let program = Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(2, 1),
-            Node::Or(0, 2),
-            Node::Implies(3, 0),
-            Node::And(4, 5),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::implies(2, 1),
+                Node::or_pair([0, 2]),
+                Node::implies(3, 0),
+                Node::and_pair([4, 5]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![6, 4, 5],
         AdmissionLimits::default(),
     )
@@ -410,15 +447,19 @@ fn shared_dag_nodes_preserve_frozen_truth_under_multiple_roots() {
 fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
     let program = Theory::new(
         130,
-        vec![
-            Node::Atom(0),
-            Node::Atom(63),
-            Node::Atom(64),
-            Node::Atom(129),
-            Node::And(0, 1),
-            Node::And(2, 3),
-            Node::And(4, 5),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(63),
+                Node::atom(64),
+                Node::atom(129),
+                Node::and_pair([0, 1]),
+                Node::and_pair([2, 3]),
+                Node::and_pair([4, 5]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![6],
         AdmissionLimits::default(),
     )
@@ -430,7 +471,7 @@ fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
     // All fifteen proper subsets fail the conjunction. Four selected bits
     // require 26 bit flips to advance the binary counter from 0 to 15.
     assert_eq!(complete.statistics().subsets, 15);
-    assert_eq!(complete.statistics().work, 8 + 130 + 15 * 8 + 26);
+    assert_eq!(complete.statistics().work, 14 + 130 + 15 * 14 + 26);
     let exact = Limits {
         max_work: complete.statistics().work,
         max_subsets: 15,

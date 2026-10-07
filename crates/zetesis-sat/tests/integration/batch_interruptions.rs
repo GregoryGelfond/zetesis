@@ -16,18 +16,22 @@ fn choices() -> Theory {
     // stable. External certificates below are checked by exhaustive Ferraris.
     Theory::new(
         3,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Implies(1, 0),
-            Node::Or(1, 4),
-            Node::Implies(2, 0),
-            Node::Or(2, 6),
-            Node::Implies(3, 0),
-            Node::Or(3, 8),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::implies(1, 0),
+                Node::or_pair([1, 4]),
+                Node::implies(2, 0),
+                Node::or_pair([2, 6]),
+                Node::implies(3, 0),
+                Node::or_pair([3, 8]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![5, 7, 9],
         AdmissionLimits::default(),
     )
@@ -204,7 +208,8 @@ fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_st
     let (encoded, proposed) = proposal_work(&theory, 1);
     // The original index is charged whole when the walk starts: an
     // allowance short of it spends nothing and stops the batch.
-    let walk = encoded + u64::try_from(theory.nodes().len()).unwrap();
+    let walk =
+        encoded + u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
     assert!(proposed > walk);
     assert!(
         proposed - encoded < 4096,

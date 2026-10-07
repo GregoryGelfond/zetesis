@@ -133,24 +133,24 @@ fn narrowing_keeps_every_stable_model(theory: &Theory) {
 fn disjunctive() -> Theory {
     let (d, p, q, r) = (0, 1, 2, 3);
     let nodes = vec![
-        Node::Atom(d),       // 0
-        Node::Atom(p),       // 1
-        Node::Atom(q),       // 2
-        Node::Or(1, 2),      // 3: p | q
-        Node::Implies(0, 3), // 4: d -> p | q
-        Node::False,         // 5
-        Node::Implies(1, 5), // 6: not p
-        Node::Atom(r),       // 7
-        Node::Implies(6, 7), // 8: not p -> r
-        Node::And(2, 7),     // 9: q & r
-        Node::Implies(9, 5), // 10: :- q, r
+        Node::atom(d),          // 0
+        Node::atom(p),          // 1
+        Node::atom(q),          // 2
+        Node::or_pair([1, 2]),  // 3: p | q
+        Node::implies(0, 3),    // 4: d -> p | q
+        Node::falsum(),         // 5
+        Node::implies(1, 5),    // 6: not p
+        Node::atom(r),          // 7
+        Node::implies(6, 7),    // 8: not p -> r
+        Node::and_pair([2, 7]), // 9: q & r
+        Node::implies(9, 5),    // 10: :- q, r
     ];
     theory(4, nodes, vec![0, 4, 8, 10])
 }
 
 #[test]
 fn an_impossible_root_refutes_the_region() {
-    let t = theory(1, vec![Node::Atom(0)], vec![0]);
+    let t = theory(1, vec![Node::atom(0)], vec![0]);
     let mut cut = region(&t, &[], &[0]);
     assert!(matches!(narrowed(&t, &mut cut), Narrowing::Refuted));
     let mut open = region(&t, &[], &[]);
@@ -164,13 +164,13 @@ fn an_impossible_root_refutes_the_region() {
 /// d. p :- d. :- p, s.
 fn derived_head_under_a_constraint() -> Theory {
     let nodes = vec![
-        Node::Atom(0),       // d
-        Node::Atom(1),       // p
-        Node::Implies(0, 1), // d -> p
-        Node::Atom(2),       // s
-        Node::And(1, 3),     // p & s
-        Node::False,
-        Node::Implies(4, 5), // :- p, s
+        Node::atom(0),          // d
+        Node::atom(1),          // p
+        Node::implies(0, 1),    // d -> p
+        Node::atom(2),          // s
+        Node::and_pair([1, 3]), // p & s
+        Node::falsum(),
+        Node::implies(4, 5), // :- p, s
     ];
     theory(3, nodes, vec![0, 2, 6])
 }
@@ -207,7 +207,7 @@ fn a_constraint_whose_body_is_sure_refutes_the_region() {
 fn a_unit_root_decides_its_one_open_atom() {
     // a | b with a cut forces b; a held decides nothing more about b by the
     // readings alone, so the support rule, which would cut b, is withheld.
-    let nodes = vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)];
+    let nodes = vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])];
     let t = theory(2, nodes, vec![2]);
     let by_readings = |region: &mut Region| {
         narrow_fresh(
@@ -256,12 +256,12 @@ fn an_atom_no_producer_can_support_is_cut() {
 fn a_choice_is_supported_by_its_body_alone() {
     // b.  {a} :- b, written a | not a <- b.
     let nodes = vec![
-        Node::Atom(0), // b
-        Node::Atom(1), // a
-        Node::False,
-        Node::Implies(1, 2), // not a
-        Node::Or(1, 3),      // a | not a
-        Node::Implies(0, 4), // b -> (a | not a)
+        Node::atom(0), // b
+        Node::atom(1), // a
+        Node::falsum(),
+        Node::implies(1, 2),   // not a
+        Node::or_pair([1, 3]), // a | not a
+        Node::implies(0, 4),   // b -> (a | not a)
     ];
     let t = theory(2, nodes, vec![0, 5]);
     let mut open = region(&t, &[], &[]);
@@ -279,11 +279,11 @@ fn outside_the_producer_fragment_the_readings_still_narrow() {
     // p | (q & r): no producer shape, so no support cut; with q cut the
     // root is a unit on p and forces it.
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::And(1, 2),
-        Node::Or(0, 3),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::and_pair([1, 2]),
+        Node::or_pair([0, 3]),
     ];
     let t = theory(3, nodes, vec![4]);
     assert!(
@@ -302,20 +302,20 @@ fn narrowing_keeps_every_stable_model_of_every_region() {
     narrowing_keeps_every_stable_model(&disjunctive());
     // p :- not q. q :- not p. r :- p, not s. s :- t.
     let nodes = vec![
-        Node::Atom(0),        // p
-        Node::Atom(1),        // q
-        Node::False,          // 2
-        Node::Implies(1, 2),  // 3: not q
-        Node::Implies(3, 0),  // 4: not q -> p
-        Node::Implies(0, 2),  // 5: not p
-        Node::Implies(5, 1),  // 6: not p -> q
-        Node::Atom(2),        // 7: r
-        Node::Atom(3),        // 8: s
-        Node::Implies(8, 2),  // 9: not s
-        Node::And(0, 9),      // 10: p & not s
-        Node::Implies(10, 7), // 11: -> r
-        Node::Atom(4),        // 12: t
-        Node::Implies(12, 8), // 13: t -> s
+        Node::atom(0),          // p
+        Node::atom(1),          // q
+        Node::falsum(),         // 2
+        Node::implies(1, 2),    // 3: not q
+        Node::implies(3, 0),    // 4: not q -> p
+        Node::implies(0, 2),    // 5: not p
+        Node::implies(5, 1),    // 6: not p -> q
+        Node::atom(2),          // 7: r
+        Node::atom(3),          // 8: s
+        Node::implies(8, 2),    // 9: not s
+        Node::and_pair([0, 9]), // 10: p & not s
+        Node::implies(10, 7),   // 11: -> r
+        Node::atom(4),          // 12: t
+        Node::implies(12, 8),   // 13: t -> s
     ];
     narrowing_keeps_every_stable_model(&theory(5, nodes, vec![4, 6, 11, 13]));
 }
@@ -372,17 +372,17 @@ fn a_held_atom_no_producer_can_support_refutes_the_region() {
     // constraint, p is forced by the disjunction, and r's only producer then
     // has an impossible body, so the held r refutes the region.
     let nodes = vec![
-        Node::Atom(0),       // d
-        Node::Atom(1),       // p
-        Node::Atom(2),       // q
-        Node::Atom(3),       // r
-        Node::Or(1, 2),      // p | q
-        Node::Implies(0, 4), // d -> p | q
-        Node::False,         // 6
-        Node::Implies(1, 6), // not p
-        Node::Implies(7, 3), // not p -> r
-        Node::And(2, 3),     // q & r
-        Node::Implies(9, 6), // :- q, r
+        Node::atom(0),          // d
+        Node::atom(1),          // p
+        Node::atom(2),          // q
+        Node::atom(3),          // r
+        Node::or_pair([1, 2]),  // p | q
+        Node::implies(0, 4),    // d -> p | q
+        Node::falsum(),         // 6
+        Node::implies(1, 6),    // not p
+        Node::implies(7, 3),    // not p -> r
+        Node::and_pair([2, 3]), // q & r
+        Node::implies(9, 6),    // :- q, r
     ];
     let t = theory(4, nodes, vec![0, 5, 8, 10]);
     let mut held = region(&t, &[3], &[]);
@@ -396,13 +396,13 @@ fn a_disjunction_whose_one_side_is_impossible_holds_the_other_sides_atoms() {
     // disjunction known to hold forces the right side, a conjunction known
     // to hold, which holds both its atoms.
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Atom(3),
-        Node::And(0, 1),
-        Node::And(2, 3),
-        Node::Or(4, 5),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::atom(3),
+        Node::and_pair([0, 1]),
+        Node::and_pair([2, 3]),
+        Node::or_pair([4, 5]),
     ];
     let t = theory(4, nodes, vec![6]);
     let mut cut = region(&t, &[], &[0]);
@@ -423,11 +423,11 @@ fn a_failing_consequent_teaches_the_antecedent_to_fail() {
     // (a & b) -> c with c cut and a held: b is cut. Producers are withheld,
     // since a has none and the support cut would refute the region first.
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::And(0, 1),
-        Node::Implies(3, 2),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::and_pair([0, 1]),
+        Node::implies(3, 2),
     ];
     let t = theory(3, nodes, vec![4]);
     let mut region = region(&t, &[0], &[2]);
@@ -449,20 +449,20 @@ fn a_held_atom_with_one_producer_left_demands_its_body() {
     // {a}. {b}. c :- a. c :- b, d.  With c held and a cut, the only producer
     // left for c is the second rule, so b and d are held.
     let nodes = vec![
-        Node::Atom(0),        // a
-        Node::Atom(1),        // b
-        Node::Atom(2),        // c
-        Node::Atom(3),        // d
-        Node::False,          // 4
-        Node::Implies(0, 4),  // not a
-        Node::Or(0, 5),       // a | not a
-        Node::Implies(1, 4),  // not b
-        Node::Or(1, 7),       // b | not b
-        Node::Implies(0, 2),  // a -> c
-        Node::And(1, 3),      // b & d
-        Node::Implies(10, 2), // b & d -> c
-        Node::Implies(3, 4),  // not d
-        Node::Or(3, 12),      // d | not d
+        Node::atom(0),          // a
+        Node::atom(1),          // b
+        Node::atom(2),          // c
+        Node::atom(3),          // d
+        Node::falsum(),         // 4
+        Node::implies(0, 4),    // not a
+        Node::or_pair([0, 5]),  // a | not a
+        Node::implies(1, 4),    // not b
+        Node::or_pair([1, 7]),  // b | not b
+        Node::implies(0, 2),    // a -> c
+        Node::and_pair([1, 3]), // b & d
+        Node::implies(10, 2),   // b & d -> c
+        Node::implies(3, 4),    // not d
+        Node::or_pair([3, 12]), // d | not d
     ];
     let t = theory(4, nodes, vec![6, 8, 9, 11, 13]);
     let mut region = region(&t, &[2], &[0]);
@@ -485,11 +485,11 @@ fn a_clause_of_three_literals_forces_its_last_open_one() {
     // region is refuted, through the chain rules (`disj_chain_unit`,
     // `disj_chain_never`) rather than a walk of the chain.
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Or(1, 2),
-        Node::Or(0, 3),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::or_pair([1, 2]),
+        Node::or_pair([0, 3]),
     ];
     let t = theory(3, nodes, vec![4]);
     let by_readings = |region: &mut Region| {
@@ -524,7 +524,12 @@ fn a_node_reached_on_both_sides_of_a_chain_is_one_operand() {
     // a | (a | b): a is an operand of the outer disjunction and of the inner
     // one it absorbs, one node of the DAG, so the chain has the operands
     // {a, b} and fails when both fail; counted twice it never would.
-    let nodes = vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1), Node::Or(0, 2)];
+    let nodes = vec![
+        Node::atom(0),
+        Node::atom(1),
+        Node::or_pair([0, 1]),
+        Node::or_pair([0, 2]),
+    ];
     let t = theory(2, nodes, vec![3]);
     let mut both_cut = region(&t, &[], &[0, 1]);
     assert!(matches!(
@@ -561,15 +566,15 @@ fn a_subformula_shared_by_two_parents_serves_both_as_one_operand() {
     // :- (a | b), d, so it is a chain of its own rather than absorbed: with
     // c cut the first root forces a | b, which then cuts d.
     let nodes = vec![
-        Node::Atom(0),       // a
-        Node::Atom(1),       // b
-        Node::Or(0, 1),      // 2: a | b, shared
-        Node::Atom(2),       // c
-        Node::Or(2, 3),      // 4: (a | b) | c
-        Node::Atom(3),       // d
-        Node::And(2, 5),     // 6: (a | b) & d
-        Node::False,         // 7
-        Node::Implies(6, 7), // 8: :- (a | b), d
+        Node::atom(0),          // a
+        Node::atom(1),          // b
+        Node::or_pair([0, 1]),  // 2: a | b, shared
+        Node::atom(2),          // c
+        Node::or_pair([2, 3]),  // 4: (a | b) | c
+        Node::atom(3),          // d
+        Node::and_pair([2, 5]), // 6: (a | b) & d
+        Node::falsum(),         // 7
+        Node::implies(6, 7),    // 8: :- (a | b), d
     ];
     let t = theory(4, nodes, vec![4, 8]);
     let mut cut_c = region(&t, &[], &[2]);
@@ -597,11 +602,11 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
     // frozen reading of the chain is the reading of its operands' masks,
     // so the subsets of {a} keep a forced and those of {c} keep c forced.
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Or(1, 2),
-        Node::Or(0, 3),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::or_pair([1, 2]),
+        Node::or_pair([0, 3]),
     ];
     let t = theory(3, nodes, vec![4]);
     let narrower = Narrower::new(&t);
@@ -639,22 +644,22 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
     for t in [disjunctive(), {
         // p :- not q. q :- not p. r :- p, not s. s :- t. {t}.
         let nodes = vec![
-            Node::Atom(0),        // p
-            Node::Atom(1),        // q
-            Node::False,          // 2
-            Node::Implies(1, 2),  // not q
-            Node::Implies(3, 0),  // not q -> p
-            Node::Implies(0, 2),  // not p
-            Node::Implies(5, 1),  // not p -> q
-            Node::Atom(2),        // r
-            Node::Atom(3),        // s
-            Node::Implies(8, 2),  // not s
-            Node::And(0, 9),      // p & not s
-            Node::Implies(10, 7), // -> r
-            Node::Atom(4),        // t
-            Node::Implies(12, 8), // t -> s
-            Node::Implies(12, 2), // not t
-            Node::Or(12, 14),     // t | not t
+            Node::atom(0),           // p
+            Node::atom(1),           // q
+            Node::falsum(),          // 2
+            Node::implies(1, 2),     // not q
+            Node::implies(3, 0),     // not q -> p
+            Node::implies(0, 2),     // not p
+            Node::implies(5, 1),     // not p -> q
+            Node::atom(2),           // r
+            Node::atom(3),           // s
+            Node::implies(8, 2),     // not s
+            Node::and_pair([0, 9]),  // p & not s
+            Node::implies(10, 7),    // -> r
+            Node::atom(4),           // t
+            Node::implies(12, 8),    // t -> s
+            Node::implies(12, 2),    // not t
+            Node::or_pair([12, 14]), // t | not t
         ];
         theory(5, nodes, vec![4, 6, 11, 13, 15])
     }] {
@@ -713,7 +718,7 @@ fn holding_an_atom_without_producers_rechecks_no_support() {
     // One root atom, narrowed without producers: the root is learned and
     // revisited, which holds its atom. That is the one propagation; without
     // producers there is no support to recheck, so none is queued.
-    let t = theory(1, vec![Node::Atom(0)], vec![0]);
+    let t = theory(1, vec![Node::atom(0)], vec![0]);
     let mut region = Region::all_open(1);
     let (narrowing, statistics) = narrow_fresh(
         &t,
@@ -733,7 +738,7 @@ fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
     // a -> a: the implication is one parent of a's node, counted once in
     // the split ranking and taken off once when the node is revisited; the
     // root holds and decides nothing, so a stays the atom to split on.
-    let t = theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]);
+    let t = theory(1, vec![Node::atom(0), Node::implies(0, 0)], vec![1]);
     let narrower = Narrower::new(&t);
     let mut knowledge = narrower.knowledge();
     let mut region = Region::all_open(1);
@@ -793,7 +798,7 @@ fn a_same_connective_node_reached_on_both_sides_is_absorbed_once() {
     // knowledge of a node that has none and never refute.
     let t = theory(
         0,
-        vec![Node::False, Node::Or(0, 0), Node::Or(1, 1)],
+        vec![Node::falsum(), Node::or_pair([0, 0]), Node::or_pair([1, 1])],
         vec![2],
     );
     let mut region = Region::all_open(0);
@@ -810,7 +815,7 @@ fn a_same_connective_node_reached_on_both_sides_is_absorbed_once() {
     // one operand does.
     let t = theory(
         1,
-        vec![Node::Atom(0), Node::Or(0, 0), Node::Or(1, 1)],
+        vec![Node::atom(0), Node::or_pair([0, 0]), Node::or_pair([1, 1])],
         vec![2],
     );
     let mut region = Region::all_open(1);

@@ -8,6 +8,8 @@ const NODE_ATOM: u32 = 1u;
 const NODE_AND: u32 = 2u;
 const NODE_OR: u32 = 3u;
 const NODE_IMPLIES: u32 = 4u;
+const NODE_ALL: u32 = 5u;
+const NODE_ANY: u32 = 6u;
 const STATUS_STABLE: u32 = 0u;
 const STATUS_NOT_MODEL: u32 = 1u;
 const STATUS_RESIDUAL: u32 = 2u;
@@ -21,7 +23,7 @@ struct Params {
 struct Node { tag: u32, left: u32, right: u32, padding: u32 }
 struct Producer { head: u32, body: u32, has_body: u32, padding: u32 }
 @group(0) @binding(0) var<uniform> params: Params;
-@group(0) @binding(1) var<storage, read> nodes: array<Node>;
+@group(0) @binding(1) var<storage, read> nodes: array<u32>;
 @group(0) @binding(2) var<storage, read> roots: array<u32>;
 // Atomic construction stores canonical records. Grouped construction stores
 // word-grouped records followed by W+1 half-open producer offsets.
@@ -32,6 +34,15 @@ struct Producer { head: u32, body: u32, has_body: u32, padding: u32 }
 @group(0) @binding(7) var<storage, read_write> results: array<u32>;
 var<workgroup> first_root: atomic<u32>;
 var<workgroup> first_atom: atomic<u32>;
+
+// Headers occupy 4*N words; wide rows occupy the checked appended tail.
+fn node_at(index: u32) -> Node {
+    let base = index * 4u;
+    return Node(nodes[base], nodes[base + 1u], nodes[base + 2u], nodes[base + 3u]);
+}
+fn operand_at(node: Node, index: u32) -> u32 {
+    return nodes[params.nodes * 4u + node.left + index];
+}
 
 fn contains(world: u32, atom: u32) -> bool {
     return (candidates[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
@@ -61,12 +72,19 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
         atomicStore(&first_atom, params.atoms);
         // Children precede their parent. Only this invocation writes truth.
         for (var index = 0u; index < params.nodes; index += 1u) {
-            let node = nodes[index];
+            let node = node_at(index);
             var value = false;
             if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
-            if (node.tag >= NODE_AND) {
+            if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
                 value = operation(node.tag, truth[values + node.left] != 0u,
                     truth[values + node.right] != 0u);
+            }
+            if (node.tag >= NODE_ALL) {
+                value = node.tag == NODE_ALL;
+                for (var child = 0u; child < node.right; child++) {
+                    let next = truth[values + operand_at(node, child)] != 0u;
+                    value = select(value || next, value && next, node.tag == NODE_ALL);
+                }
             }
             truth[values + index] = select(0u, 1u, value);
         }

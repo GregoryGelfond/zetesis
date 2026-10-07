@@ -12,8 +12,8 @@ const CANDIDATE: [usize; 4] = [0, 63, 64, 129];
 fn theory() -> Theory {
     // The atom nodes span three words. The roots are in the third node word;
     // cutting 63 must propagate through 64 to 129 in different atom words.
-    let mut nodes: Vec<_> = (0..ATOMS).map(Node::Atom).collect();
-    nodes.extend([Node::Or(63, 64), Node::Implies(64, 129)]);
+    let mut nodes: Vec<_> = (0..ATOMS).map(Node::atom).collect();
+    nodes.extend([Node::or_pair([63, 64]), Node::implies(64, 129)]);
     super::theory(ATOMS, nodes, vec![ATOMS, ATOMS + 1])
 }
 

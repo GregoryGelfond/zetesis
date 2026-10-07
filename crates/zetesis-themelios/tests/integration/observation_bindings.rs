@@ -117,7 +117,10 @@ fn equality_queries_preserve_the_original_formula() {
         // Only the fact-free queries leave this base's logical source unchanged.
         if query.starts_with("#show.") {
             assert_eq!(shown.atoms(), original.atoms());
-            assert_eq!(shown.theory().nodes(), original.theory().nodes());
+            assert_eq!(
+                (shown.theory().nodes(), shown.theory().operands()),
+                (original.theory().nodes(), original.theory().operands())
+            );
             assert_eq!(shown.theory().roots(), original.theory().roots());
             assert_eq!(shown.formula_origins(), original.formula_origins());
             assert_eq!(

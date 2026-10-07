@@ -77,8 +77,9 @@ pub struct RegionCounts {
     /// Node reads, root tests and producer checks, and for the candidate
     /// tree the producer extraction, the indexing of each restriction and,
     /// once a region walk first needs it, the indexing of the theory, one
-    /// unit per node (kept even if building the index then fails); included
-    /// in search work. A run decided by a positive certificate walks no
+    /// unit per node and operand occurrence (kept even if building the index
+    /// then fails); included in search work. A run decided by a positive
+    /// certificate walks no
     /// region and indexes no theory. Enumeration queries share the walk's
     /// original index. A standalone membership query includes its own index
     /// construction in its reduct counts.

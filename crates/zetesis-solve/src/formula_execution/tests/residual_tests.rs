@@ -61,7 +61,13 @@ fn residual_counter_overflow_preserves_its_receipt() {
 #[test]
 fn decoded_reasons_survive_exact_completion_refusal() {
     use zetesis_ferraris::{AdmissionLimits, Node, Theory};
-    let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let cancellation = zetesis_cpu::Cancellation::default();
     let mut models = zetesis_sat::StableModels::new(
         &theory,

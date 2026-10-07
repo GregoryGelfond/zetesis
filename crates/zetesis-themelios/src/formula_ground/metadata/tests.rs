@@ -185,7 +185,7 @@ fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
     fill_metadata_capacity(&mut builder);
     let before = builder.metadata.atoms.len();
     let origins_before = builder.metadata.origins.len();
-    let nodes_before = builder.nodes.len();
+    let nodes_before = builder.nodes.view().len();
     assert_eq!(builder.catalog.len(), before);
     let relocation = growth(&builder.metadata.atoms) + growth(&builder.metadata.origins);
     assert!(relocation > 0);
@@ -243,7 +243,7 @@ fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
     );
     assert_eq!(builder.metadata.atoms.len(), before);
     assert_eq!(builder.metadata.origins.len(), origins_before);
-    assert_eq!(builder.nodes.len(), nodes_before);
+    assert_eq!(builder.nodes.view().len(), nodes_before);
     assert!(builder.roots.is_empty());
     assert!(builder.origins.is_empty());
     (spent, true)

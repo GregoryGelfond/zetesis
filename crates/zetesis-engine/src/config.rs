@@ -2,10 +2,8 @@
 
 use std::num::NonZeroUsize;
 
-use zetesis_solve::SolveConfig;
-use zetesis_themelios::{ExpansionLimits, FormulaLimits, ProgramAdmissionOptions};
-
 use crate::OutputLimits;
+use zetesis_solve::{Resources, SolveConfig};
 
 /// Which native preparation supplies an answer-set run.
 ///
@@ -43,19 +41,11 @@ pub struct Config {
     pub grounder: Grounder,
     /// Maximum CPU workers assigned to the native session.
     pub workers: NonZeroUsize,
-    /// Structural inspection before retaining or preparing a canonical program.
-    pub admission: ProgramAdmissionOptions,
-    /// Cumulative normalization and finite fact-expansion allowances.
-    pub expansion: ExpansionLimits,
-    /// Formula preparation, grounding, observation and analysis allowances.
-    pub formula: FormulaLimits,
-    /// Reference allowance used to scale the native session's named retained
-    /// capacities through [`SolveConfig::for_allowance`]. Work/count ceilings
-    /// remain native defaults. This excludes source ASTs, allocator bookkeeping,
-    /// thread stacks and other owners; it is not a process RSS ceiling.
+    /// Memory allowance used by the shared ordinary resource policy at each
+    /// preparation and session opening. Source, solve and output capacities are
+    /// derived together, so changing this field cannot leave stale defaults.
+    /// Independent named capacities exclude allocator/stack overhead; not RSS.
     pub memory: u64,
-    /// Full-atom and display-term construction limits for delivered models.
-    pub output: OutputLimits,
 }
 
 impl Default for Config {
@@ -63,16 +53,19 @@ impl Default for Config {
         Self {
             grounder: Grounder::Auto,
             workers: std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN),
-            admission: ProgramAdmissionOptions::default(),
-            expansion: ExpansionLimits::default(),
-            formula: FormulaLimits::default(),
             memory: SolveConfig::REFERENCE_MEMORY,
-            output: OutputLimits::default(),
         }
     }
 }
 
 impl Config {
+    pub(crate) fn resources(self) -> Resources {
+        Resources::new(self.memory, self.workers)
+    }
+
+    pub(crate) fn output(self) -> OutputLimits {
+        OutputLimits::for_resources(self.resources())
+    }
     pub(crate) fn session(self) -> SolveConfig {
         SolveConfig {
             backend: zetesis_solve::Backend::Cpu,
@@ -83,7 +76,10 @@ impl Config {
                 Grounder::Lazy => zetesis_solve::Grounder::Lazy,
             },
             models: 0,
-            ..SolveConfig::for_allowance(self.memory, self.workers)
+            ..self.resources().solve_config()
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

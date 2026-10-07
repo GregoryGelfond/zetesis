@@ -3,7 +3,13 @@ use zetesis_cpu::Stop;
 use zetesis_ferraris::AdmissionLimits;
 
 fn theory(atoms: usize) -> Theory {
-    Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap()
+    Theory::new(
+        atoms,
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]

@@ -7,24 +7,6 @@ pub(super) fn seconds(value: &str) -> Result<u64, String> {
     })
 }
 
-pub(super) fn bytes(value: &str) -> Result<u64, String> {
-    quantity(
-        value,
-        &[
-            ("", 1),
-            ("B", 1),
-            ("KiB", 1 << 10),
-            ("MiB", 1 << 20),
-            ("GiB", 1 << 30),
-            ("TiB", 1 << 40),
-        ],
-    )
-    .map_err(|()| {
-        "expected bytes or a whole number with B, KiB, MiB, GiB or TiB; value must fit u64 bytes"
-            .to_owned()
-    })
-}
-
 fn quantity(value: &str, units: &[(&str, u64)]) -> Result<u64, ()> {
     let boundary = value
         .find(|character: char| !character.is_ascii_digit())

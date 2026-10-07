@@ -1,4 +1,5 @@
-//! Cumulative checked construction over one formula session's fixed catalog.
+//! Per-operation construction allowances over one formula session's fixed catalog.
+//! Preparation and each selection start fresh; their accepted work stays cumulative.
 
 use std::fmt;
 
@@ -14,11 +15,11 @@ use crate::{SolveConfig, SolveError};
 pub enum ModelConstructionStop {
     /// Caller cancellation or deadline, checked before the next operation.
     Control(Stop),
-    /// The next operation would exceed this session's cumulative allowance.
+    /// The next operation would exceed this preparation or selection's allowance.
     Work {
-        /// Proposed cumulative work, including the refused next operation.
+        /// Proposed work in this preparation or selection, including the refused operation.
         observed: u128,
-        /// Inclusive session work ceiling.
+        /// Inclusive work ceiling for this preparation or selection.
         limit: u64,
     },
     /// Preparing the order or a model would exceed live metadata capacity.
@@ -84,8 +85,9 @@ impl Account {
         config: &SolveConfig,
         cancellation: &Cancellation,
     ) -> Result<ModelOrder<'a>, Failure> {
+        let mut work = 0;
         let order = ModelOrder::prepare_with(catalog, config.max_model_bytes, || {
-            self.permit(config, cancellation)
+            self.permit(&mut work, config, cancellation)
         })
         .map_err(|error| self.failure(error))?;
         self.statistics.prepared_bytes = order.retained_bytes();
@@ -109,9 +111,10 @@ impl Account {
             .constructed
             .checked_add(1)
             .ok_or(Failure::Run(SolveError::ModelStatisticsOverflow))?;
+        let mut work = 0;
         let publication = order
             .select_with(positions, config.max_model_bytes, || {
-                self.permit(config, cancellation)
+                self.permit(&mut work, config, cancellation)
             })
             .map_err(|error| self.failure(error))?;
         let (model, peak) = publication.into_parts();
@@ -122,29 +125,37 @@ impl Account {
 
     fn permit(
         &mut self,
+        work: &mut u64,
         config: &SolveConfig,
         cancellation: &Cancellation,
-    ) -> Result<(), ModelConstructionStop> {
+    ) -> Result<(), Failure> {
         cancellation
             .poll()
-            .map_err(ModelConstructionStop::Control)?;
-        let observed = u128::from(self.statistics.work) + 1;
+            .map_err(|stop| Failure::Interrupted(ModelConstructionStop::Control(stop)))?;
+        let observed = u128::from(*work) + 1;
         if observed > u128::from(config.max_model_work) {
-            return Err(ModelConstructionStop::Work {
+            return Err(Failure::Interrupted(ModelConstructionStop::Work {
                 observed,
                 limit: config.max_model_work,
-            });
+            }));
         }
-        // The inclusive u64 allowance has admitted this addition.
-        self.statistics.work += 1;
+        let total = self
+            .statistics
+            .work
+            .checked_add(1)
+            .ok_or(Failure::Run(SolveError::ModelStatisticsOverflow))?;
+        // Only accepted operations enter either receipt. The inclusive u64
+        // allowance admits the local addition; the total has its own check.
+        *work += 1;
+        self.statistics.work = total;
         Ok(())
     }
 
-    fn failure(&mut self, error: ModelPublicationFailure<ModelConstructionStop>) -> Failure {
+    fn failure(&mut self, error: ModelPublicationFailure<Failure>) -> Failure {
         let (failure, peak) = error.into_parts();
         self.statistics.peak_bytes = self.statistics.peak_bytes.max(peak);
         match failure {
-            ModelFailure::Stopped(stop) => Failure::Interrupted(stop),
+            ModelFailure::Stopped(failure) => failure,
             ModelFailure::Model(ModelError::Bytes { required, limit }) => {
                 Failure::Interrupted(ModelConstructionStop::Bytes { required, limit })
             }
@@ -152,3 +163,6 @@ impl Account {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

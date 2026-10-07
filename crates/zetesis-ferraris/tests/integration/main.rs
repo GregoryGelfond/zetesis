@@ -17,6 +17,7 @@ mod native_aggregate_canonical;
 mod native_aggregate_limits;
 mod native_aggregates;
 mod normal;
+mod native_formula;
 mod reduct;
 mod refusal_contracts;
 mod region_work;

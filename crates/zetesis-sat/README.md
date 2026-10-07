@@ -8,13 +8,16 @@ no external SAT engine or clingo at runtime. It complements the existing
 exhaustive formula reference and the normal-rule least-closure checker.
 
 ```rust
-use zetesis_ferraris::{AdmissionLimits, Node, Theory};
+use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, Theory};
 use zetesis_sat::{Cancellation, Limits, StableModels};
 
 // a ∨ ¬a: an optional, supported atom.
 let theory = Theory::new(
     1,
-    vec![Node::Atom(0), Node::False, Node::Implies(0, 1), Node::Or(0, 2)],
+    FormulaParts::new(
+        vec![Node::atom(0), Node::falsum(), Node::implies(0, 1), Node::or_pair([0, 2])],
+        vec![],
+    )?,
     vec![3],
     AdmissionLimits::default(),
 )?;

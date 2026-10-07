@@ -5,7 +5,7 @@ use super::{
     AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind, AggregateLimits,
     AggregateProfile, AggregateStatistics,
 };
-use crate::Node;
+use crate::{FormulaNodes, NodeView};
 
 /// One scalar comparison against the same complete tuple eligibility family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,14 +99,14 @@ impl AggregateFamilyBuild {
 /// Returns typed input, guard, resource, allocation, cancellation or arithmetic
 /// errors. Shared limits apply to the entire family, never independently per root.
 pub fn append_aggregate_family(
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     elements: &[AggregateElement],
     guards: &[AggregateGuard],
     limits: AggregateFamilyLimits,
     cancellation: &Cancellation,
 ) -> Result<AggregateFamilyBuild, AggregateError> {
     append(
-        Destination::unchecked(nodes),
+        Destination::retained(nodes.transaction()),
         elements,
         guards,
         limits,
@@ -134,7 +134,7 @@ pub(super) fn append(
 type ResultKind<T> = Result<T, AggregateErrorKind>;
 
 fn compile(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     guards: &[AggregateGuard],
     max_guards: usize,
@@ -152,8 +152,8 @@ fn compile(
         return Ok((Vec::new(), profile));
     }
     let mut roots = reserve(guards.len())?;
-    let falsum = builder.push(Node::False)?;
-    let truth = builder.push(Node::Implies(falsum, falsum))?;
+    let falsum = builder.push(NodeView::False)?;
+    let truth = builder.push(NodeView::Implies(falsum, falsum))?;
     if nonnegative {
         let maximum = required_threshold(builder, guards, total)?;
         let row = threshold_row(builder, elements, maximum, falsum, truth)?;
@@ -178,7 +178,7 @@ fn compile(
 }
 
 fn required_threshold(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     guards: &[AggregateGuard],
     total: i128,
 ) -> ResultKind<i128> {
@@ -210,7 +210,7 @@ fn required_threshold(
 }
 
 fn threshold_row(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     maximum: i128,
     falsum: usize,
@@ -245,11 +245,11 @@ fn threshold_row(
         current[0] = truth;
         for target in 1..width {
             builder.tick()?;
-            let included = builder.push(Node::And(
+            let included = builder.push(NodeView::And(&[
                 element.condition,
                 previous[target.saturating_sub(weight)],
-            ))?;
-            current[target] = builder.push(Node::Or(previous[target], included))?;
+            ]))?;
+            current[target] = builder.push(NodeView::Or(&[previous[target], included]))?;
         }
         std::mem::swap(&mut previous, &mut current);
     }
@@ -276,7 +276,7 @@ fn lookup(
 }
 
 fn compose(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     row: &[usize],
     guard: AggregateGuard,
     total: i128,
@@ -295,14 +295,16 @@ fn compose(
     let a = lookup(row, lower, total, falsum, truth)?;
     match guard.comparison {
         AggregateComparison::Ge | AggregateComparison::Gt => Ok(a),
-        AggregateComparison::Lt | AggregateComparison::Le => builder.push(Node::Implies(a, falsum)),
+        AggregateComparison::Lt | AggregateComparison::Le => {
+            builder.push(NodeView::Implies(a, falsum))
+        }
         AggregateComparison::Eq | AggregateComparison::Ne => {
             let b = lookup(row, bound + 1, total, falsum, truth)?;
             if guard.comparison == AggregateComparison::Eq {
-                let negative = builder.push(Node::Implies(b, falsum))?;
-                builder.push(Node::And(a, negative))
+                let negative = builder.push(NodeView::Implies(b, falsum))?;
+                builder.push(NodeView::And(&[a, negative]))
             } else {
-                builder.push(Node::Implies(a, b))
+                builder.push(NodeView::Implies(a, b))
             }
         }
     }

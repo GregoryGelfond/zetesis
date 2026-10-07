@@ -155,7 +155,10 @@ fn optional_planning_declines_nonbijective_groups() {
             "{source}"
         );
         assert_eq!(ordinary.atoms(), planned.atoms());
-        assert_eq!(ordinary.theory().nodes(), planned.theory().nodes());
+        assert_eq!(
+            (ordinary.theory().nodes(), ordinary.theory().operands()),
+            (planned.theory().nodes(), planned.theory().operands())
+        );
         assert_eq!(ordinary.theory().roots(), planned.theory().roots());
         assert_eq!(ordinary.formula_origins(), planned.formula_origins());
         assert_eq!(
@@ -184,7 +187,10 @@ fn alias_groups_preserve_other_count_certificates() {
     };
     assert!(planned.theory().same_instance(plan.original_theory()));
     assert_eq!(plan.consequence_count(), 2);
-    assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+    assert_eq!(
+        (planned.theory().nodes(), planned.theory().operands()),
+        (ordinary.theory().nodes(), ordinary.theory().operands())
+    );
     assert_eq!(planned.theory().roots(), ordinary.theory().roots());
     assert_eq!(native(&planned), native(&ordinary));
     for mask in 0..1 << planned.atoms().len() {

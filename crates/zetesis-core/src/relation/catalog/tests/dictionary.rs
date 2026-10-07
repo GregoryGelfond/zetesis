@@ -67,7 +67,11 @@ fn repeated_new_terms_share_one_equality_coordinate() {
             )
             .unwrap();
     }
-    let columns: Vec<Vec<u32>> = fixture.view().columns().map(<[u32]>::to_vec).collect();
+    let columns: Vec<Vec<u32>> = fixture
+        .view()
+        .columns()
+        .map(|column| column.iter().collect())
+        .collect();
     assert_eq!(columns, [vec![0, 1], vec![0, 2], vec![1, 2], vec![0, 0]]);
     assert_eq!(fixture.rows.layout.dictionary.len(), 3);
     assert_translation(&fixture);

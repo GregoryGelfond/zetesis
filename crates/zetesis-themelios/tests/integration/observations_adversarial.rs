@@ -188,7 +188,10 @@ fn generated_joins_preserve_theory_and_complete_observation_multisets() {
         assert!(sources.insert(source));
         let input = formula(source);
         assert_eq!(input.atoms(), base.atoms(), "{}", case["name"]);
-        assert_eq!(input.theory().nodes(), base.theory().nodes());
+        assert_eq!(
+            (input.theory().nodes(), input.theory().operands()),
+            (base.theory().nodes(), base.theory().operands())
+        );
         assert_eq!(input.theory().roots(), base.theory().roots());
         assert_eq!(input.objectives().is_present(), index.is_multiple_of(13));
         let expected = recorded(case);
@@ -239,7 +242,10 @@ fn fresh_clingo_matches_recorded_and_native_complete_display_multisets() {
         let source = case["source"].as_str().unwrap();
         let input = formula(source);
         assert_eq!(input.atoms(), base.atoms());
-        assert_eq!(input.theory().nodes(), base.theory().nodes());
+        assert_eq!(
+            (input.theory().nodes(), input.theory().operands()),
+            (base.theory().nodes(), base.theory().operands())
+        );
         assert_eq!(input.theory().roots(), base.theory().roots());
         let expected = clingo(source);
         assert_eq!(recorded(&case), expected, "{}", case["name"]);

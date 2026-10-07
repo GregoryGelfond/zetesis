@@ -233,15 +233,19 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
 
     let theory = Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::False,
-            Node::Implies(0, 2),
-            Node::Or(0, 3),
-            Node::Implies(1, 0),
-            Node::And(4, 5),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 2),
+                Node::or_pair([0, 3]),
+                Node::implies(1, 0),
+                Node::and_pair([4, 5]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![6],
         zetesis_ferraris::AdmissionLimits::default(),
     )

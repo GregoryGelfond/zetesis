@@ -32,18 +32,18 @@ impl Fixture {
                 Atom::new(Predicate::new(format!("p{index}"), 0).unwrap(), vec![]).unwrap()
             })
             .collect();
-        let mut nodes = vec![Node::False];
+        let mut nodes = vec![Node::falsum()];
         let mut roots = Vec::new();
         for index in 0..atom_count {
             let atom = nodes.len();
-            nodes.push(Node::Atom(index));
-            nodes.push(Node::Implies(atom, 0));
+            nodes.push(Node::atom(index));
+            nodes.push(Node::implies(atom, 0));
             roots.push(nodes.len());
-            nodes.push(Node::Or(atom, atom + 1));
+            nodes.push(Node::or_pair([atom, atom + 1]));
         }
         let original = Theory::new(
             atom_count,
-            nodes,
+            zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
             roots,
             zetesis_ferraris::AdmissionLimits::default(),
         )
@@ -318,13 +318,16 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         .plan
         .bound(&incumbent, no_subsets(), &Cancellation::default())
         .unwrap();
-    let nodes = complete.theory().nodes().to_vec();
+    let nodes = (
+        complete.theory().nodes().to_vec(),
+        complete.theory().operands().to_vec(),
+    );
     let roots = complete.theory().roots().to_vec();
     let exact = ObjectiveBoundLimits {
         max_work: complete.statistics().work,
         aggregate: AggregateLimits {
             max_elements: 20,
-            max_nodes: nodes.len(),
+            max_nodes: nodes.0.len(),
             max_states: 6,
             max_subsets: 0,
             ..AggregateLimits::default()
@@ -335,7 +338,10 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         .bound(&incumbent, exact, &Cancellation::default())
         .unwrap();
     assert_eq!(retry.statistics(), complete.statistics());
-    assert_eq!(retry.theory().nodes(), nodes);
+    assert_eq!(
+        (retry.theory().nodes(), retry.theory().operands()),
+        (nodes.0.as_slice(), nodes.1.as_slice())
+    );
     assert_eq!(retry.theory().roots(), roots);
     for limits in [
         ObjectiveBoundLimits {
@@ -355,7 +361,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         },
         ObjectiveBoundLimits {
             aggregate: AggregateLimits {
-                max_nodes: nodes.len() - 1,
+                max_nodes: nodes.0.len() - 1,
                 ..exact.aggregate
             },
             ..exact
@@ -393,14 +399,20 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         .plan
         .bound(&incumbent, exact, &Cancellation::default())
         .unwrap();
-    assert_eq!(retry.theory().nodes(), nodes);
+    assert_eq!(
+        (retry.theory().nodes(), retry.theory().operands()),
+        (nodes.0.as_slice(), nodes.1.as_slice())
+    );
     assert_eq!(retry.theory().roots(), roots);
 }
 
 #[test]
 fn nonstrict_normalized_bound_preserves_all_original_stable_optimal_ties() {
     let fixture = Fixture::new(3, vec![(0, -2, 0, 0), (0, -2, 0, 1), (0, 1, 1, 2)]);
-    let original_nodes = fixture.original.nodes().to_vec();
+    let original_nodes = (
+        fixture.original.nodes().to_vec(),
+        fixture.original.operands().to_vec(),
+    );
     let incumbent = fixture.score(1);
     let bound = fixture
         .plan
@@ -419,6 +431,9 @@ fn nonstrict_normalized_bound_preserves_all_original_stable_optimal_ties() {
         .collect();
     assert!(search.exhausted());
     assert_eq!(actual, BTreeSet::from([vec![0], vec![1], vec![0, 1]]));
-    assert_eq!(fixture.original.nodes(), original_nodes);
+    assert_eq!(
+        (fixture.original.nodes(), fixture.original.operands()),
+        (original_nodes.0.as_slice(), original_nodes.1.as_slice())
+    );
     assert!(bound.original().same_instance(&fixture.original));
 }

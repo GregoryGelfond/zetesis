@@ -5,3 +5,4 @@ mod footer_admission_tests;
 mod frontier_tests;
 mod terminal_tests;
 mod objective_work_tests;
+mod model_policy_tests;

@@ -6,7 +6,7 @@ use zetesis_ferraris::{AdmissionLimits, Narrower, Node, Region, Theory};
 fn index() -> Narrower {
     let theory = Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap(),
         vec![],
         AdmissionLimits::default(),
     )

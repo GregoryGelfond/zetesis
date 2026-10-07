@@ -4,61 +4,64 @@ use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateLimits, AggregateProfile, AggregateStatistics,
 };
-use crate::Node;
+use crate::{AdmissionError, FormulaNodes, FormulaTransaction, NodeView};
 
 type Result<T> = std::result::Result<T, AggregateErrorKind>;
 
-/// The exclusive node borrow and, for an owned buffer, its retained scan frontier.
+/// An exclusive paired append transaction, nested beneath its caller's owner.
 pub(super) struct Destination<'a> {
-    nodes: &'a mut Vec<Node>,
-    validated: Option<&'a mut usize>,
+    nodes: FormulaTransaction<'a>,
 }
 impl<'a> Destination<'a> {
-    pub(super) fn unchecked(nodes: &'a mut Vec<Node>) -> Self {
-        Self {
-            nodes,
-            validated: None,
-        }
-    }
-
-    pub(super) fn retained(nodes: &'a mut Vec<Node>, validated: &'a mut usize) -> Self {
-        Self {
-            nodes,
-            validated: Some(validated),
-        }
+    pub(super) fn retained(nodes: FormulaTransaction<'a>) -> Self {
+        Self { nodes }
     }
 }
 
-pub(super) struct Builder<'a> {
-    nodes: &'a mut Vec<Node>,
+pub(super) struct Builder<'a, 'control> {
+    nodes: FormulaTransaction<'a>,
     limits: AggregateLimits,
-    cancellation: &'a Cancellation,
+    cancellation: &'control Cancellation,
     statistics: AggregateStatistics,
-    validated: usize,
 }
-impl Builder<'_> {
+impl Builder<'_, '_> {
     pub(super) fn tick(&mut self) -> Result<()> {
-        self.cancellation
-            .poll()
-            .map_err(AggregateErrorKind::Control)?;
-        if self.statistics.work >= self.limits.max_work {
-            return Err(AggregateErrorKind::WorkLimit);
-        }
-        self.statistics.work += 1;
-        Ok(())
+        tick(&mut self.statistics, self.limits, self.cancellation)
     }
 
-    pub(super) fn push(&mut self, node: Node) -> Result<usize> {
+    pub(super) fn push(&mut self, node: NodeView<'_>) -> Result<usize> {
         self.tick()?;
-        if self.nodes.len() >= self.limits.max_nodes {
+        let (added, edges, copies) = match node {
+            NodeView::And([]) => (2, 2, 0),
+            NodeView::And([_]) | NodeView::Or([_]) => (0, 0, 1),
+            NodeView::And(row) | NodeView::Or(row) => {
+                (1, row.len(), if row.len() >= 3 { row.len() } else { 0 })
+            }
+            NodeView::Implies(_, _) => (1, 2, 0),
+            NodeView::Atom(_) | NodeView::False => (1, 0, 0),
+        };
+        if self.nodes.view().len().saturating_add(added) > self.limits.max_nodes {
             return Err(AggregateErrorKind::NodeLimit);
         }
-        self.nodes
-            .try_reserve(1)
-            .map_err(|_| AggregateErrorKind::Allocation)?;
-        let index = self.nodes.len();
-        self.nodes.push(node);
-        self.statistics.nodes += 1;
+        if self.nodes.parts().occurrences().saturating_add(edges) > self.limits.max_operands {
+            return Err(AggregateErrorKind::OperandLimit);
+        }
+        // Charge child validation and the copied wide row before publication.
+        for _ in 0..edges.saturating_add(copies) {
+            self.tick()?;
+        }
+        let index = self
+            .nodes
+            .push(node, self.limits.max_nodes, self.limits.max_operands)
+            .map_err(|error| match error {
+                AdmissionError::Allocation => AggregateErrorKind::Allocation,
+                AdmissionError::Limit => AggregateErrorKind::OperandLimit,
+                _ => AggregateErrorKind::InvalidPrefix {
+                    node: self.nodes.view().len(),
+                },
+            })?;
+        self.statistics.nodes += added;
+        self.statistics.operands += edges;
         Ok(index)
     }
 
@@ -70,18 +73,33 @@ impl Builder<'_> {
         Ok(())
     }
 
-    pub(super) fn join(
-        &mut self,
-        previous: Option<usize>,
-        next: usize,
-        and: bool,
-    ) -> Result<usize> {
-        match previous {
-            None => Ok(next),
-            Some(previous) => self.push(if and {
-                Node::And(previous, next)
+    /// Retain one complete connective row under the same occurrence ceiling.
+    /// Growth and publication consume work before the corresponding allocation
+    /// or write. These rows are temporary operands, not threshold DP states.
+    pub(super) fn operand(&mut self, row: &mut Vec<usize>, child: usize) -> Result<()> {
+        if row.len() >= self.limits.max_operands {
+            return Err(AggregateErrorKind::OperandLimit);
+        }
+        if row.len() == row.capacity() {
+            for _ in 0..row.len() {
+                self.tick()?;
+            }
+            row.try_reserve(1)
+                .map_err(|_| AggregateErrorKind::Allocation)?;
+        }
+        self.tick()?;
+        row.push(child);
+        Ok(())
+    }
+
+    pub(super) fn group(&mut self, row: &[usize], identity: usize, and: bool) -> Result<usize> {
+        match row {
+            [] => Ok(identity),
+            [only] => Ok(*only),
+            _ => self.push(if and {
+                NodeView::And(row)
             } else {
-                Node::Or(previous, next)
+                NodeView::Or(row)
             }),
         }
     }
@@ -107,14 +125,14 @@ pub(super) fn reserve<T>(count: usize) -> Result<Vec<T>> {
 /// Existing edge topology and condition IDs are checked; atom-universe admission
 /// remains the responsibility of [`crate::Theory::new`].
 ///
-/// On failure, original nodes and length are restored; reserved capacity may
-/// change. The caller owns source origins and should restrict `max_nodes` to its
+/// On failure, both node and operand suffixes are removed; their original
+/// prefixes remain unchanged, while reserved capacities may change. The caller owns source origins and should restrict `max_nodes` to its
 /// remaining origin capacity before appending, then record every new node.
 ///
 /// # Errors
 /// Returns a typed input, resource, allocation, cancellation or arithmetic error.
 pub fn append_aggregate(
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     elements: &[AggregateElement],
     comparison: AggregateComparison,
     bound: i64,
@@ -122,7 +140,7 @@ pub fn append_aggregate(
     cancellation: &Cancellation,
 ) -> std::result::Result<AggregateBuild, AggregateError> {
     append(
-        Destination::unchecked(nodes),
+        Destination::retained(nodes.transaction()),
         elements,
         comparison,
         bound,
@@ -148,7 +166,7 @@ pub(super) fn transaction(
     destination: Destination<'_>,
     limits: AggregateLimits,
     cancellation: &Cancellation,
-    compile: impl FnOnce(&mut Builder<'_>) -> Result<(usize, AggregateProfile)>,
+    compile: impl FnOnce(&mut Builder<'_, '_>) -> Result<(usize, AggregateProfile)>,
 ) -> std::result::Result<AggregateBuild, AggregateError> {
     transaction_value(destination, limits, cancellation, compile).map(
         |((root, profile), statistics)| AggregateBuild {
@@ -163,34 +181,43 @@ pub(super) fn transaction_value<T>(
     destination: Destination<'_>,
     limits: AggregateLimits,
     cancellation: &Cancellation,
-    compile: impl FnOnce(&mut Builder<'_>) -> Result<T>,
+    compile: impl FnOnce(&mut Builder<'_, '_>) -> Result<T>,
 ) -> std::result::Result<(T, AggregateStatistics), AggregateError> {
-    let original = destination.nodes.len();
     let mut builder = Builder {
         nodes: destination.nodes,
-        validated: destination.validated.as_deref().copied().unwrap_or(0),
         limits,
         cancellation,
         statistics: AggregateStatistics::default(),
     };
-    let result = match compile(&mut builder) {
-        Ok(result) => Ok((result, builder.statistics)),
-        Err(kind) => {
-            builder.nodes.truncate(original);
-            Err(AggregateError {
-                kind,
-                statistics: builder.statistics,
-            })
+    let result = compile(&mut builder);
+    match result {
+        Ok(result) => {
+            let statistics = builder.statistics;
+            builder.nodes.commit();
+            Ok((result, statistics))
         }
-    };
-    if let Some(validated) = destination.validated {
-        *validated = builder.validated.min(builder.nodes.len());
+        Err(kind) => Err(AggregateError {
+            kind,
+            statistics: builder.statistics,
+        }),
     }
-    result
+}
+
+fn tick(
+    statistics: &mut AggregateStatistics,
+    limits: AggregateLimits,
+    cancellation: &Cancellation,
+) -> Result<()> {
+    cancellation.poll().map_err(AggregateErrorKind::Control)?;
+    if statistics.work >= limits.max_work {
+        return Err(AggregateErrorKind::WorkLimit);
+    }
+    statistics.work += 1;
+    Ok(())
 }
 
 pub(super) fn validate(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
 ) -> Result<(bool, i128)> {
     validate_elements(
@@ -202,7 +229,7 @@ pub(super) fn validate(
 }
 
 pub(super) fn validate_elements(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: impl ExactSizeIterator<Item = (usize, i32)>,
 ) -> Result<(bool, i128)> {
     validate_prefix(builder)?;
@@ -213,7 +240,7 @@ pub(super) fn validate_elements(
     let mut total = 0i128;
     for (index, (condition, weight)) in elements.enumerate() {
         builder.tick()?;
-        if condition >= builder.nodes.len() {
+        if condition >= builder.nodes.view().len() {
             return Err(AggregateErrorKind::InvalidCondition { element: index });
         }
         nonnegative &= weight >= 0;
@@ -225,34 +252,56 @@ pub(super) fn validate_elements(
 }
 
 /// Validate the existing DAG before any aggregate-specific appends.
-pub(super) fn validate_prefix(builder: &mut Builder<'_>) -> Result<usize> {
+pub(super) fn validate_prefix(builder: &mut Builder<'_, '_>) -> Result<usize> {
     builder.tick()?;
-    if builder.nodes.len() > builder.limits.max_nodes {
+    let parts = builder.nodes.parts();
+    if parts.nodes().len() > builder.limits.max_nodes {
         return Err(AggregateErrorKind::NodeLimit);
     }
-    let prefix = builder.nodes.len();
-    for index in builder.validated..prefix {
+    if parts.occurrences() > builder.limits.max_operands
+        || parts.operands().len() > builder.limits.max_operands
+    {
+        return Err(AggregateErrorKind::OperandLimit);
+    }
+    let prefix = parts.nodes().len();
+    for index in builder.nodes.validation_frontier()..prefix {
         builder.tick()?;
-        if let Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) = builder.nodes[index]
-            && (a >= index || b >= index)
-        {
-            return Err(AggregateErrorKind::InvalidPrefix { node: index });
+        let invalid = || AggregateErrorKind::InvalidPrefix { node: index };
+        let node = builder.nodes.view().node(index).map_err(|_| invalid())?;
+        let pair;
+        let children = match node {
+            NodeView::And(row) | NodeView::Or(row) => row,
+            NodeView::Implies(left, right) => {
+                pair = [left, right];
+                &pair
+            }
+            NodeView::Atom(_) | NodeView::False => &[],
+        };
+        for &child in children {
+            tick(
+                &mut builder.statistics,
+                builder.limits,
+                builder.cancellation,
+            )?;
+            if child >= index {
+                return Err(invalid());
+            }
         }
     }
-    // Publish only a complete scan. Failed scans retain their earlier frontier.
-    builder.validated = prefix;
+    // Only a completed whole-prefix scan can be retained by a committed append.
+    builder.nodes.set_validation_frontier(prefix);
     Ok(prefix)
 }
 
 fn compile(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     comparison: AggregateComparison,
     bound: i128,
 ) -> Result<(usize, AggregateProfile)> {
     let (nonnegative, total) = validate(builder, elements)?;
-    let falsum = builder.push(Node::False)?;
-    let truth = builder.push(Node::Implies(falsum, falsum))?;
+    let falsum = builder.push(NodeView::False)?;
+    let truth = builder.push(NodeView::Implies(falsum, falsum))?;
     if nonnegative {
         let root = thresholds(builder, elements, comparison, bound, total, falsum, truth)?;
         Ok((root, AggregateProfile::Threshold))
@@ -263,7 +312,7 @@ fn compile(
 }
 
 fn thresholds(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     comparison: AggregateComparison,
     bound: i128,
@@ -280,23 +329,25 @@ fn thresholds(
     let a = threshold(builder, elements, lower, total, falsum, truth)?;
     match comparison {
         AggregateComparison::Ge | AggregateComparison::Gt => Ok(a),
-        AggregateComparison::Lt | AggregateComparison::Le => builder.push(Node::Implies(a, falsum)),
+        AggregateComparison::Lt | AggregateComparison::Le => {
+            builder.push(NodeView::Implies(a, falsum))
+        }
         AggregateComparison::Eq | AggregateComparison::Ne => {
             let b = threshold(builder, elements, bound + 1, total, falsum, truth)?;
             if comparison == AggregateComparison::Eq {
-                let negative = builder.push(Node::Implies(b, falsum))?;
-                builder.push(Node::And(a, negative))
+                let negative = builder.push(NodeView::Implies(b, falsum))?;
+                builder.push(NodeView::And(&[a, negative]))
             } else {
                 // Not-equal is NOT default negation of equality: retain the
                 // implication to preserve reduct support at a nonconvex guard.
-                builder.push(Node::Implies(a, b))
+                builder.push(NodeView::Implies(a, b))
             }
         }
     }
 }
 
 fn threshold(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     bound: i128,
     total: i128,
@@ -336,11 +387,11 @@ fn threshold(
         current[0] = truth;
         for target in 1..width {
             builder.tick()?;
-            let included = builder.push(Node::And(
+            let included = builder.push(NodeView::And(&[
                 element.condition,
                 previous[target.saturating_sub(weight)],
-            ))?;
-            current[target] = builder.push(Node::Or(previous[target], included))?;
+            ]))?;
+            current[target] = builder.push(NodeView::Or(&[previous[target], included]))?;
         }
         std::mem::swap(&mut previous, &mut current);
     }
@@ -348,7 +399,7 @@ fn threshold(
 }
 
 pub(super) fn subsets(
-    builder: &mut Builder<'_>,
+    builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
     comparison: AggregateComparison,
     bound: i128,
@@ -371,26 +422,27 @@ pub(super) fn subsets(
         selected.push(false);
     }
     let mut sum = 0i128;
-    let mut root = None;
+    let mut clauses = Vec::new();
+    let mut antecedent = Vec::new();
+    let mut consequent = Vec::new();
     for ordinal in 0..count {
         builder.tick()?;
         builder.statistics.subsets += 1;
         if !comparison.holds(sum, bound) {
-            let mut antecedent = None;
-            let mut consequent = None;
+            antecedent.clear();
+            consequent.clear();
             for (element, &inside) in elements.iter().zip(&selected) {
                 builder.tick()?;
                 if inside {
-                    antecedent = Some(builder.join(antecedent, element.condition, true)?);
+                    builder.operand(&mut antecedent, element.condition)?;
                 } else {
-                    consequent = Some(builder.join(consequent, element.condition, false)?);
+                    builder.operand(&mut consequent, element.condition)?;
                 }
             }
-            let implication = builder.push(Node::Implies(
-                antecedent.unwrap_or(truth),
-                consequent.unwrap_or(falsum),
-            ))?;
-            root = Some(builder.join(root, implication, true)?);
+            let left = builder.group(&antecedent, truth, true)?;
+            let right = builder.group(&consequent, falsum, false)?;
+            let implication = builder.push(NodeView::Implies(left, right))?;
+            builder.operand(&mut clauses, implication)?;
         }
         if ordinal + 1 < count {
             for (inside, element) in selected.iter_mut().zip(elements) {
@@ -408,5 +460,5 @@ pub(super) fn subsets(
             }
         }
     }
-    Ok(root.unwrap_or(truth))
+    builder.group(&clauses, truth, true)
 }

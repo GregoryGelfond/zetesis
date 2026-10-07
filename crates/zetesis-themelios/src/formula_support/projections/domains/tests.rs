@@ -128,6 +128,29 @@ fn computed_groups_preserve_repeated_columns() {
     with_join(
         "p(4,4).p(4,5).p(5,5).p(6,6).q(2). :-p(X,X),q(Y),X/2=Y,X<5.",
         |join, computation, counters, location| {
+            // Exercise computed selection with Y known and X still free,
+            // independently of the planner's comparison-readiness preference.
+            assert_eq!(join.depth, 0);
+            assert!(join.probes.iter().all(Option::is_none));
+            join.owned_plan()
+                .patterns
+                .sort_by_key(|occurrence| occurrence.atom().predicate().name() != "q");
+            join.decide(
+                computation,
+                &FormulaLimits::default(),
+                &mut budget(),
+                counters,
+                location,
+            )
+            .unwrap();
+            assert_eq!(
+                join.plan
+                    .patterns
+                    .iter()
+                    .map(|occurrence| occurrence.atom().predicate().name())
+                    .collect::<Vec<_>>(),
+                ["q", "p"],
+            );
             let (rows, work) = collect(join, computation, counters, location);
             assert_eq!(rows, vec![numbers(&[4, 2])]);
             assert_eq!(work.table_probes, Some(1));

@@ -12,6 +12,27 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL};
 
+fn bounded_human(
+    source: &str,
+    config: &zetesis_cli::PublicationConfig,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+    cancellation: &Cancellation,
+) -> Result<zetesis_cli::Report, RunError> {
+    let result = if config.solve.oracle == zetesis_cli::Oracle::Closure {
+        crate::support::prepared::relational_human(
+            source,
+            config,
+            output,
+            diagnostics,
+            cancellation,
+        )
+    } else {
+        crate::support::prepared::human(source, config, output, diagnostics, cancellation)
+    };
+    result.map_err(|failure| *failure.cause)
+}
+
 fn output_error(error: &RunError) {
     let RunError::Output(source) = error else {
         panic!("expected transport failure: {error}")
@@ -135,31 +156,47 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
         ("#external a.", vec!["--oracle", "countermodel"], "formula"),
         (
             "a.",
-            vec![
-                "--oracle",
-                "closure",
-                "--grounder",
-                "eager",
-                "--max-ground-rules",
-                "0",
-            ],
+            vec!["--oracle", "closure", "--grounder", "eager"],
             "static",
         ),
-        (
-            "a. #show a.",
-            vec!["--max-observation-work", "0"],
-            "observation",
-        ),
+        ("a. #show a.", vec![], "observation"),
     ] {
         let mut output = Vec::new();
-        let error = run_with_diagnostics(
-            source.into(),
-            &options(&arguments),
-            &mut output,
-            &mut io::sink(),
-            &Cancellation::default(),
-        )
-        .unwrap_err();
+        let error = if matches!(expected, "static" | "observation") {
+            let mut config = zetesis_cli::PublicationConfig::from(&options(&arguments));
+            if expected == "static" {
+                config.solve.max_ground_rules = 0;
+            } else {
+                config.observations.max_work = 0;
+            }
+            let result = if expected == "static" {
+                crate::support::prepared::relational_human(
+                    source,
+                    &config,
+                    &mut output,
+                    &mut io::sink(),
+                    &Cancellation::default(),
+                )
+            } else {
+                crate::support::prepared::human(
+                    source,
+                    &config,
+                    &mut output,
+                    &mut io::sink(),
+                    &Cancellation::default(),
+                )
+            };
+            *result.unwrap_err().cause
+        } else {
+            run_with_diagnostics(
+                source.into(),
+                &options(&arguments),
+                &mut output,
+                &mut io::sink(),
+                &Cancellation::default(),
+            )
+            .unwrap_err()
+        };
         match (&error, expected) {
             (RunError::Expansion(_), "expansion")
             | (RunError::FormulaAdmission(_), "formula")
@@ -175,17 +212,18 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
         }
         assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
     }
-    let mut options = options(&[]);
-    options.max_observation_bytes = 20;
+    let mut options = zetesis_cli::PublicationConfig::from(&options(&[]));
+    options.observations.max_output_bytes = 20;
     let mut output = Vec::new();
-    let error = run_with_diagnostics(
-        "a.b.c.d.e.f.g.h. #show x.".into(),
+    let failure = crate::support::prepared::human(
+        "a.b.c.d.e.f.g.h. #show x.",
         &options,
         &mut output,
         &mut io::sink(),
         &Cancellation::default(),
     )
     .unwrap_err();
+    let error = *failure.cause;
     assert!(matches!(
         error,
         RunError::ObservationOutputLimit { limit: 20, .. }
@@ -247,7 +285,7 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
 
     let failure = zetesis_ferraris::Theory::new(
         1,
-        vec![zetesis_ferraris::Node::Atom(1)],
+        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(1)], vec![]).unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -344,7 +382,7 @@ fn hybrid_device_policy_is_refused_before_parsing() {
 fn process_rejects_non_utf8_and_excessive_stdin_without_claiming_unsat() {
     for (arguments, input, expected) in [
         (
-            vec!["--backend", "cpu", "--max-source-bytes", "1"],
+            vec!["--backend", "cpu", "--memory", "1"],
             b"a.".as_slice(),
             "source byte limit",
         ),
@@ -380,16 +418,16 @@ fn device_output_failure_is_reported_before_adapter_discovery() {
 
 #[test]
 fn incomplete_summaries_propagate_deterministic_prefix_failures() {
-    let mut requested = options(&["--oracle", "closure"]);
-    requested.models = 1;
-    for options in [
-        requested,
-        options(&["--oracle", "closure", "--max-candidates", "0"]),
-        options(&["--oracle", "countermodel", "--max-search-work", "0"]),
-    ] {
+    let mut requested = zetesis_cli::PublicationConfig::from(&options(&["--oracle", "closure"]));
+    requested.solve.models = 1;
+    let mut candidates = zetesis_cli::PublicationConfig::from(&options(&["--oracle", "closure"]));
+    candidates.solve.max_candidates = 0;
+    let mut work = zetesis_cli::PublicationConfig::from(&options(&["--oracle", "countermodel"]));
+    work.solve.max_search_work = 0;
+    for options in [requested, candidates, work] {
         let mut complete = Vec::new();
-        let report = run_with_diagnostics(
-            "{a}.".into(),
+        let report = bounded_human(
+            "{a}.",
             &options,
             &mut complete,
             &mut io::sink(),
@@ -407,8 +445,8 @@ fn incomplete_summaries_propagate_deterministic_prefix_failures() {
         assert!(!text.contains("UNSATISFIABLE"));
         for capacity in 0..=before_timing(&complete) {
             let mut output = BoundedWriter::new(capacity);
-            let error = run_with_diagnostics(
-                "{a}.".into(),
+            let error = bounded_human(
+                "{a}.",
                 &options,
                 &mut output,
                 &mut io::sink(),

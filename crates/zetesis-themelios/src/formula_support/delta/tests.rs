@@ -1,5 +1,9 @@
 //! The actual schedule preserves source occurrences and bootstrap obligations.
 
+mod structural;
+
+use std::cell::Cell;
+
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits};
 
@@ -10,6 +14,32 @@ use crate::formula_support::components::Pattern;
 use crate::formula_support::{Computation, Counters, Join, Support, testing::Fixture};
 use crate::test_support::location;
 use crate::{ExpansionLimits, FormulaLimits};
+
+// This synchronous reference disables only structural delta eligibility. It
+// leaves source metadata, scalar readiness, matching and emission unchanged.
+thread_local! {
+    static STRUCTURAL: Cell<(bool, usize)> = const { Cell::new((true, 0)) };
+}
+
+pub(super) fn structural_enabled() -> bool {
+    STRUCTURAL.get().0
+}
+
+pub(super) fn record_structural() {
+    STRUCTURAL.set((structural_enabled(), STRUCTURAL.get().1 + 1));
+}
+
+fn scoped<T>(enabled: bool, action: impl FnOnce() -> T) -> (T, usize) {
+    struct Restore((bool, usize));
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            STRUCTURAL.set(self.0);
+        }
+    }
+    let _restore = Restore(STRUCTURAL.replace((enabled, 0)));
+    let result = action();
+    (result, STRUCTURAL.get().1)
+}
 
 fn pattern(fixture: &mut Fixture, name: &str, slots: &[usize]) -> Pattern {
     let owned = AtomPattern::new(

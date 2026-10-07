@@ -238,25 +238,34 @@ fn partial_status_output_cannot_acknowledge_summary() {
 
 #[test]
 fn styling_bytes_obey_the_complete_record_limit() {
-    let mut settings = options(&["--color", "always"]);
+    let settings = options(&["--color", "always"]);
     let full = output("a.", &settings);
     let record_end = full.find("\na\n").unwrap() + "\na\n".len();
     let record_start = full.find("\u{1b}[1;36mAnswer:").unwrap();
-    settings.max_observation_bytes = record_end - record_start;
-    assert_eq!(
-        before_timing(&output("a.", &settings)),
-        before_timing(&full)
-    );
-    settings.max_observation_bytes -= 1;
-    let mut bytes = Vec::new();
-    let failure = run_detailed_with_diagnostics(
+    let maximum = record_end - record_start;
+    let mut admitted = Vec::new();
+    zetesis_cli::run_with_renderer(
         "a.".into(),
         &settings,
-        &mut bytes,
+        &mut zetesis_cli::HumanRenderer::new(&mut admitted, ColorMode::Always, maximum),
         &mut io::sink(),
         &Cancellation::default(),
     )
-    .unwrap_err();
+    .unwrap();
+    assert_eq!(
+        before_timing(std::str::from_utf8(&admitted).unwrap()),
+        before_timing(&full)
+    );
+    let mut bytes = Vec::new();
+    let failure = zetesis_cli::run_with_renderer(
+        "a.".into(),
+        &settings,
+        &mut zetesis_cli::HumanRenderer::new(&mut bytes, ColorMode::Always, maximum - 1),
+        &mut io::sink(),
+        &Cancellation::default(),
+    )
+    .unwrap_err()
+    .into_legacy();
     assert!(matches!(
         *failure.cause,
         RunError::ObservationOutputLimit { .. }

@@ -1,0 +1,1764 @@
+{
+  "raw_sha256": "f180f792197c60fb3c1b463d1bf2670beccdb8a961ac23bee657bb9d948a5f15",
+  "functions": [
+    {
+      "id": 11,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "identities",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Value": [
+            100,
+            {
+              "Ref": [
+                {
+                  "Body": 1
+                },
+                {
+                  "Deduplicated": 6
+                },
+                "Shared"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Trait": 6
+          }
+        },
+        {
+          "Ident": [
+            "clone",
+            0
+          ]
+        }
+      ],
+      "src": {
+        "TraitImpl": {
+          "impl_ref": {
+            "id": 6,
+            "generics": {
+              "regions": [
+
+              ],
+              "types": [
+
+              ],
+              "const_generics": [
+
+              ],
+              "trait_refs": [
+
+              ]
+            }
+          },
+          "trait_ref": {
+            "id": 0,
+            "generics": {
+              "regions": [
+
+              ],
+              "types": [
+                {
+                  "Deduplicated": 6
+                }
+              ],
+              "const_generics": [
+
+              ],
+              "trait_refs": [
+
+              ]
+            }
+          },
+          "item_id": 0,
+          "reuses_default": true
+        }
+      },
+      "arguments": 1
+    },
+    {
+      "id": 13,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "evaluate",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 5,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 14,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "failed_root",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 15,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "find_countermodel",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 6,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 16,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "check_subset",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 5,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 17,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "select_atoms",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 18,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "advance_subset",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4
+    },
+    {
+      "id": 19,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "validate_node",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3
+    },
+    {
+      "id": 20,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "validate_nodes",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2
+    },
+    {
+      "id": 21,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "validate_root",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2
+    },
+    {
+      "id": 22,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "validate_roots",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2
+    },
+    {
+      "id": 23,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "admit",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4
+    },
+    {
+      "id": 24,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 3
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "new",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2
+    },
+    {
+      "id": 25,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+                  {
+                    "index": 0,
+                    "name": "'a",
+                    "variance": "Unknown",
+                    "mutability": "Unknown"
+                  }
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 4
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "new",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2
+    },
+    {
+      "id": 26,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 5
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "new",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 5
+    },
+    {
+      "id": 27,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 6
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "new",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4
+    },
+    {
+      "id": 28,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 7
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "new",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 29,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "reserve",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 30,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "reduct",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+                  {
+                    "index": 0,
+                    "name": "'a",
+                    "variance": "Unknown",
+                    "mutability": "Unknown"
+                  }
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 8
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "freeze",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2
+    },
+    {
+      "id": 31,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "reduct",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+                  {
+                    "index": 0,
+                    "name": "'a",
+                    "variance": "Unknown",
+                    "mutability": "Unknown"
+                  }
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 8
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "new",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3
+    },
+    {
+      "id": 32,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "reduct",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+                  {
+                    "index": 0,
+                    "name": "'a",
+                    "variance": "Unknown",
+                    "mutability": "Unknown"
+                  }
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 8
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "is_satisfied_by",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4
+    },
+    {
+      "id": 33,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "insert_atoms",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3
+    },
+    {
+      "id": 34,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "oracle",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "check",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 35,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "check_interpretation",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3
+    },
+    {
+      "id": 36,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 9
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "candidate",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 37,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 9
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "verdict",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 38,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 9
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "accepted",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 39,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 9
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "statistics",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 40,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 9
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "into_stable_interpretation",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 41,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 10
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 42,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 10
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "interpretation",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 43,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "checked",
+            0
+          ]
+        },
+        {
+          "Impl": {
+            "Ty": {
+              "params": {
+                "regions": [
+
+                ],
+                "types": [
+
+                ],
+                "const_generics": [
+
+                ],
+                "trait_clauses": [
+
+                ],
+                "regions_outlive": [
+
+                ],
+                "types_outlive": [
+
+                ],
+                "trait_type_constraints": [
+
+                ]
+              },
+              "skip_binder": {
+                "Deduplicated": 10
+              },
+              "kind": "InherentImplBlock"
+            }
+          }
+        },
+        {
+          "Ident": [
+            "into_interpretation",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 1
+    },
+    {
+      "id": 44,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "tight",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "compile",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "classify",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 45,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "atomic_choice",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "atom",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 2,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 46,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "atomic_choice",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "pair",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 47,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "tight",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "compile",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "producer",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 3,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 84,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "theory",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "admit_dimensions",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4
+    },
+    {
+      "id": 102,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "tight",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "compile",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "classify_step",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    },
+    {
+      "id": 268,
+      "name": [
+        {
+          "Ident": [
+            "zetesis_ferraris",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "tight",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "compile",
+            0
+          ]
+        },
+        {
+          "Ident": [
+            "classify_node",
+            0
+          ]
+        }
+      ],
+      "src": "Normal",
+      "arguments": 4,
+      "rename": {
+        "index": 1,
+        "old": "theory",
+        "new": "program",
+        "type": {
+          "Deduplicated": 100
+        }
+      }
+    }
+  ],
+  "rename_ids": [
+    11,
+    13,
+    14,
+    15,
+    16,
+    17,
+    28,
+    34,
+    44,
+    45,
+    46,
+    47,
+    102,
+    268
+  ]
+}

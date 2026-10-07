@@ -19,6 +19,7 @@ use zetesis_ferraris::{
 /// Keep returned roots charged while canonical remapping and consumers overlap.
 pub(super) struct GuardFamily {
     pub(super) build: AggregateFamilyBuild,
+    pub(super) appended: super::appended::Detached,
     _storage: StorageLease,
 }
 
@@ -50,13 +51,16 @@ impl Builder<'_, '_, '_> {
         let (evaluated, numeric) = self.evaluate_numeric_guards(guards, assignment, location)?;
         // An entirely logical comparison list needs no aggregate validation or
         // threshold state, just as on the scalar route.
-        let first = self.nodes.len();
+        let first = self.nodes.view().len();
         let family = if numeric.len() == 0 {
             None
         } else {
             Some(self.append_guard_family(elements, numeric.slice(), numeric.len(), location)?)
         };
-        let canonical = self.intern_appended(first, location)?;
+        let canonical = family
+            .as_ref()
+            .map(|family| self.intern_appended(&family.appended.suffix, location))
+            .transpose()?;
         let mut roots = family.as_ref().map(|family| family.build.roots().iter());
         let mut result = VERUM;
         for (guard, bound) in guards.iter().zip(evaluated.iter()) {
@@ -70,7 +74,11 @@ impl Builder<'_, '_, '_> {
                     if let Some(capture) = capture.as_deref_mut() {
                         capture.guard(aggregate_comparison(guard.relation), bound);
                     }
-                    remap(*root, first, &canonical)
+                    remap(
+                        *root,
+                        first,
+                        canonical.as_ref().expect("numeric family").slice(),
+                    )
                 }
                 NumericComparison::Constant(truth) => {
                     if let Some(capture) = capture.as_deref_mut() {
@@ -167,9 +175,9 @@ impl Builder<'_, '_, '_> {
             max_guards,
         };
         let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
-        let result = self
-            .nodes
-            .append_aggregate_family(elements, guards, limits, &cancellation);
+        let previous_operands = self.nodes.parts().operands().len();
+        let mut transaction = self.nodes.transaction();
+        let result = transaction.append_aggregate_family(elements, guards, limits, &cancellation);
         let work = match &result {
             Ok(build) => build.statistics().work,
             Err(error) => error.statistics().work,
@@ -177,6 +185,14 @@ impl Builder<'_, '_, '_> {
         // The transaction's work ceiling is capped by remaining formula work.
         self.counters.accounting.work += work;
         let build = result.map_err(|error| FormulaFailure::Aggregate { error, location })?;
+        let appended = super::appended::detach(
+            transaction,
+            previous_operands,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
         storage.observe(build.root_storage_bytes(), location)?;
         self.computation.storage_observed(
             &storage,
@@ -188,6 +204,7 @@ impl Builder<'_, '_, '_> {
         )?;
         Ok(GuardFamily {
             build,
+            appended,
             _storage: storage,
         })
     }

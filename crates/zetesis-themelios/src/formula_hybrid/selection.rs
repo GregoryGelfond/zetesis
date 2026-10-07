@@ -261,6 +261,9 @@ impl RowFilter for Selection<'_, '_> {
 }
 
 #[cfg(test)]
+mod routes;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{

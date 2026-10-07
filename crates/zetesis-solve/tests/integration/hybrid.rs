@@ -43,6 +43,7 @@ fn limits() -> FormulaLimits {
         theory: zetesis_ferraris::AdmissionLimits {
             max_atoms: 256,
             max_nodes: 4_096,
+            max_operands: 8_192,
             max_roots: ROOT_CEILING,
         },
         ..Default::default()
@@ -108,11 +109,11 @@ fn monotone_family() -> Family {
 #[test]
 fn hybrid_admits_the_retained_root_ceiling() {
     let core = eager(CORE, &limits()).unwrap();
-    assert_eq!(
-        core.theory().roots().len(),
-        30,
-        "producer and support roots remain real"
-    );
+    // Six facts and six disjunctions contribute twelve ordinary roots. The
+    // facts retain six guards; each p(X)/q(X) pair shares one necessary d(X)
+    // condition, contributing six more guards. Eager constraints still add
+    // fifteen roots, exceeding 32; the hybrid retains only this complete core.
+    assert_eq!(core.theory().roots().len(), 12 + 6 + 6);
     let failure = eager(MONOTONE, &limits()).unwrap_err();
     assert!(matches!(
         failure,
@@ -557,4 +558,53 @@ fn a_constraint_keeps_the_relation_only_it_reads() {
     assert_eq!(actual, expected);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert_eq!(outcome.verified_models(), 2);
+}
+
+#[test]
+fn ordinary_hybrid_checks_a_wide_ready_body() {
+    use std::fmt::Write;
+
+    let resources = zetesis_solve::Resources::new(SolveConfig::REFERENCE_MEMORY, NonZeroUsize::MIN);
+    let mut source = String::from("a;b.\n");
+    for atom in 0..1024 {
+        writeln!(source, "p{atom}.").unwrap();
+    }
+    source.push_str(":-");
+    for atom in 0..1024 {
+        if atom != 0 {
+            source.push(',');
+        }
+        write!(source, "p{atom}").unwrap();
+    }
+    source.push('.');
+    let admitted = prepare_formula(
+        source,
+        resources.admission_options(),
+        resources.expansion_limits(),
+        resources.formula_limits(),
+    )
+    .unwrap()
+    .ground_hybrid()
+    .unwrap();
+    assert_eq!(admitted.streamed_templates(), 1);
+    // The planner inspects every remaining ready occurrence at each depth:
+    // even two ticks per pair exceed the former hidden 1,048,576 TermWork cap.
+    // All pN are mandatory facts, so this sole constraint makes the source UNSAT.
+    let config = SolveConfig {
+        grounder: Grounder::Lazy,
+        models: 0,
+        ..resources.solve_config()
+    };
+    let (family, outcome) = capture(PreparedInput::hybrid(&admitted), config);
+    assert!(family.is_empty());
+    assert!(outcome.unsatisfiable());
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    let regions = outcome
+        .countermodel_statistics()
+        .unwrap()
+        .region_filter
+        .unwrap();
+    assert!(regions.checks > 0);
+    assert!(regions.refuted > 0);
+    assert_eq!(regions.failed, 0);
 }

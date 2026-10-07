@@ -45,7 +45,7 @@ use std::num::NonZeroUsize;
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_cpu::{Cancellation, Stop};
 
-use crate::{Node, Theory};
+use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod counters;
@@ -196,25 +196,41 @@ pub fn producers(
     })
 }
 
-fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, Stop> {
-    let nodes = theory.nodes();
-    let mut ordinary = Vec::with_capacity(nodes.len());
-    for node in nodes {
+fn ordinary_operands(
+    operands: &[usize],
+    ordinary: &[bool],
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    let mut all = true;
+    for &child in operands {
         work.tick()?;
-        ordinary.push(match *node {
-            Node::Atom(_) | Node::False => true,
-            Node::Or(left, right) => ordinary[left] && ordinary[right],
+        all &= ordinary[child];
+    }
+    Ok(all)
+}
+
+fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, Stop> {
+    let nodes = theory.view();
+    let mut ordinary = Vec::with_capacity(nodes.len());
+    for index in 0..nodes.len() {
+        work.tick()?;
+        ordinary.push(match nodes.node(index).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Atom(_) | NodeView::False => true,
+            NodeView::Or(operands) => ordinary_operands(operands, &ordinary, work)?,
             _ => false,
         });
     }
     let mut rules = Vec::new();
     for &root in theory.roots() {
         work.tick()?;
-        let (body, head) = match nodes[root] {
-            Node::Implies(body, head) => (Some(body), head),
+        let (body, head) = match nodes.node(root).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Implies(body, head) => (Some(body), head),
             _ => (None, root),
         };
-        if matches!(nodes[head], Node::False) {
+        if matches!(
+            nodes.node(head).map_err(|_| Stop::InvalidProgram)?,
+            NodeView::False
+        ) {
             continue;
         }
         let (heads, choice) = if ordinary[head] {
@@ -222,11 +238,16 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
             let mut stack = vec![head];
             while let Some(node) = stack.pop() {
                 work.tick()?;
-                match nodes[node] {
-                    Node::Atom(atom) => {
+                match nodes.node(node).map_err(|_| Stop::InvalidProgram)? {
+                    NodeView::Atom(atom) => {
                         heads.insert(atom);
                     }
-                    Node::Or(left, right) => stack.extend([left, right]),
+                    NodeView::Or(operands) => {
+                        for &child in operands {
+                            work.tick()?;
+                            stack.push(child);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -369,7 +390,8 @@ impl<'q> Work<'q> {
 /// among each node's operands. Built once per theory from its nodes. The three
 /// immutable incidence maps store ordered rows as offsets
 /// into contiguous entry vectors, retaining every occurrence already chosen by
-/// chain formation. Compaction adds only linear construction passes.
+/// chain formation. Chain formation and compaction use linear construction
+/// passes, visiting each chain interior once when collecting its leaves.
 ///
 /// A node is absorbed into its parent's chain when it has that one parent,
 /// the same connective, and is not a root of the theory; every other
@@ -390,6 +412,8 @@ pub struct Narrower {
     absorbed: Vec<bool>,
     /// The atoms among a node's operands, for the split ranking.
     atom_operands: Adjacency,
+    /// Logical indexing visits: each native node and operand occurrence.
+    work: u64,
 }
 
 /// A maximal tree of one connective, read as one node over its operands.
@@ -414,87 +438,112 @@ fn chain_position(link: NonZeroUsize) -> usize {
     link.get() - 1
 }
 
-/// The chains of a theory: each conjunction or disjunction not absorbed
-/// into its parent is a root, with the chain it roots and, per node,
-/// whether the node is absorbed. Operands precede their parents, so a
-/// node's chain is complete when its parent is reached: a same-connective
-/// operand that is not a root of the theory and has this one parent joins
-/// the parent's chain, its own dissolving into it.
-fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>) {
-    let nodes = theory.nodes();
+/// A conjunction or disjunction and its ordered operand occurrences.
+fn connective_operands(node: NodeView<'_>) -> Option<(bool, &[usize])> {
+    match node {
+        NodeView::Or(operands) => Some((true, operands)),
+        NodeView::And(operands) => Some((false, operands)),
+        NodeView::Atom(_) | NodeView::False | NodeView::Implies(_, _) => None,
+    }
+}
+
+/// Classify interiors by distinct parents, retaining asserted roots. Markers
+/// coalesce repeated child occurrences in one parent without a quadratic scan.
+fn absorbed_nodes(theory: &Theory) -> Vec<bool> {
+    let nodes = theory.view();
     let mut roots = vec![false; nodes.len()];
     for &root in theory.roots() {
         roots[root] = true;
     }
     let mut parent_count = vec![0usize; nodes.len()];
-    for node in nodes {
-        match *node {
-            Node::Atom(_) | Node::False => {}
-            Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) => {
-                parent_count[a] += 1;
-                if b != a {
-                    parent_count[b] += 1;
-                }
+    let mut last_parent = vec![None; nodes.len()];
+    for index in 0..nodes.len() {
+        let pair;
+        let operands = match nodes.node(index).expect("admitted node") {
+            NodeView::Atom(_) | NodeView::False => continue,
+            NodeView::And(operands) | NodeView::Or(operands) => operands,
+            NodeView::Implies(a, b) => {
+                pair = [a, b];
+                &pair
+            }
+        };
+        for &child in operands {
+            if last_parent[child] != Some(index) {
+                last_parent[child] = Some(index);
+                parent_count[child] += 1;
             }
         }
     }
-    let mut built: Vec<Chain> = Vec::new();
-    let mut chain_of = vec![None; nodes.len()];
     let mut absorbed = vec![false; nodes.len()];
-    for (index, node) in nodes.iter().enumerate() {
-        let (disjunction, a, b) = match *node {
-            Node::Or(a, b) => (true, a, b),
-            Node::And(a, b) => (false, a, b),
-            _ => continue,
+    for index in 0..nodes.len() {
+        let Some((disjunction, operands)) =
+            connective_operands(nodes.node(index).expect("admitted node"))
+        else {
+            continue;
         };
+        for &operand in operands {
+            absorbed[operand] = !roots[operand]
+                && parent_count[operand] == 1
+                && connective_operands(nodes.node(operand).expect("admitted operand"))
+                    .is_some_and(|(inner, _)| inner == disjunction);
+        }
+    }
+    absorbed
+}
+
+/// Collect each live chain's distinct leaves once, in left-to-right order.
+/// Interiors have one parent, so the live chains partition them; no completed
+/// prefix is copied into its parent. A node-indexed chain marker coalesces
+/// repeated leaves without searching the already collected operand vector.
+///
+/// The admitted DAG's edges point backwards. Each pending interior is therefore
+/// replaced by smaller indices, and each interior belongs to just one walk.
+/// With N nodes, E edges and R asserted-root occurrences, classification and
+/// collection take O(N + E + R) work, O(N + E) temporary and retained
+/// storage. The explicit stack has at most E + 1 entries and is reused
+/// between chains; no recursive call uses the formula depth. Construction
+/// remains infallible, as before.
+fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>) {
+    let nodes = theory.view();
+    let absorbed = absorbed_nodes(theory);
+    let mut chains = Vec::new();
+    let mut chain_of = vec![None; nodes.len()];
+    let mut seen = vec![None; nodes.len()];
+    let mut pending = Vec::new();
+    for root in 0..nodes.len() {
+        let Some((disjunction, _)) = connective_operands(nodes.node(root).expect("admitted node"))
+        else {
+            continue;
+        };
+        if absorbed[root] {
+            continue;
+        }
+        let link = encoded_chain(chains.len());
+        chain_of[root] = Some(link);
         let mut operands = Vec::new();
-        // A node reached through both sides is one operand, seen once: seen
-        // twice, an absorbed one would return as an opaque second operand,
-        // its chain already dissolved, and the chain would wait for
-        // knowledge it never gets.
-        let sides: &[usize] = if b == a { &[a] } else { &[a, b] };
-        for &operand in sides {
-            let inner = if roots[operand] || parent_count[operand] != 1 {
-                None
+        pending.push(root);
+        while let Some(operand) = pending.pop() {
+            if seen[operand] == Some(link) {
+                continue;
+            }
+            seen[operand] = Some(link);
+            if operand == root || absorbed[operand] {
+                let (_, children) =
+                    connective_operands(nodes.node(operand).expect("admitted node"))
+                        .expect("chain interior connective");
+                // Reverse pushing preserves the first left-to-right occurrence.
+                pending.extend(children.iter().rev().copied());
             } else {
-                chain_of[operand]
-                    .map(chain_position)
-                    .filter(|&k| built[k].disjunction == disjunction)
-            };
-            // The operands stay distinct: a node reached twice, through
-            // both sides, is one operand, as it is one node of the DAG.
-            if let Some(inner) = inner {
-                chain_of[operand] = None;
-                absorbed[operand] = true;
-                for leaf in std::mem::take(&mut built[inner].operands) {
-                    if !operands.contains(&leaf) {
-                        operands.push(leaf);
-                    }
-                }
-            } else if !operands.contains(&operand) {
                 operands.push(operand);
             }
         }
-        chain_of[index] = Some(encoded_chain(built.len()));
-        built.push(Chain {
+        chains.push(Chain {
             disjunction,
-            root: index,
+            root,
             operands,
         });
     }
-    // Dissolved chains keep their slot, emptied; renumber the live ones.
-    let mut live = Vec::with_capacity(built.len());
-    let mut renumbered = vec![None; built.len()];
-    for (old, chain) in built.into_iter().enumerate() {
-        if !absorbed[chain.root] {
-            renumbered[old] = Some(encoded_chain(live.len()));
-            live.push(chain);
-        }
-    }
-    for entry in &mut chain_of {
-        *entry = entry.and_then(|old| renumbered[chain_position(old)]);
-    }
-    (live, chain_of, absorbed)
+    (chains, chain_of, absorbed)
 }
 
 /// What a narrowing knows about a region, carried from a region to its
@@ -570,7 +619,7 @@ mod tests;
 /// operand is one incidence. Distinct atom nodes carrying the same atom remain
 /// distinct occurrences when this stream is projected to atom operands.
 fn dependencies<'a>(
-    nodes: &'a [Node],
+    nodes: FormulaView<'a>,
     chains: &'a [Chain],
 ) -> impl Iterator<Item = (usize, usize)> + Clone + 'a {
     chains
@@ -581,9 +630,9 @@ fn dependencies<'a>(
                 .iter()
                 .map(move |&operand| (operand, chain.root))
         })
-        .chain(nodes.iter().enumerate().flat_map(|(index, node)| {
-            let operands = match *node {
-                Node::Implies(a, b) => [Some(a), (b != a).then_some(b)],
+        .chain((0..nodes.len()).flat_map(move |index| {
+            let operands = match nodes.node(index).expect("admitted node") {
+                NodeView::Implies(a, b) => [Some(a), (b != a).then_some(b)],
                 _ => [None, None],
             };
             operands
@@ -607,35 +656,39 @@ impl Narrower {
 
     /// Index the same DAG using checked compact adjacency construction.
     /// Each incidence map reads its immutable edge stream twice and uses linear
-    /// row scans, preserving row order and duplicates. The existing logical
-    /// index receipt remains one visit per theory node; construction passes and
+    /// row scans, preserving row order and duplicates. Chain construction walks
+    /// each final chain once with linear scratch; it never copies intermediate
+    /// chain prefixes. The logical index receipt is one visit per native node and operand
+    /// occurrence; construction passes and
     /// storage initialization are not additional charged propagation reads.
     ///
     /// # Errors
     /// Returns [`Stop::Allocation`] for compact-adjacency offset overflow or
     /// reservation failure. Chain construction and later knowledge allocation
     /// retain their existing infallible behavior; this is not universal OOM
-    /// recovery. This constructor has no independent cancellation contract.
+    /// recovery. An invalid operand view returns [`Stop::InvalidProgram`].
+    /// This constructor has no independent cancellation contract.
     pub fn try_new(theory: &Theory) -> Result<Self, Stop> {
-        let nodes = theory.nodes();
+        let nodes = theory.view();
         let (chains, chain_of, absorbed) = chains(theory);
         let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
-        let atom_operands = Adjacency::build(
+        let atom_operands = Adjacency::try_build(
             nodes.len(),
-            dependencies(nodes, &chains).filter_map(|(operand, parent)| match nodes[operand] {
-                Node::Atom(atom) => Some((parent, atom)),
-                _ => None,
+            dependencies(nodes, &chains).filter_map(|(operand, parent)| {
+                match nodes.node(operand) {
+                    Ok(NodeView::Atom(atom)) => Some(Ok((parent, atom))),
+                    Ok(_) => None,
+                    Err(_) => Some(Err(Stop::InvalidProgram)),
+                }
             }),
         )?;
-        let atom_nodes = Adjacency::build(
+        let atom_nodes = Adjacency::try_build(
             theory.atom_count(),
-            nodes
-                .iter()
-                .enumerate()
-                .filter_map(|(index, node)| match *node {
-                    Node::Atom(atom) => Some((atom, index)),
-                    _ => None,
-                }),
+            (0..nodes.len()).filter_map(|index| match nodes.node(index) {
+                Ok(NodeView::Atom(atom)) => Some(Ok((atom, index))),
+                Ok(_) => None,
+                Err(_) => Some(Err(Stop::InvalidProgram)),
+            }),
         )?;
         Ok(Self {
             parents,
@@ -644,13 +697,15 @@ impl Narrower {
             chain_of,
             absorbed,
             atom_operands,
+            work: u64::try_from(nodes.len() as u128 + theory.parts().occurrences() as u128)
+                .map_err(|_| Stop::Allocation)?,
         })
     }
 
-    /// The work indexing charged: one visit per node.
+    /// The work indexing charged: one visit per node and operand occurrence.
     #[must_use]
     pub fn work(&self) -> u64 {
-        self.parents.len() as u64
+        self.work
     }
 
     /// Knowledge of nothing, for the root of a tree over this theory.
@@ -1095,13 +1150,15 @@ impl<C: Count> Closure<'_, C> {
         step
     }
 
-    /// An atom learns to hold or to fail, and every node carrying it
-    /// learns the same. A newly held atom has its support rechecked when
-    /// producers are known.
+    /// An atom learns to hold or to fail, and every unmasked node carrying
+    /// it learns the same. Masked occurrences remain falsum independently
+    /// of the tested interpretation. A newly held atom has its support
+    /// rechecked when producers are known.
     fn atom(
         &mut self,
         index: &Narrower,
         producers: Option<&Producers>,
+        frozen: Option<&[bool]>,
         atom: usize,
         value: bool,
     ) -> Step {
@@ -1116,6 +1173,9 @@ impl<C: Count> Closure<'_, C> {
         self.lists.learned.push(atom);
         let mut step = step;
         for &node in &index.atom_nodes[atom] {
+            if frozen.is_some_and(|truth| !truth[node]) {
+                continue;
+            }
             step = step.join(if value {
                 self.sure(node)
             } else {
@@ -1144,15 +1204,17 @@ impl<C: Count> Closure<'_, C> {
             producers,
             frozen,
         } = subject;
-        let nodes = theory.nodes();
+        let nodes = theory.view();
         let mut step = Step::Unchanged;
         if !self.known.seeded {
-            for (node, kind) in nodes.iter().enumerate() {
+            for node in 0..nodes.len() {
                 if index.absorbed[node] {
                     continue;
                 }
-                let falsum =
-                    matches!(kind, Node::False) || frozen.is_some_and(|truth| !truth[node]);
+                let falsum = matches!(
+                    nodes.node(node).map_err(|_| Stop::InvalidProgram)?,
+                    NodeView::False
+                ) || frozen.is_some_and(|truth| !truth[node]);
                 if falsum {
                     step = step.join(self.never(node));
                 }
@@ -1172,7 +1234,7 @@ impl<C: Count> Closure<'_, C> {
         // the swap moves a box pointer and copies nothing.
         let mut seen = std::mem::take(&mut self.known.seen);
         for (atom, value) in region.decided_since(&seen) {
-            step = step.join(self.atom(index, producers, atom, value));
+            step = step.join(self.atom(index, producers, frozen, atom, value));
         }
         region.snapshot_decided(&mut seen);
         self.known.seen = seen;
@@ -1213,19 +1275,15 @@ impl<C: Count> Closure<'_, C> {
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
         work.tick()?;
-        let Subject {
-            theory,
-            producers,
-            frozen,
-        } = subject;
-        let nodes = theory.nodes();
+        let Subject { theory, frozen, .. } = subject;
+        let nodes = theory.view();
         let masked = |node: usize| frozen.is_some_and(|truth| !truth[node]);
         for &atom in &index.atom_operands[node] {
             self.known.unknown.decrement(atom);
         }
         let mut step = Step::Unchanged;
         if !masked(node) {
-            step = step.join(self.teach_operands(nodes, index, producers, node));
+            step = step.join(self.teach_operands(subject, index, node, work)?);
         }
         for &parent in &index.parents[node] {
             work.tick()?;
@@ -1233,11 +1291,11 @@ impl<C: Count> Closure<'_, C> {
                 continue;
             }
             step = step.join(if let Some(chain) = index.chain_of[parent] {
-                self.operand_changed(index, chain_position(chain), value)
+                self.operand_changed(index, chain_position(chain), value, work)?
             } else {
                 let up = self.learn_from_operands(nodes, parent);
                 if bit(&self.known.sure, parent) || bit(&self.known.never, parent) {
-                    up.join(self.teach_operands(nodes, index, producers, parent))
+                    up.join(self.teach_operands(subject, index, parent, work)?)
                 } else {
                     up
                 }
@@ -1251,7 +1309,13 @@ impl<C: Count> Closure<'_, C> {
     /// disjunction known to hold with all but one failing forces that one;
     /// a conjunction dually (`disj_chain_sure`, `disj_chain_never`,
     /// `disj_chain_unit` and the conjunction laws).
-    fn operand_changed(&mut self, index: &Narrower, chain: usize, value: bool) -> Step {
+    fn operand_changed(
+        &mut self,
+        index: &Narrower,
+        chain: usize,
+        value: bool,
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
         let Chain {
             disjunction,
             root,
@@ -1267,19 +1331,19 @@ impl<C: Count> Closure<'_, C> {
             self.known.sure_operands.get(chain),
             self.known.never_operands.get(chain),
         );
-        match (disjunction, value) {
+        Ok(match (disjunction, value) {
             (true, true) => self.sure(root),
             (true, false) if never == total => self.never(root),
             (true, false) if bit(&self.known.sure, root) && never + 1 == total => {
-                self.unit(index, chain)
+                self.unit(index, chain, work)?
             }
             (false, false) => self.never(root),
             (false, true) if sure == total => self.sure(root),
             (false, true) if bit(&self.known.never, root) && sure + 1 == total => {
-                self.unit(index, chain)
+                self.unit(index, chain, work)?
             }
             _ => Step::Unchanged,
-        }
+        })
     }
 
     /// The one operand of a chain not yet known learns what the chain's
@@ -1289,24 +1353,28 @@ impl<C: Count> Closure<'_, C> {
     /// set when it learns and counted when it is revisited, so the scan
     /// may find none, every operand being known with one count pending,
     /// and then the pending step decides the chain.
-    fn unit(&mut self, index: &Narrower, chain: usize) -> Step {
+    fn unit(&mut self, index: &Narrower, chain: usize, work: &mut Work<'_>) -> Result<Step, Stop> {
         let Chain {
             disjunction,
             ref operands,
             ..
         } = index.chains[chain];
-        let open = operands.iter().copied().find(|&operand| {
-            if disjunction {
+        for &operand in operands {
+            work.tick()?;
+            let open = if disjunction {
                 !bit(&self.known.never, operand)
             } else {
                 !bit(&self.known.sure, operand)
+            };
+            if open {
+                return Ok(if disjunction {
+                    self.sure(operand)
+                } else {
+                    self.never(operand)
+                });
             }
-        });
-        match open {
-            Some(operand) if disjunction => self.sure(operand),
-            Some(operand) => self.never(operand),
-            None => Step::Unchanged,
         }
+        Ok(Step::Unchanged)
     }
 
     /// A known node teaches its operands what its knowledge leaves them,
@@ -1317,18 +1385,24 @@ impl<C: Count> Closure<'_, C> {
     /// (conjunction).
     fn teach_operands(
         &mut self,
-        nodes: &[Node],
+        subject: Subject<'_>,
         index: &Narrower,
-        producers: Option<&Producers>,
         node: usize,
-    ) -> Step {
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
+        let Subject {
+            theory,
+            producers,
+            frozen,
+        } = subject;
+        let nodes = theory.view();
         let mut step = Step::Unchanged;
         if let Some(chain) = index.chain_of[node] {
-            step = step.join(self.teach_chain(index, chain_position(chain)));
+            step = step.join(self.teach_chain(index, chain_position(chain), work)?);
         }
         if bit(&self.known.sure, node) {
-            step = step.join(match nodes[node] {
-                Node::Atom(atom) => {
+            step = step.join(match nodes.node(node).expect("admitted node") {
+                NodeView::Atom(atom) => {
                     // A held head blocks the other heads of its producers.
                     if let Some(producers) = producers {
                         for &producer in &producers.by_head[atom] {
@@ -1339,11 +1413,11 @@ impl<C: Count> Closure<'_, C> {
                             }
                         }
                     }
-                    self.atom(index, producers, atom, true)
+                    self.atom(index, producers, frozen, atom, true)
                 }
-                Node::False => Step::Contradiction,
-                Node::And(..) | Node::Or(..) => Step::Unchanged,
-                Node::Implies(a, b) => {
+                NodeView::False => Step::Contradiction,
+                NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
+                NodeView::Implies(a, b) => {
                     if bit(&self.known.sure, a) {
                         self.sure(b)
                     } else if bit(&self.known.never, b) {
@@ -1355,10 +1429,10 @@ impl<C: Count> Closure<'_, C> {
             });
         }
         if bit(&self.known.never, node) {
-            step = step.join(match nodes[node] {
-                Node::Atom(atom) => self.atom(index, producers, atom, false),
-                Node::False | Node::And(..) | Node::Or(..) => Step::Unchanged,
-                Node::Implies(a, b) => self.sure(a).join(self.never(b)),
+            step = step.join(match nodes.node(node).expect("admitted node") {
+                NodeView::Atom(atom) => self.atom(index, producers, frozen, atom, false),
+                NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
+                NodeView::Implies(a, b) => self.sure(a).join(self.never(b)),
             });
             if let Some(producers) = producers {
                 for &producer in &producers.by_body[node] {
@@ -1368,11 +1442,16 @@ impl<C: Count> Closure<'_, C> {
                 }
             }
         }
-        step
+        Ok(step)
     }
 
     /// What a chain's own knowledge leaves its operands.
-    fn teach_chain(&mut self, index: &Narrower, chain: usize) -> Step {
+    fn teach_chain(
+        &mut self,
+        index: &Narrower,
+        chain: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
         let Chain {
             disjunction,
             root,
@@ -1383,10 +1462,11 @@ impl<C: Count> Closure<'_, C> {
         if bit(&self.known.sure, root) {
             if disjunction {
                 if self.known.never_operands.get(chain) + 1 == total {
-                    step = step.join(self.unit(index, chain));
+                    step = step.join(self.unit(index, chain, work)?);
                 }
             } else {
                 for &operand in operands {
+                    work.tick()?;
                     step = step.join(self.sure(operand));
                 }
             }
@@ -1394,20 +1474,21 @@ impl<C: Count> Closure<'_, C> {
         if bit(&self.known.never, root) {
             if disjunction {
                 for &operand in operands {
+                    work.tick()?;
                     step = step.join(self.never(operand));
                 }
             } else if self.known.sure_operands.get(chain) + 1 == total {
-                step = step.join(self.unit(index, chain));
+                step = step.join(self.unit(index, chain, work)?);
             }
         }
-        step
+        Ok(step)
     }
 
     /// An implication learns from its operands what the connective
     /// dictates; chains learn by their counters.
-    fn learn_from_operands(&mut self, nodes: &[Node], node: usize) -> Step {
-        match nodes[node] {
-            Node::Implies(a, b) => {
+    fn learn_from_operands(&mut self, nodes: FormulaView<'_>, node: usize) -> Step {
+        match nodes.node(node).expect("admitted node") {
+            NodeView::Implies(a, b) => {
                 let mut up = Step::Unchanged;
                 if bit(&self.known.never, a) || bit(&self.known.sure, b) {
                     up = up.join(self.sure(node));
@@ -1417,7 +1498,9 @@ impl<C: Count> Closure<'_, C> {
                 }
                 up
             }
-            Node::Atom(_) | Node::False | Node::And(..) | Node::Or(..) => Step::Unchanged,
+            NodeView::Atom(_) | NodeView::False | NodeView::And(..) | NodeView::Or(..) => {
+                Step::Unchanged
+            }
         }
     }
 
@@ -1456,7 +1539,7 @@ impl<C: Count> Closure<'_, C> {
             }
         }
         Ok(match (supporters, sole) {
-            (0, _) => self.atom(index, Some(producers), atom, false),
+            (0, _) => self.atom(index, Some(producers), None, atom, false),
             (1, Some(body)) if bit(&self.known.atom_sure, atom) => self.sure(body),
             _ => Step::Unchanged,
         })

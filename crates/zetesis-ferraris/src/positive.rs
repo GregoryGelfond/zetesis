@@ -7,9 +7,9 @@
 
 mod compile;
 mod propagate;
-mod validation;
 #[cfg(test)]
 mod tests;
+mod validation;
 
 use std::{fmt, mem::size_of};
 
@@ -19,7 +19,8 @@ use zetesis_cpu::{Cancellation, Stop};
 /// Independent limits for complete-root classification and least closure.
 #[derive(Clone, Copy, Debug)]
 pub struct PositivePlanLimits {
-    /// Forward incidences, counting both occurrences of an aliased binary child.
+    /// Forward incidences, counting every ordered child occurrence, including
+    /// repeated IDs in native conjunction and disjunction rows.
     pub max_dependencies: usize,
     /// Named plan header, construction-vector headers and actual vector capacity.
     /// Excludes the shared theory, allocator overhead and other stack temporaries.
@@ -158,7 +159,7 @@ pub struct PositivePlanStatistics {
 /// // a. b :- a. a :- b. The positive cycle is seeded by the fact a.
 /// let theory = Theory::new(
 ///     2,
-///     vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1), Node::Implies(1, 0)],
+///     zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::atom(1), Node::implies(0, 1), Node::implies(1, 0)], vec![]).unwrap(),
 ///     vec![0, 2, 3],
 ///     AdmissionLimits::default(),
 /// )?;

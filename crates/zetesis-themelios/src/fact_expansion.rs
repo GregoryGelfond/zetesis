@@ -37,6 +37,7 @@ pub(crate) fn facts(
     };
     let atom = atom.get();
     let mut facts = Vec::new();
+    let mut retained_bytes = 0_u128;
     for arguments in atom.alternatives() {
         let sizes = arguments
             .iter()
@@ -45,11 +46,11 @@ pub(crate) fn facts(
         // Every argument is validated even if another has an empty interval.
         let count = sizes
             .iter()
-            .fold(1_u128, |count, size| count.saturating_mul(*size));
+            .fold(1_u128, |count, (size, _)| count.saturating_mul(*size));
         budget.charge(ExpansionResource::Templates, count, location)?;
         let intermediate = sizes
             .iter()
-            .fold(0_u128, |sum, size| sum.saturating_add(*size));
+            .fold(0_u128, |sum, (size, _)| sum.saturating_add(*size));
         budget.charge(
             ExpansionResource::Values,
             intermediate.saturating_add(count.saturating_mul(arguments.len() as u128)),
@@ -63,6 +64,27 @@ pub(crate) fn facts(
             (atom.name.as_str().len() as u128).saturating_mul(count),
             location,
         )?;
+        // The complete returned fact family remains live across atom alternatives.
+        // Bound its carriers and argument payload together with this alternative's
+        // value columns and cursor before constructing either population.
+        let payload = sizes
+            .iter()
+            .fold(0_u128, |sum, (_, bytes)| sum.saturating_add(*bytes));
+        let output = count.saturating_mul(
+            std::mem::size_of::<Template>() as u128
+                + arguments.len() as u128 * std::mem::size_of::<Term>() as u128
+                + atom.name.as_str().len() as u128
+                + payload,
+        );
+        retained_bytes = retained_bytes.saturating_add(output);
+        let columns = intermediate
+            .saturating_mul(std::mem::size_of::<Value>() as u128)
+            .saturating_add(payload)
+            .saturating_add(
+                arguments.len() as u128
+                    * (std::mem::size_of::<Vec<Value>>() + std::mem::size_of::<usize>()) as u128,
+            );
+        budget.check_family(retained_bytes.saturating_add(columns), location)?;
         let predicate = Predicate::with_sign(
             atom.name.as_str(),
             arguments.len(),
@@ -107,9 +129,10 @@ fn size(
     term: &SourceTerm,
     budget: &Budget,
     location: ProgramSite,
-) -> Result<u128, ExpansionFailure> {
+) -> Result<(u128, u128), ExpansionFailure> {
     let mut pending = vec![term];
     let mut size = 0_u128;
+    let mut bytes = 0_u128;
     while let Some(term) = pending.pop() {
         budget.poll(location)?;
         match term {
@@ -122,6 +145,7 @@ fn size(
             SourceTerm::Symbolic(symbol) => {
                 compile::validate_scalar(symbol, location)?;
                 size = size.saturating_add(1);
+                bytes = bytes.saturating_add(crate::structural_value::symbol_bytes(symbol));
             }
             SourceTerm::Variable(variable) => {
                 return Err(ExpansionFailure::Evaluation {
@@ -134,7 +158,7 @@ fn size(
             _ => return Err(unsupported(ProfileFeature::Term, location).into()),
         }
     }
-    Ok(size)
+    Ok((size, bytes))
 }
 
 fn values(

@@ -35,17 +35,36 @@ impl Fixture {
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
 
 #[test]
-fn include_depth_option_bounds_the_loaded_graph() {
+fn typed_include_depth_bounds_the_loaded_graph() {
     let fixture = Fixture::new();
     fixture.write("entry.lp", "#include \"child.lp\".");
     fixture.write("child.lp", "#include \"leaf.lp\".");
     fixture.write("leaf.lp", "a.");
-    let refused = fixture.process(&["--max-include-depth", "1", "--color", "never"]);
-    assert_eq!(refused.status.code(), Some(2));
-    assert!(refused.stdout.is_empty());
-    let diagnostic = String::from_utf8(refused.stderr).unwrap();
-    assert!(diagnostic.contains("IncludeDepth"), "{diagnostic}");
-    let complete = fixture.process(&["--max-include-depth", "2", "--color", "never"]);
+    let refused = SourceBundle::load(
+        fixture.0.path().join("entry.lp"),
+        BundleLimits {
+            max_include_depth: 1,
+            ..BundleLimits::default()
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        refused,
+        zetesis_themelios::BundleError::Limit {
+            resource: zetesis_themelios::BundleResource::IncludeDepth,
+            ..
+        }
+    ));
+    let complete_bundle = SourceBundle::load(
+        fixture.0.path().join("entry.lp"),
+        BundleLimits {
+            max_include_depth: 2,
+            ..BundleLimits::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(complete_bundle.sources().len(), 3);
+    let complete = fixture.process(&["--color", "never"]);
     assert!(complete.status.success());
     let output = String::from_utf8(complete.stdout).unwrap();
     assert!(output.contains("a\n"), "{output}");
@@ -295,31 +314,48 @@ fn combined_expansion_budget_applies_across_original_files() {
     let fixture = Fixture::new();
     fixture.write("entry.lp", "#include \"data.lp\". p(1..2).");
     fixture.write("data.lp", "q(1..2).");
-    let mut models = Vec::new();
-    let error = run_bundle_with_diagnostics(
+    let error = zetesis_themelios::admit_bundle_extended(
         fixture.bundle(),
-        &options(&["--backend", "cpu", "--max-expanded-templates", "3"]),
-        &mut models,
-        &mut Vec::new(),
-        &Cancellation::default(),
+        zetesis_themelios::BundleAdmissionOptions::default(),
+        zetesis_themelios::ExpansionLimits {
+            max_templates: 3,
+            ..Default::default()
+        },
     )
     .unwrap_err();
-    assert!(matches!(error, RunError::BundleAdmission(_)));
-    assert!(!std::str::from_utf8(&models).unwrap().contains("Answer:"));
+    assert!(matches!(
+        error.error(),
+        zetesis_themelios::BundleAdmissionError::Expansion(
+            zetesis_themelios::ExpansionFailure::Limit {
+                resource: zetesis_themelios::ExpansionResource::Templates,
+                ..
+            }
+        )
+    ));
     assert!(error.to_string().contains("Templates"));
 }
 
 #[test]
-fn process_file_byte_limit_applies_to_included_files() {
+fn typed_file_byte_limit_applies_to_included_files() {
     let fixture = Fixture::new();
     fixture.write("entry.lp", "#include \"large.lp\".");
     fixture.write("large.lp", &format!("% {}\np.", "padding ".repeat(10)));
-    let result = fixture.process(&["--max-source-bytes", "32"]);
-    assert_eq!(result.status.code(), Some(2));
-    assert!(result.stdout.is_empty());
-    let error = String::from_utf8(result.stderr).unwrap();
-    assert!(error.contains("FileBytes"));
-    assert!(error.contains("large.lp"));
+    let error = SourceBundle::load(
+        fixture.0.path().join("entry.lp"),
+        BundleLimits {
+            max_file_bytes: 32,
+            ..BundleLimits::default()
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        zetesis_themelios::BundleError::Limit {
+            resource: zetesis_themelios::BundleResource::FileBytes,
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("large.lp"));
 }
 
 #[test]

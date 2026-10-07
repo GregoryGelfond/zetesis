@@ -288,6 +288,30 @@ impl<'a, 'source> Computation<'a, 'source> {
         }
     }
 
+    /// Find an exact constructor instance without changing the vocabulary.
+    /// Absence is a normal negative query; all ownership and resource failures
+    /// remain typed. The mutable borrow ends the lookup before any later append.
+    pub(super) fn find_constructed(
+        &mut self,
+        descriptor: ValueNodeRef<'_>,
+        values: AssignmentSlice<'_>,
+        children: &[usize],
+        work: GroundingWork<'_>,
+    ) -> Result<Option<TermKey>, FormulaFailure> {
+        let live = self.support.live_bytes() as u128;
+        match &mut self.terms {
+            Terms::Append(append) => {
+                let mut lookup = append.term_lookup();
+                let outer = live - lookup.storage_bytes() + size_of::<TermLookup<'_>>() as u128;
+                find_constructed(&mut lookup, outer, descriptor, values, children, work)
+            }
+            Terms::Frozen(lookup) => {
+                let outer = live - lookup.storage_bytes();
+                find_constructed(lookup, outer, descriptor, values, children, work)
+            }
+        }
+    }
+
     pub(crate) fn number(
         &mut self,
         value: i32,
@@ -304,4 +328,41 @@ impl<'a, 'source> Computation<'a, 'source> {
             GroundingWork::new(limits, counters, location),
         )
     }
+}
+
+/// The same immutable lookup and failure mapping serves append and frozen lanes.
+fn find_constructed(
+    lookup: &mut TermLookup<'_>,
+    outer: u128,
+    descriptor: ValueNodeRef<'_>,
+    values: AssignmentSlice<'_>,
+    children: &[usize],
+    work: GroundingWork<'_>,
+) -> Result<Option<TermKey>, FormulaFailure> {
+    let GroundingWork {
+        limits,
+        counters,
+        location,
+    } = work;
+    let checked = super::relations::owner_limits(limits, outer, location)?;
+    lookup.restart_storage_peak();
+    let result = lookup.find_constructed_with(
+        descriptor,
+        values,
+        children,
+        zetesis_core::catalog::Limits {
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+            max_bytes: usize::MAX,
+        },
+        checked,
+        || counters.work(limits, location),
+    );
+    counters.record(Event::SupportPeakBytes(outer + lookup.storage_peak()));
+    result.map_err(|error| match error {
+        AssignedFailure::Assignment(error) => crate::formula_binding::assignment(error, location),
+        AssignedFailure::Interner(error) => {
+            super::relations::atom_failure(error, limits, outer, location)
+        }
+    })
 }

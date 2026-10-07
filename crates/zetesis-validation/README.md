@@ -55,7 +55,7 @@ Licenses and source provenance remain with the curated collections.
 
 `--clingo` and `--zetesis` select executable paths or names resolved through
 PATH. Relative executable paths resolve from the caller's working directory,
-not the corpus. `--help` lists capture and native execution limits.
+not the corpus. `--help` lists capture limits and native resource controls.
 Omitting `--report` writes JSON to stdout; progress uses stderr.
 Explicit `--corpus` or `--manifest` selects the original-source manifest mode.
 
@@ -130,7 +130,7 @@ See [reported answers](src/answers.rs),
 
 ```sh
 target/release/zetesis-validate --repo . --native-backend metal \
-  --native-oracle countermodel --native-batch-size 64 \
+  --native-oracle countermodel --threads 4 \
   --report target/metal-validation.json
 ```
 
@@ -146,12 +146,14 @@ contain actual completed GPU membership work. No dummy device work is added.
 Telemetry comes from the trusted native executable; it is not hardware
 attestation, GPU kernel timing or process-memory measurement.
 
-`--native-completion-workers` and
-`--native-max-completion-scratch-bytes` pass unchanged to the solver.
-The logical scratch allowance is separate from RSS and the default scalar CPU
-cursor. A zero allowance can produce a recorded incomplete native run; the
-validator does not raise it or silently substitute another route.
-Current completion telemetry must reconcile those requested settings.
+`--threads`, optional `--memory BYTES` and optional `--time-limit SECONDS`
+request the native solver's ordinary resource policy. The validator does not
+prescribe an internal batch size or completion scratch allowance. It reconciles
+the observed execution plan and checks it against the requested thread and
+explicit memory bounds. Named memory allowances are separate from RSS;
+`--timeout-ms` and `--max-output-bytes` bound child capture independently.
+A native refusal or interruption remains a recorded failure, without silently
+raising an allowance or substituting another route.
 See [execution contracts](src/corpus_comparison/execution/tests.rs) and
 [CLI controls](tests/integration/cli_contracts.rs).
 
@@ -299,9 +301,9 @@ zetesis-bench run --suite scalability --grounder eager \
 ```
 
 `performance::scalability::workloads` returns authored queens at n=8/9/10,
-pigeonhole at h=5/6/7 and Mastermind at colors=5/6, and unchanged queens variant
+pigeonhole at h=5/6/7, Mastermind at colors=5/6/8, nested Mastermind at colors=8, and unchanged queens variant
 02, SEND+MORE=MONEY and task allocation, followed by the authored Sudoku grid.
-`--include-einstein` adds the unchanged riddle as a thirteenth workload. Sudoku's reviewed source digest and
+`--include-einstein` adds the unchanged riddle as a fifteenth workload. Sudoku's reviewed source digest and
 exact 81-digit display contract live in `scalability::sudoku`, also used by the
 ordinary CLI correctness test. Its eight givens per row make it a grounding and
 language workload, not a difficult search instance. The examples root is

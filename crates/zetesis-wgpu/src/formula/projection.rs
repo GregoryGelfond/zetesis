@@ -1,13 +1,15 @@
-//! Explicit implementation choice for one enabled Boolean gate's exact supports.
+//! Explicit implementation choice for one enabled binary gate's exact supports.
 
 use crate::{GpuError, GpuErrorKind};
 use std::borrow::Cow;
 
-/// How an enabled frozen gate projects supported Boolean values.
+/// How an enabled frozen binary gate projects supported Boolean values.
 ///
 /// Both implementations use the same three atomic observations and intersections,
 /// including physical-slot aliases and observations taken at different instants.
-/// They retain the original frozen query, sweep/work bounds and result protocol.
+/// Native groups use the shared operand reduction, which preserves satisfying
+/// completions without claiming exact projection of racing aliased observations.
+/// Both policies retain the frozen query, work bounds and result protocol.
 /// Selecting an alternative establishes no physical qualification or speedup.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GateProjection {

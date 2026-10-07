@@ -10,12 +10,16 @@ use zetesis_sat::{
 fn searches() -> [StableModels; 2] {
     let theory = Theory::new(
         1,
-        vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::or_pair([0, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3],
         AdmissionLimits::default(),
     )

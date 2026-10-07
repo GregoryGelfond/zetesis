@@ -287,7 +287,40 @@ mod physical {
     use super::formula_records::{displayed_records, full_records};
     use super::physical_backend::Physical;
     use super::{Cancellation, Completion, options, run_with_diagnostics};
+    use crate::support::prepared;
     use zetesis_backend::GpuApi;
+
+    fn typed(
+        source: &str,
+        config: &zetesis_cli::PublicationConfig,
+        json: bool,
+        output: &mut Vec<u8>,
+    ) -> zetesis_cli::Report {
+        if json {
+            let resources = zetesis_solve::Resources::default();
+            prepared::formula(
+                source,
+                config,
+                &mut zetesis_cli::JsonRenderer::new(
+                    output,
+                    resources.json_record_bytes(),
+                    resources.formula_limits().theory.max_atoms,
+                ),
+                &mut Vec::new(),
+                &Cancellation::default(),
+            )
+            .unwrap()
+        } else {
+            prepared::human(
+                source,
+                config,
+                output,
+                &mut Vec::new(),
+                &Cancellation::default(),
+            )
+            .unwrap()
+        }
+    }
 
     #[test]
     #[ignore = "requires Metal: executes the ordinary solver and never substitutes CPU"]
@@ -350,8 +383,6 @@ mod physical {
                 "table",
                 "--json",
                 "--stats",
-                "--batch-size",
-                "3",
             ]),
             &mut actual,
             &mut Vec::new(),
@@ -427,7 +458,7 @@ mod physical {
         )
         .unwrap();
         assert_eq!(cpu.completion, Completion::Exhausted);
-        for batch in ["3", "7", "16"] {
+        for batch in [None, Some(3), Some(7), Some(16)] {
             let mut actual = Vec::new();
             let mut diagnostics = Vec::new();
             let mut configuration = options(&[
@@ -435,32 +466,36 @@ mod physical {
                 backend.argument(),
                 "--oracle",
                 "countermodel",
-                "--batch-size",
-                batch,
                 "--stats",
             ]);
             configuration.json = json;
-            let report = run_with_diagnostics(
-                source.into(),
-                &configuration,
-                &mut actual,
-                &mut diagnostics,
-                &Cancellation::default(),
-            )
-            .unwrap();
+            let report = if let Some(batch) = batch {
+                let mut config = zetesis_cli::PublicationConfig::from(&configuration);
+                config.solve.batch_size = std::num::NonZeroUsize::new(batch).unwrap();
+                typed(source, &config, json, &mut actual)
+            } else {
+                run_with_diagnostics(
+                    source.into(),
+                    &configuration,
+                    &mut actual,
+                    &mut diagnostics,
+                    &Cancellation::default(),
+                )
+                .unwrap()
+            };
             assert_eq!(report.completion, Completion::Exhausted);
             assert_eq!(report.models, cpu.models);
             if json {
                 assert_eq!(
                     full_records(&actual),
                     full_records(&expected),
-                    "{source} batch={batch}: complete typed models and costs"
+                    "{source} batch={batch:?}: complete typed models and costs"
                 );
             } else {
                 assert_eq!(
                     displayed_records(&actual),
                     displayed_records(&expected),
-                    "{source} batch={batch}: displayed records"
+                    "{source} batch={batch:?}: displayed records"
                 );
             }
             let stats = report.formula_execution.unwrap();
@@ -475,9 +510,11 @@ mod physical {
             assert_eq!(stats.gpu_candidates, report.checked);
             assert_eq!(stats.gpu_decided + stats.cpu_residuals, report.checked);
             assert_eq!((stats.pending_candidates, stats.queued_models), (0, 0));
-            let text = String::from_utf8(diagnostics).unwrap();
-            assert!(text.contains("hybrid GPU propagation + exact CPU residual search"));
-            assert!(text.contains("GPU kernel timing=unavailable"));
+            if batch.is_none() {
+                let text = String::from_utf8(diagnostics).unwrap();
+                assert!(text.contains("hybrid GPU propagation + exact CPU residual search"));
+                assert!(text.contains("GPU kernel timing=unavailable"));
+            }
         }
     }
 
@@ -497,23 +534,15 @@ mod physical {
         qualify_optimization_stop(backend);
         let source = "{a;b;c;d}.";
         let mut output = Vec::new();
-        let report = run_with_diagnostics(
-            source.into(),
-            &options(&[
-                "--backend",
-                backend.argument(),
-                "--oracle",
-                "countermodel",
-                "--batch-size",
-                "7",
-                "--max-candidates",
-                "3",
-            ]),
-            &mut output,
-            &mut Vec::new(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+        let mut config = zetesis_cli::PublicationConfig::from(&options(&[
+            "--backend",
+            backend.argument(),
+            "--oracle",
+            "countermodel",
+        ]));
+        config.solve.batch_size = std::num::NonZeroUsize::new(7).unwrap();
+        config.solve.max_candidates = 3;
+        let report = typed(source, &config, false, &mut output);
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(report.models, 3);
         assert!(
@@ -521,16 +550,14 @@ mod physical {
                 .unwrap()
                 .contains("Models: 3 (search incomplete)")
         );
-        let mut limited = options(&["--backend", backend.argument(), "--oracle", "countermodel"]);
-        limited.max_batch_bytes = Some(0);
-        let report = run_with_diagnostics(
-            source.into(),
-            &limited,
-            &mut Vec::new(),
-            &mut Vec::new(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+        let mut limited = zetesis_cli::PublicationConfig::from(&options(&[
+            "--backend",
+            backend.argument(),
+            "--oracle",
+            "countermodel",
+        ]));
+        limited.solve.max_batch_bytes = 0;
+        let report = typed(source, &limited, false, &mut Vec::new());
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(report.checked, 0);
         assert_eq!(report.formula_execution.unwrap().gpu_batches, 0);
@@ -559,28 +586,24 @@ mod physical {
 
     fn qualify_optimization_stop(backend: GpuApi) {
         for pruning in [false, true] {
-            let mut configuration = options(&[
+            let mut config = zetesis_cli::PublicationConfig::from(&options(&[
                 "--backend",
                 backend.argument(),
                 "--oracle",
                 "countermodel",
-                "--batch-size",
-                "7",
-                "--max-candidates",
-                "1",
-            ]);
+            ]));
+            config.solve.batch_size = std::num::NonZeroUsize::new(7).unwrap();
+            config.solve.max_candidates = 1;
             if !pruning {
-                configuration.max_objective_bound_work = 0;
+                config.solve.max_objective_bound_work = 0;
             }
             let mut output = Vec::new();
-            let report = run_with_diagnostics(
-                super::count_objective_sources::SATISFIABLE[0].into(),
-                &configuration,
+            let report = typed(
+                super::count_objective_sources::SATISFIABLE[0],
+                &config,
+                false,
                 &mut output,
-                &mut Vec::new(),
-                &Cancellation::default(),
-            )
-            .unwrap();
+            );
             assert_eq!(report.completion, Completion::Interrupted);
             assert_eq!(report.checked, 1);
             assert_eq!(report.optimization.unwrap().scored_models, 1);

@@ -102,3 +102,24 @@ fn formula_preserves_the_declared_compute_entry() {
     assert_eq!(entry.stage, naga::ShaderStage::Compute);
     assert_eq!(entry.workgroup_size, [64, 1, 1]);
 }
+
+#[test]
+fn formula_headers_and_operands_share_a_word_addressed_binding() {
+    let module = module();
+    let (_, nodes) = module
+        .global_variables
+        .iter()
+        .find(|(_, variable)| variable.name.as_deref() == Some("nodes"))
+        .unwrap();
+    let naga::TypeInner::Array { base, stride, .. } = module.types[nodes.ty].inner else {
+        panic!("graph transport is a word array");
+    };
+    assert_eq!(stride, 4);
+    assert!(matches!(
+        module.types[base].inner,
+        naga::TypeInner::Scalar(naga::Scalar {
+            kind: naga::ScalarKind::Uint,
+            width: 4
+        })
+    ));
+}

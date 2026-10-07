@@ -114,7 +114,21 @@ impl ParsedSource {
         self,
         limits: ExpansionLimits,
     ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-        extended::admit_parsed(self, limits)
+        extended::admit_parsed(self, limits, None)
+    }
+
+    /// Admit relational templates while sharing cancellation and deadline control.
+    /// Parsing and upstream profile/raising calls are bounded cooperative intervals;
+    /// expansion polls the same token at its existing checked work boundaries.
+    ///
+    /// # Errors
+    /// Retains this owner with ordinary admission failures or a typed interruption.
+    pub fn admit_extended_with_cancellation(
+        self,
+        limits: ExpansionLimits,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
+        extended::admit_parsed(self, limits, Some(cancellation.clone()))
     }
 
     /// Prepare the finite formula profile without reparsing original bytes.
@@ -129,7 +143,23 @@ impl ParsedSource {
         expansion: ExpansionLimits,
         limits: FormulaLimits,
     ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
-        formula::prepare_parsed(self, expansion, &limits)
+        formula::prepare_parsed(self, expansion, &limits, None)
+    }
+
+    /// Prepare formulas under shared cancellation and deadline control.
+    /// The returned preparation retains the token through later support completion
+    /// and eager, hybrid or terminal materialization. Counters are not refreshed.
+    /// Upstream profile/raising calls remain bounded cooperative intervals.
+    ///
+    /// # Errors
+    /// Retains this owner with ordinary formula failures or a typed interruption.
+    pub fn prepare_formula_with_cancellation(
+        self,
+        expansion: ExpansionLimits,
+        limits: FormulaLimits,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
+        formula::prepare_parsed(self, expansion, &limits, Some(cancellation.clone()))
     }
 
     /// Recover original source bytes and identity, discarding the syntax tree.
@@ -237,5 +267,105 @@ mod tests {
         let error = SourceFailure::new(source, error).into_error();
         assert_eq!(std::ptr::from_ref(error.0.as_ref()), error_payload);
         assert_eq!(*error.0, 7);
+    }
+    #[test]
+    fn relational_control_retains_the_refused_source() {
+        let source = ParsedSource::new("p(1..3).".into(), AdmissionOptions::default()).unwrap();
+        let pointer = source.source().text().as_ptr();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        cancellation.cancel();
+        let failure = source
+            .admit_extended_with_cancellation(ExpansionLimits::default(), &cancellation)
+            .unwrap_err();
+        assert!(matches!(
+            failure.error(),
+            ExpansionFailure::Interrupted {
+                reason: zetesis_cpu::Stop::Cancelled,
+                ..
+            }
+        ));
+        assert_eq!(failure.source().source().text().as_ptr(), pointer);
+    }
+
+    #[test]
+    fn formula_preparation_observes_its_supplied_control() {
+        let source = ParsedSource::new("a | b.".into(), AdmissionOptions::default()).unwrap();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        cancellation.cancel();
+        let failure = source
+            .prepare_formula_with_cancellation(
+                ExpansionLimits::default(),
+                FormulaLimits::default(),
+                &cancellation,
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.error().interruption(),
+            Some(zetesis_cpu::Stop::Cancelled)
+        );
+    }
+
+    #[test]
+    fn formula_materialization_retains_preparation_control() {
+        let source = ParsedSource::new("a | b.".into(), AdmissionOptions::default()).unwrap();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        let prepared = source
+            .prepare_formula_with_cancellation(
+                ExpansionLimits::default(),
+                FormulaLimits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        cancellation.cancel();
+        let failure = prepared.ground().unwrap_err();
+        assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    }
+
+    #[test]
+    fn bundle_relational_admission_observes_control() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("entry.lp");
+        std::fs::write(&path, "p(1..3).").unwrap();
+        let bundle = crate::SourceBundle::load(&path, crate::BundleLimits::default()).unwrap();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        cancellation.cancel();
+        let failure = crate::admit_bundle_extended_with_cancellation(
+            bundle,
+            crate::BundleAdmissionOptions::default(),
+            ExpansionLimits::default(),
+            &cancellation,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            failure.error(),
+            crate::BundleAdmissionError::Expansion(ExpansionFailure::Interrupted {
+                reason: zetesis_cpu::Stop::Cancelled,
+                ..
+            })
+        ));
+        assert_eq!(failure.bundle().sources().len(), 1);
+    }
+
+    #[test]
+    fn bundle_formula_materialization_retains_preparation_control() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("entry.lp");
+        std::fs::write(&path, "a | b.").unwrap();
+        let bundle = crate::SourceBundle::load(&path, crate::BundleLimits::default()).unwrap();
+        let cancellation = zetesis_cpu::Cancellation::default();
+        let prepared = crate::prepare_bundle_formula_with_cancellation(
+            bundle,
+            crate::BundleAdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+            &cancellation,
+        )
+        .unwrap();
+        cancellation.cancel();
+        let failure = prepared.ground().unwrap_err();
+        assert_eq!(
+            failure.error().interruption(),
+            Some(zetesis_cpu::Stop::Cancelled)
+        );
     }
 }

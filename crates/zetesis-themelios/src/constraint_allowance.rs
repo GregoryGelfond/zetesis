@@ -3,7 +3,7 @@
 
 use std::sync::{
     Arc,
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
 use crate::{ConstraintCheckLimits, ConstraintCheckStatistics};
@@ -16,8 +16,8 @@ use crate::{ConstraintCheckLimits, ConstraintCheckStatistics};
 /// Each check (one candidate model or region) gets the ceilings as its own
 /// allowance, so they bound the work spent on any one candidate and never the
 /// number of candidates a run checks. Clones share the same monotone receipt
-/// counters, which saturate rather than refuse; stopping or dropping a checker
-/// does not refund accepted charges. No ceiling is multiplied by the number of
+/// counters, which saturate at their public field representation rather than
+/// refuse; stopping or dropping a checker does not refund accepted charges. No ceiling is multiplied by the number of
 /// workers. Separate checkers retain independent join/evaluation state and
 /// their own local receipts.
 #[derive(Clone, Debug)]
@@ -28,7 +28,7 @@ struct Shared {
     limits: ConstraintCheckLimits,
     work: AtomicU64,
     substitutions: AtomicU64,
-    scalar_bytes: AtomicU64,
+    scalar_bytes: AtomicUsize,
 }
 
 impl ConstraintAllowance {
@@ -40,7 +40,7 @@ impl ConstraintAllowance {
             limits,
             work: AtomicU64::new(0),
             substitutions: AtomicU64::new(0),
-            scalar_bytes: AtomicU64::new(0),
+            scalar_bytes: AtomicUsize::new(0),
         }))
     }
 
@@ -51,8 +51,8 @@ impl ConstraintAllowance {
     }
 
     /// Total accepted charges, including preparation and interrupted prefixes.
-    /// After workers join this is exact. During concurrent checks each field is
-    /// a monotone observation, not a simultaneous snapshot of all three fields.
+    /// After workers join this is exact until the field saturates. During concurrent
+    /// checks each field is a monotone observation, not a simultaneous snapshot.
     #[must_use]
     pub fn statistics(&self) -> ConstraintCheckStatistics {
         self.0.receipt()
@@ -67,7 +67,15 @@ impl ConstraintAllowance {
     }
 
     pub(crate) fn scalar(&self, amount: u128) {
-        record(&self.0.scalar_bytes, amount);
+        let amount = usize::try_from(amount).unwrap_or(usize::MAX);
+        // Per-check allowances do not bound the sum shared by many checks.
+        // Saturate at the public receipt's usize extent on every host.
+        let _ = self
+            .0
+            .scalar_bytes
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                Some(used.saturating_add(amount))
+            });
     }
 }
 
@@ -76,8 +84,7 @@ impl Shared {
         ConstraintCheckStatistics {
             work: self.work.load(Ordering::Relaxed),
             substitutions: self.substitutions.load(Ordering::Relaxed),
-            scalar_bytes: usize::try_from(self.scalar_bytes.load(Ordering::Relaxed))
-                .expect("scalar allowance is bounded by usize"),
+            scalar_bytes: self.scalar_bytes.load(Ordering::Relaxed),
         }
     }
 }
@@ -91,3 +98,6 @@ fn record(counter: &AtomicU64, amount: u128) {
         Some(used.saturating_add(amount))
     });
 }
+
+#[cfg(test)]
+mod tests;

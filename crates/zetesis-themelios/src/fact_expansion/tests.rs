@@ -40,3 +40,53 @@ fn cancellation_preserves_an_accepted_expansion_prefix() {
     } if location == second));
     assert_eq!(budget.usage(), accepted);
 }
+
+fn family_budget(bytes: usize) -> Budget {
+    Budget::new(
+        ExpansionLimits {
+            max_templates: usize::MAX,
+            max_values: usize::MAX,
+            max_term_work: usize::MAX,
+            max_scalar_bytes: usize::MAX,
+            max_family_bytes: bytes,
+            ..ExpansionLimits::default()
+        },
+        usize::MAX,
+    )
+}
+
+#[test]
+fn interval_facts_refuse_before_materialization() {
+    let location = ProgramSite::statement(StatementId::new(0), None);
+    let error = facts(&fact(1, 1_000_000), &mut family_budget(1024), location).unwrap_err();
+    assert!(matches!(error, ExpansionFailure::Limit {
+        resource: ExpansionResource::FamilyBytes, limit: 1024, observed, ..
+    } if observed > 1_000_000));
+}
+
+#[test]
+fn fact_family_storage_boundary_is_inclusive() {
+    let location = ProgramSite::statement(StatementId::new(0), None);
+    let error = facts(&fact(1, 3), &mut family_budget(0), location).unwrap_err();
+    let ExpansionFailure::Limit {
+        resource: ExpansionResource::FamilyBytes,
+        observed,
+        ..
+    } = error
+    else {
+        panic!("wrong pre-materialization refusal: {error}");
+    };
+    let exact = usize::try_from(observed).unwrap();
+    assert!(
+        matches!(facts(&fact(1, 3), &mut family_budget(exact - 1), location), Err(ExpansionFailure::Limit {
+        resource: ExpansionResource::FamilyBytes, observed: amount, ..
+    }) if amount == observed)
+    );
+    assert_eq!(
+        facts(&fact(1, 3), &mut family_budget(exact), location)
+            .unwrap()
+            .unwrap()
+            .len(),
+        3
+    );
+}

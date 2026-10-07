@@ -210,7 +210,7 @@ pub(super) fn scalability(
                 matrix::Producer::Reference => "clingo".into(),
                 matrix::Producer::Native { profile } => format!(
                     "zetesis / {} threads",
-                    report.plan().profiles()[profile].workers
+                    report.plan().profiles()[profile].threads
                 ),
             };
             let mut cells = vec![

@@ -14,11 +14,14 @@ use zetesis_test_support::io::BoundedWriter;
 
 fn solve(source: &str, arguments: &[&str], stats: bool) -> (Options, PublicationOutcome) {
     let mut options = Options::try_parse_from(
-        ["zetesis", "--workers", "1", "--models", "0"]
+        ["zetesis", "--models", "0"]
             .into_iter()
             .chain(arguments.iter().copied()),
     )
     .unwrap();
+    if !arguments.contains(&"--threads") {
+        options.workers = NonZeroUsize::MIN;
+    }
     options.stats = stats;
     let outcome = run_finalized_with_diagnostics(
         source.into(),
@@ -223,23 +226,37 @@ fn objective_work_preserves_the_recorded_count() {
 
 #[test]
 fn batched_cpu_completion_does_not_claim_device_work() {
-    let (options, outcome) = solve(
-        "a|b.",
-        &[
-            "--oracle",
-            "countermodel",
-            "--search",
-            "clauses",
-            "--completion-workers",
-            "2",
-        ],
-        true,
-    );
+    let admitted = zetesis_reference_support::formula("a|b.");
+    let mut config = crate::support::prepared::config(&[
+        "--oracle",
+        "countermodel",
+        "--search",
+        "clauses",
+        "--stats",
+    ]);
+    config.solve.completion_workers = NonZeroUsize::new(2).unwrap();
+    let outcome = zetesis_cli::publish_prepared(
+        zetesis_cli::PreparedInput::formula(&admitted),
+        &config,
+        &mut zetesis_cli::HumanRenderer::new(
+            io::sink(),
+            ColorMode::Never,
+            config.observations.max_output_bytes,
+        ),
+        &mut io::sink(),
+        &Cancellation::default(),
+    )
+    .unwrap();
     let semantic = outcome.semantic();
     let execution = semantic.formula_execution().unwrap();
     assert!(execution.adapter.is_empty());
     assert!(execution.completion.entered > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
+    assert_eq!(
+        semantic.completion(),
+        Some(zetesis_cli::Completion::Exhausted)
+    );
+    assert_eq!(semantic.verified_models(), 2);
+    let text = render(&config.solve, Some(semantic));
     assert_eq!(
         value(&text, "Recorded execution"),
         "CPU batched formula completion"

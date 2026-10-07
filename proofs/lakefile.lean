@@ -2,7 +2,7 @@ import Lake
 open Lake DSL
 
 package zetesis where
-  version := v!"0.3.0"
+  version := v!"0.4.0"
 
 @[default_target]
 lean_lib Zetesis where

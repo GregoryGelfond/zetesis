@@ -24,17 +24,22 @@ zetesis help solve --advanced
 ```
 
 Bare `zetesis` shows the task list. Compact solve help lists everyday inputs,
-answers, execution, limits and output options. Advanced help additionally
-describes reduct selection, batching and individual resource ceilings.
-Both views describe the same solver. File-first syntax, numeric `--models`
-and the old option spellings remain compatibility adapters.
+answers, execution, resources and output options. Advanced help additionally
+describes reduct selection, joins and source batching. Both views describe the
+same solver. File-first syntax and numeric `--models` remain compatibility
+adapters, as do `--workers` for `--threads` and `--memory-budget` for `--memory`.
 
-Omitting `--max-expansion-work` preserves independent library defaults for
-source-term expansion and eager formula grounding. An explicit value sets both
-ceilings; `--stats` reports their effective values. This pre-1.0 configuration API
-change makes `Options::max_expansion_work` an `Option<usize>`: use `None` for those
-defaults and `Some(limit)` for the shared override. Library admission continues
-to accept separate `ExpansionLimits` and `FormulaLimits` without a CLI adapter.
+`--threads`, `--memory` and optional `--time-limit` select the ordinary resource
+policy. One library-owned `zetesis_solve::Resources` derives named capacities for
+source admission, grounding, solving and publication. Mandatory work, visited
+substitutions, rounds and copied-byte traffic remain checked counters without
+selected cumulative operation ceilings. Per-stage work/count switches and
+completion or device-effort tuning are no longer command options. Explicit
+library limit types remain available to consumers that need bounded operations.
+
+```sh
+zetesis solve input.lp --threads 4 --memory 4GiB --time-limit 30s
+```
 
 Without objectives, the default returns one answer set; `--all` requests
 exhaustive enumeration. With an active objective, the search phase ends before
@@ -46,10 +51,11 @@ full answer sets.
 `--time-limit DURATION` requests a cooperative deadline after input loading.
 Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
 zero requests an immediate stop and
-omission imposes no deadline. Search polls the same `Cancellation` used by library
-consumers; a timer thread marks the deadline and each poll reads that mark
-beside the cancellation flag, without reading the clock at each poll.
-A deadline during search leaves coverage incomplete. A later deadline
+omission imposes no deadline. Controlled source preparation, grounding and search
+poll the same `Cancellation` used by library consumers; a timer thread marks the
+deadline and each poll reads that mark beside the cancellation flag, without
+reading the clock at each poll. A deadline before search exhaustion leaves
+coverage incomplete. A later deadline
 during publication preserves the already established search coverage. Either
 stop returns exit 3; the deadline is not a hard process timeout for source I/O,
 frontend work or a running device kernel.
@@ -96,7 +102,7 @@ established if only their later publication stops. Exit codes are:
 |---|---|
 | 0 | The requested run completed. |
 | 2 | Input, backend, protocol or output failure. |
-| 3 | Search or publication was interrupted. |
+| 3 | Preparation, search or publication was interrupted. |
 
 These are zetesis exit codes, not clingo's codes.
 
@@ -127,10 +133,10 @@ document's atom table is every record's `atoms` in document order. A record's
 `full_model` and its `shown.atom_indices` are indices into that table; shown
 terms and costs stay per record, and terminal outcomes remain distinct. A
 `#show` directive decides what is shown, as in human output; a program
-without one shows the whole model. `--max-json-record-bytes` bounds each model
-and terminal record, with an 8 MiB default, and `--max-atoms` bounds the
-table. Integer consumers need lossless parsing. A failed writer can leave a
-truncated document or partial human record; successful semantic checking does
+without one shows the whole model. The memory policy derives capacities for each
+complete model or terminal record and for the document's atom table. Integer
+consumers need lossless parsing. A failed writer can leave a truncated document
+or partial human record; successful semantic checking does
 not imply successful publication. See [JSON views](src/output.rs) and
 [output regression tests](tests/integration/json_output.rs).
 
@@ -176,15 +182,16 @@ formula grounding. Indexed matching is the default. Table matching reuses
 prepared masks for flat patterns over completed possible support; support growth,
 structural patterns and relational-source grounding retain their existing paths.
 The flag does not force a formula execution route or move grounding onto a GPU.
-Preparation and live query masks consume the existing source work and storage
-budgets. `--stats` distinguishes actual table preparations, reuses and row visits.
+Preparation and live query masks retain work receipts and obey the derived
+storage capacities and shared cancellation. `--stats` distinguishes actual table
+preparations, reuses and row visits.
 See the [finite-table contract](../../docs/book/rust/finite-tables.md).
 
 ```sh
 zetesis solve input.lp --backend cpu
 zetesis solve input.lp --backend metal --grounder eager
 zetesis solve input.lp --backend metal --grounder lazy
-zetesis solve input.lp --oracle countermodel --completion-workers 4 --all
+zetesis solve input.lp --oracle countermodel --threads 4 --all
 ```
 
 Closure checks candidate gates against the least closure of the reduct,
@@ -233,88 +240,71 @@ device route has no positive-plan specialization. Source analysis chooses the
 certificate attempt order; it never replaces complete ground-theory validation.
 `--oracle countermodel` retains the general reduct comparison route explicitly.
 
-`--gpu-formula-work` and `--gpu-formula-rounds` independently bound device
-propagation per formula candidate. Their defaults are 100,000,000 charged work
-units and 64 sweeps, matching the device library. `--max-work` bounds CPU
-oracle/source work and each independent formula verification call. Formula
-verification evaluates original truth or a frozen-reduct witness; certified
-candidate checks also use this per-call ceiling. These operations retain their
-own charged units. Cumulative encoding/search/certificate work remains bounded
-by `--max-search-work`. Neither host limit sets the device propagation limit.
-Values above `u32::MAX` are argument errors. Zero device work refuses a nonempty
-setup that needs work; zero rounds still checks original truth and sends
-undecided candidates to exact CPU residual search. Neither limit bounds driver
-initialization or wall-clock duration.
+Formula device propagation uses internal dispatch bounds of 100,000,000 charged
+work units and 64 sweeps per candidate. Undecided candidates continue through
+exact CPU residual search; mandatory device setup can refuse a dispatch that
+exceeds its capacity. These physical bounds do not impose a cumulative host
+operation ceiling or a wall-clock deadline. Optional class, domain and pruning
+analyses also retain finite effort bounds; declining them preserves the general
+exact route.
 
 Formula statistics report the effective device limits, actual submitted
 batches/candidates and successfully decoded batches/candidates separately.
 Propagation work and sweeps count decoded results; an interrupted unreturned
 submission does not establish how much shader work completed.
 
-`--completion-workers` controls the independent exact formula checks under
-`--search clauses`, and under `--search regions` when one CPU worker walks
-the tree or a device route runs; with more than one CPU worker under regions
-the workers decide their leaves and it is unused. The default of one keeps
-exact completion on the calling thread when that completion route applies;
-it does not make parallel region search scalar. `--threads` is described above.
-`--memory-budget` is the session's memory allowance, half of the host's
-physical memory by default and at least two gibibytes, or two gibibytes when
-the host does not report its memory. The session's
-byte ceilings, the projection, objective key, optimal, reduct, completion
-scratch, candidate, closure, closure batch and batch bytes, are the shares of
-a two-gibibyte allowance; each one not given on the command line is that
-share scaled by the allowance, and the closure ceiling is shared by the
-workers, as `SolveConfig::for_allowance` states, so a larger host admits
-larger problems before one refuses, and a given ceiling is taken as given.
-The admission and output ceilings, the source, expansion, support, JSON
-record and observation bytes, keep their fixed defaults. Work, count and
-structural ceilings are not memory and do not scale.
-The ceilings bound named storage, not resident memory; `--stats` prints the
-allowance, the host's memory and each ceiling as the session takes it.
-`--batch-size`, `--max-batch-bytes` and
-`--max-completion-scratch-bytes` bound batches and concurrent query storage.
-General checking retains one candidate-parametric reduct encoding. The scratch
-limit counts that shared owner once plus reserved query/result slots, excluding
-allocator, thread, shared-theory and GPU overhead; it is not RSS.
-`--max-reduct-bytes` independently bounds cold encoding preparation and each
-complete query workspace. Preparation consumes cumulative search work once;
-query work remains charged after reuse. A budget that cannot admit
-one required query yields incomplete coverage. The direct CPU scalar cursor
-does not consume the completion-batch allowance, but does use the reduct byte
-limit. Optional class preparation and checking separately use the completion
-scratch ceiling; the two uses do not establish a combined process-memory bound.
+Independent exact formula completion uses the calling thread by default;
+parallel CPU region workers decide their own leaves. Batch sizing and completion
+scheduling are internal defaults. Typed `SolveConfig` consumers can configure
+these operations directly.
+
+`--memory SIZE` accepts bytes or a whole number with `KiB`, `MiB`, `GiB` or `TiB`.
+The default is half of reported host physical memory, at least two gibibytes,
+or two gibibytes when the host does not report its memory. The shared policy
+derives source, expansion-family, support, formula, session and output capacities
+from that allowance, including population limits for retained values and nodes.
+Checked depth and representation limits remain. `--stats` reports the allowance,
+reported host memory and actual configured named capacities.
+
+The capacities are independent shares for named owners, which can overlap.
+Their sum is not the allowance, and neither the allowance nor the population
+limits guarantee resident memory. Allocator overhead, source-library allocations
+and thread stacks remain outside the named accounting.
+
+General checking retains one candidate-parametric reduct encoding. Completion
+scratch counts that shared owner once plus reserved query/result slots; cold
+encoding preparation and each complete query workspace have their own derived
+capacity. Preparation work is counted once, and query work remains counted after
+reuse. A capacity that cannot admit one required query yields incomplete
+coverage. The direct CPU scalar cursor does not consume the completion-batch
+allowance but still obeys the query workspace capacity. Optional class
+preparation and checking separately use the completion scratch capacity; their
+receipts do not establish a combined process-memory bound.
 
 Advanced `--source-batching independent|union|worlds` selects relational source
 sharing. Union/Worlds require lazy or automatic grounding with the CPU backend.
-Source and per-world work have distinct ceilings. A stopped world makes the
+Source and per-world work retain distinct receipts. A stopped world makes the
 whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.md).
 
 Independent relational CPU execution can adopt the compatible immutable query
 preparation retained by candidate narrowing; otherwise, the oracle prepares its
 own. It reuses that preparation and empty workspace capacities across batches,
-while each candidate keeps private truth state. `--max-source-work` bounds
-preparation separately from candidate `--max-work`; importing an owner retains
-its original preparation work and checks the oracle's preparation policy.
-`--max-closure-bytes` bounds one candidate's reserved named capacity;
-`--max-closure-batch-bytes` admits preparation, idle retained workspaces and
-assigned candidate allowances together. CPU closure setup conservatively admits
-every worker at the per-closure allowance, so `--threads` times
-`--max-closure-bytes` must not exceed `--max-closure-batch-bytes`. It refuses an
-excessive or overflowing product before allocating the execution pool, compiling
-static rules or initializing candidates. This check also applies to eager and
-shared CPU closure routes; formula and device execution use their own resource
-checks. Source admission and policy checks can already have run. When
-`--max-closure-bytes` is omitted, it is each worker's share of the collective
-ceiling. Preparation refusal and
+while each candidate keeps private truth state. Importing an owner retains its
+original preparation work and checks the oracle's preparation policy. The memory
+policy assigns each worker a share of the collective closure capacity. Collective
+admission includes preparation, idle retained workspaces and assigned candidate
+allowances. Explicit library configurations still reject an excessive or
+overflowing worker-capacity product before allocating the pool, compiling static
+rules or initializing candidates. This check also applies to eager and shared
+CPU closure routes; formula and device execution use their own resource checks.
+Source admission and policy checks can already have run. Preparation refusal and
 individual candidate refusal retain different interruption kinds. See the
 [ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
 
-Every byte ceiling in `--help-all` says which quantity it bounds: named reserved
-capacity, canonical or encoded payload without capacity or allocator slack, or
-original file bytes. Named capacity can include admitted allowances that are not
-resident, while process RSS also includes storage outside those owners. These
-quantities are not interchangeable, and none of these ceilings is a process RSS
-cap.
+Named reserved capacity, canonical or encoded payload, and original file bytes
+remain different quantities. Named capacity can include admitted allowances that
+are not resident, while process RSS includes storage outside those owners.
+The typed library limits document these accounting boundaries.
 
 ## Statistics and resource limits
 
@@ -333,7 +323,7 @@ execution routes leave this observation absent.
 
 For the independent CPU closure routes, lazy and eager, `closure_execution`
 sums the counters every completed check returns: completed and stopped checks,
-source rounds or rule passes, charged work in the route's `--max-work` units,
+source rounds or rule passes, charged work in the route's documented units,
 derived atoms and, for the lazy route, catalog work, bindings, tuple probes,
 the heads recorded as bits of dense relations, the blocks of rows joined by
 words and the largest admitted closure envelope. A stopped check returns no counters, so
@@ -341,10 +331,11 @@ its partial work is absent from the sums and counted only as a stop. The text
 form is the `independent closure` and `closure joins` lines.
 
 When relational admission expanded the source, the `expansion used` line
-states each accepted charge beside the ceiling it was checked against, term
-work, templates, values, scalar bytes and origin locations, and the JSON
-`expansion` object holds the charges. The formula route admits through its
-own budgets and reports no expansion usage.
+states accepted term work, templates, values, scalar bytes and origin locations
+beside their effective typed limits, and the JSON `expansion` object holds the
+charges. Mandatory cumulative counters use their representation maxima under
+the ordinary policy; retained populations use memory-derived capacities. The
+formula route reports its own admission receipts, not expansion usage.
 
 Coarse host stages support the default human timing line without enabling
 detailed clocks. With `--stats`, tables separate source preparation, eager
@@ -368,10 +359,11 @@ prove semantic completeness. Instrumentation is optional and adds overhead.
 See [telemetry](../zetesis-telemetry/README.md) and
 [timing regressions](tests/integration/phase_timing.rs).
 
-Source, expansion, candidate search, witness checks, observations and optimal-model
-retention have independent ceilings listed by `--help-all`. A limit never means
-a smaller admitted program or proved inconsistency. Full models are counted
-before `#show`; observation failure cannot publish a complete Answer record.
+The ordinary resource policy applies across source preparation, grounding,
+candidate search, witness checks, observations and optimal-model retention.
+A storage refusal or cooperative stop never means a smaller admitted program or
+proved inconsistency. Full models are counted before `#show`; observation failure
+cannot publish a complete Answer record.
 A retained incumbent remains unproved when search coverage is incomplete.
 Runtime observation diagnostics resolve the failing directive against the loaded
 original source, including included files. The returned typed error retains that
@@ -381,8 +373,11 @@ See the [diagnostic and publication regressions](tests/integration/observation_d
 ## Compose the command adapter
 
 Use `publish_prepared` with `PublicationConfig` and an `AnswerRenderer` to replace
-presentation without parsing command arguments. Both built-in `HumanRenderer`
-and `JsonRenderer` consume the same borrowed `AnswerView` and `PublicationView`
+presentation without parsing command arguments. `PublicationConfig::default()`
+derives solving and observation capacities from the same ordinary `Resources`
+policy. Explicit typed limits remain available for bounded library operations
+and failure-boundary tests. Both built-in `HumanRenderer` and `JsonRenderer`
+consume the same borrowed `AnswerView` and `PublicationView`
 as custom consumers. The controller evaluates `#show` once in the observation
 layer, streams one answer at a time and owns publication acknowledgements.
 The optional `configuration(ConfigurationView)` callback receives typed backend,

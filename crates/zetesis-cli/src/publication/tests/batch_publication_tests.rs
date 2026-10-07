@@ -2,7 +2,7 @@
 
 use crate::{
     Completion, FormulaExecutionStatistics, Options, PublicationFailure, PublicationReport,
-    RunError, run_finalized_with_diagnostics,
+    RunError,
 };
 use clap::Parser;
 use std::{
@@ -13,8 +13,8 @@ use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FAILED, FailAt};
 use zetesis_test_support::repository;
 
-fn options() -> Options {
-    let mut options = Options::try_parse_from([
+fn options() -> crate::publication_fixture::FormulaCase {
+    let options = Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
@@ -26,19 +26,21 @@ fn options() -> Options {
         "0",
     ])
     .unwrap();
-    options.batch_size = NonZeroUsize::new(3).unwrap();
-    options.completion_workers = NonZeroUsize::new(4).unwrap();
+    let mut options = crate::publication_fixture::FormulaCase::new(options);
+    options.config.solve.batch_size = NonZeroUsize::new(3).unwrap();
+    options.config.solve.completion_workers = NonZeroUsize::new(4).unwrap();
     options
 }
 
 fn run(
     source: &str,
-    options: &Options,
+    options: &crate::publication_fixture::FormulaCase,
     cancellation: &Cancellation,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> Result<PublicationReport, PublicationFailure> {
-    run_finalized_with_diagnostics(source.into(), options, output, diagnostics, cancellation)
+    options
+        .run(source, output, diagnostics, cancellation)
         .and_then(crate::PublicationOutcome::into_legacy)
 }
 
@@ -91,7 +93,7 @@ fn cpu_batches_preserve_complete_model_displays() {
         "{a;b}. #show a:a. #minimize{1,a:a;1,b:b}.",
     ] {
         let mut options = options();
-        options.completion_workers = NonZeroUsize::MIN;
+        options.config.solve.completion_workers = NonZeroUsize::MIN;
         let mut scalar = Vec::new();
         let expected = run(
             source,
@@ -102,7 +104,7 @@ fn cpu_batches_preserve_complete_model_displays() {
         )
         .unwrap();
         assert!(expected.semantic().formula_execution().is_none());
-        options.completion_workers = NonZeroUsize::new(4).unwrap();
+        options.config.solve.completion_workers = NonZeroUsize::new(4).unwrap();
         let mut output = Vec::new();
         let actual = run(
             source,
@@ -134,7 +136,7 @@ fn cpu_batches_preserve_complete_model_displays() {
 #[test]
 fn requested_publication_limit_reports_partial_coverage() {
     let mut options = options();
-    options.models = 1;
+    options.config.solve.models = 1;
     let mut output = Vec::new();
     let captured = run(
         "{a;b;c}.",
@@ -161,7 +163,7 @@ fn requested_publication_limit_reports_partial_coverage() {
 #[test]
 fn proposal_limit_publishes_an_incomplete_prefix() {
     let mut options = options();
-    options.max_candidates = 2;
+    options.config.solve.max_candidates = 2;
     let mut output = Vec::new();
     let captured = run(
         "{a;b;c}.",
@@ -238,10 +240,10 @@ fn hidden_optimal_ties_keep_display_multiplicity() {
     let source = "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.";
     for enabled in [false, true] {
         let mut options = options();
-        options.stats = true;
-        options.statistics_view = crate::StatisticsView::Records;
+        options.presentation.stats = true;
+        options.presentation.statistics_view = crate::StatisticsView::Records;
         if !enabled {
-            options.max_objective_bound_work = 0;
+            options.config.solve.max_objective_bound_work = 0;
         }
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
@@ -254,6 +256,9 @@ fn hidden_optimal_ties_keep_display_multiplicity() {
         )
         .unwrap();
         require_cpu_batches(captured.semantic().formula_execution().unwrap());
+        let diagnostic = std::str::from_utf8(&diagnostics).unwrap();
+        assert!(diagnostic.contains("backend=cpu batched exact completion"));
+        assert!(!diagnostic.contains("backend=hybrid"));
         assert_eq!(captured.report().completion, Completion::Exhausted);
         let optimum = captured.semantic().incumbent().unwrap();
         assert_eq!(optimum.tied_models, 2);
@@ -280,10 +285,10 @@ fn bounded_search_never_publishes_optimum_status() {
     for kind in 0..4 {
         let mut options = options();
         match kind {
-            0 => options.max_objective_work = 0,
-            1 => options.max_optimal_models = 1,
-            2 => options.max_batch_bytes = Some(0),
-            _ => options.max_search_work = 0,
+            0 => options.config.solve.max_objective_work = 0,
+            1 => options.config.solve.max_optimal_models = 1,
+            2 => options.config.solve.max_batch_bytes = 0,
+            _ => options.config.solve.max_search_work = 0,
         }
         let mut output = Vec::new();
         let captured = run(
@@ -308,14 +313,41 @@ fn bounded_search_never_publishes_optimum_status() {
 }
 
 #[test]
+fn certificate_storage_refusal_is_reported_before_exact_fallback() {
+    let mut case = options();
+    case.presentation.stats = true;
+    case.presentation.statistics_view = crate::StatisticsView::Records;
+    case.config.solve.oracle = crate::Oracle::Auto;
+    case.config.solve.completion_workers = NonZeroUsize::MIN;
+    case.config.solve.max_completion_scratch_bytes = 0;
+    let mut diagnostics = Vec::new();
+    let result = run(
+        "1{a;b;c}1.",
+        &case,
+        &Cancellation::default(),
+        &mut Vec::new(),
+        &mut diagnostics,
+    )
+    .unwrap();
+    assert_eq!(result.report().completion, Completion::Exhausted);
+    assert_eq!(result.report().models, 3);
+    let diagnostic = std::str::from_utf8(&diagnostics).unwrap();
+    assert!(
+        diagnostic.contains("optional class certificate refused"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("limit is 0"), "{diagnostic}");
+}
+
+#[test]
 fn publication_prefixes_preserve_accepted_bytes() {
     for source in [
         "{a;b}. #show x.",
         "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}.",
     ] {
         let mut options = options();
-        options.stats = true;
-        options.statistics_view = crate::StatisticsView::Records;
+        options.presentation.stats = true;
+        options.presentation.statistics_view = crate::StatisticsView::Records;
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
         let captured = run(
@@ -438,9 +470,9 @@ fn correctness_case(
 ) {
     let path = case["path"].as_str().unwrap();
     let mut options = options();
-    options.batch_size = NonZeroUsize::new(64).unwrap();
-    options.search = search;
-    options.workers = NonZeroUsize::new(workers).unwrap();
+    options.config.solve.batch_size = NonZeroUsize::new(64).unwrap();
+    options.config.solve.search = search;
+    options.config.solve.workers = NonZeroUsize::new(workers).unwrap();
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),
         zetesis_themelios::BundleLimits::default(),
@@ -448,9 +480,17 @@ fn correctness_case(
     .unwrap();
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
-    let captured = crate::run_bundle_finalized_with_diagnostics(
+    let admitted = zetesis_themelios::admit_bundle_formula(
         bundle,
-        &options,
+        zetesis_themelios::BundleAdmissionOptions::default(),
+        zetesis_themelios::ExpansionLimits::default(),
+        zetesis_themelios::FormulaLimits::default(),
+    )
+    .unwrap();
+    let captured = crate::publication_fixture::with_diagnostics(
+        crate::PreparedInput::formula_bundle(&admitted),
+        &options.config,
+        &options.presentation,
         &mut output,
         &mut diagnostics,
         &Cancellation::default(),

@@ -47,7 +47,10 @@ fn objective_directions_leave_the_original_atom_catalog_and_reduct_dag_unchanged
         ] {
             let optimized = formula(&format!("{base} {objectives}"));
             assert_eq!(optimized.atoms(), original.atoms());
-            assert_eq!(optimized.theory().nodes(), original.theory().nodes());
+            assert_eq!(
+                (optimized.theory().nodes(), optimized.theory().operands()),
+                (original.theory().nodes(), original.theory().operands())
+            );
             assert_eq!(optimized.theory().roots(), original.theory().roots());
             let models = |program: &AdmittedFormula| {
                 reference::exhaustive(program)

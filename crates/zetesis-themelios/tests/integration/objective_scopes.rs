@@ -37,8 +37,8 @@ fn scoped_objectives_keep_the_original_reduct_subject() {
         let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
-            original.theory().nodes(),
-            observed.theory().nodes(),
+            (original.theory().nodes(), original.theory().operands()),
+            (observed.theory().nodes(), observed.theory().operands()),
             "{}",
             case.name
         );
@@ -178,7 +178,10 @@ fn scoped_formula_limits_do_not_change_the_theory_cap() {
     let source = format!("{base}:~N=#sum{{1:a;2:a;4:a;8:a}}.[N]");
     let input = reference::admit(&source, &limits).unwrap();
     assert_eq!(input.atoms(), original.atoms());
-    assert_eq!(input.theory().nodes(), original.theory().nodes());
+    assert_eq!(
+        (input.theory().nodes(), input.theory().operands()),
+        (original.theory().nodes(), original.theory().operands())
+    );
     assert_eq!(reference::exhaustive(&input).len(), 2);
 }
 

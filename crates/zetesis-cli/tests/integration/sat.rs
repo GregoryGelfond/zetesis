@@ -92,13 +92,16 @@ fn sat_models_match_exhaustive_normal_search() {
 
 #[test]
 fn search_limits_are_incomplete_and_hidden_models_remain_distinct() {
-    for arguments in [
-        vec!["--max-search-work", "0"],
-        vec!["--max-search-decisions", "0"],
-        vec!["--max-candidates", "0"],
-        vec!["--max-work", "0"],
-    ] {
-        let (report, output, _) = solve("{a}.", &arguments, &Cancellation::default());
+    let limits: [fn(&mut zetesis_cli::PublicationConfig); 4] = [
+        |c| c.solve.max_search_work = 0,
+        |c| c.solve.max_search_decisions = 0,
+        |c| c.solve.max_candidates = 0,
+        |c| c.solve.max_work = 0,
+    ];
+    for limit in limits {
+        let (report, output, _) =
+            crate::support::prepared::formula_run("{a}.", &["--oracle", "countermodel"], limit);
+        let report = report.unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
         assert!(matches!(
             report.interruption,
@@ -115,11 +118,11 @@ fn search_limits_are_incomplete_and_hidden_models_remain_distinct() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 2);
     assert_eq!(answers(&output), vec![BTreeSet::from(["visible"]); 2]);
-    let (limited, output, _) = solve(
-        "{a}. {b}.",
-        &["--max-candidates", "1"],
-        &Cancellation::default(),
-    );
+    let (limited, output, _) =
+        crate::support::prepared::formula_run("{a}. {b}.", &["--oracle", "countermodel"], |c| {
+            c.solve.max_candidates = 1;
+        });
+    let limited = limited.unwrap();
     assert_eq!(limited.models, 1);
     assert_eq!(limited.completion, Completion::Interrupted);
     assert!(output.contains("Answer: 1"));
@@ -129,7 +132,7 @@ fn search_limits_are_incomplete_and_hidden_models_remain_distinct() {
 fn cancellation_precedes_eager_materialization() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let (report, _, _) = solve("a.", &["--max-atoms", "0"], &cancellation);
+    let (report, _, _) = solve("invalid source never admitted", &[], &cancellation);
     assert_eq!(
         report.interruption,
         Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
@@ -208,11 +211,7 @@ fn queens(size: usize) -> String {
 
 #[test]
 fn synthetic_eight_queens_source_has_all_92_models() {
-    let (report, output, _) = solve(
-        &queens(8),
-        &["--max-search-work", "1000000000"],
-        &Cancellation::default(),
-    );
+    let (report, output, _) = solve(&queens(8), &[], &Cancellation::default());
     assert_eq!(report.completion, Completion::Exhausted, "{report:?}");
     assert_eq!(report.models, 92);
     let models = answers(&output);

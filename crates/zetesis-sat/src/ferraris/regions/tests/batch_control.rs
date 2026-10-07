@@ -14,15 +14,15 @@ use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 /// A held root forces a chain of implications over `atoms` atoms: a closure
 /// of many more charged reads than one batch.
 fn implication_chain(atoms: usize) -> Theory {
-    let mut nodes: Vec<Node> = (0..atoms).map(Node::Atom).collect();
+    let mut nodes: Vec<Node> = (0..atoms).map(Node::atom).collect();
     let mut roots = vec![0];
     for atom in 0..atoms - 1 {
         roots.push(nodes.len());
-        nodes.push(Node::Implies(atom, atom + 1));
+        nodes.push(Node::implies(atom, atom + 1));
     }
     Theory::new(
         atoms,
-        nodes,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
         roots,
         zetesis_ferraris::AdmissionLimits::default(),
     )

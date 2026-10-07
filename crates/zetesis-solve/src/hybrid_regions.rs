@@ -1,8 +1,9 @@
 //! Original source constraints composed with the candidate-region traversal.
 //!
-//! The factory owns an immutable source handle. A worker borrows that handle
-//! while retaining its own prepared lookup and check state. Only the cumulative
-//! allowances and first fault are shared; candidate truth remains worker-local.
+//! The factory owns an immutable source handle. Workers share its catalog index
+//! and row positions, while retaining their own rule plans and check state.
+//! Cumulative allowances and the first fault are shared; candidate truth remains
+//! worker-local.
 //! Neither this adapter nor its source checker participates in a frozen-reduct
 //! proper-subset query.
 

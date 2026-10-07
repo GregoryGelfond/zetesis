@@ -230,17 +230,17 @@ fn shared_choice_guards_preserve_prefix_origins() {
     // node IDs introduced by the aggregate. Support guards have falsum heads
     // and are not these original p/q rule roots.
     let prefix_origins = |program: &AdmittedFormula| {
-        use zetesis_ferraris::Node;
+        use zetesis_ferraris::NodeView as Node;
 
         let mut by_head = std::collections::BTreeMap::new();
         let theory = program.theory();
         let atoms = program.atoms();
         assert_eq!(program.formula_origins().len(), theory.roots().len());
         for (&root, origins) in theory.roots().iter().zip(program.formula_origins()) {
-            let Node::Implies(_, head) = theory.nodes()[root] else {
+            let Node::Implies(_, head) = theory.view().node(root).unwrap() else {
                 continue;
             };
-            let Node::Atom(head) = theory.nodes()[head] else {
+            let Node::Atom(head) = theory.view().node(head).unwrap() else {
                 continue;
             };
             let atom = atoms.at(head).unwrap();

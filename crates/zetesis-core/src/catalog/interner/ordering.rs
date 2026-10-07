@@ -178,6 +178,9 @@ impl AtomAppender<'_> {
         limits: Limits,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Vec<usize>, Failure<E>> {
+        // Traversal repurposes the semantic mutation buffer. Revoke its
+        // published-spine certificate before any fallible preparation.
+        self.spines.semantic = None;
         let count = self.len();
         population(count, limits)?;
         let base = self.storage_bytes() - cells::<Step>(self.index.path.capacity())

@@ -83,15 +83,12 @@ const CASES: &[Case] = &[
     },
 ];
 
-fn options(pruning: bool, models: usize) -> Options {
+fn options(models: usize) -> Options {
     let mut options =
         Options::try_parse_from(["zetesis", "--backend", "cpu", "--workers", "1"]).unwrap();
     assert_eq!(options.oracle, Oracle::Auto);
     options.models = models;
     options.stats = true;
-    if !pruning {
-        options.max_objective_bound_work = 0;
-    }
     options
 }
 fn solve(source: &str, options: &Options) -> (Result<Report, RunError>, String, String) {
@@ -110,6 +107,35 @@ fn solve(source: &str, options: &Options) -> (Result<Report, RunError>, String, 
         String::from_utf8(stderr).unwrap(),
     )
 }
+fn with_pruning(
+    source: &str,
+    pruning: bool,
+    models: usize,
+) -> (Result<Report, RunError>, String, String) {
+    let options = options(models);
+    if pruning {
+        solve(source, &options)
+    } else {
+        let mut config = zetesis_cli::PublicationConfig::from(&options);
+        config.solve.max_objective_bound_work = 0;
+        let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
+        let result = crate::support::prepared::human(
+            source,
+            &config,
+            &mut output,
+            &mut diagnostics,
+            &Cancellation::default(),
+        )
+        .map_err(|failure| *failure.cause);
+        (
+            result,
+            String::from_utf8(output).unwrap(),
+            String::from_utf8(diagnostics).unwrap(),
+        )
+    }
+}
+
 fn symbols(line: &str) -> Vec<String> {
     let mut result = Vec::new();
     let mut quoted = false;
@@ -231,13 +257,15 @@ fn automatic_admission_and_bounds_preserve_complete_costs_and_display_multisets(
     );
     for (index, case) in CASES.iter().enumerate() {
         for pruning in [false, true] {
-            let (report, text, diagnostics) = solve(case.source, &options(pruning, 0));
+            let (report, text, diagnostics) = with_pruning(case.source, pruning, 0);
             let report = report.unwrap_or_else(|error| panic!("{}: {error}", case.source));
             assert_complete(&report, &text, case);
-            assert!(
-                diagnostics.contains("oracle: Ferraris reduct membership"),
-                "{diagnostics}"
-            );
+            if pruning {
+                assert!(
+                    diagnostics.contains("oracle: Ferraris reduct membership"),
+                    "{diagnostics}"
+                );
+            }
             let restrictions = report
                 .countermodel_statistics
                 .unwrap()
@@ -255,7 +283,7 @@ fn automatic_admission_and_bounds_preserve_complete_costs_and_display_multisets(
 fn default_display_limit_still_proves_all_hidden_optimal_ties() {
     let case = &CASES[6];
     for pruning in [false, true] {
-        let (report, text, _) = solve(case.source, &options(pruning, 1));
+        let (report, text, _) = with_pruning(case.source, pruning, 1);
         let report = report.unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 1);
@@ -275,7 +303,7 @@ fn maximizing_literal_and_evaluated_minimum_have_distinct_typed_source_refusals(
         ("#maximize{(-2147483647-1)@1,k}.", false),
         ("v(-2147483647-1).v(1). #maximize{W@1,k:v(W)}.", false),
     ] {
-        let (result, text, _) = solve(source, &options(true, 0));
+        let (result, text, _) = solve(source, &options(0));
         let error = result.unwrap_err();
         assert!(crate::support::human::preamble(&text));
         let RunError::FormulaAdmission(FormulaFailure::Expansion(ExpansionFailure::Admission(
@@ -298,7 +326,7 @@ fn maximizing_literal_and_evaluated_minimum_have_distinct_typed_source_refusals(
         assert!(!error.diagnostics().is_empty());
     }
     let source = "v(-2147483647-1).v(1). #maximize{W@1,k:v(W),W!=(-2147483647-1)}.";
-    let (report, text, _) = solve(source, &options(true, 0));
+    let (report, text, _) = solve(source, &options(0));
     assert_eq!(report.unwrap().completion, Completion::Exhausted);
     assert!(text.contains("Optimization: -1\n"));
 }
@@ -334,17 +362,15 @@ fn process(command: &mut Command, source: &str) -> Output {
 #[test]
 fn original_stdin_command_proves_normalized_optimum_without_feature_flags() {
     let case = &CASES[2];
-    for budget in ["0", "10000000"] {
+    for threads in ["1", "2"] {
         let output = process(
             Command::new(env!("CARGO_BIN_EXE_zetesis")).args([
                 "--backend",
                 "cpu",
-                "--workers",
-                "1",
+                "--threads",
+                threads,
                 "--models",
                 "0",
-                "--max-objective-bound-work",
-                budget,
             ]),
             case.source,
         );
@@ -403,7 +429,7 @@ fn fresh_clingo_optima_match_native_bounds_on_and_off() {
     for case in CASES {
         assert_eq!(clingo(case), expected(case), "{}", case.source);
         for pruning in [false, true] {
-            let (report, text, _) = solve(case.source, &options(pruning, 0));
+            let (report, text, _) = with_pruning(case.source, pruning, 0);
             assert_complete(&report.unwrap(), &text, case);
         }
     }
@@ -411,9 +437,11 @@ fn fresh_clingo_optima_match_native_bounds_on_and_off() {
 
 #[test]
 fn incomplete_maximizing_evaluation_cannot_claim_optimality() {
-    let mut bounded = options(false, 0);
-    bounded.max_objective_work = 0;
-    let (report, output, _) = solve(CASES[0].source, &bounded);
+    let (report, output, _) =
+        crate::support::prepared::formula_run(CASES[0].source, &[], |config| {
+            config.solve.max_objective_bound_work = 0;
+            config.solve.max_objective_work = 0;
+        });
     assert_eq!(report.unwrap().completion, Completion::Interrupted);
     assert!(output.contains("INCOMPLETE:"));
     assert!(output.contains("(search incomplete)"));

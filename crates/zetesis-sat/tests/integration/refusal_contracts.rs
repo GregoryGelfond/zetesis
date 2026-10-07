@@ -12,15 +12,19 @@ use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
 fn choices() -> Theory {
     Theory::new(
         2,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Implies(1, 0),
-            Node::Or(1, 2),
-            Node::Atom(1),
-            Node::Implies(4, 0),
-            Node::Or(4, 5),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::or_pair([1, 2]),
+                Node::atom(1),
+                Node::implies(4, 0),
+                Node::or_pair([4, 5]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3, 6],
         AdmissionLimits::default(),
     )
@@ -41,7 +45,13 @@ fn mismatched_restriction_error_does_not_consume_the_live_enumerator() {
     let original = choices();
     let mut search =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
-    let wrong = Theory::new(1, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let wrong = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let before = search.statistics();
     let error = search.restrict_candidates(&wrong).unwrap_err();
     assert_eq!(
@@ -75,7 +85,11 @@ fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
     assert_eq!(search.next().unwrap().unwrap().atoms().count(), 0);
     let guard = Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        zetesis_ferraris::FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+            vec![],
+        )
+        .unwrap(),
         vec![2],
         AdmissionLimits::default(),
     )

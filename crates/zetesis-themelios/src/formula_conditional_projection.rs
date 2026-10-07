@@ -47,10 +47,18 @@ impl Compiler<'_> {
             self.limits.max_analysis_nodes as u128,
             self.location,
         )?;
+        self.budget.check_family(
+            count
+                .saturating_mul(scan.bytes.saturating_mul(4) + std::mem::size_of::<Atom>() as u128),
+            self.location,
+        )?;
         let count = usize::try_from(count).expect("finite value ceiling proves usize");
         Ok((0..count)
-            .map(|position| select_atom(atom.clone(), position))
-            .collect())
+            .map(|position| {
+                self.budget.poll(self.location)?;
+                Ok(select_atom(atom.clone(), position))
+            })
+            .collect::<Result<_, crate::ExpansionFailure>>()?)
     }
 
     pub(super) fn conditional_projection(
@@ -88,10 +96,18 @@ impl Compiler<'_> {
             count.saturating_mul(payload.nodes.saturating_mul(4)),
             self.location,
         )?;
+        self.budget.check_family(
+            count.saturating_mul(
+                payload.bytes.saturating_mul(4)
+                    + std::mem::size_of::<WithProvenance<Statement>>() as u128,
+            ),
+            self.location,
+        )?;
         self.dependency_projection = true;
         let count = usize::try_from(count).expect("bounded analysis alternatives");
         let mut result = Vec::with_capacity(count);
         for position in 0..count {
+            self.budget.poll(self.location)?;
             let mut projection = Projection { position };
             let rewritten = rewrite(Program::of_nodes([statement.clone()]), &mut projection);
             debug_assert_eq!(projection.position, 0);

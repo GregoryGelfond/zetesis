@@ -555,12 +555,10 @@ fn cli_profiles_preserve_their_execution_arguments() {
             "lazy",
             "--workers",
             "2",
-            "--completion-workers",
-            "3",
+            "--memory",
+            "300000000",
             "--clingo-workers",
             "4",
-            "--batch-size",
-            "7",
             "--formula-joins",
             "table",
             "--warmups",
@@ -601,8 +599,7 @@ fn cli_profiles_preserve_their_execution_arguments() {
         );
         for (flag, value) in [
             ("--workers", "2"),
-            ("--completion-workers", "3"),
-            ("--batch-size", "7"),
+            ("--memory", "300000000"),
             ("--formula-joins", "table"),
         ] {
             let flag = serde_json::to_value(std::ffi::OsString::from(flag)).unwrap();

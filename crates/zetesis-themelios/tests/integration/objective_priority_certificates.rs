@@ -100,7 +100,10 @@ fn certificates_preserve_original_equalities() {
     )
     .unwrap();
     assert_eq!(optimized.atoms(), ordinary.atoms());
-    assert_eq!(optimized.theory().nodes(), ordinary.theory().nodes());
+    assert_eq!(
+        (optimized.theory().nodes(), optimized.theory().operands()),
+        (ordinary.theory().nodes(), ordinary.theory().operands())
+    );
     assert_eq!(optimized.theory().roots(), ordinary.theory().roots());
 }
 

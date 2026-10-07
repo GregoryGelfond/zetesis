@@ -23,19 +23,23 @@ fn theory() -> Theory {
     // d. p | q :- d. r :- not p. :- q,r.
     Theory::new(
         4,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Or(1, 2),
-            Node::Implies(0, 3),
-            Node::False,
-            Node::Implies(1, 5),
-            Node::Atom(3),
-            Node::Implies(6, 7),
-            Node::And(2, 7),
-            Node::Implies(9, 5),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::or_pair([1, 2]),
+                Node::implies(0, 3),
+                Node::falsum(),
+                Node::implies(1, 5),
+                Node::atom(3),
+                Node::implies(6, 7),
+                Node::and_pair([2, 7]),
+                Node::implies(9, 5),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![0, 4, 8, 10],
         AdmissionLimits::default(),
     )

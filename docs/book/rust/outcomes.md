@@ -279,26 +279,32 @@ substitutions, nodes, work, candidate occurrences, retained results or transport
 storage. Zero is a real ceiling where those limits apply; it does not mean
 unlimited. Work and storage limits are independent.
 
-Ordinary sessions and CLI flags share `SolveConfig::DEFAULT`: ten billion
-cumulative search-work units, ten million branch decisions, ten million
-candidates and one hundred million CPU oracle-work units under that field's
-per-candidate or shared-batch contract. These are finite logical allowances,
-not wall-clock deadlines or performance claims. Standalone primitive limit
-types keep their own operation-specific defaults. Source admission, derived
-atoms, carrier storage, batch bytes, objective retention and complete `WorldView`
-capture remain independently bounded; requesting every answer does not make
-those resources unlimited. A smaller explicit work, decision or candidate
-allowance still yields an interrupted prefix when exhausted.
+Ordinary sessions and the CLI use the shared `zetesis_solve::Resources` policy:
+threads, a named memory allowance and optional cooperative cancellation or a
+deadline. The CLI exposes `--threads`, `--memory` and `--time-limit` for these
+controls. Mandatory cumulative work, decisions and candidate counts use checked
+representation ceilings, rather than separate policy allowances. Work remains
+in statistics; it is not elapsed time or a performance guarantee. Optional
+fail-open analyses and bounded device dispatches retain their separate effort
+limits.
+
+Source admission, derived atoms, carrier storage, batch bytes, objective
+retention and complete `WorldView` capture remain independently bounded.
+The named memory allowances are not a process-wide RSS cap; requesting every
+answer does not remove them. Standalone primitive limit types keep their
+operation-specific defaults, and a library caller's explicit work, decision or
+candidate allowance still yields an interrupted prefix when exhausted.
 
 The [streaming regression](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/streaming_defaults.rs)
 checks every full answer for independent selections on a 24-vertex path against
 an independently generated bitmask family, using both automatic specialization
-and the general countermodel oracle. The former already completes within the
-previous search-work allowance; the latter needs more work and still interrupts
-when explicitly given that earlier ceiling. The test releases each answer after
-checking its identity; it does not collect a `WorldView` or bypass that type's
-retention limits. This demonstrates completed enumeration within the ordinary
-allowances, not a running-time guarantee or a change to answer-set semantics.
+and the general countermodel oracle. Both complete under ordinary solve defaults.
+A separate bounded run gives the general oracle half its measured complete
+search-work count and checks that it reports an interrupted prefix. The test
+releases each answer after checking its identity; it does not collect a
+`WorldView` or bypass that type's retention limits. This checks completed
+enumeration and explicit interruption without a running-time claim or a change
+to answer-set semantics.
 
 ### Cancellation and deadlines
 
@@ -435,8 +441,9 @@ Prepared and peak copied payload bytes exclude allocator and index overhead and
 are not process memory. The peak includes temporary restriction templates.
 Failed preparation retains its work but has no completed preparation footprint.
 The CLI exposes the same fields as `statistics.candidate_restrictions` in JSON.
-`--max-candidate-bytes` bounds copied payload; `--max-search-work` bounds cumulative
-restriction work on this route. Both advanced controls appear in `--help-all`.
+The ordinary resource policy derives candidate storage from `--memory` and
+keeps cumulative restriction work as a checked statistic. Bounded library
+callers can set `SolveConfig::max_candidate_bytes` and `max_search_work` directly.
 
 Under `--search clauses`, formula search records its necessary
 disjunctive support attempt separately from user or objective refinements.

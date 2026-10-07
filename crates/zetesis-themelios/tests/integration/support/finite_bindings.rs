@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Node, Theory};
+use zetesis_ferraris::{NodeView as Node, Theory};
 use zetesis_reference_support::canonical;
 use zetesis_themelios::AdmittedFormula;
 
@@ -13,12 +13,13 @@ pub(crate) use zetesis_test_support::records::Models;
 
 pub(crate) fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> Vec<bool> {
     let mut result = Vec::new();
-    for (index, node) in theory.nodes().iter().enumerate() {
-        let value = match *node {
+    for index in 0..theory.view().len() {
+        let node = theory.view().node(index).unwrap();
+        let value = match node {
             Node::False => false,
             Node::Atom(atom) => mask & (1 << atom) != 0,
-            Node::And(left, right) => result[left] && result[right],
-            Node::Or(left, right) => result[left] || result[right],
+            Node::And(row) => row.iter().all(|&child| result[child]),
+            Node::Or(row) => row.iter().any(|&child| result[child]),
             Node::Implies(left, right) => !result[left] || result[right],
         };
         result.push(value && frozen.is_none_or(|outer| outer[index]));

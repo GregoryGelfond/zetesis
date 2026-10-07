@@ -18,8 +18,9 @@ fn compact_mut(knowledge: &mut Knowledge) -> &mut Known<u32> {
 }
 
 mod chain_links;
-mod counters;
+mod chains;
 mod copy_costs;
+mod counters;
 mod metering;
 mod rechecks;
 mod scratch;
@@ -27,31 +28,39 @@ mod scratch;
 /// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the
 /// closure reads every node and parent: a predictable number of charges.
 fn implication_chain(atoms: usize) -> crate::Theory {
-    let mut nodes: Vec<crate::Node> = (0..atoms).map(crate::Node::Atom).collect();
+    let mut nodes: Vec<crate::Node> = (0..atoms).map(crate::Node::atom).collect();
     let mut roots = vec![0];
     for atom in 0..atoms - 1 {
         roots.push(nodes.len());
-        nodes.push(crate::Node::Implies(atom, atom + 1));
+        nodes.push(crate::Node::implies(atom, atom + 1));
     }
-    crate::Theory::new(atoms, nodes, roots, crate::AdmissionLimits::default()).unwrap()
+    crate::Theory::new(
+        atoms,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        crate::AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn shared_occurrences() -> crate::Theory {
-    use crate::Node::{Atom, Implies, Or};
-
     crate::Theory::new(
         4,
-        vec![
-            Atom(0),
-            Atom(0),
-            Atom(1),
-            Atom(2),
-            Or(0, 1),
-            Or(4, 2),
-            Implies(0, 0),
-            Implies(1, 3),
-            Implies(1, 3),
-        ],
+        crate::FormulaParts::new(
+            vec![
+                crate::Node::atom(0),
+                crate::Node::atom(0),
+                crate::Node::atom(1),
+                crate::Node::atom(2),
+                crate::Node::or_pair([0, 1]),
+                crate::Node::or_pair([4, 2]),
+                crate::Node::implies(0, 0),
+                crate::Node::implies(1, 3),
+                crate::Node::implies(1, 3),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![5, 6, 7, 8],
         crate::AdmissionLimits::default(),
     )
@@ -101,7 +110,7 @@ fn compact_narrower_keeps_shared_and_aliased_occurrences() {
         .map(|atom| compact(&knowledge).unknown.get(atom))
         .collect();
     assert_eq!(unknown, [5, 1, 2, 0]);
-    assert_eq!(index.work(), 9);
+    assert_eq!(index.work(), 9 + 10);
 }
 
 #[test]
@@ -144,11 +153,11 @@ fn compact_adjacency_uses_less_retained_storage() {
     // a ring of ordinary implications gives each atom two parents, one atom
     // node and one supporting producer, with many empty node-indexed rows.
     let atoms = 4096;
-    let mut nodes: Vec<_> = (0..atoms).map(Node::Atom).collect();
-    nodes.extend((0..atoms).map(|atom| Node::Implies(atom, (atom + 1) % atoms)));
+    let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
+    nodes.extend((0..atoms).map(|atom| Node::implies(atom, (atom + 1) % atoms)));
     let theory = crate::Theory::new(
         atoms,
-        nodes,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
         (atoms..2 * atoms).collect(),
         crate::AdmissionLimits::default(),
     )
@@ -229,9 +238,15 @@ fn propagated_decisions_are_seen(frozen: bool) {
     };
     use zetesis_cpu::Cancellation;
 
-    let mut nodes: Vec<_> = (0..130).map(Node::Atom).collect();
-    nodes.extend([Node::Or(63, 64), Node::Implies(64, 129)]);
-    let theory = Theory::new(130, nodes, vec![130, 131], AdmissionLimits::default()).unwrap();
+    let mut nodes: Vec<_> = (0..130).map(Node::atom).collect();
+    nodes.extend([Node::or_pair([63, 64]), Node::implies(64, 129)]);
+    let theory = Theory::new(
+        130,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
+        vec![130, 131],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidate_atoms = [0, 63, 64, 129];
     let candidate = Interpretation::new(&theory, candidate_atoms).unwrap();
     let cancellation = Cancellation::default();

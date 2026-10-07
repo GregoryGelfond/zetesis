@@ -5,6 +5,37 @@ Rust files match `source-inputs.sha256`. The package uses Lean 4.31.0, Charon
 `b104e24fea7d721b71e6c39fd70f26ff20bc0980` and Aeneas
 `505b6ca35217e7be5c96c3e2f8045edfbdf47291`.
 
+## Replay the native generation
+
+The unprefixed records and compatibility steps below retain the binary
+`Evaluator` generation. The native generation has its own
+[native-provenance.json](native-provenance.json), source inventory and complete
+local proof-dependency inventory. Reuse the same pinned tools and dependency
+owner; keep `Native` and `Evaluator` in their separate namespaces.
+
+From this directory, after the setup below:
+
+```sh
+(cd ../.. && shasum -a 256 -c refinement/evaluation/native-source-inputs.sha256)
+(cd ../.. && shasum -a 256 -c refinement/evaluation/native-artifacts.sha256)
+sh native-replay/replay.sh
+lake build
+lake env lean -DautoImplicit=false -DwarningAsError=true NativeAudit.lean
+```
+
+The replay writes only a new `target/native-replay` directory. It reextracts the
+recorded roots, checks the normalized source's exact hash, applies the guarded
+reversible adaptation, translates with stock Aeneas, and compares generated
+Types and Functions after removing only the recorded provider block. The large
+LLBC inputs are regenerated from source and compared with their recorded hashes. A changed input requires review and a new record; never bypass
+a guard by merely replacing its expected hash. The source inventory covers the
+eight embedded Ferraris files, not every dependency source. Complete normalized
+extraction and explicit library models fix the remaining generated operations.
+
+The consuming `TheoryAdmission` topology frontier remains outside this raw
+constructor correspondence. Building a selected constructor does not prove its
+semantics. Preserve the historical binary audits separately.
+
 ## Prepare and check
 
 Install the Lean toolchain through elan. The commands below download the pinned

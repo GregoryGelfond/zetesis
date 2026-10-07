@@ -98,18 +98,18 @@ impl Clone for MeasuredKnowledge {
 }
 
 fn theory(atoms: usize) -> Theory {
-    let mut nodes: Vec<_> = (0..atoms).map(Node::Atom).collect();
+    let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
     // Four-operand chains populate both chain-counter arrays. All but eight
     // atoms are facts, so each size has the same bounded, complete traversal.
     // The unasserted chains affect propagation and ranking, not satisfaction.
     for first in (0..atoms).step_by(4) {
-        nodes.push(Node::Or(first, first + 1));
-        nodes.push(Node::Or(nodes.len() - 1, first + 2));
-        nodes.push(Node::Or(nodes.len() - 1, first + 3));
+        nodes.push(Node::or_pair([first, first + 1]));
+        nodes.push(Node::or_pair([nodes.len() - 1, first + 2]));
+        nodes.push(Node::or_pair([nodes.len() - 1, first + 3]));
     }
     Theory::new(
         atoms,
-        nodes,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
         (0..atoms - FREE_ATOMS).collect(),
         AdmissionLimits::default(),
     )

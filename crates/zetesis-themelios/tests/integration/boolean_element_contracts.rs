@@ -340,7 +340,10 @@ fn constants_do_not_certify_atom_count_plans() {
             "{source}"
         );
         assert_eq!(planned.atoms(), ordinary.atoms());
-        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(
+            (planned.theory().nodes(), planned.theory().operands()),
+            (ordinary.theory().nodes(), ordinary.theory().operands())
+        );
         assert_eq!(planned.theory().roots(), ordinary.theory().roots());
         assert_eq!(planned.formula_origins(), ordinary.formula_origins());
     }

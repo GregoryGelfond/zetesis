@@ -9,8 +9,8 @@ fn gate_support(rows: u32, no: u32, yes: u32) -> u32 {
         select(0u, 2u, (rows & yes) != 0u);
 }
 fn gate(base: u32, node: Node) {
-    let left = nodes[node.left].output;
-    let right = nodes[node.right].output;
+    let left = node_at(node.left).output;
+    let right = node_at(node.right).output;
     let dx = atomicLoad(&domains[base + left]);
     let dy = atomicLoad(&domains[base + right]);
     let dz = atomicLoad(&domains[base + node.output]);

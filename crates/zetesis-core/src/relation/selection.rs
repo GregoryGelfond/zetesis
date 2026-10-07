@@ -658,7 +658,10 @@ impl<'source> Relation<'source> {
     ) -> Result<bool, Failure> {
         for equality in &query.equalities {
             work.tick(1)?;
-            let id = self.layout.columns[equality.column][position];
+            let id = self.layout.columns[equality.column]
+                .view()
+                .get(position)
+                .ok_or(Failure::Selection)?;
             if id != equality.value_id {
                 return Ok(false);
             }

@@ -1,19 +1,23 @@
 use super::*;
-use zetesis_ferraris::AdmissionLimits;
+use zetesis_ferraris::{AdmissionLimits, Node};
 
 fn fixture() -> Theory {
     Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::And(0, 0),
-            Node::Atom(1),
-            Node::Or(1, 2),
-            Node::False,
-            Node::Implies(3, 4),
-            Node::Atom(0),
-            Node::And(2, 6),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::and_pair([0, 0]),
+                Node::atom(1),
+                Node::or_pair([1, 2]),
+                Node::falsum(),
+                Node::implies(3, 4),
+                Node::atom(0),
+                Node::and_pair([2, 6]),
+            ],
+            Vec::new(),
+        )
+        .unwrap(),
         vec![5, 7],
         AdmissionLimits::default(),
     )
@@ -37,27 +41,39 @@ fn shared_interleaved_nodes_have_literal_stable_levels() {
     );
     let outputs: Vec<_> = prepared.nodes.chunks_exact(4).map(|node| node[3]).collect();
     assert_eq!(outputs, [0, 2, 1, 3, 4, 5, 0, 6]);
-    assert_eq!(plan.setup, 24); // 2*8 nodes + 2 atoms + 2 roots + 4 levels.
-    assert_eq!(plan.sweep, 139); // 9*8 + 2 + 64 + 1.
+    assert_eq!(plan.setup, 32); // 2*8 nodes + 8 edges + 2 atoms + 2 roots + 4 levels.
+    assert_eq!(plan.sweep, 155); // 9*8 + 2*8 edges + 2 + 64 + 1.
 }
 
 #[test]
 fn pure_chains_keep_serial_truth() {
-    let mut nodes = vec![Node::Atom(0)];
-    nodes.extend((1..128).map(|index| Node::And(index - 1, index - 1)));
-    let chain = Theory::new(1, nodes, vec![127], AdmissionLimits::default()).unwrap();
+    let mut nodes = vec![Node::atom(0)];
+    nodes.extend((1..128).map(|index| Node::and_pair([index - 1, index - 1])));
+    let chain = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(nodes, Vec::new()).unwrap(),
+        vec![127],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let (prepared, plan) = preparation(&chain, FormulaLimits::default())
         .unwrap()
         .finish(&wgpu::Limits::default(), &Cancellation::default())
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 0);
     assert_eq!(prepared.roots, [127]);
-    assert_eq!(plan.setup, 258);
+    assert_eq!(plan.setup, 512);
 }
 
 #[test]
 fn empty_graphs_keep_only_required_padding() {
-    let empty = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let empty = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let (prepared, plan) = preparation(&empty, FormulaLimits::default())
         .unwrap()
         .finish(&wgpu::Limits::default(), &Cancellation::default())
@@ -71,7 +87,8 @@ fn empty_graphs_keep_only_required_padding() {
 fn zero_roots_still_cover_every_duplicate_leaf() {
     let theory = Theory::new(
         1,
-        vec![Node::Atom(0), Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::atom(0)], Vec::new())
+            .unwrap(),
         vec![],
         AdmissionLimits::default(),
     )
@@ -191,8 +208,8 @@ fn checked_schedule_offsets_refuse_overflow_and_underflow() {
 
 #[test]
 fn level_setup_is_admitted_after_the_minimum_serial_envelope() {
-    // Minimum setup20 succeeds; the actual four-level setup requires24.
-    for (work, accepted) in [(23, false), (24, true)] {
+    // Minimum setup28 succeeds; the actual four-level setup requires32.
+    for (work, accepted) in [(31, false), (32, true)] {
         let result = preparation(
             &fixture(),
             FormulaLimits {
@@ -220,4 +237,108 @@ fn level_setup_is_admitted_after_the_minimum_serial_envelope() {
         .kind(),
         GpuErrorKind::Capacity
     );
+}
+
+#[test]
+fn native_depth_visits_every_operand_and_keeps_one_header() {
+    use zetesis_ferraris::{FormulaParts, OperandSpan};
+    let theory = Theory::new(
+        2,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::and_pair([0, 1]),
+                Node::or_pair([2, 1]),
+                Node::and_span(OperandSpan {
+                    start: 0,
+                    length: 3,
+                }),
+            ],
+            vec![0, 1, 3],
+        )
+        .unwrap(),
+        vec![4],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let (packed, plan) = Preparation::new(
+        &theory,
+        1,
+        FormulaLimits::default(),
+        &wgpu::Limits::default(),
+        1,
+    )
+    .unwrap()
+    .finish(&wgpu::Limits::default(), &Cancellation::default())
+    .unwrap();
+    assert_eq!(packed.graph.shape.nodes, 5);
+    assert_eq!(packed.graph.schedule.levels, 4);
+    assert_eq!(&packed.nodes[16..], &[5, 0, 3, 4, 0, 1, 3]);
+    assert_eq!(packed.roots, [4, 0, 2, 3, 4, 5, 0, 1, 2, 3, 4]);
+    assert_eq!((plan.setup, plan.sweep), (24, 126));
+    for (ceiling, accepted) in [(23, false), (24, true)] {
+        let result = Preparation::new(
+            &theory,
+            1,
+            FormulaLimits {
+                max_work_per_candidate: ceiling,
+                ..FormulaLimits::default()
+            },
+            &wgpu::Limits::default(),
+            1,
+        )
+        .and_then(|preparation| {
+            preparation.finish(&wgpu::Limits::default(), &Cancellation::default())
+        });
+        assert_eq!(result.is_ok(), accepted);
+    }
+}
+
+#[test]
+fn native_tail_is_charged_in_actual_cold_staging() {
+    use zetesis_ferraris::{FormulaParts, OperandSpan};
+    let theory = Theory::new(
+        1,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::and_span(OperandSpan {
+                    start: 0,
+                    length: 65,
+                }),
+            ],
+            vec![0; 65],
+        )
+        .unwrap(),
+        vec![1],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let device = wgpu::Limits::default();
+    let limits = FormulaLimits::default();
+    let (prepared, cold) = Preparation::new(&theory, 1, limits, &device, 1)
+        .unwrap()
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    assert_eq!(prepared.graph.shape.node_bytes, 4 * (8 + 65));
+    let hot = Plan::new(&prepared.graph, 1, limits, &device, false, 1).unwrap();
+    assert_eq!(
+        cold.accounted - hot.accounted,
+        retained_bytes(&prepared.nodes).unwrap() + retained_bytes(&prepared.roots).unwrap()
+    );
+    for (ceiling, accepted) in [(cold.accounted - 1, false), (cold.accounted, true)] {
+        let result = Preparation::new(
+            &theory,
+            1,
+            FormulaLimits {
+                max_batch_bytes: ceiling,
+                ..limits
+            },
+            &device,
+            1,
+        )
+        .and_then(|preparation| preparation.finish(&device, &Cancellation::default()));
+        assert_eq!(result.is_ok(), accepted);
+    }
 }

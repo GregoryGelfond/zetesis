@@ -73,7 +73,10 @@ fn ground(
 
 fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
     assert_eq!(left.atoms(), right.atoms());
-    assert_eq!(left.theory().nodes(), right.theory().nodes());
+    assert_eq!(
+        (left.theory().nodes(), left.theory().operands()),
+        (right.theory().nodes(), right.theory().operands())
+    );
     assert_eq!(left.theory().roots(), right.theory().roots());
     assert_eq!(left.formula_origins(), right.formula_origins());
     assert_eq!(
@@ -91,16 +94,24 @@ fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
 }
 
 fn selective() -> String {
+    // The shared constant selects a real, maximally skewed posting in a/b.
+    // Both remain preferred to the larger c relation, so domain meets must
+    // remove impossible prefixes independently of connected join ordering.
+    selective_with_key(true)
+}
+
+fn selective_with_key(shared_key: bool) -> String {
+    let key = if shared_key { "0," } else { "" };
     let mut source = String::new();
     for value in 1..=8 {
-        write!(source, "a({value}).b({value}).").unwrap();
+        write!(source, "a({key}{value}).b({key}{value}).").unwrap();
     }
     for left in 5..=12 {
         for right in 5..=12 {
             write!(source, "c({left},{right}).").unwrap();
         }
     }
-    source.push_str("r(X,Y):-a(X),b(Y),c(X,Y).");
+    write!(source, "r(X,Y):-a({key}X),b({key}Y),c(X,Y).").unwrap();
     source
 }
 
@@ -137,7 +148,8 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         assert!(on.support.get().join_rows < off.support.get().join_rows);
         let before = *off.rules.borrow().last().unwrap();
         let after = *on.rules.borrow().last().unwrap();
-        // Eight a/b values, but only four occur in the corresponding c columns.
+        // The constant-key postings retain the a, b, c order: eight a/b
+        // values, but only four occur in the corresponding c columns.
         // Only 16 c probes have nonempty postings. Indexed offers one eight-row
         // posting per probe, then checks the full row; Table intersects both
         // equalities before offering its one row. A complete c match is not an
@@ -160,6 +172,36 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         assert_eq!(after.roots, Some(16));
         assert!(after.domain_guard_checks.unwrap() > 0);
         assert!(on.work.get().domain_prepare_work.unwrap() > after.domain_prepare_work.unwrap());
+        if strategy == JoinStrategy::Table {
+            assert!(after.table_probes.unwrap() > 0);
+        }
+    }
+}
+
+#[test]
+fn finite_meets_avoid_empty_connected_probes() {
+    let source = selective_with_key(false);
+    for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
+        let off = Observation::default();
+        let on = Observation::default();
+        let complete = ground(&source, strategy, None, &off).unwrap();
+        let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
+        equal(&complete, &narrowed);
+        assert!(off.disabled.get());
+        assert_eq!(on.status.get(), Some(Status::FixedPoint));
+        let before = *off.rules.borrow().last().unwrap();
+        let after = *on.rules.borrow().last().unwrap();
+        // a, c, b: four a values have empty c postings; each remaining c
+        // posting has four Y values with empty b postings. Guards skip those
+        // probes, which would offer no rows under either physical strategy.
+        assert_eq!(before.join_rows, Some(8 + 4 * 8 + 4 * 4));
+        assert_eq!(after.join_rows, before.join_rows);
+        assert_eq!(before.join_probes, Some(1 + 8 + 4 * 8));
+        assert_eq!(after.join_probes, Some(1 + 4 + 4 * 4));
+        assert_eq!(after.domain_rejected_rows, Some(4 + 4 * 4));
+        assert_eq!(before.roots, Some(16));
+        assert_eq!(after.roots, Some(16));
+        assert!(after.domain_guard_checks.unwrap() > 0);
         if strategy == JoinStrategy::Table {
             assert!(after.table_probes.unwrap() > 0);
         }
@@ -427,7 +469,10 @@ fn domain_narrowing_preserves_undefined_family_evidence() {
     assert_eq!(mixed.warnings().len(), 1);
     // Different source spans are expected; emitted atoms and formulas agree.
     assert_eq!(mixed.atoms(), narrowed.atoms());
-    assert_eq!(mixed.theory().nodes(), narrowed.theory().nodes());
+    assert_eq!(
+        (mixed.theory().nodes(), mixed.theory().operands()),
+        (narrowed.theory().nodes(), narrowed.theory().operands())
+    );
     assert_eq!(mixed.theory().roots(), narrowed.theory().roots());
 }
 

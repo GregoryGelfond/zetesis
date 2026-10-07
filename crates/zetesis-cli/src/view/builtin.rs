@@ -18,14 +18,14 @@ impl<W: Write> Builtin<W> {
         if options.json {
             Self::Json(JsonRenderer::new(
                 output,
-                options.max_json_record_bytes,
-                options.max_atoms,
+                options.resources().json_record_bytes(),
+                options.resources().formula_limits().theory.max_atoms,
             ))
         } else {
             Self::Human(HumanRenderer::new(
                 output,
                 options.color,
-                options.max_observation_bytes,
+                options.resources().observation_limits().max_output_bytes,
             ))
         }
     }

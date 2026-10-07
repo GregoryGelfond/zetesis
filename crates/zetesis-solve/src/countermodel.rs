@@ -100,6 +100,8 @@ pub(crate) fn prepare_certificate(
 
 pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
     zetesis_sat::Limits {
+        admission: cnf_admission(options.max_candidate_bytes as u128),
+        reduct_admission: cnf_admission(u128::from(options.max_reduct_bytes)),
         search: zetesis_sat::SearchLimits {
             max_work: options.max_search_work,
             max_decisions: options.max_search_decisions,
@@ -112,7 +114,18 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
         max_candidates: options.max_candidates,
         max_reduct_bytes: options.max_reduct_bytes,
         max_verification_work: options.max_work,
-        ..Default::default()
+    }
+}
+
+// These independent logical populations derive from their existing named owner
+// allowance. They do not estimate total RSS. The extent cap keeps doubling a
+// literal population and the variable/sign index within checked host indices.
+fn cnf_admission(bytes: u128) -> zetesis_sat::AdmissionLimits {
+    let extent = usize::try_from(bytes.min(isize::MAX as u128)).unwrap_or(isize::MAX as usize);
+    zetesis_sat::AdmissionLimits {
+        max_variables: extent / 32,
+        max_clauses: extent / (4 * size_of::<usize>()),
+        max_literals: extent / size_of::<zetesis_sat::Literal>(),
     }
 }
 

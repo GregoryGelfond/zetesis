@@ -56,6 +56,27 @@
         ]
       },
       "source_sha256": "960f9642bafb44faae41205295fb436d8b78ed2ac46ce54356bb835402c75020"
+    },
+    {
+      "path": "mastermind-nested.lp",
+      "scaling_constant": "colors",
+      "default_value": 8,
+      "contract": {
+        "family": "all",
+        "satisfiability": "sat",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [[
+          "secret(1,8)", "secret(2,5)", "secret(3,8)",
+          "secret(4,5)", "secret(5,3)", "secret(6,4)"
+        ]],
+        "required_symbols": [],
+        "notes": [
+          "Seven scored guesses determine one six-peg secret.",
+          "Counts feed a minimum, whose results feed a sum; repeated guess positions exercise aggregate-family sharing."
+        ]
+      },
+      "source_sha256": "808861994f9c2ffa16c61a0f37175ebe403dcf805c7c81fb6f07814713cfa627"
     }
   ]
 }

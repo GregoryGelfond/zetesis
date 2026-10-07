@@ -17,7 +17,9 @@ use std::fmt;
 
 use zetesis_core::catalog::Atoms;
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_ferraris::{AggregateElement, AggregateError, AggregateLimits, Node, Theory};
+use zetesis_ferraris::{
+    AggregateElement, AggregateError, AggregateLimits, FormulaNodes, FormulaParts, NodeView, Theory,
+};
 use zetesis_objective::{ObjectiveProgram, Score};
 
 /// Inclusive construction limits; zero is a real ceiling.
@@ -38,6 +40,8 @@ pub struct ObjectivePlanLimits {
     pub max_tuple_width: usize,
     /// Eligibility DAG nodes.
     pub max_nodes: usize,
+    /// Logical operand occurrences and retained arena cells.
+    pub max_operands: usize,
     /// Local binding slots per lifted objective.
     pub max_variables: usize,
     /// Positive conditions per lifted objective.
@@ -55,6 +59,7 @@ impl Default for ObjectivePlanLimits {
             max_key_bytes: 16_777_216,
             max_tuple_width: 64,
             max_nodes: 1_048_576,
+            max_operands: 2_097_152,
             max_variables: 64,
             max_body_atoms: 1_024,
             max_work: 10_000_000,
@@ -94,6 +99,8 @@ pub enum ObjectiveBoundResource {
     TupleWidth,
     /// Formula nodes.
     Nodes,
+    /// Logical operand occurrences or retained arena cells.
+    Operands,
     /// Local variable slots.
     Variables,
     /// Positive body width.
@@ -180,7 +187,7 @@ impl std::error::Error for ObjectiveBoundError {}
 pub struct ObjectivePlan {
     original: Theory,
     objectives: ObjectiveProgram,
-    nodes: Vec<Node>,
+    nodes: FormulaParts,
     levels: BTreeMap<i32, Vec<AggregateElement>>,
     statistics: ObjectiveBoundStatistics,
 }
@@ -317,17 +324,61 @@ impl Work<'_> {
             .map_err(|_| self.error(ObjectiveBoundErrorKind::Allocation))?;
         Ok(values)
     }
-    fn node(&mut self, nodes: &mut Vec<Node>, node: Node) -> Result<usize, ObjectiveBoundError> {
+    fn node(
+        &mut self,
+        nodes: &mut FormulaNodes,
+        node: NodeView<'_>,
+    ) -> Result<usize, ObjectiveBoundError> {
         self.tick()?;
-        if nodes.len() >= self.limits.max_nodes {
+        let (added_nodes, edges) = match node {
+            NodeView::And([]) => (2, 2),
+            NodeView::And([_]) | NodeView::Or([_]) => (0, 0),
+            NodeView::And(row) | NodeView::Or(row) => (1, row.len()),
+            NodeView::Implies(_, _) => (1, 2),
+            NodeView::Atom(_) | NodeView::False => (1, 0),
+        };
+        let count = nodes
+            .view()
+            .len()
+            .checked_add(added_nodes)
+            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
+        if count > self.limits.max_nodes {
             return Err(self.limit(ObjectiveBoundResource::Nodes));
         }
-        nodes
-            .try_reserve(1)
-            .map_err(|_| self.error(ObjectiveBoundErrorKind::Allocation))?;
-        let index = nodes.len();
-        nodes.push(node);
-        self.statistics.nodes = nodes.len();
+        let occurrences = nodes
+            .parts()
+            .occurrences()
+            .checked_add(edges)
+            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
+        if occurrences > self.limits.max_operands {
+            return Err(self.limit(ObjectiveBoundResource::Operands));
+        }
+        // Charge child validation and copied arena cells before publication.
+        // The builder has no independent execution-work owner.
+        let copies = match node {
+            NodeView::And([_]) | NodeView::Or([_]) => 1,
+            NodeView::And(row) | NodeView::Or(row) if row.len() >= 3 => row.len(),
+            _ => 0,
+        };
+        for _ in 0..edges {
+            self.tick()?;
+        }
+        for _ in 0..copies {
+            self.tick()?;
+        }
+        let mut transaction = nodes.transaction();
+        let index = transaction
+            .push(node, self.limits.max_nodes, self.limits.max_operands)
+            .map_err(|error| {
+                self.error(match error {
+                    zetesis_ferraris::AdmissionError::Allocation => {
+                        ObjectiveBoundErrorKind::Allocation
+                    }
+                    _ => ObjectiveBoundErrorKind::Theory(error),
+                })
+            })?;
+        transaction.commit();
+        self.statistics.nodes = nodes.view().len();
         Ok(index)
     }
 }

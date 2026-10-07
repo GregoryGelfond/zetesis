@@ -24,9 +24,6 @@ const REPLAY_NODE_WORK: usize = 2;
 // The subtree holds its last atom, p(3): one numeric comparison with it
 // precedes any search, and only an atom beyond it walks the right spine.
 const LAST_WORK: usize = NUMERIC_NODE_WORK;
-// In the fixture tree of p(2), p(1), p(3) the spine is one right step below
-// the root.
-const SPINE_WORK: usize = 1;
 
 #[test]
 fn queries_borrow_committed_and_pending_identities() {
@@ -310,6 +307,8 @@ fn empty_queries_charge_signature_resolution() {
 #[test]
 fn vacant_entries_charge_link_replay() {
     let mut owner = owner(&[2, 1, 3]);
+    // Exercise cold path preparation independently of published-spine reuse.
+    owner.spines.semantic = None;
     assert!(owner.index.path.capacity() >= 2);
     let mut spent = 0;
     // p(0) precedes the last atom, p(3): after the one comparison with it,
@@ -341,8 +340,10 @@ fn vacant_entries_charge_link_replay() {
 }
 
 #[test]
-fn an_atom_beyond_the_last_is_placed_without_a_search() {
+fn beyond_last_preparation_visits_the_spine_once() {
     let mut owner = owner(&[2, 1, 3]);
+    // Exercise cold path preparation independently of published-spine reuse.
+    owner.spines.semantic = None;
     let mut spent = 0;
     let beyond = atom(4);
     let entry = owner
@@ -353,14 +354,11 @@ fn an_atom_beyond_the_last_is_placed_without_a_search() {
         .unwrap();
     assert_eq!(entry.position(), None);
     // One comparison with the last atom; the route is its right spine, root
-    // p(2) and p(3), walked and replayed without another typed probe.
+    // p(2) and p(3). Each node is read and retained once, with no preliminary
+    // direction-recording walk and no further typed comparison.
     assert_eq!(
         spent,
-        CANONICAL_APPLICABILITY_WORK
-            + SIGNATURE_WORK
-            + LAST_WORK
-            + SPINE_WORK
-            + 2 * REPLAY_NODE_WORK
+        CANONICAL_APPLICABILITY_WORK + SIGNATURE_WORK + LAST_WORK + 2 * REPLAY_NODE_WORK
     );
     assert_eq!(
         entry
@@ -369,6 +367,84 @@ fn an_atom_beyond_the_last_is_placed_without_a_search() {
         3
     );
     validate(&owner);
+}
+
+#[test]
+fn stopped_monotone_preparation_preserves_discovery() {
+    let initial: Vec<_> = (0..31).collect();
+    let reference = owner(&initial);
+    let mut spine = 0;
+    let mut cursor = reference.subtrees[0].root;
+    while let Some(node) = cursor {
+        spine += 1;
+        cursor = reference.index.nodes[position(node)].children[1];
+    }
+    assert!(spine > 2, "exercise more than the small rotation fixtures");
+    assert!(reference.index.path.capacity() >= spine);
+    let required =
+        CANONICAL_APPLICABILITY_WORK + SIGNATURE_WORK + LAST_WORK + spine * REPLAY_NODE_WORK;
+    let added = atom(31);
+    for cutoff in 0..=required {
+        let mut owner = owner(&initial);
+        // This boundary sweep exercises the cold right-spine builder.
+        owner.spines.semantic = None;
+        let mut spent = 0;
+        let result = owner.entry_atom_with(&added, limits(), || {
+            if spent == cutoff {
+                Err(cutoff)
+            } else {
+                spent += 1;
+                Ok(())
+            }
+        });
+        if cutoff == required {
+            let entry = result.unwrap();
+            assert_eq!(entry.position(), None);
+            assert_eq!(spent, required);
+            // Preparing the admitted path has not yet published discovery.
+            assert_eq!(entry.appender.len(), initial.len());
+        } else {
+            assert!(matches!(result, Err(Failure::Stopped(actual)) if actual == cutoff));
+            assert_eq!(spent, cutoff);
+        }
+        assert_eq!(owner.len(), initial.len());
+        validate(&owner);
+        assert_eq!(insert(&mut owner, &added), initial.len());
+        validate(&owner);
+    }
+}
+
+#[test]
+fn monotone_and_inner_insertions_keep_typed_order() {
+    let mut owner = AtomInterner::new();
+    let values = [5, 1, 9, 7, 11, 11, 0, 6, 12, 5];
+    let mut discovered = Vec::new();
+    for value in values {
+        let expected = discovered
+            .iter()
+            .position(|known| *known == value)
+            .unwrap_or_else(|| {
+                let position = discovered.len();
+                discovered.push(value);
+                position
+            });
+        assert_eq!(insert(&mut owner, &atom(value)), expected);
+        validate(&owner);
+    }
+    // Ordered publication exposes the committed prefix; insertion above has
+    // intentionally exercised both indexes while every identity was pending.
+    owner
+        .commit_with(limits(), || Ok::<_, Infallible>(()))
+        .unwrap();
+    let order = owner
+        .ordered_ids_with(limits(), || Ok::<_, Infallible>(()))
+        .unwrap();
+    let mut expected = discovered.clone();
+    expected.sort_unstable();
+    assert_eq!(
+        order.iter().map(|&id| discovered[id]).collect::<Vec<_>>(),
+        expected
+    );
 }
 
 #[test]

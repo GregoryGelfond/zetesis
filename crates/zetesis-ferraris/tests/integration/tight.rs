@@ -55,11 +55,11 @@ impl Tree {
     }
     fn emit(&self, nodes: &mut Vec<Node>) -> usize {
         let node = match self {
-            Self::Atom(atom) => Node::Atom(*atom),
-            Self::False => Node::False,
-            Self::And(a, b) => Node::And(a.emit(nodes), b.emit(nodes)),
-            Self::Or(a, b) => Node::Or(a.emit(nodes), b.emit(nodes)),
-            Self::Imp(a, b) => Node::Implies(a.emit(nodes), b.emit(nodes)),
+            Self::Atom(atom) => Node::atom(*atom),
+            Self::False => Node::falsum(),
+            Self::And(a, b) => Node::and_pair([a.emit(nodes), b.emit(nodes)]),
+            Self::Or(a, b) => Node::or_pair([a.emit(nodes), b.emit(nodes)]),
+            Self::Imp(a, b) => Node::implies(a.emit(nodes), b.emit(nodes)),
         };
         nodes.push(node);
         nodes.len() - 1
@@ -68,7 +68,13 @@ impl Tree {
 fn theory(atoms: usize, formulas: &[Tree]) -> Theory {
     let mut nodes = Vec::new();
     let roots = formulas.iter().map(|tree| tree.emit(&mut nodes)).collect();
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
+    Theory::new(
+        atoms,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 fn stable(formulas: &[Tree], candidate: usize) -> bool {
     if !formulas.iter().all(|tree| tree.truth(candidate)) {
@@ -443,15 +449,21 @@ fn cancellation_and_deadlines_refuse_certification_and_evaluation() {
 
 #[test]
 fn shared_deep_bodies_are_linear_graphs_with_matched_duplicate_edges() {
-    let mut nodes = vec![Node::Atom(0), Node::Atom(1)];
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
     let mut body = 0;
     for _ in 0..20_000 {
-        nodes.push(Node::And(body, body));
+        nodes.push(Node::and_pair([body, body]));
         body = nodes.len() - 1;
     }
-    nodes.push(Node::Implies(body, 1));
+    nodes.push(Node::implies(body, 1));
     let last = nodes.len() - 1;
-    let source = Theory::new(2, nodes, vec![0, last], AdmissionLimits::default()).unwrap();
+    let source = Theory::new(
+        2,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+        vec![0, last],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let plan = plan(&source);
     assert_eq!(plan.ranks(), &[0, 1]);
     assert_eq!(plan.statistics().dependencies, 40_003);
@@ -527,7 +539,7 @@ fn a_plan_keeps_one_producer_per_root_occurrence() {
     let second = Tree::atom(1).or(Tree::atom(1).neg()).emit(&mut nodes);
     let source = Theory::new(
         3,
-        nodes,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
         vec![first, second, first, first],
         AdmissionLimits::default(),
     )

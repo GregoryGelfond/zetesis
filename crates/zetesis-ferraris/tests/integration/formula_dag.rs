@@ -35,14 +35,14 @@ fn cases() -> impl Strategy<Value = Case> {
                 let mut nodes = Vec::new();
                 let mut costs = Vec::new();
                 for (index, (operation, left, right)) in instructions.into_iter().enumerate() {
-                    let atom = Node::Atom(permutation[usize::from(left) % atoms]);
+                    let atom = Node::atom(permutation[usize::from(left) % atoms]);
                     let operation = if deep && index > 0 {
                         operation % 3 + 2
                     } else {
                         operation % 5
                     };
                     let (node, cost) = if operation < 2 || index == 0 {
-                        (if operation == 0 { Node::False } else { atom }, 1)
+                        (if operation == 0 { Node::falsum() } else { atom }, 1)
                     } else {
                         let a = if deep {
                             index - 1
@@ -62,9 +62,9 @@ fn cases() -> impl Strategy<Value = Case> {
                         } else {
                             (
                                 match operation {
-                                    2 => Node::And(a, b),
-                                    3 => Node::Or(a, b),
-                                    _ => Node::Implies(a, b),
+                                    2 => Node::and_pair([a, b]),
+                                    3 => Node::or_pair([a, b]),
+                                    _ => Node::implies(a, b),
                                 },
                                 cost,
                             )
@@ -101,19 +101,25 @@ enum Tree {
 impl Tree {
     // Expands shared nodes into separate tree occurrences. The generator caps
     // expansion per root independently of the DAG's forty-eight-node bound.
-    fn expand(nodes: &[Node], root: usize) -> Self {
-        match nodes[root] {
-            Node::False => Self::False,
-            Node::Atom(atom) => Self::Atom(atom),
-            Node::And(a, b) => Self::And(
-                Box::new(Self::expand(nodes, a)),
-                Box::new(Self::expand(nodes, b)),
-            ),
-            Node::Or(a, b) => Self::Or(
-                Box::new(Self::expand(nodes, a)),
-                Box::new(Self::expand(nodes, b)),
-            ),
-            Node::Implies(a, b) => Self::Implies(
+    fn expand(nodes: zetesis_ferraris::FormulaView<'_>, root: usize) -> Self {
+        match nodes.node(root).unwrap() {
+            zetesis_ferraris::NodeView::False => Self::False,
+            zetesis_ferraris::NodeView::Atom(atom) => Self::Atom(atom),
+            zetesis_ferraris::NodeView::And(operands) => {
+                let (first, rest) = operands.split_first().unwrap();
+                rest.iter()
+                    .fold(Self::expand(nodes, *first), |left, &right| {
+                        Self::And(Box::new(left), Box::new(Self::expand(nodes, right)))
+                    })
+            }
+            zetesis_ferraris::NodeView::Or(operands) => {
+                let (first, rest) = operands.split_first().unwrap();
+                rest.iter()
+                    .fold(Self::expand(nodes, *first), |left, &right| {
+                        Self::Or(Box::new(left), Box::new(Self::expand(nodes, right)))
+                    })
+            }
+            zetesis_ferraris::NodeView::Implies(a, b) => Self::Implies(
                 Box::new(Self::expand(nodes, a)),
                 Box::new(Self::expand(nodes, b)),
             ),
@@ -162,7 +168,7 @@ proptest! {
     fn admission_preserves_supplied_dag(case in cases()) {
         let admitted = Theory::new(
             case.atoms,
-            case.nodes.clone(),
+zetesis_ferraris::FormulaParts::new(case.nodes.clone(), vec![]).unwrap(),
             case.roots.clone(),
             AdmissionLimits::default(),
         ).unwrap();
@@ -173,9 +179,11 @@ proptest! {
 
     #[test]
     fn generated_shared_and_deep_dags_match_explicit_tree_reduct(case in cases()) {
-        let roots: Vec<_> = case.roots.iter().map(|root| Tree::expand(&case.nodes, *root)).collect();
+        let parts = zetesis_ferraris::FormulaParts::new(case.nodes.clone(), vec![]).unwrap();
+        let roots: Vec<_> = case.roots.iter().map(|root| Tree::expand(parts.view(), *root)).collect();
         let reduct: Vec<_> = roots.iter().map(|root| root.reduct(case.candidate)).collect();
-        let theory = Theory::new(case.atoms, case.nodes, case.roots, AdmissionLimits::default())
+        let theory = Theory::new(case.atoms,
+zetesis_ferraris::FormulaParts::new(case.nodes, vec![]).unwrap(), case.roots, AdmissionLimits::default())
             .expect("generator preserves topological admission");
         let candidate = interpretation(&theory, case.candidate);
         let tested = interpretation(&theory, case.tested);
@@ -209,16 +217,18 @@ proptest! {
 
     #[test]
     fn frozen_queries_obey_materialized_root_work(case in cases()) {
+        let parts = zetesis_ferraris::FormulaParts::new(case.nodes.clone(), vec![]).unwrap();
         let reduct: Vec<_> = case.roots.iter()
-            .map(|root| Tree::expand(&case.nodes, *root).reduct(case.candidate))
+            .map(|root| Tree::expand(parts.view(), *root).reduct(case.candidate))
             .collect();
         let root_tests = reduct.iter().position(|root| !root.eval(case.tested))
             .map_or(reduct.len(), |failed| failed + 1);
-        let theory = Theory::new(case.atoms, case.nodes, case.roots, AdmissionLimits::default())
+        let theory = Theory::new(case.atoms,
+zetesis_ferraris::FormulaParts::new(case.nodes, vec![]).unwrap(), case.roots, AdmissionLimits::default())
             .unwrap();
         let candidate = interpretation(&theory, case.candidate);
         let tested = interpretation(&theory, case.tested);
-        let node_work = u64::try_from(theory.nodes().len()).unwrap();
+        let node_work = u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
         let tested_work = node_work + u64::try_from(root_tests).unwrap();
         let limits = |max_work| Limits { max_work, max_subsets: 0 };
         let cancellation = Cancellation::default();

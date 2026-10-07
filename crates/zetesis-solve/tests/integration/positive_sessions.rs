@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Node, PositiveError, PositiveResource, TightError, TightResource};
+use zetesis_ferraris::{NodeView, PositiveError, PositiveResource, TightError, TightResource};
 use zetesis_reference_support::formula;
 use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
@@ -340,9 +340,11 @@ fn disjunctive_source_declines_both_atomic_head_plans() {
         .theory()
         .roots()
         .iter()
-        .find(|&&root| match owner.theory().nodes()[root] {
-            Node::Or(_, _) => true,
-            Node::Implies(_, head) => matches!(owner.theory().nodes()[head], Node::Or(_, _)),
+        .find(|&&root| match owner.theory().view().node(root).unwrap() {
+            NodeView::Or(_) => true,
+            NodeView::Implies(_, head) => {
+                matches!(owner.theory().view().node(head).unwrap(), NodeView::Or(_))
+            }
             _ => false,
         })
         .unwrap();

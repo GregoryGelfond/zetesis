@@ -116,6 +116,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         observations.record(Event::Formula {
             atoms: self.input.theory.atom_count(),
             nodes: self.input.theory.nodes().len(),
+            operands: self.input.theory.parts().occurrences(),
             roots: self.input.theory.roots().len(),
             keyed_constraints: self.input.keyed_constraints,
         })?;
