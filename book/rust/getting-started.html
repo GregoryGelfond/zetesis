@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,19 +195,18 @@ forbidden, so its complete family contains two answers: build with test, and
 deploy with test. Each full interpretation also contains the three <code>task</code>
 facts. <code>#show run/1</code> changes only the displayed channel, not those typed answers.</p>
 <h2 id="set-up-a-rust-application"><a class="header" href="#set-up-a-rust-application">Set up a Rust application</a></h2>
-<p>The packages are not published on crates.io. Use their paths in a pinned local
-checkout. These commands select the official <code>v0.3.0</code> source release and create
-sibling repository and application directories:</p>
-<pre><code class="language-sh">git clone https://github.com/GregoryGelfond/zetesis.git
-git -C zetesis switch --detach v0.3.0
-git -C zetesis rev-parse HEAD
+<p>The packages are not published on crates.io. These examples require zetesis
+0.4.0. Use paths in a pinned local checkout of that version. From the directory
+containing your <code>zetesis</code> checkout, record its revision and create a sibling
+application:</p>
+<pre><code class="language-sh">git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app
 cd answer-set-app
 rustup override set 1.97.1
 </code></pre>
-<p>Record the full revision printed by <code>rev-parse</code>; keeping that detached checkout
-fixes the source used by all three path dependencies. To reproduce the setup
+<p>Keep a clean checkout of the full revision printed by <code>rev-parse</code>; this fixes
+the source used by all three path dependencies. To reproduce the setup
 elsewhere, check out that same revision. The first Cargo build also fetches the
 repository’s pinned themelios dependency; no separate themelios checkout or
 direct parser dependency is needed.</p>

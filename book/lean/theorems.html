@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,9 +192,12 @@ The maintained full index is
 </thead>
 <tbody>
 <tr><td>What makes an interpretation an answer set?</td><td><code>Ferraris.stable_iff_minimal_reduct</code></td><td>Fixed original theory and candidate</td></tr>
+<tr><td>Can support guards be grouped by shared condition?</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SupportTransposition.lean"><code>SupportTransposition</code></a>: <code>original_exact</code>, <code>frozen_exact</code>, <code>answer_sets_in_context</code></td><td>Exact head-condition incidences; double-negated guard families and unchanged context. Frozen truth agrees for arbitrary outer and tested interpretations; concrete grouping remains a Rust obligation</td></tr>
 <tr><td>Does the computed frozen DAG evaluate that reduct?</td><td><code>ReductEvaluation.values_correspond</code>, <code>roots_true_iff</code></td><td>Finite indexed formula semantics; mask correctness is derived, not assumed</td></tr>
 <tr><td>Does finite subset search decide membership?</td><td><code>FiniteMembership.check_iff_answer_set</code></td><td>Supplied finite candidate, decidable atom equality; subset coverage is constructed</td></tr>
 <tr><td>Are the evaluator’s child, mask and root reads present?</td><td><code>Refinement.IndexedEvaluation.satisfies_reduct_exact</code>, <code>satisfies_reduct_iff</code></td><td>Admitted DAG and root positions; the computed mask supplies its own coverage</td></tr>
+<tr><td>Do checked operand spans preserve finite connective truth?</td><td><code>Refinement.OperandArena.validate_exact</code>, <code>original_exact</code>, <code>reduct_exact</code>, <code>frozen_exact</code></td><td>Complete spans and backward references; an explicit mask bit must equal original truth. Ordered duplicates and empty identities are preserved</td></tr>
+<tr><td>Does a finite operand table compute its own correct mask?</td><td><code>Refinement.OperandTable.original_exact</code>, <code>reduct_exact</code></td><td>Admitted tables; the paired pass derives both original and reduct truth. Runtime scheduling, inline storage and Rust arena correspondence remain unproved</td></tr>
 <tr><td>Does low-bit-first counting cover all proper subsets?</td><td><code>SubsetCounter.proper_iff_visited</code>, <code>countermodel_search_iff</code></td><td>Distinct supplied atoms; tracked count and finite counter coverage are proved</td></tr>
 <tr><td>When does least closure suffice?</td><td><code>Semantics.stable_iff_gamma</code></td><td>Normalized single-head rules and constraints</td></tr>
 <tr><td>Does the sequential rule scan compute that closure?</td><td><code>FiniteClosure.closure_exact</code>, <code>accepts_exact</code>, <code>empty_completes</code></td><td>Finite normalized rules with true filters retained and false filters omitted; explicit head-list scan bound</td></tr>
@@ -365,9 +368,18 @@ rewrite or verify its source key assignment.</p>
 <p><code>AggregateReduct.direct_reduct</code> relates the failing-subset formula to original
 and frozen eligibility under complete masks. <code>AggregateRanges</code> establishes bounds
 on mathematical signed partial sums. <code>AggregateDependencies</code> composes complete
-predecessor-indexed value families. <code>ObjectiveTransport</code> and <code>ExtremumPresence</code>
-retain the distinction between possible carriers, realized values and objective
-presence.</p>
+predecessor-indexed value families. Its <code>Reuse.restart_exact</code> proves full reset
+or direct rebuilding from complete projected inputs under fixed support;
+<code>reuse_rows_exact</code> preserves the finite ordered traversal and typed failures.
+<code>clauses_exact</code> maps successful rows to the same clauses, retaining every prior
+activation and aggregate equality. Separately, <code>SupportReuse.reuse_exact</code> permits
+coalescing consecutive equal projections of completed support continuations when
+the projection determines both their head image and diagnostic evidence. It
+preserves head union, the defined flag and the first zero; it does not preserve
+formula-witness occurrences. These laws do not establish concrete source
+dependencies, carrier completeness or Rust cursor/resource correspondence.
+<code>ObjectiveTransport</code> and <code>ExtremumPresence</code> retain the distinction between
+possible carriers, realized values and objective presence.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedBounds.lean"><code>OrderedBounds</code></a>
 connects numeric measures to logical bounds. <code>separated_comparison</code> requires the
 bound to have the same ordering against every integer. <code>constant_aggregate</code>

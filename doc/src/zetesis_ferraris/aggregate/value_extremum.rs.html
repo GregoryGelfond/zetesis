@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a>    AggregateBuild, AggregateComparison, AggregateError, AggregateErrorKind, AggregateExtremum,
 <a href=#8 id=8 data-nosnippet>8</a>    AggregateLimits, AggregateProfile,
 <a href=#9 id=9 data-nosnippet>9</a>};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::Node;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use crate</span>::{FormulaNodes, NodeView};
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// One complete tuple's first value and OR-coalesced eligibility formula.
 <a href=#13 id=13 data-nosnippet>13</a>/// Equal first values do not identify equal complete tuples.
@@ -33,7 +33,7 @@
 <a href=#33 id=33 data-nosnippet>33</a>/// # Errors
 <a href=#34 id=34 data-nosnippet>34</a>/// Returns typed prefix, condition, resource, allocation or cancellation errors.
 <a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub fn </span>append_value_extremum(
-<a href=#36 id=36 data-nosnippet>36</a>    nodes: <span class="kw-2">&amp;mut </span>Vec&lt;Node&gt;,
+<a href=#36 id=36 data-nosnippet>36</a>    nodes: <span class="kw-2">&amp;mut </span>FormulaNodes,
 <a href=#37 id=37 data-nosnippet>37</a>    elements: <span class="kw-2">&amp;</span>[ValueExtremumElement],
 <a href=#38 id=38 data-nosnippet>38</a>    extremum: AggregateExtremum,
 <a href=#39 id=39 data-nosnippet>39</a>    comparison: AggregateComparison,
@@ -66,7 +66,7 @@
 <a href=#66 id=66 data-nosnippet>66</a>/// Returns the same prefix, condition, resource, allocation and cancellation
 <a href=#67 id=67 data-nosnippet>67</a>/// failures as [`append_value_extremum`], preserving the original DAG on refusal.
 <a href=#68 id=68 data-nosnippet>68</a></span><span class="kw">pub fn </span>append_value_extremum_refs&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#69 id=69 data-nosnippet>69</a>    nodes: <span class="kw-2">&amp;mut </span>Vec&lt;Node&gt;,
+<a href=#69 id=69 data-nosnippet>69</a>    nodes: <span class="kw-2">&amp;mut </span>FormulaNodes,
 <a href=#70 id=70 data-nosnippet>70</a>    elements: <span class="kw">impl </span>Iterator&lt;Item = ValueExtremumElement&lt;TermRef&lt;<span class="lifetime">'a</span>&gt;&gt;&gt;,
 <a href=#71 id=71 data-nosnippet>71</a>    extremum: AggregateExtremum,
 <a href=#72 id=72 data-nosnippet>72</a>    comparison: AggregateComparison,
@@ -75,7 +75,7 @@
 <a href=#75 id=75 data-nosnippet>75</a>    cancellation: <span class="kw-2">&amp;</span>Cancellation,
 <a href=#76 id=76 data-nosnippet>76</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AggregateBuild, AggregateError&gt; {
 <a href=#77 id=77 data-nosnippet>77</a>    append(
-<a href=#78 id=78 data-nosnippet>78</a>        Destination::unchecked(nodes),
+<a href=#78 id=78 data-nosnippet>78</a>        Destination::retained(nodes.transaction()),
 <a href=#79 id=79 data-nosnippet>79</a>        elements,
 <a href=#80 id=80 data-nosnippet>80</a>        extremum,
 <a href=#81 id=81 data-nosnippet>81</a>        comparison,
@@ -96,44 +96,42 @@
 <a href=#96 id=96 data-nosnippet>96</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AggregateBuild, AggregateError&gt; {
 <a href=#97 id=97 data-nosnippet>97</a>    transaction(destination, limits, cancellation, |builder| {
 <a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span>prefix = validate_prefix(builder)<span class="question-mark">?</span>;
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>falsum = builder.push(Node::False)<span class="question-mark">?</span>;
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>truth = builder.push(Node::Implies(falsum, falsum))<span class="question-mark">?</span>;
+<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>falsum = builder.push(NodeView::False)<span class="question-mark">?</span>;
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>truth = builder.push(NodeView::Implies(falsum, falsum))<span class="question-mark">?</span>;
 <a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span>empty = <span class="kw">match </span>extremum {
 <a href=#102 id=102 data-nosnippet>102</a>            AggregateExtremum::Min =&gt; Value::Supremum,
 <a href=#103 id=103 data-nosnippet>103</a>            AggregateExtremum::Max =&gt; Value::Infimum,
 <a href=#104 id=104 data-nosnippet>104</a>        };
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span><span class="kw-2">mut </span>inclusive = (bound == TermRef::from(<span class="kw-2">&amp;</span>empty)).then_some(truth);
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span><span class="kw-2">mut </span>strict = <span class="prelude-val">None</span>;
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">for </span>(index, element) <span class="kw">in </span>elements.enumerate() {
-<a href=#108 id=108 data-nosnippet>108</a>            builder.tick()<span class="question-mark">?</span>;
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">if </span>index &gt;= limits.max_elements {
-<a href=#110 id=110 data-nosnippet>110</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(AggregateErrorKind::ElementLimit);
-<a href=#111 id=111 data-nosnippet>111</a>            }
-<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw">if </span>element.condition &gt;= prefix {
-<a href=#113 id=113 data-nosnippet>113</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(AggregateErrorKind::InvalidCondition { element: index });
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span><span class="kw-2">mut </span>inclusive = Vec::new();
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">if </span>bound == TermRef::from(<span class="kw-2">&amp;</span>empty) {
+<a href=#107 id=107 data-nosnippet>107</a>            builder.operand(<span class="kw-2">&amp;mut </span>inclusive, truth)<span class="question-mark">?</span>;
+<a href=#108 id=108 data-nosnippet>108</a>        }
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw">let </span><span class="kw-2">mut </span>strict = Vec::new();
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">for </span>(index, element) <span class="kw">in </span>elements.enumerate() {
+<a href=#111 id=111 data-nosnippet>111</a>            builder.tick()<span class="question-mark">?</span>;
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw">if </span>index &gt;= limits.max_elements {
+<a href=#113 id=113 data-nosnippet>113</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(AggregateErrorKind::ElementLimit);
 <a href=#114 id=114 data-nosnippet>114</a>            }
-<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">let </span>order = element.value.compare_terms_with(bound, || builder.tick())<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">let </span>order = <span class="kw">if </span>extremum == AggregateExtremum::Min {
-<a href=#117 id=117 data-nosnippet>117</a>                order.reverse()
-<a href=#118 id=118 data-nosnippet>118</a>            } <span class="kw">else </span>{
-<a href=#119 id=119 data-nosnippet>119</a>                order
-<a href=#120 id=120 data-nosnippet>120</a>            };
-<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw">if </span>order.is_ge() {
-<a href=#122 id=122 data-nosnippet>122</a>                inclusive = <span class="prelude-val">Some</span>(builder.join(inclusive, element.condition, <span class="bool-val">false</span>)<span class="question-mark">?</span>);
-<a href=#123 id=123 data-nosnippet>123</a>            }
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">if </span>order.is_gt() {
-<a href=#125 id=125 data-nosnippet>125</a>                strict = <span class="prelude-val">Some</span>(builder.join(strict, element.condition, <span class="bool-val">false</span>)<span class="question-mark">?</span>);
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">if </span>element.condition &gt;= prefix {
+<a href=#116 id=116 data-nosnippet>116</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(AggregateErrorKind::InvalidCondition { element: index });
+<a href=#117 id=117 data-nosnippet>117</a>            }
+<a href=#118 id=118 data-nosnippet>118</a>            <span class="kw">let </span>order = element.value.compare_terms_with(bound, || builder.tick())<span class="question-mark">?</span>;
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="kw">let </span>order = <span class="kw">if </span>extremum == AggregateExtremum::Min {
+<a href=#120 id=120 data-nosnippet>120</a>                order.reverse()
+<a href=#121 id=121 data-nosnippet>121</a>            } <span class="kw">else </span>{
+<a href=#122 id=122 data-nosnippet>122</a>                order
+<a href=#123 id=123 data-nosnippet>123</a>            };
+<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">if </span>order.is_ge() {
+<a href=#125 id=125 data-nosnippet>125</a>                builder.operand(<span class="kw-2">&amp;mut </span>inclusive, element.condition)<span class="question-mark">?</span>;
 <a href=#126 id=126 data-nosnippet>126</a>            }
-<a href=#127 id=127 data-nosnippet>127</a>        }
-<a href=#128 id=128 data-nosnippet>128</a>        comparison_root(
-<a href=#129 id=129 data-nosnippet>129</a>            builder,
-<a href=#130 id=130 data-nosnippet>130</a>            extremum,
-<a href=#131 id=131 data-nosnippet>131</a>            comparison,
-<a href=#132 id=132 data-nosnippet>132</a>            inclusive.unwrap_or(falsum),
-<a href=#133 id=133 data-nosnippet>133</a>            strict.unwrap_or(falsum),
-<a href=#134 id=134 data-nosnippet>134</a>            falsum,
-<a href=#135 id=135 data-nosnippet>135</a>        )
-<a href=#136 id=136 data-nosnippet>136</a>        .map(|root| (root, AggregateProfile::Extremum))
-<a href=#137 id=137 data-nosnippet>137</a>    })
-<a href=#138 id=138 data-nosnippet>138</a>}
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">if </span>order.is_gt() {
+<a href=#128 id=128 data-nosnippet>128</a>                builder.operand(<span class="kw-2">&amp;mut </span>strict, element.condition)<span class="question-mark">?</span>;
+<a href=#129 id=129 data-nosnippet>129</a>            }
+<a href=#130 id=130 data-nosnippet>130</a>        }
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>inclusive = builder.group(<span class="kw-2">&amp;</span>inclusive, falsum, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>strict = builder.group(<span class="kw-2">&amp;</span>strict, falsum, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>        comparison_root(builder, extremum, comparison, inclusive, strict, falsum)
+<a href=#134 id=134 data-nosnippet>134</a>            .map(|root| (root, AggregateProfile::Extremum))
+<a href=#135 id=135 data-nosnippet>135</a>    })
+<a href=#136 id=136 data-nosnippet>136</a>}
 </code></pre></div></section></main></body></html>

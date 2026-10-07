@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -514,10 +514,20 @@ flush, and a successful later flush cannot clear an earlier publication failure.
 <p>The human renderer preflights one complete record under its byte ceiling. The
 JSON renderer additionally retains a bounded document atom table; each invocation
 starts fresh indices. Structural equality decides each atom’s index, so equal
-atoms of independent owners share one; once a canonical atom has been found, the
-table answers its later occurrences from the same owner by owner-scoped identity
-instead of hashing the atom’s structure. A refused record withdraws the atoms it
-entered together with their identities. Custom renderers own their encoding
+atoms of independent owners share one. The table copies each atom it spells once
+and retains no answer. Once a canonical atom has been found, the table answers
+its later occurrences by owner-scoped identity instead of hashing the atom’s
+structure, for as long as something outside the table still holds that atom’s
+owner. Owners are found by hashing their identity, so a lookup’s cost does not
+grow with the number of owners; once the cached owners have doubled since the
+last prune, a record begins by forgetting the owners nothing else holds, whose
+atoms can no longer be presented — amortized constant work per record, whether
+or not the consumer keeps its answers. Interleaved closure workers therefore
+keep their identities across records, and answers that each bring their own
+owner, as answers with reconstructed terminal definitions do, leave the cache
+once they are released. The public
+<code>AtomTable::index</code> lookup is structural and records no identity. A refused record withdraws
+the atoms it entered together with their identities. Custom renderers own their encoding
 limits and any copies they retain. The controller retains no complete family
 for presentation, although objective selection still uses the solver’s
 separately bounded incumbent store.</p>
@@ -616,25 +626,30 @@ and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-
 substitutions, nodes, work, candidate occurrences, retained results or transport
 storage. Zero is a real ceiling where those limits apply; it does not mean
 unlimited. Work and storage limits are independent.</p>
-<p>Ordinary sessions and CLI flags share <code>SolveConfig::DEFAULT</code>: ten billion
-cumulative search-work units, ten million branch decisions, ten million
-candidates and one hundred million CPU oracle-work units under that field’s
-per-candidate or shared-batch contract. These are finite logical allowances,
-not wall-clock deadlines or performance claims. Standalone primitive limit
-types keep their own operation-specific defaults. Source admission, derived
-atoms, carrier storage, batch bytes, objective retention and complete <code>WorldView</code>
-capture remain independently bounded; requesting every answer does not make
-those resources unlimited. A smaller explicit work, decision or candidate
-allowance still yields an interrupted prefix when exhausted.</p>
+<p>Ordinary sessions and the CLI use the shared <code>zetesis_solve::Resources</code> policy:
+threads, a named memory allowance and optional cooperative cancellation or a
+deadline. The CLI exposes <code>--threads</code>, <code>--memory</code> and <code>--time-limit</code> for these
+controls. Mandatory cumulative work, decisions and candidate counts use checked
+representation ceilings, rather than separate policy allowances. Work remains
+in statistics; it is not elapsed time or a performance guarantee. Optional
+fail-open analyses and bounded device dispatches retain their separate effort
+limits.</p>
+<p>Source admission, derived atoms, carrier storage, batch bytes, objective
+retention and complete <code>WorldView</code> capture remain independently bounded.
+The named memory allowances are not a process-wide RSS cap; requesting every
+answer does not remove them. Standalone primitive limit types keep their
+operation-specific defaults, and a library caller’s explicit work, decision or
+candidate allowance still yields an interrupted prefix when exhausted.</p>
 <p>The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/streaming_defaults.rs">streaming regression</a>
 checks every full answer for independent selections on a 24-vertex path against
 an independently generated bitmask family, using both automatic specialization
-and the general countermodel oracle. The former already completes within the
-previous search-work allowance; the latter needs more work and still interrupts
-when explicitly given that earlier ceiling. The test releases each answer after
-checking its identity; it does not collect a <code>WorldView</code> or bypass that type’s
-retention limits. This demonstrates completed enumeration within the ordinary
-allowances, not a running-time guarantee or a change to answer-set semantics.</p>
+and the general countermodel oracle. Both complete under ordinary solve defaults.
+A separate bounded run gives the general oracle half its measured complete
+search-work count and checks that it reports an interrupted prefix. The test
+releases each answer after checking its identity; it does not collect a
+<code>WorldView</code> or bypass that type’s retention limits. This checks completed
+enumeration and explicit interruption without a running-time claim or a change
+to answer-set semantics.</p>
 <h3 id="cancellation-and-deadlines"><a class="header" href="#cancellation-and-deadlines">Cancellation and deadlines</a></h3>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/cancellation.rs"><code>zetesis_cpu::Cancellation</code></a>
 carries shared cancellation and an optional absolute deadline. <code>Session</code> owns
@@ -752,8 +767,9 @@ Prepared and peak copied payload bytes exclude allocator and index overhead and
 are not process memory. The peak includes temporary restriction templates.
 Failed preparation retains its work but has no completed preparation footprint.
 The CLI exposes the same fields as <code>statistics.candidate_restrictions</code> in JSON.
-<code>--max-candidate-bytes</code> bounds copied payload; <code>--max-search-work</code> bounds cumulative
-restriction work on this route. Both advanced controls appear in <code>--help-all</code>.</p>
+The ordinary resource policy derives candidate storage from <code>--memory</code> and
+keeps cumulative restriction work as a checked statistic. Bounded library
+callers can set <code>SolveConfig::max_candidate_bytes</code> and <code>max_search_work</code> directly.</p>
 <p>Under <code>--search clauses</code>, formula search records its necessary
 disjunctive support attempt separately from user or objective refinements.
 <code>statistics.search.necessary_support</code> identifies application, an inapplicable

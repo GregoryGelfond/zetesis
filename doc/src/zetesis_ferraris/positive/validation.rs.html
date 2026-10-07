@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::mem::size_of;
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use super</span>::{Budget, PositiveError, PositivePlan, PositiveResource};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use crate</span>::{EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, Node};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use crate</span>::{EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, NodeView};
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_cpu::Stop;
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>complete(
@@ -51,16 +51,28 @@
 <a href=#51 id=51 data-nosnippet>51</a>    capacity<span class="question-mark">?</span>;
 <a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">let </span>failed = truth.failed_root();
 <a href=#53 id=53 data-nosnippet>53</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(root) = failed {
-<a href=#54 id=54 data-nosnippet>54</a>        <span class="kw">let </span>constraint = <span class="kw">match </span>least.theory().nodes()[root] {
-<a href=#55 id=55 data-nosnippet>55</a>            Node::False =&gt; <span class="bool-val">true</span>,
-<a href=#56 id=56 data-nosnippet>56</a>            Node::Implies(<span class="kw">_</span>, head) =&gt; least.theory().nodes()[head] == Node::False,
-<a href=#57 id=57 data-nosnippet>57</a>            Node::Atom(<span class="kw">_</span>) | Node::And(..) | Node::Or(..) =&gt; <span class="bool-val">false</span>,
-<a href=#58 id=58 data-nosnippet>58</a>        };
-<a href=#59 id=59 data-nosnippet>59</a>        <span class="kw">if </span>!constraint {
-<a href=#60 id=60 data-nosnippet>60</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(PositiveError::InvalidClosure { root });
-<a href=#61 id=61 data-nosnippet>61</a>        }
-<a href=#62 id=62 data-nosnippet>62</a>    }
-<a href=#63 id=63 data-nosnippet>63</a>    budget.cancellation.poll()<span class="question-mark">?</span>;
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="prelude-val">Ok</span>(failed)
-<a href=#65 id=65 data-nosnippet>65</a>}
+<a href=#54 id=54 data-nosnippet>54</a>        <span class="kw">let </span>constraint = <span class="kw">match </span>least
+<a href=#55 id=55 data-nosnippet>55</a>            .theory()
+<a href=#56 id=56 data-nosnippet>56</a>            .view()
+<a href=#57 id=57 data-nosnippet>57</a>            .node(root)
+<a href=#58 id=58 data-nosnippet>58</a>            .map_err(|<span class="kw">_</span>| Stop::InvalidProgram)<span class="question-mark">?
+<a href=#59 id=59 data-nosnippet>59</a>        </span>{
+<a href=#60 id=60 data-nosnippet>60</a>            NodeView::False =&gt; <span class="bool-val">true</span>,
+<a href=#61 id=61 data-nosnippet>61</a>            NodeView::Implies(<span class="kw">_</span>, head) =&gt; {
+<a href=#62 id=62 data-nosnippet>62</a>                least
+<a href=#63 id=63 data-nosnippet>63</a>                    .theory()
+<a href=#64 id=64 data-nosnippet>64</a>                    .view()
+<a href=#65 id=65 data-nosnippet>65</a>                    .node(head)
+<a href=#66 id=66 data-nosnippet>66</a>                    .map_err(|<span class="kw">_</span>| Stop::InvalidProgram)<span class="question-mark">?
+<a href=#67 id=67 data-nosnippet>67</a>                    </span>== NodeView::False
+<a href=#68 id=68 data-nosnippet>68</a>            }
+<a href=#69 id=69 data-nosnippet>69</a>            NodeView::Atom(<span class="kw">_</span>) | NodeView::And(..) | NodeView::Or(..) =&gt; <span class="bool-val">false</span>,
+<a href=#70 id=70 data-nosnippet>70</a>        };
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">if </span>!constraint {
+<a href=#72 id=72 data-nosnippet>72</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(PositiveError::InvalidClosure { root });
+<a href=#73 id=73 data-nosnippet>73</a>        }
+<a href=#74 id=74 data-nosnippet>74</a>    }
+<a href=#75 id=75 data-nosnippet>75</a>    budget.cancellation.poll()<span class="question-mark">?</span>;
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="prelude-val">Ok</span>(failed)
+<a href=#77 id=77 data-nosnippet>77</a>}
 </code></pre></div></section></main></body></html>

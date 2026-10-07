@@ -9,7 +9,7 @@
 <a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// Per-evaluation bounds, including storage retained from earlier evaluations.
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="attr">#[derive(Clone, Copy, Debug)]
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">pub struct </span>EvaluationLimits {
-<a href=#12 id=12 data-nosnippet>12</a>    <span class="doccomment">/// One unit per formula node and tested asserted root.
+<a href=#12 id=12 data-nosnippet>12</a>    <span class="doccomment">/// One unit per formula node, operand occurrence and tested asserted root.
 <a href=#13 id=13 data-nosnippet>13</a>    </span><span class="kw">pub </span>max_work: u64,
 <a href=#14 id=14 data-nosnippet>14</a>    <span class="doccomment">/// Workspace header plus actual truth-vector capacity, in bytes.
 <a href=#15 id=15 data-nosnippet>15</a>    /// The borrowed interpretation and theory are excluded.
@@ -203,7 +203,7 @@
 <a href=#203 id=203 data-nosnippet>203</a></span><span class="kw">pub struct </span>EvaluationAttempt&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// A truth view exists only after node evaluation and satisfaction complete.
 <a href=#205 id=205 data-nosnippet>205</a>    </span><span class="kw">pub </span>result: <span class="prelude-ty">Result</span>&lt;FormulaEvaluation&lt;<span class="lifetime">'a</span>&gt;, EvaluationError&gt;,
-<a href=#206 id=206 data-nosnippet>206</a>    <span class="doccomment">/// Charged node/root visits, including on interruption.
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="doccomment">/// Charged node, operand and root visits, including on interruption.
 <a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">pub </span>work: u64,
 <a href=#208 id=208 data-nosnippet>208</a>    <span class="doccomment">/// Workspace header plus actual capacity after this attempt.
 <a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">pub </span>retained_bytes: u128,

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -379,8 +379,9 @@ so this boundary is not an end-to-end guarantee against allocation failure.</p>
 <p>The unresolved-region counter gains one when two children replace a parent and
 loses one when a region is resolved. Idle workers finish only at zero or an
 explicit stop. The resolution that reaches zero, a stop and a close each wake
-idle workers at once; otherwise an idle worker looks for a region again and
-polls cancellation about once a millisecond. Queued models are delivered before
+idle workers at once, and each split publication wakes one idle worker;
+otherwise an idle worker looks for a region again and polls cancellation about
+once a millisecond. Queued models are delivered before
 a worker’s stop is reported.
 Cancellation observed by the coordinator can end a pull immediately; explicit
 <code>stop</code> or dropping the enumerator joins any remaining workers.
@@ -416,13 +417,23 @@ mapping. An original-false gate still disables its connective and constrains its
 output to false. Removing unused leaf slots cannot re-enable that connective.</p>
 <p>This uses the variable-independent relation contract in
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Propagation.lean"><code>Propagation.narrow_models_iff</code></a>
-and the alias-aware finite transfer in
+and, for binary gates, the alias-aware finite transfer in
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateProjection.lean"><code>GateProjection</code></a>.
 The dense mapping’s coverage, injectivity outside leaf aliases, initialized
 address range and checked world offsets are Rust/WGSL correspondence obligations;
 those abstract laws do not certify the packing or physical execution.</p>
 <h3 id="the-gate-transfer"><a class="header" href="#the-gate-transfer">The gate transfer</a></h3>
-<p>Each enabled connective narrows its three positions through a finite gate
+<p>Native conjunctions and disjunctions use a shared operand reduction under both
+projection policies. It first reads every child domain and intersects the
+possible output values. A forced conjunction true or disjunction false narrows
+every operand. The dual forced output narrows a witness only when all possible
+witness occurrences name one distinct physical slot. Repeated atom leaves may
+alias that slot; counting positions would miss this distinction. Composite
+outputs occupy their own slots. The operation preserves satisfying completions
+under monotone concurrent narrowing, without claiming exact projection of
+inconsistent observations of repeated aliases. Frozen-false groups remain
+disabled, and quiescence remains a residual query.</p>
+<p>Each enabled binary connective narrows its three positions through a finite gate
 transfer. <code>GateProjection::Enumerated</code>, the default, enumerates the relation’s
 rows; <code>GateProjection::Bitwise</code> is an explicit optional implementation. The
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/device.rs">device constructors</a> accept
@@ -517,8 +528,13 @@ their geometrically growing Vec is excluded. Caller inputs, Arc envelopes,
 allocator overhead and rounding outside the measured catalog/ordered-ID
 capacities, and backend-private transport are also outside that envelope.
 The backend must bound its own transport; this is not a process RSS ceiling.</p>
-<p>Source scans also have an independent <code>max_scan_bytes</code> allowance, 128 MiB by
-default in both <code>source::ScanLimits</code> and lazy <code>Limits</code>. It admits actual borrowed
+<p>Source scans also have an independent <code>max_scan_bytes</code> allowance, 128 MiB in
+the low-level <code>source::ScanLimits</code> and lazy <code>Limits</code> defaults. Ordinary shared
+CPU and lazy GPU sessions derive it from their host batch allowance. They reserve
+1/32 of that allowance for an instance inside the host envelope, leaving room
+for simultaneous catalog, mask and chunk storage. Scan scratch remains an
+independent capacity; these shares do not form a process RSS limit.
+The scan allowance admits actual borrowed
 row-directory and row-buffer capacities, assignment/cursor/undo scratch, and one
 offered instance’s key buffer, including buffer-growth overlap. The Program and
 catalog payload, world masks and callback-owned chunks remain under their own

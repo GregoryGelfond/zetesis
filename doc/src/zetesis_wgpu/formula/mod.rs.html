@@ -3,8 +3,8 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">mod </span>device;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">mod </span>packing;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">mod </span>preparation;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">mod </span>projection;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">mod </span>profile;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">mod </span>profile;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">mod </span>projection;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">mod </span>transport;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>std::time::Duration;
@@ -30,13 +30,13 @@
 <a href=#30 id=30 data-nosnippet>30</a>    /// original truth, then returns an explicit round-limit residual.
 <a href=#31 id=31 data-nosnippet>31</a>    </span><span class="kw">pub </span>max_rounds: u32,
 <a href=#32 id=32 data-nosnippet>32</a>    <span class="doccomment">/// Maximum charged device work per candidate. Setup costs
-<a href=#33 id=33 data-nosnippet>33</a>    /// `2*nodes+atoms+roots+levels` for two node walks, semantic-atom
+<a href=#33 id=33 data-nosnippet>33</a>    /// `2*nodes+edges+atoms+roots+levels` for two node walks, all child occurrences, semantic-atom
 <a href=#34 id=34 data-nosnippet>34</a>    /// initialization, root visits and dependency-level synchronization.
 <a href=#35 id=35 data-nosnippet>35</a>    /// Pure chains and empty graphs select serial truth and charge zero levels;
 <a href=#36 id=36 data-nosnippet>36</a>    /// other DAGs charge their number of occupied dependency levels.
-<a href=#37 id=37 data-nosnippet>37</a>    /// leaf nodes are visited but need no separate domain initialization store.
-<a href=#38 id=38 data-nosnippet>38</a>    /// A sweep reserves `9*nodes+atoms+65` units, including eight possible gate
-<a href=#39 id=39 data-nosnippet>39</a>    /// truth-table rows per node, 64 lane-summary merges and one strict-subset
+<a href=#37 id=37 data-nosnippet>37</a>    /// Leaf nodes are visited but need no separate domain initialization store.
+<a href=#38 id=38 data-nosnippet>38</a>    /// A sweep reserves `9*nodes+2*edges+atoms+65` units, including eight possible gate
+<a href=#39 id=39 data-nosnippet>39</a>    /// truth-table rows per binary node, two native operand walks, 64 lane-summary merges and one strict-subset
 <a href=#40 id=40 data-nosnippet>40</a>    /// projection. These are policy units, not raw GPU instructions.
 <a href=#41 id=41 data-nosnippet>41</a>    /// Inactive nodes still consume their allowance.
 <a href=#42 id=42 data-nosnippet>42</a>    /// A budget below mandatory setup is refused before dispatch.

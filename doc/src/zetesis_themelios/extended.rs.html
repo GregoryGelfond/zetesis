@@ -65,687 +65,693 @@
 <a href=#65 id=65 data-nosnippet>65</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>admit_parsed(
 <a href=#66 id=66 data-nosnippet>66</a>    source: ParsedSource,
 <a href=#67 id=67 data-nosnippet>67</a>    limits: ExpansionLimits,
-<a href=#68 id=68 data-nosnippet>68</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Admitted, SourceFailure&lt;ExpansionFailure&gt;&gt; {
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">match </span>compile_parsed(<span class="kw-2">&amp;</span>source, limits) {
-<a href=#70 id=70 data-nosnippet>70</a>        <span class="prelude-val">Ok</span>(compiled) =&gt; <span class="prelude-val">Ok</span>(Admitted {
-<a href=#71 id=71 data-nosnippet>71</a>            program: compiled.program,
-<a href=#72 id=72 data-nosnippet>72</a>            source: source.into_source(),
-<a href=#73 id=73 data-nosnippet>73</a>            template_origins: compiled.template_origins,
-<a href=#74 id=74 data-nosnippet>74</a>            metadata: compiled.metadata,
-<a href=#75 id=75 data-nosnippet>75</a>            expansion: compiled.expansion,
-<a href=#76 id=76 data-nosnippet>76</a>        }),
-<a href=#77 id=77 data-nosnippet>77</a>        <span class="prelude-val">Err</span>(error) =&gt; <span class="prelude-val">Err</span>(SourceFailure::new(source, error)),
-<a href=#78 id=78 data-nosnippet>78</a>    }
-<a href=#79 id=79 data-nosnippet>79</a>}
-<a href=#80 id=80 data-nosnippet>80</a>
-<a href=#81 id=81 data-nosnippet>81</a><span class="kw">fn </span>compile_parsed(
-<a href=#82 id=82 data-nosnippet>82</a>    source: <span class="kw-2">&amp;</span>ParsedSource,
-<a href=#83 id=83 data-nosnippet>83</a>    limits: ExpansionLimits,
-<a href=#84 id=84 data-nosnippet>84</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Compilation, ExpansionFailure&gt; {
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>parsed = source.parsed();
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span>options = source.options();
-<a href=#87 id=87 data-nosnippet>87</a>    profile::check_extended(parsed, options)<span class="question-mark">?</span>;
-<a href=#88 id=88 data-nosnippet>88</a>    check_definitions(parsed, limits)<span class="question-mark">?</span>;
-<a href=#89 id=89 data-nosnippet>89</a>    metadata::check_count(parsed, limits, <span class="kw-2">&amp;mut </span><span class="number">0</span>)<span class="question-mark">?</span>;
-<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">let </span>raised = raise(parsed);
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">if </span>!raised.diagnostics().is_empty() {
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
-<a href=#93 id=93 data-nosnippet>93</a>    }
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_metadata = metadata::Builder::default();
-<a href=#95 id=95 data-nosnippet>95</a>    metadata::collect(raised.program(), <span class="kw-2">&amp;mut </span>source_metadata)<span class="question-mark">?</span>;
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span>location = Location {
-<a href=#97 id=97 data-nosnippet>97</a>        source: source.source().id(),
-<a href=#98 id=98 data-nosnippet>98</a>        span: source.source().span(),
-<a href=#99 id=99 data-nosnippet>99</a>    };
-<a href=#100 id=100 data-nosnippet>100</a>    compile_owned(
-<a href=#101 id=101 data-nosnippet>101</a>        raised.program(),
-<a href=#102 id=102 data-nosnippet>102</a>        options.core_limits,
-<a href=#103 id=103 data-nosnippet>103</a>        limits,
-<a href=#104 id=104 data-nosnippet>104</a>        location.into(),
-<a href=#105 id=105 data-nosnippet>105</a>        source_metadata.finish(location.into())<span class="question-mark">?</span>,
-<a href=#106 id=106 data-nosnippet>106</a>    )
-<a href=#107 id=107 data-nosnippet>107</a>}
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// Compile the source into the program with its template origins and the
-<a href=#110 id=110 data-nosnippet>110</a>/// expansion charges it accepted, as one compilation with `metadata`.
-<a href=#111 id=111 data-nosnippet>111</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>compile_owned(
-<a href=#112 id=112 data-nosnippet>112</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
-<a href=#113 id=113 data-nosnippet>113</a>    core_limits: AdmissionLimits,
-<a href=#114 id=114 data-nosnippet>114</a>    limits: ExpansionLimits,
-<a href=#115 id=115 data-nosnippet>115</a>    location: ProgramSite,
-<a href=#116 id=116 data-nosnippet>116</a>    metadata: SourceMetadata,
-<a href=#117 id=117 data-nosnippet>117</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Compilation, ExpansionFailure&gt; {
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">let </span><span class="kw-2">mut </span>budget = Budget::new(limits, core_limits.max_templates);
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>(program, template_origins) = compile_relational(
-<a href=#120 id=120 data-nosnippet>120</a>        source,
-<a href=#121 id=121 data-nosnippet>121</a>        core_limits,
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw-2">&amp;mut </span>budget,
-<a href=#123 id=123 data-nosnippet>123</a>        location,
-<a href=#124 id=124 data-nosnippet>124</a>        FormulaPurpose::Ordinary,
-<a href=#125 id=125 data-nosnippet>125</a>        |carrier, <span class="kw">_</span>| parsed_origins(carrier),
-<a href=#126 id=126 data-nosnippet>126</a>        |location| ProgramSite::from(<span class="kw-2">*</span>location),
-<a href=#127 id=127 data-nosnippet>127</a>    )<span class="question-mark">?</span>;
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="prelude-val">Ok</span>(Compilation {
-<a href=#129 id=129 data-nosnippet>129</a>        program,
-<a href=#130 id=130 data-nosnippet>130</a>        template_origins,
-<a href=#131 id=131 data-nosnippet>131</a>        metadata,
-<a href=#132 id=132 data-nosnippet>132</a>        expansion: budget.usage(),
-<a href=#133 id=133 data-nosnippet>133</a>    })
-<a href=#134 id=134 data-nosnippet>134</a>}
-<a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a><span class="doccomment">/// Share normalization, fact expansion and signed coherence while retaining the
-<a href=#137 id=137 data-nosnippet>137</a>/// caller's evidence representation and one cumulative preparation budget.
-<a href=#138 id=138 data-nosnippet>138</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>compile_relational&lt;P: Clone + Ord&gt;(
-<a href=#139 id=139 data-nosnippet>139</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
-<a href=#140 id=140 data-nosnippet>140</a>    core_limits: AdmissionLimits,
-<a href=#141 id=141 data-nosnippet>141</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#142 id=142 data-nosnippet>142</a>    fallback: ProgramSite,
-<a href=#143 id=143 data-nosnippet>143</a>    purpose: FormulaPurpose,
-<a href=#144 id=144 data-nosnippet>144</a>    evidence: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;, ProgramSite) -&gt; Vec&lt;P&gt;,
-<a href=#145 id=145 data-nosnippet>145</a>    site: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>P) -&gt; ProgramSite,
-<a href=#146 id=146 data-nosnippet>146</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Program, Vec&lt;Vec&lt;P&gt;&gt;), ExpansionFailure&gt; {
-<a href=#147 id=147 data-nosnippet>147</a>    budget.poll(fallback)<span class="question-mark">?</span>;
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">let </span>constants = resolve(source, budget, fallback)<span class="question-mark">?</span>;
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>templates, <span class="kw-2">mut </span>origins) =
-<a href=#150 id=150 data-nosnippet>150</a>        compile_extended(source, <span class="kw-2">&amp;</span>constants, budget, fallback, purpose, evidence)<span class="question-mark">?</span>;
-<a href=#151 id=151 data-nosnippet>151</a>    budget.poll(fallback)<span class="question-mark">?</span>;
-<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">crate</span>::coherence::append_with(
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw-2">&amp;mut </span>templates,
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw-2">&amp;mut </span>origins,
-<a href=#155 id=155 data-nosnippet>155</a>        core_limits,
-<a href=#156 id=156 data-nosnippet>156</a>        |resource, count, evidence| {
-<a href=#157 id=157 data-nosnippet>157</a>            budget.charge(resource, count, evidence.first().map_or(fallback, <span class="kw-2">&amp;</span>site))
-<a href=#158 id=158 data-nosnippet>158</a>        },
-<a href=#159 id=159 data-nosnippet>159</a>        |error, evidence| {
-<a href=#160 id=160 data-nosnippet>160</a>            ExpansionFailure::from(AdmissionFailure::Core {
-<a href=#161 id=161 data-nosnippet>161</a>                error,
-<a href=#162 id=162 data-nosnippet>162</a>                location: evidence.first().map_or(fallback, <span class="kw-2">&amp;</span>site),
-<a href=#163 id=163 data-nosnippet>163</a>            })
+<a href=#68 id=68 data-nosnippet>68</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
+<a href=#69 id=69 data-nosnippet>69</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Admitted, SourceFailure&lt;ExpansionFailure&gt;&gt; {
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">match </span>compile_parsed(<span class="kw-2">&amp;</span>source, limits, cancellation) {
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="prelude-val">Ok</span>(compiled) =&gt; <span class="prelude-val">Ok</span>(Admitted {
+<a href=#72 id=72 data-nosnippet>72</a>            program: compiled.program,
+<a href=#73 id=73 data-nosnippet>73</a>            source: source.into_source(),
+<a href=#74 id=74 data-nosnippet>74</a>            template_origins: compiled.template_origins,
+<a href=#75 id=75 data-nosnippet>75</a>            metadata: compiled.metadata,
+<a href=#76 id=76 data-nosnippet>76</a>            expansion: compiled.expansion,
+<a href=#77 id=77 data-nosnippet>77</a>        }),
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="prelude-val">Err</span>(error) =&gt; <span class="prelude-val">Err</span>(SourceFailure::new(source, error)),
+<a href=#79 id=79 data-nosnippet>79</a>    }
+<a href=#80 id=80 data-nosnippet>80</a>}
+<a href=#81 id=81 data-nosnippet>81</a>
+<a href=#82 id=82 data-nosnippet>82</a><span class="kw">fn </span>compile_parsed(
+<a href=#83 id=83 data-nosnippet>83</a>    source: <span class="kw-2">&amp;</span>ParsedSource,
+<a href=#84 id=84 data-nosnippet>84</a>    limits: ExpansionLimits,
+<a href=#85 id=85 data-nosnippet>85</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
+<a href=#86 id=86 data-nosnippet>86</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Compilation, ExpansionFailure&gt; {
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">let </span>parsed = source.parsed();
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">let </span>options = source.options();
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">let </span>location = Location {
+<a href=#90 id=90 data-nosnippet>90</a>        source: source.source().id(),
+<a href=#91 id=91 data-nosnippet>91</a>        span: source.source().span(),
+<a href=#92 id=92 data-nosnippet>92</a>    };
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">let </span>budget =
+<a href=#94 id=94 data-nosnippet>94</a>        Budget::new(limits, options.core_limits.max_templates).with_cancellation(cancellation);
+<a href=#95 id=95 data-nosnippet>95</a>    budget.poll(location.into())<span class="question-mark">?</span>;
+<a href=#96 id=96 data-nosnippet>96</a>    profile::check_extended(parsed, options)<span class="question-mark">?</span>;
+<a href=#97 id=97 data-nosnippet>97</a>    check_definitions(parsed, limits)<span class="question-mark">?</span>;
+<a href=#98 id=98 data-nosnippet>98</a>    metadata::check_count(parsed, limits, <span class="kw-2">&amp;mut </span><span class="number">0</span>)<span class="question-mark">?</span>;
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>raised = raise(parsed);
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">if </span>!raised.diagnostics().is_empty() {
+<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
+<a href=#102 id=102 data-nosnippet>102</a>    }
+<a href=#103 id=103 data-nosnippet>103</a>    budget.poll(location.into())<span class="question-mark">?</span>;
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_metadata = metadata::Builder::default();
+<a href=#105 id=105 data-nosnippet>105</a>    metadata::collect(raised.program(), <span class="kw-2">&amp;mut </span>source_metadata)<span class="question-mark">?</span>;
+<a href=#106 id=106 data-nosnippet>106</a>    compile_owned(
+<a href=#107 id=107 data-nosnippet>107</a>        raised.program(),
+<a href=#108 id=108 data-nosnippet>108</a>        options.core_limits,
+<a href=#109 id=109 data-nosnippet>109</a>        budget,
+<a href=#110 id=110 data-nosnippet>110</a>        location.into(),
+<a href=#111 id=111 data-nosnippet>111</a>        source_metadata.finish(location.into())<span class="question-mark">?</span>,
+<a href=#112 id=112 data-nosnippet>112</a>    )
+<a href=#113 id=113 data-nosnippet>113</a>}
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a><span class="doccomment">/// Compile the source into the program with its template origins and the
+<a href=#116 id=116 data-nosnippet>116</a>/// expansion charges it accepted, as one compilation with `metadata`.
+<a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>compile_owned(
+<a href=#118 id=118 data-nosnippet>118</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
+<a href=#119 id=119 data-nosnippet>119</a>    core_limits: AdmissionLimits,
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw-2">mut </span>budget: Budget,
+<a href=#121 id=121 data-nosnippet>121</a>    location: ProgramSite,
+<a href=#122 id=122 data-nosnippet>122</a>    metadata: SourceMetadata,
+<a href=#123 id=123 data-nosnippet>123</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Compilation, ExpansionFailure&gt; {
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>(program, template_origins) = compile_relational(
+<a href=#125 id=125 data-nosnippet>125</a>        source,
+<a href=#126 id=126 data-nosnippet>126</a>        core_limits,
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw-2">&amp;mut </span>budget,
+<a href=#128 id=128 data-nosnippet>128</a>        location,
+<a href=#129 id=129 data-nosnippet>129</a>        FormulaPurpose::Ordinary,
+<a href=#130 id=130 data-nosnippet>130</a>        |carrier, <span class="kw">_</span>| parsed_origins(carrier),
+<a href=#131 id=131 data-nosnippet>131</a>        |location| ProgramSite::from(<span class="kw-2">*</span>location),
+<a href=#132 id=132 data-nosnippet>132</a>    )<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>    budget.poll(location)<span class="question-mark">?</span>;
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="prelude-val">Ok</span>(Compilation {
+<a href=#135 id=135 data-nosnippet>135</a>        program,
+<a href=#136 id=136 data-nosnippet>136</a>        template_origins,
+<a href=#137 id=137 data-nosnippet>137</a>        metadata,
+<a href=#138 id=138 data-nosnippet>138</a>        expansion: budget.usage(),
+<a href=#139 id=139 data-nosnippet>139</a>    })
+<a href=#140 id=140 data-nosnippet>140</a>}
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a><span class="doccomment">/// Share normalization, fact expansion and signed coherence while retaining the
+<a href=#143 id=143 data-nosnippet>143</a>/// caller's evidence representation and one cumulative preparation budget.
+<a href=#144 id=144 data-nosnippet>144</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>compile_relational&lt;P: Clone + Ord&gt;(
+<a href=#145 id=145 data-nosnippet>145</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
+<a href=#146 id=146 data-nosnippet>146</a>    core_limits: AdmissionLimits,
+<a href=#147 id=147 data-nosnippet>147</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#148 id=148 data-nosnippet>148</a>    fallback: ProgramSite,
+<a href=#149 id=149 data-nosnippet>149</a>    purpose: FormulaPurpose,
+<a href=#150 id=150 data-nosnippet>150</a>    evidence: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;, ProgramSite) -&gt; Vec&lt;P&gt;,
+<a href=#151 id=151 data-nosnippet>151</a>    site: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>P) -&gt; ProgramSite,
+<a href=#152 id=152 data-nosnippet>152</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(Program, Vec&lt;Vec&lt;P&gt;&gt;), ExpansionFailure&gt; {
+<a href=#153 id=153 data-nosnippet>153</a>    budget.poll(fallback)<span class="question-mark">?</span>;
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span>constants = resolve(source, budget, fallback)<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>(<span class="kw-2">mut </span>templates, <span class="kw-2">mut </span>origins) =
+<a href=#156 id=156 data-nosnippet>156</a>        compile_extended(source, <span class="kw-2">&amp;</span>constants, budget, fallback, purpose, evidence)<span class="question-mark">?</span>;
+<a href=#157 id=157 data-nosnippet>157</a>    budget.poll(fallback)<span class="question-mark">?</span>;
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">crate</span>::coherence::append_with(
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw-2">&amp;mut </span>templates,
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw-2">&amp;mut </span>origins,
+<a href=#161 id=161 data-nosnippet>161</a>        core_limits,
+<a href=#162 id=162 data-nosnippet>162</a>        |resource, count, evidence| {
+<a href=#163 id=163 data-nosnippet>163</a>            budget.charge(resource, count, evidence.first().map_or(fallback, <span class="kw-2">&amp;</span>site))
 <a href=#164 id=164 data-nosnippet>164</a>        },
-<a href=#165 id=165 data-nosnippet>165</a>    )<span class="question-mark">?</span>;
-<a href=#166 id=166 data-nosnippet>166</a>    budget.poll(fallback)<span class="question-mark">?</span>;
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>program = Program::new(templates, core_limits).map_err(|error| {
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">let </span>location = error
-<a href=#169 id=169 data-nosnippet>169</a>            .template_index()
-<a href=#170 id=170 data-nosnippet>170</a>            .and_then(|index| origins.get(index))
-<a href=#171 id=171 data-nosnippet>171</a>            .and_then(|evidence| evidence.first())
-<a href=#172 id=172 data-nosnippet>172</a>            .map_or(fallback, site);
-<a href=#173 id=173 data-nosnippet>173</a>        AdmissionFailure::Core { error, location }
-<a href=#174 id=174 data-nosnippet>174</a>    })<span class="question-mark">?</span>;
-<a href=#175 id=175 data-nosnippet>175</a>    budget.poll(fallback)<span class="question-mark">?</span>;
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="prelude-val">Ok</span>((program, origins))
-<a href=#177 id=177 data-nosnippet>177</a>}
-<a href=#178 id=178 data-nosnippet>178</a>
-<a href=#179 id=179 data-nosnippet>179</a><span class="kw">fn </span>check_definitions(
-<a href=#180 id=180 data-nosnippet>180</a>    parsed: <span class="kw-2">&amp;</span>Parse&lt;ast::Program&gt;,
-<a href=#181 id=181 data-nosnippet>181</a>    limits: ExpansionLimits,
-<a href=#182 id=182 data-nosnippet>182</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
-<a href=#183 id=183 data-nosnippet>183</a>    <span class="kw">let </span><span class="kw-2">mut </span>names = BTreeMap::new();
-<a href=#184 id=184 data-nosnippet>184</a>    check_definitions_in(parsed, limits, <span class="kw-2">&amp;mut </span>names)
-<a href=#185 id=185 data-nosnippet>185</a>}
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>check_definitions_in(
-<a href=#188 id=188 data-nosnippet>188</a>    parsed: <span class="kw-2">&amp;</span>Parse&lt;ast::Program&gt;,
-<a href=#189 id=189 data-nosnippet>189</a>    limits: ExpansionLimits,
-<a href=#190 id=190 data-nosnippet>190</a>    names: <span class="kw-2">&amp;mut </span>BTreeMap&lt;String, Location&gt;,
-<a href=#191 id=191 data-nosnippet>191</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">for </span>statement <span class="kw">in </span>parsed.tree().statements() {
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>ast::Statement::Const(constant) = statement <span class="kw">else </span>{
-<a href=#194 id=194 data-nosnippet>194</a>            <span class="kw">continue</span>;
-<a href=#195 id=195 data-nosnippet>195</a>        };
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span>location = parsed.location(constant.syntax().text_range());
-<a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">if </span>constant.annotation().is_some() {
-<a href=#198 id=198 data-nosnippet>198</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::ConstantPolicy {
-<a href=#199 id=199 data-nosnippet>199</a>                location: location.into(),
-<a href=#200 id=200 data-nosnippet>200</a>            });
-<a href=#201 id=201 data-nosnippet>201</a>        }
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(name) = constant.name() <span class="kw">else </span>{
-<a href=#203 id=203 data-nosnippet>203</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(unsupported(ProfileFeature::Statement, location).into());
-<a href=#204 id=204 data-nosnippet>204</a>        };
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = names.insert(name.text().to_owned(), location) {
-<a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::DuplicateConstant {
-<a href=#207 id=207 data-nosnippet>207</a>                name: name.text().to_owned(),
-<a href=#208 id=208 data-nosnippet>208</a>                first: first.into(),
-<a href=#209 id=209 data-nosnippet>209</a>                duplicate: location.into(),
-<a href=#210 id=210 data-nosnippet>210</a>            });
-<a href=#211 id=211 data-nosnippet>211</a>        }
-<a href=#212 id=212 data-nosnippet>212</a>        check(
-<a href=#213 id=213 data-nosnippet>213</a>            ExpansionResource::Constants,
-<a href=#214 id=214 data-nosnippet>214</a>            names.len() <span class="kw">as </span>u128,
-<a href=#215 id=215 data-nosnippet>215</a>            limits.max_constants,
-<a href=#216 id=216 data-nosnippet>216</a>            location.into(),
-<a href=#217 id=217 data-nosnippet>217</a>        )<span class="question-mark">?</span>;
-<a href=#218 id=218 data-nosnippet>218</a>    }
-<a href=#219 id=219 data-nosnippet>219</a>    <span class="prelude-val">Ok</span>(())
-<a href=#220 id=220 data-nosnippet>220</a>}
-<a href=#221 id=221 data-nosnippet>221</a>
-<a href=#222 id=222 data-nosnippet>222</a><span class="kw">struct </span>Definition&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#223 id=223 data-nosnippet>223</a>    constant: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Const,
-<a href=#224 id=224 data-nosnippet>224</a>    location: ProgramSite,
-<a href=#225 id=225 data-nosnippet>225</a>    dependencies: Vec&lt;String&gt;,
+<a href=#165 id=165 data-nosnippet>165</a>        |error, evidence| {
+<a href=#166 id=166 data-nosnippet>166</a>            ExpansionFailure::from(AdmissionFailure::Core {
+<a href=#167 id=167 data-nosnippet>167</a>                error,
+<a href=#168 id=168 data-nosnippet>168</a>                location: evidence.first().map_or(fallback, <span class="kw-2">&amp;</span>site),
+<a href=#169 id=169 data-nosnippet>169</a>            })
+<a href=#170 id=170 data-nosnippet>170</a>        },
+<a href=#171 id=171 data-nosnippet>171</a>    )<span class="question-mark">?</span>;
+<a href=#172 id=172 data-nosnippet>172</a>    budget.poll(fallback)<span class="question-mark">?</span>;
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>program = Program::new(templates, core_limits).map_err(|error| {
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">let </span>location = error
+<a href=#175 id=175 data-nosnippet>175</a>            .template_index()
+<a href=#176 id=176 data-nosnippet>176</a>            .and_then(|index| origins.get(index))
+<a href=#177 id=177 data-nosnippet>177</a>            .and_then(|evidence| evidence.first())
+<a href=#178 id=178 data-nosnippet>178</a>            .map_or(fallback, site);
+<a href=#179 id=179 data-nosnippet>179</a>        AdmissionFailure::Core { error, location }
+<a href=#180 id=180 data-nosnippet>180</a>    })<span class="question-mark">?</span>;
+<a href=#181 id=181 data-nosnippet>181</a>    budget.poll(fallback)<span class="question-mark">?</span>;
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="prelude-val">Ok</span>((program, origins))
+<a href=#183 id=183 data-nosnippet>183</a>}
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a><span class="kw">fn </span>check_definitions(
+<a href=#186 id=186 data-nosnippet>186</a>    parsed: <span class="kw-2">&amp;</span>Parse&lt;ast::Program&gt;,
+<a href=#187 id=187 data-nosnippet>187</a>    limits: ExpansionLimits,
+<a href=#188 id=188 data-nosnippet>188</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">let </span><span class="kw-2">mut </span>names = BTreeMap::new();
+<a href=#190 id=190 data-nosnippet>190</a>    check_definitions_in(parsed, limits, <span class="kw-2">&amp;mut </span>names)
+<a href=#191 id=191 data-nosnippet>191</a>}
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>check_definitions_in(
+<a href=#194 id=194 data-nosnippet>194</a>    parsed: <span class="kw-2">&amp;</span>Parse&lt;ast::Program&gt;,
+<a href=#195 id=195 data-nosnippet>195</a>    limits: ExpansionLimits,
+<a href=#196 id=196 data-nosnippet>196</a>    names: <span class="kw-2">&amp;mut </span>BTreeMap&lt;String, Location&gt;,
+<a href=#197 id=197 data-nosnippet>197</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">for </span>statement <span class="kw">in </span>parsed.tree().statements() {
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let </span>ast::Statement::Const(constant) = statement <span class="kw">else </span>{
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">continue</span>;
+<a href=#201 id=201 data-nosnippet>201</a>        };
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span>location = parsed.location(constant.syntax().text_range());
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">if </span>constant.annotation().is_some() {
+<a href=#204 id=204 data-nosnippet>204</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::ConstantPolicy {
+<a href=#205 id=205 data-nosnippet>205</a>                location: location.into(),
+<a href=#206 id=206 data-nosnippet>206</a>            });
+<a href=#207 id=207 data-nosnippet>207</a>        }
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(name) = constant.name() <span class="kw">else </span>{
+<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(unsupported(ProfileFeature::Statement, location).into());
+<a href=#210 id=210 data-nosnippet>210</a>        };
+<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = names.insert(name.text().to_owned(), location) {
+<a href=#212 id=212 data-nosnippet>212</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::DuplicateConstant {
+<a href=#213 id=213 data-nosnippet>213</a>                name: name.text().to_owned(),
+<a href=#214 id=214 data-nosnippet>214</a>                first: first.into(),
+<a href=#215 id=215 data-nosnippet>215</a>                duplicate: location.into(),
+<a href=#216 id=216 data-nosnippet>216</a>            });
+<a href=#217 id=217 data-nosnippet>217</a>        }
+<a href=#218 id=218 data-nosnippet>218</a>        check(
+<a href=#219 id=219 data-nosnippet>219</a>            ExpansionResource::Constants,
+<a href=#220 id=220 data-nosnippet>220</a>            names.len() <span class="kw">as </span>u128,
+<a href=#221 id=221 data-nosnippet>221</a>            limits.max_constants,
+<a href=#222 id=222 data-nosnippet>222</a>            location.into(),
+<a href=#223 id=223 data-nosnippet>223</a>        )<span class="question-mark">?</span>;
+<a href=#224 id=224 data-nosnippet>224</a>    }
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="prelude-val">Ok</span>(())
 <a href=#226 id=226 data-nosnippet>226</a>}
 <a href=#227 id=227 data-nosnippet>227</a>
-<a href=#228 id=228 data-nosnippet>228</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>resolve(
-<a href=#229 id=229 data-nosnippet>229</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
-<a href=#230 id=230 data-nosnippet>230</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#231 id=231 data-nosnippet>231</a>    fallback: ProgramSite,
-<a href=#232 id=232 data-nosnippet>232</a>) -&gt; <span class="prelude-ty">Result</span>&lt;BTreeMap&lt;String, Symbol&gt;, ExpansionFailure&gt; {
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">let </span><span class="kw-2">mut </span>definitions: BTreeMap&lt;String, Definition&lt;<span class="lifetime">'_</span>&gt;&gt; = BTreeMap::new();
-<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">for </span>(index, carrier) <span class="kw">in </span>source.statements().enumerate() {
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span>location = origin(carrier, fallback.with_statement(StatementId::new(index)));
-<a href=#236 id=236 data-nosnippet>236</a>        budget.poll(location)<span class="question-mark">?</span>;
-<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span>Statement::Const(constant) = carrier.get() <span class="kw">else </span>{
-<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">continue</span>;
-<a href=#239 id=239 data-nosnippet>239</a>        };
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">if </span>constant.policy.is_some() {
-<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::ConstantPolicy { location });
-<a href=#242 id=242 data-nosnippet>242</a>        }
-<a href=#243 id=243 data-nosnippet>243</a>        <span class="comment">// Canonical declarations are identified by their content. Additional
-<a href=#244 id=244 data-nosnippet>244</a>        // provenance records evidence, not another definition of the name.
-<a href=#245 id=245 data-nosnippet>245</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(first) = definitions
-<a href=#246 id=246 data-nosnippet>246</a>            .get(constant.name.as_str())
-<a href=#247 id=247 data-nosnippet>247</a>            .map(|entry| entry.location)
-<a href=#248 id=248 data-nosnippet>248</a>        {
-<a href=#249 id=249 data-nosnippet>249</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::DuplicateConstant {
-<a href=#250 id=250 data-nosnippet>250</a>                name: constant.name.as_str().to_owned(),
-<a href=#251 id=251 data-nosnippet>251</a>                first,
-<a href=#252 id=252 data-nosnippet>252</a>                duplicate: location,
-<a href=#253 id=253 data-nosnippet>253</a>            });
-<a href=#254 id=254 data-nosnippet>254</a>        }
-<a href=#255 id=255 data-nosnippet>255</a>        budget.check_constants(definitions.len().saturating_add(<span class="number">1</span>), location)<span class="question-mark">?</span>;
-<a href=#256 id=256 data-nosnippet>256</a>        definitions.insert(
-<a href=#257 id=257 data-nosnippet>257</a>            constant.name.as_str().to_owned(),
-<a href=#258 id=258 data-nosnippet>258</a>            Definition {
-<a href=#259 id=259 data-nosnippet>259</a>                constant,
-<a href=#260 id=260 data-nosnippet>260</a>                location,
-<a href=#261 id=261 data-nosnippet>261</a>                dependencies: Vec::new(),
-<a href=#262 id=262 data-nosnippet>262</a>            },
-<a href=#263 id=263 data-nosnippet>263</a>        );
-<a href=#264 id=264 data-nosnippet>264</a>    }
-<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>names: BTreeSet&lt;<span class="kw">_</span>&gt; = definitions.keys().cloned().collect();
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">for </span>definition <span class="kw">in </span>definitions.values_mut() {
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span><span class="kw-2">mut </span>dependencies = BTreeSet::new();
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">for </span>term <span class="kw">in </span>definition.constant.value.subterms() {
-<a href=#269 id=269 data-nosnippet>269</a>            budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, definition.location)<span class="question-mark">?</span>;
-<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">if let </span>Term::Symbolic(symbol) = term {
-<a href=#271 id=271 data-nosnippet>271</a>                <span class="kw">for </span>nested <span class="kw">in </span>symbol.subsymbols() {
-<a href=#272 id=272 data-nosnippet>272</a>                    <span class="kw">if </span>!symbol.arguments().is_empty() {
-<a href=#273 id=273 data-nosnippet>273</a>                        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, definition.location)<span class="question-mark">?</span>;
-<a href=#274 id=274 data-nosnippet>274</a>                    }
-<a href=#275 id=275 data-nosnippet>275</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = constant_name(nested).filter(|name| names.contains(<span class="kw-2">*</span>name)) {
-<a href=#276 id=276 data-nosnippet>276</a>                        dependencies.insert(name.to_owned());
-<a href=#277 id=277 data-nosnippet>277</a>                    }
-<a href=#278 id=278 data-nosnippet>278</a>                }
-<a href=#279 id=279 data-nosnippet>279</a>            }
-<a href=#280 id=280 data-nosnippet>280</a>        }
-<a href=#281 id=281 data-nosnippet>281</a>        definition.dependencies = dependencies.into_iter().collect();
-<a href=#282 id=282 data-nosnippet>282</a>    }
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="kw">let </span><span class="kw-2">mut </span>values = BTreeMap::new();
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span><span class="kw-2">mut </span>active = BTreeSet::new();
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="kw">for </span>name <span class="kw">in </span>definitions.keys() {
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">if </span>values.contains_key(name) {
-<a href=#287 id=287 data-nosnippet>287</a>            <span class="kw">continue</span>;
-<a href=#288 id=288 data-nosnippet>288</a>        }
-<a href=#289 id=289 data-nosnippet>289</a>        active.insert(name.clone());
-<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span><span class="kw-2">mut </span>stack = <span class="macro">vec!</span>[(name.clone(), <span class="number">0</span>)];
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>((name, next)) = stack.last_mut() {
-<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">let </span>definition = <span class="kw-2">&amp;</span>definitions[name];
-<a href=#293 id=293 data-nosnippet>293</a>            budget.poll(definition.location)<span class="question-mark">?</span>;
-<a href=#294 id=294 data-nosnippet>294</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(dependency) = definition.dependencies.get(<span class="kw-2">*</span>next) {
-<a href=#295 id=295 data-nosnippet>295</a>                <span class="kw-2">*</span>next += <span class="number">1</span>;
-<a href=#296 id=296 data-nosnippet>296</a>                <span class="kw">if </span>values.contains_key(dependency) {
-<a href=#297 id=297 data-nosnippet>297</a>                    <span class="kw">continue</span>;
-<a href=#298 id=298 data-nosnippet>298</a>                }
-<a href=#299 id=299 data-nosnippet>299</a>                <span class="kw">if </span>active.contains(dependency) {
-<a href=#300 id=300 data-nosnippet>300</a>                    <span class="kw">let </span><span class="kw-2">mut </span>names: Vec&lt;<span class="kw">_</span>&gt; = stack.iter().map(|(name, <span class="kw">_</span>)| name.clone()).collect();
-<a href=#301 id=301 data-nosnippet>301</a>                    names.push(dependency.clone());
-<a href=#302 id=302 data-nosnippet>302</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::ConstantCycle {
-<a href=#303 id=303 data-nosnippet>303</a>                        names,
-<a href=#304 id=304 data-nosnippet>304</a>                        location: definition.location,
-<a href=#305 id=305 data-nosnippet>305</a>                    });
-<a href=#306 id=306 data-nosnippet>306</a>                }
-<a href=#307 id=307 data-nosnippet>307</a>                active.insert(dependency.clone());
-<a href=#308 id=308 data-nosnippet>308</a>                stack.push((dependency.clone(), <span class="number">0</span>));
-<a href=#309 id=309 data-nosnippet>309</a>                <span class="kw">continue</span>;
-<a href=#310 id=310 data-nosnippet>310</a>            }
-<a href=#311 id=311 data-nosnippet>311</a>            <span class="kw">let </span>value = definition.constant.value.clone().try_fold(|parts| {
-<a href=#312 id=312 data-nosnippet>312</a>                normalize_node(Term::from(parts), <span class="kw-2">&amp;</span>values, budget, definition.location)
-<a href=#313 id=313 data-nosnippet>313</a>            })<span class="question-mark">?</span>;
-<a href=#314 id=314 data-nosnippet>314</a>            <span class="kw">let </span>TermParts::Symbolic(value) = value.into_parts() <span class="kw">else </span>{
-<a href=#315 id=315 data-nosnippet>315</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::Evaluation {
-<a href=#316 id=316 data-nosnippet>316</a>                    error: EvalError::Undefined,
-<a href=#317 id=317 data-nosnippet>317</a>                    location: definition.location,
-<a href=#318 id=318 data-nosnippet>318</a>                });
-<a href=#319 id=319 data-nosnippet>319</a>            };
-<a href=#320 id=320 data-nosnippet>320</a>            values.insert(name.clone(), value);
-<a href=#321 id=321 data-nosnippet>321</a>            active.remove(name);
-<a href=#322 id=322 data-nosnippet>322</a>            stack.pop();
-<a href=#323 id=323 data-nosnippet>323</a>        }
-<a href=#324 id=324 data-nosnippet>324</a>    }
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="prelude-val">Ok</span>(values)
-<a href=#326 id=326 data-nosnippet>326</a>}
-<a href=#327 id=327 data-nosnippet>327</a>
-<a href=#328 id=328 data-nosnippet>328</a><span class="kw">type </span>Compiled&lt;P&gt; = (Vec&lt;zetesis_core::Template&gt;, Vec&lt;Vec&lt;P&gt;&gt;);
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a><span class="doccomment">/// Normalize each statement and compile it. A statement whose every term
-<a href=#331 id=331 data-nosnippet>331</a>/// normalization would return as it is, charged and validated by
-<a href=#332 id=332 data-nosnippet>332</a>/// [`kept_as_is`], is compiled from the original carrier: the rewrite would
-<a href=#333 id=333 data-nosnippet>333</a>/// hand back the same statement, stamped with a transformation tag that
-<a href=#334 id=334 data-nosnippet>334</a>/// nothing after this point reads, at the cost of copying and rebuilding it.
-<a href=#335 id=335 data-nosnippet>335</a>/// Every other statement is rebuilt by the rewrite, alone in a program of
-<a href=#336 id=336 data-nosnippet>336</a>/// its own so that no two statements merge.
-<a href=#337 id=337 data-nosnippet>337</a></span><span class="kw">fn </span>compile_extended&lt;P: Clone&gt;(
-<a href=#338 id=338 data-nosnippet>338</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
-<a href=#339 id=339 data-nosnippet>339</a>    constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;,
-<a href=#340 id=340 data-nosnippet>340</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#341 id=341 data-nosnippet>341</a>    fallback: ProgramSite,
-<a href=#342 id=342 data-nosnippet>342</a>    purpose: FormulaPurpose,
-<a href=#343 id=343 data-nosnippet>343</a>    evidence: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;, ProgramSite) -&gt; Vec&lt;P&gt;,
-<a href=#344 id=344 data-nosnippet>344</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Compiled&lt;P&gt;, ExpansionFailure&gt; {
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">let </span><span class="kw-2">mut </span>compiled = (Vec::new(), Vec::new());
-<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">for </span>(index, carrier) <span class="kw">in </span>source.statements().enumerate() {
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span>location = origin(carrier, fallback.with_statement(StatementId::new(index)));
-<a href=#348 id=348 data-nosnippet>348</a>        budget.poll(location)<span class="question-mark">?</span>;
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">if </span>!purpose.includes(carrier.get())
-<a href=#350 id=350 data-nosnippet>350</a>            || <span class="macro">matches!</span>(
-<a href=#351 id=351 data-nosnippet>351</a>                carrier.get(),
-<a href=#352 id=352 data-nosnippet>352</a>                Statement::Const(<span class="kw">_</span>) | Statement::Defined(<span class="kw">_</span>) | Statement::Show(<span class="kw">_</span>)
-<a href=#353 id=353 data-nosnippet>353</a>            )
-<a href=#354 id=354 data-nosnippet>354</a>        {
-<a href=#355 id=355 data-nosnippet>355</a>            <span class="kw">continue</span>;
-<a href=#356 id=356 data-nosnippet>356</a>        }
-<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span>locations = evidence(carrier, location);
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">if </span>kept_as_is(carrier.get(), constants, budget, location)<span class="question-mark">? </span>{
-<a href=#359 id=359 data-nosnippet>359</a>            emit(carrier, locations, budget, location, <span class="kw-2">&amp;mut </span>compiled)<span class="question-mark">?</span>;
-<a href=#360 id=360 data-nosnippet>360</a>            <span class="kw">continue</span>;
-<a href=#361 id=361 data-nosnippet>361</a>        }
-<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span><span class="kw-2">mut </span>normalizer = Normalizer {
-<a href=#363 id=363 data-nosnippet>363</a>            constants,
-<a href=#364 id=364 data-nosnippet>364</a>            budget,
-<a href=#365 id=365 data-nosnippet>365</a>            location,
-<a href=#366 id=366 data-nosnippet>366</a>            failure: <span class="prelude-val">None</span>,
-<a href=#367 id=367 data-nosnippet>367</a>        };
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span>rewritten = rewrite(SourceProgram::of_nodes([carrier.clone()]), <span class="kw-2">&amp;mut </span>normalizer);
-<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(failure) = normalizer.failure {
-<a href=#370 id=370 data-nosnippet>370</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(failure);
-<a href=#371 id=371 data-nosnippet>371</a>        }
-<a href=#372 id=372 data-nosnippet>372</a>        budget.poll(location)<span class="question-mark">?</span>;
-<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">let </span>normalized_carrier = rewritten
-<a href=#374 id=374 data-nosnippet>374</a>            .statements()
-<a href=#375 id=375 data-nosnippet>375</a>            .next()
-<a href=#376 id=376 data-nosnippet>376</a>            .expect(<span class="string">"a rule rewrite keeps its statement"</span>);
-<a href=#377 id=377 data-nosnippet>377</a>        emit(
-<a href=#378 id=378 data-nosnippet>378</a>            normalized_carrier,
-<a href=#379 id=379 data-nosnippet>379</a>            locations,
-<a href=#380 id=380 data-nosnippet>380</a>            budget,
-<a href=#381 id=381 data-nosnippet>381</a>            location,
-<a href=#382 id=382 data-nosnippet>382</a>            <span class="kw-2">&amp;mut </span>compiled,
-<a href=#383 id=383 data-nosnippet>383</a>        )<span class="question-mark">?</span>;
-<a href=#384 id=384 data-nosnippet>384</a>    }
-<a href=#385 id=385 data-nosnippet>385</a>    <span class="prelude-val">Ok</span>(compiled)
-<a href=#386 id=386 data-nosnippet>386</a>}
-<a href=#387 id=387 data-nosnippet>387</a>
-<a href=#388 id=388 data-nosnippet>388</a><span class="doccomment">/// Emit one normalized statement's templates, each with the statement's
-<a href=#389 id=389 data-nosnippet>389</a>/// original evidence: its facts, expanded, or the one template of its rule.
-<a href=#390 id=390 data-nosnippet>390</a></span><span class="kw">fn </span>emit&lt;P: Clone&gt;(
-<a href=#391 id=391 data-nosnippet>391</a>    statement: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
-<a href=#392 id=392 data-nosnippet>392</a>    locations: Vec&lt;P&gt;,
-<a href=#393 id=393 data-nosnippet>393</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#394 id=394 data-nosnippet>394</a>    location: ProgramSite,
-<a href=#395 id=395 data-nosnippet>395</a>    (templates, origins): <span class="kw-2">&amp;mut </span>Compiled&lt;P&gt;,
-<a href=#396 id=396 data-nosnippet>396</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(facts) = fact_expansion::facts(statement, budget, location)<span class="question-mark">? </span>{
-<a href=#398 id=398 data-nosnippet>398</a>        budget.charge(
-<a href=#399 id=399 data-nosnippet>399</a>            ExpansionResource::Origins,
-<a href=#400 id=400 data-nosnippet>400</a>            (facts.len() <span class="kw">as </span>u128).saturating_mul(locations.len() <span class="kw">as </span>u128),
-<a href=#401 id=401 data-nosnippet>401</a>            location,
-<a href=#402 id=402 data-nosnippet>402</a>        )<span class="question-mark">?</span>;
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">for </span>fact <span class="kw">in </span>facts {
-<a href=#404 id=404 data-nosnippet>404</a>            templates.push(fact);
-<a href=#405 id=405 data-nosnippet>405</a>            origins.push(locations.clone());
-<a href=#406 id=406 data-nosnippet>406</a>        }
-<a href=#407 id=407 data-nosnippet>407</a>    } <span class="kw">else </span>{
-<a href=#408 id=408 data-nosnippet>408</a>        budget.charge(ExpansionResource::Templates, <span class="number">1</span>, location)<span class="question-mark">?</span>;
-<a href=#409 id=409 data-nosnippet>409</a>        budget.charge(
-<a href=#410 id=410 data-nosnippet>410</a>            ExpansionResource::Origins,
-<a href=#411 id=411 data-nosnippet>411</a>            locations.len() <span class="kw">as </span>u128,
-<a href=#412 id=412 data-nosnippet>412</a>            location,
-<a href=#413 id=413 data-nosnippet>413</a>        )<span class="question-mark">?</span>;
-<a href=#414 id=414 data-nosnippet>414</a>        templates.push(compile::statement(statement, location)<span class="question-mark">?</span>);
-<a href=#415 id=415 data-nosnippet>415</a>        origins.push(locations);
-<a href=#416 id=416 data-nosnippet>416</a>    }
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="prelude-val">Ok</span>(())
-<a href=#418 id=418 data-nosnippet>418</a>}
-<a href=#419 id=419 data-nosnippet>419</a>
-<a href=#420 id=420 data-nosnippet>420</a><span class="doccomment">/// Whether normalization would return `statement` exactly as it is. Its
-<a href=#421 id=421 data-nosnippet>421</a>/// terms are charged and validated as the rewrite would charge and validate
-<a href=#422 id=422 data-nosnippet>422</a>/// them, in the rewrite's order, on a tentative budget that becomes the
-<a href=#423 id=423 data-nosnippet>423</a>/// budget only when every term is a [`Leaf`]; otherwise the budget is left
-<a href=#424 id=424 data-nosnippet>424</a>/// as it was, and the rewrite charges the statement from the start. A
-<a href=#425 id=425 data-nosnippet>425</a>/// failure is the one the rewrite would raise first, since it arises before
-<a href=#426 id=426 data-nosnippet>426</a>/// any term the rewrite would rebuild. Nothing is cloned but the budget.
-<a href=#427 id=427 data-nosnippet>427</a></span><span class="kw">fn </span>kept_as_is(
-<a href=#428 id=428 data-nosnippet>428</a>    statement: <span class="kw-2">&amp;</span>Statement,
-<a href=#429 id=429 data-nosnippet>429</a>    constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;,
-<a href=#430 id=430 data-nosnippet>430</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#431 id=431 data-nosnippet>431</a>    location: ProgramSite,
-<a href=#432 id=432 data-nosnippet>432</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt; {
-<a href=#433 id=433 data-nosnippet>433</a>    <span class="kw">let </span>Statement::Rule(rule) = statement <span class="kw">else </span>{
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
-<a href=#435 id=435 data-nosnippet>435</a>    };
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">let </span><span class="kw-2">mut </span>tentative = budget.clone();
-<a href=#437 id=437 data-nosnippet>437</a>    <span class="kw">let </span>kept = every_term(rule, <span class="kw-2">&amp;mut </span>|term| <span class="kw">match </span>Leaf::of(term, constants) {
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="prelude-val">Some</span>(leaf) =&gt; leaf.account(<span class="kw-2">&amp;mut </span>tentative, location).map(|()| <span class="bool-val">true</span>),
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
-<a href=#440 id=440 data-nosnippet>440</a>    })<span class="question-mark">?</span>;
-<a href=#441 id=441 data-nosnippet>441</a>    <span class="kw">if </span>kept {
-<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw-2">*</span>budget = tentative;
-<a href=#443 id=443 data-nosnippet>443</a>    }
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="prelude-val">Ok</span>(kept)
-<a href=#445 id=445 data-nosnippet>445</a>}
-<a href=#446 id=446 data-nosnippet>446</a>
-<a href=#447 id=447 data-nosnippet>447</a><span class="doccomment">/// Apply `keep` to the terms of a rule of the shape this profile compiles,
-<a href=#448 id=448 data-nosnippet>448</a>/// in the order the rewrite rebuilds them: the head, then each body element;
-<a href=#449 id=449 data-nosnippet>449</a>/// an atom's arguments in order, a comparison's first term and then its
-<a href=#450 id=450 data-nosnippet>450</a>/// steps. `Ok(false)` at the first term `keep` refuses, or at once for a
-<a href=#451 id=451 data-nosnippet>451</a>/// head or body element of another shape, which the rewrite descends in an
-<a href=#452 id=452 data-nosnippet>452</a>/// order this walk does not reproduce.
-<a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">fn </span>every_term(
-<a href=#454 id=454 data-nosnippet>454</a>    rule: <span class="kw-2">&amp;</span>Rule,
-<a href=#455 id=455 data-nosnippet>455</a>    keep: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>Term) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt;,
-<a href=#456 id=456 data-nosnippet>456</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt; {
-<a href=#457 id=457 data-nosnippet>457</a>    <span class="comment">// A head or body element of any other shape, including one the pinned
-<a href=#458 id=458 data-nosnippet>458</a>    // themelios tier may add, is left to the rewrite.
-<a href=#459 id=459 data-nosnippet>459</a>    </span><span class="kw">let </span>head = <span class="kw">match </span>rule.head().get() {
-<a href=#460 id=460 data-nosnippet>460</a>        Head::Literal(literal) =&gt; literal_terms(literal, keep)<span class="question-mark">?</span>,
-<a href=#461 id=461 data-nosnippet>461</a>        Head::Falsum | Head::Verum =&gt; <span class="bool-val">true</span>,
-<a href=#462 id=462 data-nosnippet>462</a>        <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
-<a href=#463 id=463 data-nosnippet>463</a>    };
-<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">if </span>!head {
-<a href=#465 id=465 data-nosnippet>465</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
-<a href=#466 id=466 data-nosnippet>466</a>    }
-<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">for </span>element <span class="kw">in </span>rule.body().get().elements() {
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">let </span>kept = <span class="kw">match </span>element.get() {
-<a href=#469 id=469 data-nosnippet>469</a>            BodyElement::Literal(literal) =&gt; literal_terms(literal, keep)<span class="question-mark">?</span>,
-<a href=#470 id=470 data-nosnippet>470</a>            <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
-<a href=#471 id=471 data-nosnippet>471</a>        };
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">if </span>!kept {
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
-<a href=#474 id=474 data-nosnippet>474</a>        }
-<a href=#475 id=475 data-nosnippet>475</a>    }
-<a href=#476 id=476 data-nosnippet>476</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
-<a href=#477 id=477 data-nosnippet>477</a>}
-<a href=#478 id=478 data-nosnippet>478</a>
-<a href=#479 id=479 data-nosnippet>479</a><span class="kw">fn </span>literal_terms(
-<a href=#480 id=480 data-nosnippet>480</a>    literal: <span class="kw-2">&amp;</span>Literal,
-<a href=#481 id=481 data-nosnippet>481</a>    keep: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>Term) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt;,
-<a href=#482 id=482 data-nosnippet>482</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt; {
-<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>literal.inner {
-<a href=#484 id=484 data-nosnippet>484</a>        LiteralInner::Atom(atom) =&gt; {
-<a href=#485 id=485 data-nosnippet>485</a>            <span class="kw">for </span>term <span class="kw">in </span>atom.get().argument_terms() {
-<a href=#486 id=486 data-nosnippet>486</a>                <span class="kw">if </span>!keep(term)<span class="question-mark">? </span>{
-<a href=#487 id=487 data-nosnippet>487</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
-<a href=#488 id=488 data-nosnippet>488</a>                }
-<a href=#489 id=489 data-nosnippet>489</a>            }
-<a href=#490 id=490 data-nosnippet>490</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
-<a href=#491 id=491 data-nosnippet>491</a>        }
-<a href=#492 id=492 data-nosnippet>492</a>        LiteralInner::Comparison(comparison) =&gt; {
-<a href=#493 id=493 data-nosnippet>493</a>            <span class="kw">let </span>comparison = comparison.get();
-<a href=#494 id=494 data-nosnippet>494</a>            <span class="kw">if </span>!keep(comparison.first())<span class="question-mark">? </span>{
-<a href=#495 id=495 data-nosnippet>495</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
-<a href=#496 id=496 data-nosnippet>496</a>            }
-<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">for </span>(<span class="kw">_</span>, term) <span class="kw">in </span>comparison.steps() {
-<a href=#498 id=498 data-nosnippet>498</a>                <span class="kw">if </span>!keep(term)<span class="question-mark">? </span>{
-<a href=#499 id=499 data-nosnippet>499</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
-<a href=#500 id=500 data-nosnippet>500</a>                }
-<a href=#501 id=501 data-nosnippet>501</a>            }
-<a href=#502 id=502 data-nosnippet>502</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
-<a href=#503 id=503 data-nosnippet>503</a>        }
-<a href=#504 id=504 data-nosnippet>504</a>        LiteralInner::True | LiteralInner::False =&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
-<a href=#505 id=505 data-nosnippet>505</a>    }
-<a href=#506 id=506 data-nosnippet>506</a>}
-<a href=#507 id=507 data-nosnippet>507</a>
-<a href=#508 id=508 data-nosnippet>508</a><span class="doccomment">/// A term [`normalize_node`] returns exactly as it is, charged and validated
-<a href=#509 id=509 data-nosnippet>509</a>/// by [`Leaf::account`]: a variable, or an argument-free scalar naming no
-<a href=#510 id=510 data-nosnippet>510</a>/// definition. Every other term is rebuilt, or, for a pool or interval
-<a href=#511 id=511 data-nosnippet>511</a>/// former, kept around terms that may not be.
-<a href=#512 id=512 data-nosnippet>512</a></span><span class="attr">#[derive(Clone, Copy)]
-<a href=#513 id=513 data-nosnippet>513</a></span><span class="kw">enum </span>Leaf&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#514 id=514 data-nosnippet>514</a>    Variable,
-<a href=#515 id=515 data-nosnippet>515</a>    Scalar(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Symbol),
-<a href=#516 id=516 data-nosnippet>516</a>}
-<a href=#517 id=517 data-nosnippet>517</a>
-<a href=#518 id=518 data-nosnippet>518</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; Leaf&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#519 id=519 data-nosnippet>519</a>    <span class="kw">fn </span>of(term: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Term, constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="kw">match </span>term {
-<a href=#521 id=521 data-nosnippet>521</a>            Term::Variable(<span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(<span class="self">Self</span>::Variable),
-<a href=#522 id=522 data-nosnippet>522</a>            Term::Symbolic(symbol)
-<a href=#523 id=523 data-nosnippet>523</a>                <span class="kw">if </span>symbol.arguments().is_empty() &amp;&amp; defined(symbol, constants).is_none() =&gt;
-<a href=#524 id=524 data-nosnippet>524</a>            {
-<a href=#525 id=525 data-nosnippet>525</a>                <span class="prelude-val">Some</span>(<span class="self">Self</span>::Scalar(symbol))
-<a href=#526 id=526 data-nosnippet>526</a>            }
-<a href=#527 id=527 data-nosnippet>527</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#528 id=528 data-nosnippet>528</a>        }
-<a href=#529 id=529 data-nosnippet>529</a>    }
-<a href=#530 id=530 data-nosnippet>530</a>
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="doccomment">/// Charge and validate as [`normalize_node`] does for this term: its unit
-<a href=#532 id=532 data-nosnippet>532</a>    /// of term work first, then a scalar's validation and payload.
-<a href=#533 id=533 data-nosnippet>533</a>    </span><span class="kw">fn </span>account(<span class="self">self</span>, budget: <span class="kw-2">&amp;mut </span>Budget, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
-<a href=#534 id=534 data-nosnippet>534</a>        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
-<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#536 id=536 data-nosnippet>536</a>            <span class="self">Self</span>::Variable =&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#537 id=537 data-nosnippet>537</a>            <span class="self">Self</span>::Scalar(symbol) =&gt; scalar_leaf(symbol, budget, location),
-<a href=#538 id=538 data-nosnippet>538</a>        }
-<a href=#539 id=539 data-nosnippet>539</a>    }
-<a href=#540 id=540 data-nosnippet>540</a>}
-<a href=#541 id=541 data-nosnippet>541</a>
-<a href=#542 id=542 data-nosnippet>542</a><span class="doccomment">/// The value an argument-free scalar names, when it names a definition.
-<a href=#543 id=543 data-nosnippet>543</a></span><span class="kw">fn </span>defined&lt;<span class="lifetime">'a</span>&gt;(symbol: <span class="kw-2">&amp;</span>Symbol, constants: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>BTreeMap&lt;String, Symbol&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Symbol&gt; {
-<a href=#544 id=544 data-nosnippet>544</a>    constant_name(symbol).and_then(|name| constants.get(name))
-<a href=#545 id=545 data-nosnippet>545</a>}
-<a href=#546 id=546 data-nosnippet>546</a>
-<a href=#547 id=547 data-nosnippet>547</a><span class="doccomment">/// Validate an argument-free scalar normalization keeps and charge its payload.
-<a href=#548 id=548 data-nosnippet>548</a></span><span class="kw">fn </span>scalar_leaf(
-<a href=#549 id=549 data-nosnippet>549</a>    symbol: <span class="kw-2">&amp;</span>Symbol,
-<a href=#550 id=550 data-nosnippet>550</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#551 id=551 data-nosnippet>551</a>    location: ProgramSite,
-<a href=#552 id=552 data-nosnippet>552</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
-<a href=#553 id=553 data-nosnippet>553</a>    compile::validate_scalar(symbol, location)<span class="question-mark">?</span>;
-<a href=#554 id=554 data-nosnippet>554</a>    budget.charge(
-<a href=#555 id=555 data-nosnippet>555</a>        ExpansionResource::ScalarBytes,
-<a href=#556 id=556 data-nosnippet>556</a>        symbol_bytes(symbol),
-<a href=#557 id=557 data-nosnippet>557</a>        location,
-<a href=#558 id=558 data-nosnippet>558</a>    )<span class="question-mark">?</span>;
-<a href=#559 id=559 data-nosnippet>559</a>    <span class="prelude-val">Ok</span>(())
-<a href=#560 id=560 data-nosnippet>560</a>}
-<a href=#561 id=561 data-nosnippet>561</a>
-<a href=#562 id=562 data-nosnippet>562</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>parsed_origins(carrier: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;) -&gt; Vec&lt;Location&gt; {
-<a href=#563 id=563 data-nosnippet>563</a>    carrier
-<a href=#564 id=564 data-nosnippet>564</a>        .provenance()
-<a href=#565 id=565 data-nosnippet>565</a>        .origins()
-<a href=#566 id=566 data-nosnippet>566</a>        .filter_map(|origin| <span class="kw">match </span>origin {
-<a href=#567 id=567 data-nosnippet>567</a>            Origin::Parsed(location) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>location),
-<a href=#568 id=568 data-nosnippet>568</a>            Origin::Constructed | Origin::Transformed(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#569 id=569 data-nosnippet>569</a>        })
-<a href=#570 id=570 data-nosnippet>570</a>        .collect()
-<a href=#571 id=571 data-nosnippet>571</a>}
-<a href=#572 id=572 data-nosnippet>572</a>
-<a href=#573 id=573 data-nosnippet>573</a><span class="doccomment">/// Statement evidence retains logical identity independently of parsed spans.
-<a href=#574 id=574 data-nosnippet>574</a>/// Constructed input contributes its caller-assigned site rather than a fabricated location.
-<a href=#575 id=575 data-nosnippet>575</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>program_sites(
-<a href=#576 id=576 data-nosnippet>576</a>    carrier: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
-<a href=#577 id=577 data-nosnippet>577</a>    fallback: ProgramSite,
-<a href=#578 id=578 data-nosnippet>578</a>) -&gt; Vec&lt;ProgramSite&gt; {
-<a href=#579 id=579 data-nosnippet>579</a>    <span class="kw">let </span><span class="kw-2">mut </span>sites: Vec&lt;<span class="kw">_</span>&gt; = carrier
-<a href=#580 id=580 data-nosnippet>580</a>        .provenance()
-<a href=#581 id=581 data-nosnippet>581</a>        .origins()
-<a href=#582 id=582 data-nosnippet>582</a>        .filter_map(|origin| <span class="kw">match </span>origin {
-<a href=#583 id=583 data-nosnippet>583</a>            Origin::Parsed(location) =&gt; <span class="prelude-val">Some</span>(fallback.with_location(<span class="kw-2">*</span>location)),
-<a href=#584 id=584 data-nosnippet>584</a>            Origin::Constructed | Origin::Transformed(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#585 id=585 data-nosnippet>585</a>        })
-<a href=#586 id=586 data-nosnippet>586</a>        .collect();
-<a href=#587 id=587 data-nosnippet>587</a>    <span class="kw">if </span>sites.is_empty() {
-<a href=#588 id=588 data-nosnippet>588</a>        sites.push(fallback);
-<a href=#589 id=589 data-nosnippet>589</a>    }
-<a href=#590 id=590 data-nosnippet>590</a>    sites
-<a href=#591 id=591 data-nosnippet>591</a>}
-<a href=#592 id=592 data-nosnippet>592</a>
-<a href=#593 id=593 data-nosnippet>593</a><span class="doccomment">/// Attach actual parsed evidence without changing a caller-assigned statement ID.
-<a href=#594 id=594 data-nosnippet>594</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>origin(
-<a href=#595 id=595 data-nosnippet>595</a>    carrier: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
-<a href=#596 id=596 data-nosnippet>596</a>    fallback: <span class="kw">impl </span>Into&lt;ProgramSite&gt;,
-<a href=#597 id=597 data-nosnippet>597</a>) -&gt; ProgramSite {
-<a href=#598 id=598 data-nosnippet>598</a>    <span class="kw">let </span>fallback = fallback.into();
-<a href=#599 id=599 data-nosnippet>599</a>    carrier
-<a href=#600 id=600 data-nosnippet>600</a>        .provenance()
-<a href=#601 id=601 data-nosnippet>601</a>        .origins()
-<a href=#602 id=602 data-nosnippet>602</a>        .find_map(|origin| <span class="kw">match </span>origin {
-<a href=#603 id=603 data-nosnippet>603</a>            Origin::Parsed(location) =&gt; <span class="prelude-val">Some</span>(fallback.with_location(<span class="kw-2">*</span>location)),
-<a href=#604 id=604 data-nosnippet>604</a>            Origin::Constructed | Origin::Transformed(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#605 id=605 data-nosnippet>605</a>        })
-<a href=#606 id=606 data-nosnippet>606</a>        .unwrap_or(fallback)
-<a href=#607 id=607 data-nosnippet>607</a>}
-<a href=#608 id=608 data-nosnippet>608</a>
-<a href=#609 id=609 data-nosnippet>609</a><span class="kw">struct </span>Normalizer&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#610 id=610 data-nosnippet>610</a>    constants: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>BTreeMap&lt;String, Symbol&gt;,
-<a href=#611 id=611 data-nosnippet>611</a>    budget: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Budget,
-<a href=#612 id=612 data-nosnippet>612</a>    location: ProgramSite,
-<a href=#613 id=613 data-nosnippet>613</a>    failure: <span class="prelude-ty">Option</span>&lt;ExpansionFailure&gt;,
-<a href=#614 id=614 data-nosnippet>614</a>}
-<a href=#615 id=615 data-nosnippet>615</a>
-<a href=#616 id=616 data-nosnippet>616</a><span class="kw">impl </span>Rewrite <span class="kw">for </span>Normalizer&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#617 id=617 data-nosnippet>617</a>    <span class="kw">fn </span>tag(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TransformTag {
-<a href=#618 id=618 data-nosnippet>618</a>        TransformTag::new(<span class="string">"zetesis-scalar-expansion"</span>)
-<a href=#619 id=619 data-nosnippet>619</a>    }
-<a href=#620 id=620 data-nosnippet>620</a>    <span class="kw">fn </span>rewrite_term(<span class="kw-2">&amp;mut </span><span class="self">self</span>, term: Term) -&gt; Term {
-<a href=#621 id=621 data-nosnippet>621</a>        <span class="kw">if </span><span class="self">self</span>.failure.is_some() {
-<a href=#622 id=622 data-nosnippet>622</a>            <span class="kw">return </span>term;
-<a href=#623 id=623 data-nosnippet>623</a>        }
-<a href=#624 id=624 data-nosnippet>624</a>        <span class="kw">match </span>normalize_node(term, <span class="self">self</span>.constants, <span class="self">self</span>.budget, <span class="self">self</span>.location) {
-<a href=#625 id=625 data-nosnippet>625</a>            <span class="prelude-val">Ok</span>(term) =&gt; term,
-<a href=#626 id=626 data-nosnippet>626</a>            <span class="prelude-val">Err</span>(error) =&gt; {
-<a href=#627 id=627 data-nosnippet>627</a>                <span class="self">self</span>.failure = <span class="prelude-val">Some</span>(error);
-<a href=#628 id=628 data-nosnippet>628</a>                <span class="comment">// Only a failed private intermediate uses this placeholder;
-<a href=#629 id=629 data-nosnippet>629</a>                // the entire rewrite is refused before compilation.
-<a href=#630 id=630 data-nosnippet>630</a>                </span>Term::Symbolic(Symbol::Number(<span class="number">0</span>))
-<a href=#631 id=631 data-nosnippet>631</a>            }
-<a href=#632 id=632 data-nosnippet>632</a>        }
-<a href=#633 id=633 data-nosnippet>633</a>    }
-<a href=#634 id=634 data-nosnippet>634</a>}
-<a href=#635 id=635 data-nosnippet>635</a>
-<a href=#636 id=636 data-nosnippet>636</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>normalize_node(
-<a href=#637 id=637 data-nosnippet>637</a>    term: Term,
-<a href=#638 id=638 data-nosnippet>638</a>    constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;,
-<a href=#639 id=639 data-nosnippet>639</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
-<a href=#640 id=640 data-nosnippet>640</a>    location: ProgramSite,
-<a href=#641 id=641 data-nosnippet>641</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Term, ExpansionFailure&gt; {
-<a href=#642 id=642 data-nosnippet>642</a>    budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
-<a href=#643 id=643 data-nosnippet>643</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>term {
-<a href=#644 id=644 data-nosnippet>644</a>        Term::Variable(<span class="kw">_</span>) | Term::Pool(<span class="kw">_</span>) | Term::Interval { .. } =&gt; <span class="prelude-val">Ok</span>(term),
-<a href=#645 id=645 data-nosnippet>645</a>        Term::Symbolic(symbol) <span class="kw">if </span>!symbol.arguments().is_empty() =&gt; {
-<a href=#646 id=646 data-nosnippet>646</a>            budget.charge(
-<a href=#647 id=647 data-nosnippet>647</a>                ExpansionResource::ScalarBytes,
-<a href=#648 id=648 data-nosnippet>648</a>                symbol_bytes(symbol),
-<a href=#649 id=649 data-nosnippet>649</a>                location,
-<a href=#650 id=650 data-nosnippet>650</a>            )<span class="question-mark">?</span>;
-<a href=#651 id=651 data-nosnippet>651</a>            <span class="kw">let </span>resolved =
-<a href=#652 id=652 data-nosnippet>652</a>                symbol
-<a href=#653 id=653 data-nosnippet>653</a>                    .clone()
-<a href=#654 id=654 data-nosnippet>654</a>                    .try_fold(|parts| -&gt; <span class="prelude-ty">Result</span>&lt;Symbol, ExpansionFailure&gt; {
-<a href=#655 id=655 data-nosnippet>655</a>                        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
-<a href=#656 id=656 data-nosnippet>656</a>                        <span class="kw">let </span>value = Symbol::from(parts);
-<a href=#657 id=657 data-nosnippet>657</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(replacement) = defined(<span class="kw-2">&amp;</span>value, constants) {
-<a href=#658 id=658 data-nosnippet>658</a>                            budget.charge(
-<a href=#659 id=659 data-nosnippet>659</a>                                ExpansionResource::ScalarBytes,
-<a href=#660 id=660 data-nosnippet>660</a>                                symbol_bytes(replacement),
-<a href=#661 id=661 data-nosnippet>661</a>                                location,
-<a href=#662 id=662 data-nosnippet>662</a>                            )<span class="question-mark">?</span>;
-<a href=#663 id=663 data-nosnippet>663</a>                            <span class="prelude-val">Ok</span>(replacement.clone())
-<a href=#664 id=664 data-nosnippet>664</a>                        } <span class="kw">else </span>{
-<a href=#665 id=665 data-nosnippet>665</a>                            <span class="prelude-val">Ok</span>(value)
-<a href=#666 id=666 data-nosnippet>666</a>                        }
-<a href=#667 id=667 data-nosnippet>667</a>                    })<span class="question-mark">?</span>;
-<a href=#668 id=668 data-nosnippet>668</a>            compile::validate_scalar(<span class="kw-2">&amp;</span>resolved, location)<span class="question-mark">?</span>;
-<a href=#669 id=669 data-nosnippet>669</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(resolved))
-<a href=#670 id=670 data-nosnippet>670</a>        }
-<a href=#671 id=671 data-nosnippet>671</a>        Term::Symbolic(symbol) =&gt; {
-<a href=#672 id=672 data-nosnippet>672</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = defined(symbol, constants) {
-<a href=#673 id=673 data-nosnippet>673</a>                budget.charge(
-<a href=#674 id=674 data-nosnippet>674</a>                    ExpansionResource::ScalarBytes,
-<a href=#675 id=675 data-nosnippet>675</a>                    symbol_bytes(value),
-<a href=#676 id=676 data-nosnippet>676</a>                    location,
-<a href=#677 id=677 data-nosnippet>677</a>                )<span class="question-mark">?</span>;
-<a href=#678 id=678 data-nosnippet>678</a>                <span class="prelude-val">Ok</span>(Term::Symbolic(value.clone()))
-<a href=#679 id=679 data-nosnippet>679</a>            } <span class="kw">else </span>{
-<a href=#680 id=680 data-nosnippet>680</a>                scalar_leaf(symbol, budget, location)<span class="question-mark">?</span>;
-<a href=#681 id=681 data-nosnippet>681</a>                <span class="prelude-val">Ok</span>(term)
-<a href=#682 id=682 data-nosnippet>682</a>            }
-<a href=#683 id=683 data-nosnippet>683</a>        }
-<a href=#684 id=684 data-nosnippet>684</a>        Term::UnaryOperation {
-<a href=#685 id=685 data-nosnippet>685</a>            operator: themelios_program::term::UnaryOp::Negate,
-<a href=#686 id=686 data-nosnippet>686</a>            argument,
-<a href=#687 id=687 data-nosnippet>687</a>        } <span class="kw">if </span><span class="macro">matches!</span>(argument.as_ref(), Term::Symbolic(Symbol::Function { .. })) =&gt; {
-<a href=#688 id=688 data-nosnippet>688</a>            <span class="kw">let </span>Term::Symbolic(Symbol::Function {
-<a href=#689 id=689 data-nosnippet>689</a>                name,
-<a href=#690 id=690 data-nosnippet>690</a>                arguments,
-<a href=#691 id=691 data-nosnippet>691</a>                sign,
-<a href=#692 id=692 data-nosnippet>692</a>            }) = argument.as_ref()
-<a href=#693 id=693 data-nosnippet>693</a>            <span class="kw">else </span>{
-<a href=#694 id=694 data-nosnippet>694</a>                <span class="macro">unreachable!</span>(<span class="string">"checked function operand"</span>)
-<a href=#695 id=695 data-nosnippet>695</a>            };
-<a href=#696 id=696 data-nosnippet>696</a>            budget.charge(
-<a href=#697 id=697 data-nosnippet>697</a>                ExpansionResource::ScalarBytes,
-<a href=#698 id=698 data-nosnippet>698</a>                symbol_bytes(<span class="kw">match </span>argument.as_ref() {
-<a href=#699 id=699 data-nosnippet>699</a>                    Term::Symbolic(symbol) =&gt; symbol,
-<a href=#700 id=700 data-nosnippet>700</a>                    <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(<span class="string">"checked symbol"</span>),
-<a href=#701 id=701 data-nosnippet>701</a>                }),
-<a href=#702 id=702 data-nosnippet>702</a>                location,
-<a href=#703 id=703 data-nosnippet>703</a>            )<span class="question-mark">?</span>;
-<a href=#704 id=704 data-nosnippet>704</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(Symbol::Function {
-<a href=#705 id=705 data-nosnippet>705</a>                name: name.clone(),
-<a href=#706 id=706 data-nosnippet>706</a>                arguments: arguments.clone(),
-<a href=#707 id=707 data-nosnippet>707</a>                sign: <span class="kw">match </span>sign {
-<a href=#708 id=708 data-nosnippet>708</a>                    Sign::Positive =&gt; Sign::Negative,
-<a href=#709 id=709 data-nosnippet>709</a>                    Sign::Negative =&gt; Sign::Positive,
-<a href=#710 id=710 data-nosnippet>710</a>                },
-<a href=#711 id=711 data-nosnippet>711</a>            }))
-<a href=#712 id=712 data-nosnippet>712</a>        }
-<a href=#713 id=713 data-nosnippet>713</a>        Term::Function { .. } | Term::Tuple(<span class="kw">_</span>) <span class="kw">if </span>term.is_ground() =&gt; {
-<a href=#714 id=714 data-nosnippet>714</a>            <span class="kw">for </span>child <span class="kw">in </span>term.subterms() {
-<a href=#715 id=715 data-nosnippet>715</a>                budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
-<a href=#716 id=716 data-nosnippet>716</a>                <span class="kw">if </span><span class="macro">matches!</span>(child, Term::Pool(<span class="kw">_</span>) | Term::Interval { .. }) {
-<a href=#717 id=717 data-nosnippet>717</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(unsupported(ProfileFeature::Term, location).into());
-<a href=#718 id=718 data-nosnippet>718</a>                }
-<a href=#719 id=719 data-nosnippet>719</a>            }
-<a href=#720 id=720 data-nosnippet>720</a>            <span class="kw">let </span>symbol = term
-<a href=#721 id=721 data-nosnippet>721</a>                .evaluate()
-<a href=#722 id=722 data-nosnippet>722</a>                .map_err(|error| ExpansionFailure::Evaluation { error, location })<span class="question-mark">?</span>;
-<a href=#723 id=723 data-nosnippet>723</a>            compile::validate_scalar(<span class="kw-2">&amp;</span>symbol, location)<span class="question-mark">?</span>;
-<a href=#724 id=724 data-nosnippet>724</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(symbol))
-<a href=#725 id=725 data-nosnippet>725</a>        }
-<a href=#726 id=726 data-nosnippet>726</a>        Term::UnaryOperation { .. } | Term::BinaryOperation { .. } | Term::Absolute(<span class="kw">_</span>) =&gt; {
-<a href=#727 id=727 data-nosnippet>727</a>            <span class="kw">let </span>symbol = term
-<a href=#728 id=728 data-nosnippet>728</a>                .evaluate()
-<a href=#729 id=729 data-nosnippet>729</a>                .map_err(|error| ExpansionFailure::Evaluation { error, location })<span class="question-mark">?</span>;
-<a href=#730 id=730 data-nosnippet>730</a>            compile::validate_scalar(<span class="kw-2">&amp;</span>symbol, location)<span class="question-mark">?</span>;
-<a href=#731 id=731 data-nosnippet>731</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(symbol))
-<a href=#732 id=732 data-nosnippet>732</a>        }
-<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(unsupported(ProfileFeature::Term, location).into()),
-<a href=#734 id=734 data-nosnippet>734</a>    }
-<a href=#735 id=735 data-nosnippet>735</a>}
-<a href=#736 id=736 data-nosnippet>736</a>
-<a href=#737 id=737 data-nosnippet>737</a><span class="kw">fn </span>constant_name(symbol: <span class="kw-2">&amp;</span>Symbol) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
-<a href=#738 id=738 data-nosnippet>738</a>    <span class="kw">match </span>symbol {
-<a href=#739 id=739 data-nosnippet>739</a>        Symbol::Function {
-<a href=#740 id=740 data-nosnippet>740</a>            name,
-<a href=#741 id=741 data-nosnippet>741</a>            arguments,
-<a href=#742 id=742 data-nosnippet>742</a>            sign: Sign::Positive,
-<a href=#743 id=743 data-nosnippet>743</a>        } <span class="kw">if </span>arguments.is_empty() =&gt; <span class="prelude-val">Some</span>(name.as_str()),
-<a href=#744 id=744 data-nosnippet>744</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#745 id=745 data-nosnippet>745</a>    }
-<a href=#746 id=746 data-nosnippet>746</a>}
-<a href=#747 id=747 data-nosnippet>747</a>
-<a href=#748 id=748 data-nosnippet>748</a><span class="kw">fn </span>symbol_bytes(symbol: <span class="kw-2">&amp;</span>Symbol) -&gt; u128 {
-<a href=#749 id=749 data-nosnippet>749</a>    <span class="kw">crate</span>::structural_value::symbol_bytes(symbol)
-<a href=#750 id=750 data-nosnippet>750</a>}
+<a href=#228 id=228 data-nosnippet>228</a><span class="kw">struct </span>Definition&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#229 id=229 data-nosnippet>229</a>    constant: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Const,
+<a href=#230 id=230 data-nosnippet>230</a>    location: ProgramSite,
+<a href=#231 id=231 data-nosnippet>231</a>    dependencies: Vec&lt;String&gt;,
+<a href=#232 id=232 data-nosnippet>232</a>}
+<a href=#233 id=233 data-nosnippet>233</a>
+<a href=#234 id=234 data-nosnippet>234</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>resolve(
+<a href=#235 id=235 data-nosnippet>235</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
+<a href=#236 id=236 data-nosnippet>236</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#237 id=237 data-nosnippet>237</a>    fallback: ProgramSite,
+<a href=#238 id=238 data-nosnippet>238</a>) -&gt; <span class="prelude-ty">Result</span>&lt;BTreeMap&lt;String, Symbol&gt;, ExpansionFailure&gt; {
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">let </span><span class="kw-2">mut </span>definitions: BTreeMap&lt;String, Definition&lt;<span class="lifetime">'_</span>&gt;&gt; = BTreeMap::new();
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">for </span>(index, carrier) <span class="kw">in </span>source.statements().enumerate() {
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">let </span>location = origin(carrier, fallback.with_statement(StatementId::new(index)));
+<a href=#242 id=242 data-nosnippet>242</a>        budget.poll(location)<span class="question-mark">?</span>;
+<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>Statement::Const(constant) = carrier.get() <span class="kw">else </span>{
+<a href=#244 id=244 data-nosnippet>244</a>            <span class="kw">continue</span>;
+<a href=#245 id=245 data-nosnippet>245</a>        };
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">if </span>constant.policy.is_some() {
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::ConstantPolicy { location });
+<a href=#248 id=248 data-nosnippet>248</a>        }
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="comment">// Canonical declarations are identified by their content. Additional
+<a href=#250 id=250 data-nosnippet>250</a>        // provenance records evidence, not another definition of the name.
+<a href=#251 id=251 data-nosnippet>251</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(first) = definitions
+<a href=#252 id=252 data-nosnippet>252</a>            .get(constant.name.as_str())
+<a href=#253 id=253 data-nosnippet>253</a>            .map(|entry| entry.location)
+<a href=#254 id=254 data-nosnippet>254</a>        {
+<a href=#255 id=255 data-nosnippet>255</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::DuplicateConstant {
+<a href=#256 id=256 data-nosnippet>256</a>                name: constant.name.as_str().to_owned(),
+<a href=#257 id=257 data-nosnippet>257</a>                first,
+<a href=#258 id=258 data-nosnippet>258</a>                duplicate: location,
+<a href=#259 id=259 data-nosnippet>259</a>            });
+<a href=#260 id=260 data-nosnippet>260</a>        }
+<a href=#261 id=261 data-nosnippet>261</a>        budget.check_constants(definitions.len().saturating_add(<span class="number">1</span>), location)<span class="question-mark">?</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        definitions.insert(
+<a href=#263 id=263 data-nosnippet>263</a>            constant.name.as_str().to_owned(),
+<a href=#264 id=264 data-nosnippet>264</a>            Definition {
+<a href=#265 id=265 data-nosnippet>265</a>                constant,
+<a href=#266 id=266 data-nosnippet>266</a>                location,
+<a href=#267 id=267 data-nosnippet>267</a>                dependencies: Vec::new(),
+<a href=#268 id=268 data-nosnippet>268</a>            },
+<a href=#269 id=269 data-nosnippet>269</a>        );
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span>names: BTreeSet&lt;<span class="kw">_</span>&gt; = definitions.keys().cloned().collect();
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">for </span>definition <span class="kw">in </span>definitions.values_mut() {
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">let </span><span class="kw-2">mut </span>dependencies = BTreeSet::new();
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">for </span>term <span class="kw">in </span>definition.constant.value.subterms() {
+<a href=#275 id=275 data-nosnippet>275</a>            budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, definition.location)<span class="question-mark">?</span>;
+<a href=#276 id=276 data-nosnippet>276</a>            <span class="kw">if let </span>Term::Symbolic(symbol) = term {
+<a href=#277 id=277 data-nosnippet>277</a>                <span class="kw">for </span>nested <span class="kw">in </span>symbol.subsymbols() {
+<a href=#278 id=278 data-nosnippet>278</a>                    <span class="kw">if </span>!symbol.arguments().is_empty() {
+<a href=#279 id=279 data-nosnippet>279</a>                        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, definition.location)<span class="question-mark">?</span>;
+<a href=#280 id=280 data-nosnippet>280</a>                    }
+<a href=#281 id=281 data-nosnippet>281</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = constant_name(nested).filter(|name| names.contains(<span class="kw-2">*</span>name)) {
+<a href=#282 id=282 data-nosnippet>282</a>                        dependencies.insert(name.to_owned());
+<a href=#283 id=283 data-nosnippet>283</a>                    }
+<a href=#284 id=284 data-nosnippet>284</a>                }
+<a href=#285 id=285 data-nosnippet>285</a>            }
+<a href=#286 id=286 data-nosnippet>286</a>        }
+<a href=#287 id=287 data-nosnippet>287</a>        definition.dependencies = dependencies.into_iter().collect();
+<a href=#288 id=288 data-nosnippet>288</a>    }
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span><span class="kw-2">mut </span>values = BTreeMap::new();
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">let </span><span class="kw-2">mut </span>active = BTreeSet::new();
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">for </span>name <span class="kw">in </span>definitions.keys() {
+<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">if </span>values.contains_key(name) {
+<a href=#293 id=293 data-nosnippet>293</a>            <span class="kw">continue</span>;
+<a href=#294 id=294 data-nosnippet>294</a>        }
+<a href=#295 id=295 data-nosnippet>295</a>        active.insert(name.clone());
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span><span class="kw-2">mut </span>stack = <span class="macro">vec!</span>[(name.clone(), <span class="number">0</span>)];
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>((name, next)) = stack.last_mut() {
+<a href=#298 id=298 data-nosnippet>298</a>            <span class="kw">let </span>definition = <span class="kw-2">&amp;</span>definitions[name];
+<a href=#299 id=299 data-nosnippet>299</a>            budget.poll(definition.location)<span class="question-mark">?</span>;
+<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(dependency) = definition.dependencies.get(<span class="kw-2">*</span>next) {
+<a href=#301 id=301 data-nosnippet>301</a>                <span class="kw-2">*</span>next += <span class="number">1</span>;
+<a href=#302 id=302 data-nosnippet>302</a>                <span class="kw">if </span>values.contains_key(dependency) {
+<a href=#303 id=303 data-nosnippet>303</a>                    <span class="kw">continue</span>;
+<a href=#304 id=304 data-nosnippet>304</a>                }
+<a href=#305 id=305 data-nosnippet>305</a>                <span class="kw">if </span>active.contains(dependency) {
+<a href=#306 id=306 data-nosnippet>306</a>                    <span class="kw">let </span><span class="kw-2">mut </span>names: Vec&lt;<span class="kw">_</span>&gt; = stack.iter().map(|(name, <span class="kw">_</span>)| name.clone()).collect();
+<a href=#307 id=307 data-nosnippet>307</a>                    names.push(dependency.clone());
+<a href=#308 id=308 data-nosnippet>308</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::ConstantCycle {
+<a href=#309 id=309 data-nosnippet>309</a>                        names,
+<a href=#310 id=310 data-nosnippet>310</a>                        location: definition.location,
+<a href=#311 id=311 data-nosnippet>311</a>                    });
+<a href=#312 id=312 data-nosnippet>312</a>                }
+<a href=#313 id=313 data-nosnippet>313</a>                active.insert(dependency.clone());
+<a href=#314 id=314 data-nosnippet>314</a>                stack.push((dependency.clone(), <span class="number">0</span>));
+<a href=#315 id=315 data-nosnippet>315</a>                <span class="kw">continue</span>;
+<a href=#316 id=316 data-nosnippet>316</a>            }
+<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw">let </span>value = definition.constant.value.clone().try_fold(|parts| {
+<a href=#318 id=318 data-nosnippet>318</a>                normalize_node(Term::from(parts), <span class="kw-2">&amp;</span>values, budget, definition.location)
+<a href=#319 id=319 data-nosnippet>319</a>            })<span class="question-mark">?</span>;
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">let </span>TermParts::Symbolic(value) = value.into_parts() <span class="kw">else </span>{
+<a href=#321 id=321 data-nosnippet>321</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(ExpansionFailure::Evaluation {
+<a href=#322 id=322 data-nosnippet>322</a>                    error: EvalError::Undefined,
+<a href=#323 id=323 data-nosnippet>323</a>                    location: definition.location,
+<a href=#324 id=324 data-nosnippet>324</a>                });
+<a href=#325 id=325 data-nosnippet>325</a>            };
+<a href=#326 id=326 data-nosnippet>326</a>            values.insert(name.clone(), value);
+<a href=#327 id=327 data-nosnippet>327</a>            active.remove(name);
+<a href=#328 id=328 data-nosnippet>328</a>            stack.pop();
+<a href=#329 id=329 data-nosnippet>329</a>        }
+<a href=#330 id=330 data-nosnippet>330</a>    }
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="prelude-val">Ok</span>(values)
+<a href=#332 id=332 data-nosnippet>332</a>}
+<a href=#333 id=333 data-nosnippet>333</a>
+<a href=#334 id=334 data-nosnippet>334</a><span class="kw">type </span>Compiled&lt;P&gt; = (Vec&lt;zetesis_core::Template&gt;, Vec&lt;Vec&lt;P&gt;&gt;);
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a><span class="doccomment">/// Normalize each statement and compile it. A statement whose every term
+<a href=#337 id=337 data-nosnippet>337</a>/// normalization would return as it is, charged and validated by
+<a href=#338 id=338 data-nosnippet>338</a>/// [`kept_as_is`], is compiled from the original carrier: the rewrite would
+<a href=#339 id=339 data-nosnippet>339</a>/// hand back the same statement, stamped with a transformation tag that
+<a href=#340 id=340 data-nosnippet>340</a>/// nothing after this point reads, at the cost of copying and rebuilding it.
+<a href=#341 id=341 data-nosnippet>341</a>/// Every other statement is rebuilt by the rewrite, alone in a program of
+<a href=#342 id=342 data-nosnippet>342</a>/// its own so that no two statements merge.
+<a href=#343 id=343 data-nosnippet>343</a></span><span class="kw">fn </span>compile_extended&lt;P: Clone&gt;(
+<a href=#344 id=344 data-nosnippet>344</a>    source: <span class="kw-2">&amp;</span>SourceProgram,
+<a href=#345 id=345 data-nosnippet>345</a>    constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;,
+<a href=#346 id=346 data-nosnippet>346</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#347 id=347 data-nosnippet>347</a>    fallback: ProgramSite,
+<a href=#348 id=348 data-nosnippet>348</a>    purpose: FormulaPurpose,
+<a href=#349 id=349 data-nosnippet>349</a>    evidence: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;, ProgramSite) -&gt; Vec&lt;P&gt;,
+<a href=#350 id=350 data-nosnippet>350</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Compiled&lt;P&gt;, ExpansionFailure&gt; {
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">let </span><span class="kw-2">mut </span>compiled = (Vec::new(), Vec::new());
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">for </span>(index, carrier) <span class="kw">in </span>source.statements().enumerate() {
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span>location = origin(carrier, fallback.with_statement(StatementId::new(index)));
+<a href=#354 id=354 data-nosnippet>354</a>        budget.poll(location)<span class="question-mark">?</span>;
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">if </span>!purpose.includes(carrier.get())
+<a href=#356 id=356 data-nosnippet>356</a>            || <span class="macro">matches!</span>(
+<a href=#357 id=357 data-nosnippet>357</a>                carrier.get(),
+<a href=#358 id=358 data-nosnippet>358</a>                Statement::Const(<span class="kw">_</span>) | Statement::Defined(<span class="kw">_</span>) | Statement::Show(<span class="kw">_</span>)
+<a href=#359 id=359 data-nosnippet>359</a>            )
+<a href=#360 id=360 data-nosnippet>360</a>        {
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="kw">continue</span>;
+<a href=#362 id=362 data-nosnippet>362</a>        }
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>locations = evidence(carrier, location);
+<a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">if </span>kept_as_is(carrier.get(), constants, budget, location)<span class="question-mark">? </span>{
+<a href=#365 id=365 data-nosnippet>365</a>            emit(carrier, locations, budget, location, <span class="kw-2">&amp;mut </span>compiled)<span class="question-mark">?</span>;
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw">continue</span>;
+<a href=#367 id=367 data-nosnippet>367</a>        }
+<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span><span class="kw-2">mut </span>normalizer = Normalizer {
+<a href=#369 id=369 data-nosnippet>369</a>            constants,
+<a href=#370 id=370 data-nosnippet>370</a>            budget,
+<a href=#371 id=371 data-nosnippet>371</a>            location,
+<a href=#372 id=372 data-nosnippet>372</a>            failure: <span class="prelude-val">None</span>,
+<a href=#373 id=373 data-nosnippet>373</a>        };
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>rewritten = rewrite(SourceProgram::of_nodes([carrier.clone()]), <span class="kw-2">&amp;mut </span>normalizer);
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(failure) = normalizer.failure {
+<a href=#376 id=376 data-nosnippet>376</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(failure);
+<a href=#377 id=377 data-nosnippet>377</a>        }
+<a href=#378 id=378 data-nosnippet>378</a>        budget.poll(location)<span class="question-mark">?</span>;
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>normalized_carrier = rewritten
+<a href=#380 id=380 data-nosnippet>380</a>            .statements()
+<a href=#381 id=381 data-nosnippet>381</a>            .next()
+<a href=#382 id=382 data-nosnippet>382</a>            .expect(<span class="string">"a rule rewrite keeps its statement"</span>);
+<a href=#383 id=383 data-nosnippet>383</a>        emit(
+<a href=#384 id=384 data-nosnippet>384</a>            normalized_carrier,
+<a href=#385 id=385 data-nosnippet>385</a>            locations,
+<a href=#386 id=386 data-nosnippet>386</a>            budget,
+<a href=#387 id=387 data-nosnippet>387</a>            location,
+<a href=#388 id=388 data-nosnippet>388</a>            <span class="kw-2">&amp;mut </span>compiled,
+<a href=#389 id=389 data-nosnippet>389</a>        )<span class="question-mark">?</span>;
+<a href=#390 id=390 data-nosnippet>390</a>    }
+<a href=#391 id=391 data-nosnippet>391</a>    <span class="prelude-val">Ok</span>(compiled)
+<a href=#392 id=392 data-nosnippet>392</a>}
+<a href=#393 id=393 data-nosnippet>393</a>
+<a href=#394 id=394 data-nosnippet>394</a><span class="doccomment">/// Emit one normalized statement's templates, each with the statement's
+<a href=#395 id=395 data-nosnippet>395</a>/// original evidence: its facts, expanded, or the one template of its rule.
+<a href=#396 id=396 data-nosnippet>396</a></span><span class="kw">fn </span>emit&lt;P: Clone&gt;(
+<a href=#397 id=397 data-nosnippet>397</a>    statement: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
+<a href=#398 id=398 data-nosnippet>398</a>    locations: Vec&lt;P&gt;,
+<a href=#399 id=399 data-nosnippet>399</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#400 id=400 data-nosnippet>400</a>    location: ProgramSite,
+<a href=#401 id=401 data-nosnippet>401</a>    (templates, origins): <span class="kw-2">&amp;mut </span>Compiled&lt;P&gt;,
+<a href=#402 id=402 data-nosnippet>402</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
+<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(facts) = fact_expansion::facts(statement, budget, location)<span class="question-mark">? </span>{
+<a href=#404 id=404 data-nosnippet>404</a>        budget.charge(
+<a href=#405 id=405 data-nosnippet>405</a>            ExpansionResource::Origins,
+<a href=#406 id=406 data-nosnippet>406</a>            (facts.len() <span class="kw">as </span>u128).saturating_mul(locations.len() <span class="kw">as </span>u128),
+<a href=#407 id=407 data-nosnippet>407</a>            location,
+<a href=#408 id=408 data-nosnippet>408</a>        )<span class="question-mark">?</span>;
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">for </span>fact <span class="kw">in </span>facts {
+<a href=#410 id=410 data-nosnippet>410</a>            templates.push(fact);
+<a href=#411 id=411 data-nosnippet>411</a>            origins.push(locations.clone());
+<a href=#412 id=412 data-nosnippet>412</a>        }
+<a href=#413 id=413 data-nosnippet>413</a>    } <span class="kw">else </span>{
+<a href=#414 id=414 data-nosnippet>414</a>        budget.charge(ExpansionResource::Templates, <span class="number">1</span>, location)<span class="question-mark">?</span>;
+<a href=#415 id=415 data-nosnippet>415</a>        budget.charge(
+<a href=#416 id=416 data-nosnippet>416</a>            ExpansionResource::Origins,
+<a href=#417 id=417 data-nosnippet>417</a>            locations.len() <span class="kw">as </span>u128,
+<a href=#418 id=418 data-nosnippet>418</a>            location,
+<a href=#419 id=419 data-nosnippet>419</a>        )<span class="question-mark">?</span>;
+<a href=#420 id=420 data-nosnippet>420</a>        templates.push(compile::statement(statement, location)<span class="question-mark">?</span>);
+<a href=#421 id=421 data-nosnippet>421</a>        origins.push(locations);
+<a href=#422 id=422 data-nosnippet>422</a>    }
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="prelude-val">Ok</span>(())
+<a href=#424 id=424 data-nosnippet>424</a>}
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a><span class="doccomment">/// Whether normalization would return `statement` exactly as it is. Its
+<a href=#427 id=427 data-nosnippet>427</a>/// terms are charged and validated as the rewrite would charge and validate
+<a href=#428 id=428 data-nosnippet>428</a>/// them, in the rewrite's order, on a tentative budget that becomes the
+<a href=#429 id=429 data-nosnippet>429</a>/// budget only when every term is a [`Leaf`]; otherwise the budget is left
+<a href=#430 id=430 data-nosnippet>430</a>/// as it was, and the rewrite charges the statement from the start. A
+<a href=#431 id=431 data-nosnippet>431</a>/// failure is the one the rewrite would raise first, since it arises before
+<a href=#432 id=432 data-nosnippet>432</a>/// any term the rewrite would rebuild. Nothing is cloned but the budget.
+<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">fn </span>kept_as_is(
+<a href=#434 id=434 data-nosnippet>434</a>    statement: <span class="kw-2">&amp;</span>Statement,
+<a href=#435 id=435 data-nosnippet>435</a>    constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;,
+<a href=#436 id=436 data-nosnippet>436</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#437 id=437 data-nosnippet>437</a>    location: ProgramSite,
+<a href=#438 id=438 data-nosnippet>438</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt; {
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">let </span>Statement::Rule(rule) = statement <span class="kw">else </span>{
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#441 id=441 data-nosnippet>441</a>    };
+<a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">let </span><span class="kw-2">mut </span>tentative = budget.clone();
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="kw">let </span>kept = every_term(rule, <span class="kw-2">&amp;mut </span>|term| <span class="kw">match </span>Leaf::of(term, constants) {
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="prelude-val">Some</span>(leaf) =&gt; leaf.account(<span class="kw-2">&amp;mut </span>tentative, location).map(|()| <span class="bool-val">true</span>),
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
+<a href=#446 id=446 data-nosnippet>446</a>    })<span class="question-mark">?</span>;
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">if </span>kept {
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw-2">*</span>budget = tentative;
+<a href=#449 id=449 data-nosnippet>449</a>    }
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="prelude-val">Ok</span>(kept)
+<a href=#451 id=451 data-nosnippet>451</a>}
+<a href=#452 id=452 data-nosnippet>452</a>
+<a href=#453 id=453 data-nosnippet>453</a><span class="doccomment">/// Apply `keep` to the terms of a rule of the shape this profile compiles,
+<a href=#454 id=454 data-nosnippet>454</a>/// in the order the rewrite rebuilds them: the head, then each body element;
+<a href=#455 id=455 data-nosnippet>455</a>/// an atom's arguments in order, a comparison's first term and then its
+<a href=#456 id=456 data-nosnippet>456</a>/// steps. `Ok(false)` at the first term `keep` refuses, or at once for a
+<a href=#457 id=457 data-nosnippet>457</a>/// head or body element of another shape, which the rewrite descends in an
+<a href=#458 id=458 data-nosnippet>458</a>/// order this walk does not reproduce.
+<a href=#459 id=459 data-nosnippet>459</a></span><span class="kw">fn </span>every_term(
+<a href=#460 id=460 data-nosnippet>460</a>    rule: <span class="kw-2">&amp;</span>Rule,
+<a href=#461 id=461 data-nosnippet>461</a>    keep: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>Term) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt;,
+<a href=#462 id=462 data-nosnippet>462</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt; {
+<a href=#463 id=463 data-nosnippet>463</a>    <span class="comment">// A head or body element of any other shape, including one the pinned
+<a href=#464 id=464 data-nosnippet>464</a>    // themelios tier may add, is left to the rewrite.
+<a href=#465 id=465 data-nosnippet>465</a>    </span><span class="kw">let </span>head = <span class="kw">match </span>rule.head().get() {
+<a href=#466 id=466 data-nosnippet>466</a>        Head::Literal(literal) =&gt; literal_terms(literal, keep)<span class="question-mark">?</span>,
+<a href=#467 id=467 data-nosnippet>467</a>        Head::Falsum | Head::Verum =&gt; <span class="bool-val">true</span>,
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
+<a href=#469 id=469 data-nosnippet>469</a>    };
+<a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">if </span>!head {
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#472 id=472 data-nosnippet>472</a>    }
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">for </span>element <span class="kw">in </span>rule.body().get().elements() {
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span>kept = <span class="kw">match </span>element.get() {
+<a href=#475 id=475 data-nosnippet>475</a>            BodyElement::Literal(literal) =&gt; literal_terms(literal, keep)<span class="question-mark">?</span>,
+<a href=#476 id=476 data-nosnippet>476</a>            <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
+<a href=#477 id=477 data-nosnippet>477</a>        };
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">if </span>!kept {
+<a href=#479 id=479 data-nosnippet>479</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#480 id=480 data-nosnippet>480</a>        }
+<a href=#481 id=481 data-nosnippet>481</a>    }
+<a href=#482 id=482 data-nosnippet>482</a>    <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+<a href=#483 id=483 data-nosnippet>483</a>}
+<a href=#484 id=484 data-nosnippet>484</a>
+<a href=#485 id=485 data-nosnippet>485</a><span class="kw">fn </span>literal_terms(
+<a href=#486 id=486 data-nosnippet>486</a>    literal: <span class="kw-2">&amp;</span>Literal,
+<a href=#487 id=487 data-nosnippet>487</a>    keep: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>Term) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt;,
+<a href=#488 id=488 data-nosnippet>488</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, ExpansionFailure&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>literal.inner {
+<a href=#490 id=490 data-nosnippet>490</a>        LiteralInner::Atom(atom) =&gt; {
+<a href=#491 id=491 data-nosnippet>491</a>            <span class="kw">for </span>term <span class="kw">in </span>atom.get().argument_terms() {
+<a href=#492 id=492 data-nosnippet>492</a>                <span class="kw">if </span>!keep(term)<span class="question-mark">? </span>{
+<a href=#493 id=493 data-nosnippet>493</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#494 id=494 data-nosnippet>494</a>                }
+<a href=#495 id=495 data-nosnippet>495</a>            }
+<a href=#496 id=496 data-nosnippet>496</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+<a href=#497 id=497 data-nosnippet>497</a>        }
+<a href=#498 id=498 data-nosnippet>498</a>        LiteralInner::Comparison(comparison) =&gt; {
+<a href=#499 id=499 data-nosnippet>499</a>            <span class="kw">let </span>comparison = comparison.get();
+<a href=#500 id=500 data-nosnippet>500</a>            <span class="kw">if </span>!keep(comparison.first())<span class="question-mark">? </span>{
+<a href=#501 id=501 data-nosnippet>501</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#502 id=502 data-nosnippet>502</a>            }
+<a href=#503 id=503 data-nosnippet>503</a>            <span class="kw">for </span>(<span class="kw">_</span>, term) <span class="kw">in </span>comparison.steps() {
+<a href=#504 id=504 data-nosnippet>504</a>                <span class="kw">if </span>!keep(term)<span class="question-mark">? </span>{
+<a href=#505 id=505 data-nosnippet>505</a>                    <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
+<a href=#506 id=506 data-nosnippet>506</a>                }
+<a href=#507 id=507 data-nosnippet>507</a>            }
+<a href=#508 id=508 data-nosnippet>508</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
+<a href=#509 id=509 data-nosnippet>509</a>        }
+<a href=#510 id=510 data-nosnippet>510</a>        LiteralInner::True | LiteralInner::False =&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
+<a href=#511 id=511 data-nosnippet>511</a>    }
+<a href=#512 id=512 data-nosnippet>512</a>}
+<a href=#513 id=513 data-nosnippet>513</a>
+<a href=#514 id=514 data-nosnippet>514</a><span class="doccomment">/// A term [`normalize_node`] returns exactly as it is, charged and validated
+<a href=#515 id=515 data-nosnippet>515</a>/// by [`Leaf::account`]: a variable, or an argument-free scalar naming no
+<a href=#516 id=516 data-nosnippet>516</a>/// definition. Every other term is rebuilt, or, for a pool or interval
+<a href=#517 id=517 data-nosnippet>517</a>/// former, kept around terms that may not be.
+<a href=#518 id=518 data-nosnippet>518</a></span><span class="attr">#[derive(Clone, Copy)]
+<a href=#519 id=519 data-nosnippet>519</a></span><span class="kw">enum </span>Leaf&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#520 id=520 data-nosnippet>520</a>    Variable,
+<a href=#521 id=521 data-nosnippet>521</a>    Scalar(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Symbol),
+<a href=#522 id=522 data-nosnippet>522</a>}
+<a href=#523 id=523 data-nosnippet>523</a>
+<a href=#524 id=524 data-nosnippet>524</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; Leaf&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#525 id=525 data-nosnippet>525</a>    <span class="kw">fn </span>of(term: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Term, constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">match </span>term {
+<a href=#527 id=527 data-nosnippet>527</a>            Term::Variable(<span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(<span class="self">Self</span>::Variable),
+<a href=#528 id=528 data-nosnippet>528</a>            Term::Symbolic(symbol)
+<a href=#529 id=529 data-nosnippet>529</a>                <span class="kw">if </span>symbol.arguments().is_empty() &amp;&amp; defined(symbol, constants).is_none() =&gt;
+<a href=#530 id=530 data-nosnippet>530</a>            {
+<a href=#531 id=531 data-nosnippet>531</a>                <span class="prelude-val">Some</span>(<span class="self">Self</span>::Scalar(symbol))
+<a href=#532 id=532 data-nosnippet>532</a>            }
+<a href=#533 id=533 data-nosnippet>533</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#534 id=534 data-nosnippet>534</a>        }
+<a href=#535 id=535 data-nosnippet>535</a>    }
+<a href=#536 id=536 data-nosnippet>536</a>
+<a href=#537 id=537 data-nosnippet>537</a>    <span class="doccomment">/// Charge and validate as [`normalize_node`] does for this term: its unit
+<a href=#538 id=538 data-nosnippet>538</a>    /// of term work first, then a scalar's validation and payload.
+<a href=#539 id=539 data-nosnippet>539</a>    </span><span class="kw">fn </span>account(<span class="self">self</span>, budget: <span class="kw-2">&amp;mut </span>Budget, location: ProgramSite) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
+<a href=#540 id=540 data-nosnippet>540</a>        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
+<a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#542 id=542 data-nosnippet>542</a>            <span class="self">Self</span>::Variable =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#543 id=543 data-nosnippet>543</a>            <span class="self">Self</span>::Scalar(symbol) =&gt; scalar_leaf(symbol, budget, location),
+<a href=#544 id=544 data-nosnippet>544</a>        }
+<a href=#545 id=545 data-nosnippet>545</a>    }
+<a href=#546 id=546 data-nosnippet>546</a>}
+<a href=#547 id=547 data-nosnippet>547</a>
+<a href=#548 id=548 data-nosnippet>548</a><span class="doccomment">/// The value an argument-free scalar names, when it names a definition.
+<a href=#549 id=549 data-nosnippet>549</a></span><span class="kw">fn </span>defined&lt;<span class="lifetime">'a</span>&gt;(symbol: <span class="kw-2">&amp;</span>Symbol, constants: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>BTreeMap&lt;String, Symbol&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Symbol&gt; {
+<a href=#550 id=550 data-nosnippet>550</a>    constant_name(symbol).and_then(|name| constants.get(name))
+<a href=#551 id=551 data-nosnippet>551</a>}
+<a href=#552 id=552 data-nosnippet>552</a>
+<a href=#553 id=553 data-nosnippet>553</a><span class="doccomment">/// Validate an argument-free scalar normalization keeps and charge its payload.
+<a href=#554 id=554 data-nosnippet>554</a></span><span class="kw">fn </span>scalar_leaf(
+<a href=#555 id=555 data-nosnippet>555</a>    symbol: <span class="kw-2">&amp;</span>Symbol,
+<a href=#556 id=556 data-nosnippet>556</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#557 id=557 data-nosnippet>557</a>    location: ProgramSite,
+<a href=#558 id=558 data-nosnippet>558</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExpansionFailure&gt; {
+<a href=#559 id=559 data-nosnippet>559</a>    compile::validate_scalar(symbol, location)<span class="question-mark">?</span>;
+<a href=#560 id=560 data-nosnippet>560</a>    budget.charge(
+<a href=#561 id=561 data-nosnippet>561</a>        ExpansionResource::ScalarBytes,
+<a href=#562 id=562 data-nosnippet>562</a>        symbol_bytes(symbol),
+<a href=#563 id=563 data-nosnippet>563</a>        location,
+<a href=#564 id=564 data-nosnippet>564</a>    )<span class="question-mark">?</span>;
+<a href=#565 id=565 data-nosnippet>565</a>    <span class="prelude-val">Ok</span>(())
+<a href=#566 id=566 data-nosnippet>566</a>}
+<a href=#567 id=567 data-nosnippet>567</a>
+<a href=#568 id=568 data-nosnippet>568</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>parsed_origins(carrier: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;) -&gt; Vec&lt;Location&gt; {
+<a href=#569 id=569 data-nosnippet>569</a>    carrier
+<a href=#570 id=570 data-nosnippet>570</a>        .provenance()
+<a href=#571 id=571 data-nosnippet>571</a>        .origins()
+<a href=#572 id=572 data-nosnippet>572</a>        .filter_map(|origin| <span class="kw">match </span>origin {
+<a href=#573 id=573 data-nosnippet>573</a>            Origin::Parsed(location) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">*</span>location),
+<a href=#574 id=574 data-nosnippet>574</a>            Origin::Constructed | Origin::Transformed(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#575 id=575 data-nosnippet>575</a>        })
+<a href=#576 id=576 data-nosnippet>576</a>        .collect()
+<a href=#577 id=577 data-nosnippet>577</a>}
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a><span class="doccomment">/// Statement evidence retains logical identity independently of parsed spans.
+<a href=#580 id=580 data-nosnippet>580</a>/// Constructed input contributes its caller-assigned site rather than a fabricated location.
+<a href=#581 id=581 data-nosnippet>581</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>program_sites(
+<a href=#582 id=582 data-nosnippet>582</a>    carrier: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
+<a href=#583 id=583 data-nosnippet>583</a>    fallback: ProgramSite,
+<a href=#584 id=584 data-nosnippet>584</a>) -&gt; Vec&lt;ProgramSite&gt; {
+<a href=#585 id=585 data-nosnippet>585</a>    <span class="kw">let </span><span class="kw-2">mut </span>sites: Vec&lt;<span class="kw">_</span>&gt; = carrier
+<a href=#586 id=586 data-nosnippet>586</a>        .provenance()
+<a href=#587 id=587 data-nosnippet>587</a>        .origins()
+<a href=#588 id=588 data-nosnippet>588</a>        .filter_map(|origin| <span class="kw">match </span>origin {
+<a href=#589 id=589 data-nosnippet>589</a>            Origin::Parsed(location) =&gt; <span class="prelude-val">Some</span>(fallback.with_location(<span class="kw-2">*</span>location)),
+<a href=#590 id=590 data-nosnippet>590</a>            Origin::Constructed | Origin::Transformed(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#591 id=591 data-nosnippet>591</a>        })
+<a href=#592 id=592 data-nosnippet>592</a>        .collect();
+<a href=#593 id=593 data-nosnippet>593</a>    <span class="kw">if </span>sites.is_empty() {
+<a href=#594 id=594 data-nosnippet>594</a>        sites.push(fallback);
+<a href=#595 id=595 data-nosnippet>595</a>    }
+<a href=#596 id=596 data-nosnippet>596</a>    sites
+<a href=#597 id=597 data-nosnippet>597</a>}
+<a href=#598 id=598 data-nosnippet>598</a>
+<a href=#599 id=599 data-nosnippet>599</a><span class="doccomment">/// Attach actual parsed evidence without changing a caller-assigned statement ID.
+<a href=#600 id=600 data-nosnippet>600</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>origin(
+<a href=#601 id=601 data-nosnippet>601</a>    carrier: <span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;,
+<a href=#602 id=602 data-nosnippet>602</a>    fallback: <span class="kw">impl </span>Into&lt;ProgramSite&gt;,
+<a href=#603 id=603 data-nosnippet>603</a>) -&gt; ProgramSite {
+<a href=#604 id=604 data-nosnippet>604</a>    <span class="kw">let </span>fallback = fallback.into();
+<a href=#605 id=605 data-nosnippet>605</a>    carrier
+<a href=#606 id=606 data-nosnippet>606</a>        .provenance()
+<a href=#607 id=607 data-nosnippet>607</a>        .origins()
+<a href=#608 id=608 data-nosnippet>608</a>        .find_map(|origin| <span class="kw">match </span>origin {
+<a href=#609 id=609 data-nosnippet>609</a>            Origin::Parsed(location) =&gt; <span class="prelude-val">Some</span>(fallback.with_location(<span class="kw-2">*</span>location)),
+<a href=#610 id=610 data-nosnippet>610</a>            Origin::Constructed | Origin::Transformed(<span class="kw">_</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#611 id=611 data-nosnippet>611</a>        })
+<a href=#612 id=612 data-nosnippet>612</a>        .unwrap_or(fallback)
+<a href=#613 id=613 data-nosnippet>613</a>}
+<a href=#614 id=614 data-nosnippet>614</a>
+<a href=#615 id=615 data-nosnippet>615</a><span class="kw">struct </span>Normalizer&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#616 id=616 data-nosnippet>616</a>    constants: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>BTreeMap&lt;String, Symbol&gt;,
+<a href=#617 id=617 data-nosnippet>617</a>    budget: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Budget,
+<a href=#618 id=618 data-nosnippet>618</a>    location: ProgramSite,
+<a href=#619 id=619 data-nosnippet>619</a>    failure: <span class="prelude-ty">Option</span>&lt;ExpansionFailure&gt;,
+<a href=#620 id=620 data-nosnippet>620</a>}
+<a href=#621 id=621 data-nosnippet>621</a>
+<a href=#622 id=622 data-nosnippet>622</a><span class="kw">impl </span>Rewrite <span class="kw">for </span>Normalizer&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#623 id=623 data-nosnippet>623</a>    <span class="kw">fn </span>tag(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; TransformTag {
+<a href=#624 id=624 data-nosnippet>624</a>        TransformTag::new(<span class="string">"zetesis-scalar-expansion"</span>)
+<a href=#625 id=625 data-nosnippet>625</a>    }
+<a href=#626 id=626 data-nosnippet>626</a>    <span class="kw">fn </span>rewrite_term(<span class="kw-2">&amp;mut </span><span class="self">self</span>, term: Term) -&gt; Term {
+<a href=#627 id=627 data-nosnippet>627</a>        <span class="kw">if </span><span class="self">self</span>.failure.is_some() {
+<a href=#628 id=628 data-nosnippet>628</a>            <span class="kw">return </span>term;
+<a href=#629 id=629 data-nosnippet>629</a>        }
+<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">match </span>normalize_node(term, <span class="self">self</span>.constants, <span class="self">self</span>.budget, <span class="self">self</span>.location) {
+<a href=#631 id=631 data-nosnippet>631</a>            <span class="prelude-val">Ok</span>(term) =&gt; term,
+<a href=#632 id=632 data-nosnippet>632</a>            <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#633 id=633 data-nosnippet>633</a>                <span class="self">self</span>.failure = <span class="prelude-val">Some</span>(error);
+<a href=#634 id=634 data-nosnippet>634</a>                <span class="comment">// Only a failed private intermediate uses this placeholder;
+<a href=#635 id=635 data-nosnippet>635</a>                // the entire rewrite is refused before compilation.
+<a href=#636 id=636 data-nosnippet>636</a>                </span>Term::Symbolic(Symbol::Number(<span class="number">0</span>))
+<a href=#637 id=637 data-nosnippet>637</a>            }
+<a href=#638 id=638 data-nosnippet>638</a>        }
+<a href=#639 id=639 data-nosnippet>639</a>    }
+<a href=#640 id=640 data-nosnippet>640</a>}
+<a href=#641 id=641 data-nosnippet>641</a>
+<a href=#642 id=642 data-nosnippet>642</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>normalize_node(
+<a href=#643 id=643 data-nosnippet>643</a>    term: Term,
+<a href=#644 id=644 data-nosnippet>644</a>    constants: <span class="kw-2">&amp;</span>BTreeMap&lt;String, Symbol&gt;,
+<a href=#645 id=645 data-nosnippet>645</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
+<a href=#646 id=646 data-nosnippet>646</a>    location: ProgramSite,
+<a href=#647 id=647 data-nosnippet>647</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Term, ExpansionFailure&gt; {
+<a href=#648 id=648 data-nosnippet>648</a>    budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
+<a href=#649 id=649 data-nosnippet>649</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>term {
+<a href=#650 id=650 data-nosnippet>650</a>        Term::Variable(<span class="kw">_</span>) | Term::Pool(<span class="kw">_</span>) | Term::Interval { .. } =&gt; <span class="prelude-val">Ok</span>(term),
+<a href=#651 id=651 data-nosnippet>651</a>        Term::Symbolic(symbol) <span class="kw">if </span>!symbol.arguments().is_empty() =&gt; {
+<a href=#652 id=652 data-nosnippet>652</a>            budget.charge(
+<a href=#653 id=653 data-nosnippet>653</a>                ExpansionResource::ScalarBytes,
+<a href=#654 id=654 data-nosnippet>654</a>                symbol_bytes(symbol),
+<a href=#655 id=655 data-nosnippet>655</a>                location,
+<a href=#656 id=656 data-nosnippet>656</a>            )<span class="question-mark">?</span>;
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="kw">let </span>resolved =
+<a href=#658 id=658 data-nosnippet>658</a>                symbol
+<a href=#659 id=659 data-nosnippet>659</a>                    .clone()
+<a href=#660 id=660 data-nosnippet>660</a>                    .try_fold(|parts| -&gt; <span class="prelude-ty">Result</span>&lt;Symbol, ExpansionFailure&gt; {
+<a href=#661 id=661 data-nosnippet>661</a>                        budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
+<a href=#662 id=662 data-nosnippet>662</a>                        <span class="kw">let </span>value = Symbol::from(parts);
+<a href=#663 id=663 data-nosnippet>663</a>                        <span class="kw">if let </span><span class="prelude-val">Some</span>(replacement) = defined(<span class="kw-2">&amp;</span>value, constants) {
+<a href=#664 id=664 data-nosnippet>664</a>                            budget.charge(
+<a href=#665 id=665 data-nosnippet>665</a>                                ExpansionResource::ScalarBytes,
+<a href=#666 id=666 data-nosnippet>666</a>                                symbol_bytes(replacement),
+<a href=#667 id=667 data-nosnippet>667</a>                                location,
+<a href=#668 id=668 data-nosnippet>668</a>                            )<span class="question-mark">?</span>;
+<a href=#669 id=669 data-nosnippet>669</a>                            <span class="prelude-val">Ok</span>(replacement.clone())
+<a href=#670 id=670 data-nosnippet>670</a>                        } <span class="kw">else </span>{
+<a href=#671 id=671 data-nosnippet>671</a>                            <span class="prelude-val">Ok</span>(value)
+<a href=#672 id=672 data-nosnippet>672</a>                        }
+<a href=#673 id=673 data-nosnippet>673</a>                    })<span class="question-mark">?</span>;
+<a href=#674 id=674 data-nosnippet>674</a>            compile::validate_scalar(<span class="kw-2">&amp;</span>resolved, location)<span class="question-mark">?</span>;
+<a href=#675 id=675 data-nosnippet>675</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(resolved))
+<a href=#676 id=676 data-nosnippet>676</a>        }
+<a href=#677 id=677 data-nosnippet>677</a>        Term::Symbolic(symbol) =&gt; {
+<a href=#678 id=678 data-nosnippet>678</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = defined(symbol, constants) {
+<a href=#679 id=679 data-nosnippet>679</a>                budget.charge(
+<a href=#680 id=680 data-nosnippet>680</a>                    ExpansionResource::ScalarBytes,
+<a href=#681 id=681 data-nosnippet>681</a>                    symbol_bytes(value),
+<a href=#682 id=682 data-nosnippet>682</a>                    location,
+<a href=#683 id=683 data-nosnippet>683</a>                )<span class="question-mark">?</span>;
+<a href=#684 id=684 data-nosnippet>684</a>                <span class="prelude-val">Ok</span>(Term::Symbolic(value.clone()))
+<a href=#685 id=685 data-nosnippet>685</a>            } <span class="kw">else </span>{
+<a href=#686 id=686 data-nosnippet>686</a>                scalar_leaf(symbol, budget, location)<span class="question-mark">?</span>;
+<a href=#687 id=687 data-nosnippet>687</a>                <span class="prelude-val">Ok</span>(term)
+<a href=#688 id=688 data-nosnippet>688</a>            }
+<a href=#689 id=689 data-nosnippet>689</a>        }
+<a href=#690 id=690 data-nosnippet>690</a>        Term::UnaryOperation {
+<a href=#691 id=691 data-nosnippet>691</a>            operator: themelios_program::term::UnaryOp::Negate,
+<a href=#692 id=692 data-nosnippet>692</a>            argument,
+<a href=#693 id=693 data-nosnippet>693</a>        } <span class="kw">if </span><span class="macro">matches!</span>(argument.as_ref(), Term::Symbolic(Symbol::Function { .. })) =&gt; {
+<a href=#694 id=694 data-nosnippet>694</a>            <span class="kw">let </span>Term::Symbolic(Symbol::Function {
+<a href=#695 id=695 data-nosnippet>695</a>                name,
+<a href=#696 id=696 data-nosnippet>696</a>                arguments,
+<a href=#697 id=697 data-nosnippet>697</a>                sign,
+<a href=#698 id=698 data-nosnippet>698</a>            }) = argument.as_ref()
+<a href=#699 id=699 data-nosnippet>699</a>            <span class="kw">else </span>{
+<a href=#700 id=700 data-nosnippet>700</a>                <span class="macro">unreachable!</span>(<span class="string">"checked function operand"</span>)
+<a href=#701 id=701 data-nosnippet>701</a>            };
+<a href=#702 id=702 data-nosnippet>702</a>            budget.charge(
+<a href=#703 id=703 data-nosnippet>703</a>                ExpansionResource::ScalarBytes,
+<a href=#704 id=704 data-nosnippet>704</a>                symbol_bytes(<span class="kw">match </span>argument.as_ref() {
+<a href=#705 id=705 data-nosnippet>705</a>                    Term::Symbolic(symbol) =&gt; symbol,
+<a href=#706 id=706 data-nosnippet>706</a>                    <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(<span class="string">"checked symbol"</span>),
+<a href=#707 id=707 data-nosnippet>707</a>                }),
+<a href=#708 id=708 data-nosnippet>708</a>                location,
+<a href=#709 id=709 data-nosnippet>709</a>            )<span class="question-mark">?</span>;
+<a href=#710 id=710 data-nosnippet>710</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(Symbol::Function {
+<a href=#711 id=711 data-nosnippet>711</a>                name: name.clone(),
+<a href=#712 id=712 data-nosnippet>712</a>                arguments: arguments.clone(),
+<a href=#713 id=713 data-nosnippet>713</a>                sign: <span class="kw">match </span>sign {
+<a href=#714 id=714 data-nosnippet>714</a>                    Sign::Positive =&gt; Sign::Negative,
+<a href=#715 id=715 data-nosnippet>715</a>                    Sign::Negative =&gt; Sign::Positive,
+<a href=#716 id=716 data-nosnippet>716</a>                },
+<a href=#717 id=717 data-nosnippet>717</a>            }))
+<a href=#718 id=718 data-nosnippet>718</a>        }
+<a href=#719 id=719 data-nosnippet>719</a>        Term::Function { .. } | Term::Tuple(<span class="kw">_</span>) <span class="kw">if </span>term.is_ground() =&gt; {
+<a href=#720 id=720 data-nosnippet>720</a>            <span class="kw">for </span>child <span class="kw">in </span>term.subterms() {
+<a href=#721 id=721 data-nosnippet>721</a>                budget.charge(ExpansionResource::TermWork, <span class="number">1</span>, location)<span class="question-mark">?</span>;
+<a href=#722 id=722 data-nosnippet>722</a>                <span class="kw">if </span><span class="macro">matches!</span>(child, Term::Pool(<span class="kw">_</span>) | Term::Interval { .. }) {
+<a href=#723 id=723 data-nosnippet>723</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(unsupported(ProfileFeature::Term, location).into());
+<a href=#724 id=724 data-nosnippet>724</a>                }
+<a href=#725 id=725 data-nosnippet>725</a>            }
+<a href=#726 id=726 data-nosnippet>726</a>            <span class="kw">let </span>symbol = term
+<a href=#727 id=727 data-nosnippet>727</a>                .evaluate()
+<a href=#728 id=728 data-nosnippet>728</a>                .map_err(|error| ExpansionFailure::Evaluation { error, location })<span class="question-mark">?</span>;
+<a href=#729 id=729 data-nosnippet>729</a>            compile::validate_scalar(<span class="kw-2">&amp;</span>symbol, location)<span class="question-mark">?</span>;
+<a href=#730 id=730 data-nosnippet>730</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(symbol))
+<a href=#731 id=731 data-nosnippet>731</a>        }
+<a href=#732 id=732 data-nosnippet>732</a>        Term::UnaryOperation { .. } | Term::BinaryOperation { .. } | Term::Absolute(<span class="kw">_</span>) =&gt; {
+<a href=#733 id=733 data-nosnippet>733</a>            <span class="kw">let </span>symbol = term
+<a href=#734 id=734 data-nosnippet>734</a>                .evaluate()
+<a href=#735 id=735 data-nosnippet>735</a>                .map_err(|error| ExpansionFailure::Evaluation { error, location })<span class="question-mark">?</span>;
+<a href=#736 id=736 data-nosnippet>736</a>            compile::validate_scalar(<span class="kw-2">&amp;</span>symbol, location)<span class="question-mark">?</span>;
+<a href=#737 id=737 data-nosnippet>737</a>            <span class="prelude-val">Ok</span>(Term::Symbolic(symbol))
+<a href=#738 id=738 data-nosnippet>738</a>        }
+<a href=#739 id=739 data-nosnippet>739</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(unsupported(ProfileFeature::Term, location).into()),
+<a href=#740 id=740 data-nosnippet>740</a>    }
+<a href=#741 id=741 data-nosnippet>741</a>}
+<a href=#742 id=742 data-nosnippet>742</a>
+<a href=#743 id=743 data-nosnippet>743</a><span class="kw">fn </span>constant_name(symbol: <span class="kw-2">&amp;</span>Symbol) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
+<a href=#744 id=744 data-nosnippet>744</a>    <span class="kw">match </span>symbol {
+<a href=#745 id=745 data-nosnippet>745</a>        Symbol::Function {
+<a href=#746 id=746 data-nosnippet>746</a>            name,
+<a href=#747 id=747 data-nosnippet>747</a>            arguments,
+<a href=#748 id=748 data-nosnippet>748</a>            sign: Sign::Positive,
+<a href=#749 id=749 data-nosnippet>749</a>        } <span class="kw">if </span>arguments.is_empty() =&gt; <span class="prelude-val">Some</span>(name.as_str()),
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#751 id=751 data-nosnippet>751</a>    }
+<a href=#752 id=752 data-nosnippet>752</a>}
+<a href=#753 id=753 data-nosnippet>753</a>
+<a href=#754 id=754 data-nosnippet>754</a><span class="kw">fn </span>symbol_bytes(symbol: <span class="kw-2">&amp;</span>Symbol) -&gt; u128 {
+<a href=#755 id=755 data-nosnippet>755</a>    <span class="kw">crate</span>::structural_value::symbol_bytes(symbol)
+<a href=#756 id=756 data-nosnippet>756</a>}
 </code></pre></div></section></main></body></html>

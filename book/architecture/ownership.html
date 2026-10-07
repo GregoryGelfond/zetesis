@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -306,27 +306,50 @@ exports owned themelios symbols. These are the contracts of the source and
 observation boundaries, not a claim that every subsystem shares one physical
 owner or one memory allowance.</p>
 <h2 id="shared-original-narrowing-index"><a class="header" href="#shared-original-narrowing-index">Shared original narrowing index</a></h2>
-<p>Region enumeration prepares one immutable <code>IndexedTheory</code> in <code>zetesis-sat</code>:
-the exact admitted <code>Theory</code> and its <code>Narrower</code> index, constructed together.
-Scalar candidates, parallel candidate producers and native membership workers
-share that owner. Proper-subset queries use the same original DAG index under
-each candidate’s frozen truth. Reuse requires <code>Theory::same_instance</code>; separately
-admitted equal formulas are different subjects. This is enumeration-owned
-preparation, with no global cache or public interchange of raw index handles.</p>
+<p>Region enumeration owns one <code>OriginalIndex</code> in <code>zetesis-sat</code>, the only place
+an immutable <code>IndexedTheory</code> can be constructed: the exact admitted <code>Theory</code>
+and its <code>Narrower</code> index, constructed together. The enumeration builds it when
+a region walk first needs it, before the walk’s first step, on every route:
+scalar, batched, candidate producers and native membership workers, which
+receive it when they are spawned. A run decided by a positive certificate
+walks no region and builds none. Scalar candidates, parallel candidate
+producers and native membership workers share that owner. Proper-subset
+queries use the same original DAG index under each candidate’s frozen truth;
+the membership state holds no index and borrows the one its owner lends.
+Reuse requires <code>Theory::same_instance</code>; separately admitted equal formulas are
+different subjects. This is enumeration-owned preparation, with no global
+cache or public interchange of raw index handles.</p>
 <p>Only immutable indexing is shared. Each candidate region owns its knowledge;
 each reduct traversal starts with private knowledge under its candidate’s mask.
-Evaluation workspaces, budget leases and traversal state remain separate.
-Candidate-only restrictions retain their own indexes and never enter the
+A narrowing’s worklists belong to whoever walks: the scalar walk, each parallel
+worker and each producer round keep one <code>NarrowingScratch</code> for their candidate
+regions; each reduct workspace keeps one for its proper-subset queries, counted
+in its retained bytes; each proposer keeps one for its positive checks. Each
+narrowing empties the scratch it borrows before reading it, and no scratch is
+shared between threads. Evaluation workspaces, budget leases and traversal
+state remain separate.</p>
+<p>Region queries check retained workspace storage before evaluation and before
+returning a successful verdict. The final check includes scratch grown by the
+query; every attempt records its retained peak, including a failed attempt.
+An earlier typed failure keeps its cause. This is a retained-storage boundary,
+not an allocator quota: a refused query may retain capacity above its limit,
+but cannot publish a successful membership verdict.</p>
+<p>Candidate-only restrictions retain their own indexes and never enter the
 original theory or supply its support. Tight and positive certificates retain
 their existing membership procedures and do not execute a general reduct query.</p>
-<p>Index construction is charged once to candidate preparation, one work unit per
-original node. Reusing that index adds no construction charge to reduct-region
-work. A standalone membership check without candidate preparation constructs
-and charges its own index. Failed query reads retain their existing work and
-query-count receipts, and sharing does not change verification or search limits.
-The index constructor retains its existing allocation boundary; the shared
-handle uses an infallible Arc allocation, as does Theory. These logical work
-and ownership facts do not establish a process RSS bound or a measured speedup.</p>
+<p>Index construction is charged once, when the walk starts, to the candidate
+walk’s search work and region receipt, one work unit per original node: the
+charge is made before building, and a refused charge builds nothing and stops
+the run incomplete. A charge admitted before a failed build stays in both
+receipts, as a failed narrowing keeps its admitted prefix. Its host time is
+candidate generation. Reusing that index adds no construction charge to
+reduct-region work. A standalone membership check, which walks no candidate
+region, constructs and charges its own index to its reduct receipt. Failed
+query reads retain their existing work and query-count receipts, and sharing
+does not change verification or search limits. The index constructor retains
+its existing allocation boundary; the shared handle uses an infallible Arc
+allocation, as does Theory. These logical work and ownership facts do not
+establish a process RSS bound or a measured speedup.</p>
 <h2 id="prepared-formula-queries"><a class="header" href="#prepared-formula-queries">Prepared formula queries</a></h2>
 <p>A formula enumeration under the clauses method (<code>--search clauses</code>) constructs
 its <code>PreparedReduct</code> lazily, when a candidate first needs exact subset
@@ -521,8 +544,8 @@ This conservative guard also covers eager and shared CPU closure execution;
 formula and device routes apply their own resource checks instead.
 <code>SolveConfig::validate</code> checks representation-independent policies. With valid
 policies, an already cancelled session stops before executor resource checks.
-The command derives <code>L</code> as each worker’s share of the collective ceiling when
-<code>--max-closure-bytes</code> is not given. At most
+The ordinary resource policy derives <code>L</code> as each worker’s share of the
+collective capacity selected by <code>--memory</code>. At most
 <code>min(submitted candidates, worker count)</code> workspaces are
 assigned, each to a contiguous candidate range; candidates inside one range run
 sequentially. An empty batch admits only retained collective capacity and does
@@ -531,7 +554,8 @@ allocator overhead are separate owners.</p>
 <p>Ordinary sessions map <code>SolveConfig::max_source_work</code> to immutable preparation
 work and <code>max_closure_batch_bytes</code> to both preparation storage and the collective
 owner allowance. Candidate closure work retains its separate <code>max_work</code> counter.
-The existing CLI options expose these bounds without a combined work quota.
+Bounded library callers can select these work ceilings. Ordinary command
+execution uses checked counter maxima without a selected work quota.
 A preparation stop is distinct from an individual candidate stop; neither
 establishes candidate exhaustion. A collective reservation refusal starts no
 candidate and releases the admission slot.</p>

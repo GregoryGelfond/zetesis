@@ -100,22 +100,35 @@
 <a href=#100 id=100 data-nosnippet>100</a>
 <a href=#101 id=101 data-nosnippet>101</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>search_limits(options: <span class="kw-2">&amp;</span>SolveConfig) -&gt; zetesis_sat::Limits {
 <a href=#102 id=102 data-nosnippet>102</a>    zetesis_sat::Limits {
-<a href=#103 id=103 data-nosnippet>103</a>        search: zetesis_sat::SearchLimits {
-<a href=#104 id=104 data-nosnippet>104</a>            max_work: options.max_search_work,
-<a href=#105 id=105 data-nosnippet>105</a>            max_decisions: options.max_search_decisions,
-<a href=#106 id=106 data-nosnippet>106</a>        },
-<a href=#107 id=107 data-nosnippet>107</a>        projections: zetesis_sat::ProjectionLimits {
-<a href=#108 id=108 data-nosnippet>108</a>            max_entries: options.max_projection_entries,
-<a href=#109 id=109 data-nosnippet>109</a>            max_nodes: options.max_projection_nodes,
-<a href=#110 id=110 data-nosnippet>110</a>            max_bytes: options.max_projection_bytes,
-<a href=#111 id=111 data-nosnippet>111</a>        },
-<a href=#112 id=112 data-nosnippet>112</a>        max_candidates: options.max_candidates,
-<a href=#113 id=113 data-nosnippet>113</a>        max_reduct_bytes: options.max_reduct_bytes,
-<a href=#114 id=114 data-nosnippet>114</a>        max_verification_work: options.max_work,
-<a href=#115 id=115 data-nosnippet>115</a>        ..Default::default()
-<a href=#116 id=116 data-nosnippet>116</a>    }
-<a href=#117 id=117 data-nosnippet>117</a>}
-<a href=#118 id=118 data-nosnippet>118</a>
-<a href=#119 id=119 data-nosnippet>119</a><span class="attr">#[cfg(test)]
-<a href=#120 id=120 data-nosnippet>120</a></span><span class="kw">mod </span>tests;
+<a href=#103 id=103 data-nosnippet>103</a>        admission: cnf_admission(options.max_candidate_bytes <span class="kw">as </span>u128),
+<a href=#104 id=104 data-nosnippet>104</a>        reduct_admission: cnf_admission(u128::from(options.max_reduct_bytes)),
+<a href=#105 id=105 data-nosnippet>105</a>        search: zetesis_sat::SearchLimits {
+<a href=#106 id=106 data-nosnippet>106</a>            max_work: options.max_search_work,
+<a href=#107 id=107 data-nosnippet>107</a>            max_decisions: options.max_search_decisions,
+<a href=#108 id=108 data-nosnippet>108</a>        },
+<a href=#109 id=109 data-nosnippet>109</a>        projections: zetesis_sat::ProjectionLimits {
+<a href=#110 id=110 data-nosnippet>110</a>            max_entries: options.max_projection_entries,
+<a href=#111 id=111 data-nosnippet>111</a>            max_nodes: options.max_projection_nodes,
+<a href=#112 id=112 data-nosnippet>112</a>            max_bytes: options.max_projection_bytes,
+<a href=#113 id=113 data-nosnippet>113</a>        },
+<a href=#114 id=114 data-nosnippet>114</a>        max_candidates: options.max_candidates,
+<a href=#115 id=115 data-nosnippet>115</a>        max_reduct_bytes: options.max_reduct_bytes,
+<a href=#116 id=116 data-nosnippet>116</a>        max_verification_work: options.max_work,
+<a href=#117 id=117 data-nosnippet>117</a>    }
+<a href=#118 id=118 data-nosnippet>118</a>}
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a><span class="comment">// These independent logical populations derive from their existing named owner
+<a href=#121 id=121 data-nosnippet>121</a>// allowance. They do not estimate total RSS. The extent cap keeps doubling a
+<a href=#122 id=122 data-nosnippet>122</a>// literal population and the variable/sign index within checked host indices.
+<a href=#123 id=123 data-nosnippet>123</a></span><span class="kw">fn </span>cnf_admission(bytes: u128) -&gt; zetesis_sat::AdmissionLimits {
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>extent = usize::try_from(bytes.min(isize::MAX <span class="kw">as </span>u128)).unwrap_or(isize::MAX <span class="kw">as </span>usize);
+<a href=#125 id=125 data-nosnippet>125</a>    zetesis_sat::AdmissionLimits {
+<a href=#126 id=126 data-nosnippet>126</a>        max_variables: extent / <span class="number">32</span>,
+<a href=#127 id=127 data-nosnippet>127</a>        max_clauses: extent / (<span class="number">4 </span>* size_of::&lt;usize&gt;()),
+<a href=#128 id=128 data-nosnippet>128</a>        max_literals: extent / size_of::&lt;zetesis_sat::Literal&gt;(),
+<a href=#129 id=129 data-nosnippet>129</a>    }
+<a href=#130 id=130 data-nosnippet>130</a>}
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a><span class="attr">#[cfg(test)]
+<a href=#133 id=133 data-nosnippet>133</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

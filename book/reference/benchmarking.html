@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -240,7 +240,7 @@ inputs.</p>
 <tr><td><code>baseline</code></td><td>SEND, queens variant 02 and task allocation</td></tr>
 <tr><td><code>queens</code></td><td>The six unchanged eight-queens encodings</td></tr>
 <tr><td><code>series</code></td><td>The maintained 22 generated, constant-amended and original workloads</td></tr>
-<tr><td><code>scalability</code></td><td>Ten authored and corpus workloads, with indexed formula joins and region search</td></tr>
+<tr><td><code>scalability</code></td><td>Fourteen authored and corpus workloads, with indexed formula joins and region search</td></tr>
 </tbody>
 </table>
 </div>
@@ -252,10 +252,20 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no <code>--case</code>; it alone accepts <code>--examples</code>, its
 authored root, which defaults to <code>examples</code>, and <code>--include-einstein</code>, which
-adds the unchanged Einstein riddle as an eleventh workload. The maintained
+adds the unchanged Einstein riddle as a fifteenth workload. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
-capture, evidence and native-decoder ceilings to the sizes of its records.</p>
+capture, evidence and native-decoder ceilings to the sizes of its records.
+Both scalability commands apply the population’s measurement presets: at least
+16 MiB per invocation and decoded report, 4,194,304 native atom occurrences and
+8,388,608 native value-node occurrences. Atom-table reuse in compact JSON still
+counts every full-model occurrence. Larger caller capacities remain in force;
+per-value limits, timeouts, total capture and evidence ceilings stay as requested.
+The report records the resulting capacities in <code>limits</code> and
+<code>native_normalization_limits</code>. These measurement presets do not change solver
+resource limits or relax complete-family comparison. Library callers explicitly
+apply <code>scalability::limits</code> and <code>scalability::native_answers</code> before constructing
+their matrix request; execution itself never raises supplied limits.</p>
 <h3 id="profiles"><a class="header" href="#profiles">Profiles</a></h3>
 <p>A run measures one native profile, set by <code>--backend</code>, <code>--grounder</code> and
 <code>--threads</code>, or compares several. Each compared axis replaces its single
@@ -302,14 +312,15 @@ choose an explicit count within that bound.</p>
 <tr><td><code>--oracle auto|closure|countermodel</code></td><td><code>auto</code></td></tr>
 <tr><td><code>--search regions|clauses</code></td><td>The suite’s: region search for <code>scalability</code>, the solver’s own otherwise</td></tr>
 <tr><td><code>--formula-joins indexed|table</code></td><td>The suite’s: indexed joins for <code>scalability</code>, the solver’s own otherwise</td></tr>
-<tr><td><code>--completion-workers</code></td><td>One</td></tr>
-<tr><td><code>--batch-size</code></td><td>64 candidate occurrences</td></tr>
-<tr><td><code>--max-expansion-work</code></td><td>None; a ceiling is recorded in the evidence, independent of the process deadline</td></tr>
+<tr><td><code>--memory SIZE</code></td><td>The solver’s ordinary host-dependent memory allowance</td></tr>
 <tr><td><code>--time-limit SECONDS</code></td><td>None; a cooperative native deadline</td></tr>
 <tr><td><code>--clingo-threads</code>, also <code>--clingo-workers</code></td><td>One; clingo retains its stock search heuristics</td></tr>
 </tbody>
 </table>
 </div>
+<p>New reports identify the ordinary resource policy. Historical reports retain
+their explicit work and batch settings; profiles with different policies must
+not be pooled as repeated measurements of one configuration.</p>
 <p>The maintained telemetry decoder reads every backend and grounder; its Vulkan
 decoding awaits qualification on a Vulkan host. It reports unsupported
 combinations and actual execution failures rather than silently replacing the

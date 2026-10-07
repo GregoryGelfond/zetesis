@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>    AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind, AggregateLimits,
 <a href=#6 id=6 data-nosnippet>6</a>    AggregateProfile, AggregateStatistics,
 <a href=#7 id=7 data-nosnippet>7</a>};
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::Node;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use crate</span>::{FormulaNodes, NodeView};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// One scalar comparison against the same complete tuple eligibility family.
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,14 +99,14 @@
 <a href=#99 id=99 data-nosnippet>99</a>/// Returns typed input, guard, resource, allocation, cancellation or arithmetic
 <a href=#100 id=100 data-nosnippet>100</a>/// errors. Shared limits apply to the entire family, never independently per root.
 <a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub fn </span>append_aggregate_family(
-<a href=#102 id=102 data-nosnippet>102</a>    nodes: <span class="kw-2">&amp;mut </span>Vec&lt;Node&gt;,
+<a href=#102 id=102 data-nosnippet>102</a>    nodes: <span class="kw-2">&amp;mut </span>FormulaNodes,
 <a href=#103 id=103 data-nosnippet>103</a>    elements: <span class="kw-2">&amp;</span>[AggregateElement],
 <a href=#104 id=104 data-nosnippet>104</a>    guards: <span class="kw-2">&amp;</span>[AggregateGuard],
 <a href=#105 id=105 data-nosnippet>105</a>    limits: AggregateFamilyLimits,
 <a href=#106 id=106 data-nosnippet>106</a>    cancellation: <span class="kw-2">&amp;</span>Cancellation,
 <a href=#107 id=107 data-nosnippet>107</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AggregateFamilyBuild, AggregateError&gt; {
 <a href=#108 id=108 data-nosnippet>108</a>    append(
-<a href=#109 id=109 data-nosnippet>109</a>        Destination::unchecked(nodes),
+<a href=#109 id=109 data-nosnippet>109</a>        Destination::retained(nodes.transaction()),
 <a href=#110 id=110 data-nosnippet>110</a>        elements,
 <a href=#111 id=111 data-nosnippet>111</a>        guards,
 <a href=#112 id=112 data-nosnippet>112</a>        limits,
@@ -134,7 +134,7 @@
 <a href=#134 id=134 data-nosnippet>134</a><span class="kw">type </span>ResultKind&lt;T&gt; = <span class="prelude-ty">Result</span>&lt;T, AggregateErrorKind&gt;;
 <a href=#135 id=135 data-nosnippet>135</a>
 <a href=#136 id=136 data-nosnippet>136</a><span class="kw">fn </span>compile(
-<a href=#137 id=137 data-nosnippet>137</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#137 id=137 data-nosnippet>137</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#138 id=138 data-nosnippet>138</a>    elements: <span class="kw-2">&amp;</span>[AggregateElement],
 <a href=#139 id=139 data-nosnippet>139</a>    guards: <span class="kw-2">&amp;</span>[AggregateGuard],
 <a href=#140 id=140 data-nosnippet>140</a>    max_guards: usize,
@@ -152,8 +152,8 @@
 <a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>((Vec::new(), profile));
 <a href=#153 id=153 data-nosnippet>153</a>    }
 <a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">let </span><span class="kw-2">mut </span>roots = reserve(guards.len())<span class="question-mark">?</span>;
-<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>falsum = builder.push(Node::False)<span class="question-mark">?</span>;
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">let </span>truth = builder.push(Node::Implies(falsum, falsum))<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>falsum = builder.push(NodeView::False)<span class="question-mark">?</span>;
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">let </span>truth = builder.push(NodeView::Implies(falsum, falsum))<span class="question-mark">?</span>;
 <a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">if </span>nonnegative {
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>maximum = required_threshold(builder, guards, total)<span class="question-mark">?</span>;
 <a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">let </span>row = threshold_row(builder, elements, maximum, falsum, truth)<span class="question-mark">?</span>;
@@ -178,7 +178,7 @@
 <a href=#178 id=178 data-nosnippet>178</a>}
 <a href=#179 id=179 data-nosnippet>179</a>
 <a href=#180 id=180 data-nosnippet>180</a><span class="kw">fn </span>required_threshold(
-<a href=#181 id=181 data-nosnippet>181</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#181 id=181 data-nosnippet>181</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#182 id=182 data-nosnippet>182</a>    guards: <span class="kw-2">&amp;</span>[AggregateGuard],
 <a href=#183 id=183 data-nosnippet>183</a>    total: i128,
 <a href=#184 id=184 data-nosnippet>184</a>) -&gt; ResultKind&lt;i128&gt; {
@@ -210,7 +210,7 @@
 <a href=#210 id=210 data-nosnippet>210</a>}
 <a href=#211 id=211 data-nosnippet>211</a>
 <a href=#212 id=212 data-nosnippet>212</a><span class="kw">fn </span>threshold_row(
-<a href=#213 id=213 data-nosnippet>213</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#213 id=213 data-nosnippet>213</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#214 id=214 data-nosnippet>214</a>    elements: <span class="kw-2">&amp;</span>[AggregateElement],
 <a href=#215 id=215 data-nosnippet>215</a>    maximum: i128,
 <a href=#216 id=216 data-nosnippet>216</a>    falsum: usize,
@@ -245,11 +245,11 @@
 <a href=#245 id=245 data-nosnippet>245</a>        current[<span class="number">0</span>] = truth;
 <a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">for </span>target <span class="kw">in </span><span class="number">1</span>..width {
 <a href=#247 id=247 data-nosnippet>247</a>            builder.tick()<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">let </span>included = builder.push(Node::And(
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">let </span>included = builder.push(NodeView::And(<span class="kw-2">&amp;</span>[
 <a href=#249 id=249 data-nosnippet>249</a>                element.condition,
 <a href=#250 id=250 data-nosnippet>250</a>                previous[target.saturating_sub(weight)],
-<a href=#251 id=251 data-nosnippet>251</a>            ))<span class="question-mark">?</span>;
-<a href=#252 id=252 data-nosnippet>252</a>            current[target] = builder.push(Node::Or(previous[target], included))<span class="question-mark">?</span>;
+<a href=#251 id=251 data-nosnippet>251</a>            ]))<span class="question-mark">?</span>;
+<a href=#252 id=252 data-nosnippet>252</a>            current[target] = builder.push(NodeView::Or(<span class="kw-2">&amp;</span>[previous[target], included]))<span class="question-mark">?</span>;
 <a href=#253 id=253 data-nosnippet>253</a>        }
 <a href=#254 id=254 data-nosnippet>254</a>        std::mem::swap(<span class="kw-2">&amp;mut </span>previous, <span class="kw-2">&amp;mut </span>current);
 <a href=#255 id=255 data-nosnippet>255</a>    }
@@ -276,7 +276,7 @@
 <a href=#276 id=276 data-nosnippet>276</a>}
 <a href=#277 id=277 data-nosnippet>277</a>
 <a href=#278 id=278 data-nosnippet>278</a><span class="kw">fn </span>compose(
-<a href=#279 id=279 data-nosnippet>279</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#279 id=279 data-nosnippet>279</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#280 id=280 data-nosnippet>280</a>    row: <span class="kw-2">&amp;</span>[usize],
 <a href=#281 id=281 data-nosnippet>281</a>    guard: AggregateGuard,
 <a href=#282 id=282 data-nosnippet>282</a>    total: i128,
@@ -295,16 +295,18 @@
 <a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">let </span>a = lookup(row, lower, total, falsum, truth)<span class="question-mark">?</span>;
 <a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">match </span>guard.comparison {
 <a href=#297 id=297 data-nosnippet>297</a>        AggregateComparison::Ge | AggregateComparison::Gt =&gt; <span class="prelude-val">Ok</span>(a),
-<a href=#298 id=298 data-nosnippet>298</a>        AggregateComparison::Lt | AggregateComparison::Le =&gt; builder.push(Node::Implies(a, falsum)),
-<a href=#299 id=299 data-nosnippet>299</a>        AggregateComparison::Eq | AggregateComparison::Ne =&gt; {
-<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">let </span>b = lookup(row, bound + <span class="number">1</span>, total, falsum, truth)<span class="question-mark">?</span>;
-<a href=#301 id=301 data-nosnippet>301</a>            <span class="kw">if </span>guard.comparison == AggregateComparison::Eq {
-<a href=#302 id=302 data-nosnippet>302</a>                <span class="kw">let </span>negative = builder.push(Node::Implies(b, falsum))<span class="question-mark">?</span>;
-<a href=#303 id=303 data-nosnippet>303</a>                builder.push(Node::And(a, negative))
-<a href=#304 id=304 data-nosnippet>304</a>            } <span class="kw">else </span>{
-<a href=#305 id=305 data-nosnippet>305</a>                builder.push(Node::Implies(a, b))
-<a href=#306 id=306 data-nosnippet>306</a>            }
-<a href=#307 id=307 data-nosnippet>307</a>        }
-<a href=#308 id=308 data-nosnippet>308</a>    }
-<a href=#309 id=309 data-nosnippet>309</a>}
+<a href=#298 id=298 data-nosnippet>298</a>        AggregateComparison::Lt | AggregateComparison::Le =&gt; {
+<a href=#299 id=299 data-nosnippet>299</a>            builder.push(NodeView::Implies(a, falsum))
+<a href=#300 id=300 data-nosnippet>300</a>        }
+<a href=#301 id=301 data-nosnippet>301</a>        AggregateComparison::Eq | AggregateComparison::Ne =&gt; {
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="kw">let </span>b = lookup(row, bound + <span class="number">1</span>, total, falsum, truth)<span class="question-mark">?</span>;
+<a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">if </span>guard.comparison == AggregateComparison::Eq {
+<a href=#304 id=304 data-nosnippet>304</a>                <span class="kw">let </span>negative = builder.push(NodeView::Implies(b, falsum))<span class="question-mark">?</span>;
+<a href=#305 id=305 data-nosnippet>305</a>                builder.push(NodeView::And(<span class="kw-2">&amp;</span>[a, negative]))
+<a href=#306 id=306 data-nosnippet>306</a>            } <span class="kw">else </span>{
+<a href=#307 id=307 data-nosnippet>307</a>                builder.push(NodeView::Implies(a, b))
+<a href=#308 id=308 data-nosnippet>308</a>            }
+<a href=#309 id=309 data-nosnippet>309</a>        }
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>}
 </code></pre></div></section></main></body></html>

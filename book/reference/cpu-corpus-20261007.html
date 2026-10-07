@@ -1,0 +1,370 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>CPU corpus comparison, October 2026 - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-1ecb55d0.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/reference/cpu-corpus-20261007.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="cpu-corpus-comparison-7-october-2026"><a class="header" href="#cpu-corpus-comparison-7-october-2026">CPU corpus comparison, 7 October 2026</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>This complete 94-program CPU comparison measures zetesis 0.4.0 against clingo 5.8.2. The <a href="observations/cpu-corpus-20261007.json">portable observations</a> identify the exact measured executable and source snapshot.</p>
+<p>On the Apple M4 Pro measurement host, zetesis used 14 threads, CPU execution and automatic grounding/oracle selection; clingo used one thread and stock search heuristics. Both requested every answer or every tied optimum. One qualification and one warmup preceded three timed repetitions and one separate RSS run for each solver and case. All <strong>94 cases and 1128 positions passed</strong>, with no changed inputs, faults or unsettled children.</p>
+<p>The native profile uses ordinary resource policy, the executable’s default memory allowance and no cooperative deadline. The harness retains a 10-second child timeout, a 600-second campaign deadline and capture/normalization bounds. Memory allowance is not a process RSS ceiling. The current <a href="benchmarking.html">benchmark protocol</a> distinguishes solver resources from measurement bounds.</p>
+<h2 id="results-and-limits"><a class="header" href="#results-and-limits">Results and limits</a></h2>
+<p>Summed per-case wall medians are <strong>729.179 ms for zetesis</strong> and <strong>804.916 ms for clingo</strong>. Zetesis is faster on <strong>4 of 94 cases</strong>; clingo is faster on 90. A few substantial wins reduce the total; most individual programs favor clingo. These totals are sums of separate medians, not one timed combined run, and three repetitions do not establish a general speedup or statistical significance.</p>
+<p>Whole-process time includes startup, input loading, parsing, grounding, solving and captured JSON/statistics output. Driver stages exclude source loading, statistics output and the JSON envelope. RSS uses separate fresh-child observations. These CPU results do not qualify GPU performance, other thread counts, or time to the first answer.</p>
+<p>Qualification compares complete displayed families and final optimum ties/costs with clingo, including multiplicity. Full native atoms and shown values must also agree across native profiles/repeats; clingo’s hidden full interpretations are unavailable. Removal of an execution ceiling is not an algorithmic speedup. Earlier <a href="foundation-reuse.html">foundation-reuse measurements</a> remain historical observations of their own sources and schedules.</p>
+<h2 id="all-94-programs"><a class="header" href="#all-94-programs">All 94 programs</a></h2>
+<p>Times are milliseconds; ratio is zetesis/clingo, so smaller favors zetesis. Ratios and win counts use unrounded values. Program links navigate the current repository; the observations retain the measured corpus file hashes, per-case ranges and stage medians.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">zetesis</th><th style="text-align: right">clingo</th><th style="text-align: right">Ratio</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/equality-generalized-tsp/01-basic.lp">equality-generalized-tsp/01-basic</a></td><td style="text-align: right">6.63</td><td style="text-align: right">5.21</td><td style="text-align: right">1.273</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/equality-generalized-tsp/02-larger.lp">equality-generalized-tsp/02-larger</a></td><td style="text-align: right">6.57</td><td style="text-align: right">5.22</td><td style="text-align: right">1.260</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/equality-generalized-tsp/03-unreachable-subset-unsat.lp">equality-generalized-tsp/03-unreachable-subset-unsat</a></td><td style="text-align: right">6.54</td><td style="text-align: right">3.95</td><td style="text-align: right">1.657</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp">shortest-path/v01/01-basic</a></td><td style="text-align: right">6.53</td><td style="text-align: right">5.16</td><td style="text-align: right">1.266</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/02-start-equals-end.lp">shortest-path/v01/02-start-equals-end</a></td><td style="text-align: right">5.26</td><td style="text-align: right">3.93</td><td style="text-align: right">1.338</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/03-zero-cost-detour.lp">shortest-path/v01/03-zero-cost-detour</a></td><td style="text-align: right">6.52</td><td style="text-align: right">5.20</td><td style="text-align: right">1.255</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/04-no-path.lp">shortest-path/v01/04-no-path</a></td><td style="text-align: right">6.38</td><td style="text-align: right">3.95</td><td style="text-align: right">1.618</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/05-multi-path.lp">shortest-path/v01/05-multi-path</a></td><td style="text-align: right">6.51</td><td style="text-align: right">5.18</td><td style="text-align: right">1.255</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/06-layered-dag.lp">shortest-path/v01/06-layered-dag</a></td><td style="text-align: right">9.11</td><td style="text-align: right">5.21</td><td style="text-align: right">1.748</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/07-cycles.lp">shortest-path/v01/07-cycles</a></td><td style="text-align: right">6.63</td><td style="text-align: right">5.21</td><td style="text-align: right">1.273</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-01/08-negative-weights.lp">shortest-path/v01/08-negative-weights</a></td><td style="text-align: right">6.52</td><td style="text-align: right">3.97</td><td style="text-align: right">1.641</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/01-basic.lp">shortest-path/v02/01-basic</a></td><td style="text-align: right">6.59</td><td style="text-align: right">5.22</td><td style="text-align: right">1.260</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/02-start-equals-end.lp">shortest-path/v02/02-start-equals-end</a></td><td style="text-align: right">6.52</td><td style="text-align: right">3.94</td><td style="text-align: right">1.656</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/03-before-forces-detour.lp">shortest-path/v02/03-before-forces-detour</a></td><td style="text-align: right">6.49</td><td style="text-align: right">5.16</td><td style="text-align: right">1.258</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/04-after-forces-extension.lp">shortest-path/v02/04-after-forces-extension</a></td><td style="text-align: right">6.61</td><td style="text-align: right">5.20</td><td style="text-align: right">1.273</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/05-ordering-unsat.lp">shortest-path/v02/05-ordering-unsat</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.21</td><td style="text-align: right">1.256</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/06-layered-dag-before.lp">shortest-path/v02/06-layered-dag-before</a></td><td style="text-align: right">9.08</td><td style="text-align: right">5.22</td><td style="text-align: right">1.738</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/07-layered-dag-before-after.lp">shortest-path/v02/07-layered-dag-before-after</a></td><td style="text-align: right">9.07</td><td style="text-align: right">5.20</td><td style="text-align: right">1.746</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/08-tie-break-under-ordering.lp">shortest-path/v02/08-tie-break-under-ordering</a></td><td style="text-align: right">6.55</td><td style="text-align: right">5.19</td><td style="text-align: right">1.263</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-02/09-negative-weights.lp">shortest-path/v02/09-negative-weights</a></td><td style="text-align: right">6.51</td><td style="text-align: right">5.20</td><td style="text-align: right">1.252</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/01-basic.lp">shortest-path/v03/01-basic</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.18</td><td style="text-align: right">1.263</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/02-start-equals-end.lp">shortest-path/v03/02-start-equals-end</a></td><td style="text-align: right">6.50</td><td style="text-align: right">5.18</td><td style="text-align: right">1.255</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/03-budget-forces-detour.lp">shortest-path/v03/03-budget-forces-detour</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.20</td><td style="text-align: right">1.257</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/04-cost-at-cap-allowed.lp">shortest-path/v03/04-cost-at-cap-allowed</a></td><td style="text-align: right">6.49</td><td style="text-align: right">3.93</td><td style="text-align: right">1.652</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/05-budget-unsat.lp">shortest-path/v03/05-budget-unsat</a></td><td style="text-align: right">6.56</td><td style="text-align: right">5.16</td><td style="text-align: right">1.271</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/06-layered-dag-cap.lp">shortest-path/v03/06-layered-dag-cap</a></td><td style="text-align: right">10.38</td><td style="text-align: right">6.51</td><td style="text-align: right">1.595</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/07-layered-dag-tight-cap.lp">shortest-path/v03/07-layered-dag-tight-cap</a></td><td style="text-align: right">10.30</td><td style="text-align: right">6.45</td><td style="text-align: right">1.598</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/08-tie-break-under-cap.lp">shortest-path/v03/08-tie-break-under-cap</a></td><td style="text-align: right">6.56</td><td style="text-align: right">5.22</td><td style="text-align: right">1.258</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-03/09-negative-weights.lp">shortest-path/v03/09-negative-weights</a></td><td style="text-align: right">6.52</td><td style="text-align: right">5.19</td><td style="text-align: right">1.257</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/01-basic.lp">shortest-path/v04/01-basic</a></td><td style="text-align: right">6.49</td><td style="text-align: right">5.18</td><td style="text-align: right">1.252</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/02-start-equals-end.lp">shortest-path/v04/02-start-equals-end</a></td><td style="text-align: right">6.59</td><td style="text-align: right">5.12</td><td style="text-align: right">1.286</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/03-before-forces-detour-within-budget.lp">shortest-path/v04/03-before-forces-detour-within-budget</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.19</td><td style="text-align: right">1.261</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/04-ordering-violates-budget.lp">shortest-path/v04/04-ordering-violates-budget</a></td><td style="text-align: right">6.51</td><td style="text-align: right">5.00</td><td style="text-align: right">1.303</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/05-after-and-budget-interact.lp">shortest-path/v04/05-after-and-budget-interact</a></td><td style="text-align: right">6.53</td><td style="text-align: right">5.21</td><td style="text-align: right">1.253</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp">shortest-path/v04/06-layered-dag-ordering-cap</a></td><td style="text-align: right">10.33</td><td style="text-align: right">6.45</td><td style="text-align: right">1.600</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/07-layered-dag-combined.lp">shortest-path/v04/07-layered-dag-combined</a></td><td style="text-align: right">10.32</td><td style="text-align: right">6.48</td><td style="text-align: right">1.591</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/08-tie-break-under-ordering-and-cap.lp">shortest-path/v04/08-tie-break-under-ordering-and-cap</a></td><td style="text-align: right">6.56</td><td style="text-align: right">5.21</td><td style="text-align: right">1.258</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/shortest-path/variant-04/09-negative-weights.lp">shortest-path/v04/09-negative-weights</a></td><td style="text-align: right">6.56</td><td style="text-align: right">5.21</td><td style="text-align: right">1.259</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-01/01-basic.lp">task-allocation/v01/01-basic</a></td><td style="text-align: right">6.53</td><td style="text-align: right">3.92</td><td style="text-align: right">1.668</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-01/02-agent-reuse.lp">task-allocation/v01/02-agent-reuse</a></td><td style="text-align: right">5.23</td><td style="text-align: right">3.90</td><td style="text-align: right">1.341</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-01/03-selective-compatibility.lp">task-allocation/v01/03-selective-compatibility</a></td><td style="text-align: right">6.53</td><td style="text-align: right">3.90</td><td style="text-align: right">1.675</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-01/04-no-compatible-agent-unsat.lp">task-allocation/v01/04-no-compatible-agent-unsat</a></td><td style="text-align: right">5.26</td><td style="text-align: right">3.92</td><td style="text-align: right">1.343</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-01/05-larger-mix.lp">task-allocation/v01/05-larger-mix</a></td><td style="text-align: right">6.52</td><td style="text-align: right">3.90</td><td style="text-align: right">1.673</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-02/01-basic.lp">task-allocation/v02/01-basic</a></td><td style="text-align: right">6.50</td><td style="text-align: right">3.91</td><td style="text-align: right">1.661</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp">task-allocation/v02/02-makespan-tiebreak</a></td><td style="text-align: right">6.60</td><td style="text-align: right">3.91</td><td style="text-align: right">1.688</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-02/03-cost-dominates.lp">task-allocation/v02/03-cost-dominates</a></td><td style="text-align: right">6.50</td><td style="text-align: right">3.92</td><td style="text-align: right">1.657</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-02/04-no-compatible-agent-unsat.lp">task-allocation/v02/04-no-compatible-agent-unsat</a></td><td style="text-align: right">6.48</td><td style="text-align: right">3.92</td><td style="text-align: right">1.653</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-02/05-larger-mix.lp">task-allocation/v02/05-larger-mix</a></td><td style="text-align: right">7.78</td><td style="text-align: right">5.20</td><td style="text-align: right">1.496</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-03/01-basic.lp">task-allocation/v03/01-basic</a></td><td style="text-align: right">6.53</td><td style="text-align: right">3.92</td><td style="text-align: right">1.665</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-03/02-multiple-groups.lp">task-allocation/v03/02-multiple-groups</a></td><td style="text-align: right">6.53</td><td style="text-align: right">5.20</td><td style="text-align: right">1.255</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-03/03-mixed-grouped-ungrouped.lp">task-allocation/v03/03-mixed-grouped-ungrouped</a></td><td style="text-align: right">6.58</td><td style="text-align: right">3.92</td><td style="text-align: right">1.676</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-03/04-incompatible-group-unsat.lp">task-allocation/v03/04-incompatible-group-unsat</a></td><td style="text-align: right">5.23</td><td style="text-align: right">3.90</td><td style="text-align: right">1.341</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-03/05-larger-mix.lp">task-allocation/v03/05-larger-mix</a></td><td style="text-align: right">6.50</td><td style="text-align: right">3.90</td><td style="text-align: right">1.668</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/01-basic.lp">task-allocation/v04/01-basic</a></td><td style="text-align: right">9.00</td><td style="text-align: right">22.74</td><td style="text-align: right">0.396</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/02-precedence.lp">task-allocation/v04/02-precedence</a></td><td style="text-align: right">7.81</td><td style="text-align: right">6.47</td><td style="text-align: right">1.207</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/03-agent-serialization.lp">task-allocation/v04/03-agent-serialization</a></td><td style="text-align: right">7.78</td><td style="text-align: right">24.08</td><td style="text-align: right">0.323</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/04-window-too-tight-unsat.lp">task-allocation/v04/04-window-too-tight-unsat</a></td><td style="text-align: right">6.62</td><td style="text-align: right">5.21</td><td style="text-align: right">1.270</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp">task-allocation/v04/05-larger-mix</a></td><td style="text-align: right">28.74</td><td style="text-align: right">181.34</td><td style="text-align: right">0.159</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-01/01-basic.lp">traveling-salesman/v01/01-basic</a></td><td style="text-align: right">7.92</td><td style="text-align: right">5.30</td><td style="text-align: right">1.495</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-01/02-multiple-tours.lp">traveling-salesman/v01/02-multiple-tours</a></td><td style="text-align: right">6.57</td><td style="text-align: right">5.21</td><td style="text-align: right">1.260</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-01/03-asymmetric.lp">traveling-salesman/v01/03-asymmetric</a></td><td style="text-align: right">7.89</td><td style="text-align: right">5.17</td><td style="text-align: right">1.525</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-01/04-subtour-unsat.lp">traveling-salesman/v01/04-subtour-unsat</a></td><td style="text-align: right">6.57</td><td style="text-align: right">3.94</td><td style="text-align: right">1.668</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-01/05-ring.lp">traveling-salesman/v01/05-ring</a></td><td style="text-align: right">8.18</td><td style="text-align: right">5.19</td><td style="text-align: right">1.575</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-02/01-basic.lp">traveling-salesman/v02/01-basic</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.20</td><td style="text-align: right">1.256</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-02/02-single-salesman.lp">traveling-salesman/v02/02-single-salesman</a></td><td style="text-align: right">6.64</td><td style="text-align: right">5.18</td><td style="text-align: right">1.283</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-02/03-too-many-salesmen-unsat.lp">traveling-salesman/v02/03-too-many-salesmen-unsat</a></td><td style="text-align: right">6.58</td><td style="text-align: right">5.20</td><td style="text-align: right">1.266</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-02/04-equal-cost-split.lp">traveling-salesman/v02/04-equal-cost-split</a></td><td style="text-align: right">6.49</td><td style="text-align: right">5.19</td><td style="text-align: right">1.251</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-02/05-larger-asymmetric.lp">traveling-salesman/v02/05-larger-asymmetric</a></td><td style="text-align: right">6.55</td><td style="text-align: right">5.21</td><td style="text-align: right">1.256</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-02/06-unreachable-edge.lp">traveling-salesman/v02/06-unreachable-edge</a></td><td style="text-align: right">6.58</td><td style="text-align: right">5.19</td><td style="text-align: right">1.268</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-03/01-basic.lp">traveling-salesman/v03/01-basic</a></td><td style="text-align: right">6.50</td><td style="text-align: right">5.16</td><td style="text-align: right">1.259</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-03/02-single-salesman.lp">traveling-salesman/v03/02-single-salesman</a></td><td style="text-align: right">6.57</td><td style="text-align: right">5.20</td><td style="text-align: right">1.263</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-03/03-depot-crossing-unsat.lp">traveling-salesman/v03/03-depot-crossing-unsat</a></td><td style="text-align: right">6.56</td><td style="text-align: right">5.19</td><td style="text-align: right">1.263</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-03/04-equal-cost-split.lp">traveling-salesman/v03/04-equal-cost-split</a></td><td style="text-align: right">6.53</td><td style="text-align: right">5.19</td><td style="text-align: right">1.257</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp">traveling-salesman/v03/05-larger-three-depots</a></td><td style="text-align: right">7.78</td><td style="text-align: right">5.20</td><td style="text-align: right">1.495</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-03/06-unreachable-edge.lp">traveling-salesman/v03/06-unreachable-edge</a></td><td style="text-align: right">6.50</td><td style="text-align: right">3.93</td><td style="text-align: right">1.654</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-04/01-basic.lp">traveling-salesman/v04/01-basic</a></td><td style="text-align: right">7.82</td><td style="text-align: right">5.19</td><td style="text-align: right">1.506</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-04/02-single-salesman.lp">traveling-salesman/v04/02-single-salesman</a></td><td style="text-align: right">7.64</td><td style="text-align: right">5.19</td><td style="text-align: right">1.473</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-04/03-window-too-tight-unsat.lp">traveling-salesman/v04/03-window-too-tight-unsat</a></td><td style="text-align: right">6.51</td><td style="text-align: right">5.19</td><td style="text-align: right">1.254</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-04/04-depot-window-too-tight-unsat.lp">traveling-salesman/v04/04-depot-window-too-tight-unsat</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.20</td><td style="text-align: right">1.259</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-04/05-three-depots-asymmetric-times.lp">traveling-salesman/v04/05-three-depots-asymmetric-times</a></td><td style="text-align: right">8.99</td><td style="text-align: right">5.18</td><td style="text-align: right">1.736</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-04/06-unreachable-edge.lp">traveling-salesman/v04/06-unreachable-edge</a></td><td style="text-align: right">7.79</td><td style="text-align: right">5.19</td><td style="text-align: right">1.501</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-05/01-basic.lp">traveling-salesman/v05/01-basic</a></td><td style="text-align: right">7.63</td><td style="text-align: right">5.18</td><td style="text-align: right">1.474</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-05/02-tight-bound-exact.lp">traveling-salesman/v05/02-tight-bound-exact</a></td><td style="text-align: right">6.55</td><td style="text-align: right">5.20</td><td style="text-align: right">1.258</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-05/03-revisit-too-tight-unsat.lp">traveling-salesman/v05/03-revisit-too-tight-unsat</a></td><td style="text-align: right">6.48</td><td style="text-align: right">5.19</td><td style="text-align: right">1.248</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-05/04-depot-and-vertex-revisits.lp">traveling-salesman/v05/04-depot-and-vertex-revisits</a></td><td style="text-align: right">6.54</td><td style="text-align: right">5.21</td><td style="text-align: right">1.257</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp">traveling-salesman/v05/05-three-depots-mixed</a></td><td style="text-align: right">9.10</td><td style="text-align: right">5.21</td><td style="text-align: right">1.746</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/scenarios/traveling-salesman/variant-05/06-unreachable-edge.lp">traveling-salesman/v05/06-unreachable-edge</a></td><td style="text-align: right">9.11</td><td style="text-align: right">5.19</td><td style="text-align: right">1.754</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-01.lp">n-queens/v01</a></td><td style="text-align: right">12.81</td><td style="text-align: right">5.19</td><td style="text-align: right">2.468</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-02.lp">n-queens/v02</a></td><td style="text-align: right">31.58</td><td style="text-align: right">118.36</td><td style="text-align: right">0.267</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-03.lp">n-queens/v03</a></td><td style="text-align: right">12.93</td><td style="text-align: right">6.48</td><td style="text-align: right">1.996</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-04.lp">n-queens/v04</a></td><td style="text-align: right">7.82</td><td style="text-align: right">6.46</td><td style="text-align: right">1.210</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-05.lp">n-queens/v05</a></td><td style="text-align: right">9.21</td><td style="text-align: right">6.45</td><td style="text-align: right">1.427</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/n-queens/variant-06.lp">n-queens/v06</a></td><td style="text-align: right">9.14</td><td style="text-align: right">6.43</td><td style="text-align: right">1.420</td></tr>
+<tr><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/correctness/standalone/send-money/send-money.lp">send-money/send-money</a></td><td style="text-align: right">12.84</td><td style="text-align: right">11.48</td><td style="text-align: right">1.118</td></tr>
+<tr><td><strong>All 94: sum of per-case medians</strong></td><td style="text-align: right"><strong>729.179</strong></td><td style="text-align: right"><strong>804.916</strong></td><td style="text-align: right"><strong>0.906</strong></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="identity-and-reproduction"><a class="header" href="#identity-and-reproduction">Identity and reproduction</a></h2>
+<p>The measured zetesis binary SHA-256 is <code>d75a5060bb76194d954c022b5a58ff9aa2106e019863b0a75e2113ac71938647</code>; its workspace source-manifest digest is <code>8c4c4499a2f8269b1905ad5357a9b7c9950edca3762ed8903c8b678e87b73d5d</code>. The observations retain individual workspace source, shader, manifest and configuration hashes, and the Cargo.lock identity for pinned dependencies. These hashes identify the measurement independently of a branch or release tag; a rebuilt executable has its own identity.</p>
+<p>From the checkout whose source manifest is being measured, build the tools and use a fresh report destination:</p>
+<pre><code class="language-sh">cargo build --locked --release -p zetesis-cli -p zetesis-bench --all-features --bins
+target/release/zetesis --version
+clingo --version
+target/release/zetesis-bench run examples/correctness \
+  --suite corpus --zetesis "$PWD/target/release/zetesis" \
+  --clingo "$(command -v clingo)" --backend cpu --grounder auto --oracle auto \
+  --threads 14 --clingo-threads 1 --warmups 1 --repetitions 3 --memory-runs 1 \
+  --timeout-seconds 10 --campaign-seconds 600 --report corpus-0.4-candidate.json
+target/release/zetesis-bench compare measured=corpus-0.4-candidate.json \
+  --markdown &gt; corpus-0.4-candidate.md
+</code></pre>
+<p>Use clingo 5.8.2 and the pinned Rust toolchain. Retain the checkout/source hashes, executable hashes and complete generated report with each new run. Stop competing builds and measurements first. A different machine or source produces a new observation; source identity alone does not predict identical timings. The public JSON is a path-free projection of retained evidence, not another measurement or a runner input. Its raw-report digest identifies retained evidence rather than promising a public raw-capture download.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/performance.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/foundation-reuse.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/performance.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/foundation-reuse.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

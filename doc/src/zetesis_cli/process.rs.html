@@ -4,12 +4,12 @@
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>std::process::ExitCode;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>std::time::{Duration, Instant};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>zetesis_presentation::{Streams, color_disabled, terminal_width};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_themelios::{BundleLimits, SourceBundle};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_themelios::SourceBundle;
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// Process adapter. Exit 0 means a completed request; test uses 1 for a
 <a href=#10 id=10 data-nosnippet>10</a>/// completed check with non-passing evidence. Exit 2 is an input/backend/output
-<a href=#11 id=11 data-nosnippet>11</a>/// error, and 3 interrupted search or publication. Satisfiability and coverage are printed
-<a href=#12 id=12 data-nosnippet>12</a>/// independently; this is not clingo's numeric exit-code protocol.
+<a href=#11 id=11 data-nosnippet>11</a>/// error, and 3 interrupted preparation, search or publication. Satisfiability
+<a href=#12 id=12 data-nosnippet>12</a>/// and coverage are printed independently; this is not clingo's numeric exit-code protocol.
 <a href=#13 id=13 data-nosnippet>13</a>/// Standard output is explicitly flushed before returning. A flush failure is
 <a href=#14 id=14 data-nosnippet>14</a>/// an output error, independently of any established semantic outcome.
 <a href=#15 id=15 data-nosnippet>15</a></span><span class="attr">#[must_use]
@@ -229,43 +229,40 @@
 <a href=#229 id=229 data-nosnippet>229</a>    } <span class="kw">else </span>{
 <a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">let </span>bundle = SourceBundle::load_many(
 <a href=#231 id=231 data-nosnippet>231</a>            std::iter::once(<span class="kw-2">&amp;</span>options.input).chain(<span class="kw-2">&amp;</span>options.additional_inputs),
-<a href=#232 id=232 data-nosnippet>232</a>            BundleLimits {
-<a href=#233 id=233 data-nosnippet>233</a>                max_roots: options.max_source_roots,
-<a href=#234 id=234 data-nosnippet>234</a>                max_files: options.max_source_files,
-<a href=#235 id=235 data-nosnippet>235</a>                max_file_bytes: options.max_source_bytes,
-<a href=#236 id=236 data-nosnippet>236</a>                max_total_bytes: options.max_total_source_bytes,
-<a href=#237 id=237 data-nosnippet>237</a>                max_include_depth: options.max_include_depth,
-<a href=#238 id=238 data-nosnippet>238</a>            },
-<a href=#239 id=239 data-nosnippet>239</a>        )
-<a href=#240 id=240 data-nosnippet>240</a>        .map_err(RunError::BundleLoad)<span class="question-mark">?</span>;
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="prelude-val">Ok</span>(Input::Bundle(bundle))
-<a href=#242 id=242 data-nosnippet>242</a>    }
-<a href=#243 id=243 data-nosnippet>243</a>}
-<a href=#244 id=244 data-nosnippet>244</a>
-<a href=#245 id=245 data-nosnippet>245</a><span class="kw">fn </span>read_source(options: <span class="kw-2">&amp;</span>Options) -&gt; io::Result&lt;String&gt; {
-<a href=#246 id=246 data-nosnippet>246</a>    read_text(io::stdin().lock(), options.max_source_bytes)
-<a href=#247 id=247 data-nosnippet>247</a>}
-<a href=#248 id=248 data-nosnippet>248</a>
-<a href=#249 id=249 data-nosnippet>249</a><span class="kw">fn </span>read_text(reader: <span class="kw">impl </span>Read, limit: usize) -&gt; io::Result&lt;String&gt; {
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">let </span>maximum = u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(<span class="number">1</span>);
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">let </span><span class="kw-2">mut </span>source = Vec::new();
-<a href=#252 id=252 data-nosnippet>252</a>    reader.take(maximum).read_to_end(<span class="kw-2">&amp;mut </span>source)<span class="question-mark">?</span>;
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="comment">// Admission counts bytes. Decoding a truncated multibyte character must not
-<a href=#254 id=254 data-nosnippet>254</a>    // replace the already established byte-limit refusal with a UTF-8 error.
-<a href=#255 id=255 data-nosnippet>255</a>    </span><span class="kw">if </span>source.len() &gt; limit {
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(io::Error::new(
-<a href=#257 id=257 data-nosnippet>257</a>            io::ErrorKind::InvalidInput,
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="string">"source byte limit exceeded"</span>,
-<a href=#259 id=259 data-nosnippet>259</a>        ));
-<a href=#260 id=260 data-nosnippet>260</a>    }
-<a href=#261 id=261 data-nosnippet>261</a>    String::from_utf8(source).map_err(|<span class="kw">_</span>| {
-<a href=#262 id=262 data-nosnippet>262</a>        io::Error::new(
-<a href=#263 id=263 data-nosnippet>263</a>            io::ErrorKind::InvalidData,
-<a href=#264 id=264 data-nosnippet>264</a>            <span class="string">"standard input is not valid UTF-8"</span>,
-<a href=#265 id=265 data-nosnippet>265</a>        )
-<a href=#266 id=266 data-nosnippet>266</a>    })
-<a href=#267 id=267 data-nosnippet>267</a>}
-<a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a><span class="attr">#[cfg(test)]
-<a href=#270 id=270 data-nosnippet>270</a></span><span class="kw">mod </span>tests;
+<a href=#232 id=232 data-nosnippet>232</a>            options.resources().bundle_limits(),
+<a href=#233 id=233 data-nosnippet>233</a>        )
+<a href=#234 id=234 data-nosnippet>234</a>        .map_err(RunError::BundleLoad)<span class="question-mark">?</span>;
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="prelude-val">Ok</span>(Input::Bundle(bundle))
+<a href=#236 id=236 data-nosnippet>236</a>    }
+<a href=#237 id=237 data-nosnippet>237</a>}
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a><span class="kw">fn </span>read_source(options: <span class="kw-2">&amp;</span>Options) -&gt; io::Result&lt;String&gt; {
+<a href=#240 id=240 data-nosnippet>240</a>    read_text(
+<a href=#241 id=241 data-nosnippet>241</a>        io::stdin().lock(),
+<a href=#242 id=242 data-nosnippet>242</a>        options.resources().admission_options().max_source_bytes,
+<a href=#243 id=243 data-nosnippet>243</a>    )
+<a href=#244 id=244 data-nosnippet>244</a>}
+<a href=#245 id=245 data-nosnippet>245</a>
+<a href=#246 id=246 data-nosnippet>246</a><span class="kw">fn </span>read_text(reader: <span class="kw">impl </span>Read, limit: usize) -&gt; io::Result&lt;String&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">let </span>maximum = u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(<span class="number">1</span>);
+<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">let </span><span class="kw-2">mut </span>source = Vec::new();
+<a href=#249 id=249 data-nosnippet>249</a>    reader.take(maximum).read_to_end(<span class="kw-2">&amp;mut </span>source)<span class="question-mark">?</span>;
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="comment">// Admission counts bytes. Decoding a truncated multibyte character must not
+<a href=#251 id=251 data-nosnippet>251</a>    // replace the already established byte-limit refusal with a UTF-8 error.
+<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">if </span>source.len() &gt; limit {
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(io::Error::new(
+<a href=#254 id=254 data-nosnippet>254</a>            io::ErrorKind::InvalidInput,
+<a href=#255 id=255 data-nosnippet>255</a>            <span class="string">"source byte limit exceeded"</span>,
+<a href=#256 id=256 data-nosnippet>256</a>        ));
+<a href=#257 id=257 data-nosnippet>257</a>    }
+<a href=#258 id=258 data-nosnippet>258</a>    String::from_utf8(source).map_err(|<span class="kw">_</span>| {
+<a href=#259 id=259 data-nosnippet>259</a>        io::Error::new(
+<a href=#260 id=260 data-nosnippet>260</a>            io::ErrorKind::InvalidData,
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="string">"standard input is not valid UTF-8"</span>,
+<a href=#262 id=262 data-nosnippet>262</a>        )
+<a href=#263 id=263 data-nosnippet>263</a>    })
+<a href=#264 id=264 data-nosnippet>264</a>}
+<a href=#265 id=265 data-nosnippet>265</a>
+<a href=#266 id=266 data-nosnippet>266</a><span class="attr">#[cfg(test)]
+<a href=#267 id=267 data-nosnippet>267</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

@@ -2,7 +2,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">crate</span>::ProgramSite;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">crate</span>::formula_head_aggregate::Bijection;
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>zetesis_ferraris::{AggregateComparison, Node, Theory};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>zetesis_ferraris::{AggregateComparison, FormulaView, NodeView <span class="kw">as </span>Node, Theory};
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use super</span>::{
 <a href=#8 id=8 data-nosnippet>8</a>    CountPlanFailure, CountPlanFailureKind <span class="kw">as </span>Fault, CountPlanResource <span class="kw">as </span>Resource, Outcome,
@@ -16,7 +16,7 @@
 <a href=#16 id=16 data-nosnippet>16</a>    <span class="kw">pub </span>body: usize,
 <a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">pub </span>eligible: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[(usize, usize)],
 <a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">pub </span>bijection: Bijection,
-<a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">pub </span>nodes: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[Node],
+<a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">pub </span>nodes: FormulaView&lt;<span class="lifetime">'a</span>&gt;,
 <a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">pub </span>atom_count: usize,
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub </span>bounds: Bounds,
 <a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub </span>origins: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[ProgramSite],
@@ -164,13 +164,13 @@
 <a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">let </span><span class="kw-2">mut </span>members = <span class="self">self</span>.work.vector(input.eligible.len())<span class="question-mark">?</span>;
 <a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>(head, <span class="kw">_</span>) <span class="kw">in </span>input.eligible {
 <a href=#166 id=166 data-nosnippet>166</a>            <span class="self">self</span>.work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(Node::Atom(atom)) = input.nodes.get(head) <span class="kw">else </span>{
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(Node::Atom(atom)) = input.nodes.node(head) <span class="kw">else </span>{
 <a href=#168 id=168 data-nosnippet>168</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(Fault::SourceMapping);
 <a href=#169 id=169 data-nosnippet>169</a>            };
-<a href=#170 id=170 data-nosnippet>170</a>            <span class="kw">if </span><span class="kw-2">*</span>atom &gt;= input.atom_count {
+<a href=#170 id=170 data-nosnippet>170</a>            <span class="kw">if </span>atom &gt;= input.atom_count {
 <a href=#171 id=171 data-nosnippet>171</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(Fault::SourceMapping);
 <a href=#172 id=172 data-nosnippet>172</a>            }
-<a href=#173 id=173 data-nosnippet>173</a>            members.push(<span class="kw-2">*</span>atom);
+<a href=#173 id=173 data-nosnippet>173</a>            members.push(atom);
 <a href=#174 id=174 data-nosnippet>174</a>        }
 <a href=#175 id=175 data-nosnippet>175</a>        <span class="comment">// Conservative quadratic comparison allowance bounds this small sort;
 <a href=#176 id=176 data-nosnippet>176</a>        // the source group already established uniqueness before this boundary.

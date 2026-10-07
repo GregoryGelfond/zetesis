@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-ferraris/src/atomic_choice.rs`."><title>atomic_choice.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis_ferraris" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_ferraris/</div>atomic_choice.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Pure recognition of one exact atomic-choice head in an admitted DAG.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use crate</span>::{Node, Theory};
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use crate</span>::{NodeView, Theory};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="doccomment">/// Return the semantic atom of `a or not a`, accepting either operand order.
 <a href=#6 id=6 data-nosnippet>6</a>/// Atom nodes may be distinct occurrences of the same semantic index. This
@@ -8,23 +8,38 @@
 <a href=#8 id=8 data-nosnippet>8</a>/// rewriting. Each consumer charges it within its root/producer inspection.
 <a href=#9 id=9 data-nosnippet>9</a>/// Cross-atom alternatives and richer classically equivalent forms decline.
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>atom(theory: <span class="kw-2">&amp;</span>Theory, head: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">let </span>node = theory.nodes()[head];
-<a href=#12 id=12 data-nosnippet>12</a>    <span class="kw">let </span>Node::Or(left, right) = node <span class="kw">else </span>{
+<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">let </span>node = theory.view().node(head).ok()<span class="question-mark">?</span>;
+<a href=#12 id=12 data-nosnippet>12</a>    <span class="kw">let </span>NodeView::Or(operands) = node <span class="kw">else </span>{
 <a href=#13 id=13 data-nosnippet>13</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#14 id=14 data-nosnippet>14</a>    };
-<a href=#15 id=15 data-nosnippet>15</a>    pair(theory, left, right).or_else(|| pair(theory, right, left))
-<a href=#16 id=16 data-nosnippet>16</a>}
-<a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">fn </span>pair(theory: <span class="kw-2">&amp;</span>Theory, positive: usize, negative: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">let </span>node = theory.nodes()[positive];
-<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">let </span>Node::Atom(atom) = node <span class="kw">else </span>{
-<a href=#21 id=21 data-nosnippet>21</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#22 id=22 data-nosnippet>22</a>    };
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span>node = theory.nodes()[negative];
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span>Node::Implies(left, right) = node <span class="kw">else </span>{
-<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#26 id=26 data-nosnippet>26</a>    };
-<a href=#27 id=27 data-nosnippet>27</a>    (theory.nodes()[left] == Node::Atom(atom) &amp;&amp; theory.nodes()[right] == Node::False)
-<a href=#28 id=28 data-nosnippet>28</a>        .then_some(atom)
-<a href=#29 id=29 data-nosnippet>29</a>}
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">if </span>operands.len() != <span class="number">2 </span>{
+<a href=#16 id=16 data-nosnippet>16</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#17 id=17 data-nosnippet>17</a>    }
+<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">let </span>left = operands[<span class="number">0</span>];
+<a href=#19 id=19 data-nosnippet>19</a>    <span class="kw">let </span>right = operands[<span class="number">1</span>];
+<a href=#20 id=20 data-nosnippet>20</a>    pair(theory, left, right).or_else(|| pair(theory, right, left))
+<a href=#21 id=21 data-nosnippet>21</a>}
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">fn </span>pair(theory: <span class="kw-2">&amp;</span>Theory, positive: usize, negative: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span>node = theory.view().node(positive).ok()<span class="question-mark">?</span>;
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">let </span>NodeView::Atom(atom) = node <span class="kw">else </span>{
+<a href=#26 id=26 data-nosnippet>26</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#27 id=27 data-nosnippet>27</a>    };
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">let </span>node = theory.view().node(negative).ok()<span class="question-mark">?</span>;
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">let </span>NodeView::Implies(left, right) = node <span class="kw">else </span>{
+<a href=#30 id=30 data-nosnippet>30</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#31 id=31 data-nosnippet>31</a>    };
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">if </span>!is_atom(theory.view().node(left).ok()<span class="question-mark">?</span>, atom) {
+<a href=#33 id=33 data-nosnippet>33</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#34 id=34 data-nosnippet>34</a>    }
+<a href=#35 id=35 data-nosnippet>35</a>    theory.view().node(right).ok()<span class="question-mark">?</span>.is_false().then_some(atom)
+<a href=#36 id=36 data-nosnippet>36</a>}
+<a href=#37 id=37 data-nosnippet>37</a>
+<a href=#38 id=38 data-nosnippet>38</a><span class="comment">// Finish the slice-bearing node read before the caller branches on its shape.
+<a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">fn </span>is_atom(node: NodeView&lt;<span class="lifetime">'_</span>&gt;, atom: usize) -&gt; bool {
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">match </span>node {
+<a href=#41 id=41 data-nosnippet>41</a>        NodeView::Atom(other) =&gt; other == atom,
+<a href=#42 id=42 data-nosnippet>42</a>        NodeView::False | NodeView::Implies(..) | NodeView::And(<span class="kw">_</span>) | NodeView::Or(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
+<a href=#43 id=43 data-nosnippet>43</a>    }
+<a href=#44 id=44 data-nosnippet>44</a>}
 </code></pre></div></section></main></body></html>

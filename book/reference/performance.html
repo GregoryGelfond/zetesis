@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,6 +186,10 @@ program. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/README
 summarizes the latest complete CPU corpus comparison. The studies below retain
 their own source revisions, workloads and measurement conditions.</p>
 <h2 id="recorded-comparisons"><a class="header" href="#recorded-comparisons">Recorded comparisons</a></h2>
+<p>The <a href="cpu-corpus-20261007.html">7 October 2026 CPU corpus comparison</a> records all
+94 cases for a 0.4.0 release-preparation candidate: 729.179 ms against
+804.916 ms for clingo in summed three-run medians, with 4 native wins.
+Most cases favor clingo; the page preserves every case and the candidate identity.</p>
 <p>The <a href="foundation-reuse.html">grounding and formula preparation comparison</a> measures
 all 94 corpus programs before and after shared preparation, domain and primitive
 changes. Summed grounding time falls about 11%; process time falls about 3%,
@@ -279,15 +283,17 @@ zetesis-bench run --suite scalability --grounder eager \
   --compare-threads 1,2,4,8,14 --repetitions 4 --memory-runs 2 \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 </code></pre>
-<p>Both use ten workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
-three unchanged corpus cases (queens variant 02, SEND+MORE=MONEY and task
-allocation), and the authored Sudoku grid. <code>--include-einstein</code> adds the
-unchanged riddle as an eleventh workload. The test runs complete-family
+<p>Both use fourteen workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
+Mastermind at colors=5/6/8, nested Mastermind at colors=8,
+three unchanged corpus cases (queens variant 02,
+SEND+MORE=MONEY and task allocation), and the authored Sudoku grid.
+<code>--include-einstein</code> adds the unchanged riddle as a fifteenth workload. The test runs complete-family
 qualifications only. The benchmark qualifies clingo once per case, then measures
 each native thread profile separately. Reports retain all refusals and limits;
-the workload’s inclusion is not a scaling claim. <code>--max-expansion-work</code> can set
-an explicit common grounding ceiling when needed, and its value remains part of
-the profile identity. See the <a href="commands.html#check-conformance">command guide</a> for
+the workload’s inclusion is not a scaling claim. <code>--memory</code> sets a common native
+memory allowance and remains part of the profile identity. Historical results
+with explicit work ceilings retain those ceilings in their evidence. See the
+<a href="commands.html#check-conformance">command guide</a> for
 source roots, process bounds and the required new evidence destination.</p>
 <h2 id="read-the-measurements"><a class="header" href="#read-the-measurements">Read the measurements</a></h2>
 <div class="table-wrapper">
@@ -362,7 +368,7 @@ as <code>--report LABEL=PATH</code>, are operands.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/foundation-reuse.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/cpu-corpus-20261007.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -376,7 +382,7 @@ as <code>--report LABEL=PATH</code>, are operands.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/foundation-reuse.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/cpu-corpus-20261007.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -3,8 +3,8 @@
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::fmt;
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use crate</span>::{
-<a href=#6 id=6 data-nosnippet>6</a>    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits, Node,
-<a href=#7 id=7 data-nosnippet>7</a>    Theory, append_aggregate,
+<a href=#6 id=6 data-nosnippet>6</a>    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
+<a href=#7 id=7 data-nosnippet>7</a>    FormulaNodes, NodeView, Theory,
 <a href=#8 id=8 data-nosnippet>8</a>};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zetesis_cpu::{Cancellation, Stop};
 <a href=#10 id=10 data-nosnippet>10</a>
@@ -145,7 +145,7 @@
 <a href=#145 id=145 data-nosnippet>145</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
 <a href=#146 id=146 data-nosnippet>146</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Restriction, RestrictionError&gt; {
 <a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span><span class="kw-2">mut </span>builder = Builder {
-<a href=#148 id=148 data-nosnippet>148</a>            nodes: Vec::new(),
+<a href=#148 id=148 data-nosnippet>148</a>            nodes: FormulaNodes::default(),
 <a href=#149 id=149 data-nosnippet>149</a>            roots: Vec::new(),
 <a href=#150 id=150 data-nosnippet>150</a>            work: <span class="number">0</span>,
 <a href=#151 id=151 data-nosnippet>151</a>            limits,
@@ -165,7 +165,7 @@
 <a href=#165 id=165 data-nosnippet>165</a>}
 <a href=#166 id=166 data-nosnippet>166</a>
 <a href=#167 id=167 data-nosnippet>167</a><span class="kw">struct </span>Builder&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#168 id=168 data-nosnippet>168</a>    nodes: Vec&lt;Node&gt;,
+<a href=#168 id=168 data-nosnippet>168</a>    nodes: FormulaNodes,
 <a href=#169 id=169 data-nosnippet>169</a>    roots: Vec&lt;usize&gt;,
 <a href=#170 id=170 data-nosnippet>170</a>    work: u64,
 <a href=#171 id=171 data-nosnippet>171</a>    limits: RestrictionLimits,
@@ -179,7 +179,7 @@
 <a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RestrictionErrorKind::Atoms);
 <a href=#180 id=180 data-nosnippet>180</a>        }
 <a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">if </span>plan.inconsistent() {
-<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">let </span>falsum = <span class="self">self</span>.node(Node::False)<span class="question-mark">?</span>;
+<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">let </span>falsum = <span class="self">self</span>.node(NodeView::False)<span class="question-mark">?</span>;
 <a href=#183 id=183 data-nosnippet>183</a>            <span class="self">self</span>.root(falsum)<span class="question-mark">?</span>;
 <a href=#184 id=184 data-nosnippet>184</a>        } <span class="kw">else </span>{
 <a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">for </span>group <span class="kw">in </span>plan.consequences() {
@@ -193,7 +193,7 @@
 <a href=#193 id=193 data-nosnippet>193</a>        <span class="self">self</span>.poll()<span class="question-mark">?</span>;
 <a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>theory = Theory::new(
 <a href=#195 id=195 data-nosnippet>195</a>            plan.atom_count(),
-<a href=#196 id=196 data-nosnippet>196</a>            std::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.nodes),
+<a href=#196 id=196 data-nosnippet>196</a>            std::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.nodes).into_parts(),
 <a href=#197 id=197 data-nosnippet>197</a>            std::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.roots),
 <a href=#198 id=198 data-nosnippet>198</a>            <span class="self">self</span>.limits.theory,
 <a href=#199 id=199 data-nosnippet>199</a>        )
@@ -211,7 +211,7 @@
 <a href=#211 id=211 data-nosnippet>211</a>            .try_reserve_exact(members.len())
 <a href=#212 id=212 data-nosnippet>212</a>            .map_err(|<span class="kw">_</span>| RestrictionErrorKind::Stopped(Stop::Allocation))<span class="question-mark">?</span>;
 <a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">for </span><span class="kw-2">&amp;</span>atom <span class="kw">in </span>members {
-<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">let </span>condition = <span class="self">self</span>.node(Node::Atom(atom))<span class="question-mark">?</span>;
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">let </span>condition = <span class="self">self</span>.node(NodeView::Atom(atom))<span class="question-mark">?</span>;
 <a href=#215 id=215 data-nosnippet>215</a>            elements.push(AggregateElement {
 <a href=#216 id=216 data-nosnippet>216</a>                condition,
 <a href=#217 id=217 data-nosnippet>217</a>                weight: <span class="number">1</span>,
@@ -220,9 +220,9 @@
 <a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">let </span>bound = i64::try_from(lower).map_err(|<span class="kw">_</span>| RestrictionErrorKind::Overflow)<span class="question-mark">?</span>;
 <a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let </span><span class="kw-2">mut </span>limits = <span class="self">self</span>.limits.aggregate;
 <a href=#222 id=222 data-nosnippet>222</a>        limits.max_nodes = limits.max_nodes.min(<span class="self">self</span>.limits.theory.max_nodes);
-<a href=#223 id=223 data-nosnippet>223</a>        limits.max_work = limits.max_work.min(<span class="self">self</span>.limits.max_work - <span class="self">self</span>.work);
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>result = append_aggregate(
-<a href=#225 id=225 data-nosnippet>225</a>            <span class="kw-2">&amp;mut </span><span class="self">self</span>.nodes,
+<a href=#223 id=223 data-nosnippet>223</a>        limits.max_operands = limits.max_operands.min(<span class="self">self</span>.limits.theory.max_operands);
+<a href=#224 id=224 data-nosnippet>224</a>        limits.max_work = limits.max_work.min(<span class="self">self</span>.limits.max_work - <span class="self">self</span>.work);
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">let </span>result = <span class="self">self</span>.nodes.append_aggregate(
 <a href=#226 id=226 data-nosnippet>226</a>            <span class="kw-2">&amp;</span>elements,
 <a href=#227 id=227 data-nosnippet>227</a>            AggregateComparison::Ge,
 <a href=#228 id=228 data-nosnippet>228</a>            bound,
@@ -257,29 +257,33 @@
 <a href=#257 id=257 data-nosnippet>257</a>        <span class="prelude-val">Ok</span>(())
 <a href=#258 id=258 data-nosnippet>258</a>    }
 <a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">fn </span>node(<span class="kw-2">&amp;mut </span><span class="self">self</span>, node: Node) -&gt; <span class="prelude-ty">Result</span>&lt;usize, RestrictionErrorKind&gt; {
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">fn </span>node(<span class="kw-2">&amp;mut </span><span class="self">self</span>, node: NodeView&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;usize, RestrictionErrorKind&gt; {
 <a href=#261 id=261 data-nosnippet>261</a>        <span class="self">self</span>.tick()<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">if </span><span class="self">self</span>.nodes.len() == <span class="self">self</span>.limits.theory.max_nodes {
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">if </span><span class="self">self</span>.nodes.parts().nodes().len() == <span class="self">self</span>.limits.theory.max_nodes {
 <a href=#263 id=263 data-nosnippet>263</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RestrictionErrorKind::Nodes);
 <a href=#264 id=264 data-nosnippet>264</a>        }
-<a href=#265 id=265 data-nosnippet>265</a>        <span class="self">self</span>.nodes
-<a href=#266 id=266 data-nosnippet>266</a>            .try_reserve(<span class="number">1</span>)
-<a href=#267 id=267 data-nosnippet>267</a>            .map_err(|<span class="kw">_</span>| RestrictionErrorKind::Stopped(Stop::Allocation))<span class="question-mark">?</span>;
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>index = <span class="self">self</span>.nodes.len();
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="self">self</span>.nodes.push(node);
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="prelude-val">Ok</span>(index)
-<a href=#271 id=271 data-nosnippet>271</a>    }
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">fn </span>root(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), RestrictionErrorKind&gt; {
-<a href=#274 id=274 data-nosnippet>274</a>        <span class="self">self</span>.tick()<span class="question-mark">?</span>;
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">if </span><span class="self">self</span>.roots.len() == <span class="self">self</span>.limits.theory.max_roots {
-<a href=#276 id=276 data-nosnippet>276</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RestrictionErrorKind::Roots);
-<a href=#277 id=277 data-nosnippet>277</a>        }
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="self">self</span>.roots
-<a href=#279 id=279 data-nosnippet>279</a>            .try_reserve(<span class="number">1</span>)
-<a href=#280 id=280 data-nosnippet>280</a>            .map_err(|<span class="kw">_</span>| RestrictionErrorKind::Stopped(Stop::Allocation))<span class="question-mark">?</span>;
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="self">self</span>.roots.push(root);
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="prelude-val">Ok</span>(())
-<a href=#283 id=283 data-nosnippet>283</a>    }
-<a href=#284 id=284 data-nosnippet>284</a>}
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">let </span><span class="kw-2">mut </span>transaction = <span class="self">self</span>.nodes.transaction();
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span>index = transaction
+<a href=#267 id=267 data-nosnippet>267</a>            .push(
+<a href=#268 id=268 data-nosnippet>268</a>                node,
+<a href=#269 id=269 data-nosnippet>269</a>                <span class="self">self</span>.limits.theory.max_nodes,
+<a href=#270 id=270 data-nosnippet>270</a>                <span class="self">self</span>.limits.theory.max_operands,
+<a href=#271 id=271 data-nosnippet>271</a>            )
+<a href=#272 id=272 data-nosnippet>272</a>            .map_err(RestrictionErrorKind::Theory)<span class="question-mark">?</span>;
+<a href=#273 id=273 data-nosnippet>273</a>        transaction.commit();
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="prelude-val">Ok</span>(index)
+<a href=#275 id=275 data-nosnippet>275</a>    }
+<a href=#276 id=276 data-nosnippet>276</a>
+<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">fn </span>root(<span class="kw-2">&amp;mut </span><span class="self">self</span>, root: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), RestrictionErrorKind&gt; {
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="self">self</span>.tick()<span class="question-mark">?</span>;
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">if </span><span class="self">self</span>.roots.len() == <span class="self">self</span>.limits.theory.max_roots {
+<a href=#280 id=280 data-nosnippet>280</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RestrictionErrorKind::Roots);
+<a href=#281 id=281 data-nosnippet>281</a>        }
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="self">self</span>.roots
+<a href=#283 id=283 data-nosnippet>283</a>            .try_reserve(<span class="number">1</span>)
+<a href=#284 id=284 data-nosnippet>284</a>            .map_err(|<span class="kw">_</span>| RestrictionErrorKind::Stopped(Stop::Allocation))<span class="question-mark">?</span>;
+<a href=#285 id=285 data-nosnippet>285</a>        <span class="self">self</span>.roots.push(root);
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="prelude-val">Ok</span>(())
+<a href=#287 id=287 data-nosnippet>287</a>    }
+<a href=#288 id=288 data-nosnippet>288</a>}
 </code></pre></div></section></main></body></html>

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -519,7 +519,7 @@ control of the native session API.</p>
 <h2 id="queries-yes-no-and-unknown"><a class="header" href="#queries-yes-no-and-unknown">Queries: Yes, No and Unknown</a></h2>
 <p>The query API deliberately adopts the <strong>Gelfond–Kahl three-valued reading</strong>:
 Definition 2.2.2 with the authors’ errata, as specified in the
-<a href="https://github.com/GregoryGelfond/themelios/blob/3339a8abed1e00f21e42c2b3ed2677c16248eda5/docs/design/query.md">pinned themelios query design, §2.2</a>.</p>
+<a href="https://github.com/GregoryGelfond/themelios/blob/4c163d0d07cf67180354d9b605e19df2d355529e/docs/design/query.md">pinned themelios query design, §2.2</a>.</p>
 <p><code>Query::of</code> constructs a ground literal query. Within one answer set, a literal
 is true if present, false if its strong contrary is present, and unknown
 otherwise. <code>Query::all</code> forms a conjunction and <code>Query::any</code> a disjunction;
@@ -591,7 +591,13 @@ each question. It does not claim incremental ground-state reuse.</p>
 <h2 id="execution-and-limits"><a class="header" href="#execution-and-limits">Execution and limits</a></h2>
 <p><code>Solver::new(Config)</code> selects grounding, worker count and resource allowances.
 The default worker count comes from the host. This adapter currently executes on
-the CPU; enabling GPU support elsewhere in a Cargo build does not change that.</p>
+the CPU; enabling GPU support elsewhere in a Cargo build does not change that.
+<code>Config::memory</code> determines named preparation, execution and output capacities
+through <code>zetesis_solve::Resources</code>. They are derived when used, so changing the
+allowance does not leave stale defaults in another phase. The library default
+is two GiB. This is not a process RSS cap; independent capacities and untracked
+allocator or thread-stack storage can overlap. Ordinary runs have no selected
+operation-count ceiling.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -600,15 +606,16 @@ the CPU; enabling GPU support elsewhere in a Cargo build does not change that.</
 <tbody>
 <tr><td><code>Auto</code></td><td>Existing adaptive formula preparation, including terminal reconstruction where applicable</td></tr>
 <tr><td><code>Eager</code></td><td>Complete finite formula grounding</td></tr>
-<tr><td><code>Hybrid</code></td><td>Formula producers materialized, eligible constraints instantiated during search</td></tr>
-<tr><td><code>Lazy</code></td><td>Relational templates joined during candidate checking</td></tr>
+<tr><td><code>Lazy</code></td><td>Relational templates joined during candidate checking; outside that profile, formula producers materialized, eligible constraints instantiated during search and terminal definitions reconstructed per answer</td></tr>
 </tbody>
 </table>
 </div>
-<p>The admitted language differs by route. Explicit lazy grounding currently
-accepts the <a href="source.html#admit-an-existing-logical-program">relational profile</a>,
-not arbitrary formula programs. Unsupported input is refused; it is not retried
-under another grounding mode.</p>
+<p>These are the CLI’s <code>--grounder</code> values with the same mapping. Lazy grounding
+joins a program inside the
+<a href="source.html#admit-an-existing-logical-program">relational profile</a> from source;
+a program that profile refuses only for a construct it lacks takes the lazy
+formula route instead. Every other refusal, such as a resource ceiling, is
+returned; it is not retried under another grounding mode.</p>
 <p>Use <code>Agent::solve_with</code> and <code>SolveOptions</code> for a time budget. The deadline covers
 grounding, search and delivery, including time between reads. Enforcement is
 cooperative and depends on timer scheduling. <code>Agent::interrupt()</code> provides cancellation for an in-flight

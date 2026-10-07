@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["GroundingMode","SolveStage"],"struct":["StageMeasurement","StageRecorder","StageSpan","StageTimings"]};
+window.SIDEBAR_ITEMS = {"enum":["GroundingMode","SolveStage","TerminalBaseMark"],"struct":["StageMeasurement","StageRecorder","StageSpan","StageTimings"]};

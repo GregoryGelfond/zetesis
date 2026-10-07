@@ -3,14 +3,17 @@
 // ANCHOR: example
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
-    AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
-    models_reduct,
+    AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict,
+    check, models, models_reduct,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let theory = Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+            vec![],
+        )?,
         vec![2],
         AdmissionLimits::default(),
     )?;

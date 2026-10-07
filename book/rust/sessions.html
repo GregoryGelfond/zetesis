@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -269,6 +269,31 @@ shared execution, before allocating its pool or initializing candidates.
 Formula and device execution do not inherit this unused reservation. With valid
 policies, an already cancelled request stops before executor resource checks
 and allocation; an incompatible policy remains a setup error.</p>
+<p>For ordinary resource policy, derive preparation and execution settings together:</p>
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span><span class="boring">extern crate zetesis_solve;
+</span><span class="boring">extern crate zetesis_themelios;
+</span>use std::num::NonZeroUsize;
+use zetesis_solve::Resources;
+
+let resources = Resources::new(512 * 1024 * 1024, NonZeroUsize::new(4).unwrap());
+let input = zetesis_themelios::admit_formula(
+    "1 { a; b } 1.".into(),
+    resources.admission_options(),
+    resources.expansion_limits(),
+    resources.formula_limits(),
+)?;
+let config = resources.solve_config();
+assert_eq!(config.workers.get(), 4);
+<span class="boring">let _ = input;
+</span><span class="boring">Ok::&lt;(), Box&lt;dyn std::error::Error&gt;&gt;(())
+</span><span class="boring">}</span></code></pre>
+<p>This policy derives named storage capacities from memory and keeps work as
+checked statistics without a selected operation-count cutoff. The independent
+capacities are not a global resident-memory guarantee. Explicit limit fields
+remain available when an embedding needs a bounded operation; optional analyses
+and device dispatches also retain internal effort bounds.</p>
 <h2 id="pulling-and-stopping"><a class="header" href="#pulling-and-stopping">Pulling and stopping</a></h2>
 <p><code>Session</code> is a fused iterator of <code>Result&lt;AnswerSet, SolveFailure&gt;</code>. Each
 privately constructed <code>AnswerSet</code> retains its original <code>Subject</code>, complete interpretation and optional
@@ -503,8 +528,8 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </code></pre>
 <p><code>SolveConfig::constraints</code> supplies cumulative <code>ConstraintCheckLimits</code> for that
 session: charged work, substitutions and structural-capture reservations. The
-retained <code>max_scalar_bytes</code> field bounds requested capture-delta bytes; those
-cells borrow canonical terms. Flat binding copies retain IDs and frozen
+retained <code>max_scalar_bytes</code> field bounds requested capture-delta capacity growth;
+each join reuses those cells, which borrow canonical terms. Flat binding copies retain IDs and frozen
 constructor lookup reuses admitted terms, so neither adds a scalar-byte charge.
 Their physical storage remains under the admitted support allowance. The
 <code>scalar_bytes</code> receipt is cumulative reserved bytes, not live capacity or RSS.
@@ -695,15 +720,25 @@ can record into the same scope without entering the solver’s private state.
 Each formula session imports only new cumulative timing work, so repeated
 snapshots cannot count it again. Measurements never establish semantic coverage.</p>
 <p>For terminal definitions, <code>GroundingMode::EagerBaseTerminalDefinitions</code> identifies
-eager base materialization followed by host reconstruction during solving. A
-grounding interval covers the base, not the complete original theory. The
+eager base materialization followed by host reconstruction during solving, and
+<code>GroundingMode::HybridBaseTerminalDefinitions</code> a hybrid base — an eager producer
+core whose eligible constraints are streamed — followed by the same
+reconstruction. The route supplies the base’s kind (<code>TerminalBaseMark</code>), so the
+mode does not depend on whether admission was observed. A grounding interval
+covers the base (for a hybrid base, its core), not the complete original theory. The
 <code>AnswerReconstruction</code> phase records attempted extensions, including refusals;
 <code>terminal_execution()</code> separately records consumed base answers, completed
-original answers and an unfinished attempt. Its accepted work includes source
-admission and remains distinct from base search work. These counters are
+original answers and an unfinished attempt. Its accepted work totals include
+source admission and remain distinct from base search work; it also reports
+admission’s charge, the per-answer allowance each reconstruction may use, the
+latest call’s accepted charge and the componentwise peak of accepted charges. These counters are
 available without timing instrumentation. CLI phase schema 4 introduced
 <code>answer_reconstruction</code>; schema 5 adds <code>model_construction</code>. Maintained readers
 accept schemas 1–4 without inventing measurements absent from older records.</p>
+<p>Reconstruction prepares immutable rule patterns on its first attempted answer.
+The first call includes that preparation work; later calls reuse the patterns
+but still account for their retained storage. Truth selections, bindings and
+cursors remain private to each answer. Per-answer allowances are unchanged.</p>
 <p>Formula sessions prepare one semantic ordering of their fixed atom catalog.
 Each verified interpretation selects positions through this ordering before
 scoring or output. The catalog remains the authority for atom contents; ranks
@@ -711,11 +746,19 @@ are an execution view, not a second atom store or a cross-catalog identity.
 CPU and device membership paths use the same model construction.</p>
 <p><code>SemanticOutcome::model_construction()</code> retains accepted work, prepared rank
 capacity, peak construction metadata and completed model count, even without
-timing instrumentation. <code>SolveConfig::max_model_work</code> bounds cumulative ordering
-and selection work; <code>max_model_bytes</code> bounds prepared ranks plus active
-construction metadata. This byte scope excludes the borrowed catalog and earlier
-models, whose owners account for their storage separately. The limits default
-to one billion operations and 64 MiB; <code>for_allowance</code> scales only the byte limit.
+timing instrumentation. <code>SolveConfig::max_model_work</code> bounds each selection’s
+work; one-time order preparation has a separate allowance of the same size.
+Every attempt starts with its own full allowance, while the receipt retains
+accepted work cumulatively, including failed attempts. A refused operation is
+not charged. Overflow of the cumulative work or completed-model counter is a
+<code>SolveError::ModelStatisticsOverflow</code>, before an unrecorded operation or model
+can be published. The work interruption’s proposed count is local to the
+refused preparation or selection; JSON’s <code>required</code> carries that count, while
+<code>statistics.model_construction.work</code> remains cumulative. <code>max_model_bytes</code>
+bounds prepared ranks plus active construction metadata. This byte scope excludes the borrowed catalog and earlier
+models, whose owners account for their storage separately. Ordinary policy
+derives the byte capacity from memory and uses the work counter’s representation
+maximum. A library caller can select a smaller work allowance explicitly.
 Cancellation or either bound interrupts enumeration with a typed reason. It does
 not turn a verified but unconstructed answer into a published model, establish
 UNSAT, or prove an incumbent optimal.</p>

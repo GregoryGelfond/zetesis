@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -264,7 +264,7 @@ matters. The reduct remains the criterion for accepting an answer.</p>
 <tr><td><code>--threads auto</code></td><td>The host’s available parallelism; one if availability is unknown.</td></tr>
 <tr><td><code>--grounder auto</code></td><td>Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly.</td></tr>
 <tr><td><code>--time-limit DURATION</code></td><td>No deadline when omitted; accepts whole seconds or <code>s</code>, <code>m</code>, <code>h</code>.</td></tr>
-<tr><td><code>--memory-budget SIZE</code></td><td>Host-based allowance for named storage; accepts bytes or <code>B</code>, <code>KiB</code>, <code>MiB</code>, <code>GiB</code>, <code>TiB</code>.</td></tr>
+<tr><td><code>--memory SIZE</code></td><td>Host-based allowance for named storage; accepts bytes or <code>B</code>, <code>KiB</code>, <code>MiB</code>, <code>GiB</code>, <code>TiB</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -275,18 +275,23 @@ definitions from each verified base answer. It returns full original answers;
 Explicit <code>--grounder eager</code> still requests complete materialization.</p>
 <p>For a formula input, explicit <code>--grounder lazy</code> selects CPU hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. This hybrid profile is separate from
-automatic terminal-definition reconstruction. It runs on the CPU backend, uses indexed
-joins and refuses objective declarations and table joins. Relational lazy
+checked from their admitted source families. Certified terminal definitions are
+deferred too, and reconstructed from each accepted base answer, as automatic
+admission does over an eager base. It runs on the CPU backend, uses indexed
+joins and refuses objective declarations and table joins.</p>
+<p>The three grounders: <code>eager</code> instantiates every rule before solving; <code>lazy</code>
+instantiates on demand wherever admitted — relational source joins, or the
+hybrid formula schedule with terminal definitions deferred; <code>auto</code> admits
+relational source joins where it can, and otherwise instantiates an eager base
+and defers certified terminal definitions. Relational lazy
 closure retains its existing CPU and device routes.</p>
 <p>Hybrid statistics distinguish retained-core models from original answers accepted
-after complete constraint checks. The existing source work, substitution and
-scalar-byte options also set separate cumulative ceilings for constraint replay;
-admission and replay do not share one remaining allowance. A stopped check is
-incomplete, never an accepted answer or an UNSAT result.</p>
+after complete constraint checks. Checks observe the solve’s cancellation token
+and memory policy. Work and substitution counts remain available in statistics.
+A stopped check is incomplete, never an accepted answer or an UNSAT result.</p>
 <pre><code class="language-sh">zetesis solve program.lp --backend cpu --threads 4
 zetesis solve program.lp --backend metal --grounder eager --all
-zetesis solve program.lp --time-limit 30s --memory-budget 4GiB
+zetesis solve program.lp --time-limit 30s --memory 4GiB
 </code></pre>
 <p>An explicit positive thread count overrides this default. The thread setting
 selects the applicable host search or closure pool. General GPU execution also
@@ -302,20 +307,19 @@ The <a href="../architecture/execution.html">execution chapter</a> explains each
 immediate stop; blocking input, frontend operations and a running device kernel
 cannot be preempted. Bare numeric durations retain their historical meaning in
 seconds. Fractional values and overflowing unit conversions are rejected.</p>
-<p>The memory allowance defaults to half of reported physical memory, with a
-minimum of two GiB; an unavailable reading falls back to two GiB. It scales
-specified session storage ceilings, not every allocation. Fixed admission/output
-limits and work/count limits retain their own defaults. This allowance is not
-a process RSS cap. Advanced help identifies which bytes each ceiling counts.
-Closure workers share a collective storage ceiling: increasing <code>--threads</code>
-reduces each worker’s default share. Use an explicit thread count to balance
-parallelism with memory per worker.</p>
-<p>Formula model construction has separate controls: <code>--max-model-work</code> bounds
-cumulative preparation of atom order and construction of selected models;
-<code>--max-model-bytes</code> bounds prepared ranks and active construction metadata.
-Catalog storage and retained answer families remain under their own owners.
-Work defaults to one billion operations. The byte default is 64 MiB before
-scaling by the memory allowance; an explicit byte override is not scaled.</p>
+<p>The public resource controls are <code>--threads</code>, <code>--memory</code> and the optional
+<code>--time-limit</code>. The memory allowance defaults to half of reported physical
+memory, with a minimum of two GiB; an unavailable reading falls back to two GiB.
+It determines named capacities for source loading, grounding, solving and
+output. These capacities do not cover every allocation and can overlap;
+the allowance is not a process RSS cap. Closure workers share a collective
+capacity, so increasing <code>--threads</code> reduces each worker’s share.</p>
+<p>Ordinary execution has no selected operation-count or grounding-round ceiling.
+Work counters remain available through <code>--stats</code>; counter overflow and storage
+failures remain checked. Optional analyses and GPU dispatches retain internal
+effort bounds. An optional analysis can decline its optimization; a device may
+refuse a dispatch that cannot perform its mandatory setup within its capacity.
+Explicit bounded library operations remain available for testing and embedding.</p>
 <pre><code class="language-sh">zetesis help solve --advanced
 </code></pre>
 <p>Reaching a resource limit or deadline leaves the affected operation incomplete.
@@ -371,8 +375,8 @@ steps, rule traversal, variants, domain guards and subsequent producer selection
 <p>Subtracting these subtotals from construction work leaves plan preparation,
 initial scheduling, snapshot/query preparation and round control. Preparation
 before this build and later completed-support query setup are outside the total.
-These are accepted charges against the formula work limit, not durations or
-expansion-budget units. Failed and unwinding operations retain their accepted
+These are accepted formula-work charges, not durations or source-expansion
+counts. Failed and unwinding operations retain their accepted
 prefix; a refused charge itself is excluded. A partial count does not establish
 completed support. The existing public phase sequence is unchanged.</p>
 <pre><code class="language-sh">zetesis solve program.lp --all --stats
@@ -415,12 +419,13 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository’s maintained
-58-test physical qualification suite.</p>
+59-test physical qualification suite.</p>
 <p>Corpus and backend checks accept every backend: <code>--backend cpu</code> (the default),
 <code>gpu</code>, <code>metal</code> or <code>vulkan</code>. GPU corpus checks request the eager general formula
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.</p>
-<p><code>test scalability</code> uses the same ten workloads as <code>zetesis-bench run --suite scalability</code>: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
+<p><code>test scalability</code> uses the same fourteen workloads as <code>zetesis-bench run --suite scalability</code>: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
+authored Mastermind at colors=5/6/8, nested Mastermind at colors=8,
 unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
 Sudoku grid. It checks one
 complete clingo family and one native family per requested thread count, with
@@ -430,7 +435,8 @@ counts default to <code>1,2,4,8,14</code>; one through eight profiles, each at m
 threads, are admitted. The positional corpus root defaults to
 <code>examples/correctness</code>, and <code>--examples</code> defaults to <code>examples</code>. Both must come
 from the maintained checkout. <code>--include-einstein</code> adds the unchanged Einstein
-riddle as an eleventh workload; <code>--max-expansion-work</code> supplies an explicit native grounding ceiling.
+riddle as a fifteenth workload. <code>--memory</code> applies one native memory allowance
+to each requested thread profile.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in <code>--report NEW.json</code>.
 Amended inputs use the complete reference family rather than the original
@@ -438,8 +444,8 @@ default-size model count. A refusal or timeout remains a nonpass.</p>
 <p>The scalability workflow requires Linux or macOS for bounded child capture.
 Its overall scheduling deadline defaults to 1,800 seconds, adjustable with
 <code>--campaign-seconds</code>; cumulative captures and serialized evidence are separately
-bounded by <code>--total-capture-bytes</code> and <code>--report-bytes</code>. It never raises a native
-work ceiling or replaces an incomplete case to finish the population.</p>
+bounded by <code>--total-capture-bytes</code> and <code>--report-bytes</code>. It never replaces an
+incomplete case to finish the population.</p>
 <p><code>test backend</code> currently requires Linux or macOS for bounded child-process
 capture. On other platforms it reports the unavailable capture capability as a
 nonpass. <code>test corpus</code> has a separate portable direct-child capture path; that
@@ -500,7 +506,7 @@ bound to the protocols and identities in the <a href="performance.html">performa
 <p>File-first invocations remain accepted, including <code>zetesis program.lp --models 0</code>.
 Their missing-input default remains standard input, and their existing statistics
 records are preserved. Prefer explicit <code>solve</code> in new scripts. The old flags
-<code>--workers</code> and <code>--memory</code> remain aliases for <code>--threads</code> and <code>--memory-budget</code>;
+<code>--workers</code> and <code>--memory-budget</code> remain aliases for <code>--threads</code> and <code>--memory</code>;
 <code>--models 0</code> maps to <code>--all</code>, and positive <code>--models N</code>
 maps to <code>--answers N</code>. Conflicting answer-selection flags are rejected.</p>
 <p><code>--help-all</code> remains an alias for full solve help. Historical measurement recipes

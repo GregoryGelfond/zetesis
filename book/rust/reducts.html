@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,22 +183,28 @@
                         <h1 id="working-with-finite-reducts"><a class="header" href="#working-with-finite-reducts">Working with finite reducts</a></h1>
 <p><code>zetesis-ferraris</code> accepts an already finite formula DAG. Every edge refers to a
 preceding node. Roots are the formulas asserted by the theory; their conjunction
-is the semantic input. <code>Theory::new</code> checks this shape and transfers the vectors
-without grounding or searching.</p>
+is the semantic input. <code>FormulaParts</code> owns the node vector and operand arena
+as one pair. Two-child conjunctions and disjunctions use inline pairs; wider
+rows refer to the arena. <code>Theory::new</code> checks the complete shape and transfers
+both buffers with the roots, without grounding or searching. Semantic inspection
+uses <code>theory.view().node(index)</code> to borrow the entire <code>NodeView</code> operand row.</p>
 <p>Here atom indices <code>0</code> and <code>1</code> denote <code>a</code> and <code>b</code>. The theory is <code>a | b.</code>.
 The candidate <code>{a,b}</code> satisfies the theory but has a proper-subset reduct model:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_cpu;
 </span><span class="boring">extern crate zetesis_ferraris;
 </span>use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
-    AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
-    models_reduct,
+    AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict,
+    check, models, models_reduct,
 };
 
 fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let theory = Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+            vec![],
+        )?,
         vec![2],
         AdmissionLimits::default(),
     )?;
@@ -245,8 +251,9 @@ Its exhaustive subset enumeration is useful for small exact checks and reference
 comparisons; use the ordinary session for the composed native search.</p>
 <h2 id="preserve-the-subject"><a class="header" href="#preserve-the-subject">Preserve the subject</a></h2>
 <p>An <code>Interpretation</code> belongs to one immutable <code>Theory</code>. Cloning the theory shares
-identity. Independently constructing equal node lists produces another identity,
-and passing an interpretation from it returns <code>Stop::WrongProgram</code>.</p>
+identity. Independently constructing equal paired formula storage produces
+another identity, and passing an interpretation from it returns
+<code>Stop::WrongProgram</code>.</p>
 <p><code>Interpretation::try_clone</code> copies the packed words while sharing that exact
 theory owner. It takes O(ceil(U/64)) time and owned words for a universe of U
 atoms, reports allocation failure, and neither evaluates formulas nor owns a
@@ -284,14 +291,17 @@ evaluation storage, while the candidate and mask remain immutable. A wrong
 theory, cancellation or resource stop leaves the frozen value reusable. A new
 candidate requires another freeze.</p>
 <h2 id="cost-and-limits"><a class="header" href="#cost-and-limits">Cost and limits</a></h2>
-<p>Formula evaluation walks the topological nodes and asserted roots. The current
+<p>Formula evaluation walks the topological nodes, every child occurrence and
+asserted roots. The current
 <code>models_reduct</code> convenience operation evaluates the candidate and tested
 interpretation on each call, under one combined work budget. A caller must
 account for that repeated work.</p>
-<p>For <code>N</code> nodes, <code>FrozenReduct::new</code> charges <code>N</code> node evaluations and retains <code>N</code>
-Boolean values, borrowing the candidate’s packed words. A query charges <code>N</code>
-node evaluations plus root tests through the first false root, and uses <code>N</code>
-temporary Boolean values. Construction and each query have independent limits;
+<p>For <code>N</code> nodes and <code>E</code> logical child occurrences, <code>FrozenReduct::new</code> charges
+<code>N + E</code> operations and retains <code>N</code> Boolean values, borrowing the candidate’s
+packed words. Duplicate children count separately, including both children of
+an inline pair or implication. A query charges <code>N + E</code> operations plus root
+tests through the first false root, and uses <code>N</code> temporary Boolean values.
+Construction and each query have independent limits;
 those per-call budgets do not establish a cumulative campaign bound. Neither
 operation consumes a subset budget.</p>
 <p><code>Limits::max_work</code> bounds charged operations; <code>max_subsets</code> bounds the reference

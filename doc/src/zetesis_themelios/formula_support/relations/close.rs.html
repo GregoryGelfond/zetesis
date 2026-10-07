@@ -77,7 +77,7 @@
 <a href=#77 id=77 data-nosnippet>77</a>}
 <a href=#78 id=78 data-nosnippet>78</a><span class="kw">impl </span>SourceCloseFailure {
 <a href=#79 id=79 data-nosnippet>79</a>    <span class="comment">// The uncommon failure owns its cause off the successful close path.
-<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">fn </span>new(failure: FormulaFailure, peak_bytes: u128) -&gt; <span class="self">Self </span>{
+<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(failure: FormulaFailure, peak_bytes: u128) -&gt; <span class="self">Self </span>{
 <a href=#81 id=81 data-nosnippet>81</a>        <span class="self">Self </span>{
 <a href=#82 id=82 data-nosnippet>82</a>            failure: Box::new(failure),
 <a href=#83 id=83 data-nosnippet>83</a>            peak_bytes,
@@ -104,7 +104,7 @@
 <a href=#104 id=104 data-nosnippet>104</a>}
 <a href=#105 id=105 data-nosnippet>105</a>
 <a href=#106 id=106 data-nosnippet>106</a><span class="kw">impl </span>SupportCatalog {
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">fn </span>into_closed(
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>into_closed(
 <a href=#108 id=108 data-nosnippet>108</a>        <span class="self">self</span>,
 <a href=#109 id=109 data-nosnippet>109</a>        external_bytes: u128,
 <a href=#110 id=110 data-nosnippet>110</a>        work: GroundingWork&lt;<span class="lifetime">'_</span>&gt;,

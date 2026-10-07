@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c288a928.js";
+            window.path_to_searchindex_js = "../searchindex-86489835.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-53ba9757.js"></script>
+        <script src="../toc-1ecb55d0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1034,6 +1034,16 @@ cargo run --locked -p zetesis --example book-program
 same consuming operation. Use <code>PreparedInput::formula</code> for the first result and
 <code>PreparedInput::terminal</code> for the second. The terminal session accepts automatic
 grounding and reconstructs full answers before applying original observations.</p>
+<p><code>PreparedFormula::ground_lazy()</code> (and its bundle counterpart) defers the same
+certified definitions over a hybrid base: the base’s producer core is
+instantiated and its eligible integrity constraints are streamed, even when none
+is eligible. It returns <code>FormulaMaterialization::Complete(HybridFormula)</code> when
+nothing is deferred. A terminal owner’s <code>base()</code> says which base it has; a
+hybrid base’s session checks each core answer against the streamed constraints
+before reconstructing it, runs under automatic or lazy grounding on the CPU, and
+refuses an eager request. <code>zetesis_solve::ground_formula</code> and <code>ground_bundle</code>
+map a requested grounder to its materialization — <code>eager</code> to <code>ground</code>, <code>lazy</code> to
+<code>ground_lazy</code>, <code>auto</code> to <code>ground_adaptive</code> — as the CLI and the facade do.</p>
 <p>A terminal definition has a positive, flat body and an ordinary head whose
 predicate is read by no logical rule or constraint. All producers must qualify;
 strong-negation coherence, objectives and explicit projection are checked before
@@ -1055,8 +1065,13 @@ composition, <code>reconstruction()</code> returns an independent cursor whose
 That lower-level operation checks exact catalog ownership, not base stability;
 the ordinary session supplies the verified-base premise.</p>
 <p>The cursor borrows canonical terms and uses private binding and row-selection
-metadata. Each call starts with exactly the supplied true rows. Its cumulative
-work and substitutions include source admission and earlier calls. A refusal
+metadata. Each call starts with exactly the supplied true rows and may charge
+the cursor’s per-answer allowance of work and substitutions — the headroom the
+formula ceilings left after source admission — whatever earlier calls used; a
+work or substitution refusal reports that allowance as its limit and the call’s
+requested charge as observed; the receipts’ <code>latest</code> is the call’s accepted
+charge. <code>statistics()</code> reports the session totals, admission’s
+charge, the allowance, the latest call and the largest call. A refusal
 fuses the cursor without invalidating prior returned models. Retained model
 families have their own consumer-side memory limits. These named capacities are
 not process RSS, and the checked mathematical extension law is not yet a proof
@@ -1144,8 +1159,11 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </code></pre>
 <h2 id="stream-ordinary-constraints"><a class="header" href="#stream-ordinary-constraints">Stream ordinary constraints</a></h2>
 <p><code>PreparedFormula::ground_hybrid()</code> and the corresponding bundle method return
-one shared <code>HybridFormula</code>. It retains the original source, complete possible
-support and typed atom catalog. Producers and constraints with aggregates,
+one shared <code>HybridFormula</code>. It retains the original source, the typed atom
+catalog and, when any constraint is streamed, the closed canonical base with the
+possible-support relations those constraints read; discovery and order indexes
+and every other relation are released at admission. Closing is charged as
+formula work, and its transient peak is admitted against <code>max_support_bytes</code>. Producers and constraints with aggregates,
 projected atoms or conditional scopes remain in <code>core_theory()</code>. Ordinary
 atom/scalar integrity constraints retain their prepared templates instead of
 complete formula DAGs. This first schedule requires indexed joins and refuses
@@ -1165,8 +1183,14 @@ substitute for owner identity.</p>
 <p><code>check_region(&amp;theory, &amp;region, &amp;cancellation)</code> requires the exact retained core
 and a region spanning its dense atom catalog. A certainly true constraint body
 returns <code>Refuted { site }</code>; otherwise it returns <code>NotRefuted</code>, which does
-not assert satisfaction. The checker prepares and reuses a typed atom index and
-support-row correspondence on first region use. Region checks select known-held
+not assert satisfaction. On first region use a checker borrows the core’s typed
+atom index (a <code>CatalogIndex</code>) and the core’s support-row positions in that
+catalog. The first checker to need each builds it; every later checker of the
+same core, on any thread, borrows it for one unit of work and pairs the
+positions with its own occurrence maps in work proportional to the number of
+kept predicates. Checkers racing on a first use may each build, and one result
+is kept; a refused build keeps nothing. Each checker’s support ledger counts the
+shared structures’ retained bytes, as it counts the shared support base. Region checks select known-held
 positive rows before binding, while retaining rows without a known correspondence.
 A necessary signed-predicate test can avoid a template that cannot have a sure
 body. Neither operation changes the final full-model check or arithmetic admission.
@@ -1184,20 +1208,28 @@ before the hybrid owner is returned, independently of later candidate truth.
 Omitted zero-divisor instances therefore retain the same located warnings, and
 candidate filtering cannot conceal fatal arithmetic.</p>
 <p>Hybrid admission preserves its original expansion-budget prefix. It also keeps
-prepared constraint plans and completed support that eager grounding can release
-after emission. The existing source, scalar and support ceilings still apply;
+prepared constraint plans and the support relations they read, which eager
+grounding can release after emission, and, once a region check has used them,
+the core’s typed atom index (two integer orders over the core’s atoms) and the
+kept support rows’ positions in it. The existing source, scalar and support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
 atom guards. <code>streamed_templates()</code> counts lowered templates, including pool
 alternatives, and <code>streamed_instances()</code> counts scalar-selected instances visited
 during admission; neither is a retained instance store.</p>
-<p><code>checker(limits)</code> has its own cumulative work and substitution limits, plus a
-byte allowance for structural capture deltas. ID-only copies and lookups do not
-consume that byte allowance.
+<p><code>checker(limits)</code> gives each check its own work and substitution limits, plus a
+byte allowance for structural capture-delta capacity growth within each join:
+the first check’s allowance also
+covers the checker’s preparation, and each later check is measured from the
+charges accepted when the previous one ended. The limits bound the work spent
+on one candidate, never the number of candidates. A refusal reports the check’s
+own allowance as its limit. ID-only copies and lookups do not consume the byte
+allowance.
 For parallel composition, create <code>ConstraintAllowance::new(limits)</code> and
 use <code>checker_with_allowance(&amp;allowance, &amp;cancellation)</code> for every worker and final
-checker. Its clones share before-operation charges; no allowance is multiplied
-by the worker count. <code>allowance.statistics()</code> is exact after those workers join;
+checker. Each check of each checker gets <code>limits</code>; the clones share one
+cumulative receipt of every accepted charge, and no limit is multiplied by the
+worker count. <code>allowance.statistics()</code> is exact after those workers join;
 live fields are independently observed monotone counters. Snapshot descriptors
 are prepared once per checker, without copying support rows; per-operation
 binding/storage ceilings remain those of the admitted source. A new checker
@@ -1248,9 +1280,11 @@ before preparation. The default is 128 MiB for the support authority’s canonic
 payload, identity indexes and current prefix, plus relation metadata, postings,
 borrowed snapshots, query capacity and construction scratch. Canonical support
 payload is counted by its authority once. Allocator/tree/control-runtime overhead
-and unrelated grounding state remain separate; this is not a total-memory bound. The CLI exposes the same
-allowance as <code>--max-support-bytes</code> in <code>--help-all</code>. This is an admission limit;
-<code>SolveConfig</code> applies after the formula owner has already been constructed.</p>
+and unrelated grounding state remain separate; this is not a total-memory bound.
+For the ordinary resource policy, use <code>zetesis_solve::Resources</code> to derive
+admission, expansion, formula and session settings from one memory allowance
+and thread count. The CLI uses this same policy. <code>SolveConfig</code> alone applies
+after the formula owner has already been constructed.</p>
 <p>Choose positive joins separately through the preparation’s
 <code>with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })</code> method.
 The default <code>Indexed</code> strategy probes existing value postings. After a flat
@@ -1308,10 +1342,13 @@ values into its own relation dictionaries, whose local IDs are not source term
 IDs. This avoids rebuilding typed values during guard preparation. Candidate
 metadata remains bounded by charged work outside the support-byte allowance;
 canonical payload and guard workspace retain their separate storage accounting.</p>
-<p>This complete example compares admitted atoms, nodes, roots and provenance,
-observes an actual typed <code>Analysis</code> and positive guard activity, and checks both
-local widening and a stopped analysis. It materializes theories without solving
-for answer sets or measuring elapsed time.</p>
+<p>This complete example compares admitted atoms, nodes, operand storage, roots
+and provenance, observes an actual typed <code>Analysis</code> and positive guard activity,
+and checks both local widening and a stopped analysis. Its connected join order
+is <code>a</code>, <code>c</code>, <code>b</code>: guards reduce final-rule probes from thirteen to seven by
+skipping empty postings, while both routes offer sixteen rows. Six rows are
+rejected during completion and six during final instantiation. The example
+materializes theories without solving for answer sets or measuring elapsed time.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate themelios_base;
 </span><span class="boring">extern crate zetesis_domain;
 </span><span class="boring">extern crate zetesis_themelios;
@@ -1339,6 +1376,7 @@ struct Observation {
     status: Cell&lt;Option&lt;Status&gt;&gt;,
     unknown_argument: Cell&lt;bool&gt;,
     work: Cell&lt;GroundingWork&gt;,
+    final_rule: Cell&lt;Option&lt;GroundingWork&gt;&gt;,
 }
 impl GroundingObserver for Observation {
     fn enter(&amp;self) {}
@@ -1362,12 +1400,15 @@ impl GroundingObserver for Observation {
 
     fn phase_exit(
         &amp;self,
-        _: GroundingPhase,
+        phase: GroundingPhase,
         _: Option&lt;ProgramSite&gt;,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {
         self.work.set(self.work.get().checked_sum(work));
+        if phase == GroundingPhase::RuleInstantiation {
+            self.final_rule.set(Some(work));
+        }
     }
 }
 
@@ -1388,6 +1429,7 @@ fn ground(
 fn same_theory(left: &amp;AdmittedFormula, right: &amp;AdmittedFormula) {
     assert_eq!(left.atoms(), right.atoms());
     assert_eq!(left.theory().nodes(), right.theory().nodes());
+    assert_eq!(left.theory().operands(), right.theory().operands());
     assert_eq!(left.theory().roots(), right.theory().roots());
     assert_eq!(left.formula_origins(), right.formula_origins());
 }
@@ -1411,11 +1453,18 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     let work = on.work.get();
     assert!(work.domain_prepare_work.is_some_and(|count| count &gt; 0));
     assert!(work.domain_guard_checks.is_some_and(|count| count &gt; 0));
-    // Indexed offers one c posting, then matches whole rows. In the final
-    // instantiation the guards reject two a rows, four b rows and eight c
-    // rows before copying their new bindings; the completion round before it
-    // rejected the same a and b rows, and the sum over the phases is twenty.
-    assert_eq!(work.domain_rejected_rows, Some(20));
+    // The connected order is a, c, b. Two a values have empty c postings;
+    // each remaining c posting has two Y values with empty b postings.
+    // Guards skip these empty probes; both routes offer the same 16 rows.
+    let before = off.final_rule.get().unwrap();
+    let after = on.final_rule.get().unwrap();
+    assert_eq!(before.join_rows, Some(4 + 2 * 4 + 2 * 2));
+    assert_eq!(after.join_rows, before.join_rows);
+    assert_eq!(before.join_probes, Some(1 + 4 + 2 * 4));
+    assert_eq!(after.join_probes, Some(1 + 2 + 2 * 2));
+    assert_eq!(after.domain_rejected_rows, Some(2 + 2 * 2));
+    // Completion rejects the same six rows before final instantiation.
+    assert_eq!(work.domain_rejected_rows, Some(12));
     assert!(work.join_probes.unwrap() &lt; off.work.get().join_probes.unwrap());
 
     for limits in [
