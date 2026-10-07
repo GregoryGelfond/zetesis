@@ -80,13 +80,18 @@ pub(super) fn column_bytes(
     if rows > u32::MAX - ROWS_PER_GROUP {
         return Err(capacity("relation padded row address exceeds u32"));
     }
-    let count = cells(rows, columns)?;
+    let mut count = cells(columns, 2)?;
     if relation.columns().len() != relation.predicate().arity()
         || relation
             .columns()
             .any(|column| column.len() != relation.row_count())
     {
         return Err(capacity("relation columns disagree with row/arity shape"));
+    }
+    for column in relation.columns() {
+        count = count
+            .checked_add(rows.div_ceil(32 / column.bits()))
+            .ok_or_else(|| capacity("relation packed column offset exceeds u32"))?;
     }
     let bytes = u64::from(count.max(1)) * 4;
     buffer(bytes, limits)?;

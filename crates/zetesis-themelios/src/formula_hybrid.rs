@@ -271,10 +271,13 @@ impl HybridFormula {
     }
 }
 
-/// One check's scalar-byte budget, reporting to `allowance` when shared.
-fn scalar_budget(limits: ConstraintCheckLimits, allowance: Option<ConstraintAllowance>) -> Budget {
+/// One check's join-planning and scalar budget; shared scalar receipts are
+/// reported to `allowance`. Planning uses the caller's work ceiling, not an
+/// unrelated source-admission default.
+fn check_budget(limits: ConstraintCheckLimits, allowance: Option<ConstraintAllowance>) -> Budget {
     let budget = Budget::new(
         ExpansionLimits {
+            max_term_work: usize::try_from(limits.max_work).unwrap_or(usize::MAX),
             max_scalar_bytes: limits.max_scalar_bytes,
             ..ExpansionLimits::default()
         },
@@ -452,7 +455,7 @@ impl StreamedCore {
         Ok(ConstraintChecker {
             owner: self,
             prepared,
-            budget: scalar_budget(limits, allowance.clone()),
+            budget: check_budget(limits, allowance.clone()),
             limits,
             allowance,
             settled: (0, 0),
@@ -472,6 +475,7 @@ impl StreamedCore {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConstraintCheckLimits {
     /// Charged join, scalar and typed atom-lookup work in one check.
+    /// The same allowance independently bounds source join-planning term work.
     pub max_work: u64,
     /// Complete substitutions visited in one check, including false filters.
     pub max_substitutions: u64,
@@ -940,6 +944,7 @@ impl ConstraintChecker<'_> {
         // check's includes preparation), so the ceilings bound each
         // candidate, never the number of candidates.
         let start = self.settled;
+        self.budget.set_cancellation(Some(cancellation.clone()));
         if let Some(prepared) = &mut self.prepared {
             prepared.limits.max_work = start.0.saturating_add(self.limits.max_work);
             prepared.limits.max_substitutions =
@@ -970,7 +975,7 @@ impl ConstraintChecker<'_> {
         self.settled = (self.accounting.work, self.accounting.substitutions);
         let statistics = self.statistics();
         self.settled_scalar_bytes = statistics.scalar_bytes;
-        self.budget = scalar_budget(self.limits, self.allowance.clone());
+        self.budget = check_budget(self.limits, self.allowance.clone());
         result.map_err(|cause| ConstraintCheckFailure {
             cause: cause.relative_to(start).retain_input(&self.owner.0.source),
             statistics,
@@ -1215,3 +1220,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod planning_tests;

@@ -20,6 +20,27 @@ fn partition(timings: &PhaseTimings) {
     assert_eq!(elapsed, stages.driver_elapsed);
 }
 
+fn result_output(source: &str, outputs: [&[u8]; 2]) {
+    let texts = outputs
+        .map(|output| crate::support::human::before_timing(std::str::from_utf8(output).unwrap()));
+    if source != "a|b." {
+        assert_eq!(texts[0], texts[1], "{source}");
+        return;
+    }
+    // Two workers may publish either answer first. Both exact renderings
+    // preserve the full family, multiplicity, numbering, header and footer.
+    let expected = [["a", "b"], ["b", "a"]].map(|[first, second]| {
+        format!(
+            "{}Backend: CPU · 2 threads · eager grounding\n\n\
+             Answer: 1\n{first}\nAnswer: 2\n{second}\nSATISFIABLE\nModels: 2\n",
+            crate::support::human::banner()
+        )
+    });
+    for text in texts {
+        assert!(expected.iter().any(|output| output == text), "{text}");
+    }
+}
+
 #[test]
 fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
     for (source, args, mode) in [
@@ -41,7 +62,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
         ),
         (
             "a|b.",
-            vec!["--oracle", "countermodel", "--completion-workers", "2"],
+            vec!["--oracle", "countermodel"],
             GroundingMode::Eager,
         ),
         ("1{p;q}1.#minimize{1:p}.", vec![], GroundingMode::Eager),
@@ -50,9 +71,13 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
         for enabled in [false, true] {
             let mut output = Vec::new();
             let mut diagnostics = Vec::new();
+            let mut configured = options(&args, enabled);
+            if source == "a|b." {
+                configured.workers = std::num::NonZeroUsize::new(2).unwrap();
+            }
             let report = run_detailed_with_diagnostics(
                 source.into(),
-                &options(&args, enabled),
+                &configured,
                 &mut output,
                 &mut diagnostics,
                 &Cancellation::default(),
@@ -113,11 +138,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
             }
             outputs.push(output);
         }
-        assert_eq!(
-            crate::support::human::before_timing(std::str::from_utf8(&outputs[0]).unwrap()),
-            crate::support::human::before_timing(std::str::from_utf8(&outputs[1]).unwrap()),
-            "{source}"
-        );
+        result_output(source, [&outputs[0], &outputs[1]]);
     }
 }
 
@@ -130,12 +151,6 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
             vec!["--oracle", "countermodel"],
             true,
             false,
-        ),
-        (
-            "p.",
-            vec!["--grounder", "eager", "--max-ground-rules", "0"],
-            true,
-            true,
         ),
     ] {
         let mut output = Vec::new();
@@ -158,9 +173,11 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
         assert_eq!(timings.stages.get(SolveStage::Solving).is_some(), solving);
         assert!(timings.stages.get(SolveStage::ObservationOutput).is_none());
     }
-    let report = run_detailed_with_diagnostics(
-        "a|b.".into(),
-        &options(&["--max-search-work", "0"], true),
+    let mut config = zetesis_cli::PublicationConfig::from(&options(&[], true));
+    config.solve.max_search_work = 0;
+    let report = crate::support::prepared::human(
+        "a|b.",
+        &config,
         &mut Vec::new(),
         &mut Vec::new(),
         &Cancellation::default(),
@@ -171,6 +188,26 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
     partition(&timings);
     assert!(timings.stages.get(SolveStage::Solving).is_some());
     assert!(timings.get(SolvePhase::CandidateSetup).is_some());
+}
+
+#[test]
+fn bounded_static_setup_retains_entered_stages() {
+    let mut config = zetesis_cli::PublicationConfig::from(&options(&["--grounder", "eager"], true));
+    config.solve.max_ground_rules = 0;
+    let failure = crate::support::prepared::relational_human(
+        "p.",
+        &config,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    let timings = *failure.phase_timings.unwrap();
+    partition(&timings);
+    assert!(timings.stages.get(SolveStage::SourcePreparation).is_none());
+    assert!(timings.stages.get(SolveStage::Grounding).is_some());
+    assert!(timings.stages.get(SolveStage::Solving).is_some());
+    assert!(timings.stages.get(SolveStage::ObservationOutput).is_none());
 }
 
 #[test]

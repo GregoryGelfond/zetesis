@@ -7,7 +7,7 @@ struct Params {
 }
 struct Node { tag: u32, left: u32, right: u32, output: u32, }
 @group(0) @binding(0) var<uniform> params: Params;
-@group(0) @binding(1) var<storage, read> nodes: array<Node>;
+@group(0) @binding(1) var<storage, read> nodes: array<u32>;
 @group(0) @binding(2) var<storage, read> roots: array<u32>;
 @group(0) @binding(3) var<storage, read> seeds: array<u32>;
 @group(0) @binding(4) var<storage, read_write> frozen: array<u32>;
@@ -20,6 +20,15 @@ var<workgroup> stage: u32;
 var<workgroup> subset_count: atomic<u32>;
 var<workgroup> subset_last: atomic<u32>;
 
+// Headers occupy 4*N words; wide rows occupy the checked appended tail.
+fn node_at(index: u32) -> Node {
+    let base = index * 4u;
+    return Node(nodes[base], nodes[base + 1u], nodes[base + 2u], nodes[base + 3u]);
+}
+fn operand_at(node: Node, index: u32) -> u32 {
+    return nodes[params.nodes * 4u + node.left + index];
+}
+
 fn contains(world: u32, atom: u32) -> bool {
     return (seeds[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
 }
@@ -29,12 +38,19 @@ fn operation(tag: u32, left: bool, right: bool) -> bool {
     return !left || right;
 }
 fn original(world: u32, mask_base: u32, index: u32) {
-    let node = nodes[index];
+    let node = node_at(index);
     var value = false;
     if (node.tag == 1u) { value = contains(world, node.left); }
-    if (node.tag >= 2u) {
+    if (node.tag >= 2u && node.tag <= 4u) {
         value = operation(node.tag, frozen[mask_base + node.left] != 0u,
             frozen[mask_base + node.right] != 0u);
+    }
+    if (node.tag >= 5u) {
+        value = node.tag == 5u;
+        for (var child = 0u; child < node.right; child++) {
+            let next = frozen[mask_base + operand_at(node, child)] != 0u;
+            value = select(value || next, value && next, node.tag == 5u);
+        }
     }
     frozen[mask_base + index] = select(0u, 1u, value);
 }
@@ -44,9 +60,48 @@ fn narrow(index: u32, allowed: u32) {
     if (next != previous) { atomicStore(&changed, 1u); }
     if (next == 0u) { atomicStore(&conflict, 1u); }
 }
+// Native groups retain every operand occurrence. A composite output has its
+// own slot; repeated atom nodes may share a physical child slot. The unique
+// witness test therefore counts distinct slots, never operand positions.
+// Concurrent intersections can only remove completions. This transfer is sound
+// with stale reads; it does not promise exact projection of racing snapshots.
+fn group_gate(base: u32, node: Node) {
+    let conjunction = node.tag == 5u;
+    let all_bit = select(1u, 2u, conjunction);
+    let witness_bit = select(2u, 1u, conjunction);
+    var all_possible = true;
+    var empty = false;
+    var has_witness = false;
+    var multiple = false;
+    var witness = 0u;
+    for (var index = 0u; index < node.right; index++) {
+        let slot = node_at(operand_at(node, index)).output;
+        let domain = atomicLoad(&domains[base + slot]);
+        all_possible = all_possible && (domain & all_bit) != 0u;
+        empty = empty || domain == 0u;
+        if ((domain & witness_bit) != 0u) {
+            if (has_witness && witness != slot) { multiple = true; }
+            witness = slot;
+            has_witness = true;
+        }
+    }
+    var allowed = select(0u, all_bit, all_possible) |
+        select(0u, witness_bit, has_witness);
+    if (empty) { allowed = 0u; }
+    let output = atomicLoad(&domains[base + node.output]) & allowed;
+    narrow(base + node.output, allowed);
+    if (output == all_bit) {
+        for (var index = 0u; index < node.right; index++) {
+            narrow(base + node_at(operand_at(node, index)).output, all_bit);
+        }
+    } else if (output == witness_bit && has_witness && !multiple) {
+        narrow(base + witness, witness_bit);
+    }
+}
+
 fn gate(base: u32, node: Node) {
-    let left = nodes[node.left].output;
-    let right = nodes[node.right].output;
+    let left = node_at(node.left).output;
+    let right = node_at(node.right).output;
     let dx = atomicLoad(&domains[base + left]);
     let dy = atomicLoad(&domains[base + right]);
     let dz = atomicLoad(&domains[base + node.output]);
@@ -106,7 +161,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         atomicStore(&domains[base + atom], select(1u, 3u, contains(world, atom)));
     }
     for (var index = lane; index < params.nodes; index += 64u) {
-        let node = nodes[index];
+        let node = node_at(index);
         // Atom nodes already share the initialized semantic atom slot. All
         // other outputs occupy distinct dense auxiliary positions.
         if (node.tag != 1u) {
@@ -118,7 +173,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     for (var index = lane; index < params.roots; index += 64u) {
         let root = roots[index];
         if (frozen[mask_base + root] == 0u) { atomicStore(&bad_root, 1u); }
-        atomicAnd(&domains[base + nodes[root].output], 2u);
+        atomicAnd(&domains[base + node_at(root).output], 2u);
     }
     storageBarrier();
     workgroupBarrier();
@@ -146,10 +201,13 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         }
         workgroupBarrier();
         for (var index = lane; index < params.nodes; index += 64u) {
-            let node = nodes[index];
+            let node = node_at(index);
             // Crucial reduct boundary: an M-false composite is just false.
             // Its original connective must not constrain the children.
-            if (node.tag >= 2u && frozen[mask_base + index] != 0u) { gate(base, node); }
+            if (frozen[mask_base + index] != 0u) {
+                if (node.tag >= 5u) { group_gate(base, node); }
+                else if (node.tag >= 2u) { gate(base, node); }
+            }
         }
         storageBarrier();
         workgroupBarrier();

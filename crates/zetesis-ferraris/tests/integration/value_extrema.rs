@@ -1,5 +1,5 @@
 //! Ordered values are checked against independent complete failing-subset formulas.
-use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, prefix, push};
+use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, copy, prefix, push, snapshot};
 use crate::support::worlds::eval;
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
@@ -79,7 +79,7 @@ fn reference(
     extremum: Extremum,
     comparison: Comparison,
     bound: &Value,
-) -> (Vec<Node>, usize) {
+) -> (zetesis_ferraris::FormulaNodes, usize) {
     let mut nodes = prefix();
     let mut root = 1;
     for subset in 0usize..(1 << elements.len()) {
@@ -95,13 +95,25 @@ fn reference(
         let mut consequent = 0;
         for (index, element) in elements.iter().enumerate() {
             if subset & (1 << index) == 0 {
-                consequent = push(&mut nodes, Node::Or(consequent, element.condition));
+                consequent = push(
+                    &mut nodes,
+                    zetesis_ferraris::NodeView::Or(&[consequent, element.condition]),
+                );
             } else {
-                antecedent = push(&mut nodes, Node::And(antecedent, element.condition));
+                antecedent = push(
+                    &mut nodes,
+                    zetesis_ferraris::NodeView::And(&[antecedent, element.condition]),
+                );
             }
         }
-        let implication = push(&mut nodes, Node::Implies(antecedent, consequent));
-        root = push(&mut nodes, Node::And(root, implication));
+        let implication = push(
+            &mut nodes,
+            zetesis_ferraris::NodeView::Implies(antecedent, consequent),
+        );
+        root = push(
+            &mut nodes,
+            zetesis_ferraris::NodeView::And(&[root, implication]),
+        );
     }
     (nodes, root)
 }
@@ -150,28 +162,34 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
     for _ in 0..3 {
         for outer in 0..4 {
             assert_eq!(
-                eval(&nodes, root, outer, None),
-                eval(&specified, expected_root, outer, None)
+                eval(nodes.view(), root, outer, None),
+                eval(specified.view(), expected_root, outer, None)
             );
             assert_eq!(
-                eval(&borrowed_nodes, borrowed_root, outer, None),
-                eval(&specified, expected_root, outer, None)
+                eval(borrowed_nodes.view(), borrowed_root, outer, None),
+                eval(specified.view(), expected_root, outer, None)
             );
             for inner in 0..4 {
                 assert_eq!(
-                    eval(&borrowed_nodes, borrowed_root, inner, Some(outer)),
-                    eval(&specified, expected_root, inner, Some(outer))
+                    eval(borrowed_nodes.view(), borrowed_root, inner, Some(outer)),
+                    eval(specified.view(), expected_root, inner, Some(outer))
                 );
                 assert_eq!(
-                    eval(&nodes, root, inner, Some(outer)),
-                    eval(&specified, expected_root, inner, Some(outer)),
+                    eval(nodes.view(), root, inner, Some(outer)),
+                    eval(specified.view(), expected_root, inner, Some(outer)),
                     "{elements:?} {extremum:?} {comparison:?} {bound:?} M={outer} J={inner}"
                 );
             }
         }
-        borrowed_root = push(&mut borrowed_nodes, Node::Implies(borrowed_root, 0));
-        root = push(&mut nodes, Node::Implies(root, 0));
-        expected_root = push(&mut specified, Node::Implies(expected_root, 0));
+        borrowed_root = push(
+            &mut borrowed_nodes,
+            zetesis_ferraris::NodeView::Implies(borrowed_root, 0),
+        );
+        root = push(&mut nodes, zetesis_ferraris::NodeView::Implies(root, 0));
+        expected_root = push(
+            &mut specified,
+            zetesis_ferraris::NodeView::Implies(expected_root, 0),
+        );
     }
 }
 #[test]
@@ -252,7 +270,8 @@ fn exact_limits_restore_the_existing_prefix() {
     .unwrap();
     let exact = AggregateLimits {
         max_elements: 2,
-        max_nodes: nodes.len(),
+        max_nodes: nodes.view().len(),
+        max_operands: nodes.parts().occurrences(),
         max_work: built.statistics().work,
         max_states: 0,
         max_subsets: 0,
@@ -271,7 +290,7 @@ fn exact_limits_restore_the_existing_prefix() {
         .unwrap(),
         built
     );
-    assert_eq!(repeated, nodes);
+    assert_eq!(snapshot(&repeated), snapshot(&nodes));
     for (limits, expected) in [
         (
             AggregateLimits {
@@ -307,7 +326,7 @@ fn exact_limits_restore_the_existing_prefix() {
         )
         .unwrap_err();
         assert_eq!(error.kind(), expected);
-        assert_eq!(nodes, prefix());
+        assert_eq!(snapshot(&nodes), snapshot(&prefix()));
     }
 }
 
@@ -329,9 +348,13 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
     )
     .unwrap_err();
     assert_eq!(error.kind(), Error::InvalidCondition { element: 0 });
-    assert_eq!(nodes, prefix());
-    nodes.push(Node::And(usize::MAX, 0));
-    let bad = nodes.clone();
+    assert_eq!(snapshot(&nodes), snapshot(&prefix()));
+    let (mut raw_nodes, operands) = snapshot(&nodes);
+    raw_nodes.push(Node::and_pair([usize::MAX, 0]));
+    nodes = zetesis_ferraris::FormulaNodes::new(
+        zetesis_ferraris::FormulaParts::new(raw_nodes, operands).unwrap(),
+    );
+    let bad = copy(&nodes);
     assert!(matches!(
         append_value_extremum(
             &mut nodes,
@@ -346,7 +369,7 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
         .kind(),
         Error::InvalidPrefix { .. }
     ));
-    assert_eq!(nodes, bad);
+    assert_eq!(snapshot(&nodes), snapshot(&bad));
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut nodes = prefix();
@@ -364,17 +387,17 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
         .kind(),
         Error::Control(_)
     ));
-    assert_eq!(nodes, prefix());
+    assert_eq!(snapshot(&nodes), snapshot(&prefix()));
 }
 
 #[test]
 fn borrowed_elements_cannot_name_newly_appended_nodes() {
     let value = Value::Number(1);
     let mut nodes = prefix();
-    let original = nodes.clone();
+    let original = copy(&nodes);
     let element = Element {
         value: (&value).into(),
-        condition: nodes.len(),
+        condition: nodes.view().len(),
     };
     let error = append_value_extremum_refs(
         &mut nodes,
@@ -390,14 +413,14 @@ fn borrowed_elements_cannot_name_newly_appended_nodes() {
         error.kind(),
         Error::InvalidCondition { element: 0 }
     ));
-    assert_eq!(nodes, original);
+    assert_eq!(snapshot(&nodes), snapshot(&original));
 }
 
 #[test]
 fn borrowed_elements_obey_the_actual_element_limit() {
     let value = Value::Number(1);
     let mut nodes = prefix();
-    let original = nodes.clone();
+    let original = copy(&nodes);
     let elements = (0..2).filter(|_| true).map(|_| Element {
         value: (&value).into(),
         condition: 2,
@@ -417,5 +440,5 @@ fn borrowed_elements_obey_the_actual_element_limit() {
     )
     .unwrap_err();
     assert!(matches!(error.kind(), Error::ElementLimit));
-    assert_eq!(nodes, original);
+    assert_eq!(snapshot(&nodes), snapshot(&original));
 }

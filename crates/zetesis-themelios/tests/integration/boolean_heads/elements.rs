@@ -220,7 +220,10 @@ fn boolean_elements_preserve_other_count_certificates() {
     assert_eq!(plan.consequence_count(), 2);
     assert!(planned.theory().same_instance(plan.original_theory()));
     assert_eq!(ordinary.atoms(), planned.atoms());
-    assert_eq!(ordinary.theory().nodes(), planned.theory().nodes());
+    assert_eq!(
+        (ordinary.theory().nodes(), ordinary.theory().operands()),
+        (planned.theory().nodes(), planned.theory().operands())
+    );
     assert_eq!(ordinary.theory().roots(), planned.theory().roots());
     assert_eq!(native(&ordinary), native(&planned));
 }

@@ -95,8 +95,8 @@ fn finite_queries_preserve_the_original_formula() {
         let input = formula(&source(index));
         assert_eq!(input.atoms(), plain.atoms(), "case {index}");
         assert_eq!(
-            input.theory().nodes(),
-            plain.theory().nodes(),
+            (input.theory().nodes(), input.theory().operands()),
+            (plain.theory().nodes(), plain.theory().operands()),
             "case {index}"
         );
         assert_eq!(

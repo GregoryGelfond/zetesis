@@ -158,6 +158,113 @@ impl Compiler<'_> {
         Ok(consumed)
     }
 
+    /// Summarize the normal rule after its complete body and head plan.
+    /// Every non-generated outer read outside the positive witness patterns
+    /// participates. This includes all generator expressions, so transitive
+    /// scalar/aggregate inputs are covered without a second dependency graph.
+    /// Positive matching and prefix errors still run for every base row.
+    /// Rich heads and unplanned scopes retain their existing traversal.
+    pub(super) fn continuation_inputs(
+        &mut self,
+        body: &[LiteralIr],
+        head: &crate::formula_ir::HeadIr,
+        variables: usize,
+        plan: &crate::formula_assignment_plan::Plan,
+    ) -> Result<Option<Vec<usize>>, FormulaFailure> {
+        let crate::formula_ir::HeadIr::Normal(Some(head)) = head else {
+            return Ok(None);
+        };
+        let mut count = 0;
+        for variable in 0..variables {
+            count += usize::from(self.continuation_uses(body, *head, plan, variable)?);
+        }
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            count as u128 * std::mem::size_of::<usize>() as u128,
+            self.location,
+        )?;
+        let mut inputs = Vec::with_capacity(count);
+        for variable in 0..variables {
+            if self.continuation_uses(body, *head, plan, variable)? {
+                inputs.push(variable);
+            }
+        }
+        Ok(Some(inputs))
+    }
+
+    fn continuation_uses(
+        &mut self,
+        body: &[LiteralIr],
+        head: AtomPattern,
+        plan: &crate::formula_assignment_plan::Plan,
+        variable: usize,
+    ) -> Result<bool, FormulaFailure> {
+        self.scope_work(plan.steps.len())?;
+        if plan.steps.iter().any(|step| step.produced == variable) {
+            return Ok(false);
+        }
+        if self.pattern_uses(head, variable)? {
+            return Ok(true);
+        }
+        for literal in body {
+            self.scope_work(1)?;
+            if matches!(
+                literal,
+                LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_)
+            ) {
+                continue;
+            }
+            if self.literal_uses(literal, variable)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Retain only inherited reads that determine an assignment's complete
+    /// tuple and eligibility family. This uses the same scope analysis as the
+    /// proposal scheduler, before synthetic head slots exist. Two charged
+    /// scans reserve the exact summary size, once per source aggregate.
+    pub(super) fn assignment_family_inputs(
+        &mut self,
+        aggregate: &AggregateIr,
+        variables: usize,
+    ) -> Result<Vec<usize>, FormulaFailure> {
+        if aggregate.binding.is_none() {
+            return Ok(Vec::new());
+        }
+        let mut count = 0;
+        for variable in 0..variables {
+            count += usize::from(self.family_uses(aggregate, variable)?);
+        }
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            count as u128 * std::mem::size_of::<usize>() as u128,
+            self.location,
+        )?;
+        let mut inputs = Vec::with_capacity(count);
+        for variable in 0..variables {
+            if self.family_uses(aggregate, variable)? {
+                inputs.push(variable);
+            }
+        }
+        Ok(inputs)
+    }
+
+    fn family_uses(
+        &mut self,
+        aggregate: &AggregateIr,
+        variable: usize,
+    ) -> Result<bool, FormulaFailure> {
+        self.scope_work(1)?;
+        for element in &aggregate.elements {
+            if self.element_uses(element, variable)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     pub(super) fn scope_work(&mut self, count: usize) -> Result<(), FormulaFailure> {
         self.budget
             .charge(ExpansionResource::TermWork, count as u128, self.location)?;

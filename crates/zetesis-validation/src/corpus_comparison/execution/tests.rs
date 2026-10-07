@@ -585,3 +585,60 @@ fn current_partial_duplicate_mixed_and_contradictory_statistics_are_not_qualific
         }
     }
 }
+
+#[test]
+fn ordinary_policy_qualifies_observed_internal_limits() {
+    let value = super::formula_for_policy(
+        CURRENT,
+        Backend::Gpu(Some(GpuApi::Metal)),
+        4.try_into().unwrap(),
+        Some(268_435_456),
+        &answer(),
+    )
+    .unwrap();
+    let completion = value.completion.unwrap();
+    assert_eq!(completion.requested_workers, 4);
+    assert_eq!(completion.max_logical_scratch_bytes, 268_435_456);
+}
+
+#[test]
+fn ordinary_policy_refuses_excess_completion_threads() {
+    assert!(
+        super::formula_for_policy(
+            CURRENT,
+            Backend::Gpu(Some(GpuApi::Metal)),
+            3.try_into().unwrap(),
+            None,
+            &answer()
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn ordinary_policy_refuses_excess_reported_memory() {
+    assert!(
+        super::formula_for_policy(
+            CURRENT,
+            Backend::Gpu(Some(GpuApi::Metal)),
+            4.try_into().unwrap(),
+            Some(268_435_455),
+            &answer()
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn legacy_telemetry_does_not_certify_explicit_memory() {
+    assert!(
+        super::formula_for_policy(
+            GOOD,
+            Backend::Gpu(Some(GpuApi::Metal)),
+            1.try_into().unwrap(),
+            Some(268_435_456),
+            &answer()
+        )
+        .is_err()
+    );
+}

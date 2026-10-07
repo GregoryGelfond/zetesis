@@ -73,6 +73,58 @@ fn every_prefix(options: &Options, outcome: &Result<Report, PublicationFailure>)
     text.to_owned()
 }
 
+fn bounded_statistics(
+    source: &str,
+    case: &crate::publication_fixture::FormulaCase,
+) -> (Report, Vec<u8>, String) {
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let report = case
+        .run(
+            source,
+            &mut output,
+            &mut diagnostics,
+            &Cancellation::default(),
+        )
+        .unwrap()
+        .into_legacy()
+        .unwrap()
+        .into_report();
+    (report, output, String::from_utf8(diagnostics).unwrap())
+}
+
+#[test]
+fn cpu_closure_refuses_an_oversized_reservation() {
+    let options = options(&["--stats", "--memory", "2147483648"]);
+    let mut config = crate::PublicationConfig::from(&options);
+    config.solve.workers = std::num::NonZeroUsize::new(5).unwrap();
+    config.solve.max_closure_bytes = 134_217_728;
+    let admitted = zetesis_themelios::admit_extended(
+        "{a}.".into(),
+        zetesis_themelios::AdmissionOptions::default(),
+        zetesis_themelios::ExpansionLimits::default(),
+    )
+    .unwrap();
+    let mut output = Vec::new();
+    let failure = crate::publication_fixture::with_diagnostics(
+        crate::PreparedInput::admitted(&admitted),
+        &config,
+        &options,
+        &mut output,
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    let text = failure.cause.to_string();
+    assert!(
+        text.contains("5 threads with 134217728 closure bytes each"),
+        "{text}"
+    );
+    assert!(text.contains("671088640"), "{text}");
+    assert!(text.contains("536870912"), "{text}");
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
+}
+
 #[test]
 fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
     for (source, arguments, formula, optimum) in [
@@ -103,13 +155,29 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
 #[test]
 fn shared_cpu_statistics_preserve_every_writer_prefix() {
     for selection in ["union", "worlds"] {
-        for stop in [None, Some("--max-work"), Some("--max-source-work")] {
-            let mut arguments = vec!["--source-batching", selection];
-            if let Some(limit) = stop {
-                arguments.extend([limit, "0"]);
+        for stop in [None, Some(false), Some(true)] {
+            let options = options(&["--source-batching", selection]);
+            let mut config = crate::PublicationConfig::from(&options);
+            match stop {
+                Some(true) => config.solve.max_source_work = 0,
+                Some(false) => config.solve.max_work = 0,
+                None => {}
             }
-            let options = options(&arguments);
-            let outcome = actual("a.", &options, &Cancellation::default());
+            let admitted = zetesis_themelios::admit_extended(
+                "a.".into(),
+                zetesis_themelios::AdmissionOptions::default(),
+                zetesis_themelios::ExpansionLimits::default(),
+            )
+            .unwrap();
+            let outcome = crate::publish_prepared(
+                crate::PreparedInput::admitted(&admitted),
+                &config,
+                &mut crate::HumanRenderer::new(io::sink(), crate::ColorMode::Never, 65_536),
+                &mut io::sink(),
+                &Cancellation::default(),
+            )
+            .and_then(crate::PublicationOutcome::into_legacy)
+            .map(crate::PublicationReport::into_report);
             let report = outcome.as_ref().unwrap();
             let stats = report.shared_execution.as_ref().unwrap();
             assert_eq!(stats.submitted_candidates, 1);
@@ -178,6 +246,53 @@ fn static_gpu_statistics_retain_eager_grounding() {
 }
 
 #[test]
+fn statistics_failure_preserves_observation_cause() {
+    let source = format!(
+        "p(\"{}\"). #show shown:p(X). #minimize{{0@1,k:p(X)}}.",
+        "x".repeat(1500)
+    );
+    let mut presentation = options(&["--json", "--stats"]);
+    presentation.statistics_view = crate::StatisticsView::Records;
+    let mut case = crate::publication_fixture::FormulaCase::new(presentation);
+    case.config.observations.max_work = 0;
+    let mut reference = Vec::new();
+    case.run(
+        &source,
+        &mut io::sink(),
+        &mut reference,
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    let capacity = std::str::from_utf8(&reference)
+        .unwrap()
+        .find("Statistics:")
+        .unwrap();
+    let mut output = Vec::new();
+    let failure = case
+        .run(
+            &source,
+            &mut output,
+            &mut BoundedWriter::new(capacity),
+            &Cancellation::default(),
+        )
+        .unwrap_err()
+        .into_legacy();
+    let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let partial = failure.partial_report.unwrap();
+    assert!(partial.summary_published);
+    assert_eq!(partial.completion, Some(Completion::Exhausted));
+    assert_eq!(value["outcome"]["status"], "failed");
+    assert_eq!(value["outcome"]["coverage"], "exhausted");
+    assert_eq!(value["outcome"]["optimization"]["optimal"], true);
+    assert!(value["statistics"]["stage_timings"].is_object());
+    assert_eq!(value["outcome"]["error"]["secondary_output_failure"], true);
+    assert!(matches!(*failure.cause, RunError::Observation(_)));
+    assert!(failure.secondary_output.is_some());
+    assert_eq!(value["outcome"]["error"]["kind"], "observation");
+    assert_eq!((partial.published_models, partial.verified_models), (0, 1));
+}
+
+#[test]
 fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualification() {
     let mut requested = options(&[]);
     requested.models = 1;
@@ -190,14 +305,18 @@ fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualificati
         every_prefix(&requested, &outcome).contains("requested models reached (partial coverage)")
     );
     for candidates in [0, 1] {
-        let mut bounded = options(&["--oracle", "countermodel"]);
-        bounded.max_candidates = candidates;
-        bounded.max_objective_bound_work = 0;
-        let outcome = actual(
+        let bounded = options(&["--oracle", "countermodel"]);
+        let mut config = crate::PublicationConfig::from(&bounded);
+        config.solve.max_candidates = candidates;
+        config.solve.max_objective_bound_work = 0;
+        let outcome = crate::publication_fixture::human(
             "1 {a;b} 1. #minimize{1,a:a;2,b:b}.",
-            &bounded,
+            &config,
+            &mut io::sink(),
             &Cancellation::default(),
-        );
+        )
+        .and_then(crate::PublicationOutcome::into_legacy)
+        .map(crate::PublicationReport::into_report);
         let report = outcome.as_ref().unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(report.optimization.is_some(), candidates == 1);
@@ -326,4 +445,35 @@ fn exhausted_coverage_alone_cannot_label_an_incumbent_optimal() {
     let text = String::from_utf8(bytes).unwrap();
     assert!(text.contains("objective: incumbent only"));
     assert!(!text.contains("objective: optimal"));
+}
+
+#[test]
+fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimality() {
+    let mut one_model = options(&["--stats"]);
+    one_model.models = 1;
+    let case = crate::publication_fixture::FormulaCase::new(one_model);
+    let (report, _, text) = bounded_statistics("{a}.", &case);
+    assert_eq!(report.completion, Completion::RequestedModels);
+    assert!(text.contains("requested models reached (partial coverage)"));
+    let mut bounded = crate::publication_fixture::FormulaCase::new(options(&[
+        "--stats",
+        "--oracle",
+        "countermodel",
+    ]));
+    bounded.config.solve.max_candidates = 0;
+    let (report, output, text) = bounded_statistics("{a}. #minimize{1:a}.", &bounded);
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert!(report.optimization.is_none());
+    assert!(text.contains("interrupted (partial coverage)"));
+    assert!(text.contains("objective: no retained score; evaluation counters=unavailable"));
+    assert!(!text.contains("objective: optimal"));
+    assert!(!String::from_utf8(output).unwrap().contains("OPTIMUM FOUND"));
+    bounded.config.solve.max_candidates = 1;
+    bounded.config.solve.max_objective_bound_work = 0;
+    let (report, output, text) = bounded_statistics("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", &bounded);
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert!(report.optimization.is_some());
+    assert!(text.contains("objective: incumbent only"));
+    assert!(!text.contains("objective: optimal"));
+    assert!(!String::from_utf8(output).unwrap().contains("OPTIMUM FOUND"));
 }

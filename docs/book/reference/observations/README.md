@@ -2,6 +2,11 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+The [7 October 2026 CPU corpus comparison](../cpu-corpus-20261007.md) retains a
+[portable 94-case record](cpu-corpus-20261007.json) for a 0.4.0 release-preparation
+candidate. Exact binary and workspace source hashes identify the measurement;
+no final release tag or measured commit is implied.
+
 The [grounding and formula preparation comparison](../foundation-reuse.md)
 records source `120fadfb` against `ec6adadd` and `d6557d0a`. Its portable evidence
 covers the [94-case corpus](foundation-reuse-120fadfb-corpus.json),
@@ -11,7 +16,14 @@ retains input report hashes, timing and memory observations, actual execution
 routes and qualification scope. Non-completed cells retain their reasons.
 These CPU observations do not establish Metal performance or qualification.
 
-The latest [coverage snapshot](../coverage-120fadfb.md) records portable coverage
+The [0.4.0 coverage snapshot](../coverage-0.4.0.md) records portable workspace,
+combined portable-plus-Metal workspace and independent CPU-only coverage. Its
+[receipt](coverage-0.4.0.json) retains report and tool identities, the
+[source-content manifest](coverage-0.4.0-sources.json), and all 59 named physical
+tests in 14 passing groups. The [0.3.0 snapshot](../coverage-0.3.0.md) remains a
+separate historical record.
+
+The earlier [coverage snapshot](../coverage-120fadfb.md) records portable coverage
 at `120fadfb` and separate Metal qualification at its documentation successor
 `f9e1506c`. Its [receipt](coverage-120fadfb.json) preserves exact counts,
 source identities, report hashes and the 58 named physical tests.

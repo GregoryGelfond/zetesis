@@ -98,8 +98,10 @@ impl Grounder {
 }
 
 /// Execution requests only; no extra source, constants, stdin or output options.
-/// Unspecified solver budgets retain the sealed executable's defaults.
+/// The ordinary public resource policy is requested; effective behavior belongs
+/// to the sealed executable. Historical executables may retain bounded defaults.
 #[derive(Clone, Copy, Debug, Serialize)]
+#[serde(tag = "resource_policy", rename = "ordinary")]
 pub struct NativeExecution {
     /// Requested execution hardware.
     pub backend: Backend,
@@ -115,42 +117,29 @@ pub struct NativeExecution {
     /// executable's default and permits comparison with versions before this flag.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub search: Option<SearchMethod>,
-    /// Closure worker request.
-    pub workers: NonZeroUsize,
-    /// Formula completion worker request.
-    pub completion_workers: NonZeroUsize,
-    /// Native candidate batch ceiling.
-    pub batch_size: NonZeroUsize,
-    /// Logical completion scratch allowance; zero is a valid requested ceiling.
-    pub max_completion_scratch_bytes: u64,
+    /// Requested worker threads.
+    pub threads: NonZeroUsize,
+    /// Explicit named-memory allowance in bytes. Omission requests the sealed
+    /// executable's ordinary default; neither form is a process RSS limit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_bytes: Option<u64>,
     /// Cooperative deadline passed as `--time-limit`, in whole seconds. Absent
-    /// means no deadline; a deadline changes what the solver polls at every
-    /// charged unit, so it is part of the profile's identity.
+    /// means no deadline. A deadline can stop an otherwise completed run, so
+    /// it is part of the requested profile's identity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_limit_seconds: Option<std::num::NonZeroU64>,
-    /// Explicit formula expansion-work ceiling. Omission preserves the sealed
-    /// executable's default; an override is part of the measured profile.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_expansion_work: Option<usize>,
 }
 impl NativeExecution {
-    /// The command-line arguments that request this execution of the native
-    /// solver, in one fixed order: the backend, oracle, grounder, workers,
-    /// completion workers, batch size, completion scratch and model count,
-    /// then the join strategy, search method, deadline and expansion ceiling when the
-    /// profile names them. A campaign appends its output flags and the input.
+    /// Arguments for the ordinary public policy: algorithm selection, threads,
+    /// complete enumeration, then optional join/search, deadline and memory.
+    /// A campaign appends its output flags and input. No internal work, batch
+    /// or completion ceiling is requested.
     pub(crate) fn arguments(&self) -> Vec<std::ffi::OsString> {
         let values = [
             ("--backend", self.backend.label().into()),
             ("--oracle", self.oracle.label().into()),
             ("--grounder", self.grounder.label().into()),
-            ("--workers", self.workers.to_string()),
-            ("--completion-workers", self.completion_workers.to_string()),
-            ("--batch-size", self.batch_size.to_string()),
-            (
-                "--max-completion-scratch-bytes",
-                self.max_completion_scratch_bytes.to_string(),
-            ),
+            ("--threads", self.threads.to_string()),
             ("--models", "0".into()),
         ];
         values
@@ -174,10 +163,10 @@ impl NativeExecution {
                     std::ffi::OsString::from(seconds.to_string()),
                 ]
             }))
-            .chain(self.max_expansion_work.into_iter().flat_map(|work| {
+            .chain(self.memory_bytes.into_iter().flat_map(|bytes| {
                 [
-                    std::ffi::OsString::from("--max-expansion-work"),
-                    std::ffi::OsString::from(work.to_string()),
+                    std::ffi::OsString::from("--memory"),
+                    std::ffi::OsString::from(bytes.to_string()),
                 ]
             }))
             .collect()
@@ -192,12 +181,9 @@ impl Default for NativeExecution {
             grounder: Grounder::Eager,
             formula_joins: None,
             search: None,
-            workers: NonZeroUsize::new(1).expect("one is nonzero"),
-            completion_workers: NonZeroUsize::new(1).expect("one is nonzero"),
-            batch_size: NonZeroUsize::new(64).expect("64 is nonzero"),
-            max_completion_scratch_bytes: 268_435_456,
+            threads: NonZeroUsize::new(1).expect("one is nonzero"),
+            memory_bytes: None,
             time_limit_seconds: None,
-            max_expansion_work: None,
         }
     }
 }
@@ -206,7 +192,7 @@ impl Default for NativeExecution {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FormulaJoins {
-    /// Existing shortest-posting joins.
+    /// Indexed matching over canonical relation columns.
     Indexed,
     /// Prepared table masks for eligible completed-support patterns.
     Table,

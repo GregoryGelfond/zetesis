@@ -247,17 +247,37 @@ fn cumulative_source_and_root_limits_refuse_before_model_output() {
     let fixture = Fixture::new();
     fixture.write("a.lp", "p.");
     fixture.write("b.lp", "q.");
-    for (flag, value, label) in [
-        ("--max-source-roots", "1", "Roots"),
-        ("--max-source-files", "1", "Files"),
-        ("--max-total-source-bytes", "3", "TotalBytes"),
+    for (limits, resource) in [
+        (
+            zetesis_themelios::BundleLimits {
+                max_roots: 1,
+                ..Default::default()
+            },
+            zetesis_themelios::BundleResource::Roots,
+        ),
+        (
+            zetesis_themelios::BundleLimits {
+                max_files: 1,
+                ..Default::default()
+            },
+            zetesis_themelios::BundleResource::Files,
+        ),
+        (
+            zetesis_themelios::BundleLimits {
+                max_total_bytes: 3,
+                ..Default::default()
+            },
+            zetesis_themelios::BundleResource::TotalBytes,
+        ),
     ] {
-        let result = fixture.native(&["a.lp", "b.lp", flag, value]);
-        assert_eq!(result.status.code(), Some(2));
-        assert!(crate::support::human::preamble(
-            std::str::from_utf8(&result.stdout).unwrap()
-        ));
-        assert!(String::from_utf8(result.stderr).unwrap().contains(label));
+        let error = zetesis_themelios::SourceBundle::load_many(
+            [fixture.0.path().join("a.lp"), fixture.0.path().join("b.lp")],
+            limits,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, zetesis_themelios::BundleError::Limit { resource: actual, .. } if actual == resource)
+        );
     }
     fixture.close();
 }
@@ -414,9 +434,11 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("unreadable.lp"));
 
     fixture.write("sub/bound.lp", "#include \"x\".");
-    fixture.write("x", "p(1). q(2). r(3). s(4).");
+    fixture.write("x", &format!("% {}\np(1).", "padding ".repeat(32)));
     fixture.write("sub/x", "fallback.");
-    let over_limit = fixture.native(&["sub/bound.lp", "--max-source-bytes", "16"]);
+    // 1 KiB permits two file identities but only 128 bytes in one file.
+    // The existing cwd target refuses; policy refusal must not try fallback.
+    let over_limit = fixture.native(&["sub/bound.lp", "--memory", "1024"]);
     assert_eq!(over_limit.status.code(), Some(2));
     assert!(crate::support::human::preamble(
         std::str::from_utf8(&over_limit.stdout).unwrap()

@@ -26,7 +26,10 @@ fn exact_grounding_boundary_preserves_success_and_retains_failed_attempts() {
     )
     .unwrap();
     assert_eq!(measured.atoms(), plain.atoms());
-    assert_eq!(measured.theory().nodes(), plain.theory().nodes());
+    assert_eq!(
+        (measured.theory().nodes(), measured.theory().operands()),
+        (plain.theory().nodes(), plain.theory().operands())
+    );
     assert_eq!(measured.theory().roots(), plain.theory().roots());
     assert_eq!(*observer.0.borrow(), [true, false]);
 

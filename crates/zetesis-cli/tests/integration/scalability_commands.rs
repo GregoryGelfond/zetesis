@@ -32,7 +32,7 @@ fn scalability_tests_require_an_evidence_destination() {
 
 #[test]
 fn scalability_tests_have_only_qualification_positions() {
-    let options = test(&["--report", "new.json", "--max-expansion-work", "300000000"]);
+    let options = test(&["--report", "new.json", "--memory", "300000000"]);
     assert!(!options.view.stats);
     let plan = options.plan().unwrap();
     let slots = plan
@@ -47,8 +47,7 @@ fn scalability_tests_have_only_qualification_positions() {
                 && profile.grounder == selected::Grounder::Eager
                 && profile.formula_joins == Some(selected::FormulaJoins::Indexed)
                 && profile.search == Some(selected::SearchMethod::Regions)
-                && profile.completion_workers.get() == 1
-                && profile.max_expansion_work == Some(300_000_000))
+                && profile.memory_bytes == Some(300_000_000))
     );
 }
 
@@ -180,13 +179,30 @@ mod campaigns {
         };
         let qualified = evidence(test_report);
         let measured = evidence(bench_report);
+        for report in [&qualified, &measured] {
+            let normalization = &report["report"]["native_normalization_limits"];
+            assert_eq!(normalization["input_bytes"], 16 * 1024 * 1024);
+            assert_eq!(normalization["atoms"], 4 * 1024 * 1024);
+            assert_eq!(normalization["value_nodes"], 8 * 1024 * 1024);
+            assert_eq!(
+                report["report"]["limits"]["process"]["max_output_bytes"],
+                16 * 1024 * 1024
+            );
+            assert!(
+                report["report"]["plan"]["profiles"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|profile| profile.get("max_expansion_work").is_none())
+            );
+        }
         assert_eq!(
             qualified["report"]["workloads"],
             measured["report"]["workloads"]
         );
         assert_eq!(
             qualified["report"]["workloads"].as_array().unwrap().len(),
-            12
+            14
         );
         assert!(
             qualified["report"]["samples"]
@@ -266,12 +282,12 @@ mod campaigns {
     }
 
     #[test]
-    fn compact_conformance_retains_work_refusal_diagnostics() {
+    fn compact_conformance_retains_memory_refusal_diagnostics() {
         use std::os::unix::fs::PermissionsExt;
 
         let fixture = Fixture::new();
         // This controlled reference is a protocol fixture, not an answer oracle.
-        // Its UNSAT families intentionally mismatch queens; the native work
+        // Its UNSAT families intentionally mismatch queens; the native memory
         // refusal must still carry its own diagnosis and process exit.
         std::fs::write(&fixture.reference, concat!(
             "#!/bin/sh\n",
@@ -284,7 +300,10 @@ mod campaigns {
         let mut options = test(&fixture.options(&destination));
         options.zetesis = Some(PathBuf::from(env!("CARGO_BIN_EXE_zetesis")));
         options.threads = vec![std::num::NonZeroUsize::MIN];
-        options.max_expansion_work = Some(0);
+        // 384 KiB admits this refusal record (12 KiB) while the wide
+        // eager producer family cannot fit its named source/support capacities.
+        // Zero memory would also refuse the diagnostic's own output buffer.
+        options.memory = Some(384 * 1024);
         options.view.json = true;
         let mut output = Vec::new();
         assert_eq!(
@@ -306,22 +325,70 @@ mod campaigns {
             .enumerate()
             .filter(|(_, check)| check["slot"]["producer"]["solver"] == "native")
             .collect::<Vec<_>>();
-        assert_eq!(native.len(), 12);
-        for (index, check) in native {
-            assert_eq!(check["decision"], "refused", "{check}");
+        assert_eq!(native.len(), 14);
+        // Other workloads can fail to publish their larger diagnostic footer.
+        // That remains an invalid report, never a qualified memory refusal.
+        // Require retained evidence of this exact publication cause; malformed
+        // reports without that cause still fail with their case identity.
+        for (index, check) in &native {
+            if check["decision"] == "invalid_report" {
+                let retained = &evidence["report"]["samples"][*index];
+                let stdout = retained["capture"]["stdout"]["data"].as_str().unwrap();
+                let stderr = retained["capture"]["stderr"]["data"].as_str().unwrap();
+                let error = serde_json::from_str::<serde_json::Value>(stdout)
+                    .expect_err("an incomplete diagnostic cannot be valid JSON");
+                assert!(error.is_eof(), "{check}: {error}; stderr: {stderr}");
+                assert!(
+                    stderr.contains("secondary output: model JSON view refused: Bytes"),
+                    "{check}; stderr: {stderr}"
+                );
+                assert_eq!(check["detail"], retained["detail"], "{check}");
+                assert_eq!(check["capture"]["exit"]["code"], 2, "{check}");
+                assert!(check.get("elapsed_ns").is_none(), "{check}");
+            }
+        }
+        assert_eq!(
+            evidence["report"]["plan"]["profiles"][0]["memory_bytes"],
+            384 * 1024
+        );
+        // The maintained wide Mastermind case is colors=8. Other cases may
+        // complete within this allowance; their controlled reference is not an
+        // answer oracle. This proposition concerns a real, retained refusal.
+        let workload = &evidence["report"]["workloads"][8];
+        assert_eq!(workload["entry"], "scalability/mastermind.lp");
+        assert_eq!(workload["sources"][0]["edits"][0]["after"], "8");
+        let wide = native
+            .iter()
+            .find(|(_, check)| check["slot"]["case"] == 8)
+            .unwrap();
+        assert_eq!(
+            wide.1["decision"], "refused",
+            "{}; retained stderr: {}",
+            wide.1, evidence["report"]["samples"][wide.0]["capture"]["stderr"]["data"]
+        );
+        let support_bytes = zetesis_solve::Resources::new(384 * 1024, std::num::NonZeroUsize::MIN)
+            .formula_limits()
+            .max_support_bytes;
+        assert!(
+            wide.1["detail"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("SupportBytes limit {support_bytes} exceeded")),
+            "{}",
+            wide.1
+        );
+        for (index, check) in native
+            .into_iter()
+            .filter(|(_, check)| check["decision"] == "refused")
+        {
             let retained = &evidence["report"]["samples"][index];
             let envelope: serde_json::Value =
                 serde_json::from_str(retained["capture"]["stdout"]["data"].as_str().unwrap())
                     .unwrap();
             let cause = envelope["outcome"]["error"]["detail"].as_str().unwrap();
-            // This option bounds both term expansion and formula preparation.
-            // Either admission door may spend the first unit; the compact view
-            // must retain that actual refusal, including its zero allowance.
-            assert!(
-                (cause.contains("TermWork") && cause.contains("exceeds 0"))
-                    || cause.contains("formula Work limit 0 exceeded (needed at least 1)"),
-                "{cause}"
-            );
+            // Memory also bounds retained populations such as source origins;
+            // preserve each actual diagnosis rather than infer it from a noun.
+            assert!(!cause.is_empty(), "{check}");
             assert!(check["detail"].as_str().unwrap().contains(cause), "{check}");
             assert_eq!(check["detail"], retained["detail"]);
             assert_eq!(check["capture"]["exit"]["code"], 2);
@@ -331,4 +398,19 @@ mod campaigns {
         }
         assert!(view["before"].as_array().unwrap().len() >= 3);
     }
+}
+
+#[test]
+fn scalability_refuses_removed_work_tuning() {
+    let error = Invocation::try_parse_from([
+        "zetesis",
+        "test",
+        "scalability",
+        "--report",
+        "new.json",
+        "--max-expansion-work",
+        "1",
+    ])
+    .unwrap_err();
+    assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
 }

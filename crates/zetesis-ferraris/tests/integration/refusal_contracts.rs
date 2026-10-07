@@ -1,5 +1,6 @@
 //! Public aggregate failures retain evidence and never damage reusable input DAGs.
 
+use crate::support::aggregate_theories::{copy, raw, snapshot};
 use std::error::Error as _;
 use std::time::Instant;
 
@@ -10,7 +11,7 @@ use zetesis_ferraris::{
     Limits, Node, Theory, append_aggregate, append_aggregate_family, models, models_reduct,
 };
 
-fn retry_and_verify(nodes: &mut Vec<Node>, elements: &[Element]) {
+fn retry_and_verify(nodes: &mut zetesis_ferraris::FormulaNodes, elements: &[Element]) {
     let built = append_aggregate(
         nodes,
         elements,
@@ -22,7 +23,7 @@ fn retry_and_verify(nodes: &mut Vec<Node>, elements: &[Element]) {
     .unwrap();
     let theory = Theory::new(
         2,
-        nodes.clone(),
+        copy(nodes).into_parts(),
         vec![built.root()],
         AdmissionLimits::default(),
     )
@@ -68,7 +69,7 @@ fn retry_and_verify(nodes: &mut Vec<Node>, elements: &[Element]) {
 
 #[test]
 fn refused_aggregate_resources_keep_a_reusable_prefix_and_named_reason() {
-    let prefix = vec![Node::Atom(0), Node::Atom(1)];
+    let prefix = raw(vec![Node::atom(0), Node::atom(1)]);
     for (weights, limits, kind, phrase) in [
         (
             [1, 2],
@@ -126,7 +127,7 @@ fn refused_aggregate_resources_keep_a_reusable_prefix_and_named_reason() {
                 condition: 1,
             },
         ];
-        let mut nodes = prefix.clone();
+        let mut nodes = copy(&prefix);
         let error = append_aggregate(
             &mut nodes,
             &elements,
@@ -139,7 +140,11 @@ fn refused_aggregate_resources_keep_a_reusable_prefix_and_named_reason() {
         assert_eq!(error.kind(), kind);
         assert!(error.to_string().contains(phrase), "{error}");
         assert!(error.source().is_none());
-        assert_eq!(nodes, prefix, "no new root may escape a failed transaction");
+        assert_eq!(
+            snapshot(&nodes),
+            snapshot(&prefix),
+            "no new root may escape a failed transaction"
+        );
         assert!(error.statistics().work <= limits.max_work);
         retry_and_verify(&mut nodes, &elements);
     }
@@ -147,7 +152,7 @@ fn refused_aggregate_resources_keep_a_reusable_prefix_and_named_reason() {
 
 #[test]
 fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
-    let mut malformed = vec![Node::And(0, 0)];
+    let mut malformed = raw(vec![Node::and_pair([0, 0])]);
     let error = append_aggregate(
         &mut malformed,
         &[],
@@ -158,10 +163,14 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
     )
     .unwrap_err();
     assert_eq!(error.kind(), AggregateErrorKind::InvalidPrefix { node: 0 });
-    assert!(error.to_string().contains("forward edge at node 0"));
-    assert_eq!(malformed, vec![Node::And(0, 0)]);
-    let mut nodes = vec![Node::Atom(0), Node::Atom(1)];
-    let before = nodes.clone();
+    assert!(
+        error
+            .to_string()
+            .contains("invalid storage or edges at node 0")
+    );
+    assert_eq!(snapshot(&malformed), (vec![Node::and_pair([0, 0])], vec![]));
+    let mut nodes = raw(vec![Node::atom(0), Node::atom(1)]);
+    let before = copy(&nodes);
     let invalid = [Element {
         weight: 1,
         condition: 2,
@@ -180,7 +189,7 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
         AggregateErrorKind::InvalidCondition { element: 0 }
     );
     assert!(error.to_string().contains("element 0"));
-    assert_eq!(nodes, before);
+    assert_eq!(snapshot(&nodes), snapshot(&before));
     let elements = [Element {
         weight: 1,
         condition: 0,
@@ -202,7 +211,7 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
     .unwrap_err();
     assert_eq!(error.kind(), AggregateErrorKind::GuardLimit);
     assert!(error.to_string().contains("guard limit"));
-    assert_eq!(nodes, before);
+    assert_eq!(snapshot(&nodes), snapshot(&before));
     retry_and_verify(&mut nodes, &elements);
 }
 
@@ -217,8 +226,8 @@ fn aggregate_control_causes_remain_downcastable_and_do_not_poison_retry() {
             Stop::Deadline,
         ),
     ] {
-        let mut nodes = vec![Node::Atom(0), Node::Atom(1)];
-        let original = nodes.clone();
+        let mut nodes = raw(vec![Node::atom(0), Node::atom(1)]);
+        let original = copy(&nodes);
         let elements = [Element {
             weight: 1,
             condition: 0,
@@ -239,7 +248,7 @@ fn aggregate_control_causes_remain_downcastable_and_do_not_poison_retry() {
         );
         assert_eq!(error.to_string(), expected.to_string());
         assert_eq!(error.statistics().work, 0);
-        assert_eq!(nodes, original);
+        assert_eq!(snapshot(&nodes), snapshot(&original));
         retry_and_verify(&mut nodes, &elements);
     }
 }

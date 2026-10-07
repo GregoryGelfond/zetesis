@@ -2,8 +2,8 @@ use super::*;
 use zetesis_ferraris::{AdmissionLimits, TightPlanLimits};
 
 fn certificate(atoms: usize, heads: &[usize]) -> TightPlan {
-    let mut nodes = vec![Node::False];
-    nodes.extend((0..atoms).map(Node::Atom));
+    let mut nodes = vec![Node::falsum()];
+    nodes.extend((0..atoms).map(Node::atom));
     let roots = heads
         .iter()
         .enumerate()
@@ -13,12 +13,18 @@ fn certificate(atoms: usize, heads: &[usize]) -> TightPlan {
             } else {
                 let body = usize::from(ordinal % 3 == 2 && head != 0);
                 let root = nodes.len();
-                nodes.push(Node::Implies(body, head + 1));
+                nodes.push(Node::implies(body, head + 1));
                 root
             }
         })
         .collect();
-    let theory = Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        atoms,
+        zetesis_ferraris::FormulaParts::new(nodes, Vec::new()).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     TightPlan::compile(
         &theory,
         TightPlanLimits::default(),

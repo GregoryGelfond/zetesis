@@ -318,14 +318,14 @@ memory or establish a speedup. Shared-word contention remains a measurement
 question. Ordinary formula sessions with automatic membership policy select this
 primitive on an explicit device backend when complete tight preparation succeeds.
 
-The complete device-work allowance is now
-`nodes + roots + producers + 2 * ceil(atoms / 32)`: one word scan constructs or
-initializes support and one checks missing support. This replaces the former
-`nodes + roots + producers + atoms + ceil(atoms / 32)` contract. Work receipts
-and pre-dispatch admission use the same new allowance; an exact allowance is
-admitted and one less is refused. Historical work counts therefore need their
-source identity when compared. This change describes logical operation counts,
-not measured latency or a new membership criterion.
+The complete device-work allowance is
+`nodes + edges + roots + producers + 2 * ceil(atoms / 32)`, where `edges`
+counts every child occurrence, including repetitions, inline pairs and
+implication. Original truth reads every operand; one word scan constructs or
+initializes support and one checks missing support. Work receipts and
+pre-dispatch admission use this same allowance: an exact allowance is admitted
+and one less is refused. Historical work counts need their source identity
+when compared. These counts do not measure latency or change membership.
 
 Preparation shares the CPU certificate constructor and cumulative search budget,
 but does not activate CPU certificate checking. The executor is selected before
@@ -366,11 +366,12 @@ The result marker identifies the branch that constructed support. A mismatched
 policy marker is a readback failure even if the reported verdict agrees; this
 validates the protocol, without proving the shader or device implementation.
 
-The four physical
+The maintained physical
 [tight-oracle tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware_tight.rs)
-exercise both policies on Apple M4 Pro Metal. They cover original-root precedence,
-least unsupported atoms, duplicate and skewed producers, packed-word boundaries,
-batch isolation, resource refusals and retained-theory identity. The
+exercise both policies on the selected Metal or Vulkan backend. They cover
+native conjunction/disjunction rows, original-root precedence, least unsupported
+atoms, duplicate and skewed producers, packed-word boundaries, batch isolation,
+resource refusals and retained-theory identity. The
 [performance evidence](../reference/measurement-protocols.md#performance-evidence) separates
 these correctness checks from latency and occupancy measurements.
 
@@ -382,8 +383,25 @@ immutable offsets on a fresh theory.
 
 ## Formula evaluation on the device
 
+Both formula kernels borrow the admitted `Theory` through complete `NodeView`
+rows. Their shared
+[transport packer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula_graph.rs)
+keeps one four-word header per original node and appends wide operand rows to
+the same storage buffer. Binary pairs remain inline; a wider conjunction or
+disjunction remains one node with its ordered, repeated child occurrences.
+No binary expansion or per-candidate graph copy is made. This immutable view
+is retained for one exact theory identity. Unused raw arena cells are omitted;
+overlapping raw spans are copied once per logical row.
+
+For `N` nodes and `W` wide operand occurrences, packing checks `4*N+W` against
+the 32-bit word-address range. The padded byte size `4*max(4,4*N+W)` is checked
+independently against both device buffer limits and included in resident and
+cold-upload accounting. Formula cold admission also checks actual retained
+staging capacity. Binding counts remain unchanged.
+
 The general formula kernel assigns one workgroup to each candidate. A prepared
-theory groups original DAG nodes by dependency depth. Nodes in one level read
+theory groups original DAG nodes by dependency depth, taking the maximum depth
+over every child in a native row. Nodes in one level read
 only earlier levels, so the lanes can compute them independently:
 
 ```text
@@ -411,6 +429,15 @@ if count = 1: intersect_domain(last, {false})
 `last` identifies an atom only when the count is one; zero is a valid atom index.
 Auxiliary formula nodes never participate in this subset test. An original-false
 subformula remains disabled by the frozen mask throughout propagation.
+
+Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
+and empty graphs use zero levels. Each complete sweep reserves
+`9*nodes+2*edges+atoms+65`, covering binary relation rows, both possible native
+operand scans and the strict-subset reduction. These are bounded policy units,
+not raw instruction counts. A limit below setup is refused before dispatch;
+a limit preventing another sweep returns an explicit residual for completion.
+Cold host preparation takes `O(nodes+edges+roots+levels)` work outside that
+per-candidate device budget.
 
 [Preparation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/preparation.rs)
 owns temporary depth and schedule storage and releases staging after upload.

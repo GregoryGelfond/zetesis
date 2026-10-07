@@ -13,21 +13,23 @@ use crate::{
 use super::super::{chain_position, encoded_chain};
 
 fn dissolved_chains() -> Theory {
-    use Node::{And, Atom, Or};
-
     Theory::new(
         4,
-        vec![
-            Atom(0),
-            Atom(1),
-            Atom(2),
-            Atom(3),
-            Or(0, 1),
-            Or(4, 2),
-            And(1, 2),
-            And(6, 3),
-            Or(5, 7),
-        ],
+        crate::FormulaParts::new(
+            vec![
+                crate::Node::atom(0),
+                crate::Node::atom(1),
+                crate::Node::atom(2),
+                crate::Node::atom(3),
+                crate::Node::or_pair([0, 1]),
+                crate::Node::or_pair([4, 2]),
+                crate::Node::and_pair([1, 2]),
+                crate::Node::and_pair([6, 3]),
+                crate::Node::or_pair([5, 7]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![5, 8],
         AdmissionLimits::default(),
     )
@@ -53,9 +55,15 @@ fn chain_encoding_checks_the_unrepresentable_position() {
 fn non_chain_nodes_have_no_chain_link() {
     for nodes in [
         vec![],
-        vec![Node::Atom(0), Node::False, Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::falsum(), Node::implies(0, 1)],
     ] {
-        let theory = Theory::new(1, nodes, vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            1,
+            crate::FormulaParts::new(nodes, vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let narrower = Narrower::new(&theory);
         assert_eq!(narrower.chain_of.len(), theory.nodes().len());
         assert!(narrower.chain_of.iter().all(Option::is_none));
@@ -182,13 +190,19 @@ fn chain_positions_preserve_frozen_closure() {
 #[test]
 fn compact_chain_links_reduce_retained_storage() {
     let atoms = 4096;
-    let mut nodes: Vec<_> = (0..atoms).map(Node::Atom).collect();
+    let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
     for first in (0..atoms).step_by(4) {
-        nodes.push(Node::Or(first, first + 1));
-        nodes.push(Node::Or(nodes.len() - 1, first + 2));
-        nodes.push(Node::Or(nodes.len() - 1, first + 3));
+        nodes.push(Node::or_pair([first, first + 1]));
+        nodes.push(Node::or_pair([nodes.len() - 1, first + 2]));
+        nodes.push(Node::or_pair([nodes.len() - 1, first + 3]));
     }
-    let theory = Theory::new(atoms, nodes, vec![], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        atoms,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let narrower = Narrower::new(&theory);
     let compact = &narrower.chain_of;
     let mut previous = vec![None; compact.len()];

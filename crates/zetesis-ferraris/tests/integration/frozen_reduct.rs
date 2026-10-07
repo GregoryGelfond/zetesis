@@ -7,7 +7,13 @@ use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{AdmissionLimits, FrozenReduct, Limits, Node, Theory, models_reduct};
 
 fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(2, nodes, roots, AdmissionLimits::default()).unwrap()
+    Theory::new(
+        2,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn work_limit(max_work: u64) -> Limits {
@@ -19,7 +25,7 @@ fn work_limit(max_work: u64) -> Limits {
 
 #[test]
 fn frozen_subject_is_the_original_borrow() {
-    let theory = theory(vec![Node::Atom(0)], vec![0]);
+    let theory = theory(vec![Node::atom(0)], vec![0]);
     let candidate = interpretation(&theory, 1);
     let frozen = FrozenReduct::new(&candidate, work_limit(1), &Cancellation::default()).unwrap();
     assert!(std::ptr::eq(frozen.candidate(), &raw const candidate));
@@ -34,7 +40,7 @@ fn frozen_subject_is_the_original_borrow() {
 
 #[test]
 fn freezing_does_not_require_original_satisfaction() {
-    let theory = theory(vec![Node::Atom(0)], vec![0]);
+    let theory = theory(vec![Node::atom(0)], vec![0]);
     let candidate = interpretation(&theory, 0);
     let cancellation = Cancellation::default();
     let frozen = FrozenReduct::new(&candidate, work_limit(1), &cancellation).unwrap();
@@ -54,49 +60,51 @@ fn freezing_does_not_require_original_satisfaction() {
 #[test]
 fn tested_interpretations_need_not_be_subsets() {
     let theory = theory(
-        vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
         vec![2],
     );
     let candidate = interpretation(&theory, 2);
     let cancellation = Cancellation::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
     // The candidate-false antecedent is falsum even when atom 0 belongs to J.
     for world in [1, 3, 0, 2, 1] {
         let tested = interpretation(&theory, world);
         assert!(
             frozen
-                .is_satisfied_by(&tested, work_limit(4), &cancellation)
+                .is_satisfied_by(&tested, work_limit(6), &cancellation)
                 .unwrap()
         );
-        assert!(models_reduct(&theory, &candidate, &tested, work_limit(7), &cancellation).unwrap());
+        assert!(
+            models_reduct(&theory, &candidate, &tested, work_limit(11), &cancellation).unwrap()
+        );
     }
 }
 
 #[test]
 fn distinct_candidates_keep_distinct_reducts() {
     let theory = theory(
-        vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
         vec![2],
     );
     let cancellation = Cancellation::default();
     let guarded = interpretation(&theory, 3);
     let vacuous = interpretation(&theory, 2);
-    let guarded = FrozenReduct::new(&guarded, work_limit(3), &cancellation).unwrap();
-    let vacuous = FrozenReduct::new(&vacuous, work_limit(3), &cancellation).unwrap();
+    let guarded = FrozenReduct::new(&guarded, work_limit(5), &cancellation).unwrap();
+    let vacuous = FrozenReduct::new(&vacuous, work_limit(5), &cancellation).unwrap();
     let tested = interpretation(&theory, 1);
     assert!(
         !guarded
-            .is_satisfied_by(&tested, work_limit(4), &cancellation)
+            .is_satisfied_by(&tested, work_limit(6), &cancellation)
             .unwrap()
     );
     assert!(
         vacuous
-            .is_satisfied_by(&tested, work_limit(4), &cancellation)
+            .is_satisfied_by(&tested, work_limit(6), &cancellation)
             .unwrap()
     );
     assert!(
         !guarded
-            .is_satisfied_by(&tested, work_limit(4), &cancellation)
+            .is_satisfied_by(&tested, work_limit(6), &cancellation)
             .unwrap()
     );
 }
@@ -104,19 +112,19 @@ fn distinct_candidates_keep_distinct_reducts() {
 #[test]
 fn independent_queries_can_share_one_frozen_value() {
     let theory = theory(
-        vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
         vec![2],
     );
     let candidate = interpretation(&theory, 3);
     let false_tested = interpretation(&theory, 1);
     let true_tested = interpretation(&theory, 2);
     let cancellation = Cancellation::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
     std::thread::scope(|scope| {
         let false_query =
-            scope.spawn(|| frozen.is_satisfied_by(&false_tested, work_limit(4), &cancellation));
+            scope.spawn(|| frozen.is_satisfied_by(&false_tested, work_limit(6), &cancellation));
         let true_query =
-            scope.spawn(|| frozen.is_satisfied_by(&true_tested, work_limit(4), &cancellation));
+            scope.spawn(|| frozen.is_satisfied_by(&true_tested, work_limit(6), &cancellation));
         assert!(!false_query.join().unwrap().unwrap());
         assert!(true_query.join().unwrap().unwrap());
     });
@@ -126,24 +134,24 @@ fn independent_queries_can_share_one_frozen_value() {
 fn nested_negation_retains_candidate_truth() {
     let theory = theory(
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(2, 1),
-            Node::Implies(3, 0),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::implies(2, 1),
+            Node::implies(3, 0),
         ],
         vec![4],
     );
     let candidate = interpretation(&theory, 1);
     let cancellation = Cancellation::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(11), &cancellation).unwrap();
     // In (not not a -> a)^M, double negation is true for every tested J.
     for world in 0..4 {
         assert_eq!(
             frozen
                 .is_satisfied_by(
                     &interpretation(&theory, world),
-                    work_limit(6),
+                    work_limit(12),
                     &cancellation
                 )
                 .unwrap(),
@@ -155,19 +163,19 @@ fn nested_negation_retains_candidate_truth() {
 #[test]
 fn constraints_keep_their_frozen_meaning() {
     let theory = theory(
-        vec![Node::Atom(0), Node::False, Node::Implies(0, 1)],
+        vec![Node::atom(0), Node::falsum(), Node::implies(0, 1)],
         vec![2],
     );
     let cancellation = Cancellation::default();
     for candidate in 0..4 {
         let subject = interpretation(&theory, candidate);
-        let frozen = FrozenReduct::new(&subject, work_limit(3), &cancellation).unwrap();
+        let frozen = FrozenReduct::new(&subject, work_limit(5), &cancellation).unwrap();
         for tested in 0..4 {
             assert_eq!(
                 frozen
                     .is_satisfied_by(
                         &interpretation(&theory, tested),
-                        work_limit(4),
+                        work_limit(6),
                         &cancellation
                     )
                     .unwrap(),
@@ -198,30 +206,36 @@ fn empty_theories_need_no_charged_work() {
 
 #[test]
 fn freeze_work_ceiling_is_inclusive() {
-    let theory = theory(vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)], vec![2]);
+    let theory = theory(
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+        vec![2],
+    );
     let candidate = interpretation(&theory, 3);
     let cancellation = Cancellation::default();
-    for limit in 0..3 {
+    for limit in 0..5 {
         assert_eq!(
             FrozenReduct::new(&candidate, work_limit(limit), &cancellation).unwrap_err(),
             Stop::WorkLimit
         );
     }
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
     assert!(
         frozen
-            .is_satisfied_by(&candidate, work_limit(4), &cancellation)
+            .is_satisfied_by(&candidate, work_limit(6), &cancellation)
             .unwrap()
     );
 }
 
 #[test]
 fn satisfaction_does_not_recharge_the_freeze() {
-    let theory = theory(vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)], vec![2]);
+    let theory = theory(
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+        vec![2],
+    );
     let candidate = interpretation(&theory, 3);
     let cancellation = Cancellation::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
-    for limit in 0..4 {
+    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
+    for limit in 0..6 {
         assert_eq!(
             frozen
                 .is_satisfied_by(&candidate, work_limit(limit), &cancellation)
@@ -232,7 +246,7 @@ fn satisfaction_does_not_recharge_the_freeze() {
     for _ in 0..3 {
         assert!(
             frozen
-                .is_satisfied_by(&candidate, work_limit(4), &cancellation)
+                .is_satisfied_by(&candidate, work_limit(6), &cancellation)
                 .unwrap()
         );
     }
@@ -241,7 +255,7 @@ fn satisfaction_does_not_recharge_the_freeze() {
             &theory,
             &candidate,
             &candidate,
-            work_limit(6),
+            work_limit(10),
             &cancellation
         )
         .unwrap_err(),
@@ -252,7 +266,7 @@ fn satisfaction_does_not_recharge_the_freeze() {
             &theory,
             &candidate,
             &candidate,
-            work_limit(7),
+            work_limit(11),
             &cancellation
         )
         .unwrap()
@@ -262,29 +276,29 @@ fn satisfaction_does_not_recharge_the_freeze() {
 #[test]
 fn roots_are_charged_until_the_first_failure() {
     let theory = theory(
-        vec![Node::Atom(0), Node::False, Node::Implies(1, 1)],
+        vec![Node::atom(0), Node::falsum(), Node::implies(1, 1)],
         vec![2, 1, 0],
     );
     let candidate = interpretation(&theory, 1);
     let cancellation = Cancellation::default();
-    let frozen = FrozenReduct::new(&candidate, work_limit(3), &cancellation).unwrap();
+    let frozen = FrozenReduct::new(&candidate, work_limit(5), &cancellation).unwrap();
     assert_eq!(
         frozen
-            .is_satisfied_by(&candidate, work_limit(4), &cancellation)
+            .is_satisfied_by(&candidate, work_limit(6), &cancellation)
             .unwrap_err(),
         Stop::WorkLimit
     );
     assert!(
         !frozen
-            .is_satisfied_by(&candidate, work_limit(5), &cancellation)
+            .is_satisfied_by(&candidate, work_limit(7), &cancellation)
             .unwrap()
     );
 }
 
 #[test]
 fn foreign_tested_identity_precedes_control() {
-    let own = theory(vec![Node::Atom(0)], vec![0]);
-    let foreign = theory(vec![Node::Atom(0)], vec![0]);
+    let own = theory(vec![Node::atom(0)], vec![0]);
+    let foreign = theory(vec![Node::atom(0)], vec![0]);
     let candidate = interpretation(&own, 1);
     let tested = interpretation(&foreign, 1);
     let cancellation = Cancellation::default();
@@ -316,7 +330,7 @@ fn wrapper_identity_precedes_control() {
 
 #[test]
 fn stopped_queries_leave_the_reduct_reusable() {
-    let theory = theory(vec![Node::Atom(0)], vec![0]);
+    let theory = theory(vec![Node::atom(0)], vec![0]);
     let candidate = interpretation(&theory, 1);
     let cancellation = Cancellation::default();
     let frozen = FrozenReduct::new(&candidate, work_limit(1), &cancellation).unwrap();

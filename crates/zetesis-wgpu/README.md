@@ -193,6 +193,18 @@ executor and retains the exact relation owner. A filter accepts queries from
 that owner and produces one packed row mask per query occurrence. Empty
 conjunctions retain every row; missing dictionary values retain none.
 
+Preparation packs each authoritative 8-, 16- or 32-bit column directly into the
+mapped `u32` storage buffer. Two words per column record its absolute payload
+word offset and cell width. Each payload starts on a word boundary and holds
+four, two or one unchanged equality IDs per word, lowest lane first; unused
+lanes are zero. Host checks cover shape, offsets, byte limits and padding before
+a prepared view escapes. No unpacked host column copy is retained. Headers can
+outweigh cell savings for small relations, and the reported column bytes include
+them. The kernel decodes these cells before applying the same equality predicate;
+this storage change does not give numeric order to IDs or change scheduled
+logical comparison work. CPU tests cover packing, while each physical backend
+requires its own width and mask comparisons.
+
 The kernel evaluates 64 consecutive row positions per workgroup. Unique writers
 pack the flags into ordered mask words; reconstruction preserves local row
 identity and the relation's original catalog mapping. Equality IDs provide no

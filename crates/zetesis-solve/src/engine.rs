@@ -51,6 +51,17 @@ pub(crate) fn validate_countermodel(options: &SolveConfig) -> Result<(), SolveEr
     Ok(())
 }
 
+#[derive(Debug)]
+pub(crate) enum PreparationFailure {
+    Run(SolveError),
+    Stopped(Stop),
+}
+impl From<SolveError> for PreparationFailure {
+    fn from(error: SolveError) -> Self {
+        Self::Run(error)
+    }
+}
+
 pub(crate) struct Engine {
     executor: Executor,
 }
@@ -98,12 +109,13 @@ impl Engine {
         program: &Program,
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
-    ) -> Result<Self, SolveError> {
+    ) -> Result<Self, PreparationFailure> {
         Self::with_ground(
             options,
             program,
             None,
             &ExecutionResources::default(),
+            &Cancellation::default(),
             observations,
             phases,
         )
@@ -114,15 +126,25 @@ impl Engine {
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
         resources: &ExecutionResources,
+        cancellation: &Cancellation,
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
-    ) -> Result<Self, SolveError> {
+    ) -> Result<Self, PreparationFailure> {
+        cancellation.poll().map_err(PreparationFailure::Stopped)?;
         validate_combination(options)?;
         let executor = match options.backend {
-            Backend::Cpu => Executor::cpu(options, program, cached, observations, phases)?,
-            Backend::Gpu(_) => {
-                Executor::gpu(options, program, cached, resources, observations, phases)?
+            Backend::Cpu => {
+                Executor::cpu(options, program, cached, cancellation, observations, phases)?
             }
+            Backend::Gpu(_) => Executor::gpu(
+                options,
+                program,
+                cached,
+                resources,
+                cancellation,
+                observations,
+                phases,
+            )?,
         };
         Ok(Self { executor })
     }
@@ -222,6 +244,34 @@ impl IndependentCpu {
     }
 }
 
+/// Derive all named source capacities from this route's host allowance.
+/// The instance allowance is eagerly reserved inside the host envelope before
+/// catalog or mask growth. Giving it the full envelope would refuse every batch;
+/// this conservative 1/32 share leaves the rest for those simultaneous owners.
+/// Scan scratch is independently bounded and does not reserve its whole ceiling.
+fn lazy_source_limits(
+    options: &SolveConfig,
+    host_bytes: u64,
+    source_work: u64,
+) -> zetesis_cpu::lazy::Limits {
+    const INSTANCE_RESERVATION_SHARE: usize = 32;
+    let host_bytes = usize::try_from(host_bytes)
+        .unwrap_or(usize::MAX)
+        .min(isize::MAX as usize);
+    zetesis_cpu::lazy::Limits {
+        max_candidates: options.batch_size.get(),
+        max_atoms: options.max_atoms,
+        max_source_work: source_work,
+        max_rounds: u64::try_from(options.max_atoms)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1),
+        max_instance_bytes: host_bytes / INSTANCE_RESERVATION_SHARE,
+        max_scan_bytes: host_bytes,
+        max_host_bytes: host_bytes,
+        ..Default::default()
+    }
+}
+
 /// Keep device execution and its cumulative observations under one owner.
 /// The enum uses one allocation for this state, leaving CPU variants compact.
 #[cfg(feature = "gpu")]
@@ -240,17 +290,8 @@ impl LazyGpu {
         seeds: &[SeedSelection],
         cancellation: &Cancellation,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
-        let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);
-        let source_limits = zetesis_cpu::lazy::Limits {
-            max_candidates: options.batch_size.get(),
-            max_atoms: options.max_atoms,
-            max_source_work: options.max_work,
-            max_rounds: u64::try_from(options.max_atoms)
-                .unwrap_or(u64::MAX)
-                .saturating_add(1),
-            max_host_bytes: bytes,
-            ..Default::default()
-        };
+        let source_limits =
+            lazy_source_limits(options, options.max_batch_bytes / 2, options.max_work);
         let device_limits = zetesis_wgpu::GpuLimits {
             max_candidates: options.batch_size.get(),
             max_batch_bytes: options.max_batch_bytes / 2,
@@ -282,9 +323,10 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
+        cancellation: &Cancellation,
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
-    ) -> Result<Self, SolveError> {
+    ) -> Result<Self, PreparationFailure> {
         validate_closure_reservation(options)?;
         let oracle = BatchOracle::new(options.workers, options.batch_size)
             .map_err(SolveError::Batch)?
@@ -297,7 +339,7 @@ impl Executor {
         if options.grounder == Grounder::Eager {
             let ground = match cached {
                 Some(ground) => ground,
-                None => compile_static(options, program, options.max_atoms, phases)?,
+                None => compile_static(options, program, options.max_atoms, cancellation, phases)?,
             };
             observe_static(options, &ground, observations)?;
             observations.record(Event::CpuClosure {
@@ -368,10 +410,11 @@ impl Executor {
         _: &Program,
         _: Option<Arc<GroundProgram>>,
         _: &ExecutionResources,
+        _: &Cancellation,
         _: &mut impl ExecutionSink,
         _: &Recorder,
-    ) -> Result<Self, SolveError> {
-        Err(SolveError::BackendUnavailable)
+    ) -> Result<Self, PreparationFailure> {
+        Err(SolveError::BackendUnavailable.into())
     }
 
     #[cfg(feature = "gpu")]
@@ -380,9 +423,10 @@ impl Executor {
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
         resources: &ExecutionResources,
+        cancellation: &Cancellation,
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
-    ) -> Result<Self, SolveError> {
+    ) -> Result<Self, PreparationFailure> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
 
         let context = resources
@@ -421,17 +465,18 @@ impl Executor {
         let ground = match cached {
             Some(ground) => {
                 if ground.atom_count() > atom_limit {
-                    return Err(SolveError::Static(
-                        zetesis_core::StaticError::LimitExceeded {
+                    return Err(
+                        SolveError::Static(zetesis_core::StaticError::LimitExceeded {
                             resource: "GPU atoms",
                             actual: ground.atom_count(),
                             limit: atom_limit,
-                        },
-                    ));
+                        })
+                        .into(),
+                    );
                 }
                 ground
             }
-            None => compile_static(options, program, atom_limit, phases)?,
+            None => compile_static(options, program, atom_limit, cancellation, phases)?,
         };
         observe_static(options, &ground, observations)?;
         observations.record(Event::DeviceClosure {
@@ -459,16 +504,8 @@ impl Executor {
         };
         match self {
             Self::SharedCpu { oracle, statistics } => {
-                let source = zetesis_cpu::lazy::Limits {
-                    max_candidates: options.batch_size.get(),
-                    max_atoms: options.max_atoms,
-                    max_source_work: options.max_source_work,
-                    max_rounds: u64::try_from(options.max_atoms)
-                        .unwrap_or(u64::MAX)
-                        .saturating_add(1),
-                    max_host_bytes: usize::try_from(options.max_batch_bytes).unwrap_or(usize::MAX),
-                    ..Default::default()
-                };
+                let source =
+                    lazy_source_limits(options, options.max_batch_bytes, options.max_source_work);
                 let result = oracle.check_shared_views(
                     program,
                     seeds.iter().map(SeedSelection::view),
@@ -545,19 +582,26 @@ fn compile_static(
     options: &SolveConfig,
     program: &Program,
     max_atoms: usize,
+    cancellation: &Cancellation,
     phases: &Recorder,
-) -> Result<Arc<GroundProgram>, SolveError> {
+) -> Result<Arc<GroundProgram>, PreparationFailure> {
     let grounding = phases.stage(crate::SolveStage::Grounding);
-    let result = GroundProgram::compile(
+    let result = GroundProgram::compile_with(
         program,
         StaticLimits {
             max_atoms,
             max_ground_rules: options.max_ground_rules,
             max_substitutions: options.max_substitutions,
         },
+        || cancellation.poll(),
     );
     drop(grounding);
-    result.map(Arc::new).map_err(SolveError::Static)
+    result.map(Arc::new).map_err(|failure| match failure {
+        zetesis_core::StaticFailure::Static(error) => {
+            PreparationFailure::Run(SolveError::Static(error))
+        }
+        zetesis_core::StaticFailure::Stopped(stop) => PreparationFailure::Stopped(stop),
+    })
 }
 
 fn observe_static(
@@ -618,6 +662,9 @@ pub(crate) fn selection(backend: Backend) -> zetesis_wgpu::GpuSelection {
 
 #[cfg(test)]
 mod control_contract_tests;
+
+#[cfg(test)]
+mod lazy_memory_tests;
 
 #[cfg(all(test, feature = "gpu"))]
 mod resource_tests;

@@ -147,6 +147,64 @@ fn sessions_start_from_the_same_admission_history() {
     assert!(first.statistics().work > second.statistics().work);
 }
 
+#[test]
+fn repeated_answers_reuse_immutable_preparation_work() {
+    let owner = terminal("{seed(1..4)}. receipt(X):-seed(X).");
+    let model = selection(&owner, &["seed(1)", "seed(3)"]);
+    let mut cursor = owner.reconstruction().unwrap();
+    let first = cursor
+        .reconstruct(&model, &Cancellation::default())
+        .unwrap();
+    let cold = cursor.statistics().latest.work;
+    let second = cursor
+        .reconstruct(&model, &Cancellation::default())
+        .unwrap();
+    let warm = cursor.statistics().latest.work;
+    assert_eq!(first, second);
+    assert!(warm < cold, "cold {cold}, warm {warm}");
+    cursor
+        .reconstruct(&model, &Cancellation::default())
+        .unwrap();
+    assert_eq!(cursor.statistics().latest.work, warm);
+    assert_eq!(
+        cursor.statistics().work,
+        cursor.statistics().admission.work + cold + 2 * warm
+    );
+}
+
+#[test]
+fn cancellation_refuses_a_session_with_a_prepared_plan() {
+    let owner = terminal("{seed(1)}. receipt(X):-seed(X).");
+    let model = selection(&owner, &["seed(1)"]);
+    let mut cursor = owner.reconstruction().unwrap();
+    let first = cursor
+        .reconstruct(&model, &Cancellation::default())
+        .unwrap();
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    assert_eq!(
+        cursor
+            .reconstruct(&model, &cancellation)
+            .unwrap_err()
+            .stop(),
+        Some(Stop::Cancelled)
+    );
+    assert_eq!(cursor.statistics().completed, 1);
+    assert_eq!(names(&first), ["receipt(1)", "seed(1)"]);
+}
+
+#[test]
+fn reconstruction_sessions_can_move_between_threads() {
+    fn require_send<T: Send>() {}
+    require_send::<zetesis_themelios::TerminalReconstruction<'_>>();
+}
+
+#[test]
+fn reconstruction_sessions_can_be_shared_between_threads() {
+    fn require_sync<T: Sync>() {}
+    require_sync::<zetesis_themelios::TerminalReconstruction<'_>>();
+}
+
 fn terminal_with(source: &str, limits: &FormulaLimits) -> TerminalFormula {
     let FormulaMaterialization::Terminal(owner) = prepare_formula(
         source.into(),
@@ -208,6 +266,7 @@ fn distinct_answers_do_not_exhaust_the_grounding_ceiling() {
         },
     );
     let mut cursor = owner.reconstruction().unwrap();
+    let mut peak_work = 0;
     // Every nonempty subset of the seeds is its own answer.
     for mask in 1..16_usize {
         let seeds: Vec<&str> = (0..4)
@@ -218,10 +277,12 @@ fn distinct_answers_do_not_exhaust_the_grounding_ceiling() {
             .reconstruct(&selection(&owner, &seeds), &Cancellation::default())
             .unwrap();
         assert_eq!(names(&result).len(), 2 * seeds.len());
+        peak_work = peak_work.max(cursor.statistics().latest.work);
     }
     let statistics = cursor.statistics();
     assert_eq!(statistics.completed, 15);
-    assert_eq!(statistics.peak.work, largest);
+    assert_eq!(statistics.peak.work, peak_work);
+    assert!(statistics.peak.work <= largest);
 }
 
 #[test]
@@ -282,13 +343,22 @@ fn an_answer_fits_exactly_the_headroom_admission_left() {
         },
     );
     let mut cursor = owner.reconstruction().unwrap();
-    for _ in 0..3 {
+    let mut warm = 0;
+    for index in 0..3 {
         cursor
             .reconstruct(&selection(&owner, &model_names), &Cancellation::default())
             .unwrap();
-        assert_eq!(cursor.statistics().latest.work, call);
+        let charged = cursor.statistics().latest.work;
+        if index == 0 {
+            assert_eq!(charged, call);
+        } else if index == 1 {
+            assert!(charged < call);
+            warm = charged;
+        } else {
+            assert_eq!(charged, warm);
+        }
     }
-    assert_eq!(cursor.statistics().work, admission + 3 * call);
+    assert_eq!(cursor.statistics().work, admission + call + 2 * warm);
     // Refused at admission + c − 1: the refusal names the allowance and the
     // call's own charge.
     let owner = terminal_with(

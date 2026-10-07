@@ -473,30 +473,38 @@ fn pre_cancelled_sessions_retain_the_original_subject_without_reconstruction() {
 #[test]
 fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     let owner = terminal(OPTIONAL);
-    // Each answer gets the headroom admission left. The answer holding both
-    // seeds costs the most to reconstruct; a ceiling one short of admission
-    // plus its cost refuses that answer alone.
-    let mut cursor = owner.reconstruction().unwrap();
-    let admission = cursor.statistics().admission.work;
-    let both = Model::from_positions(
-        owner.base_atom_catalog(),
-        0..owner.base_atom_catalog().atoms().len(),
-    )
-    .unwrap();
-    cursor.reconstruct(&both, &Cancellation::default()).unwrap();
-    let costliest = cursor.statistics().latest.work;
-    let completed_work = Session::builder(
-        PreparedInput::terminal(&owner),
-        config(),
-        Cancellation::default(),
-    )
-    .collect(WorldViewLimits::default())
-    .unwrap()
-    .outcome()
-    .terminal_execution()
-    .unwrap()
-    .reconstruction
-    .work;
+    // The first answer prepares the shared plan; later answers reuse it.
+    // Measure the peak of this session's actual answer order, rather than
+    // treating a separately reconstructed cold answer as its costliest call.
+    let reference = collect(PreparedInput::terminal(&owner));
+    assert_eq!(family(&reference), expected());
+    let reconstruction = reference
+        .outcome()
+        .terminal_execution()
+        .unwrap()
+        .reconstruction;
+    let admission = reconstruction.admission.work;
+    let costliest = reconstruction.peak.work;
+    let completed_work = reconstruction.work;
+    assert!(costliest > 0);
+    let exact = terminal_with_limits(
+        OPTIONAL,
+        &FormulaLimits {
+            max_work: admission + costliest,
+            ..FormulaLimits::default()
+        },
+    );
+    let complete = collect(PreparedInput::terminal(&exact));
+    assert_eq!(family(&complete), expected());
+    let exact_receipt = complete
+        .outcome()
+        .terminal_execution()
+        .unwrap()
+        .reconstruction;
+    assert_eq!(exact_receipt.admission.work, admission);
+    assert_eq!(exact_receipt.allowance.work, costliest);
+    assert_eq!(exact_receipt.peak.work, costliest);
+    assert_eq!(exact_receipt.work, completed_work);
     let limited = terminal_with_limits(
         OPTIONAL,
         &FormulaLimits {
@@ -523,7 +531,19 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
             Err(failure) => break failure,
         }
     };
-    assert!(matches!(*failure.cause, SolveError::Reconstruction(_)));
+    let SolveError::Reconstruction(error) = failure.cause.as_ref() else {
+        panic!("expected reconstruction work refusal: {failure:?}");
+    };
+    let cause = match error {
+        zetesis_themelios::ReconstructionError::Source(cause)
+        | zetesis_themelios::ReconstructionError::Model(zetesis_core::ModelFailure::Stopped(
+            cause,
+        )) => cause.cause(),
+        other => panic!("expected a source work refusal: {other:?}"),
+    };
+    assert!(matches!(cause, FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed, limit, ..
+    } if *observed == u128::from(costliest) && *limit == u128::from(costliest - 1)));
     let outcome = failure.semantic().unwrap();
     assert_eq!(outcome.verified_models(), accepted);
     assert!(accepted < 4);
@@ -532,6 +552,9 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     assert_eq!(receipt.base_answers, accepted + 1);
     assert_eq!((receipt.reconstructed, receipt.pending), (accepted, 1));
     assert_eq!(receipt.reconstruction.completed, accepted);
+    assert_eq!(receipt.reconstruction.admission.work, admission);
+    assert_eq!(receipt.reconstruction.allowance.work, costliest - 1);
+    assert_eq!(receipt.reconstruction.latest.work, costliest - 1);
     assert!(receipt.reconstruction.work < completed_work);
     assert!(session.next().is_none());
     assert_eq!(

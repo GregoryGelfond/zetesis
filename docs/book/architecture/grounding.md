@@ -23,6 +23,14 @@ safety, arithmetic evaluation and resource limits can still fail. A frontend
 syntax diagnostic, an unsupported zetesis construct, and an exceeded resource
 ceiling have distinct meanings; none denotes an inconsistent program.
 
+Possible support also supplies substitutions for source validation. A rule whose
+body contains `not p` cannot contribute an answer-set atom when `p` is a fact,
+but removing that rule from support can hide a later arithmetic error. For
+example, `p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` still reaches
+overflow during admission. Such pruning requires a certificate preserving
+admission throughout the affected consumers, not only answer-set equivalence.
+The current grounder retains those support rows.
+
 The [checked source-preparation example](../rust/source.md) follows
 `prepare_formula`, the retained analysis basis, `ground` and a complete CPU
 collection. It contrasts two Boolean source families whose different counting
@@ -109,18 +117,41 @@ ceiling applies independently to each guard; the family API instead has a
 cumulative subset ceiling. Assignment proposal families already use the family
 primitive and share the same source-side call and receipt handling.
 
-Independent compilations share the ground builder's `FormulaNodes` owner. It
-retains one node vector and the extent of its completed topology validation;
-subsequent compilers inspect only the unchecked suffix. Reading lends an
-immutable slice. Appending leaves new nodes unchecked, and truncating or
-extracting a suffix shortens the validation extent. Canonical remapping therefore
-cannot give replacement nodes the removed suffix's validation. There is no
-second formula representation or cached aggregate result in this mechanism.
-Every call still checks its node ceiling, tuple conditions and control. The
-ordinary aggregate functions accepting a raw vector retain full validation.
+An assignment aggregate's retained family is identified by its source occurrence
+and the inherited variables read by its element tuples and conditions. Other
+bindings do not duplicate that family. The assignment value and its written
+guards still select the appropriate formula in each rule instance. These
+families belong to one completed support snapshot; they never carry results
+across growing support rounds. Complete tuple identity and eligibility formulas
+remain unchanged, including their frozen-reduct meaning.
 
-The configured aggregate work, node and state ceilings are unchanged. For a
-shared append they apply to the whole family, and its work is also bounded by
+Independent compilations share the ground builder's `FormulaNodes` owner. It
+retains paired node and operand buffers and the extent of committed topology
+validation; subsequent compilers inspect only the unchecked suffix. Reading
+borrows complete child rows. Checked logical appends extend a fully validated
+prefix; raw ingress remains unchecked. Append transactions own both suffixes. Rollback or
+detachment restores both lengths and the checkpoint's validation frontier;
+validation discovered through newly appended arena cells is discarded with them.
+Canonical remapping cannot give replacement nodes removed validation. There is
+no second formula representation or cached aggregate result in this mechanism.
+Every call still checks its node and operand ceilings, tuple conditions and
+control. Raw paired constructors retain full validation.
+
+Final source admission consumes that same owner through
+`FormulaNodes::prepare_admission`, retaining topology evidence until its fixed
+`TheoryAdmission::admit` route runs. The core supplies the remaining scan charge:
+`2N + R` for fully checked topology and `2N + E + R` otherwise, where `N` counts
+nodes, `E` counts all logical child occurrences and `R` counts roots. Both routes
+independently recount occurrences, scan atom IDs and validate roots; the saved
+work is only the repeated child traversal. The source charges this amount before
+publication with its existing work and cancellation checks. All dimension,
+arena, atom-universe and root bounds remain independent. Raw re-entry discards
+the frontier and receives full validation. The additional consuming-owner
+correspondence depends on append, rollback and detach invariants; it is not
+established merely by the raw-constructor extraction proof.
+
+Aggregate work, node, operand and state ceilings apply to the whole shared
+family, and its work is also bounded by
 remaining formula work. The source charges guard preparation, weight inspection,
 remapping and accepted compiler work, including a refused compiler prefix.
 Collecting bounds before compilation changes the operation order and numerical
@@ -131,7 +162,8 @@ through remapping. `AggregateFamilyBuild::root_storage_bytes()` reports the root
 vector header and its actual capacity, excluding the DAG and compiler scratch.
 Failed compiler transactions expose work receipts but no returned-root allocation
 receipt; their internal transient allocations remain bounded by the aggregate
-API's guard and state ceilings rather than source support-peak measurements.
+API's guard, operand and state ceilings rather than source support-peak
+measurements.
 
 ## Canonical values and independent meanings
 
@@ -140,6 +172,12 @@ retain term identifiers, relation columns retain those same identifiers, and
 generated arithmetic values and compound terms enter that vocabulary through a
 checked writer. Joins compare identities within the vocabulary; ordered
 comparisons still use ASP term order. Identifier order has no logical meaning.
+
+Comparing distinct canonical compound terms can reuse a shared immutable
+constructor name. The descriptor comparison admits its exact slice identity;
+equal storage needs no repeated byte scan. Kind, sign, arity and child terms
+still determine the result. Different storage uses the ordinary content
+comparison, and ingress values keep their existing checked comparison path.
 
 Preparation admits static constants, signed predicates and constructor names
 before the first support round. Compiled expressions and patterns keep component
@@ -350,12 +388,20 @@ occurrence binds and the variables each comparison waits on. Extending the
 bound prefix one occurrence at a time, the
 [criterion](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/order.rs)
 takes first an occurrence whose variables are all bound, which is a test and
-never widens the join; then the smaller relation; among relations of one size
-the occurrence that decides the most waiting comparisons, so that a false
-comparison prunes before an unrelated relation multiplies the rows; and
+never widens the join; then an empty source, followed by the generator that
+decides the most waiting comparisons. A false comparison can then prune before
+deeper joins multiply the rows. Among equally decisive generators, a constant
+or already-bound whole argument takes precedence over an independent domain:
+that argument can use an equality posting. The remaining criteria prefer the
+smaller relation, then progress toward other waiting comparisons, and
 otherwise the earlier occurrence of the canonical body, which orders literals
 by predicate and then by variable name rather than by their position in the
-source text. Every order yields the same complete bindings, and the
+source text. A known argument is a preference, not a bound on the number of
+matching rows: a skewed posting may contain the whole relation, and a comparison
+may accept every row. This ordering criterion does not treat bound children
+of a structured argument as a known whole argument. Exact structural probes
+resolve those children later, at the selected occurrence.
+Every order yields the same complete bindings, and the
 semi-naive partition reads source occurrence, not this order. In the pruning
 path, a comparison is checked at the depth whose occurrence binds its last
 variable. A defined false comparison can prune the prefix. Complete arithmetic
@@ -534,6 +580,13 @@ canonical rows can survive a refusal without entering either discovery index.
 Both views retain only metadata over the same authoritative payload; their
 actual capacities and growth overlap are charged.
 
+Prepared head patterns retain candidate locations for their predicate's column
+block and discovery subtree. Each insertion checks that those locations still
+name the same signed predicate; a changed directory uses ordinary lookup.
+Tuple identity is checked afresh, so no absence result survives an insertion.
+This reuses predicate preparation across a family without another atom store.
+The larger preparation headers remain included in resource accounting.
+
 A committed prefix supplies the count-plan collector's exact dense occurrence
 view. The first commit transfers the pending ID map; later commits move only
 pending IDs after borrowed views end. Finalization transfers that mapping and
@@ -611,6 +664,62 @@ and collects new positive head atoms. Aggregate and conditional truth remains in
 the emitted formulas; it does not prune possible producers. A proposed aggregate
 assignment value retains its original equality.
 
+An ordinary nonempty head with a checked aggregate binding plan can reuse a
+completed support continuation when the next positive binding agrees on every
+relational input read by that continuation. The compiler's
+[`continuation_inputs`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment_ir.rs)
+summary covers generators, scalar filters, arithmetic, negative literals,
+aggregate tuples and conditions, and the head. It excludes generated targets
+and reads confined to the positive witness patterns. Thus different anonymous
+witnesses can share head production without treating their atoms as true.
+Rich heads and unplanned scopes retain their existing traversal.
+
+Reuse is local to one rule and immutable support snapshot. Positive matching,
+row restrictions and prefix checks still run before the comparison. Only an
+exhausted continuation qualifies: all its selected heads have been visited,
+and its defined-witness and first-error evidence remains in the join. The
+existing cursor frame owns the comparison inputs; no additional key map or
+binding snapshot is retained. A different or missing input restarts the
+continuation. Every support round creates fresh joins. Final formula emission
+continues to visit every original witness, preserving its activation, aggregate
+equalities and provenance.
+
+Final formula construction can also share a continuation, with a different
+observation: it retains every positive activation. For an ordinary nonempty head
+with the checked plan, flat positive patterns and total prefix comparisons,
+[`formula_factor::continuations`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_factor/continuations.rs)
+groups consecutive bindings with equal continuation inputs. It forms a
+disjunction of their whole positive-witness conjunctions and conjoins that guard
+with each shared continuation's remaining body. Each resulting implication and
+producer keeps the original head and source origins. Correlations between atoms
+within a witness, aggregate equality, and negative conditions remain formulas;
+possible support does not establish their truth.
+
+The first selected row completes body filters and head arithmetic before witness
+atoms are published. Empty or entirely rejected continuations introduce none;
+rejected rows retain scoped body validation. Lookahead uses the existing matcher,
+row restrictions and a lent base frame, while the active proposal keeps its own
+comparison certificate. A differing key starts another run, including when an
+earlier key reappears. One retained proposal row and the formula guard replace
+repeated proposal products; there is no global grouping table. Partial prefix
+evaluation and other unchecked shapes keep complete traversal. All ordinary
+storage, work and interruption checks remain active, and an unfinished run
+cannot produce an admitted theory. The finite factorization law preserves
+original and arbitrary frozen-reduct truth; source scope and runtime admission
+remain separate implementation obligations.
+
+Preparing the summary scans the source footprint twice. With V outer variables,
+S plan steps and F source-footprint entries, its worst-case work is O(V(S + F));
+all inspections are charged to source term work. Its retained slot indices are
+charged once to `ScalarBytes`. Comparing a new frame costs O(V + K) for K retained
+input indices, with canonical scope checks and the simultaneous old/new frame
+storage admitted through the existing work and byte limits. The compiler's
+source-footprint extraction and this producer-continuation correspondence are
+executable obligations, not a Lean-verified Rust implementation. The
+[support continuation regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/continuations.rs)
+compare full support, formula graphs, diagnostics and provenance with reuse
+disabled.
+
 For a normalized positive-flat program without objective declarations, a private
 [producer plan](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers.rs)
 checks every original IR occurrence against the rule certificate also used by
@@ -646,8 +755,16 @@ The [producer scheduling laws](https://github.com/GregoryGelfond/zetesis/blob/ma
 state complete input registration and published old-head history as explicit
 premises. Fewer visits do not by themselves establish a timing improvement.
 
-Ordinary positive atom heads with positive flat witnesses and pure scalar checks
-or generators use [delta joins](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs).
+Structural positive patterns stage borrowed canonical subterms before changing
+bindings. Each join owns one reusable capture buffer under its existing support
+storage lease; capacity growth consumes scalar-byte reservation, while actual
+retained capacity and replacement overlap remain under `max_support_bytes`.
+A mismatch or refusal clears the staged captures, and a successful match clears
+them after committing bindings to the ordinary undo trail. This changes neither
+candidate-row selection nor constructor, constant and repeated-variable checks.
+
+Ordinary positive atom heads with positive flat or structural witnesses and pure
+scalar checks or generators use [delta joins](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs).
 Flat ordinary `not` and `not not` atoms may occur between these inputs. They
 provide no bindings and do not test truth during possible-support discovery;
 their arguments use the existing admitted bindings and scalar evaluation.
@@ -673,8 +790,14 @@ the cursor does not first prepare an unrestricted order and then replace it.
 An ordinary producer without positive inputs runs once, even if it has negative
 non-input atoms. Changing such atoms' possible presence cannot enable another
 head proposal, because support generation ignores their truth. Aggregate,
-conditional, projected, structural and nonnormal producers retain full-round traversal. Every
-selected input still passes the same typed tuple matcher and scalar evaluator.
+conditional, projected and nonnormal producers retain full-round traversal.
+Structural occurrences use the original whole-row capture and the same nested
+constructor, constant, repeated-variable and anonymous-pattern checks. Bound
+structural postings intersect the old/new interval by actual relation row position.
+This per-rule certificate does not require the whole program to be positive:
+objectives or richer rules elsewhere leave eligible normal rules eligible, while
+the separate whole-program wake schedule retains its narrower applicability.
+Every selected input still passes the same typed tuple matcher and scalar evaluator.
 An empty proposal set establishes completion only after every required variant
 and conservative producer has finished. Final formula emission visits all
 complete authored-body families and preserves their definedness evidence,
@@ -751,9 +874,48 @@ out atoms outside that carrier. [SourceSupport](../lean/theorems.md) and the
 state this premise explicitly; successful Rust completion is not a proof of the
 source-to-reduct correspondence.
 
-Formula nodes use an exact-key hash index with randomized hashing. The separate
+Ordinary normal rules with at least two flat positive body atoms can reuse
+their [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).
+The join lends the exact relation occurrences and identifies the prefix left
+unchanged by its last advance. A prepared head projects arguments from those
+rows into the existing canonical atom store. Repeated variables, constants and
+strong negation keep their original meaning. The same projection serves
+possible-support discovery and formula emission; the latter still visits every
+producer, even when its head is already known.
+
+The [formula consumer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/producer.rs)
+constructs atomic formulas and balanced groups of two or three conjuncts only
+after a complete selected binding exists. Unchanged prefixes retain their
+subformulas. Eligible non-prefix groups of two or three atomic witnesses also
+retain reached ordered row-position tuples and their canonical formula IDs.
+Each map belongs to one group with fixed source occurrences in one immutable
+join snapshot; row positions from another owner cannot identify its atoms.
+A hit reuses the existing subformula. A miss constructs it through the same
+canonical node index. No possible row product is precomputed, and every complete
+producer still publishes its implication, root and producer metadata.
+
+Cursor and group metadata are linear in body width. The maps additionally retain
+space linear in the number of distinct reached subtuples across eligible groups.
+A sorted map with `m` entries takes logarithmic lookup work and can shift `m`
+entries on insertion, giving quadratic total movement in the worst insertion
+order. Key reads, searches, movement, retained capacity and replacement peaks
+consume the existing work and storage allowances; reuse still checks
+cancellation. Arithmetic, default negation and local generators retain their
+existing construction path.
+
+These are representation and execution changes, not an inference that possible
+support is true. All producer conditions and source origins remain represented.
+Finite conjunction and frozen-reduct laws justify regrouping; the join's exact
+row identity and complete producer coverage are separate implementation
+obligations. Semantic differential tests check both original truth and frozen
+truth for arbitrary interpretations. They do not establish a source-to-Rust
+formal refinement.
+
+Formula nodes use an exact-key index with the shared deterministic word hash. The separate
 node sequence establishes dense IDs and output order; hash-table iteration never
-participates in formula construction. Complete-key equality preserves node identity under hash collisions, and node ceilings are checked before a new ID is published.
+participates in formula construction. Complete-key equality preserves node
+identity under hash collisions. Collision probes consume the work allowance,
+and node ceilings are checked before a new ID is published.
 
 Completed formula theories always include double-negated necessary support
 guards. These guards strengthen candidate checks while preserving reduct subset
@@ -763,9 +925,50 @@ Construction uses one
 with flat atom headers and shared append arenas. Each header identifies its
 producer sequence, ordered source locations and first atom occurrence. Producer
 links preserve insertion order and repetitions. Origin links preserve full source
-identity and span order, with duplicates removed when encountered. Necessary
-support formulas still fold the complete producer sequence at the final support
-stage; collecting metadata creates no formula nodes early.
+identity and span order, with duplicates removed when encountered. Collecting
+metadata creates no formula nodes early. The final support stage uses complete
+producer sequences from this same owner.
+
+Atoms with one recorded nonconstant producer can share necessary conditions.
+For each such body, the compiler reads only its direct conjunction children;
+other formulas stay opaque singleton conditions. It groups exact child-node
+identities and replaces the selected family of guards
+`not not (h -> AND conditions)` by guards
+`not not ((OR requiring heads) -> condition)`. Both families require every
+incidence's true head to have a true condition in the original interpretation.
+Double negation freezes precisely that predicate for every tested interpretation,
+so the conjunction of roots has the same original and arbitrary frozen truth.
+Ordinary roots and shared body prefixes are unchanged. No positive support is
+created by the guard disjunction. Multiple recorded producers, even duplicates,
+and constant or missing producers retain their per-atom guard construction.
+
+A deterministic shape check precedes incidence-row and formula publication. It
+requires fewer estimated guard nodes, no more logical child occurrences and no
+more roots; these estimates precede canonical interning and do not promise less
+work for every input. Before allocating the directory, a charged catalog scan
+counts eligible heads and direct incidences. Empty conjunction rows decline
+sharing, and a necessary operand bound rejects families that cannot fit the
+existing guard price even with perfect sharing. This precheck does not detect all
+unprofitable families. They use the existing guard path after charging their
+planning work. Planning can exhaust work or live workspace on a program admitted
+by the original path; the compiler reports that typed refusal without refunding
+work or hiding cancellation.
+
+The shared plan uses a directory over the fixed node prefix, ordered group headers
+and one complete incidence arena. Directory entries explicitly distinguish absent
+groups from present indices in one machine word. The coordinate passes take
+O(P + A + I) visits and O(P + I) temporary cells, for P prefix nodes, A emitted
+atoms and I direct incidences. Semantic node lookup and evidence union add their
+own charged comparisons, movement, copies and temporary evidence. New buffers use
+the existing live workspace allowance, including growth overlap. Repeated
+incidences are visited and charged; retained native operands count against the
+ordinary operand ceiling.
+
+Unselected guards keep their atom order; shared groups follow in first-incidence
+order. Each shared root retains the sorted union of all participating heads'
+producer sites and first occurrences. Root identity and multiplicity can change,
+while every original source site remains represented. Counting, filling or
+publication failure returns an admission refusal, never a partial theory.
 
 This removes each atom's intermediate heap buffers. It adds a link word per
 entry, and origin insertion can still inspect all locations associated with an
@@ -917,6 +1120,10 @@ Reconstruction shares immutable term and tuple storage, but starts with a fresh
 truth selection for every answer. Its joins use the shared whole-argument matcher
 and borrowed typed keys. It neither imports a second value universe nor treats
 possible support as truth. Duplicate witnesses coalesce only at head publication.
+The first reconstruction prepares the retained head and body patterns, in their
+original order. Later answers reuse those patterns while initializing their own
+bindings and row cursors. Preparation is charged once; its retained capacity is
+counted on every call. A failed preparation publishes no partial plan.
 
 The automatic formula route chooses this schedule over an eager base, and the
 lazy formula route over a hybrid base, whose eligible constraints are streamed
@@ -943,6 +1150,27 @@ insertion extends only the new row's postings. An immutable snapshot borrows
 these existing columns and postings. Row and equality IDs survive append, while
 queries remain bound to one particular immutable view. Numeric ID order is not
 ASP term order.
+
+Round publication opens one checked catalog append session for each contiguous
+predicate run. The session reuses the one-row transaction's equality IDs and
+tentative dictionary patches; scalar insertion uses the same transaction engine.
+It lends each newly committed row's equality IDs directly to posting insertion,
+without rebuilding a relation view. A duplicate keeps its original row and adds
+no posting. Each row still admits all comparisons, reservations and publication
+work before its indivisible commit. Earlier committed rows survive a later
+refusal; the support build then fails, without claiming completed support.
+Session capacities are charged separately from retained catalog storage,
+including actual growth overlap, and are released at the end of the run.
+Reusing these allocations removes repeated preparation, not dictionary searches
+or per-row index maintenance.
+
+An insertion beyond the relation's current greatest tuple reuses the published
+rightmost index path. Each row still undergoes the typed maximum comparison;
+numeric IDs do not establish this order. The relation and atom interner share
+the same checked path mechanism. Only changed links and balances are published,
+with rotation and path-refresh work admitted before the row commits. Interior
+insertions or failed path preparation invalidate the retained path. This reuses
+the existing mutation buffer without another tuple collection or lookup index.
 
 The append dictionary also retains a sparse inverse from canonical term identity
 to local equality ID. Tuple insertion and equality queries share that lookup.
@@ -987,6 +1215,42 @@ rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
 bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
 ```
 
+A structural argument such as `f(X,g(Y))` supplies an exact equality when all
+its named variables are bound and it contains no anonymous position. The cursor
+resolves its constructors through the canonical vocabulary's existing lookup,
+including name, sign, arity and ordered children. It then uses the same
+whole-column posting as an already bound flat argument. A missing constructor
+identity selects no rows from that snapshot. Partial arguments and anonymous
+positions retain the ordinary matcher; one exact argument can restrict a tuple
+whose other arguments remain partial. The full matcher still checks every
+offered row.
+
+These queries admit no terms and change no incoming binding. Append-side queries
+borrow a fresh lookup from the writer; completed support uses its retained
+read-only lookup. Neither retains negative results across writer growth. A
+cursor reuses leased term-ID frames and child-index scratch, clearing provisional
+IDs after every result. Existing support-byte and work limits cover this scratch,
+the temporary append lookup header and the lookup's local child capacity.
+Refusal and cancellation remain typed failures. Eliminated matcher visits are
+no longer charged; the additional exact-query work is charged where performed.
+
+A cursor also retains at most one successful resolution per actual structured
+source argument. Its immutable argument nodes name the input slots; one scoped
+term-ID frame stores the last complete inputs and result. Reuse requires every
+current input to be present and canonically identical. The fresh whole-capture
+slot addresses the record directly, and the record checks the actual source
+argument; ambiguous capture coordinates in manually assembled IR decline reuse.
+No absence, relation row or logical activation is cached.
+
+These records belong to one join, its source plan and its fixed support snapshot.
+The append vocabulary grows monotonically; the ordinary checked argument view
+still validates the result against the current reader prefix. Backtracking owns
+the incoming slots and does not publish retained results into them. A changed
+input invalidates the record before replacement, and a complete successful
+replacement alone makes it reusable. Refusal leaves no partial valid record.
+Preparation, dependency checks, ID transfers and retained capacity are charged;
+only the constructor reconstruction and lookup actually avoided are omitted.
+
 Each cursor resolves a positive occurrence to its borrowed snapshot relation on
 first entry and retains that reference across backtracking. Row access and later
 probes use the same immutable row owner, without searching the predicate directory
@@ -995,8 +1259,9 @@ resolves its own relations, including predicates newly inserted in the directory
 
 The indexed selector folds known equalities directly into its shortest posting.
 It uses the core relation's checked single-equality resolver, shared with owned
-`Query` construction, without allocating temporary key or equality vectors.
-Every later variable slot and column is still checked after a missing value;
+`Query` construction. Flat probes need no temporary key or equality vectors;
+structural probes supply their resolved argument frame. Within this resolver,
+every later variable slot and column is still checked after a missing value;
 interruption returns no partial posting. Per-step work admission and completed
 failure prefixes remain observable. Owned public queries retain their existing
 frame and equality-vector capacity receipts. The cursor's resolved-reference
@@ -1257,11 +1522,10 @@ rounds retain scoped IDs. Allocator/tree/control-runtime overhead and unrelated
 grounding state remain separate. The independent cumulative source-expansion
 budget still applies, and this support limit is not RSS.
 
-The command-line equivalent is the advanced `--max-support-bytes` option,
-shown by `--help-all` and recorded by `--stats`. It defaults to 128 MiB and
-applies to eager formula admission. Zero is a zero-byte ceiling, not unlimited
-memory. Increasing this allowance does not change source-atom, work or other
-independent limits.
+Ordinary execution derives this support capacity from the shared `--memory`
+allowance. Zero memory supplies zero capacity. The library's explicit
+`FormulaLimits` remains available for callers that need to bound individual
+operations. Work statistics retain their meaning independently of that policy.
 
 Row identity connects relational semantics to masks, intersections and gathers.
 Combining two column masks means intersecting positions in the same relation
@@ -1272,6 +1536,16 @@ then encodes complete typed values through a dictionary of borrowed references.
 It preserves row occurrences and their order, including duplicate tuples, and
 keeps original catalog indices distinct from local positions. Explicit predicate
 arity and row count distinguish an empty relation from a nullary tuple.
+
+The equality columns use 8-, 16- or 32-bit cells behind one borrowed `Column`
+view. Decoding returns the same `u32` dictionary identifier; it neither renumbers
+values nor changes typed term order. Immutable construction chooses a sufficient
+width from its dictionary. An appendable catalog widens a column before a new
+identifier is published, charging the copied cells and simultaneous old/new
+storage. A later refusal can retain that wider capacity while preserving every
+published row. Clearing a catalog retains its reusable capacity. There is no
+retained unpacked copy. Headers, indexes and allocator capacity still count, so
+narrower cells alone do not establish a smaller complete owner or faster query.
 
 The lazy source grounder retains its candidate-specific relation and world-mask
 contracts; this eager support representation does not make a possible atom true.
@@ -1286,10 +1560,10 @@ bindings = FilterMap(MatchWholeTuple(pattern, binding), selected)
 ```
 
 This conjunction-filter primitive does not replace the eager grounder's shortest
-posting policy. Additional filtering skips budgeted matcher visits and value
-extraction, which can change their checked-failure boundaries. The production
-change preserves exactly the previous offered rows, preserving that boundary as
-well as successful bindings.
+posting policy. Intersecting every posting would skip additional budgeted matcher
+visits and value extraction, which can change checked-failure boundaries. Such a
+consumer must establish preservation of successful bindings and typed failures
+for its own matching operation.
 
 The same equality predicate can produce ordered positions or packed row bits.
 [`Relation::select_mask`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation/selection.rs)

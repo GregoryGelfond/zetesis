@@ -10,7 +10,7 @@ use crate::support::formula_trees::{Formula, world};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::Node;
+use zetesis_ferraris::NodeView as Node;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
@@ -122,10 +122,10 @@ fn original_rule(program: &AdmittedFormula, head: &str) -> usize {
         .iter()
         .copied()
         .filter(|root| {
-            let Node::Implies(_, consequent) = program.theory().nodes()[*root] else {
+            let Node::Implies(_, consequent) = program.theory().view().node(*root).unwrap() else {
                 return false;
             };
-            program.theory().nodes()[consequent] == Node::Atom(atom)
+            program.theory().view().node(consequent).unwrap() == Node::Atom(atom)
         })
         .collect();
     assert_eq!(

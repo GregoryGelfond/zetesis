@@ -12,15 +12,19 @@ fn theory(roots: Vec<usize>) -> Theory {
     // a, b, false, not a, a or b, (a or b) and not a, b -> a.
     Theory::new(
         2,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::False,
-            Node::Implies(0, 2),
-            Node::Or(0, 1),
-            Node::And(4, 3),
-            Node::Implies(1, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 2),
+                Node::or_pair([0, 1]),
+                Node::and_pair([4, 3]),
+                Node::implies(1, 0),
+            ],
+            vec![],
+        )
+        .unwrap(),
         roots,
         AdmissionLimits::default(),
     )
@@ -64,7 +68,7 @@ fn node_truth_describes_the_exact_interpretation() {
                 None
             }
         );
-        assert_eq!(attempt.work, if a || b { 9 } else { 8 });
+        assert_eq!(attempt.work, if a || b { 17 } else { 16 });
     }
 }
 
@@ -73,7 +77,7 @@ fn root_scan_exhaustion_exposes_no_truth() {
     let program = theory(vec![4, 6]);
     let candidate = Interpretation::new(&program, [0]).unwrap();
     let mut workspace = EvaluationWorkspace::default();
-    for max_work in 0..9 {
+    for max_work in 0..17 {
         let attempt = workspace.evaluate(
             &candidate,
             EvaluationLimits {
@@ -91,13 +95,13 @@ fn root_scan_exhaustion_exposes_no_truth() {
     let attempt = workspace.evaluate(
         &candidate,
         EvaluationLimits {
-            max_work: 9,
+            max_work: 17,
             ..EvaluationLimits::default()
         },
         &Cancellation::default(),
     );
     assert!(attempt.result.unwrap().is_model());
-    assert_eq!(attempt.work, 9);
+    assert_eq!(attempt.work, 17);
 }
 
 #[test]
@@ -150,14 +154,20 @@ fn reserved_capacity_does_not_supply_original_truth() {
         &Cancellation::default(),
     );
     assert!(complete.result.unwrap().is_model());
-    assert_eq!(complete.work, 8);
+    assert_eq!(complete.work, 16);
     assert_eq!(complete.retained_bytes, bytes);
 }
 
 #[test]
 fn storage_ceiling_includes_existing_capacity() {
     let large = theory(vec![]);
-    let empty = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let empty = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidate = Interpretation::new(&large, []).unwrap();
     let nothing = Interpretation::new(&empty, []).unwrap();
     let mut workspace = EvaluationWorkspace::default();
@@ -217,7 +227,13 @@ fn storage_ceiling_includes_existing_capacity() {
 
 #[test]
 fn empty_evaluation_observes_control_before_storage() {
-    let program = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let program = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidate = Interpretation::new(&program, []).unwrap();
     let cancelled = Cancellation::default();
     cancelled.cancel();

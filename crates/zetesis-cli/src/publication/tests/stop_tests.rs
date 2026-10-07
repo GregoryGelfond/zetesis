@@ -24,8 +24,6 @@ fn options(json: bool) -> Options {
         "countermodel",
         "--workers",
         "1",
-        "--completion-workers",
-        "1",
         "--models",
         "0",
         "--color",
@@ -115,10 +113,8 @@ fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
         .windows(MARKER.len())
         .position(|bytes| bytes == MARKER)
         .unwrap();
-    let mut options = options(true);
     let footer = &original[boundary..];
     for maximum in 0..footer.len() {
-        options.max_json_record_bytes = maximum;
         let mut output = Vec::new();
         let mut document =
             crate::output::document_fixture::Document::new(&mut output, true).unwrap();
@@ -128,7 +124,7 @@ fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
             .write_all(&original[PREFIX.len()..boundary])
             .unwrap();
         let failure = document
-            .finish(Ok(stopped_progress(stopped)), &options)
+            .finish(Ok(stopped_progress(stopped)), maximum)
             .unwrap_err();
         assert!(matches!(
             *failure.cause,
@@ -147,14 +143,13 @@ fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
         assert_eq!(failure.publication().unwrap().models(), 1);
         assert!(!failure.publication().unwrap().summary());
     }
-    options.max_json_record_bytes = footer.len();
     let mut output = Vec::new();
     let mut document = crate::output::document_fixture::Document::new(&mut output, true).unwrap();
     document
         .write_all(&original[PREFIX.len()..boundary])
         .unwrap();
     let completed = document
-        .finish(Ok(stopped_progress(stopped)), &options)
+        .finish(Ok(stopped_progress(stopped)), footer.len())
         .unwrap();
     assert!(matches!(completed, PublicationOutcome::Stopped(_)));
     assert!(completed.publication().summary());

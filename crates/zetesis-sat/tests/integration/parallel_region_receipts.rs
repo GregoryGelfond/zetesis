@@ -12,12 +12,16 @@ use zetesis_sat::{Cancellation, Incomplete, Limits, SearchLimits, StableModels};
 fn exhausted_root_narrowing_keeps_its_charged_work() {
     let theory = Theory::new(
         1,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Implies(1, 0),
-            Node::Or(1, 2),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::or_pair([1, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3],
         AdmissionLimits::default(),
     )
@@ -34,7 +38,9 @@ fn exhausted_root_narrowing_keeps_its_charged_work() {
     assert_eq!(initial.regions.unwrap().counts.work, initial.search.work);
     // Room for the original index, charged when the walk starts, and one
     // read of the root's narrowing.
-    let limit = initial.search.work + u64::try_from(theory.nodes().len()).unwrap() + 1;
+    let limit = initial.search.work
+        + u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap()
+        + 1;
     let mut search = StableModels::with_region_workers(
         &theory,
         workers,
@@ -76,7 +82,7 @@ fn failed_reduct_narrowing_keeps_its_query_count() {
     // no concurrent candidate whose completed query can mask a missing count.
     let theory = Theory::new(
         2,
-        vec![Node::Atom(0), Node::Atom(1)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap(),
         vec![0, 1],
         AdmissionLimits::default(),
     )

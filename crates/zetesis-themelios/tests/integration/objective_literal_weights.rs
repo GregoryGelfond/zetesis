@@ -64,7 +64,10 @@ fn ignored_weights_preserve_the_original_reduct_subject() {
         // Identical original nodes imply identical truth for every original and
         // frozen interpretation, including candidates rejected by the reduct.
         assert_eq!(input.atoms(), ordinary.atoms());
-        assert_eq!(input.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(
+            (input.theory().nodes(), input.theory().operands()),
+            (ordinary.theory().nodes(), ordinary.theory().operands())
+        );
         assert_eq!(input.theory().roots(), ordinary.theory().roots());
         assert_eq!(input.formula_origins(), ordinary.formula_origins());
     }

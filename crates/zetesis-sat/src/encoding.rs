@@ -1,4 +1,4 @@
-use zetesis_ferraris::{Interpretation, Node, Theory};
+use zetesis_ferraris::{Interpretation, NodeView, Theory};
 
 use crate::search::{Budget, Quota, storage};
 use crate::{AdmissionLimits, Assignment, Cnf, Incomplete, Literal};
@@ -22,17 +22,48 @@ fn frozen(
     budget: &mut Budget<'_, impl Quota>,
 ) -> Result<(), Incomplete> {
     reserve(values, theory.nodes().len())?;
-    for node in theory.nodes() {
+    for index in 0..theory.view().len() {
         budget.tick()?;
-        values.push(match *node {
-            Node::Atom(atom) => candidate.contains(atom),
-            Node::False => false,
-            Node::And(a, b) => values[a] && values[b],
-            Node::Or(a, b) => values[a] || values[b],
-            Node::Implies(a, b) => !values[a] || values[b],
-        });
+        values.push(
+            match theory
+                .view()
+                .node(index)
+                .map_err(|_| Incomplete::InvalidWitness)?
+            {
+                NodeView::Atom(atom) => candidate.contains(atom),
+                NodeView::False => false,
+                NodeView::And(operands) => truth_operands(operands, values, true, budget)?,
+                NodeView::Or(operands) => truth_operands(operands, values, false, budget)?,
+                NodeView::Implies(a, b) => {
+                    budget.tick()?;
+                    let left = values[a];
+                    budget.tick()?;
+                    let right = values[b];
+                    !left || right
+                }
+            },
+        );
     }
     Ok(())
+}
+
+fn truth_operands(
+    operands: &[usize],
+    values: &[bool],
+    conjunction: bool,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<bool, Incomplete> {
+    let mut value = conjunction;
+    for &child in operands {
+        budget.tick()?;
+        let truth = values[child];
+        value = if conjunction {
+            value & truth
+        } else {
+            value | truth
+        };
+    }
+    Ok(value)
 }
 
 pub(crate) fn encode<Q: Quota>(
@@ -68,18 +99,20 @@ impl Workspace {
         &mut self,
         theory: &Theory,
         limits: AdmissionLimits,
+        budget: &mut Budget<'_, impl Quota>,
     ) -> Result<(), Incomplete> {
+        let gates = gate_count(theory, budget)?;
         let cnf = self
             .cnf
             .get_or_insert(Cnf::empty(theory.atom_count(), limits)?);
         cnf.reset(theory.atom_count(), limits)?;
-        let dimensions = ClauseReservation::new(theory, limits)?;
+        let dimensions = ClauseReservation::new(theory, limits, gates)?;
         cnf.reserve(dimensions.clauses, dimensions.literals)?;
         reserve(&mut self.mask, theory.nodes().len())?;
         reserve(&mut self.nodes, theory.nodes().len())?;
         reserve(&mut self.strict, theory.atom_count())?;
         self.gates
-            .try_reserve(theory.nodes().len().saturating_sub(self.gates.len()))
+            .try_reserve(gates.saturating_sub(self.gates.len()))
             .map_err(|_| Incomplete::Allocation)?;
         Ok(())
     }
@@ -107,7 +140,7 @@ impl Workspace {
         budget.tick()?;
         self.clear();
         if Q::BOUNDED_STORAGE {
-            self.reserve(theory, limits)?;
+            self.reserve(theory, limits, budget)?;
         }
         let cnf = self
             .cnf
@@ -143,22 +176,56 @@ impl Workspace {
     }
 }
 
+/// Count the exact number of unsimplified binary CNF gates used by native
+/// groups. Only metadata is inspected: every node costs one permit and each
+/// arity is read in constant time from the admitted view.
+pub(crate) fn gate_count(
+    theory: &Theory,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<usize, Incomplete> {
+    let mut gates = 0usize;
+    for index in 0..theory.view().len() {
+        budget.tick()?;
+        gates = gates
+            .checked_add(node_gates(
+                theory
+                    .view()
+                    .node(index)
+                    .map_err(|_| Incomplete::InvalidWitness)?,
+            ))
+            .ok_or(Incomplete::CounterOverflow)?;
+    }
+    Ok(gates)
+}
+
+pub(crate) fn node_gates(node: NodeView<'_>) -> usize {
+    match node {
+        NodeView::Atom(_) | NodeView::False => 0,
+        NodeView::Implies(_, _) => 1,
+        NodeView::And(operands) | NodeView::Or(operands) => operands.len().saturating_sub(1),
+    }
+}
+
 pub(crate) struct ClauseReservation {
     pub(crate) clauses: usize,
     pub(crate) literals: usize,
 }
 
 impl ClauseReservation {
-    pub(crate) fn new(theory: &Theory, limits: AdmissionLimits) -> Result<Self, Incomplete> {
+    pub(crate) fn new(
+        theory: &Theory,
+        limits: AdmissionLimits,
+        gates: usize,
+    ) -> Result<Self, Incomplete> {
         let atoms = theory.atom_count() as u128;
-        let nodes = theory.nodes().len() as u128;
+        let gates = gates as u128;
         let roots = theory.roots().len() as u128;
         let narrow = |count: u128, limit: usize| {
             usize::try_from(count.min(limit as u128)).map_err(|_| Incomplete::CounterOverflow)
         };
         Ok(Self {
-            clauses: narrow(3 * nodes + roots + atoms + 1, limits.max_clauses)?,
-            literals: narrow(7 * nodes + roots + 2 * atoms, limits.max_literals)?,
+            clauses: narrow(3 * gates + roots + atoms + 1, limits.max_clauses)?,
+            literals: narrow(7 * gates + roots + 2 * atoms, limits.max_literals)?,
         })
     }
 }
@@ -197,25 +264,30 @@ fn append_nodes<Q: Quota>(
     budget: &mut Budget<'_, Q>,
 ) -> Result<(), Incomplete> {
     reserve(nodes, theory.nodes().len())?;
-    if Q::BOUNDED_STORAGE {
-        gates
-            .try_reserve(theory.nodes().len())
-            .map_err(|_| Incomplete::Allocation)?;
-    }
-    for (index, node) in theory.nodes().iter().enumerate() {
+    for index in 0..theory.view().len() {
         budget.tick()?;
         // Compaction applies to this classical query only. The original theory
         // remains intact, and the frozen mask was computed before any aliasing.
         let value = if mask.as_ref().is_some_and(|values| !values[index]) {
             Encoded::Constant(false)
         } else {
-            match *node {
-                Node::False => Encoded::Constant(false),
-                Node::Atom(atom) => Encoded::Literal(Literal::new(atom, true)),
-                Node::And(a, b) => gate(cnf, gates, false, nodes[a], nodes[b], budget)?,
-                Node::Or(a, b) => gate(cnf, gates, true, nodes[a], nodes[b], budget)?,
-                Node::Implies(a, b) => {
-                    gate(cnf, gates, true, nodes[a].negated(), nodes[b], budget)?
+            match theory
+                .view()
+                .node(index)
+                .map_err(|_| Incomplete::InvalidWitness)?
+            {
+                NodeView::False => Encoded::Constant(false),
+                NodeView::Atom(atom) => Encoded::Literal(Literal::new(atom, true)),
+                NodeView::And(operands) => {
+                    gate_operands(cnf, gates, false, operands, nodes, budget)?
+                }
+                NodeView::Or(operands) => gate_operands(cnf, gates, true, operands, nodes, budget)?,
+                NodeView::Implies(a, b) => {
+                    budget.tick()?;
+                    let left = nodes[a].negated();
+                    budget.tick()?;
+                    let right = nodes[b];
+                    gate(cnf, gates, true, left, right, budget)?
                 }
             }
         };
@@ -230,6 +302,29 @@ fn append_nodes<Q: Quota>(
         }
     }
     Ok(())
+}
+
+/// Translate a native group through the existing bounded clause-gate builder.
+/// Only this optional classical query introduces auxiliary variables; the
+/// authoritative formula and its frozen interpretation stay native and intact.
+pub(crate) fn gate_operands(
+    cnf: &mut Cnf,
+    gates: &mut HashMap<(usize, usize), Literal>,
+    disjunction: bool,
+    operands: &[usize],
+    nodes: &[Encoded],
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Encoded, Incomplete> {
+    let mut result = None;
+    for &child in operands {
+        budget.tick()?;
+        let right = nodes[child];
+        result = Some(match result {
+            None => right,
+            Some(left) => gate(cnf, gates, disjunction, left, right, budget)?,
+        });
+    }
+    Ok(result.unwrap_or(Encoded::Constant(!disjunction)))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -319,6 +414,8 @@ pub(crate) fn interpretation(
         // Every selected atom came from the theory's own range. Any other
         // constructor refusal invalidates that representation argument.
         zetesis_ferraris::AdmissionError::Atom
+        | zetesis_ferraris::AdmissionError::Arity
+        | zetesis_ferraris::AdmissionError::Span
         | zetesis_ferraris::AdmissionError::Edge
         | zetesis_ferraris::AdmissionError::Root
         | zetesis_ferraris::AdmissionError::Limit => Incomplete::InvalidWitness,

@@ -27,6 +27,8 @@ fn shader_constants_preserve_the_wire_contract() {
         ("NODE_AND", 2),
         ("NODE_OR", 3),
         ("NODE_IMPLIES", 4),
+        ("NODE_ALL", 5),
+        ("NODE_ANY", 6),
         ("STATUS_STABLE", 0),
         ("STATUS_NOT_MODEL", 1),
         ("STATUS_RESIDUAL", 2),

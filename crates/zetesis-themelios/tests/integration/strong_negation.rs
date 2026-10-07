@@ -244,17 +244,21 @@ fn coherence_and_signed_choices_match_a_manual_theory_in_every_frozen_world() {
     assert_ne!(positive, negative);
     let expected = Theory::new(
         2,
-        vec![
-            Node::False,
-            Node::Atom(positive),
-            Node::Atom(negative),
-            Node::Implies(1, 0),
-            Node::Implies(2, 0),
-            Node::Or(1, 3),
-            Node::Or(2, 4),
-            Node::And(1, 2),
-            Node::Implies(7, 0),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(positive),
+                Node::atom(negative),
+                Node::implies(1, 0),
+                Node::implies(2, 0),
+                Node::or_pair([1, 3]),
+                Node::or_pair([2, 4]),
+                Node::and_pair([1, 2]),
+                Node::implies(7, 0),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![5, 6, 8],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -426,7 +430,10 @@ fn signed_anonymous_projection_has_the_declared_model_view() {
                 .unwrap();
         assert_eq!(admitted.source().expect("source input").text(), source);
         assert_eq!(admitted.atoms(), original.atoms());
-        assert_eq!(admitted.theory().nodes(), original.theory().nodes());
+        assert_eq!(
+            (admitted.theory().nodes(), admitted.theory().operands()),
+            (original.theory().nodes(), original.theory().operands())
+        );
         assert_eq!(admitted.theory().roots(), original.theory().roots());
         assert_eq!(admitted.formula_origins(), original.formula_origins());
         let views: Vec<_> = stable_models(&admitted)

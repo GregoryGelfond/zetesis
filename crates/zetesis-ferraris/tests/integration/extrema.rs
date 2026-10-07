@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, prefix, push};
+use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, copy, prefix, push, raw, snapshot};
 use crate::support::worlds::{eval, interpretation};
 use proptest::prelude::*;
 use zetesis_cpu::{Cancellation, Stop};
@@ -46,7 +46,7 @@ fn reference(
     extremum: Extremum,
     comparison: Comparison,
     bound: Bound,
-) -> (Vec<Node>, usize) {
+) -> (zetesis_ferraris::FormulaNodes, usize) {
     let mut nodes = prefix();
     let mut root = 1;
     for subset in 0usize..(1 << elements.len()) {
@@ -62,20 +62,32 @@ fn reference(
         let mut consequent = 0;
         for (index, element) in elements.iter().enumerate() {
             if subset & (1 << index) == 0 {
-                consequent = push(&mut nodes, Node::Or(consequent, element.condition));
+                consequent = push(
+                    &mut nodes,
+                    zetesis_ferraris::NodeView::Or(&[consequent, element.condition]),
+                );
             } else {
-                antecedent = push(&mut nodes, Node::And(antecedent, element.condition));
+                antecedent = push(
+                    &mut nodes,
+                    zetesis_ferraris::NodeView::And(&[antecedent, element.condition]),
+                );
             }
         }
-        let implication = push(&mut nodes, Node::Implies(antecedent, consequent));
-        root = push(&mut nodes, Node::And(root, implication));
+        let implication = push(
+            &mut nodes,
+            zetesis_ferraris::NodeView::Implies(antecedent, consequent),
+        );
+        root = push(
+            &mut nodes,
+            zetesis_ferraris::NodeView::And(&[root, implication]),
+        );
     }
     (nodes, root)
 }
 
 fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, bound: Bound) {
     let input = prefix();
-    let mut nodes = input.clone();
+    let mut nodes = copy(&input);
     let built = append_extremum(
         &mut nodes,
         elements,
@@ -86,16 +98,22 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
         &Cancellation::default(),
     )
     .unwrap();
-    let theory = Theory::new(2, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![built.root()],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let (reference, root) = reference(elements, extremum, comparison, bound);
     for outer in 0..4 {
         let selected = elements
             .iter()
-            .filter(|element| eval(&input, element.condition, outer, None))
+            .filter(|element| eval(input.view(), element.condition, outer, None))
             .map(|element| element.weight);
         let classical = holds(comparison, value(extremum, selected), bound);
         let candidate = interpretation(&theory, outer);
-        assert_eq!(eval(&reference, root, outer, None), classical);
+        assert_eq!(eval(reference.view(), root, outer, None), classical);
         assert_eq!(
             models(
                 &theory,
@@ -111,10 +129,10 @@ fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, boun
         for inner in 0..4 {
             let selected = elements
                 .iter()
-                .filter(|element| eval(&input, element.condition, inner, Some(outer)))
+                .filter(|element| eval(input.view(), element.condition, inner, Some(outer)))
                 .map(|element| element.weight);
             let expected = classical && holds(comparison, value(extremum, selected), bound);
-            assert_eq!(eval(&reference, root, inner, Some(outer)), expected);
+            assert_eq!(eval(reference.view(), root, inner, Some(outer)), expected);
             assert_eq!(
                 models_reduct(
                     &theory,
@@ -229,7 +247,7 @@ fn empty_tied_and_extreme_values_keep_infinities_distinct_from_finite_limits() {
 #[test]
 fn linear_extrema_need_neither_subset_carriers_nor_threshold_rows() {
     for extremum in EXTREMA {
-        let mut nodes: Vec<_> = (0..4_096).map(Node::Atom).collect();
+        let mut nodes = raw((0..4_096).map(Node::atom).collect());
         let elements: Vec<_> = (0..4_096)
             .map(|condition| Element {
                 weight: if condition % 2 == 0 {
@@ -258,8 +276,13 @@ fn linear_extrema_need_neither_subset_carriers_nor_threshold_rows() {
         assert_eq!(built.statistics().states, 0);
         assert_eq!(built.statistics().subsets, 0);
         assert!(built.appended_nodes() <= 2 * elements.len() + 4);
-        let theory =
-            Theory::new(4_096, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            4_096,
+            nodes.into_parts(),
+            vec![built.root()],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let empty = Interpretation::new(&theory, []).unwrap();
         assert!(models(&theory, &empty, Limits::default(), &Cancellation::default()).unwrap());
     }
@@ -267,7 +290,7 @@ fn linear_extrema_need_neither_subset_carriers_nor_threshold_rows() {
 
 fn limited(elements: &[Element], limits: AggregateLimits) -> Error {
     let original = prefix();
-    let mut nodes = original.clone();
+    let mut nodes = copy(&original);
     let error = append_extremum(
         &mut nodes,
         elements,
@@ -278,7 +301,7 @@ fn limited(elements: &[Element], limits: AggregateLimits) -> Error {
         &Cancellation::default(),
     )
     .unwrap_err();
-    assert_eq!(nodes, original);
+    assert_eq!(snapshot(&nodes), snapshot(&original));
     error.kind()
 }
 
@@ -307,7 +330,8 @@ fn inclusive_limits_and_failed_append_restore_every_prefix_node() {
     .unwrap();
     let exact = AggregateLimits {
         max_elements: elements.len(),
-        max_nodes: nodes.len(),
+        max_nodes: nodes.view().len(),
+        max_operands: nodes.parts().occurrences(),
         max_work: built.statistics().work,
         max_states: 0,
         max_subsets: 0,
@@ -326,7 +350,7 @@ fn inclusive_limits_and_failed_append_restore_every_prefix_node() {
         .unwrap(),
         built
     );
-    assert_eq!(repeated, nodes);
+    assert_eq!(snapshot(&repeated), snapshot(&nodes));
     assert_eq!(
         limited(
             &elements,
@@ -371,8 +395,8 @@ fn bad_conditions_and_topology_are_typed_failures_with_rollback() {
         ),
         Error::InvalidCondition { element: 0 }
     );
-    let mut nodes = vec![Node::Implies(0, 0)];
-    let original = nodes.clone();
+    let mut nodes = raw(vec![Node::implies(0, 0)]);
+    let original = copy(&nodes);
     let error = append_extremum(
         &mut nodes,
         &[],
@@ -384,7 +408,7 @@ fn bad_conditions_and_topology_are_typed_failures_with_rollback() {
     )
     .unwrap_err();
     assert_eq!(error.kind(), Error::InvalidPrefix { node: 0 });
-    assert_eq!(nodes, original);
+    assert_eq!(snapshot(&nodes), snapshot(&original));
 }
 
 #[test]
@@ -398,7 +422,7 @@ fn cancelled_and_expired_empty_extrema_are_refusals_before_work() {
             Stop::Deadline,
         ),
     ] {
-        let mut nodes = Vec::new();
+        let mut nodes = zetesis_ferraris::FormulaNodes::default();
         let error = append_extremum(
             &mut nodes,
             &[],
@@ -414,6 +438,107 @@ fn cancelled_and_expired_empty_extrema_are_refusals_before_work() {
         .unwrap_err();
         assert_eq!(error.kind(), Error::Control(expected));
         assert_eq!(error.statistics().work, 0);
-        assert!(nodes.is_empty());
+        assert!(nodes.view().is_empty());
+        assert!(nodes.parts().operands().is_empty());
     }
+}
+
+#[test]
+fn native_witness_rows_preserve_frozen_truth() {
+    let elements = [2, 3, 4, 5].map(|condition| Element {
+        weight: 1,
+        condition,
+    });
+    let mut nodes = prefix();
+    let build = append_extremum(
+        &mut nodes,
+        &elements,
+        Extremum::Max,
+        Comparison::Ge,
+        1,
+        AggregateLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        nodes.view().node(build.root()).unwrap(),
+        zetesis_ferraris::NodeView::Or(&[2, 3, 4, 5])
+    );
+    for kind in EXTREMA {
+        for comparison in COMPARISONS {
+            for bound in [0, 1, 2] {
+                verify(&elements, kind, comparison, Bound::Number(bound));
+            }
+        }
+    }
+}
+
+#[test]
+fn native_witness_rows_obey_operand_admission() {
+    let elements = [2, 3, 4, 5].map(|condition| Element {
+        weight: 1,
+        condition,
+    });
+    let compile = |nodes: &mut zetesis_ferraris::FormulaNodes, max_operands| {
+        append_extremum(
+            nodes,
+            &elements,
+            Extremum::Max,
+            Comparison::Ge,
+            1,
+            AggregateLimits {
+                max_operands,
+                max_states: 0,
+                ..AggregateLimits::default()
+            },
+            &Cancellation::default(),
+        )
+    };
+    let mut full = prefix();
+    let expected = compile(&mut full, usize::MAX).unwrap();
+    let count = full.parts().occurrences();
+    let mut exact = prefix();
+    assert_eq!(compile(&mut exact, count).unwrap(), expected);
+    assert_eq!(snapshot(&exact), snapshot(&full));
+    let mut short = prefix();
+    let before = snapshot(&short);
+    let error = compile(&mut short, count - 1).unwrap_err();
+    assert_eq!(error.kind(), Error::OperandLimit);
+    assert_eq!(snapshot(&short), before);
+}
+
+#[test]
+fn native_witness_work_refusals_restore_both_buffers() {
+    let elements = [2, 3, 4, 5].map(|condition| Element {
+        weight: 1,
+        condition,
+    });
+    let compile = |nodes: &mut zetesis_ferraris::FormulaNodes, max_work| {
+        append_extremum(
+            nodes,
+            &elements,
+            Extremum::Max,
+            Comparison::Ne,
+            0,
+            AggregateLimits {
+                max_work,
+                ..AggregateLimits::default()
+            },
+            &Cancellation::default(),
+        )
+    };
+    let mut full = prefix();
+    let work = compile(&mut full, u64::MAX).unwrap().statistics().work;
+    assert!(!full.parts().operands().is_empty());
+    let mut reached_native_row = false;
+    for max_work in 0..work {
+        let mut nodes = prefix();
+        let before = snapshot(&nodes);
+        let error = compile(&mut nodes, max_work).unwrap_err();
+        assert_eq!(error.kind(), Error::WorkLimit);
+        assert_eq!(error.statistics().work, max_work);
+        reached_native_row |= error.statistics().operands >= 6;
+        assert_eq!(snapshot(&nodes), before);
+    }
+    assert!(reached_native_row);
 }

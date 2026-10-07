@@ -18,6 +18,7 @@ mod performance_families;
 mod process_capture;
 mod process_executable;
 mod reported_answers;
+mod scalability_limits;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod selected_campaign;
 mod series_cells;

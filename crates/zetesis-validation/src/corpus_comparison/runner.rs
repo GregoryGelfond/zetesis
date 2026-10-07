@@ -222,16 +222,19 @@ fn native_arguments(
         arguments.extend(["--models".into(), "0".into()]);
     }
     arguments.extend([
-        "--batch-size".into(),
-        request.native_batch_size.to_string().into(),
-        "--completion-workers".into(),
-        request.native_completion_workers.to_string().into(),
-        "--max-completion-scratch-bytes".into(),
-        request
-            .native_max_completion_scratch_bytes
-            .to_string()
-            .into(),
+        match invocation {
+            NativeInvocation::Legacy => "--workers",
+            NativeInvocation::Solve => "--threads",
+        }
+        .into(),
+        request.native_threads.to_string().into(),
     ]);
+    if let Some(bytes) = request.native_memory_bytes {
+        arguments.extend(["--memory".into(), bytes.to_string().into()]);
+    }
+    if let Some(seconds) = request.native_time_limit_seconds {
+        arguments.extend(["--time-limit".into(), seconds.to_string().into()]);
+    }
     if request.effective_native_stats() {
         arguments.push("--stats".into());
     }
@@ -271,14 +274,11 @@ fn check_answers(
     }
     result.answer_parity = true;
     if request.physical_formula() {
-        match execution::formula_for_request(
+        match execution::formula_for_policy(
             &result.native_process.as_ref().unwrap().stderr,
             request.native_backend,
-            request.native_batch_size.get(),
-            execution::CompletionRequest {
-                workers: request.native_completion_workers,
-                max_scratch_bytes: request.native_max_completion_scratch_bytes,
-            },
+            request.native_threads,
+            request.native_memory_bytes,
             result.native_answer.as_ref().unwrap(),
         ) {
             Ok(evidence) => result.execution = Some(evidence),

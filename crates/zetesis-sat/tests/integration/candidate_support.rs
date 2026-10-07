@@ -8,11 +8,11 @@ use zetesis_sat::{Cancellation, Incomplete, Limits, StableModels, SupportStatus}
 use zetesis_theory_support::theories::theory;
 
 fn disjunctions(pairs: usize) -> Theory {
-    let mut nodes: Vec<_> = (0..pairs * 2).map(Node::Atom).collect();
+    let mut nodes: Vec<_> = (0..pairs * 2).map(Node::atom).collect();
     let roots = (0..pairs)
         .map(|pair| {
             let root = nodes.len();
-            nodes.push(Node::Or(pair * 2, pair * 2 + 1));
+            nodes.push(Node::or_pair([pair * 2, pair * 2 + 1]));
             root
         })
         .collect();
@@ -89,7 +89,7 @@ fn independent_disjunctions_generate_only_two_choices_per_pair() {
 fn independent_facts_can_support_both_disjuncts() {
     let input = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![0, 1, 2],
     );
     let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
@@ -107,13 +107,13 @@ fn mixed_choices_generate_only_supported_candidates() {
     let input = theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Or(0, 1),
-            Node::Implies(2, 3),
-            Node::Or(2, 5),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 3),
+            Node::or_pair([2, 5]),
         ],
         vec![4, 6],
     );
@@ -138,21 +138,23 @@ fn opaque_choice_heads_retain_general_candidate_search() {
     let input = theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Or(0, 1),
-            Node::Implies(2, 3),
-            Node::Or(2, 5),
-            Node::And(6, 6),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 3),
+            Node::or_pair([2, 5]),
+            Node::and_pair([6, 6]),
         ],
         vec![4, 7],
     );
     let mut models = by_clauses(&input, Limits::default(), Cancellation::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::NotApplicable);
-    assert_eq!(support.construction_work, 10); // Eight nodes, two roots.
+    // The refusal reads all eight nodes, the four operands of its two
+    // disjunctions, and both roots. The opaque conjunction is never expanded.
+    assert_eq!(support.construction_work, 8 + 4 + 2);
     assert_eq!(support.encoding_work, 0);
     assert_eq!(
         collect(&mut models),
@@ -169,15 +171,15 @@ fn mixed_support_keeps_positive_cycle_minimality_checks() {
     let input = theory(
         4,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Atom(3),
-            Node::False,
-            Node::Or(0, 1),
-            Node::Implies(2, 4),
-            Node::Or(2, 6),
-            Node::Implies(3, 3),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::atom(3),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 4),
+            Node::or_pair([2, 6]),
+            Node::implies(3, 3),
         ],
         vec![5, 7, 8],
     );

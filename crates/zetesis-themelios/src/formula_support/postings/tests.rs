@@ -282,7 +282,10 @@ fn observation_preserves_the_compiled_subject() {
         assert_eq!(report.support_builds, 1);
         assert!(report.totals.probes > 0);
         assert_eq!(observed.atoms(), plain.atoms());
-        assert_eq!(observed.theory().nodes(), plain.theory().nodes());
+        assert_eq!(
+            (observed.theory().nodes(), observed.theory().operands()),
+            (plain.theory().nodes(), plain.theory().operands())
+        );
         assert_eq!(observed.theory().roots(), plain.theory().roots());
         assert_eq!(observed.formula_origins(), plain.formula_origins());
         let observed = observed.objectives();

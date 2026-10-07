@@ -25,7 +25,7 @@ fn unrepresentable_progress_preserves_an_earlier_reservation_error() {
 fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
     let original = Theory::new(
         1,
-        vec![Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -122,7 +122,7 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
 fn larger_query() -> PreparedReduct {
     let theory = Theory::new(
         8,
-        vec![Node::False; 256],
+        zetesis_ferraris::FormulaParts::new(vec![Node::falsum(); 256], vec![]).unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )

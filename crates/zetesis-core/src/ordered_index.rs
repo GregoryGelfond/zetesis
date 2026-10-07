@@ -5,6 +5,8 @@
 
 use std::{cmp::Ordering, num::NonZeroUsize};
 
+pub(crate) mod spine;
+
 pub(crate) type Link = Option<NonZeroUsize>;
 
 pub(crate) fn encoded(position: usize) -> NonZeroUsize {
@@ -37,18 +39,22 @@ pub(crate) struct Index {
     pub peak: u128,
 }
 
-impl Index {
-    /// Compute a new root and path metadata without changing any published link.
-    /// The recorded search path ends at an absent child. The inserted leaf has
-    /// height one; propagation stops once subtree height is unchanged.
-    pub fn plan<E>(
-        &mut self,
-        id: usize,
-        before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Link, E> {
-        self.plan_from(self.root, id, before)
-    }
+/// Metadata already established by one successful insertion plan. The changed
+/// suffix includes the new leaf; earlier path cells remain published unchanged.
+#[derive(Clone, Copy)]
+pub(crate) struct Planned {
+    pub root: Link,
+    pub changed_from: usize,
+    pub rotation: Option<Rotation>,
+}
 
+#[derive(Clone, Copy)]
+pub(crate) enum Rotation {
+    Single(usize),
+    Double,
+}
+
+impl Index {
     /// Plan against an unpublished root whose nodes were supplied in `path`.
     /// This supports several leaves in one bounded metadata transaction.
     pub fn plan_from<E>(
@@ -57,7 +63,22 @@ impl Index {
         id: usize,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Link, E> {
+        self.plan_changes_from(root, id, before)
+            .map(|plan| plan.root)
+    }
+
+    /// Compute a new root and its actual changed suffix without changing any
+    /// published link. The path ends at the absent child's new leaf. Propagation
+    /// stops once subtree height is unchanged. A consumer reusing an all-right
+    /// path must establish that property separately before invoking the planner.
+    pub fn plan_changes_from<E>(
+        &mut self,
+        root: Link,
+        id: usize,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Planned, E> {
         let mut child = Some(encoded(id));
+        let mut changed_from = self.path.len() - 1;
         for level in (0..self.path.len() - 1).rev() {
             before()?;
             let step = &mut self.path[level];
@@ -65,30 +86,48 @@ impl Index {
             step.node.children[side] = child;
             step.node.balance += if step.right { 1 } else { -1 };
             step.changed = true;
+            changed_from = level;
             child = Some(encoded(step.id));
             if step.node.balance == 0 {
-                return Ok(root);
+                return Ok(Planned {
+                    root,
+                    changed_from,
+                    rotation: None,
+                });
             }
             if step.node.balance.abs() == 2 {
-                child = self.rotate(level, before)?;
+                let (rotated, rotation) = self.rotate(level, before)?;
+                child = rotated;
                 if level == 0 {
-                    return Ok(child);
+                    return Ok(Planned {
+                        root: child,
+                        changed_from,
+                        rotation: Some(rotation),
+                    });
                 }
                 before()?;
                 let parent = &mut self.path[level - 1];
                 parent.node.children[usize::from(parent.right)] = child;
                 parent.changed = true;
-                return Ok(root);
+                return Ok(Planned {
+                    root,
+                    changed_from: level - 1,
+                    rotation: Some(rotation),
+                });
             }
         }
-        Ok(child)
+        Ok(Planned {
+            root: child,
+            changed_from,
+            rotation: None,
+        })
     }
 
     fn rotate<E>(
         &mut self,
         level: usize,
         before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Link, E> {
+    ) -> Result<(Link, Rotation), E> {
         // Before the first imbalance, the heavy child and (for a double
         // rotation) grandchild are the next two nodes in the insertion path.
         before()?;
@@ -105,7 +144,7 @@ impl Index {
             child.node.balance = 0;
             self.path[level] = root;
             self.path[level + 1] = child;
-            return Ok(Some(encoded(child.id)));
+            return Ok((Some(encoded(child.id)), Rotation::Single(level)));
         }
         before()?;
         let mut pivot = self.path[level + 2];
@@ -120,22 +159,16 @@ impl Index {
         self.path[level] = root;
         self.path[level + 1] = child;
         self.path[level + 2] = pivot;
-        Ok(Some(encoded(pivot.id)))
+        Ok((Some(encoded(pivot.id)), Rotation::Double))
     }
 
-    /// All writes below are pre-admitted as one indivisible publication. A
-    /// callback cannot observe a half-rotated tree or an unindexed payload.
-    pub fn publish(&mut self, root: Link) {
-        self.publish_nodes();
-        self.root = root;
-    }
-
-    /// Publish the planned leaf and the changed path nodes, leaving the root
-    /// to an owner that keeps one root per subtree.
-    pub fn publish_nodes(&mut self) {
+    /// Publish a suffix established by `plan_changes_from`; nodes before this
+    /// boundary were not mutated. The owner pre-admits every write and publishes
+    /// its root in the same indivisible transaction, without callbacks.
+    pub fn publish_nodes_from(&mut self, changed_from: usize) {
         let leaf = self.path.last().expect("planned leaf");
         self.nodes.push(leaf.node);
-        for step in &self.path[..self.path.len() - 1] {
+        for step in &self.path[changed_from..self.path.len() - 1] {
             if step.changed {
                 self.nodes[step.id] = step.node;
             }
@@ -154,40 +187,23 @@ pub(crate) enum Last {
     Search,
 }
 
-/// Compare a query with the tree's last node in order, held by its owner,
-/// before any search: arrivals that extend the order, as rows derived in
-/// order do, are placed with one comparison instead of one per level, and any
-/// other arrival pays that one comparison before its search. Only on `Beyond`
-/// is the right spine walked, with `step` admitting each level and no
-/// comparison, and `descend(true)` recorded once per node on it: the route a
-/// full search would take, since every comparison on it is Greater. The
-/// spine ends at `last`, the node its owner holds. An error publishes no
-/// result and changes no node.
-pub(crate) fn last<C, E>(
-    nodes: &[Node],
+/// Classify a query against the owner's last node before searching. A query
+/// beyond that node is absent and its insertion path is the right spine. The
+/// owner may prepare that path directly without first recording its directions.
+/// This comparison reads no links and changes neither published nodes nor scratch.
+pub(crate) fn compare_last<C, E>(
     root: Link,
     last: Option<usize>,
     context: &mut C,
-    mut step: impl FnMut(&mut C) -> Result<(), E>,
     compare: impl FnOnce(usize, &mut C) -> Result<Ordering, E>,
-    mut descend: impl FnMut(bool),
 ) -> Result<Last, E> {
-    let (Some(mut spine), Some(last)) = (root, last) else {
+    let (Some(_), Some(last)) = (root, last) else {
         return Ok(Last::Search);
     };
     Ok(match compare(last, context)? {
         Ordering::Equal => Last::Found(last),
         Ordering::Less => Last::Search,
-        Ordering::Greater => {
-            descend(true);
-            while let Some(next) = nodes[position(spine)].children[1] {
-                step(context)?;
-                spine = next;
-                descend(true);
-            }
-            debug_assert_eq!(position(spine), last, "the held last node ends the spine");
-            Last::Beyond
-        }
+        Ordering::Greater => Last::Beyond,
     })
 }
 

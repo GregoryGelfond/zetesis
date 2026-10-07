@@ -1,31 +1,19 @@
 //! Retention failures and partial evaluation cannot forge an optimum or erase
 //! accounting for stable models already checked by the reduct oracle.
 
-use clap::Parser;
-use zetesis_cli::{
-    Completion, Interruption, OptimizationStop, Options, Report, run_with_diagnostics,
-};
+use zetesis_cli::{Completion, Interruption, OptimizationStop, PublicationConfig, Report};
 use zetesis_cpu::Cancellation;
 
 /// One worker: the exact charges these tests compare are the scalar walk's,
 /// whose first leaf is the same on every run.
-fn options() -> Options {
-    Options::try_parse_from([
-        "zetesis",
-        "--backend",
-        "cpu",
-        "--workers",
-        "1",
-        "--models",
-        "0",
-    ])
-    .expect("bounded test configuration")
+fn options() -> PublicationConfig {
+    crate::support::prepared::config(&[])
 }
 
-fn solve(source: &str, options: &Options) -> (Report, String) {
+fn solve(source: &str, options: &PublicationConfig) -> (Report, String) {
     let mut output = Vec::new();
-    let report = run_with_diagnostics(
-        source.to_owned(),
+    let report = crate::support::prepared::human(
+        source,
         options,
         &mut output,
         &mut Vec::new(),
@@ -47,7 +35,7 @@ fn assert_incomplete(report: &Report, output: &str) {
 fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count() {
     let source = "{a}. #minimize {-1@0,k:a}.";
     let mut limited = options();
-    limited.max_optimal_atoms = 0;
+    limited.solve.max_optimal_atoms = 0;
     let (report, output) = solve(source, &limited);
     assert_incomplete(&report, &output);
     assert!(matches!(
@@ -76,7 +64,7 @@ fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count
 fn a_fully_scored_tie_counts_even_when_its_retention_exceeds_the_limit() {
     let source = "{a}. #minimize {0@0,k:a}.";
     let mut limited = options();
-    limited.max_optimal_models = 1;
+    limited.solve.max_optimal_models = 1;
     let (report, output) = solve(source, &limited);
     assert_incomplete(&report, &output);
     assert!(matches!(
@@ -94,8 +82,8 @@ fn a_fully_scored_tie_counts_even_when_its_retention_exceeds_the_limit() {
 #[test]
 fn display_limits_discard_extra_ties_but_do_not_stop_optimality_search() {
     let mut limited = options();
-    limited.models = 1;
-    limited.max_optimal_models = 1;
+    limited.solve.models = 1;
+    limited.solve.max_optimal_models = 1;
     let (report, output) = solve("{a}. {b}. #show. #minimize {0@0,k:a}.", &limited);
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
@@ -110,11 +98,11 @@ fn display_limits_discard_extra_ties_but_do_not_stop_optimality_search() {
 fn partial_prepared_score_preserves_the_incumbent() {
     let source = "{a}. #minimize {0@0,k:a}.";
     let mut first_only = options();
-    first_only.max_candidates = 1;
+    first_only.solve.max_candidates = 1;
     let (prefix, _) = solve(source, &first_only);
     let first_work = prefix.optimization.expect("first verified incumbent").work;
     let mut limited = options();
-    limited.max_objective_work = first_work + 1;
+    limited.solve.max_objective_work = first_work + 1;
     let (report, output) = solve(source, &limited);
     assert_incomplete(&report, &output);
     let Some(Interruption::PreparedObjective(error)) = &report.interruption else {
@@ -138,7 +126,7 @@ fn partial_prepared_score_preserves_the_incumbent() {
 #[test]
 fn replacement_releases_retained_atom_budget_and_filters_never_reduce_its_cost() {
     let mut bounded = options();
-    bounded.max_optimal_atoms = 1;
+    bounded.solve.max_optimal_atoms = 1;
     let (report, output) = solve("1 {a;b} 1. #minimize {5@0,k:a;2@0,k:b}.", &bounded);
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);

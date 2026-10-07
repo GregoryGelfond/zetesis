@@ -9,8 +9,8 @@ use themelios_program::program::DefaultNegation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
-    AdmissionLimits, AggregateComparison, AggregateElement, AggregateLimits, Interpretation,
-    Limits, Node, Theory, append_aggregate, models,
+    AdmissionLimits, AggregateComparison, AggregateElement, AggregateLimits, FormulaNodes,
+    FormulaParts, Interpretation, Limits, NodeView as Node, Theory, append_aggregate, models,
 };
 
 use super::atom;
@@ -32,7 +32,7 @@ struct Fixture {
     counters: Counters,
     atoms: SourceSelection,
     names: Vec<String>,
-    nodes: Vec<Node>,
+    nodes: FormulaNodes,
     heads: Vec<usize>,
     roots: Vec<usize>,
     collector: Collector,
@@ -65,16 +65,26 @@ impl Fixture {
             atoms,
             names: Vec::new(),
             // The collector's unconditional activation is canonical true 1.
-            nodes: vec![Node::False, Node::Implies(0, 0)],
+            nodes: FormulaNodes::new(
+                FormulaParts::new(
+                    vec![
+                        zetesis_ferraris::Node::falsum(),
+                        zetesis_ferraris::Node::implies(0, 0),
+                    ],
+                    vec![],
+                )
+                .unwrap(),
+            ),
             heads: Vec::new(),
             roots: Vec::new(),
             collector,
         }
     }
 
-    fn push(&mut self, node: Node) -> usize {
-        let id = self.nodes.len();
-        self.nodes.push(node);
+    fn push(&mut self, node: Node<'_>) -> usize {
+        let mut transaction = self.nodes.transaction();
+        let id = transaction.push(node, usize::MAX, usize::MAX).unwrap();
+        transaction.commit();
         id
     }
 
@@ -109,7 +119,7 @@ impl Fixture {
         let head = self.push(Node::Atom(id));
         self.heads.push(head);
         let absent = self.push(Node::Implies(head, 0));
-        let permission = self.push(Node::Or(head, absent));
+        let permission = self.push(Node::Or(&[head, absent]));
         self.roots.push(permission);
     }
 
@@ -141,7 +151,7 @@ impl Fixture {
         // Match the ordinary head-bound constraint: an active body cannot
         // violate the actual lowered aggregate. No placeholder root certifies it.
         let outside = self.push(Node::Implies(within, 0));
-        let violated = self.push(Node::And(1, outside));
+        let violated = self.push(Node::And(&[1, outside]));
         let asserted = self.push(Node::Implies(violated, 0));
         self.roots.push(asserted);
         let eligible: Vec<_> = members.iter().map(|&id| (self.heads[id], 1)).collect();
@@ -201,7 +211,7 @@ impl Fixture {
                 body: 1,
                 eligible: &eligible,
                 bijection,
-                nodes: &self.nodes,
+                nodes: self.nodes.view(),
                 atom_count: self.atoms.len(),
                 bounds,
                 origins: &[origin],
@@ -295,7 +305,7 @@ fn captured_members_keep_their_meaning_after_catalog_growth() {
     let atom_count = fixture.atoms.len();
     let theory = Theory::new(
         atom_count,
-        fixture.nodes,
+        fixture.nodes.into_parts(),
         fixture.roots,
         AdmissionLimits::default(),
     )

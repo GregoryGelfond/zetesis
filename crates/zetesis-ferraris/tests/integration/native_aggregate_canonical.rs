@@ -11,7 +11,8 @@ use zetesis_ferraris::{AdmissionLimits, AggregateComparison, Node, Theory};
 fn theory() -> Theory {
     Theory::new(
         0,
-        vec![Node::False, Node::Implies(0, 0)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::falsum(), Node::implies(0, 0)], vec![])
+            .unwrap(),
         vec![],
         AdmissionLimits::default(),
     )

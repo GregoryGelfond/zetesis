@@ -45,6 +45,11 @@ pub(super) fn restrict(
             admission: zetesis_ferraris::AdmissionLimits {
                 max_atoms: limits.admission.max_variables,
                 max_nodes: limits.admission.max_literals,
+                max_operands: limits
+                    .admission
+                    .max_literals
+                    .checked_mul(2)
+                    .ok_or(Incomplete::CounterOverflow)?,
                 max_roots: limits.admission.max_clauses,
             },
             max_work: budget
@@ -100,7 +105,11 @@ mod tests {
     fn input() -> Theory {
         Theory::new(
             2,
-            vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+            zetesis_ferraris::FormulaParts::new(
+                vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+                vec![],
+            )
+            .unwrap(),
             vec![2],
             zetesis_ferraris::AdmissionLimits::default(),
         )
@@ -110,15 +119,19 @@ mod tests {
     fn mixed_input() -> Theory {
         Theory::new(
             3,
-            vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::Atom(2),
-                Node::False,
-                Node::Or(0, 1),
-                Node::Implies(2, 3),
-                Node::Or(2, 5),
-            ],
+            zetesis_ferraris::FormulaParts::new(
+                vec![
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::atom(2),
+                    Node::falsum(),
+                    Node::or_pair([0, 1]),
+                    Node::implies(2, 3),
+                    Node::or_pair([2, 5]),
+                ],
+                vec![],
+            )
+            .unwrap(),
             vec![4, 6],
             zetesis_ferraris::AdmissionLimits::default(),
         )

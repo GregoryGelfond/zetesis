@@ -2,7 +2,7 @@
 
 use crate::ProgramSite;
 use crate::formula_head_aggregate::Bijection;
-use zetesis_ferraris::{AggregateComparison, Node, Theory};
+use zetesis_ferraris::{AggregateComparison, FormulaView, NodeView as Node, Theory};
 
 use super::{
     CountPlanFailure, CountPlanFailureKind as Fault, CountPlanResource as Resource, Outcome,
@@ -16,7 +16,7 @@ pub(crate) struct Input<'a> {
     pub body: usize,
     pub eligible: &'a [(usize, usize)],
     pub bijection: Bijection,
-    pub nodes: &'a [Node],
+    pub nodes: FormulaView<'a>,
     pub atom_count: usize,
     pub bounds: Bounds,
     pub origins: &'a [ProgramSite],
@@ -164,13 +164,13 @@ impl Collector {
         let mut members = self.work.vector(input.eligible.len())?;
         for &(head, _) in input.eligible {
             self.work.charge(1)?;
-            let Some(Node::Atom(atom)) = input.nodes.get(head) else {
+            let Ok(Node::Atom(atom)) = input.nodes.node(head) else {
                 return Err(Fault::SourceMapping);
             };
-            if *atom >= input.atom_count {
+            if atom >= input.atom_count {
                 return Err(Fault::SourceMapping);
             }
-            members.push(*atom);
+            members.push(atom);
         }
         // Conservative quadratic comparison allowance bounds this small sort;
         // the source group already established uniqueness before this boundary.

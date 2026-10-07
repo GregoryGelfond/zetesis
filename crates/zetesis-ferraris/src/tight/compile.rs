@@ -4,8 +4,8 @@ use super::{
     TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
     TightProducerKind, TightResource, Work, bytes, filled, reserve,
 };
-use crate::{Node, Theory};
-use zetesis_cpu::Cancellation;
+use crate::{NodeView, Theory};
+use zetesis_cpu::{Cancellation, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Body {
@@ -87,21 +87,73 @@ impl TightPlan {
 
 fn classify(theory: &Theory, work: &mut Work<'_>) -> Result<Vec<Body>, TightError> {
     let mut classes = reserve(theory.nodes().len())?;
-    for node in theory.nodes() {
-        work.tick()?;
-        classes.push(match *node {
-            Node::Atom(_) => Body::Positive,
-            Node::False => Body::Frozen,
-            Node::Implies(_, b) if theory.nodes()[b] == Node::False => Body::Frozen,
-            Node::Implies(_, _) => Body::Opaque,
-            Node::And(a, b) | Node::Or(a, b) => match (classes[a], classes[b]) {
-                (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
-                (Body::Frozen, Body::Frozen) => Body::Frozen,
-                _ => Body::Positive,
-            },
-        });
+    for index in 0..theory.view().len() {
+        classify_step(theory, index, &mut classes, work)?;
     }
     Ok(classes)
+}
+
+/// Charge and complete one classification before extending the valid prefix.
+fn classify_step(
+    theory: &Theory,
+    index: usize,
+    classes: &mut Vec<Body>,
+    work: &mut Work<'_>,
+) -> Result<(), TightError> {
+    work.tick()?;
+    let class = classify_node(theory, index, classes, work)?;
+    classes.push(class);
+    Ok(())
+}
+
+/// Complete one node's classification before publishing it to the prefix.
+/// Implications inspect their consequent; groups inspect every occurrence.
+fn classify_node(
+    theory: &Theory,
+    index: usize,
+    classes: &[Body],
+    work: &mut Work<'_>,
+) -> Result<Body, TightError> {
+    match theory
+        .view()
+        .node(index)
+        .map_err(|_| Stop::InvalidProgram)?
+    {
+        NodeView::Atom(_) => Ok(Body::Positive),
+        NodeView::False => Ok(Body::Frozen),
+        NodeView::Implies(_, consequent) => {
+            work.tick()?;
+            let node = theory
+                .view()
+                .node(consequent)
+                .map_err(|_| Stop::InvalidProgram)?;
+            Ok(if node.is_false() {
+                Body::Frozen
+            } else {
+                Body::Opaque
+            })
+        }
+        NodeView::And(operands) | NodeView::Or(operands) => {
+            classify_operands(operands, classes, work)
+        }
+    }
+}
+
+fn classify_operands(
+    operands: &[usize],
+    classes: &[Body],
+    work: &mut Work<'_>,
+) -> Result<Body, TightError> {
+    let mut class = Body::Frozen;
+    for &child in operands {
+        work.tick()?;
+        class = match (class, classes[child]) {
+            (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
+            (Body::Frozen, Body::Frozen) => Body::Frozen,
+            _ => Body::Positive,
+        };
+    }
+    Ok(class)
 }
 
 fn producer(
@@ -109,16 +161,24 @@ fn producer(
     root: usize,
     classes: &[Body],
 ) -> Result<Option<TightProducer>, TightError> {
-    let node = theory.nodes()[root];
+    let node = theory.view().node(root).map_err(|_| Stop::InvalidProgram)?;
     let (body, head) = match node {
-        Node::False => return Ok(None),
-        Node::Implies(_, b) if theory.nodes()[b] == Node::False => return Ok(None),
-        Node::Implies(a, b) => (Some(a), b),
+        NodeView::False => return Ok(None),
+        NodeView::Implies(_, b)
+            if theory
+                .view()
+                .node(b)
+                .map_err(|_| Stop::InvalidProgram)?
+                .is_false() =>
+        {
+            return Ok(None);
+        }
+        NodeView::Implies(a, b) => (Some(a), b),
         _ => (None, root),
     };
-    let node = theory.nodes()[head];
+    let node = theory.view().node(head).map_err(|_| Stop::InvalidProgram)?;
     let (head, kind) = match node {
-        Node::Atom(atom) => (atom, TightProducerKind::Normal),
+        NodeView::Atom(atom) => (atom, TightProducerKind::Normal),
         _ => (
             crate::atomic_choice::atom(theory, head).ok_or(TightError::UnsupportedRoot { root })?,
             TightProducerKind::Choice,
@@ -176,14 +236,21 @@ fn each_dependency(
     mut visit: impl FnMut(usize, usize, bool) -> Result<(), TightError>,
 ) -> Result<(), TightError> {
     let offset = theory.atom_count();
-    for (index, node) in theory.nodes().iter().enumerate() {
+    for index in 0..theory.view().len() {
         work.tick()?;
-        match *node {
-            Node::Atom(atom) => visit(atom, offset + index, false)?,
-            Node::And(a, b) | Node::Or(a, b) if classes[index] == Body::Positive => {
+        match theory
+            .view()
+            .node(index)
+            .map_err(|_| Stop::InvalidProgram)?
+        {
+            NodeView::Atom(atom) => visit(atom, offset + index, false)?,
+            NodeView::And(operands) | NodeView::Or(operands)
+                if classes[index] == Body::Positive =>
+            {
                 // Duplicate operands contribute duplicate edges and matching
                 // indegrees. Neither is silently deduplicated on its own.
-                for child in [a, b] {
+                for &child in operands {
+                    work.tick()?;
                     if classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
@@ -352,15 +419,21 @@ fn validate_ranks(
         }
     }
     let mut maximum = reserve::<usize>(theory.nodes().len())?;
-    for (index, node) in theory.nodes().iter().enumerate() {
+    for (index, &class) in classes.iter().enumerate() {
         work.tick()?;
-        maximum.push(match *node {
-            Node::Atom(atom) => ranks[atom],
-            Node::And(a, b) | Node::Or(a, b) if classes[index] == Body::Positive => {
-                maximum[a].max(maximum[b])
-            }
-            _ => 0,
-        });
+        maximum.push(
+            match theory
+                .view()
+                .node(index)
+                .map_err(|_| Stop::InvalidProgram)?
+            {
+                NodeView::Atom(atom) => ranks[atom],
+                NodeView::And(operands) | NodeView::Or(operands) if class == Body::Positive => {
+                    maximum_operand(operands, &maximum, work)?
+                }
+                _ => 0,
+            },
+        );
     }
     for producer in producers {
         work.tick()?;
@@ -374,4 +447,17 @@ fn validate_ranks(
         }
     }
     Ok(())
+}
+
+fn maximum_operand(
+    operands: &[usize],
+    maximum: &[usize],
+    work: &mut Work<'_>,
+) -> Result<usize, TightError> {
+    let mut value = 0;
+    for &child in operands {
+        work.tick()?;
+        value = value.max(maximum[child]);
+    }
+    Ok(value)
 }

@@ -114,11 +114,27 @@ cancellation or a callback panic.
 
 Foreign and ingress queries use the typed-order view: one iterative AVL tree per
 predicate, kept in predicate order. This view also supplies semantic enumeration
-and new insertion placement; numeric IDs do not define term order. A vacant entry
-records its semantic descent in two target-sized words and replays those links
-to prepare insertion without repeating comparisons. Occupied entries do not
-change mutation scratch. Both indexes contain one node per discovered atom;
-the inverse needs no array spanning undiscovered canonical identities.
+and new insertion placement; numeric IDs do not define term order. An entry
+requiring ordered placement first compares against the relation's last atom.
+A greater atom uses the checked right spine. Cold preparation reads and retains
+each of its `h` nodes once, charging two work permits per node plus reservation
+work. A completed increasing insertion keeps the published spine in that same
+mutation buffer. The next increasing insertion can reuse it after one checked
+certificate comparison. The sparse inverse independently requires the incoming
+canonical ID to exceed its own maximum; typed tuple order alone cannot establish
+this for a reused closed catalog.
+
+AVL planning remains unchanged. Before publication, the owner admits every
+changed node, every cell moved by a rotation's spine repair, every changed suffix
+reset and the replacement certificate. Both indexes and the discovery map then
+publish together without callbacks or allocation. Any operation that repurposes
+a path revokes its certificate before fallible preparation; refusal or unwind
+cannot leave tentative scratch certified. Other vacant entries record their
+semantic descent in two target-sized words and replay links without repeating
+comparisons. Occupied entries do not change mutation scratch. The certificates
+add only fixed owner metadata; both indexes still contain one node per discovered
+atom, and the inverse needs no array spanning undiscovered canonical identities. These paths share the same checked insertion and publication in
+[`AtomAppender`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/interner.rs).
 
 `AtomAppender::order_selected_with` orders a unique selection of committed or
 pending discovery positions through that same semantic index. It validates the
@@ -263,6 +279,28 @@ rows. It reads the immutable pattern and assignment without copying their IDs
 into an argument vector. Per-argument logical bounds apply even when the atom
 already exists. A refused discovery can leave a complete canonical row for a later
 retry, but establishes neither discovery nor support membership.
+
+For repeated instances of an admitted pattern, `prepare_pattern_with` returns
+a `PreparedPattern` bound to the exact atom writer and fixed term limits. It
+borrows the source template and checks its constants once. Each
+`insert_prepared_pattern_with` call still checks the assignment, selected
+variables and resource bounds before using the same canonical insertion path.
+The capability owns no argument copy or lookup cache; its header counts in the
+caller's retained metadata. Construction input uses the general insertion path.
+
+For a head drawn from already matched immutable relation rows,
+`prepare_row_pattern_with` binds the same pattern to exact `Relation` owners and
+explicit `RowColumn` projections. `PreparedRows` takes the caller's metadata
+vectors without copying tuples; `storage_bytes()` reports its header and actual
+capacities for that caller's lease. Preparation examines O(a² + b) metadata for
+a head of arity a and b inputs, with no scan of the relations' row population.
+Insertion authenticates the selected row owners and uses their original canonical
+occurrences directly. Finite term limits still apply before lookup, including
+occupied rows. Maximum `usize` limits need no measure scan: canonical admission
+already checked nodes, depth and the combined encoded and rendered byte length
+against limits representable by `usize`. The capability proves coordinate access,
+not join completeness, injectivity, freshness or truth. Canonical collision checks,
+discovery indexes and their resource refusals remain the shared insertion path.
 
 For authenticated canonical inputs, the exclusive insertion entry retains its
 exact row lookup for publication. Index allocation may move storage without

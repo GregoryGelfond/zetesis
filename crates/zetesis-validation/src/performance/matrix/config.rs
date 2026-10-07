@@ -269,9 +269,7 @@ fn validate_profiles(
     if profiles.is_empty()
         || profiles.len() > 8
         || reference_workers.get() > 256
-        || profiles
-            .iter()
-            .any(|profile| profile.workers.get() > 256 || profile.completion_workers.get() > 256)
+        || profiles.iter().any(|profile| profile.threads.get() > 256)
     {
         return Err(Error::Configuration(
             "matrix requires 1..=8 profiles and workers 1..=256",

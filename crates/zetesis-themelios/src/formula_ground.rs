@@ -5,15 +5,20 @@ mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
 mod aggregate_guards;
+mod appended;
 mod aggregate_order;
 pub(crate) mod atoms;
 mod cache;
 mod metadata;
+mod support_guards;
 mod nodes;
+mod producer;
 mod projection;
 mod retained;
 use retained::RetainedState;
 pub(crate) use retained::{RetainedGrounding, ground_retained};
+#[cfg(test)]
+mod assignment_families;
 #[cfg(test)]
 mod constants;
 
@@ -31,8 +36,11 @@ use zetesis_core::catalog::{TermKey, TermRef};
 use zetesis_core::{AtomCatalog, ValueNodeRef};
 use zetesis_ferraris::{
     AggregateComparison, AggregateElement, AggregateExtremum, AggregateGuard as NumericGuard,
-    FormulaNodes, Node, Theory, ValueExtremumElement,
+    FormulaNodes, FormulaSuffix, NodeView as Node, ValueExtremumElement,
 };
+
+#[cfg(test)]
+use zetesis_ferraris::{FormulaParts, Theory};
 
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
@@ -164,7 +172,6 @@ fn ground_with_schedule(
     let profile = Profile::new(observer);
     let keyed_constraints = preparation.program.keyed_constraints;
     let key_analysis = preparation.program.key_analysis;
-    let theory_limits = preparation.limits.theory;
     let location = preparation.location;
     let Instantiation {
         projection,
@@ -182,13 +189,13 @@ fn ground_with_schedule(
     } = instantiate(preparation, &profile, schedule)?;
     let Emission {
         atoms,
-        nodes,
-        roots,
+        admission,
         origins,
         count_plan,
     } = emission;
     let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
-        Theory::new(atoms.atoms().len(), nodes, roots, theory_limits)
+        admission
+            .admit()
             .map_err(|error| FormulaFailure::Theory { error, location })
     })?;
     let count_plan = count_plan.map_or(
@@ -465,7 +472,7 @@ fn emit<'source>(
     })?;
     let streamed_instances =
         builder.instantiate_rules(&prepared.rules, domains, support, profile, schedule)?;
-    let (emission, counters) = builder.finish(profile)?;
+    let (emission, counters) = builder.finish(profile, location)?;
     Ok(PendingEmission {
         projection,
         objectives,
@@ -512,8 +519,7 @@ impl PendingEmission {
         let projection = projection.publish(&mut publication, limits, &mut counters, location)?;
         let Emission {
             atoms,
-            nodes,
-            roots,
+            admission,
             origins,
             count_plan,
         } = emission;
@@ -522,8 +528,7 @@ impl PendingEmission {
             objectives.publish(&atoms, &mut publication, limits, &mut counters, location)?;
         let emission = Emission {
             atoms,
-            nodes,
-            roots,
+            admission,
             origins,
             count_plan,
         };
@@ -572,8 +577,7 @@ impl PendingEmission {
 /// Validation borrows no interning index, producer table or aggregate cache.
 struct Emission<A = AtomCatalog> {
     atoms: A,
-    nodes: Vec<Node>,
-    roots: Vec<usize>,
+    admission: zetesis_ferraris::TheoryAdmission,
     origins: Vec<Vec<ProgramSite>>,
     count_plan: Option<crate::formula_count_plan::Collector>,
 }
@@ -749,6 +753,12 @@ impl Builder<'_, '_, '_> {
             &mut self.counters,
         )?;
         outer.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
+        if crate::formula_factor::continuations(self, rule, &mut outer, support)? {
+            return Ok(());
+        }
+        if producer::rule(self, rule, &mut outer)? {
+            return Ok(());
+        }
         while let Some(row) = outer.next_row(
             self.computation,
             self.limits,
@@ -819,6 +829,17 @@ impl Builder<'_, '_, '_> {
         self.node(Node::Implies(FALSUM, FALSUM), location)?;
         Ok(())
     }
+    fn operand_bound(&self) -> (FormulaResource, usize) {
+        match self.purpose {
+            Purpose::Theory | Purpose::Validation => {
+                (FormulaResource::Operands, self.limits.theory.max_operands)
+            }
+            Purpose::Objective => (
+                FormulaResource::ObjectiveFormulaOperands,
+                self.limits.max_objective_formula_operands,
+            ),
+        }
+    }
     fn atom_bound(&self) -> (FormulaResource, usize) {
         match self.purpose {
             Purpose::Theory | Purpose::Validation => {
@@ -836,6 +857,7 @@ impl Builder<'_, '_, '_> {
     fn finish(
         mut self,
         profile: &Profile<'_>,
+        location: ProgramSite,
     ) -> Result<(Emission<formula_support::SourceSelection>, Counters), FormulaFailure> {
         use crate::GroundingPhase;
 
@@ -843,11 +865,18 @@ impl Builder<'_, '_, '_> {
         profile.phase(GroundingPhase::SupportGuards, None, || {
             self.support_guards()
         })?;
+        // Preserve the sole owner's topology evidence. This consuming attempt
+        // fixes the remaining scans before charging them; raw input still takes
+        // the full route. Final atom bounds and roots are never inferred here.
+        let admission =
+            self.nodes
+                .prepare_admission(self.catalog.len(), self.roots, self.limits.theory);
+        self.counters
+            .charge_work(admission.work(), self.limits, location)?;
         Ok((
             Emission {
                 atoms: self.catalog.into_selection(),
-                nodes: self.nodes.into_vec(),
-                roots: self.roots,
+                admission,
                 origins: self.origins,
                 count_plan: self.count_plan,
             },
@@ -900,18 +929,19 @@ impl Builder<'_, '_, '_> {
     }
     pub(super) fn node(
         &mut self,
-        node: Node,
+        node: Node<'_>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         self.counters.record(Event::NodeLookup);
-        let bound = self.node_bound();
+        let bounds = [self.node_bound(), self.operand_bound()];
         let (index, inserted) = nodes::intern(
             &mut self.node_indices,
             &mut self.nodes,
             node,
-            bound,
+            bounds,
             location,
+            || self.counters.work(self.limits, location),
         )?;
         if inserted {
             self.counters.record(Event::NodeInserted);
@@ -931,7 +961,7 @@ impl Builder<'_, '_, '_> {
         } else if right == VERUM || left == right {
             Ok(left)
         } else {
-            self.node(Node::And(left, right), location)
+            self.node(Node::And(&[left, right]), location)
         }
     }
     pub(super) fn or(
@@ -947,7 +977,77 @@ impl Builder<'_, '_, '_> {
         } else if right == FALSUM || left == right {
             Ok(left)
         } else {
-            self.node(Node::Or(left, right), location)
+            self.node(Node::Or(&[left, right]), location)
+        }
+    }
+    pub(super) fn group(
+        &mut self,
+        values: &[usize],
+        conjunction: bool,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        self.mapped_group(values, conjunction, std::convert::identity, location)
+    }
+    /// Remap and normalize one immediate operand row. Until the first change,
+    /// the retained prefix is the input itself; only a changed row needs scratch.
+    /// Order and nonadjacent repetitions are preserved. Each read and copied
+    /// occurrence is charged before use; no node is published by a stopped scan.
+    fn mapped_group(
+        &mut self,
+        values: &[usize],
+        conjunction: bool,
+        mut map: impl FnMut(usize) -> usize,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        let identity = if conjunction { VERUM } else { FALSUM };
+        let absorbing = if conjunction { FALSUM } else { VERUM };
+        let mut selected: Option<Buffer<usize>> = None;
+        let mut previous = None;
+        for (position, &original) in values.iter().enumerate() {
+            self.work(location)?;
+            let value = map(original);
+            if value == absorbing {
+                return Ok(absorbing);
+            }
+            let keep = value != identity && previous != Some(value);
+            if selected.is_none() && (!keep || value != original) {
+                let mut prefix =
+                    Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+                for &prior in &values[..position] {
+                    prefix.push(
+                        prior,
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?;
+                }
+                selected = Some(prefix);
+            }
+            if let Some(selected) = selected.as_mut().filter(|_| keep) {
+                selected.push(
+                    value,
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
+            }
+            if keep {
+                previous = Some(value);
+            }
+        }
+        match selected.as_ref().map_or(values, Buffer::slice) {
+            [] => Ok(identity),
+            [value] => Ok(*value),
+            row => self.node(
+                if conjunction {
+                    Node::And(row)
+                } else {
+                    Node::Or(row)
+                },
+                location,
+            ),
         }
     }
     pub(super) fn neg(
@@ -1067,7 +1167,7 @@ impl Builder<'_, '_, '_> {
     /// Validate a rejected complete row without changing the original atom/node
     /// catalog, caches, roots or producer tables. Scratch uses the existing
     /// theory ceilings; cumulative source work and scalar copying remain shared.
-    fn validate_body(
+    pub(super) fn validate_body(
         &mut self,
         literals: &[LiteralIr],
         binding: &Binding,
@@ -1090,9 +1190,9 @@ impl Builder<'_, '_, '_> {
         )?;
         Ok(())
     }
-    pub(super) fn body(
+    pub(super) fn body<'literal>(
         &mut self,
-        literals: &[LiteralIr],
+        literals: impl IntoIterator<Item = &'literal LiteralIr>,
         assignment: &Binding,
         location: ProgramSite,
         support: &Support,
@@ -1215,6 +1315,26 @@ impl Builder<'_, '_, '_> {
         }
         Ok(result)
     }
+    /// Publish the same normal-rule root, positive activation and source origins.
+    pub(super) fn normal(
+        &mut self,
+        head: Option<AtomPattern>,
+        rule: &RuleIr,
+        assignment: &Binding,
+        body: usize,
+    ) -> Result<(), FormulaFailure> {
+        let head = match head {
+            Some(head) => self.atom(head, assignment, rule.location)?,
+            None => FALSUM,
+        };
+        let formula = self.node(Node::Implies(body, head), rule.location)?;
+        self.root(formula, rule)?;
+        if head != FALSUM {
+            self.producer(head, body, rule)?;
+        }
+        Ok(())
+    }
+
     fn rule(
         &mut self,
         rule: &RuleIr,
@@ -1232,18 +1352,7 @@ impl Builder<'_, '_, '_> {
             return Ok(());
         }
         match &rule.head {
-            HeadIr::Normal(head) => {
-                let head = match head {
-                    Some(head) => self.atom(*head, assignment, rule.location)?,
-                    None => FALSUM,
-                };
-                let formula = self.node(Node::Implies(body, head), rule.location)?;
-                self.root(formula, rule)?;
-                if head != FALSUM {
-                    self.producer(head, body, rule)?;
-                }
-                Ok(())
-            }
+            HeadIr::Normal(head) => self.normal(*head, rule, assignment, body),
             HeadIr::Disjunction(heads) => self.disjunction(heads, body, assignment, rule),
             HeadIr::ConditionalDisjunction { ordinary, elements } => {
                 let mut disjunction = FALSUM;
@@ -1306,7 +1415,12 @@ impl Builder<'_, '_, '_> {
         assignment: &Binding,
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
-        let mut disjunction = FALSUM;
+        let mut literals = Buffer::new(
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            rule.location,
+        )?;
         let mut distinct = CoordinateMap::new(
             self.computation,
             self.limits,
@@ -1332,7 +1446,13 @@ impl Builder<'_, '_, '_> {
                 )?
                 .is_none()
             {
-                disjunction = self.or(disjunction, literal, rule.location)?;
+                literals.push(
+                    literal,
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    rule.location,
+                )?;
                 // Necessary support is the original body for each head,
                 // not a shifted rule excluding the other disjuncts.
                 if let Some(atom) = atom {
@@ -1346,6 +1466,7 @@ impl Builder<'_, '_, '_> {
                 }
             }
         }
+        let disjunction = self.group(literals.slice(), false, rule.location)?;
         let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
         self.root(formula, rule)
     }
@@ -1378,7 +1499,7 @@ impl Builder<'_, '_, '_> {
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
         self.work(rule.location)?;
-        let Node::Atom(atom) = self.nodes[head] else {
+        let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
             unreachable!("head is an atom");
         };
         self.metadata.producer(
@@ -1391,7 +1512,7 @@ impl Builder<'_, '_, '_> {
         self.record_head_origins(atom, rule)
     }
     fn head_origins(&mut self, head: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
-        let Node::Atom(atom) = self.nodes[head] else {
+        let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
             unreachable!("head occurrence is an atom");
         };
         self.record_head_origins(atom, rule)
@@ -1400,27 +1521,6 @@ impl Builder<'_, '_, '_> {
         for &location in &rule.origins {
             self.metadata
                 .origin(atom, location, self.budget, &mut self.counters, self.limits)?;
-        }
-        Ok(())
-    }
-    fn support_guards(&mut self) -> Result<(), FormulaFailure> {
-        // The completed owner can be borrowed independently while formulas grow.
-        // No producer sequence is copied or folded before this semantic phase.
-        let metadata = std::mem::take(&mut self.metadata);
-        for atom in 0..self.catalog.len() {
-            let location = metadata.location(atom);
-            let mut supported = FALSUM;
-            for antecedent in metadata.producers(atom) {
-                self.work(location)?;
-                supported = self.or(supported, antecedent, location)?;
-            }
-            let head = self.node(Node::Atom(atom), location)?;
-            let necessary = self.node(Node::Implies(head, supported), location)?;
-            let negative = self.neg(necessary, location)?;
-            let guard = self.neg(negative, location)?;
-            self.admit_root(metadata.origins(atom).len(), location)?;
-            let origins = metadata.copy_origins(atom, &mut self.counters, self.limits)?;
-            self.publish_root(guard, origins);
         }
         Ok(())
     }
@@ -1516,7 +1616,7 @@ impl Builder<'_, '_, '_> {
                         body,
                         eligible: eligible.slice(),
                         bijection: keys,
-                        nodes: &self.nodes,
+                        nodes: self.nodes.view(),
                         atom_count: self.catalog.len(),
                         bounds,
                         origins: &rule.origins,
@@ -1985,7 +2085,7 @@ impl Builder<'_, '_, '_> {
         support: &Support,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        let key = self.cache_key(target, assignment, location)?;
+        let key = self.cache_key(&aggregate.family_inputs, assignment, location)?;
         let slot = self.cached_aggregate(aggregate, &key, assignment, support, location)?;
         self.work(location)?;
         let roots = self
@@ -2084,21 +2184,21 @@ impl Builder<'_, '_, '_> {
                 unreachable!("handled extrema");
             };
             let guards = self.assignment_guards(&values, location)?;
-            let first = self.nodes.len();
+            let first = self.nodes.view().len();
             let family = self.append_guard_family(
                 elements.slice(),
                 guards.slice(),
                 self.limits.max_assignment_values,
                 location,
             )?;
-            let canonical = self.intern_appended(first, location)?;
+            let canonical = self.intern_appended(&family.appended.suffix, location)?;
             for (slot, root) in family.build.roots().iter().enumerate() {
                 self.work(location)?;
                 let key = values.key(slot, location)?;
                 let value = self.term(&key, location)?;
                 roots.insert(
                     value,
-                    remap(*root, first, &canonical),
+                    remap(*root, first, canonical.slice()),
                     None,
                     Context::new(
                         &*self.computation,
@@ -2192,11 +2292,11 @@ impl Builder<'_, '_, '_> {
     }
     fn cache_key(
         &mut self,
-        target: usize,
+        inputs: &[usize],
         assignment: &Binding,
         location: ProgramSite,
     ) -> Result<Buffer<Option<usize>>, FormulaFailure> {
-        let count = assignment.len() - usize::from(target < assignment.len());
+        let count = inputs.len();
         let mut outer = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
         outer.resize(
             count,
@@ -2206,20 +2306,19 @@ impl Builder<'_, '_, '_> {
             &mut self.counters,
             location,
         )?;
-        let mut at = 0;
-        for slot in 0..assignment.len() {
+        // Equal projected coordinates give the same complete tuple set and
+        // the same eligibility formulas in this immutable completed support.
+        // Other proposals remain in the rule's original equality literals.
+        for (at, &slot) in inputs.iter().enumerate() {
             self.work(location)?;
-            if slot != target {
-                let key = assignment
-                    .slots()
-                    .key(slot)
-                    .map_err(|error| crate::formula_binding::assignment(error, location))?;
-                outer.slice_mut()[at] = key
-                    .as_ref()
-                    .map(|key| self.term(key, location))
-                    .transpose()?;
-                at += 1;
-            }
+            let key = assignment
+                .slots()
+                .key(slot)
+                .map_err(|error| crate::formula_binding::assignment(error, location))?;
+            outer.slice_mut()[at] = key
+                .as_ref()
+                .map(|key| self.term(key, location))
+                .transpose()?;
         }
         Ok(outer)
     }
@@ -2432,32 +2531,51 @@ impl Builder<'_, '_, '_> {
     }
     fn intern_appended(
         &mut self,
-        first: usize,
+        appended: &FormulaSuffix,
         location: ProgramSite,
-    ) -> Result<Vec<usize>, FormulaFailure> {
-        let appended = self.nodes.split_off(first);
-        let mut canonical = Vec::with_capacity(appended.len());
-        for node in appended {
+    ) -> Result<Buffer<usize>, FormulaFailure> {
+        let first = appended.first();
+        let mut canonical =
+            Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        for ordinal in 0..appended.view().len() {
             self.work(location)?;
-            let map = |index: usize| remap(index, first, &canonical);
-            // Only structural sharing and intuitionistic constant/identity laws
-            // are used; no classical eligibility simplification is permitted.
+            let node = appended
+                .view()
+                .node(ordinal)
+                .map_err(|error| FormulaFailure::Theory { error, location })?;
+            // Preserve shared children; only the complete immediate operand row
+            // is remapped, never flattened through another canonical node.
             let index = match node {
                 Node::False => FALSUM,
                 Node::Atom(atom) => self.node(Node::Atom(atom), location)?,
-                Node::And(left, right) => self.and(map(left), map(right), location)?,
-                Node::Or(left, right) => self.or(map(left), map(right), location)?,
-                Node::Implies(left, right) => {
-                    self.node(Node::Implies(map(left), map(right)), location)?
-                }
+                Node::And(row) | Node::Or(row) => self.mapped_group(
+                    row,
+                    matches!(node, Node::And(_)),
+                    |child| remap(child, first, canonical.slice()),
+                    location,
+                )?,
+                Node::Implies(left, right) => self.node(
+                    Node::Implies(
+                        remap(left, first, canonical.slice()),
+                        remap(right, first, canonical.slice()),
+                    ),
+                    location,
+                )?,
             };
-            canonical.push(index);
+            canonical.push(
+                index,
+                self.computation,
+                self.limits,
+                &mut self.counters,
+                location,
+            )?;
         }
         Ok(canonical)
     }
     fn aggregate_limits(&self) -> zetesis_ferraris::AggregateLimits {
         let mut limits = self.limits.aggregate;
         limits.max_nodes = limits.max_nodes.min(self.node_bound().1);
+        limits.max_operands = limits.max_operands.min(self.operand_bound().1);
         limits.max_work = limits
             .max_work
             .min(self.limits.max_work - self.counters.accounting.work);
@@ -2615,11 +2733,11 @@ impl Builder<'_, '_, '_> {
     /// Keep completed compiler work even when its node transaction rolls back.
     /// Each call's ceiling is bounded by the remaining formula-work allowance.
     fn record_aggregate(
-        &mut self,
+        counters: &mut Counters,
         result: Result<zetesis_ferraris::AggregateBuild, zetesis_ferraris::AggregateError>,
         location: ProgramSite,
     ) -> Result<zetesis_ferraris::AggregateBuild, FormulaFailure> {
-        self.counters.accounting.work += match &result {
+        counters.accounting.work += match &result {
             Ok(build) => build.statistics().work,
             Err(error) => error.statistics().work,
         };
@@ -2634,18 +2752,28 @@ impl Builder<'_, '_, '_> {
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let limits = self.aggregate_limits();
-        let first = self.nodes.len();
+        let first = self.nodes.view().len();
         let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
-        let compiled = self.nodes.append_aggregate(
+        let previous_operands = self.nodes.parts().operands().len();
+        let mut transaction = self.nodes.transaction();
+        let compiled = transaction.append_aggregate(
             elements,
             comparison,
             i64::from(bound),
             limits,
             &cancellation,
         );
-        let build = self.record_aggregate(compiled, location)?;
-        let canonical = self.intern_appended(first, location)?;
-        Ok(remap(build.root(), first, &canonical))
+        let build = Self::record_aggregate(&mut self.counters, compiled, location)?;
+        let appended = appended::detach(
+            transaction,
+            previous_operands,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
+        let canonical = self.intern_appended(&appended.suffix, location)?;
+        Ok(remap(build.root(), first, canonical.slice()))
     }
 
     fn extremum_root(
@@ -2664,7 +2792,7 @@ impl Builder<'_, '_, '_> {
             )
         })?;
         crate::formula_assignment::extremum_value(bound, location)?;
-        let first = self.nodes.len();
+        let first = self.nodes.view().len();
         let limits = self.aggregate_limits();
         let terms = &self.terms;
         let values = elements.iter().map(|element| ValueExtremumElement {
@@ -2674,7 +2802,9 @@ impl Builder<'_, '_, '_> {
             condition: element.condition,
         });
         let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
-        let result = self.nodes.append_value_extremum_refs(
+        let previous_operands = self.nodes.parts().operands().len();
+        let mut transaction = self.nodes.transaction();
+        let result = transaction.append_value_extremum_refs(
             values,
             kind,
             comparison,
@@ -2682,8 +2812,16 @@ impl Builder<'_, '_, '_> {
             limits,
             &cancellation,
         );
-        let build = self.record_aggregate(result, location)?;
-        let canonical = self.intern_appended(first, location)?;
-        Ok(remap(build.root(), first, &canonical))
+        let build = Self::record_aggregate(&mut self.counters, result, location)?;
+        let appended = appended::detach(
+            transaction,
+            previous_operands,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+        )?;
+        let canonical = self.intern_appended(&appended.suffix, location)?;
+        Ok(remap(build.root(), first, canonical.slice()))
     }
 }

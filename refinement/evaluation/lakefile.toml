@@ -1,6 +1,6 @@
 name = "zetesis_evaluation_refinement"
 version = "0.0.0"
-defaultTargets = ["TightProducer", "AtomicChoice", "TightClassification", "RuntimePublicRefusal", "RuntimeMembership", "SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample"]
+defaultTargets = ["TightProducer", "AtomicChoice", "TightClassification", "RuntimePublicRefusal", "RuntimeMembership", "SubjectMembership", "PublicMembership", "InterpretationStorage", "InsertionBoundaryExample", "InterpretationConstruction", "UsizeCeiling", "ProgressExample", "TheorySatisfaction", "FixedLoopExample", "RootScanExample", "FrozenQueryExample", "SelectedAtoms", "ScalarSubsetsExample", "SubsetSteps", "SubsetQuery", "OwnedMembership", "MembershipVerdicts", "RuntimeEffects", "AdmissionValidationExample", "AdmittedData", "TheoryConstructionExample", "ReservedStorage", "PublicFrozenQuery", "FrozenConstruction", "FrozenBoundaryExample", "NativeTheoryConstruction", "NativeAdmissionConsequences", "NativeExecution", "NativeAdmittedQuery", "NativeInterpretationStorage", "NativeFixedSelection", "NativeSubsetQueryTotal", "NativePublicCheckPhases", "NativeCheckedResults", "NativeMembershipSearch", "NativeSubjectMembership", "NativeTightOperands"]
 
 [leanOptions]
 autoImplicit = false
@@ -66,6 +66,12 @@ globs = [
   "Zetesis.PackedSubsets",
   "Zetesis.IndexedEvaluation",
   "Zetesis.TheoryAdmission",
+  "Zetesis.AdjacencyRows",
+  "Zetesis.Transformers",
+  "Zetesis.Semantics",
+  "Zetesis.NormalFerraris",
+  "Zetesis.OperandArena",
+  "Zetesis.OperandTable",
 ]
 
 [[lean_lib]]
@@ -373,3 +379,195 @@ name = "TightProducerReads"
 
 [[lean_lib]]
 name = "TightProducer"
+
+[[lean_lib]]
+name = "Native"
+
+[[lean_lib]]
+name = "NativeRows"
+
+[[lean_lib]]
+name = "NativeRowsArena"
+
+[[lean_lib]]
+name = "NativeStructure"
+
+[[lean_lib]]
+name = "NativeRange"
+
+[[lean_lib]]
+name = "NativeBoundsValidation"
+
+[[lean_lib]]
+name = "NativeAdmissionValidation"
+
+[[lean_lib]]
+name = "NativeOccurrenceCount"
+
+[[lean_lib]]
+name = "NativeAdmittedData"
+
+[[lean_lib]]
+name = "NativeTheoryConstruction"
+
+[[lean_lib]]
+name = "NativeControl"
+
+[[lean_lib]]
+name = "NativeMembership"
+
+[[lean_lib]]
+name = "NativeOperands"
+
+[[lean_lib]]
+name = "NativeEvaluation"
+
+[[lean_lib]]
+name = "NativeSemantics"
+
+[[lean_lib]]
+name = "NativeStep"
+
+[[lean_lib]]
+name = "NativeSpecification"
+
+[[lean_lib]]
+name = "NativeTable"
+
+[[lean_lib]]
+name = "NativeLoop"
+
+[[lean_lib]]
+name = "NativeDenotation"
+
+[[lean_lib]]
+name = "NativeExecution"
+
+[[lean_lib]]
+name = "NativeAdmissionConsequences"
+
+[[lean_lib]]
+name = "NativeAdmittedQuery"
+
+[[lean_lib]]
+name = "NativeEvaluationAccounting"
+
+[[lean_lib]]
+name = "NativeFrozenConstruction"
+
+[[lean_lib]]
+name = "NativeFrozenQuery"
+
+[[lean_lib]]
+name = "NativeOwnerChecks"
+
+[[lean_lib]]
+name = "NativePublicFrozenQuery"
+
+[[lean_lib]]
+name = "NativeRootScan"
+
+[[lean_lib]]
+name = "NativeRootSemantics"
+
+[[lean_lib]]
+name = "NativeWorkInitialization"
+
+[[lean_lib]]
+name = "NativePackedStorage"
+
+[[lean_lib]]
+name = "NativeInsertionLoop"
+
+[[lean_lib]]
+name = "NativeVectorInput"
+
+[[lean_lib]]
+name = "NativeInterpretationConstruction"
+
+[[lean_lib]]
+name = "NativeInterpretationStorage"
+
+[[lean_lib]]
+name = "NativeSelectedAtoms"
+
+[[lean_lib]]
+name = "NativeSubsetSteps"
+
+[[lean_lib]]
+name = "NativeFixedSelection"
+
+[[lean_lib]]
+name = "NativeSubsetQuery"
+
+[[lean_lib]]
+name = "NativeSubsetQueryTotal"
+
+[[lean_lib]]
+name = "NativeReservedStorage"
+
+[[lean_lib]]
+name = "NativePublicCheckBoundary"
+
+[[lean_lib]]
+name = "NativePublicCheckPhases"
+
+[[lean_lib]]
+name = "NativeCheckedResults"
+
+[[lean_lib]]
+name = "ScalarSubsetWords"
+
+[[lean_lib]]
+name = "NativeScalarSubsets"
+
+[[lean_lib]]
+name = "NativeSubsetCarry"
+
+[[lean_lib]]
+name = "NativeSearchRepresentation"
+
+[[lean_lib]]
+name = "NativeSearchSteps"
+
+[[lean_lib]]
+name = "NativeCountermodelTrace"
+
+[[lean_lib]]
+name = "NativeSearchSemantics"
+
+[[lean_lib]]
+name = "NativeFixedSearch"
+
+[[lean_lib]]
+name = "NativeMembershipSearch"
+
+[[lean_lib]]
+name = "OwnerValues"
+
+[[lean_lib]]
+name = "NativePackedSetup"
+
+[[lean_lib]]
+name = "NativeSearchFrame"
+
+[[lean_lib]]
+name = "NativeMembershipVerdicts"
+
+[[lean_lib]]
+name = "NativeOwnedMembership"
+
+[[lean_lib]]
+name = "NativePublicMembership"
+
+[[lean_lib]]
+name = "NativeSubjectMembership"
+
+[[lean_lib]]
+name = "NativeTightWork"
+
+[[lean_lib]]
+name = "NativeTightClassFold"
+
+[[lean_lib]]
+name = "NativeTightOperands"

@@ -1,7 +1,7 @@
 //! Optional complete-theory certificates under the enumeration budget.
 
-mod positive;
 mod candidates;
+mod positive;
 pub(super) use candidates::PositiveCandidates;
 mod types;
 pub use types::{
@@ -53,8 +53,9 @@ impl Certificate {
 
 impl Certification {
     /// A complete check's work bound in the primitive's charged units:
-    /// tight checking visits every node, root, producer and atom once;
-    /// positive checking compares atoms, then visits nodes and roots. Early
+    /// tight checking visits every node, operand occurrence, root, producer
+    /// and atom once; positive checking compares atoms, then visits nodes,
+    /// operand occurrences and roots. Early
     /// refusals or refutations can consume less, never more.
     pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
         let (theory, producers) = match self {
@@ -64,6 +65,7 @@ impl Certification {
         [
             theory.atom_count(),
             theory.nodes().len(),
+            theory.parts().occurrences(),
             theory.roots().len(),
             producers,
         ]

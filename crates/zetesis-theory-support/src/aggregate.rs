@@ -6,7 +6,8 @@
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
-    AdmissionLimits, AggregateComparison as Comparison, Interpretation, Node, Theory,
+    AdmissionLimits, AggregateComparison as Comparison, FormulaNodes, FormulaParts, Interpretation,
+    Node, Theory,
     native_aggregate::{self as native, Bound, Eligibility, Function, Group, Guard, Tuple},
 };
 
@@ -38,17 +39,21 @@ pub const COMPARISONS: [Comparison; 6] = [
 /// Panics if the default admission limits refuse the theory; they admit it.
 #[must_use]
 pub fn theory() -> Theory {
-    Theory::new(2, connectives(), vec![], AdmissionLimits::default()).unwrap()
+    let parts = FormulaParts::new(connectives(), vec![]).unwrap();
+    Theory::new(2, parts, vec![], AdmissionLimits::default()).unwrap()
 }
 
 /// The first nodes of every theory the Ferraris aggregate propositions
 /// build: [`theory`]'s, then `a or not a`, a choice of `a` under the Ferraris
 /// reduct.
+///
+/// # Panics
+/// Panics if the finite fixture's operand count overflows; it does not.
 #[must_use]
-pub fn ferraris_prefix() -> Vec<Node> {
+pub fn ferraris_prefix() -> FormulaNodes {
     let mut nodes = connectives();
-    nodes.push(Node::Or(2, 4));
-    nodes
+    nodes.push(Node::or_pair([2, 4]));
+    FormulaNodes::new(FormulaParts::new(nodes, vec![]).unwrap())
 }
 
 /// The theory over atoms `a` and `b` whose nodes are [`ferraris_prefix`]'s,
@@ -58,23 +63,29 @@ pub fn ferraris_prefix() -> Vec<Node> {
 /// Panics if the default admission limits refuse the theory; they admit it.
 #[must_use]
 pub fn ferraris_theory() -> Theory {
-    Theory::new(2, ferraris_prefix(), vec![], AdmissionLimits::default()).unwrap()
+    Theory::new(
+        2,
+        ferraris_prefix().into_parts(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 /// Falsity and truth, `a` and `b`, `not a`, `not not a` and `not b`, and `a`
 /// with `b` under conjunction, disjunction and implication.
 fn connectives() -> Vec<Node> {
     vec![
-        Node::False,
-        Node::Implies(0, 0),
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Implies(2, 0),
-        Node::Implies(4, 0),
-        Node::Implies(3, 0),
-        Node::And(2, 3),
-        Node::Or(2, 3),
-        Node::Implies(2, 3),
+        Node::falsum(),
+        Node::implies(0, 0),
+        Node::atom(0),
+        Node::atom(1),
+        Node::implies(2, 0),
+        Node::implies(4, 0),
+        Node::implies(3, 0),
+        Node::and_pair([2, 3]),
+        Node::or_pair([2, 3]),
+        Node::implies(2, 3),
     ]
 }
 
@@ -195,8 +206,9 @@ mod tests {
     #[test]
     fn the_ferraris_prefix_is_the_device_connectives_then_a_or_not_a() {
         let prefix = ferraris_prefix();
+        let prefix = prefix.parts().nodes();
         assert_eq!(prefix[..prefix.len() - 1], *theory().nodes());
-        assert_eq!(prefix.last(), Some(&Node::Or(2, 4)));
+        assert_eq!(prefix.last(), Some(&Node::or_pair([2, 4])));
         assert_eq!(ferraris_theory().nodes(), prefix);
     }
 }

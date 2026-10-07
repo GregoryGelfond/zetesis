@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use crate::formula_support::GroundingWork;
 use zetesis_core::PatternRef;
+use zetesis_core::atom_interner::{PreparedPattern, PreparedRows, RowColumn};
 use zetesis_core::catalog::AssignmentSlice;
+use zetesis_core::relation::{Relation, Row};
 
 use super::{
     AtomRef, Counters, Failure, FormulaFailure, FormulaLimits, Memory, ProgramSite, SupportAppend,
@@ -165,25 +167,122 @@ impl SupportAppend<'_> {
         self.owner.restart_storage_peak();
         // Each input already passed source term admission; the shared source
         // storage/work limits bound this tuple operation, without a new depth cap.
-        let term_limits = zetesis_core::catalog::Limits {
-            max_nodes: usize::MAX,
-            max_depth: usize::MAX,
-            max_bytes: usize::MAX,
-        };
+        let term_limits = source_term_limits();
         let result = self
             .owner
             .insert_pattern_with(pattern, values, term_limits, checked, || {
                 counters.work(limits, location)
             });
         let refreshed = self.refresh(workspace, limits, counters, location);
-        let position = result.map_err(|error| match error {
-            atom_interner::AssignedFailure::Assignment(error) => {
-                crate::formula_binding::assignment(error, location)
-            }
-            atom_interner::AssignedFailure::Interner(error) => {
-                atom_failure(error, limits, outer, location)
-            }
-        })?;
+        let position = result.map_err(|error| assigned_failure(error, limits, outer, location))?;
+        refreshed?;
+        Ok(SourceAtom {
+            scope: self.scope.clone(),
+            position,
+        })
+    }
+
+    /// Source templates and their constants already passed source admission.
+    /// Preparation retains only the caller-accounted borrowed header.
+    pub(in crate::formula_support) fn prepare_pattern<'pattern>(
+        &self,
+        pattern: PatternRef<'pattern>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<PreparedPattern<'pattern>>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let outer = self.outer_bytes(workspace);
+        self.owner
+            .prepare_pattern_with(
+                pattern,
+                source_term_limits(),
+                owner_limits(limits, outer, location)?,
+                || counters.work(limits, location),
+            )
+            .map_err(|error| assigned_failure(error, limits, outer, location))
+    }
+
+    /// Projection metadata already has its source lease. Core preparation
+    /// consumes the vectors without allocating or counting that lease again.
+    pub(in crate::formula_support) fn prepare_rows<'rows, 'source>(
+        &self,
+        pattern: PatternRef<'source>,
+        sources: Vec<&'rows Relation<'source>>,
+        columns: Vec<Option<RowColumn>>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<PreparedRows<'rows, 'source>>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let outer = self.outer_bytes(workspace);
+        self.owner
+            .prepare_row_pattern_with(
+                pattern,
+                sources,
+                columns,
+                source_term_limits(),
+                owner_limits(limits, outer, location)?,
+                || counters.work(limits, location),
+            )
+            .map_err(|error| assigned_failure(error, limits, outer, location))
+    }
+
+    pub(in crate::formula_support) fn rows_assigned(
+        &mut self,
+        pattern: &PreparedRows<'_, '_>,
+        rows: &[Row<'_, '_>],
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let outer = self.outer_bytes(workspace);
+        let checked = owner_limits(limits, outer, location)?;
+        self.owner.restart_storage_peak();
+        let result = self
+            .owner
+            .insert_prepared_rows_with(pattern, rows, checked, || counters.work(limits, location));
+        let refreshed = self.refresh(workspace, limits, counters, location);
+        let position = result.map_err(|error| assigned_failure(error, limits, outer, location))?;
+        refreshed?;
+        Ok(SourceAtom {
+            scope: self.scope.clone(),
+            position,
+        })
+    }
+
+    pub(in crate::formula_support) fn prepared_assigned(
+        &mut self,
+        pattern: &PreparedPattern<'_>,
+        values: AssignmentSlice<'_>,
+        workspace: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let outer = self.outer_bytes(workspace);
+        let checked = owner_limits(limits, outer, location)?;
+        self.owner.restart_storage_peak();
+        let result = self
+            .owner
+            .insert_prepared_pattern_with(pattern, values, checked, || {
+                counters.work(limits, location)
+            });
+        let refreshed = self.refresh(workspace, limits, counters, location);
+        let position = result.map_err(|error| assigned_failure(error, limits, outer, location))?;
         refreshed?;
         Ok(SourceAtom {
             scope: self.scope.clone(),
@@ -261,3 +360,28 @@ mod tests;
 
 #[cfg(test)]
 mod lookup_tests;
+
+fn source_term_limits() -> zetesis_core::catalog::Limits {
+    // Each input passed source admission. Do not impose a second logical cap.
+    zetesis_core::catalog::Limits {
+        max_nodes: usize::MAX,
+        max_depth: usize::MAX,
+        max_bytes: usize::MAX,
+    }
+}
+
+fn assigned_failure(
+    error: atom_interner::AssignedFailure<FormulaFailure>,
+    limits: &FormulaLimits,
+    outer: u128,
+    location: ProgramSite,
+) -> FormulaFailure {
+    match error {
+        atom_interner::AssignedFailure::Assignment(error) => {
+            crate::formula_binding::assignment(error, location)
+        }
+        atom_interner::AssignedFailure::Interner(error) => {
+            atom_failure(error, limits, outer, location)
+        }
+    }
+}

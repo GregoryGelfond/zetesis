@@ -5,6 +5,21 @@ use std::io;
 use zetesis_cli::{Completion, Options, RunError, run};
 use zetesis_cpu::{Cancellation, Stop};
 
+fn bounded_candidates(source: &str, maximum: u64) -> (zetesis_cli::Report, String) {
+    let mut config = crate::support::prepared::config(&["--oracle", "closure"]);
+    config.solve.max_candidates = maximum;
+    let mut output = Vec::new();
+    let report = crate::support::prepared::relational_human(
+        source,
+        &config,
+        &mut output,
+        &mut io::sink(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    (report, String::from_utf8(output).unwrap())
+}
+
 fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, String) {
     let mut output = Vec::new();
     let report = run(
@@ -64,7 +79,7 @@ fn unsat_requires_exhaustion_and_limits_preserve_incomplete_status() {
     // candidate limit is exercised on a program whose region is counted:
     // with r out nothing is decided, and the count's first seed meets it.
     let counted = "p :- not q, not r. q :- not p, not r. r :- not p, not q.";
-    let (limited, text) = solve(counted, &["--models", "0", "--max-candidates", "1"]);
+    let (limited, text) = bounded_candidates(counted, 1);
     assert_eq!(limited.completion, Completion::Interrupted);
     assert_eq!(
         limited.interruption,
@@ -75,7 +90,7 @@ fn unsat_requires_exhaustion_and_limits_preserve_incomplete_status() {
 
 #[test]
 fn partial_batch_limit_does_not_discard_completed_models() {
-    let (report, text) = solve("{a}. {b}.", &["--models", "0", "--max-candidates", "3"]);
+    let (report, text) = bounded_candidates("{a}. {b}.", 3);
     assert_eq!((report.models, report.checked), (3, 3));
     assert_eq!(report.completion, Completion::Interrupted);
     assert!(text.contains("INCOMPLETE"));
@@ -144,9 +159,8 @@ fn output_failure_is_propagated() {
 }
 
 #[test]
-fn cli_rejects_zero_workers_and_batches() {
+fn cli_rejects_zero_threads() {
     assert!(Options::try_parse_from(["zetesis", "--workers", "0"]).is_err());
-    assert!(Options::try_parse_from(["zetesis", "--batch-size", "0"]).is_err());
 }
 
 #[test]

@@ -305,7 +305,9 @@ fn profile_name(profile: &serde_json::Value) -> String {
         "{}/{} ({} threads)",
         profile["backend"].as_str().unwrap_or("unavailable"),
         profile["grounder"].as_str().unwrap_or("unavailable"),
-        profile["workers"]
+        profile
+            .get("threads")
+            .unwrap_or(&profile["workers"])
             .as_u64()
             .map_or_else(|| "?".into(), |workers| workers.to_string())
     )
@@ -356,9 +358,13 @@ pub(super) fn run(
                 profile.backend.to_string(),
                 profile.grounder.label().to_owned(),
                 profile.oracle.label().to_owned(),
-                profile.workers.to_string(),
-                profile.completion_workers.to_string(),
-                profile.batch_size.to_string(),
+                profile.threads.to_string(),
+                profile
+                    .memory_bytes
+                    .map_or_else(|| "default".into(), |bytes| bytes.to_string()),
+                profile
+                    .time_limit_seconds
+                    .map_or_else(|| "none".into(), |seconds| seconds.to_string()),
             ])
         })
         .collect();
@@ -370,8 +376,8 @@ pub(super) fn run(
             "Grounder",
             "Oracle",
             "Threads",
-            "Completion",
-            "Batch",
+            "Memory bytes",
+            "Deadline seconds",
         ],
         profiles,
     )?

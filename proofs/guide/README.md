@@ -13,10 +13,12 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | When is parallel signed addition safe from intermediate overflow? | [AggregateRanges](../Zetesis/AggregateRanges.lean) bounds every mathematical intermediate sum by separate positive and negative carrier totals. The actual execution must preserve contribution occurrences and implement the admitted arithmetic. |
 | When do total and group capacities imply stronger local bounds? | [PartitionCapacities](../Zetesis/PartitionCapacities.lean) separates the counting argument from the caller's coverage and theory-entailment premises. |
 | What makes an interpretation an answer set? | [Ferraris](../Zetesis/Ferraris.lean): formula truth, the frozen reduct, minimality and their connection. |
+| When may support guards be grouped by condition? | [FerrarisGuards](../Zetesis/FerrarisGuards.lean) freezes an arbitrary formula's truth through double negation. [SupportTransposition](../Zetesis/SupportTransposition.lean) then preserves whole guard families under exact incidence coverage, for arbitrary outer and tested interpretations and any unchanged surrounding theory. |
 | Does an executable finite checker implement that definition? | [Finite membership](finite-membership.md) constructs complete subinterpretation coverage and composes it with [computed reduct evaluation](reduct-evaluation.md), without an oracle-agreement premise. |
 | How does a finite scan reach least normal closure? | [Executable closure](finite-closure.md) proves a sequential scan invariant, an explicit head-list bound and exact constraint and gate checks. |
 | How are finite interpretations represented by machine words? | [Packed interpretations](packed-interpretations.md) proves zero initialization, insertion and numeric word export as a separate representation model. |
 | How are indexed reads justified during reduct evaluation? | [Checked DAG evaluation](indexed-evaluation.md) connects admitted child, mask and root indices to completed satisfaction. |
+| Can finite connectives read their children from an arena? | [OperandArena](../Zetesis/OperandArena.lean) connects checked spans to original and frozen truth. [OperandTable](../Zetesis/OperandTable.lean) proves original and paired original/reduct table evaluation. Missing reads remain incomplete; actual Rust storage and separate-pass correspondence remain unproved. |
 | How does a binary counter establish subset coverage? | [Proper-subset counting](subset-counter.md) proves carry, maintained population and every proper-subinterpretation visit. |
 | How does packed storage preserve normal closure? | [Packed closure](packed-closure.md) proves direct word initialization, frozen selection, sequential writes and the completed least consequence set. |
 | What makes that packed closure an accepted answer? | [Packed acceptance](packed-acceptance.md) adds constraint and gate-projection checks, distinguishing seed admission from complete gate coverage. |
@@ -48,6 +50,7 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | How do canonical constants compose with partial bindings? | [CanonicalTemplates](../Zetesis/CanonicalTemplates.lean) connects ordered substitution to decoding and [BindingScopes](../Zetesis/BindingScopes.lean)'s checked reads. The available identity domain is a premise; Rust must validate scope and prefix. |
 | When do vocabulary coordinates identify and order atoms? | [CarrierCoordinates](../Zetesis/CarrierCoordinates.lean) separates decoder uniqueness, transported order and finite sparse selections. No full-carrier ordinal is required, and independent atom-row scopes remain distinct even with a shared vocabulary. |
 | When does completed possible support cover answer sets? | [The support argument](source-support.md) separates an empty-delta closure result from the source-to-reduct projection premise. Minimality then places every answer-set atom inside the carrier; optional objective activity still does not establish realizability. |
+| When may a fact-blocked rule be omitted? | [FactRejection](../Zetesis/FactRejection.lean) preserves original and arbitrary frozen-reduct satisfaction when the blocking fact remains in the theory. Preserving source-admission diagnostics is a separate obligation. |
 | When may possible-support rounds visit only affected producers? | [Affected producer scheduling](producer-scheduling.md) requires complete positive-input registration, zero-input bootstrap and previously published old heads. It preserves original producer identities and possible-head closure without discharging final constraints. |
 | Can source contributions share an arena? | [SourceContributions](../Zetesis/SourceContributions.lean) gives finite-chain uniqueness, preservation under changes to other entries, and per-atom append-order laws. Rust link mutation, origin ordering and resource accounting remain separate obligations. |
 | When can grounding remain incomplete while work proceeds? | [LiftedBridge](../Zetesis/LiftedBridge.lean): sound intermediate stages and explicit final coverage premises for stable acceptance. |
@@ -187,7 +190,15 @@ storage, exact allocation accounting and physical GPU correspondence explicit.
 outer-value path through complete families indexed by predecessor rows. Its
 coverage laws compose without treating proposed values as realized aggregate
 results; original activation and every equality remain in frozen clauses.
-Source scheduling and concrete carrier completeness remain unproved bridges.
+Its `Reuse` layer retains one preceding parent frame, successful carrier and
+cursor. Restart rereads both projections and resets the complete carrier on a
+hit. A finite traversal agrees exactly with rebuilding from the fixed support,
+including order, parent association and typed failures, and emits the same
+clauses. The separate `SupportReuse.reuse_exact` law coalesces consecutive
+completed observations under sufficient projections, preserving possible-head
+union and the defined flag/first-zero diagnostic. This support observation does
+not retain formula-witness multiplicity. Source scheduling, dependency extraction, concrete carrier completeness,
+Rust cursor behavior and resource accounting remain unproved bridges.
 
 [BinaryWatch](../Zetesis/BinaryWatch.lean) is a small algorithmic specialization:
 two distinct positions exhaust a binary clause, leaving no replacement to find.

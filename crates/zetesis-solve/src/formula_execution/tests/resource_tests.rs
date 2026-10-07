@@ -25,7 +25,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
     assert!(context.same_instance(oracle.context()));
     let theory = zetesis_ferraris::Theory::new(
         1,
-        vec![zetesis_ferraris::Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(0)], vec![]).unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -73,7 +73,13 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
         GpuContext::new_selected(GpuOptions::default(), crate::engine::selection(backend)).unwrap();
     assert_eq!(context.info().backend(), expected_api);
     assert!(context.info().is_hardware_gpu());
-    let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidates = [Interpretation::new(&theory, [0]).unwrap()];
     let options = SolveConfig {
         backend,

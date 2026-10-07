@@ -1,4 +1,4 @@
-//! Help visibility is presentation; all advanced arguments retain their parser.
+//! Both help views expose the shared public resource controls.
 
 use clap::Parser;
 use zetesis_cli::{Options, Oracle};
@@ -22,8 +22,10 @@ fn default_help_shows_everyday_solving_options() {
         "--stats",
         "--json",
         "--color",
+        "--threads",
+        "--memory",
+        "--time-limit",
         "--help",
-        "--help-all",
         "--version",
     ] {
         assert!(
@@ -31,82 +33,58 @@ fn default_help_shows_everyday_solving_options() {
             "missing everyday option: {visible}"
         );
     }
-    for advanced in [
-        "--oracle",
-        "--workers",
-        "--completion-workers",
-        "--batch-size",
-        "--max-search-work",
-        "--max-source-bytes",
-        "--max-support-bytes",
-        "--max-candidate-bytes",
-        "--max-observation-bytes",
-    ] {
-        assert!(
-            !short.contains(advanced),
-            "advanced option in compact help: {advanced}"
-        );
-    }
+    assert!(!short.contains("--oracle"));
 }
 
 #[test]
-fn full_help_exposes_the_resource_contracts() {
+fn full_help_retains_algorithm_choices() {
     let full = help("--help-all");
-    for advanced in [
+    for choice in [
         "--oracle",
-        "--workers",
-        "--completion-workers",
-        "--batch-size",
-        "--max-search-work",
-        "--max-search-decisions",
-        "--max-source-bytes",
-        "--max-support-bytes",
-        "--max-candidate-bytes",
-        "--max-observation-bytes",
-        "--max-objective-work",
-        "--max-completion-scratch-bytes",
-        "--max-reduct-bytes",
-        "--max-substitutions",
-        "--max-ground-rules",
-        "--max-batch-bytes",
+        "--search",
+        "--source-batching",
+        "--formula-joins",
     ] {
-        assert!(
-            full.contains(advanced),
-            "missing advanced option: {advanced}"
-        );
+        assert!(full.contains(choice), "missing algorithm choice: {choice}");
     }
     assert!(full.contains("interrupted runs may display incumbents"));
 }
 
 #[test]
-fn hidden_options_keep_their_original_values() {
+fn resource_help_has_no_stage_controls() {
+    for text in [help("--help"), help("--help-all")] {
+        for removed in [
+            "--max-",
+            "--completion-workers",
+            "--batch-size",
+            "--gpu-formula-",
+        ] {
+            assert!(!text.contains(removed), "removed control: {removed}");
+        }
+    }
+    assert!(help("--help-all").contains("not a resident-memory limit"));
+}
+
+#[test]
+fn compatibility_aliases_preserve_public_resources() {
     let options = Options::try_parse_from([
         "zetesis",
         "--oracle",
         "countermodel",
         "--workers",
         "3",
-        "--completion-workers",
-        "2",
-        "--batch-size",
-        "7",
-        "--max-search-work",
-        "41",
-        "--max-work",
-        "0",
+        "--memory-budget",
+        "4GiB",
     ])
     .unwrap();
     assert_eq!(options.oracle, Oracle::Countermodel);
     assert_eq!(options.workers.get(), 3);
-    assert_eq!(options.completion_workers.get(), 2);
-    assert_eq!(options.batch_size.get(), 7);
-    assert_eq!(options.max_search_work, 41);
-    assert_eq!(options.max_work, 0);
+    assert_eq!(options.memory, 4 << 30);
 }
 
 #[test]
-fn invalid_worker_counts_remain_parser_errors() {
-    for flag in ["--workers", "--completion-workers", "--batch-size"] {
+fn invalid_thread_counts_remain_parser_errors() {
+    for flag in ["--threads", "--workers"] {
         let error = Options::try_parse_from(["zetesis", flag, "0"]).unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::ValueValidation);
     }
@@ -117,41 +95,4 @@ fn device_help_remains_available_without_discovery() {
     let error = Options::try_parse_from(["zetesis", "devices", "--help"]).unwrap_err();
     assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
     assert!(error.to_string().contains("zetesis devices"));
-}
-
-#[test]
-fn every_byte_ceiling_names_the_quantity_it_bounds() {
-    // A byte ceiling is read against a resident-memory figure unless it says
-    // what it counts: reserved capacity, canonical or encoded payload, or the
-    // original bytes of a file. Each option's help must say which.
-    let full = help("--help-all");
-    let mut options = Vec::new();
-    let mut entries: Vec<(&str, String)> = Vec::new();
-    for line in full.lines() {
-        let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix("--") {
-            let name = rest
-                .split(|c: char| c.is_whitespace() || c == '=')
-                .next()
-                .unwrap();
-            options.push(name);
-            entries.push((name, String::new()));
-        } else if let Some((_, text)) = entries.last_mut() {
-            text.push_str(trimmed);
-            text.push(' ');
-        }
-    }
-    let ceilings: Vec<_> = entries
-        .iter()
-        .filter(|(name, _)| name.ends_with("-bytes"))
-        .collect();
-    assert_eq!(ceilings.len(), 16, "{options:?}");
-    for (name, text) in ceilings {
-        assert!(
-            ["reserved", "canonical", "encoded", "original"]
-                .iter()
-                .any(|quantity| text.contains(quantity)),
-            "--{name} does not say which bytes it bounds: {text}"
-        );
-    }
 }

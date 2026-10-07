@@ -46,17 +46,16 @@ struct Options {
     /// Native execution backend (cpu, gpu, metal or vulkan), passed through unchanged.
     #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
     native_backend: zetesis_backend::Backend,
-    /// Positive native candidate batch size, recorded and passed to zetesis.
-    #[arg(long, default_value = "64")]
-    native_batch_size: NonZeroUsize,
-    /// Positive exact formula completion worker request, separate from closure workers.
+    /// Native worker threads.
     #[arg(long, default_value = "1")]
-    native_completion_workers: NonZeroUsize,
-    /// Logical completion-batch scratch bytes; zero is a valid native refusal budget.
-    #[arg(long, default_value_t = 268_435_456)]
-    native_max_completion_scratch_bytes: u64,
-    /// Capture native statistics; also enabled for physical formula campaigns
-    /// or multiple requested completion workers.
+    threads: NonZeroUsize,
+    /// Native named-memory allowance in bytes; omitted, the executable default.
+    #[arg(long, value_name = "BYTES")]
+    memory: Option<u64>,
+    /// Native cooperative deadline in whole seconds, separate from child timeout.
+    #[arg(long, value_name = "SECONDS")]
+    time_limit: Option<std::num::NonZeroU64>,
+    /// Capture native statistics; also enabled for physical formula campaigns.
     #[arg(long)]
     native_stats: bool,
     /// Run/check the reference only; success does not establish native support.
@@ -94,9 +93,9 @@ fn execute(options: &Options) -> Result<bool, String> {
         zetesis: options.zetesis.clone(),
         native_oracle: options.native_oracle.into(),
         native_backend: options.native_backend,
-        native_batch_size: options.native_batch_size,
-        native_completion_workers: options.native_completion_workers,
-        native_max_completion_scratch_bytes: options.native_max_completion_scratch_bytes,
+        native_threads: options.threads,
+        native_memory_bytes: options.memory,
+        native_time_limit_seconds: options.time_limit,
         native_stats: options.native_stats,
         reference_only: options.reference_only,
         timeout_ms: options.timeout_ms,

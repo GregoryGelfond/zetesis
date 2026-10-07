@@ -1,5 +1,5 @@
 use super::*;
-use zetesis_ferraris::{AdmissionLimits, TightPlanLimits};
+use zetesis_ferraris::{AdmissionLimits, Node, TightPlanLimits};
 
 fn atomic(device: &wgpu::Limits) -> Packing<'_> {
     Packing {
@@ -11,17 +11,21 @@ fn atomic(device: &wgpu::Limits) -> Packing<'_> {
 fn certificate() -> TightPlan {
     let theory = Theory::new(
         3,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Implies(1, 0),
-            Node::Or(1, 4),
-            Node::And(1, 2),
-            Node::Implies(6, 0),
-            Node::Implies(4, 2),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::implies(1, 0),
+                Node::or_pair([1, 4]),
+                Node::and_pair([1, 2]),
+                Node::implies(6, 0),
+                Node::implies(4, 2),
+            ],
+            Vec::new(),
+        )
+        .unwrap(),
         vec![8, 5, 7, 1],
         AdmissionLimits::default(),
     )
@@ -101,10 +105,10 @@ fn certificate_packing_retains_original_formula_structure() {
     );
     assert_eq!(packed.roots, [8, 5, 7, 1]);
     assert_eq!(packed.producers, [1, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(graph.work, 18);
+    assert_eq!(graph.work, 28);
     assert_eq!(
         plan(&graph, 2, true).params(&graph),
-        [3, 9, 4, 3, 1, 2, 18, 7]
+        [3, 9, 4, 3, 1, 2, 28, 7]
     );
 }
 
@@ -192,7 +196,13 @@ fn candidate_count_must_match_the_admitted_transport() {
 
 #[test]
 fn empty_carriers_keep_only_required_buffer_padding() {
-    let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let certificate = TightPlan::compile(
         &theory,
         TightPlanLimits::default(),
@@ -221,7 +231,13 @@ fn empty_carriers_keep_only_required_buffer_padding() {
 #[test]
 fn candidate_word_tails_never_introduce_atoms() {
     for count in [1, 31, 32, 33, 63, 64, 65] {
-        let theory = Theory::new(count, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            count,
+            zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let certificate = TightPlan::compile(
             &theory,
             TightPlanLimits::default(),
@@ -256,7 +272,13 @@ fn support_storage_uses_packed_world_rows() {
         (64, 2),
         (65, 3),
     ] {
-        let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            atoms,
+            zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let certificate = TightPlan::compile(
             &theory,
             TightPlanLimits::default(),
@@ -283,7 +305,13 @@ fn support_work_charges_both_word_scans() {
         (64, 4),
         (65, 6),
     ] {
-        let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            atoms,
+            zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let certificate = TightPlan::compile(
             &theory,
             TightPlanLimits::default(),
@@ -334,7 +362,7 @@ fn byte_ceiling_includes_its_exact_boundary() {
 #[test]
 fn full_scan_work_is_required_before_dispatch() {
     let graph = graph();
-    for (max_work_per_candidate, success) in [(18, true), (17, false)] {
+    for (max_work_per_candidate, success) in [(28, true), (27, false)] {
         assert_eq!(
             Plan::new(
                 &graph,
@@ -463,11 +491,11 @@ fn zero_epoch_cannot_alias_cleared_result_storage() {
 fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 1, 0, 18, RESULT_MAGIC, 7, 1, 1, 3, 18, RESULT_MAGIC];
+    let records = [7, 0, 1, 0, 28, RESULT_MAGIC, 7, 1, 1, 3, 28, RESULT_MAGIC];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
-    assert_eq!(result[0].work(), 18);
+    assert_eq!(result[0].work(), 28);
 }
 
 #[test]
@@ -479,19 +507,19 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
         0,
         0,
         0,
-        18,
+        28,
         RESULT_MAGIC,
         7,
         1,
         2,
         2,
-        18,
+        28,
         RESULT_MAGIC,
         7,
         2,
         1,
         1,
-        18,
+        28,
         RESULT_MAGIC,
     ];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
@@ -514,8 +542,8 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
 fn corrupt_records_never_produce_a_partial_batch() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let valid = [7, 0, 0, 0, 18, RESULT_MAGIC, 7, 1, 2, 2, 18, RESULT_MAGIC];
-    for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 19), (11, 0), (8, 0)] {
+    let valid = [7, 0, 0, 0, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
+    for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 29), (11, 0), (8, 0)] {
         let mut corrupt = valid;
         corrupt[index] = value;
         assert_eq!(
@@ -539,7 +567,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         decode_present(
-            &[7, 0, 1, 4, 18, RESULT_MAGIC],
+            &[7, 0, 1, 4, 28, RESULT_MAGIC],
             &graph,
             &plan,
             &Cancellation::default()
@@ -562,7 +590,7 @@ fn cancellation_prevents_completed_results() {
         graph.pack(&certificate, &cancellation).err().unwrap(),
         plan.pack(&graph, &input, &cancellation).unwrap_err(),
         decode_present(
-            &[7, 0, 0, 0, 18, RESULT_MAGIC],
+            &[7, 0, 0, 0, 28, RESULT_MAGIC],
             &graph,
             &plan,
             &cancellation,
@@ -577,7 +605,7 @@ fn cancellation_prevents_completed_results() {
 fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 2, 2, 18, RESULT_MAGIC, 7, 1, 2, 2, 18, RESULT_MAGIC];
+    let records = [7, 0, 2, 2, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
     let error =
         super::decode(&records, &graph, &plan, &[7, 3], &Cancellation::default()).unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Readback);
@@ -590,7 +618,7 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         super::decode(
-            &[7, 0, 0, 0, 18, RESULT_MAGIC],
+            &[7, 0, 0, 0, 28, RESULT_MAGIC],
             &graph,
             &plan,
             &[],
@@ -603,7 +631,13 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
 }
 
 fn empty_graph() -> Graph {
-    let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let certificate = TightPlan::compile(
         &theory,
         TightPlanLimits::default(),
@@ -641,7 +675,13 @@ fn empty_storage_padding_never_becomes_a_witness() {
     }
 
     // Zero is a valid ordinal when an actual asserted root occupies it.
-    let theory = Theory::new(0, vec![Node::False], vec![0], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![Node::falsum()], Vec::new()).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let certificate =
         TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
@@ -718,3 +758,95 @@ fn result_addressing_has_an_independent_ceiling() {
 }
 
 mod grouping_tests;
+
+#[test]
+fn native_tight_rows_retain_tail_and_complete_scan_allowance() {
+    use zetesis_ferraris::{FormulaParts, OperandSpan};
+    let theory = Theory::new(
+        3,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::and_span(OperandSpan {
+                    start: 0,
+                    length: 65,
+                }),
+                Node::implies(3, 2),
+            ],
+            (0..65).map(|i| i % 2).collect(),
+        )
+        .unwrap(),
+        vec![0, 1, 4],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let certificate = TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    for support in [TightSupport::Atomic, TightSupport::Grouped] {
+        let device = wgpu::Limits::default();
+        let graph = Graph::new(
+            &certificate,
+            Packing {
+                device: &device,
+                support,
+            },
+        )
+        .unwrap();
+        let packed = graph.pack(&certificate, &Cancellation::default()).unwrap();
+        assert_eq!(graph.nodes, 5);
+        assert_eq!(graph.node_bytes, 4 * (20 + 65));
+        assert_eq!(&packed.nodes[12..16], &[5, 0, 65, 0]);
+        assert_eq!(
+            &packed.nodes[20..],
+            &(0..65).map(|i| i % 2).collect::<Vec<_>>()
+        );
+        assert_eq!(graph.edges, 67);
+        assert_eq!(graph.work, 5 + 67 + 3 + graph.producers + 2);
+        let required = Plan::new(&graph, 1, TightGpuLimits::default(), &device, true, 1)
+            .unwrap()
+            .accounted;
+        for (limit, accepted) in [(required - 1, false), (required, true)] {
+            assert_eq!(
+                Plan::new(
+                    &graph,
+                    1,
+                    TightGpuLimits {
+                        max_batch_bytes: limit,
+                        ..TightGpuLimits::default()
+                    },
+                    &device,
+                    true,
+                    1
+                )
+                .is_ok(),
+                accepted
+            );
+        }
+        for (limit, accepted) in [
+            (u64::from(graph.work) - 1, false),
+            (u64::from(graph.work), true),
+        ] {
+            assert_eq!(
+                Plan::new(
+                    &graph,
+                    1,
+                    TightGpuLimits {
+                        max_work_per_candidate: limit,
+                        ..TightGpuLimits::default()
+                    },
+                    &device,
+                    true,
+                    1
+                )
+                .is_ok(),
+                accepted
+            );
+        }
+    }
+}

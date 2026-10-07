@@ -45,7 +45,13 @@ fn retained_grounding_preserves_the_materialized_theory() {
     let source = "{pick(1); pick(2)}. result(X) :- pick(X).";
     let ordinary = crate::formula_ground::ground(testing::prepare(source), None, None).unwrap();
     let retained = ground_retained(testing::prepare(source), None, false).unwrap();
-    assert_eq!(ordinary.theory.nodes(), retained.compiled.theory.nodes());
+    assert_eq!(
+        (ordinary.theory.nodes(), ordinary.theory.operands()),
+        (
+            retained.compiled.theory.nodes(),
+            retained.compiled.theory.operands()
+        )
+    );
     assert_eq!(ordinary.theory.roots(), retained.compiled.theory.roots());
     assert_eq!(ordinary.atoms.atoms(), retained.compiled.atoms.atoms());
 }

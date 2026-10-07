@@ -28,7 +28,7 @@ fn controlled_calls(backend: GpuApi) {
     let seeds = [Seed::new(&program, []).unwrap()];
     let theory = Theory::new(
         1,
-        vec![Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -111,7 +111,7 @@ fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut G
     let seeds = [Seed::new(&program, []).unwrap()];
     let theory = Theory::new(
         0,
-        vec![],
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )

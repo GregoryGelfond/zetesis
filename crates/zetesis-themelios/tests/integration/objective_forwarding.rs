@@ -207,7 +207,10 @@ fn forwarded_observers_leave_the_original_theory_intact() {
         let ordinary = admit(program, &FormulaLimits::default()).unwrap();
         let observed = admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(ordinary.atoms(), observed.atoms());
-        assert_eq!(ordinary.theory().nodes(), observed.theory().nodes());
+        assert_eq!(
+            (ordinary.theory().nodes(), ordinary.theory().operands()),
+            (observed.theory().nodes(), observed.theory().operands())
+        );
         assert_eq!(ordinary.theory().roots(), observed.theory().roots());
         assert_eq!(ordinary.formula_origins(), observed.formula_origins());
     }

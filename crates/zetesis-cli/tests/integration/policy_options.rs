@@ -1,11 +1,11 @@
-//! CLI spellings map directly to the library's execution policy values.
+//! Public options select algorithms and the shared ordinary resource policy.
 
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
 use zetesis_cli::{Backend, Grounder, Options, Oracle, SearchMethod, SolveConfig, SourceBatching};
 
-fn nondefault_options() -> Options {
-    // Distinct values detect crossed fields whose defaults happen to coincide.
-    Options::try_parse_from([
+#[test]
+fn algorithm_options_preserve_the_selected_policies() {
+    let options = Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
@@ -20,201 +20,111 @@ fn nondefault_options() -> Options {
         "--stats",
         "--models",
         "11",
-        "--max-search-work",
-        "12",
-        "--max-search-decisions",
-        "13",
-        "--max-objective-work",
-        "14",
-        "--max-objective-bound-work",
-        "15",
-        "--max-objective-bindings",
-        "16",
-        "--max-objective-keys",
-        "17",
-        "--max-objective-key-bytes",
-        "18",
-        "--max-optimal-models",
-        "19",
-        "--max-optimal-atoms",
-        "20",
-        "--max-optimal-bytes",
-        "21",
-        "--batch-size",
-        "22",
-        "--workers",
-        "23",
-        "--completion-workers",
-        "24",
-        "--max-completion-scratch-bytes",
-        "25",
-        "--max-candidates",
-        "26",
-        "--max-carrier-atoms",
-        "27",
-        "--max-work",
-        "28",
-        "--max-source-work",
-        "29",
-        "--max-atoms",
-        "30",
-        "--max-substitutions",
-        "31",
-        "--max-ground-rules",
-        "32",
-        "--max-batch-bytes",
-        "33",
-        "--max-candidate-bytes",
-        "34",
-        "--max-projection-entries",
-        "35",
-        "--max-projection-nodes",
-        "36",
-        "--max-projection-bytes",
-        "37",
-        "--max-closure-bytes",
-        "38",
-        "--max-closure-batch-bytes",
-        "39",
-        "--max-reduct-bytes",
-        "40",
+        "--threads",
+        "3",
+        "--memory",
+        "4GiB",
     ])
-    .unwrap()
-}
-
-#[test]
-fn nondefault_options_preserve_each_solver_field() {
-    let config = SolveConfig::from(&nondefault_options());
+    .unwrap();
+    let config = SolveConfig::from(&options);
     assert_eq!(config.backend, Backend::Cpu);
     assert_eq!(config.grounder, Grounder::Lazy);
     assert_eq!(config.source_batching, SourceBatching::Worlds);
     assert_eq!(config.oracle, Oracle::Closure);
+    assert_eq!(config.search, SearchMethod::Regions);
     assert!(config.stats);
     assert_eq!(config.models, 11);
-    assert_eq!(config.max_search_work, 12);
-    assert_eq!(config.max_search_decisions, 13);
-    assert_eq!(config.max_objective_work, 14);
-    assert_eq!(config.max_objective_bound_work, 15);
-    assert_eq!(config.max_objective_bindings, 16);
-    assert_eq!(config.max_objective_keys, 17);
-    assert_eq!(config.max_objective_key_bytes, 18);
-    assert_eq!(config.max_optimal_models, 19);
-    assert_eq!(config.max_optimal_atoms, 20);
-    assert_eq!(config.max_optimal_bytes, 21);
-    assert_eq!(config.batch_size.get(), 22);
-    assert_eq!(config.workers.get(), 23);
-    assert_eq!(config.completion_workers.get(), 24);
-    assert_eq!(config.max_completion_scratch_bytes, 25);
-    assert_eq!(config.search, SearchMethod::Regions);
-    assert_eq!(config.max_candidates, 26);
-    assert_eq!(config.max_carrier_atoms, 27);
-    assert_eq!(config.max_work, 28);
-    assert_eq!(config.max_source_work, 29);
-    assert_eq!(config.max_atoms, 30);
-    assert_eq!(config.max_substitutions, 31);
-    assert_eq!(config.max_ground_rules, 32);
-    assert_eq!(config.max_batch_bytes, 33);
-    assert_eq!(config.max_candidate_bytes, 34);
-    assert_eq!(config.max_projection_entries, 35);
-    assert_eq!(config.max_projection_nodes, 36);
-    assert_eq!(config.max_projection_bytes, 37);
-    assert_eq!(config.max_closure_bytes, 38);
-    assert_eq!(config.max_closure_batch_bytes, 39);
-    assert_eq!(config.max_reduct_bytes, 40);
+    assert_eq!(config.workers.get(), 3);
 }
 
 #[test]
-fn an_omitted_closure_allowance_is_the_collective_share_per_worker() {
-    let derived = SolveConfig::from(
-        &Options::try_parse_from(["zetesis", "--workers", "8", "--memory", "2147483648"]).unwrap(),
-    );
-    assert_eq!(
-        derived.max_closure_bytes,
-        SolveConfig::DEFAULT.max_closure_batch_bytes / 8
-    );
-    assert!(derived.validate().is_ok());
-    let explicit = SolveConfig::from(
-        &Options::try_parse_from(["zetesis", "--workers", "8", "--max-closure-bytes", "5"])
-            .unwrap(),
-    );
-    assert_eq!(explicit.max_closure_bytes, 5);
-    let collective = SolveConfig::from(
-        &Options::try_parse_from([
-            "zetesis",
-            "--workers",
-            "3",
-            "--max-closure-batch-bytes",
-            "300",
-        ])
-        .unwrap(),
-    );
-    assert_eq!(collective.max_closure_bytes, 100);
+fn resource_options_use_the_library_policy() {
+    for memory in [0, 1, 2_147_483_648, 4_294_967_296] {
+        let options =
+            Options::try_parse_from(["zetesis", "--threads", "4", "--memory", &memory.to_string()])
+                .unwrap();
+        let expected = zetesis_solve::Resources::new(memory, options.workers).solve_config();
+        let actual = SolveConfig::from(&options);
+        assert_eq!(actual.max_closure_bytes, expected.max_closure_bytes);
+        assert_eq!(
+            actual.max_closure_batch_bytes,
+            expected.max_closure_batch_bytes
+        );
+        assert_eq!(
+            actual.max_completion_scratch_bytes,
+            expected.max_completion_scratch_bytes
+        );
+        assert_eq!(actual.max_model_bytes, expected.max_model_bytes);
+        assert_eq!(actual.constraints, expected.constraints);
+        assert_eq!(actual.max_work, u64::MAX);
+        assert_eq!(actual.max_search_work, u64::MAX);
+        assert_eq!(actual.max_source_work, u64::MAX);
+        assert_eq!(actual.max_objective_work, u64::MAX);
+    }
 }
 
 #[test]
-fn byte_ceilings_are_the_library_defaults_scaled_by_the_memory_allowance() {
-    // At the reference allowance every byte ceiling is the library's; at
-    // twice it, every one is doubled and the others are unchanged.
-    let reference = SolveConfig::from(
-        &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "2147483648"]).unwrap(),
-    );
-    assert_eq!(reference, SolveConfig::DEFAULT);
-    let doubled = SolveConfig::from(
-        &Options::try_parse_from(["zetesis", "--workers", "4", "--memory", "4294967296"]).unwrap(),
-    );
-    let library = SolveConfig::DEFAULT;
-    assert_eq!(doubled.max_model_bytes, 2 * library.max_model_bytes);
-    assert_eq!(
-        doubled.max_projection_bytes,
-        2 * library.max_projection_bytes
-    );
-    assert_eq!(
-        doubled.max_objective_key_bytes,
-        2 * library.max_objective_key_bytes
-    );
-    assert_eq!(doubled.max_optimal_bytes, 2 * library.max_optimal_bytes);
-    assert_eq!(doubled.max_reduct_bytes, 2 * library.max_reduct_bytes);
-    assert_eq!(
-        doubled.max_completion_scratch_bytes,
-        2 * library.max_completion_scratch_bytes
-    );
-    assert_eq!(doubled.max_candidate_bytes, 2 * library.max_candidate_bytes);
-    assert_eq!(
-        doubled.max_closure_batch_bytes,
-        2 * library.max_closure_batch_bytes
-    );
-    assert_eq!(doubled.max_closure_bytes, 2 * library.max_closure_bytes);
-    assert_eq!(doubled.max_batch_bytes, 2 * library.max_batch_bytes);
-    let unscaled = SolveConfig {
-        max_model_bytes: library.max_model_bytes,
-        max_projection_bytes: library.max_projection_bytes,
-        max_objective_key_bytes: library.max_objective_key_bytes,
-        max_optimal_bytes: library.max_optimal_bytes,
-        max_reduct_bytes: library.max_reduct_bytes,
-        max_completion_scratch_bytes: library.max_completion_scratch_bytes,
-        max_candidate_bytes: library.max_candidate_bytes,
-        max_closure_batch_bytes: library.max_closure_batch_bytes,
-        max_closure_bytes: library.max_closure_bytes,
-        max_batch_bytes: library.max_batch_bytes,
-        ..doubled
-    };
-    assert_eq!(format!("{unscaled:?}"), format!("{library:?}"));
-    // A given ceiling is taken as given, whatever the allowance.
-    let given = SolveConfig::from(
-        &Options::try_parse_from([
-            "zetesis",
-            "--memory",
-            "4294967296",
-            "--max-reduct-bytes",
-            "7",
-        ])
-        .unwrap(),
-    );
-    assert_eq!(given.max_reduct_bytes, 7);
-    // The default allowance is at least the reference.
-    let host = Options::try_parse_from(["zetesis"]).unwrap();
-    assert!(host.memory >= 2_147_483_648);
-    assert!(host.max_reduct_bytes.is_none());
+fn removed_stage_controls_are_parser_errors() {
+    for flag in [
+        "--max-json-record-bytes",
+        "--max-search-work",
+        "--max-search-decisions",
+        "--max-projection-entries",
+        "--max-projection-nodes",
+        "--max-projection-bytes",
+        "--max-expansion-work",
+        "--max-support-bytes",
+        "--max-expanded-templates",
+        "--max-expansion-values",
+        "--max-expansion-bytes",
+        "--max-domain-values",
+        "--max-assignment-values",
+        "--max-generated-values",
+        "--max-support-rounds",
+        "--max-model-work",
+        "--max-model-bytes",
+        "--max-objective-work",
+        "--max-observation-work",
+        "--max-observation-bindings",
+        "--max-observation-terms",
+        "--max-observation-bytes",
+        "--max-objective-bound-work",
+        "--max-objective-bindings",
+        "--max-objective-keys",
+        "--max-objective-key-bytes",
+        "--max-optimal-models",
+        "--max-optimal-atoms",
+        "--max-optimal-bytes",
+        "--batch-size",
+        "--completion-workers",
+        "--max-reduct-bytes",
+        "--max-completion-scratch-bytes",
+        "--max-candidates",
+        "--max-candidate-bytes",
+        "--max-carrier-atoms",
+        "--max-work",
+        "--max-closure-bytes",
+        "--max-closure-batch-bytes",
+        "--gpu-formula-work",
+        "--gpu-formula-rounds",
+        "--max-source-work",
+        "--max-atoms",
+        "--max-source-bytes",
+        "--max-source-roots",
+        "--max-source-files",
+        "--max-total-source-bytes",
+        "--max-include-depth",
+        "--max-substitutions",
+        "--max-ground-rules",
+        "--max-batch-bytes",
+    ] {
+        for prefix in [vec!["zetesis"], vec!["zetesis", "solve"]] {
+            let error =
+                zetesis_cli::Invocation::try_parse_from(prefix.into_iter().chain([flag, "1"]))
+                    .unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::UnknownArgument, "{flag}");
+        }
+    }
 }
 
 #[test]
@@ -222,7 +132,6 @@ fn automatic_workers_use_the_host_parallelism() {
     let options = Options::try_parse_from(["zetesis"]).unwrap();
     let host = std::thread::available_parallelism().unwrap_or(std::num::NonZeroUsize::MIN);
     assert_eq!(options.workers, host);
-    assert_eq!(options.completion_workers.get(), 1);
 }
 
 #[test]
@@ -366,48 +275,4 @@ fn non_utf8_policy_values_remain_parser_errors() {
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::InvalidUtf8);
     }
-}
-
-#[test]
-fn formula_device_limits_remain_distinct_from_cpu_work() {
-    for (work, rounds) in [(0, 0), (789, 17), (u32::MAX, u32::MAX)] {
-        let options = Options::try_parse_from([
-            "zetesis",
-            "--max-work",
-            "18446744073709551615",
-            "--gpu-formula-work",
-            &work.to_string(),
-            "--gpu-formula-rounds",
-            &rounds.to_string(),
-        ])
-        .unwrap();
-        let config = SolveConfig::from(&options);
-        assert_eq!(config.max_work, u64::MAX);
-        assert_eq!(config.gpu_formula_work, work);
-        assert_eq!(config.gpu_formula_rounds, rounds);
-    }
-    let defaults = SolveConfig::from(&Options::try_parse_from(["zetesis"]).unwrap());
-    assert_eq!(defaults.gpu_formula_work, 100_000_000);
-    assert_eq!(defaults.gpu_formula_rounds, 64);
-}
-
-#[test]
-fn formula_device_limits_reject_unrepresentable_values() {
-    for flag in ["--gpu-formula-work", "--gpu-formula-rounds"] {
-        for value in ["4294967296", "18446744073709551615"] {
-            let error = Options::try_parse_from(["zetesis", flag, value]).unwrap_err();
-            assert_eq!(error.kind(), ErrorKind::ValueValidation);
-        }
-    }
-}
-
-#[test]
-fn the_expansion_byte_budget_is_an_option_with_the_library_default() {
-    let options = Options::try_parse_from(["zetesis"]).unwrap();
-    assert_eq!(
-        options.max_expansion_bytes,
-        zetesis_themelios::ExpansionLimits::default().max_scalar_bytes
-    );
-    let raised = Options::try_parse_from(["zetesis", "--max-expansion-bytes", "5"]).unwrap();
-    assert_eq!(raised.max_expansion_bytes, 5);
 }

@@ -7,6 +7,14 @@ reservations. The result concerns one candidate of one finite ground formula
 theory under explicit library, runtime and extraction contracts. The package also proves theory admission and construction, finite
 interpretation construction, and stored-reduct construction and public querying.
 
+The unprefixed refinement declarations on this page concern the retained binary
+`Evaluator` generation. Native row, admission, evaluator, query and public
+membership proofs live separately under `Native`; their current scope is listed
+in the [correspondence chapter](correspondence.md#indexed-reads-counters-and-packed-scans).
+Native runtime-effect composition and the outer tight classifier, recognizer and
+producer proofs remain separate. Historical source records do not qualify changed
+native operations.
+
 ## Recognizing bodies for tight checking
 
 The optimized tight check needs a structural certificate before it may replace

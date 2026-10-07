@@ -12,7 +12,12 @@ fn the_host_memory_probe_ignores_a_sysctl_on_path() {
     const PLANTED: &str = "1234";
     let directory = tempfile::tempdir().unwrap();
     let planted = directory.path().join("sysctl");
-    std::fs::write(&planted, format!("#!/bin/sh\necho {PLANTED}\n")).unwrap();
+    let invoked = directory.path().join("invoked");
+    std::fs::write(
+        &planted,
+        format!("#!/bin/sh\n: > \"$ZETESIS_TEST_SYSCTL_MARKER\"\necho {PLANTED}\n"),
+    )
+    .unwrap();
     std::fs::set_permissions(&planted, std::fs::Permissions::from_mode(0o755)).unwrap();
     let path = std::env::join_paths(std::iter::once(directory.path().to_owned()).chain(
         std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
@@ -25,6 +30,7 @@ fn the_host_memory_probe_ignores_a_sysctl_on_path() {
         .args(["solve", "--backend", "cpu", "--all", "--json", "--stats"])
         .arg(&source)
         .env("PATH", path)
+        .env("ZETESIS_TEST_SYSCTL_MARKER", &invoked)
         .output()
         .unwrap();
 
@@ -36,8 +42,9 @@ fn the_host_memory_probe_ignores_a_sysctl_on_path() {
         .and_then(|rest| rest.split(')').next())
         .expect("the statistics header reports the host memory reading");
     assert_ne!(reported, PLANTED);
+    assert!(!invoked.exists(), "the planted probe must not run");
     assert!(
-        reported.parse::<u64>().is_ok_and(|bytes| bytes > 1 << 30),
+        reported == "unreported" || reported.parse::<u64>().is_ok_and(|bytes| bytes > 0),
         "{reported}"
     );
 }

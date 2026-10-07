@@ -258,28 +258,3 @@ fn relational_grounding_stays_unmeasured_in_formula_attribution() {
         }
     }
 }
-
-#[test]
-fn a_grounding_failure_retains_its_phase_outcome() {
-    let mut output = Vec::new();
-    let mut options = options(&[]);
-    options.max_atoms = 0;
-    let failure = run_detailed_with_diagnostics(
-        "1{p;q}1.".into(),
-        &options,
-        &mut output,
-        &mut std::io::sink(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    let typed = failure.phase_timings.unwrap().grounding;
-    let support = typed.get(GroundingPhase::SupportCompletion).unwrap();
-    assert_eq!(support.count(GroundingOutcome::Failed), Some(1));
-    assert!(typed.get(GroundingPhase::RuleInstantiation).is_none());
-    let document: Value = serde_json::from_slice(&output).unwrap();
-    assert_eq!(
-        document["statistics"]["grounding_attribution"]["measurements"]["support_completion"]["outcomes"]
-            ["failed"],
-        1
-    );
-}

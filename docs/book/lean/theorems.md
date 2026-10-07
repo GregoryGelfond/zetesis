@@ -8,9 +8,12 @@ The maintained full index is
 | Question | Module and central law | Required boundary |
 | --- | --- | --- |
 | What makes an interpretation an answer set? | `Ferraris.stable_iff_minimal_reduct` | Fixed original theory and candidate |
+| Can support guards be grouped by shared condition? | [`SupportTransposition`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SupportTransposition.lean): `original_exact`, `frozen_exact`, `answer_sets_in_context` | Exact head-condition incidences; double-negated guard families and unchanged context. Frozen truth agrees for arbitrary outer and tested interpretations; concrete grouping remains a Rust obligation |
 | Does the computed frozen DAG evaluate that reduct? | `ReductEvaluation.values_correspond`, `roots_true_iff` | Finite indexed formula semantics; mask correctness is derived, not assumed |
 | Does finite subset search decide membership? | `FiniteMembership.check_iff_answer_set` | Supplied finite candidate, decidable atom equality; subset coverage is constructed |
 | Are the evaluator's child, mask and root reads present? | `Refinement.IndexedEvaluation.satisfies_reduct_exact`, `satisfies_reduct_iff` | Admitted DAG and root positions; the computed mask supplies its own coverage |
+| Do checked operand spans preserve finite connective truth? | `Refinement.OperandArena.validate_exact`, `original_exact`, `reduct_exact`, `frozen_exact` | Complete spans and backward references; an explicit mask bit must equal original truth. Ordered duplicates and empty identities are preserved |
+| Does a finite operand table compute its own correct mask? | `Refinement.OperandTable.original_exact`, `reduct_exact` | Admitted tables; the paired pass derives both original and reduct truth. Runtime scheduling, inline storage and Rust arena correspondence remain unproved |
 | Does low-bit-first counting cover all proper subsets? | `SubsetCounter.proper_iff_visited`, `countermodel_search_iff` | Distinct supplied atoms; tracked count and finite counter coverage are proved |
 | When does least closure suffice? | `Semantics.stable_iff_gamma` | Normalized single-head rules and constraints |
 | Does the sequential rule scan compute that closure? | `FiniteClosure.closure_exact`, `accepts_exact`, `empty_completes` | Finite normalized rules with true filters retained and false filters omitted; explicit head-list scan bound |
@@ -190,9 +193,18 @@ rewrite or verify its source key assignment.
 `AggregateReduct.direct_reduct` relates the failing-subset formula to original
 and frozen eligibility under complete masks. `AggregateRanges` establishes bounds
 on mathematical signed partial sums. `AggregateDependencies` composes complete
-predecessor-indexed value families. `ObjectiveTransport` and `ExtremumPresence`
-retain the distinction between possible carriers, realized values and objective
-presence.
+predecessor-indexed value families. Its `Reuse.restart_exact` proves full reset
+or direct rebuilding from complete projected inputs under fixed support;
+`reuse_rows_exact` preserves the finite ordered traversal and typed failures.
+`clauses_exact` maps successful rows to the same clauses, retaining every prior
+activation and aggregate equality. Separately, `SupportReuse.reuse_exact` permits
+coalescing consecutive equal projections of completed support continuations when
+the projection determines both their head image and diagnostic evidence. It
+preserves head union, the defined flag and the first zero; it does not preserve
+formula-witness occurrences. These laws do not establish concrete source
+dependencies, carrier completeness or Rust cursor/resource correspondence.
+`ObjectiveTransport` and `ExtremumPresence` retain the distinction between
+possible carriers, realized values and objective presence.
 
 [`OrderedBounds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedBounds.lean)
 connects numeric measures to logical bounds. `separated_comparison` requires the

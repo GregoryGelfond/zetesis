@@ -92,14 +92,14 @@ fn tools(observation: Observation<'_>) -> Result<Value, Error> {
     }
     Ok(Value::Object(result))
 }
-/// What a physical stage's 58 exact tests of `api` cover.
+/// What a physical stage's 59 exact tests of `api` cover.
 fn physical_scope(api: zetesis_backend::GpuApi) -> String {
     let (name, other) = match api {
         zetesis_backend::GpuApi::Metal => ("Metal", "Vulkan"),
         zetesis_backend::GpuApi::Vulkan => ("Vulkan", "Metal"),
     };
     format!(
-        "58 exact {name} tests: native aggregate reduction, static constructor and complete closure/reference checks, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic materialization and automatic CPU policy, complete-world-view collection, bounded relation equality filtering, shared-context composition, contention and shared failure handling, caller-supplied session resources with policy and observer failures, observed complete collection on supplied contexts, explicit compiled formula profiles with independent oracle state and compilation identity, and combined language-consumer families with scored observations and optimum ties. Cooperative device control, interrupted preparation reuse and actual submission receipts are included, alongside completed-support table joins with actual GPU candidates and complete CPU/{name} answer families. Ordinary automatic membership sessions check complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch. Terminal sessions check complete reconstruction from device-verified base answers. Unlisted tests and {other} are not selected."
+        "59 exact {name} tests: native aggregate reduction, static constructor and complete closure/reference checks, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic materialization and automatic CPU policy, complete-world-view collection, bounded relation equality filtering with 8/16/32-bit column transport, shared-context composition, contention and shared failure handling, caller-supplied session resources with policy and observer failures, observed complete collection on supplied contexts, explicit compiled formula profiles with independent oracle state and compilation identity, and combined language-consumer families with scored observations and optimum ties. Cooperative device control, interrupted preparation reuse and actual submission receipts are included, alongside completed-support table joins with actual GPU candidates and complete CPU/{name} answer families. Ordinary automatic membership sessions check complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch. Terminal sessions check complete reconstruction from device-verified base answers. Unlisted tests and {other} are not selected."
     )
 }
 /// Compose the established metadata schema from explicit validated observations.

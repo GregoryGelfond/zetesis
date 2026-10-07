@@ -77,6 +77,8 @@ impl From<crate::selected::Error> for Error {
 #[derive(Debug, Serialize)]
 pub struct Report {
     schema: u32,
+    // Requested public controls; the sealed executable determines effective defaults.
+    native_resource_policy: &'static str,
     manifest_sha256: &'static str,
     schedule: Schedule,
     #[serde(skip_serializing_if = "Option::is_none")]

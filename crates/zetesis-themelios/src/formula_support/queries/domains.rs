@@ -627,7 +627,7 @@ impl<'a, 'source> Guards<'a, 'source> {
                 counters.work(limits, location)?;
                 counters.record(Event::DomainGuardCheck);
                 let middle = start + (end - start) / 2;
-                match restriction.ids[middle].cmp(id) {
+                match restriction.ids[middle].cmp(&id) {
                     std::cmp::Ordering::Less => start = middle + 1,
                     std::cmp::Ordering::Greater => end = middle,
                     std::cmp::Ordering::Equal => {

@@ -8,13 +8,186 @@ of one finite ground formula theory. The package also proves theory admission
 and construction, finite interpretation construction, and stored-reduct
 construction and public querying under their stated contracts.
 
+The retained binary generation in `Evaluator` (`ZetesisExtract`) supplies the
+historical full-package results. The native generation in `Native`
+(`ZetesisNativeExtract`) now has its own row, admission, constructor, evaluator,
+frozen-query, proper-subset search and public membership laws described below.
+Native runtime-effect composition remains separate; historical results do not
+qualify changed native entrypoints.
+
 The reusable ASP theory lives in [`proofs`](../../proofs/README.md). This package
 imports the reduct-evaluation, packed-subset and admission sources directly and checks them
 with the extraction backend's Lean 4.31.0. The main library retains Lean 4.33.1.
 No semantic definitions are copied or replaced; object files from different Lean
-versions are not mixed. `semantic-inputs.sha256` identifies the shared sources.
+versions are not mixed. `semantic-inputs.sha256` identifies the shared sources
+for the retained binary proofs. The existing `source-inputs.sha256`,
+`provenance.json` and `verification.json` also describe that retained generation;
+they do not qualify native source changes. [native-provenance.json](native-provenance.json)
+and its separate source/artifact inventories identify the refreshed native
+extraction and adaptations. [native-verification.json](native-verification.json) records the package build and
+complete native axiom audit separately from source identity.
+
+## Native operand-row getters
+
+[`NativeRows`](NativeRows.lean) proves the actual generated `read_span`,
+`Node::view`, `FormulaView::node` and `FormulaParts::view` operations. Inline pairs
+expose both entries in order. Wide rows expose the complete selected span,
+preserving repeated IDs. The equations hold for raw storage without assuming
+successful theory admission: arity below three returns `Arity` before checking
+the range; an unavailable or overflowing wide span returns `Span`; a missing
+node index returns `Edge` before decoding a node. Borrowing parts retains both
+original sequences, without validating the cached occurrence count.
+
+[`NativeRowsArena`](NativeRowsArena.lean) maps successful wide-row contents to
+`OperandArena` by taking each machine index's natural value. Range validity comes
+from the generated getter. An explicit premise that every child precedes the
+current node supplies topology; the bridge does not prove the generated child
+validator. Ordered equality then supplies the reusable arena validator's exact
+returned row.
+
+The generation uses the same pinned backend and dependency environment as the
+retained package. Its namespace separates the generated types and external
+bindings. One explicit section block supplies `ArcAllocation` and
+`VectorReservation`; removing that block restores the stock generated function
+file. Neither class installs a default provider or assumes successful allocation.
+The imported scalar, slice and array models and the explicit native external
+bindings remain library/extraction trust boundaries. `NativeRowsAudit.lean`
+checks the row laws and native bindings for transitive axioms.
+
+## Native paired admission and evaluation
+
+These laws refer to the retained generated `Native` operations. The refreshed
+raw-admission extraction includes its shared dimension checks. The consuming
+`TheoryAdmission` path additionally relies on the construction owner's validated
+topology frontier; the raw constructor proof does not establish that invariant.
+
+[`NativeAdmissionValidation`](NativeAdmissionValidation.lean) and
+[`NativeBoundsValidation`](NativeBoundsValidation.lean) prove the actual finite
+node, child and root scans, including complete ordered wide rows. Acceptance
+supplies the shared [`NativeStructure`](NativeStructure.lean) atom and backward
+child bounds. [`NativeAdmissionConsequences`](NativeAdmissionConsequences.lean)
+identifies the first refused row after its valid prefix, excludes allocation
+refusal from admission, and relates each decoded row's width to its raw count.
+
+[`NativeOccurrenceCount`](NativeOccurrenceCount.lean) proves the actual checked
+sum of logical operand occurrences. [`NativeAdmittedData`](NativeAdmittedData.lean)
+proves every phase of actual admission: dimensions and atom padding, occurrence
+counting and its limit, node validation, then roots. Both physical arena length
+and logical occurrence count must fit the operand limit. Unused arena cells and
+repeated or overlapping row occurrences retain their respective charges. Success
+preserves the complete input vectors and replaces only the supplied occurrence
+cache with the recomputed sum; representable packed word counts follow.
+
+[`NativeTheoryConstruction`](NativeTheoryConstruction.lean) derives successful
+admission and allocation from an actual constructor return. Typed refusals are
+exactly admission refusals. Allocation failure or divergence remains an outer
+result. The returned value and fresh heap transition retain their explicit
+per-invocation library contracts; no default allocator or success premise is
+introduced.
+
+[`NativeLoop`](NativeLoop.lean) proves the actual evaluator's finite completion
+or typed stop under the supplied fixed atomic observations. Its output is the
+exact completed prefix, and its receipt includes work inside an unfinished node.
+[`NativeExecution`](NativeExecution.lean) proves generated setup and complete
+original truth. Two actual completed passes establish frozen-reduct truth for
+arbitrary outer and tested interpretations, deriving the mask from the first
+pass. Complete work is one tick per node plus one per decoded operand occurrence.
+[`NativeDenotation`](NativeDenotation.lean) connects the decoded table to the
+existing Ferraris and `OperandTable` laws; this is a mathematical view, not a
+second stored runtime graph.
+
+[`NativeRootScan`](NativeRootScan.lean) proves the actual ordered root scan,
+including its first false occurrence and work spent before a typed stop.
+[`NativeFrozenConstruction`](NativeFrozenConstruction.lean) derives the original
+mask from actual construction. [`NativePublicFrozenQuery`](NativePublicFrozenQuery.lean)
+then connects a completed public query to Ferraris reduct satisfaction. The
+tested interpretation need not be a subset of the candidate, and the candidate
+need not satisfy the original theory. Stops remain errors. A query charges at
+most N+E+R, where R counts stored root occurrences, including repetitions.
+
+[`NativeAdmittedQuery`](NativeAdmittedQuery.lean) supplies structural validity,
+root coverage and recomputed N+E from actual theory admission, then composes
+public frozen construction and querying. Its owned-vector endpoint also derives
+packed readability from the actual interpretation constructors described below.
+Native tight paths and runtime event/refusal projections remain to be migrated.
+These results do not prove allocator capacity, changing atomic
+histories, live reference counts, Rust borrowing or GPU execution.
+
+[`NativeInterpretationStorage`](NativeInterpretationStorage.lean) supplies the
+packed-readability premise from actual interpretation construction. The generic
+endpoint requires a finite sequence justified by the supplied iterator's actual
+calls; the owned-vector endpoint derives that sequence. Successful construction
+retains the theory, admits every input atom, and produces exactly the input's
+packed membership with zero padding. Duplicate input atoms remain idempotent.
+The reservation contract requires a successful reservation to preserve its empty
+input; it neither assumes reservation success nor proves allocator capacity.
+`NativeInsertionLoop` also identifies the first invalid coordinate and the
+packed prefix retained by the actual insertion helper on that refusal.
+
+[`NativeFixedSelection`](NativeFixedSelection.lean) proves that the generated
+selected-atom scan visits the declared universe in order. Completion supplies
+the exact ascending atom list; a stop preserves its visited prefix and work.
+[`NativeSubsetQuery`](NativeSubsetQuery.lean) connects one completed query to
+the reduct fixed by actual original evaluation. `NativeSubsetQueryTotal` proves
+its finite typed outcome: initial admission charges one subset even if later
+evaluation stops, while refusal before admission preserves the old state.
+
+[`NativeMembershipSearch`](NativeMembershipSearch.lean) composes these queries
+with the actual packed counter and search loop. Finite rank proves coverage of
+all proper subsets. A true return retains a proper-subset model of the frozen
+reduct; a completed false return excludes every such model. Composing that
+search with actual original evaluation, root checking and atom selection proves
+answer-set membership. Public allocation and owner setup remain separate from
+this phase-level result. Shared scalar and packed-word laws live once in
+`ScalarSubsetWords`; both extracted representations use those same laws.
+
+[`NativePublicCheckPhases`](NativePublicCheckPhases.lean) derives the public
+checker's actual sequence of reservations, evaluation, root checking, atom
+selection and subset search from a completed call. It preserves the published
+verdict and work without assuming that an intermediate result is correct.
+`NativePublicCheckBoundary` proves the order of early refusals;
+`NativeCheckedResults` proves that result accessors and consuming conversion
+retain the exact checked interpretation.
+
+[`NativePublicMembership`](NativePublicMembership.lean) composes these actual
+calls with the semantic search laws. A completed public check returns Stable
+exactly for an answer set. NotModel identifies an asserted root with a present
+false original value; NonMinimal returns the actual program-owned proper-subset
+model of the candidate's reduct. Exact candidate storage, admitted node/root
+structure, a common immutable heap and successful reservation's preservation
+of empty sequences are explicit contracts. Ownership's generic value relation
+lives once in `OwnerValues`; historical and native checks use their respective
+generated calls.
+
+[`NativeSubjectMembership`](NativeSubjectMembership.lean) derives structure and
+storage from actual theory and owned-vector interpretation construction. It
+recovers the actual checker call from the retained-subject wrapper and proves
+that successful conversion retains that constructed subject as an answer set.
+The successful Arc-value and reservation contracts promise no allocation or
+completion. These are fixed-observation library-model results; changing runtime
+observations and their source-checked context projection remain separate.
+
+`NativeAudit.lean` checks the transitive axioms of the native row, admission,
+evaluation, frozen-query, subset-search and public membership results together.
+Run it with the pinned refinement toolchain:
+
+```sh
+lake env lean -DautoImplicit=false -DwarningAsError=true NativeAudit.lean
+```
+
+This audit supplements the retained generation's `Audit.lean` and
+`SharedAudit.lean`; it does not replace their unported endpoints.
 
 ## Tight recognition and single-root producers
+
+For the native representation, [`NativeTightOperands`](NativeTightOperands.lean)
+proves the actual child-classification loop and its complete or interrupted work
+receipt. Every visited child occurrence is charged, including repetitions and
+children following an opaque class. `NativeTightClassFold` connects its class
+fold to the existing body recognizer. These laws cover the inner loop; the native
+outer classifier, exact syntax recognition and producer composition remain open.
+
+The following results concern the retained binary generation.
 
 The tight specialization is being connected to the same answer-set definition.
 Its first correspondence is the actual `tight::compile::classify` scan: successful

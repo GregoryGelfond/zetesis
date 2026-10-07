@@ -148,12 +148,15 @@ fn empty_and_unsupported_positive_cycles_have_one_empty_stable_model() {
 }
 
 #[test]
-fn source_bytes_syntax_depth_and_body_budgets_are_not_retried_away() {
-    let mut bounded = options(&[]);
-    bounded.max_source_bytes = 1;
+fn source_limits_preserve_typed_admission_refusals() {
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+    let bounded = AdmissionOptions {
+        max_source_bytes: 1,
+        ..AdmissionOptions::default()
+    };
     assert!(matches!(
-        assert_refused_without_output("1 {a;b} 1.", &bounded),
-        RunError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit {
+        admit_extended("1 {a;b} 1.".into(), bounded, ExpansionLimits::default()),
+        Err(ExpansionFailure::Admission(AdmissionFailure::Limit {
             resource: InputLimit::SourceBytes,
             ..
         }))
@@ -162,161 +165,139 @@ fn source_bytes_syntax_depth_and_body_budgets_are_not_retried_away() {
         assert_refused_without_output("a(", &options(&[])),
         RunError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Syntax(_)))
     ));
-    let deeply_nested = format!("p({}1{}).", "(".repeat(80), ")".repeat(80));
-    assert!(matches!(
-        assert_refused_without_output(&deeply_nested, &options(&[])),
-        RunError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit {
-            resource: InputLimit::SyntaxDepth,
-            ..
-        }))
-    ));
-    let too_many_literals = format!("a :- {}.", vec!["b"; 1_025].join(","));
-    assert!(matches!(
-        assert_refused_without_output(&too_many_literals, &options(&[])),
-        RunError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit {
-            resource: InputLimit::BodyElements,
-            ..
-        }))
-    ));
+    for (source, resource) in [
+        (
+            format!("p({}1{}).", "(".repeat(80), ")".repeat(80)),
+            InputLimit::SyntaxDepth,
+        ),
+        (
+            format!("a :- {}.", vec!["b"; 1_025].join(",")),
+            InputLimit::BodyElements,
+        ),
+    ] {
+        assert!(
+            matches!(admit_extended(source, AdmissionOptions::default(), ExpansionLimits::default()), Err(ExpansionFailure::Admission(AdmissionFailure::Limit {resource: actual, ..})) if actual == resource)
+        );
+    }
 }
 
 #[test]
-fn undefined_arithmetic_and_expansion_budgets_remain_hard_refusals() {
+fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
     for source in ["p(1/0).", "p(2147483647+1)."] {
         assert!(matches!(
             assert_refused_without_output(source, &options(&[])),
             RunError::Expansion(ExpansionFailure::Evaluation { .. })
         ));
     }
-    for arguments in [
-        vec!["--max-expansion-work", "0"],
-        vec!["--max-expanded-templates", "0"],
-        vec!["--max-expansion-values", "0"],
-    ] {
+    let configure: [fn(&mut ExpansionLimits); 3] = [
+        |limits| limits.max_term_work = 0,
+        |limits| limits.max_templates = 0,
+        |limits| limits.max_values = 0,
+    ];
+    for configure in configure {
+        let mut limits = ExpansionLimits::default();
+        configure(&mut limits);
         assert!(matches!(
-            assert_refused_without_output("p(1..2).", &options(&arguments)),
-            RunError::Expansion(ExpansionFailure::Limit { .. })
+            admit_extended("p(1..2).".into(), AdmissionOptions::default(), limits),
+            Err(ExpansionFailure::Limit { .. })
         ));
     }
-    for (flag, resource) in [
-        ("--max-substitutions", FormulaResource::Substitutions),
-        ("--max-atoms", FormulaResource::Atoms),
-        ("--max-ground-rules", FormulaResource::Roots),
+    for resource in [
+        FormulaResource::Substitutions,
+        FormulaResource::Atoms,
+        FormulaResource::Roots,
     ] {
-        assert!(matches!(
-            assert_refused_without_output("1 {a;b} 1.", &options(&[flag, "0"])),
-            RunError::FormulaAdmission(FormulaFailure::Limit { resource: actual, .. })
-                if actual == resource
-        ));
+        let mut limits = zetesis_themelios::FormulaLimits::default();
+        match resource {
+            FormulaResource::Substitutions => limits.max_substitutions = 0,
+            FormulaResource::Atoms => limits.theory.max_atoms = 0,
+            FormulaResource::Roots => limits.theory.max_roots = 0,
+            _ => unreachable!(),
+        }
+        let (result, output) = crate::support::prepared::bounded_admission(
+            "1 {a;b} 1.",
+            ExpansionLimits::default(),
+            &limits,
+        );
+        assert!(
+            matches!(result, Err(RunError::FormulaAdmission(FormulaFailure::Limit {resource:actual,..})) if actual==resource)
+        );
+        assert!(output.is_empty());
     }
 }
 
 #[test]
-fn support_byte_default_matches_formula_admission() {
-    assert_eq!(
-        options(&[]).max_support_bytes,
-        zetesis_themelios::FormulaLimits::default().max_support_bytes,
-    );
-}
-
-#[test]
-fn explicit_work_override_bounds_eager_admission() {
+fn formula_work_admission_is_inclusive() {
     let source = "a|b. c:-a. c:-b.";
-    let attempt = |work: usize| {
-        run(
+    let attempt = |work: u64| {
+        let limits = zetesis_themelios::FormulaLimits {
+            max_work: work,
+            ..Default::default()
+        };
+        crate::support::prepared::bounded_admission(
             source,
-            &options(&[
-                "--oracle",
-                "countermodel",
-                "--grounder",
-                "eager",
-                "--stats",
-                "--max-expansion-work",
-                &work.to_string(),
-            ]),
+            zetesis_themelios::ExpansionLimits::default(),
+            &limits,
         )
     };
-    let (mut low, mut high) = (
-        0,
-        usize::try_from(zetesis_themelios::FormulaLimits::default().max_work).unwrap(),
-    );
+    let (mut low, mut high) = (0, zetesis_themelios::FormulaLimits::default().max_work);
     assert!(attempt(high).0.is_ok());
-    // Locate this actual small admission's inclusive ceiling, without assuming
-    // an interner layout, work schedule or literal default operation count.
     while low < high {
         let middle = low + (high - low) / 2;
-        let (result, output, _) = attempt(middle);
-        match result {
+        match attempt(middle).0 {
             Ok(report) => {
                 assert_eq!(report.completion, Completion::Exhausted);
                 high = middle;
             }
-            Err(RunError::FormulaAdmission(error)) => {
-                assert!(crate::support::human::preamble(&output));
-                let (observed, limit) = match error {
-                    FormulaFailure::Limit {
-                        resource: FormulaResource::Work,
-                        observed,
-                        limit,
-                        ..
-                    }
-                    | FormulaFailure::Expansion(ExpansionFailure::Limit {
-                        resource: zetesis_themelios::ExpansionResource::TermWork,
-                        observed,
-                        limit,
-                        ..
-                    }) => (observed, limit),
-                    other => panic!("unexpected source refusal: {other:?}"),
-                };
-                assert_eq!(limit, middle as u128);
+            Err(RunError::FormulaAdmission(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed,
+                limit,
+                ..
+            })) => {
+                assert_eq!(limit, u128::from(middle));
                 assert!(observed > limit);
                 low = middle + 1;
             }
-            other => panic!("unexpected admission result: {other:?}"),
+            other => panic!("unexpected source result: {other:?}"),
         }
     }
     assert!(low > 0);
-    let (result, output, diagnostics) = attempt(low);
+    let (result, output) = attempt(low);
     assert_eq!(result.unwrap().completion, Completion::Exhausted);
-    let models = answers(&output);
-    assert_eq!(models.len(), 2);
     assert_eq!(
-        models.into_iter().collect::<BTreeSet<_>>(),
-        BTreeSet::from([BTreeSet::from(["a", "c"]), BTreeSet::from(["b", "c"]),])
+        answers(&output).into_iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([BTreeSet::from(["a", "c"]), BTreeSet::from(["b", "c"])])
     );
+    let (result, output) = attempt(low - 1);
+    assert!(output.is_empty());
     assert!(
-        diagnostics.contains(&format!("expansion limits: work={low};")),
-        "{diagnostics}"
-    );
-    assert!(
-        diagnostics.contains(&format!(
-            "; work={low} (applicable when formula admission is selected)"
-        )),
-        "{diagnostics}"
-    );
-    let (result, output, _) = attempt(low - 1);
-    assert!(crate::support::human::preamble(&output));
-    assert!(
-        matches!(result, Err(RunError::FormulaAdmission(FormulaFailure::Limit {
-        resource: FormulaResource::Work, observed, limit, location,
-    })) if observed == low as u128 && limit == (low - 1) as u128
-        && location.location().expect("parsed source").source == zetesis_themelios::AdmissionOptions::default().source_id)
+        matches!(result,Err(RunError::FormulaAdmission(FormulaFailure::Limit{resource:FormulaResource::Work,observed,limit,location})) if observed==u128::from(low) && limit==u128::from(low-1) && location.location().unwrap().source==zetesis_themelios::AdmissionOptions::default().source_id)
     );
 }
 
 #[test]
 fn support_byte_limit_is_inclusive() {
     let source = "1 {a;b} 1.";
-    let attempt = |bytes: usize| {
-        let configured = options(&["--max-support-bytes", &bytes.to_string()]);
-        run(source, &configured)
+    let attempt = |bytes| {
+        crate::support::prepared::bounded_admission(
+            source,
+            zetesis_themelios::ExpansionLimits::default(),
+            &zetesis_themelios::FormulaLimits {
+                max_support_bytes: bytes,
+                ..Default::default()
+            },
+        )
     };
-    let (mut low, mut high) = (0_usize, options(&[]).max_support_bytes);
+    let (mut low, mut high) = (
+        0,
+        zetesis_themelios::FormulaLimits::default().max_support_bytes,
+    );
     assert!(attempt(high).0.is_ok());
     while low < high {
         let middle = low + (high - low) / 2;
-        let (result, output, _) = attempt(middle);
-        match result {
+        match attempt(middle).0 {
             Ok(report) => {
                 assert_eq!(report.completion, Completion::Exhausted);
                 high = middle;
@@ -327,11 +308,10 @@ fn support_byte_limit_is_inclusive() {
                 limit,
                 location,
             })) => {
-                assert!(crate::support::human::preamble(&output));
                 assert_eq!(limit, middle as u128);
                 assert!(observed > limit);
                 assert_eq!(
-                    location.location().expect("parsed source").source,
+                    location.location().unwrap().source,
                     zetesis_themelios::AdmissionOptions::default().source_id
                 );
                 low = middle + 1;
@@ -340,56 +320,89 @@ fn support_byte_limit_is_inclusive() {
         }
     }
     assert!(low > 0);
-    let (result, output, _) = attempt(low);
+    let (result, output) = attempt(low);
     assert_eq!(result.unwrap().completion, Completion::Exhausted);
     assert_eq!(
         answers(&output).into_iter().collect::<BTreeSet<_>>(),
-        BTreeSet::from([BTreeSet::from(["a"]), BTreeSet::from(["b"])]),
+        BTreeSet::from([BTreeSet::from(["a"]), BTreeSet::from(["b"])])
     );
-    let configured = options(&["--max-support-bytes", &(low - 1).to_string()]);
-    assert!(matches!(
-        assert_refused_without_output(source, &configured),
-        RunError::FormulaAdmission(FormulaFailure::Limit {
-            resource: FormulaResource::SupportBytes, observed, limit, ..
-        }) if observed == low as u128 && limit == (low - 1) as u128
-    ));
+    let (result, output) = attempt(low - 1);
+    assert!(output.is_empty());
+    assert!(
+        matches!(result,Err(RunError::FormulaAdmission(FormulaFailure::Limit{resource:FormulaResource::SupportBytes,observed,limit,..})) if observed==low as u128 && limit==(low-1) as u128)
+    );
 }
 
 #[test]
-fn statistics_report_configured_support_bytes() {
-    let configured = options(&["--stats", "--max-support-bytes", "65536"]);
+fn statistics_report_memory_derived_support_bytes() {
+    let configured = options(&["--stats", "--memory", "1048576"]);
     let (result, _, diagnostics) = run("1 {a;b} 1.", &configured);
     assert_eq!(result.unwrap().completion, Completion::Exhausted);
-    assert!(diagnostics.contains("eager support bytes=65536"));
+    assert!(
+        diagnostics.contains(&format!(
+            "support bytes={}",
+            configured.resources().formula_limits().max_support_bytes
+        )),
+        "{diagnostics}"
+    );
 }
 
 #[test]
-fn incomplete_oracle_limits_do_not_switch_algorithms_or_claim_unsatisfiable() {
-    for (arguments, countermodel) in [
-        (vec!["--max-work", "0"], false),
-        (vec!["--max-carrier-atoms", "0"], false),
-        (
-            vec!["--oracle", "countermodel", "--max-search-work", "0"],
-            true,
-        ),
-    ] {
-        let (result, output, diagnostics) = run("{a}.", &options(&arguments));
-        let report = result.expect("bounded logical search report");
+fn incomplete_oracles_do_not_claim_unsatisfiable() {
+    for (countermodel, carrier) in [(false, false), (false, true), (true, false)] {
+        let mut config = crate::support::prepared::config(&[
+            "--oracle",
+            if countermodel {
+                "countermodel"
+            } else {
+                "closure"
+            },
+        ]);
+        if countermodel {
+            config.solve.max_search_work = 0;
+        } else if carrier {
+            config.solve.max_carrier_atoms = 0;
+        } else {
+            config.solve.max_work = 0;
+        }
+        let mut output = Vec::new();
+        let mut renderer = zetesis_cli::HumanRenderer::new(
+            &mut output,
+            zetesis_cli::ColorMode::Never,
+            config.observations.max_output_bytes,
+        );
+        let report = if countermodel {
+            crate::support::prepared::formula(
+                "{a}.",
+                &config,
+                &mut renderer,
+                &mut std::io::sink(),
+                &Cancellation::default(),
+            )
+        } else {
+            crate::support::prepared::relational(
+                "{a}.",
+                &config,
+                &mut renderer,
+                &mut std::io::sink(),
+                &Cancellation::default(),
+            )
+        }
+        .unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
         if countermodel {
             assert!(matches!(
                 report.interruption,
                 Some(Interruption::Countermodel(_))
             ));
-            assert!(!diagnostics.contains("Oracle: reduct closure"));
         } else {
             assert!(matches!(
                 report.interruption,
                 Some(Interruption::Oracle(Stop::WorkLimit | Stop::CarrierLimit))
             ));
-            assert!(diagnostics.contains("Oracle: reduct closure"));
             assert!(report.countermodel_statistics.is_none());
         }
+        let output = String::from_utf8(output).unwrap();
         assert!(output.contains("INCOMPLETE:"));
         assert!(!output.contains("UNSATISFIABLE"));
     }

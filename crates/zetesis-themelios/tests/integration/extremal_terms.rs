@@ -147,8 +147,8 @@ fn extremal_objective_fields_supply_no_numeric_contribution() {
         assert!(!input.objectives().is_present(), "{source}");
         assert_eq!(input.atoms(), ordinary.atoms(), "{source}");
         assert_eq!(
-            input.theory().nodes(),
-            ordinary.theory().nodes(),
+            (input.theory().nodes(), input.theory().operands()),
+            (ordinary.theory().nodes(), ordinary.theory().operands()),
             "{source}"
         );
         assert_eq!(

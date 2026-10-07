@@ -177,8 +177,8 @@ fn solve_argument(argument: Arg) -> Arg {
         "grounder" => argument.help_heading("Execution"),
         "memory" => argument
             .visible_alias(None::<&str>)
-            .long("memory-budget")
-            .alias("memory")
+            .long("memory")
+            .alias("memory-budget")
             .hide_short_help(false)
             .help_heading("Limits"),
         "time_limit" => argument.help_heading("Limits"),

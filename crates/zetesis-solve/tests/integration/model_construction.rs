@@ -1,4 +1,4 @@
-//! Model construction has its own cumulative budget and incomplete outcomes.
+//! Each construction has an allowance; cumulative receipts retain incomplete work.
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
@@ -119,26 +119,128 @@ fn construction_limits_refuse_before_candidate_setup() {
 }
 
 #[test]
-fn construction_refusal_preserves_the_checked_prefix() {
-    let owner = formula("a | b.");
+fn each_model_receives_its_own_work_allowance() {
+    let owner = formula("{a;b;c;d}.");
     let mut complete = Session::new(
         PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
     .unwrap();
-    let expected: Vec<_> = complete
+    let mut prior_work = complete.progress().model_construction().unwrap().work;
+    let mut allowance = prior_work;
+    let mut expected = BTreeSet::new();
+    while let Some(answer) = complete.next() {
+        expected.insert(answer.unwrap().interpretation().clone());
+        let work = complete.progress().model_construction().unwrap().work;
+        allowance = allowance.max(work - prior_work);
+        prior_work = work;
+    }
+    assert_eq!(expected.len(), 16);
+    let receipt = *complete.outcome().unwrap().model_construction().unwrap();
+    assert!(receipt.work > allowance);
+    let mut limited = Session::new(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            max_model_work: allowance,
+            ..config()
+        },
+        Cancellation::default(),
+    )
+    .unwrap();
+    let actual = limited
         .by_ref()
         .map(|answer| answer.unwrap().interpretation().clone())
-        .collect();
-    assert_eq!(expected.len(), 2);
-    let work_limit = complete
+        .collect::<BTreeSet<_>>();
+    assert_eq!(actual, expected);
+    let outcome = limited.outcome().unwrap();
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(outcome.model_construction(), Some(&receipt));
+    assert_eq!(receipt.constructed, 16);
+}
+
+#[test]
+fn preparation_work_allowance_is_inclusive() {
+    let owner = formula("{a}.");
+    let complete = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    let prepared = *complete.progress().model_construction().unwrap();
+    assert!(prepared.work > 0);
+    let exact = Session::new(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            max_model_work: prepared.work,
+            ..config()
+        },
+        Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(exact.progress().model_construction(), Some(&prepared));
+    let limit = prepared.work - 1;
+    let mut below = Session::new(
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            max_model_work: limit,
+            ..config()
+        },
+        Cancellation::default(),
+    )
+    .unwrap();
+    assert!(below.next().is_none());
+    let outcome = below.outcome().unwrap();
+    assert_eq!(outcome.verified_models(), 0);
+    assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+    assert_eq!(outcome.model_construction().unwrap().work, limit);
+    assert_eq!(outcome.model_construction().unwrap().prepared_bytes, 0);
+    assert_eq!(
+        outcome.interruption(),
+        Some(Interruption::ModelConstruction(
+            ModelConstructionStop::Work {
+                observed: u128::from(prepared.work),
+                limit,
+            }
+        ))
+    );
+    assert!(
+        below
+            .phase_timings()
+            .unwrap()
+            .get(SolvePhase::CandidateSetup)
+            .is_none()
+    );
+}
+
+#[test]
+fn construction_refusal_preserves_the_checked_prefix() {
+    let owner = formula("{a}.");
+    let mut complete = Session::new(
+        PreparedInput::formula(&owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    let prepared = complete.progress().model_construction().unwrap().work;
+    let expected_first = complete.next().unwrap().unwrap();
+    let first_work = complete.progress().model_construction().unwrap().work - prepared;
+    let expected_second = complete.next().unwrap().unwrap();
+    assert!(complete.next().is_none());
+    assert_eq!(expected_first.interpretation(), &model(&[]));
+    assert_eq!(expected_second.interpretation(), &model(&["a"]));
+    let second_work = complete
         .outcome()
         .unwrap()
         .model_construction()
         .unwrap()
         .work
-        - 1;
+        - prepared
+        - first_work;
+    let work_limit = second_work - 1;
+    // Order preparation and the empty answer fit; selecting a has more work.
+    assert!(prepared <= work_limit && first_work <= work_limit);
     let mut limited = Session::new(
         PreparedInput::formula(&owner),
         SolveConfig {
@@ -149,7 +251,7 @@ fn construction_refusal_preserves_the_checked_prefix() {
     )
     .unwrap();
     let first = limited.next().unwrap().unwrap();
-    assert_eq!(first.interpretation(), &expected[0]);
+    assert_eq!(first.interpretation(), expected_first.interpretation());
     assert!(limited.next().is_none());
     let outcome = limited.outcome().unwrap();
     assert_eq!(outcome.verified_models(), 2);
@@ -159,31 +261,40 @@ fn construction_refusal_preserves_the_checked_prefix() {
     )) if observed == u128::from(work_limit) + 1 && limit == work_limit)
     );
     let receipt = outcome.model_construction().unwrap();
-    assert_eq!((receipt.work, receipt.constructed), (work_limit, 1));
+    assert_eq!(receipt.work, prepared + first_work + work_limit);
+    assert_eq!(receipt.constructed, 1);
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert!(!outcome.unsatisfiable());
     assert!(limited.next().is_none());
-    assert_eq!(first.interpretation(), &expected[0]);
+    assert_eq!(first.interpretation(), expected_first.interpretation());
 }
 
 #[test]
 fn construction_refusal_drains_prior_incumbents() {
-    let owner = formula("a | b. #minimize{1,a:a;1,b:b}.");
+    let owner = formula("{a}. #minimize{1,a:a}.");
     let mut complete = Session::enumerate(
         PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
     .unwrap();
-    let expected: Vec<_> = complete.by_ref().map(|answer| answer.unwrap()).collect();
-    assert_eq!(expected.len(), 2);
-    let work_limit = complete
+    let prepared = complete.progress().model_construction().unwrap().work;
+    let expected = complete.next().unwrap().unwrap();
+    let first_work = complete.progress().model_construction().unwrap().work - prepared;
+    let second = complete.next().unwrap().unwrap();
+    assert!(complete.next().is_none());
+    assert_eq!(expected.interpretation(), &model(&[]));
+    assert_eq!(second.interpretation(), &model(&["a"]));
+    let second_work = complete
         .outcome()
         .unwrap()
         .model_construction()
         .unwrap()
         .work
-        - 1;
+        - prepared
+        - first_work;
+    let work_limit = second_work - 1;
+    assert!(prepared <= work_limit && first_work <= work_limit);
     let mut limited = Session::new(
         PreparedInput::formula(&owner),
         SolveConfig {
@@ -194,8 +305,8 @@ fn construction_refusal_drains_prior_incumbents() {
     )
     .unwrap();
     let retained = limited.next().unwrap().unwrap();
-    assert_eq!(retained.interpretation(), expected[0].interpretation());
-    assert_eq!(retained.score(), expected[0].score());
+    assert_eq!(retained.interpretation(), expected.interpretation());
+    assert_eq!(retained.score(), expected.score());
     assert!(limited.next().is_none());
     let outcome = limited.outcome().unwrap();
     assert_eq!(
@@ -206,7 +317,9 @@ fn construction_refusal_drains_prior_incumbents() {
         ),
         (2, 1, 1)
     );
-    assert_eq!(outcome.model_construction().unwrap().constructed, 1);
+    let receipt = outcome.model_construction().unwrap();
+    assert_eq!(receipt.work, prepared + first_work + work_limit);
+    assert_eq!(receipt.constructed, 1);
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert!(matches!(
         outcome.interruption(),

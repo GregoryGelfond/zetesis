@@ -7,7 +7,7 @@ pub(crate) use state::State;
 
 use std::{collections::HashMap, mem::size_of, sync::Arc};
 
-use zetesis_ferraris::{Node, Theory};
+use zetesis_ferraris::{NodeView, Theory};
 
 use crate::{
     AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
@@ -165,13 +165,21 @@ impl PreparedReduct {
     ) -> Result<Data, Incomplete> {
         budget.tick()?;
         let mut implications = 0;
-        for node in theory.nodes() {
+        let mut formula_gates = 0usize;
+        for index in 0..theory.view().len() {
             budget.tick()?;
-            if matches!(node, Node::Implies(..)) {
+            let node = theory
+                .view()
+                .node(index)
+                .map_err(|_| Incomplete::InvalidWitness)?;
+            if matches!(node, NodeView::Implies(..)) {
                 implications += 1;
             }
+            formula_gates = formula_gates
+                .checked_add(encoding::node_gates(node))
+                .ok_or(Incomplete::CounterOverflow)?;
         }
-        let shape = Shape::new(theory, implications, limits.admission)?;
+        let shape = Shape::new(theory, implications, formula_gates, limits.admission)?;
         let mut builder = Builder {
             data: Data {
                 theory: theory.clone(),
@@ -246,17 +254,18 @@ impl Shape {
     fn new(
         theory: &Theory,
         implications: usize,
+        formula_gates: usize,
         limits: AdmissionLimits,
     ) -> Result<Self, Incomplete> {
         let atoms = theory.atom_count() as u128;
-        let nodes = theory.nodes().len() as u128;
+        let gates_bound = formula_gates as u128;
         let roots = theory.roots().len() as u128;
         let imps = implications as u128;
         let narrow = |count| usize::try_from(count).map_err(|_| Incomplete::CounterOverflow);
         let inputs = narrow(2 * atoms + imps)?;
         // A refused fresh variable can still follow a gate-map reservation.
         // Reserve the complete finite gate bound, including that failed attempt.
-        let gates = narrow(nodes + imps + atoms)?;
+        let gates = narrow(gates_bound + imps + atoms)?;
         Ok(Self {
             inputs,
             nodes: theory.nodes().len(),
@@ -264,10 +273,11 @@ impl Shape {
             gates,
             atoms: theory.atom_count(),
             clauses: narrow(
-                (3 * nodes + 3 * imps + 4 * atoms + roots + 1).min(limits.max_clauses as u128),
+                (3 * gates_bound + 3 * imps + 4 * atoms + roots + 1)
+                    .min(limits.max_clauses as u128),
             )?,
             literals: narrow(
-                (7 * nodes + 7 * imps + 10 * atoms + roots).min(limits.max_literals as u128),
+                (7 * gates_bound + 7 * imps + 10 * atoms + roots).min(limits.max_literals as u128),
             )?,
         })
     }
@@ -397,22 +407,42 @@ impl Builder {
 
     fn encode(&mut self, budget: &mut Budget<'_, impl Quota>) -> Result<(), Incomplete> {
         let atoms = self.data.theory.atom_count();
-        for index in 0..self.data.theory.nodes().len() {
+        // A shallow Arc clone separates the immutable operand borrow from
+        // mutations to this query builder. No formula storage is copied.
+        let theory = self.data.theory.clone();
+        for index in 0..theory.view().len() {
             budget.tick()?;
-            let value = match self.data.theory.nodes()[index] {
-                Node::False => Encoded::Constant(false),
-                Node::Atom(atom) => Encoded::Literal(Literal::new(atom, true)),
-                Node::And(left, right) => {
-                    self.gate(false, self.nodes[left], self.nodes[right], budget)?
-                }
-                Node::Or(left, right) => {
-                    self.gate(true, self.nodes[left], self.nodes[right], budget)?
-                }
-                Node::Implies(left, right) => {
+            let value = match theory
+                .view()
+                .node(index)
+                .map_err(|_| Incomplete::InvalidWitness)?
+            {
+                NodeView::False => Encoded::Constant(false),
+                NodeView::Atom(atom) => Encoded::Literal(Literal::new(atom, true)),
+                NodeView::And(operands) => encoding::gate_operands(
+                    &mut self.data.cnf,
+                    &mut self.gates,
+                    false,
+                    operands,
+                    &self.nodes,
+                    budget,
+                )?,
+                NodeView::Or(operands) => encoding::gate_operands(
+                    &mut self.data.cnf,
+                    &mut self.gates,
+                    true,
+                    operands,
+                    &self.nodes,
+                    budget,
+                )?,
+                NodeView::Implies(left, right) => {
                     let parameter = Literal::new(2 * atoms + self.data.implications.len(), true);
                     self.data.implications.push(index);
-                    let implication =
-                        self.gate(true, self.nodes[left].negated(), self.nodes[right], budget)?;
+                    budget.tick()?;
+                    let left = self.nodes[left].negated();
+                    budget.tick()?;
+                    let right = self.nodes[right];
+                    let implication = self.gate(true, left, right, budget)?;
                     self.gate(false, Encoded::Literal(parameter), implication, budget)?
                 }
             };

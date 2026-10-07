@@ -2,7 +2,7 @@ use super::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
     filled, reserve,
 };
-use crate::{Interpretation, Node};
+use crate::{Interpretation, NodeView};
 use zetesis_cpu::{Cancellation, Stop};
 
 impl TightPlan {
@@ -63,15 +63,28 @@ impl TightPlan {
         // Explicit byte cells give candidate tiles a fixed payload bound.
         // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
         let mut values = reserve::<u8>(self.theory.nodes().len())?;
-        for node in self.theory.nodes() {
+        for index in 0..self.theory.view().len() {
             work.tick()?;
-            values.push(u8::from(match *node {
-                Node::Atom(atom) => candidate.contains(atom),
-                Node::False => false,
-                Node::And(a, b) => values[a] != 0 && values[b] != 0,
-                Node::Or(a, b) => values[a] != 0 || values[b] != 0,
-                Node::Implies(a, b) => values[a] == 0 || values[b] != 0,
-            }));
+            values.push(u8::from(
+                match self
+                    .theory
+                    .view()
+                    .node(index)
+                    .map_err(|_| Stop::InvalidProgram)?
+                {
+                    NodeView::Atom(atom) => candidate.contains(atom),
+                    NodeView::False => false,
+                    NodeView::And(operands) => evaluate_operands(operands, &values, true, work)?,
+                    NodeView::Or(operands) => evaluate_operands(operands, &values, false, work)?,
+                    NodeView::Implies(a, b) => {
+                        work.tick()?;
+                        let left = values[a];
+                        work.tick()?;
+                        let right = values[b];
+                        left == 0 || right != 0
+                    }
+                },
+            ));
         }
         for &root in self.theory.roots() {
             work.tick()?;
@@ -108,4 +121,23 @@ impl TightPlan {
             logical_bytes,
         })
     }
+}
+
+fn evaluate_operands(
+    operands: &[usize],
+    values: &[u8],
+    conjunction: bool,
+    work: &mut Work<'_>,
+) -> Result<bool, TightError> {
+    let mut value = conjunction;
+    for &child in operands {
+        work.tick()?;
+        let truth = values[child] != 0;
+        value = if conjunction {
+            value & truth
+        } else {
+            value | truth
+        };
+    }
+    Ok(value)
 }

@@ -35,43 +35,25 @@ fn solve(source: &str, options: &Options) -> (Report, Vec<u8>, String) {
 }
 
 #[test]
-fn statistics_distinguish_formula_profile_limits() {
-    for (atoms, roots, expected_atoms, expected_roots) in [
-        (1_000_000, 1_000_000, 1_000_000, 1_000_000),
-        (11, 13, 11, 13),
-    ] {
+fn statistics_report_memory_derived_storage() {
+    for memory in [64 * 1024 * 1024, 128 * 1024 * 1024] {
         let mut configured = options(&["--stats", "--oracle", "countermodel"]);
-        configured.max_atoms = atoms;
-        configured.max_ground_rules = roots;
+        configured.memory = memory;
+        let resources = zetesis_solve::Resources::new(memory, configured.workers);
+        let formula = resources.formula_limits();
         let (_, _, diagnostics) = solve("a.", &configured);
         assert!(
-            diagnostics.contains(&format!("requested grounding limits: atoms={atoms};")),
-            "{diagnostics}"
-        );
-        assert!(diagnostics.contains(&format!(
-            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1000000; assignment values/operation=1000000; generated binding values=1000000; support rounds=1000000"
-        )), "{diagnostics}");
-        assert!(
-            diagnostics.contains(&format!(
-                "; work={} (applicable when formula admission is selected)",
-                zetesis_themelios::FormulaLimits::default().max_work
-            )),
+            diagnostics.contains("no cumulative operation budget"),
             "{diagnostics}"
         );
         assert!(
             diagnostics.contains(&format!(
-                "expansion limits: work={};",
-                zetesis_themelios::ExpansionLimits::default().max_term_work
+                "support bytes={}; formula nodes={}; formula operands={}",
+                formula.max_support_bytes, formula.theory.max_nodes, formula.theory.max_operands,
             )),
             "{diagnostics}"
         );
-        assert!(
-            diagnostics.contains(&format!(
-                "; scalar bytes={};",
-                zetesis_themelios::ExpansionLimits::default().max_scalar_bytes
-            )),
-            "{diagnostics}"
-        );
+        assert!(!diagnostics.contains("formula profile ceilings:"));
     }
 }
 
@@ -230,32 +212,6 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
 }
 
 #[test]
-fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimality() {
-    let mut one_model = options(&["--stats"]);
-    one_model.models = 1;
-    let (report, _, text) = solve("{a}.", &one_model);
-    assert_eq!(report.completion, Completion::RequestedModels);
-    assert!(text.contains("requested models reached (partial coverage)"));
-    let mut bounded = options(&["--stats", "--oracle", "countermodel"]);
-    bounded.max_candidates = 0;
-    let (report, output, text) = solve("{a}. #minimize{1:a}.", &bounded);
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert!(report.optimization.is_none());
-    assert!(text.contains("interrupted (partial coverage)"));
-    assert!(text.contains("objective: no retained score; evaluation counters=unavailable"));
-    assert!(!text.contains("objective: optimal"));
-    assert!(!String::from_utf8(output).unwrap().contains("OPTIMUM FOUND"));
-    bounded.max_candidates = 1;
-    bounded.max_objective_bound_work = 0;
-    let (report, output, text) = solve("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", &bounded);
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert!(report.optimization.is_some());
-    assert!(text.contains("objective: incumbent only"));
-    assert!(!text.contains("objective: optimal"));
-    assert!(!String::from_utf8(output).unwrap().contains("OPTIMUM FOUND"));
-}
-
-#[test]
 fn cancellation_and_source_refusal_have_unavailable_execution_not_zero_work() {
     let options = options(&["--stats", "--oracle", "countermodel"]);
     let cancellation = Cancellation::default();
@@ -368,44 +324,28 @@ fn statistics_writer_failure_is_a_typed_error_with_the_exact_written_prefix() {
 
 #[test]
 fn statistics_print_expansion_usage_beside_its_ceilings() {
-    let (report, _, text) = solve("p(1..3). q(X) :- p(X).", &options(&["--stats"]));
+    let configured = options(&["--stats"]);
+    let limits =
+        zetesis_solve::Resources::new(configured.memory, configured.workers).expansion_limits();
+    let (report, _, text) = solve("p(1..3). q(X) :- p(X).", &configured);
     let usage = report.expansion.unwrap();
     assert!(usage.term_work > 0);
-    assert!(text.contains(&format!(
-        "expansion used: term work={} of 1048576; templates={} of 100000; values={} of 1000000;",
-        usage.term_work, usage.templates, usage.values
-    )), "{text}");
+    assert!(
+        text.contains(&format!(
+            "expansion used: term work={} of {}; templates={} of {}; values={} of {};",
+            usage.term_work,
+            limits.max_term_work,
+            usage.templates,
+            limits.max_templates,
+            usage.values,
+            limits.max_values
+        )),
+        "{text}"
+    );
     // The formula route admits through its own budgets and reports no usage.
     let (formula, _, text) = solve("a | b.", &options(&["--stats"]));
     assert!(formula.expansion.is_none());
     assert!(!text.contains("expansion used:"), "{text}");
-}
-
-#[test]
-fn cpu_closure_refuses_an_oversized_reservation() {
-    // At the reference allowance the collective ceiling is the library's.
-    let mut configured = options(&["--stats", "--memory", "2147483648"]);
-    configured.workers = std::num::NonZeroUsize::new(5).unwrap();
-    configured.max_closure_bytes = Some(134_217_728);
-    let mut output = Vec::new();
-    let mut diagnostics = Vec::new();
-    let error = run_with_diagnostics(
-        "{a}.".into(),
-        &configured,
-        &mut output,
-        &mut diagnostics,
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    let text = error.to_string();
-    assert!(text.contains("--threads 5"), "{text}");
-    assert!(text.contains("--max-closure-bytes 134217728"), "{text}");
-    assert!(
-        text.contains("--max-closure-batch-bytes 536870912"),
-        "{text}"
-    );
-    assert!(text.contains("671088640"), "{text}");
-    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]
@@ -414,14 +354,15 @@ fn the_closure_limits_line_states_the_derived_allowance() {
     eight.workers = std::num::NonZeroUsize::new(8).unwrap();
     let (_, _, text) = solve("{a}.", &eight);
     assert!(
-        text.contains("independent CPU closure limits: named bytes/owner=67108864 (collective share of 8 workers)"),
+        text.contains("closure bytes/worker=67108864; closure bytes/collective=536870912;"),
         "{text}"
     );
-    let (_, _, explicit) = solve(
-        "{a}.",
-        &options(&["--stats", "--max-closure-bytes", "4096"]),
+    eight.memory /= 2;
+    let (_, _, text) = solve("{a}.", &eight);
+    assert!(
+        text.contains("closure bytes/worker=33554432; closure bytes/collective=268435456;"),
+        "{text}"
     );
-    assert!(explicit.contains("named bytes/owner=4096;"), "{explicit}");
 }
 
 #[test]

@@ -56,6 +56,14 @@ impl Compiler<'_> {
         else {
             return Ok(vec![body.clone()]);
         };
+        self.budget.check_family(
+            (cursor.remaining as u128).saturating_mul(
+                cursor
+                    .bytes
+                    .saturating_add(std::mem::size_of::<Body>() as u128),
+            ),
+            self.location,
+        )?;
         let mut result = Vec::new();
         while let Some(statement) = cursor.next(self.budget, self.location)? {
             let Statement::Rule(rule) = statement.get() else {
@@ -187,6 +195,20 @@ impl<'a> Cursor<'a> {
         budget.charge(
             ExpansionResource::Values,
             scan.nodes.saturating_mul(copies).saturating_mul(count),
+            location,
+        )?;
+        budget.check_family(
+            scan.bytes
+                .saturating_mul(copies)
+                .saturating_mul(4)
+                .saturating_add(
+                    scan.nodes
+                        .saturating_mul(copies)
+                        .saturating_mul(std::mem::size_of::<BodyElement>() as u128),
+                )
+                .saturating_add((widths.len() as u128).saturating_mul(
+                    (std::mem::size_of::<u128>() + 2 * std::mem::size_of::<usize>()) as u128,
+                )),
             location,
         )?;
         let positions = vec![0; widths.len()];

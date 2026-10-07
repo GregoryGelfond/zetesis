@@ -210,15 +210,21 @@ fn counter_bytes(knowledge: &Knowledge) -> u128 {
 #[test]
 fn compact_counters_reduce_clone_payload() {
     let atoms = 4096;
-    let mut nodes: Vec<_> = (0..atoms).map(Node::Atom).collect();
+    let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
     // Disjoint four-operand chains exercise both per-chain arrays as well as
     // atom occurrence counts. No solving or timing claim relies on this graph.
     for first in (0..atoms).step_by(4) {
-        nodes.push(Node::Or(first, first + 1));
-        nodes.push(Node::Or(nodes.len() - 1, first + 2));
-        nodes.push(Node::Or(nodes.len() - 1, first + 3));
+        nodes.push(Node::or_pair([first, first + 1]));
+        nodes.push(Node::or_pair([nodes.len() - 1, first + 2]));
+        nodes.push(Node::or_pair([nodes.len() - 1, first + 3]));
     }
-    let theory = Theory::new(atoms, nodes, vec![], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        atoms,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let narrower = Narrower::new(&theory);
     let compact = narrower.knowledge();
     let native = native(&compact);

@@ -146,6 +146,9 @@ pub enum ExecutionObservation<'a> {
         atoms: usize,
         /// DAG node count.
         nodes: usize,
+        /// Logical child occurrences, including repeated children. Inline pairs
+        /// and implications each contribute two; this is not arena length.
+        operands: usize,
         /// Asserted roots of this membership subproblem. Under a preceding
         /// `TerminalDefinitions` event these are base roots, not the full source.
         roots: usize,

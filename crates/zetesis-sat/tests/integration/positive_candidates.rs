@@ -39,10 +39,10 @@ fn cycle(seed: bool) -> Theory {
     theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
         ],
         roots,
     )
@@ -53,10 +53,10 @@ fn failed_constraint() -> Theory {
     theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(2, 1),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::implies(2, 1),
         ],
         vec![3],
     )
@@ -138,8 +138,8 @@ fn failed_constraint_skips_larger_classical_models() {
 #[test]
 fn restrictions_on_either_side_of_configuration_are_conjoined() {
     let original = cycle(true);
-    let allow = theory(3, vec![Node::Atom(0)], vec![0]);
-    let refuse = theory(3, vec![Node::Atom(2)], vec![0]);
+    let allow = theory(3, vec![Node::atom(0)], vec![0]);
+    let refuse = theory(3, vec![Node::atom(2)], vec![0]);
     for route in ROUTES {
         for before in [false, true] {
             let mut stream = search(
@@ -170,7 +170,7 @@ fn restrictions_on_either_side_of_configuration_are_conjoined() {
 #[test]
 fn restriction_after_delivery_cannot_repeat_the_candidate() {
     let original = cycle(true);
-    let allow = theory(3, vec![Node::Atom(0)], vec![0]);
+    let allow = theory(3, vec![Node::atom(0)], vec![0]);
     for route in ROUTES {
         let mut stream = search(route, &original, Limits::default(), Cancellation::default());
         enable(&mut stream);
@@ -229,7 +229,7 @@ fn singleton_filter_stops_leave_coverage_open() {
 #[test]
 fn batch_retries_keep_the_single_original_subject() {
     let original = cycle(true);
-    let refuse = theory(3, vec![Node::Atom(2)], vec![0]);
+    let refuse = theory(3, vec![Node::atom(2)], vec![0]);
     for route in ROUTES {
         let mut stream = search(route, &original, Limits::default(), Cancellation::default());
         enable(&mut stream);
@@ -335,6 +335,7 @@ fn positive_pulls_use_one_inclusive_work_budget() {
             (original.atom_count().div_ceil(64)
                 + original.atom_count()
                 + original.nodes().len()
+                + original.parts().occurrences()
                 + original.roots().len()) as u64
         );
         for remaining in 0..=required {
@@ -390,7 +391,7 @@ fn cancellation_after_delivery_does_not_establish_exhaustion() {
 
 #[test]
 fn external_tight_preparation_keeps_region_proposals() {
-    let original = theory(2, vec![Node::Atom(0)], vec![0]);
+    let original = theory(2, vec![Node::atom(0)], vec![0]);
     for route in [Route::Scalar, Route::Producers] {
         let mut stream = search(route, &original, Limits::default(), Cancellation::default());
         let plan = stream
@@ -416,7 +417,7 @@ fn singleton_restriction_receipts_agree_across_region_modes() {
     let original = cycle(true);
     let restriction = theory(
         3,
-        vec![Node::Atom(0), Node::Atom(1), Node::And(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
         vec![2],
     );
     let mut expected = None;

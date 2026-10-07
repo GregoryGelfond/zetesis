@@ -4,7 +4,13 @@ use super::*;
 use crate::{AdmissionLimits, Limits, Node};
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
+    Theory::new(
+        atoms,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn plan(theory: &Theory) -> PositivePlan {
@@ -20,16 +26,16 @@ fn aliased() -> Theory {
     theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Implies(3, 3),
-            Node::And(0, 0),
-            Node::Or(1, 1),
-            Node::Implies(4, 0),
-            Node::Implies(5, 1),
-            Node::Implies(6, 2),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::implies(3, 3),
+            Node::and_pair([0, 0]),
+            Node::or_pair([1, 1]),
+            Node::implies(4, 0),
+            Node::implies(5, 1),
+            Node::implies(6, 2),
         ],
         vec![7, 8, 9],
     )
@@ -45,11 +51,11 @@ fn unsupported_atoms_do_not_enter_positive_cycles() {
         let owner = theory(
             3,
             vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::Atom(2),
-                Node::Implies(0, 1),
-                Node::Implies(1, 0),
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::implies(0, 1),
+                Node::implies(1, 0),
             ],
             roots,
         );
@@ -82,11 +88,11 @@ fn failed_constraint_keeps_the_complete_least_consequences() {
     let owner = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(1, 2),
+            Node::atom(0),
+            Node::atom(1),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::implies(1, 2),
         ],
         vec![2, 0, 3, 4],
     );
@@ -120,14 +126,14 @@ fn arbitrary_constraints_filter_answers_without_supplying_support() {
             let owner = theory(
                 2,
                 vec![
-                    Node::Atom(0),
-                    Node::Atom(1),
-                    Node::False,
-                    Node::Implies(0, 2),
-                    Node::Implies(3, 2),
-                    Node::Implies(0, 1),
-                    Node::Implies(5, 2),
-                    Node::Implies(6, 2),
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::falsum(),
+                    Node::implies(0, 2),
+                    Node::implies(3, 2),
+                    Node::implies(0, 1),
+                    Node::implies(5, 2),
+                    Node::implies(6, 2),
                 ],
                 roots,
             );
@@ -166,10 +172,10 @@ fn failed_nonmonotone_constraint_can_have_a_larger_classical_model() {
     let owner = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(2, 1),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::implies(2, 1),
         ],
         vec![3],
     );
@@ -197,12 +203,12 @@ fn final_original_evaluation_is_charged_and_cannot_publish_a_partial_plan() {
     let owner = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(1, 1),
-            Node::Implies(0, 2),
-            Node::Implies(3, 1),
-            Node::Implies(4, 1),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(1, 1),
+            Node::implies(0, 2),
+            Node::implies(3, 1),
+            Node::implies(4, 1),
         ],
         vec![0, 5],
     );
@@ -235,7 +241,7 @@ fn final_original_evaluation_is_charged_and_cannot_publish_a_partial_plan() {
 
 #[test]
 fn false_producer_from_an_invalid_closure_is_a_refusal() {
-    let owner = theory(1, vec![Node::Atom(0)], vec![0]);
+    let owner = theory(1, vec![Node::atom(0)], vec![0]);
     let not_closed = Interpretation::new(&owner, []).unwrap();
     let cancellation = Cancellation::default();
     let mut budget = Budget {
@@ -261,17 +267,17 @@ fn complete_families_agree_with_general_reduct_checking() {
         for facts in 0..4 {
             for constraint in [false, true] {
                 let nodes = vec![
-                    Node::Atom(0),
-                    Node::Atom(1),
-                    Node::Atom(2),
-                    Node::Atom(3),
-                    Node::False,
-                    Node::Implies(4, 4),
-                    Node::And(0, 1),
-                    Node::Or(0, 1),
-                    Node::Implies(body, 2),
-                    Node::Implies(2, 0),
-                    Node::Implies(1, 4),
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::atom(2),
+                    Node::atom(3),
+                    Node::falsum(),
+                    Node::implies(4, 4),
+                    Node::and_pair([0, 1]),
+                    Node::or_pair([0, 1]),
+                    Node::implies(body, 2),
+                    Node::implies(2, 0),
+                    Node::implies(1, 4),
                 ];
                 let mut roots = vec![8, 9];
                 for atom in 0..2 {
@@ -312,10 +318,10 @@ fn every_original_root_must_have_a_supported_form() {
     let owner = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::or_pair([0, 2]),
         ],
         vec![0, 3],
     );
@@ -338,13 +344,13 @@ fn implication_bodies_cannot_enter_positive_plans() {
         let owner = theory(
             2,
             vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::False,
-                Node::Implies(0, 2),
-                Node::Implies(3, 2),
-                Node::Implies(0, 1),
-                Node::Implies(body, 1),
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 2),
+                Node::implies(3, 2),
+                Node::implies(0, 1),
+                Node::implies(body, 1),
             ],
             vec![6],
         );

@@ -24,7 +24,11 @@ impl Fixture {
         let catalog = AtomCatalog::new(atoms.to_vec()).unwrap();
         let theory = Theory::new(
             3,
-            vec![Node::Atom(0), Node::Atom(1), Node::Atom(2)],
+            zetesis_ferraris::FormulaParts::new(
+                vec![Node::atom(0), Node::atom(1), Node::atom(2)],
+                vec![],
+            )
+            .unwrap(),
             vec![],
             zetesis_ferraris::AdmissionLimits::default(),
         )
@@ -141,7 +145,11 @@ fn equal_structure_does_not_authorize_another_owner() {
     let fixture = Fixture::new();
     let foreign = Theory::new(
         fixture.theory.atom_count(),
-        fixture.theory.nodes().to_vec(),
+        zetesis_ferraris::FormulaParts::new(
+            fixture.theory.nodes().to_vec(),
+            fixture.theory.operands().to_vec(),
+        )
+        .unwrap(),
         fixture.theory.roots().to_vec(),
         zetesis_ferraris::AdmissionLimits::default(),
     )

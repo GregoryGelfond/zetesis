@@ -11,18 +11,24 @@ use crate::{
 /// Atom 0 with one producer per body atom `1..=bodies`, `a ← b_i`, each body
 /// a free choice `{b_i}`, written `b_i ∨ ¬b_i`.
 fn shared_head(bodies: usize) -> Theory {
-    let mut nodes: Vec<Node> = (0..=bodies).map(Node::Atom).collect();
-    nodes.push(Node::False);
+    let mut nodes: Vec<Node> = (0..=bodies).map(Node::atom).collect();
+    nodes.push(Node::falsum());
     let falsum = nodes.len() - 1;
     let mut roots = Vec::new();
     for body in 1..=bodies {
-        nodes.push(Node::Implies(body, 0));
+        nodes.push(Node::implies(body, 0));
         roots.push(nodes.len() - 1);
-        nodes.push(Node::Implies(body, falsum));
-        nodes.push(Node::Or(body, nodes.len() - 1));
+        nodes.push(Node::implies(body, falsum));
+        nodes.push(Node::or_pair([body, nodes.len() - 1]));
         roots.push(nodes.len() - 1);
     }
-    Theory::new(bodies + 1, nodes, roots, AdmissionLimits::default()).unwrap()
+    Theory::new(
+        bodies + 1,
+        crate::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn producers(theory: &Theory) -> Producers {

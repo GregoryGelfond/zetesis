@@ -2,13 +2,16 @@
 
 use super::query::{Identity, Projected, ProjectionSource};
 use super::{
-    AtomAppender, AtomInterner, CatalogRead, DeclaredPredicate, Failure, Limits, Query, TermLimits,
-    admit, fmt, population, storage, store_failure,
+    AtomAppender, AtomInterner, CatalogRead, DeclaredPredicate, Failure, Limits,
+    PredicateLocations, Query, TermLimits, admit, fmt, population, storage, store_failure,
 };
 use crate::catalog::{
     AssignmentError, AssignmentFailure, AssignmentSlice, ReadError, TermKey, TermRef,
 };
 use crate::{PatternRef, TemplateTerm, ValueNodeRef};
+
+mod prepared;
+pub use prepared::{PreparedPattern, PreparedRows, RowColumn};
 
 /// Assigned construction preserves frame errors and the interner's typed failures.
 #[derive(Debug)]
@@ -56,16 +59,20 @@ impl AtomInterner {
     /// The owner cannot append while this capability or its read views are live.
     #[must_use]
     pub fn term_lookup(&self) -> TermLookup<'_> {
-        TermLookup {
-            storage: storage::TermLookup::new(&self.store),
-            population: self.len(),
-            bytes: self.storage_bytes(),
-            metadata: self.storage_bytes() - self.store.current_bytes(),
-        }
+        TermLookup::new(&self.store, self.len(), self.storage_bytes())
     }
 }
 
 impl<'a> TermLookup<'a> {
+    pub(super) fn new(store: &'a storage::Store, population: usize, bytes: u128) -> Self {
+        Self {
+            storage: storage::TermLookup::new(store),
+            population,
+            bytes,
+            metadata: bytes - store.current_bytes(),
+        }
+    }
+
     /// Borrow the complete immutable vocabulary and atom prefix.
     #[must_use]
     pub fn read(&self) -> CatalogRead<'a> {
@@ -381,14 +388,43 @@ impl AtomAppender<'_> {
                     storage::Failure::Stopped(error) => Failure::Stopped(error),
                 })?;
         }
+        self.insert_validated_projection(&projected, limits, before)
+    }
+
+    fn insert_validated_projection<E>(
+        &mut self,
+        projected: &Projected<'_>,
+        limits: Limits,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<usize, AssignedFailure<E>> {
+        self.insert_projection_at(projected, None, limits, before)
+    }
+
+    fn insert_projection_at<E>(
+        &mut self,
+        projected: &Projected<'_>,
+        locations: Option<PredicateLocations>,
+        limits: Limits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<usize, AssignedFailure<E>> {
         // Shared borrows keep this completely validated projection unchanged
         // through exact preparation, semantic placement and row publication.
-        let query = Query::Projected(&projected);
+        let query = Query::Projected(projected);
         let Identity::Local(prepared) = query.identity_with(self.store, &mut before)? else {
             unreachable!("validated projection has local canonical coordinates");
         };
+        let prepared = match locations {
+            Some(location) => prepared.with_column(location.column),
+            None => prepared,
+        };
         self.reborrow()
-            .entry_prepared(query, Some(prepared), limits, &mut before)?
+            .entry_prepared(
+                query,
+                Some(prepared),
+                locations.map(|location| location.subtree),
+                limits,
+                &mut before,
+            )?
             .insert_with(limits, before)
             .map_err(Into::into)
     }

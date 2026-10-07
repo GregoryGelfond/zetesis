@@ -19,6 +19,7 @@ Use the tables below to find a specific capability.
 | Prepare or admit a logical formula program | `zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}` | [Typed formula preparation](source.md#prepare-a-logical-formula-program) |
 | Prepare an owned logical relational program | `zetesis_themelios::{prepare_program_relational, ProgramRelationalOptions, PreparedRelational}` | [Owned relational preparation](source.md#admit-an-existing-logical-program) |
 | Admit a logical program under S0 | `zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}` | [Typed program admission](source.md#borrow-the-strict-relational-input) |
+| Configure ordinary resource policy | `zetesis_solve::Resources` | [Sessions](sessions.md) |
 | Solve admitted input | `zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}` | [Sessions](sessions.md) |
 | Collect a complete native family | `zetesis_solve::WorldView::collect`, `SessionBuilder::collect`, `WorldViewLimits` | [Completion and output](outcomes.md) |
 | Inspect an answer or interpretation | `AnswerSet`, `zetesis_core::{Interpretation, Model}`, `catalog::{AtomRef, TermRef}` | [Interpretations and atoms](models.md) |
@@ -73,7 +74,7 @@ row or locating a gate atom does not establish answer-set membership. See
 | Compile a complete relational graph | `zetesis_core::GroundProgram::compile` | [Parallel and lazy checking](parallel.md) |
 | Check a normal program's reduct | `zetesis_cpu::{check, check_static, BatchOracle}` | [Parallel and lazy checking](parallel.md) |
 | Reuse scalar query preparation | `PreparedQueries`, `PreparationLimits`, `ClosureWorkspace` | [Repeated checks](parallel.md#reuse-preparation-across-scalar-checks) |
-| Build finite formulas and check membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` | [Finite reducts](reducts.md) |
+| Build finite formulas and check membership | `zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}` | [Finite reducts](reducts.md) |
 | Reuse original truth or a frozen reduct | `EvaluationWorkspace`, `FormulaEvaluation`, `FrozenReduct` | [Finite reducts](reducts.md) |
 | Use checked formula specializations | `zetesis_ferraris::{PositivePlan, TightPlan}` | [Formula plans](sessions.md#formula-membership-plans) |
 | Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
@@ -114,6 +115,51 @@ semantic solver libraries. Record checks, physical tests and Lean proofs have
 different scopes; none alone certifies the complete Rust/WGSL implementation.
 See [validation](../reference/validation.md) and
 [proof correspondence](../lean/correspondence.md) before extending those claims.
+
+## Migrating from 0.3.0
+
+Version 0.4.0 changes resource configuration and several direct library interfaces.
+The [command guide](../reference/commands.md#existing-scripts) covers retained CLI
+aliases; removed per-stage controls have no hidden replacement flags.
+
+For ordinary execution, construct `zetesis_solve::Resources` from memory and
+workers, then derive source, solve and observation settings together. The
+[`Resources` example](sessions.md#embedding-an-ordinary-solve) shows the common
+preparation/session path. Work remains checked statistics, and named memory
+capacities are not an aggregate process-memory guarantee. Direct primitive
+limits remain available for an explicitly bounded operation.
+
+| Previous use | Migration |
+| --- | --- |
+| `zetesis::Config::{admission, expansion, formula, output}` | Configure `grounder`, `workers` and `memory`; the adapter derives preparation, solve and output settings together. For individual bounds, use the underlying preparation/session APIs. |
+| `zetesis::Grounder::Hybrid` | Use `Grounder::Lazy`. Relational admission still takes its source-join route; unsupported relational constructs can take the hybrid formula route. Other refusals are returned. |
+| `Theory::new` over `Vec<Node>` and matching binary `Node` variants | Supply `FormulaParts` containing nodes and their operand arena. Inspect `theory.view().node(index)` as `NodeView`; `And` and `Or` expose complete slices. Raw pairs use `Node::and_pair`/`or_pair`; wide rows use checked arena spans. |
+| Aggregate append functions over a node vector | Use the paired `FormulaNodes` owner. Transactions commit, roll back or detach both suffixes together. `into_parts` discards topology evidence; `prepare_admission` consumes it for checked final admission. |
+| Complete literals of formula/aggregate or expansion limits | Include the new operand ceilings and `ExpansionLimits::max_family_bytes`. Exhaustive failures must cover operand-span/arity and materialized-family refusals. Node count alone no longer describes graph size. |
+| `TerminalFormula::base_theory() -> &Theory` | It returns `Option<&Theory>`. Match `base()` for eager versus streamed bases; a hybrid core's proposals must pass its constraints before reconstruction. Terminal observations add `base` and `streamed`, and grounding-mode matches include the hybrid terminal route. |
+| Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Quota variants use `NarrowingQuota`; `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
+| `AtomTable::index` as an identity-recording operation | It performs structural lookup; the record encoder owns identity recording. `AtomIdentityMap::retain_held` releases unneeded owners. |
+| Native benchmark execution fields for workers, completion, batch and work caps | Use `NativeExecution::{threads, memory_bytes, time_limit_seconds}` with algorithm choices. New records identify the requested ordinary policy; historical report readers retain earlier fields. |
+
+Formula work includes logical operand occurrences, even inline pairs. Reused
+validation omits only scans actually avoided; raw input still receives complete
+admission. See [finite reducts](reducts.md) and the
+[paired aggregate contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/README.md#shared-comparison-families).
+Narrowing's quota is consulted at most `NARROWING_BATCH` charged reads apart
+(currently 256); exact work refusal and refunds remain part of its contract.
+
+Constraint and terminal-reconstruction allowances now bound each check or answer,
+while their statistics accumulate. `SolveConfig::max_model_work` likewise bounds
+each verified model's construction, with a separate allowance of the same size
+for semantic-order preparation. Code interpreting these receipts must preserve
+the distinction between a single operation and the session total.
+
+The shared themelios revision is
+`4c163d0d07cf67180354d9b605e19df2d355529e`. Align direct dependencies with it or use
+`zetesis`'s reexports; separate revisions provide distinct Rust types. Parsed and
+constructed inputs retain their logical/source identity contracts. These API and
+representation changes do not extend the proof boundary to all source grounding,
+parallel enumeration or GPU execution.
 
 ## API reference
 

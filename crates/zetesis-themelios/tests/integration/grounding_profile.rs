@@ -110,7 +110,10 @@ fn profile_preserves_the_compiled_subject() {
     let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
     let plain = compile(source, &FormulaLimits::default(), None).unwrap();
     assert_eq!(measured.atoms(), plain.atoms());
-    assert_eq!(measured.theory().nodes(), plain.theory().nodes());
+    assert_eq!(
+        (measured.theory().nodes(), measured.theory().operands()),
+        (plain.theory().nodes(), plain.theory().operands())
+    );
     assert_eq!(measured.theory().roots(), plain.theory().roots());
     assert_eq!(measured.formula_origins(), plain.formula_origins());
     assert_eq!(measured.objective_origins(), plain.objective_origins());
@@ -177,7 +180,10 @@ fn support_operation_work_reaches_the_library_observer() {
     let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
     let plain = compile(source, &FormulaLimits::default(), None).unwrap();
     assert_eq!(measured.atoms(), plain.atoms());
-    assert_eq!(measured.theory().nodes(), plain.theory().nodes());
+    assert_eq!(
+        (measured.theory().nodes(), measured.theory().operands()),
+        (plain.theory().nodes(), plain.theory().operands())
+    );
     assert_eq!(measured.theory().roots(), plain.theory().roots());
     let records = observer.records.borrow();
     let work = records

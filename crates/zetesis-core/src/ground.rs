@@ -85,18 +85,44 @@ impl GroundProgram {
     /// Returns [`StaticError`] for count overflow, budget exhaustion, allocation
     /// refusal, or an internal inconsistency. None denotes logical UNSAT.
     pub fn compile(program: &Program, limits: StaticLimits) -> Result<Self, StaticError> {
+        match Self::compile_with(program, limits, || Ok::<_, std::convert::Infallible>(())) {
+            Ok(graph) => Ok(graph),
+            Err(StaticFailure::Static(error)) => Err(error),
+            Err(StaticFailure::Stopped(never)) => match never {},
+        }
+    }
+
+    /// Materialize the same ordered carrier and rule family with caller control.
+    /// The callback runs before each dimension, carrier row, gate inspection,
+    /// substitution, assignment field, filter and instantiated pattern, and at
+    /// the canonical writer's existing checked operation boundaries. It does not
+    /// change count ceilings or establish a wall-clock latency bound for allocation,
+    /// one term comparison or sorting a rule's admitted antecedents.
+    ///
+    /// # Errors
+    /// Preserves static admission failures and returns the callback's exact error
+    /// as [`StaticFailure::Stopped`]. A refused private prefix is dropped; no
+    /// partial graph is published and the source program remains unchanged.
+    pub fn compile_with<E>(
+        program: &Program,
+        limits: StaticLimits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Self, StaticFailure<E>> {
+        before().map_err(StaticFailure::Stopped)?;
         let mut atom_count = 0usize;
         for predicate in program.predicates() {
+            before().map_err(StaticFailure::Stopped)?;
             atom_count = atom_count
                 .checked_add(power(program.domain().len(), predicate.arity())?)
                 .ok_or(StaticError::CountOverflow)?;
             bound("atoms", atom_count, limits.max_atoms)?;
         }
         if u32::try_from(atom_count).is_err() {
-            return Err(StaticError::DenseIdOverflow);
+            return Err(StaticError::DenseIdOverflow.into());
         }
         let mut substitution_count = 0usize;
         for template in program.templates() {
+            before().map_err(StaticFailure::Stopped)?;
             substitution_count = substitution_count
                 .checked_add(power(program.domain().len(), template.variable_count())?)
                 .ok_or(StaticError::CountOverflow)?;
@@ -116,24 +142,24 @@ impl GroundProgram {
             max_bytes: u128::MAX,
         };
         for atom in program.carrier_atoms() {
+            before().map_err(StaticFailure::Stopped)?;
             let atom = atom.map_err(StaticError::Carrier)?;
             atoms
-                .entry_atom_with(atom.atom(), atom_limits, || {
-                    Ok::<_, std::convert::Infallible>(())
-                })
+                .entry_atom_with(atom.atom(), atom_limits, &mut before)
                 .map_err(intern_failure)?
-                .insert_with(atom_limits, || Ok::<_, std::convert::Infallible>(()))
+                .insert_with(atom_limits, &mut before)
                 .map_err(intern_failure)?;
         }
         let mut graph = Self {
             program: program.clone(),
             atoms: atoms
-                .into_catalog_with(atom_limits, || Ok::<_, std::convert::Infallible>(()))
+                .into_catalog_with(atom_limits, &mut before)
                 .map_err(intern_failure)?,
             rules: Vec::new(),
             gate_atom_ids: Vec::new(),
         };
         for (index, atom) in graph.atoms.atoms().iter().enumerate() {
+            before().map_err(StaticFailure::Stopped)?;
             if program.contains_gate_atom(atom) {
                 graph
                     .gate_atom_ids
@@ -145,16 +171,17 @@ impl GroundProgram {
             }
         }
         for template in program.templates() {
-            graph.compile_template(template, limits.max_ground_rules)?;
+            graph.compile_template(template, limits.max_ground_rules, &mut before)?;
         }
         Ok(graph)
     }
 
-    fn compile_template(
+    fn compile_template<E>(
         &mut self,
         template: TemplateRef<'_>,
         max_rules: usize,
-    ) -> Result<(), StaticError> {
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<(), StaticFailure<E>> {
         if self.program.domain().is_empty() && template.variable_count() != 0 {
             return Ok(());
         }
@@ -164,11 +191,13 @@ impl GroundProgram {
             .map_err(|_| StaticError::Allocation)?;
         coordinates.resize(template.variable_count(), 0);
         loop {
+            before().map_err(StaticFailure::Stopped)?;
             let mut assignment = Vec::new();
             assignment
                 .try_reserve_exact(coordinates.len())
                 .map_err(|_| StaticError::Allocation)?;
             for index in &coordinates {
+                before().map_err(StaticFailure::Stopped)?;
                 assignment.push(
                     self.program
                         .domain()
@@ -178,6 +207,7 @@ impl GroundProgram {
             }
             let mut enabled = true;
             for filter in template.filters() {
+                before().map_err(StaticFailure::Stopped)?;
                 if !filter
                     .evaluate(assignment.as_slice())
                     .map_err(|_| StaticError::InvalidAdmittedProgram)?
@@ -197,13 +227,13 @@ impl GroundProgram {
                 )?;
                 let head = template
                     .head()
-                    .map(|pattern| self.instantiate_id(pattern, &assignment))
+                    .map(|pattern| self.instantiate_id(pattern, &assignment, before))
                     .transpose()?;
                 let rule = GroundRule {
                     head,
-                    positive: self.instantiate_ids(template.positive(), &assignment)?,
-                    gate_true: self.instantiate_ids(template.gate_true(), &assignment)?,
-                    gate_false: self.instantiate_ids(template.gate_false(), &assignment)?,
+                    positive: self.instantiate_ids(template.positive(), &assignment, before)?,
+                    gate_true: self.instantiate_ids(template.gate_true(), &assignment, before)?,
+                    gate_false: self.instantiate_ids(template.gate_false(), &assignment, before)?,
                 };
                 self.rules
                     .try_reserve(1)
@@ -217,11 +247,13 @@ impl GroundProgram {
         Ok(())
     }
 
-    fn instantiate_id(
+    fn instantiate_id<E>(
         &self,
         pattern: PatternRef<'_>,
         assignment: &[TermRef<'_>],
-    ) -> Result<AtomId, StaticError> {
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<AtomId, StaticFailure<E>> {
+        before().map_err(StaticFailure::Stopped)?;
         let key = pattern
             .key(assignment)
             .map_err(|_| StaticError::InvalidAdmittedProgram)?;
@@ -230,18 +262,19 @@ impl GroundProgram {
             .atoms()
             .binary_search_key(&key)
             .map_err(|_| StaticError::InvalidAdmittedProgram)?;
-        u32::try_from(position).map_err(|_| StaticError::DenseIdOverflow)
+        u32::try_from(position).map_err(|_| StaticError::DenseIdOverflow.into())
     }
-    fn instantiate_ids(
+    fn instantiate_ids<E>(
         &self,
         patterns: Patterns<'_>,
         assignment: &[TermRef<'_>],
-    ) -> Result<Vec<AtomId>, StaticError> {
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Vec<AtomId>, StaticFailure<E>> {
         let mut ids = Vec::new();
         ids.try_reserve_exact(patterns.len())
             .map_err(|_| StaticError::Allocation)?;
         for pattern in patterns {
-            ids.push(self.instantiate_id(pattern, assignment)?);
+            ids.push(self.instantiate_id(pattern, assignment, before)?);
         }
         ids.sort_unstable();
         ids.dedup();
@@ -390,8 +423,8 @@ impl GroundProgram {
     }
 }
 
-fn intern_failure(error: InternFailure<std::convert::Infallible>) -> StaticError {
-    match error {
+fn intern_failure<E>(error: InternFailure<E>) -> StaticFailure<E> {
+    let error = match error {
         InternFailure::Catalog(error) => StaticError::Catalog(error),
         InternFailure::Atoms { required, limit } => StaticError::LimitExceeded {
             resource: "atoms",
@@ -400,8 +433,9 @@ fn intern_failure(error: InternFailure<std::convert::Infallible>) -> StaticError
         },
         InternFailure::Allocation(_) => StaticError::Allocation,
         InternFailure::Overflow | InternFailure::Bytes { .. } => StaticError::CountOverflow,
-        InternFailure::Stopped(never) => match never {},
-    }
+        InternFailure::Stopped(error) => return StaticFailure::Stopped(error),
+    };
+    StaticFailure::Static(error)
 }
 
 fn power(base: usize, exponent: usize) -> Result<usize, StaticError> {
@@ -420,6 +454,36 @@ fn bound(resource: &'static str, actual: usize, limit: usize) -> Result<(), Stat
         })
     } else {
         Ok(())
+    }
+}
+
+/// Controlled static compilation refused before publishing a graph.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StaticFailure<E> {
+    /// Existing count, allocation, catalog or admitted-program failure.
+    Static(StaticError),
+    /// Exact caller cancellation, deadline or injected refusal.
+    Stopped(E),
+}
+impl<E> From<StaticError> for StaticFailure<E> {
+    fn from(error: StaticError) -> Self {
+        Self::Static(error)
+    }
+}
+impl<E: fmt::Display> fmt::Display for StaticFailure<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Static(error) => error.fmt(f),
+            Self::Stopped(error) => error.fmt(f),
+        }
+    }
+}
+impl<E: std::error::Error + 'static> std::error::Error for StaticFailure<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(match self {
+            Self::Static(error) => error,
+            Self::Stopped(error) => error,
+        })
     }
 }
 

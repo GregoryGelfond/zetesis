@@ -78,7 +78,30 @@ fn physical_fixtures_belong_to_the_lazy_source_profile() {
 mod physical {
     use super::physical_backend::Physical;
     use super::{Cancellation, Completion, options, run_with_diagnostics};
+    use crate::support::prepared;
     use zetesis_backend::GpuApi;
+
+    fn typed(
+        source: &str,
+        config: &zetesis_cli::PublicationConfig,
+    ) -> (zetesis_cli::Report, serde_json::Value) {
+        let mut output = Vec::new();
+        let resources = zetesis_solve::Resources::default();
+        let report = prepared::relational(
+            source,
+            config,
+            &mut zetesis_cli::JsonRenderer::new(
+                &mut output,
+                resources.json_record_bytes(),
+                resources.formula_limits().theory.max_atoms,
+            ),
+            &mut Vec::new(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        (report, serde_json::from_slice(&output).unwrap())
+    }
+
     use zetesis_cli::{Interruption, RunError};
     use zetesis_cpu::Stop;
 
@@ -103,9 +126,6 @@ mod physical {
             let mut selected = options(&["--stats", "--json"]);
             selected.backend = backend.requested();
             selected.grounder = grounder;
-            // A hidden static lowering cannot succeed under these limits.
-            selected.max_ground_rules = 0;
-            selected.max_substitutions = 0;
             let mut output = Vec::new();
             let mut diagnostics = Vec::new();
             let report = run_with_diagnostics(
@@ -128,6 +148,15 @@ mod physical {
             assert_eq!(stats.submitted_candidates, stats.completed_candidates);
             assert!(stats.completed_candidates <= report.checked);
             assert_eq!(stats.stopped_candidates, 0);
+            // The typed session also proves that this route does not consume
+            // the independent static lowering allowances.
+            let mut bounded = zetesis_cli::PublicationConfig::from(&selected);
+            bounded.solve.max_ground_rules = 0;
+            bounded.solve.max_substitutions = 0;
+            let (bounded_report, bounded_models) = typed(source, &bounded);
+            assert_eq!(bounded_report.completion, Completion::Exhausted);
+            assert_eq!(bounded_models["models"], expected["models"]);
+            assert!(bounded_report.lazy_execution.unwrap().dispatches > 0);
             let diagnostics = String::from_utf8(diagnostics).unwrap();
             assert!(diagnostics.contains("effective=lazy"));
             assert!(!diagnostics.contains("effective=eager"));
@@ -175,18 +204,16 @@ mod physical {
             "p. -q:-p.",
         ] {
             let (_, expected, _) = solve(source, &["--backend", "cpu", "--stats", "--json"]);
-            for batch in ["1", "3", "33"] {
-                let (report, actual, diagnostics) = solve(
-                    source,
-                    &[
-                        "--backend",
-                        backend.argument(),
-                        "--batch-size",
-                        batch,
-                        "--stats",
-                        "--json",
-                    ],
-                );
+            for batch in [None, Some(1), Some(3), Some(33)] {
+                let arguments = ["--backend", backend.argument(), "--stats", "--json"];
+                let (report, actual, diagnostics) = if let Some(batch) = batch {
+                    let mut config = zetesis_cli::PublicationConfig::from(&options(&arguments));
+                    config.solve.batch_size = std::num::NonZeroUsize::new(batch).unwrap();
+                    let (report, actual) = typed(source, &config);
+                    (report, actual, String::new())
+                } else {
+                    solve(source, &arguments)
+                };
                 assert_eq!(report.completion, Completion::Exhausted);
                 assert_eq!(actual["models"], expected["models"]);
                 let stats = report.lazy_execution.unwrap();
@@ -213,14 +240,16 @@ mod physical {
                 );
                 assert_eq!(stats.requested_backend, backend.requested());
                 assert_eq!(stats.backend, backend.name());
-                assert!(diagnostics.contains("effective=lazy"));
-                assert!(!diagnostics.contains("effective=eager"));
-                if stats.submitted_candidates == 0 {
-                    assert!(diagnostics.contains(
+                if batch.is_none() {
+                    assert!(diagnostics.contains("effective=lazy"));
+                    assert!(!diagnostics.contains("effective=eager"));
+                    if stats.submitted_candidates == 0 {
+                        assert!(diagnostics.contains(
                         "effective execution: none needed; the root narrowing refuted every seed"
                     ));
-                } else {
-                    assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"));
+                    } else {
+                        assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"));
+                    }
                 }
                 assert_eq!(
                     actual["statistics"]["lazy_execution"]["dispatches"],
@@ -281,8 +310,6 @@ mod physical {
             &[
                 "--backend",
                 backend.argument(),
-                "--batch-size",
-                "3",
                 "--models",
                 "1",
                 "--stats",
@@ -314,17 +341,14 @@ mod physical {
     }
 
     fn qualify_source_stop(backend: GpuApi) {
-        let (report, value, _) = solve(
-            WORLDS,
-            &[
-                "--backend",
-                backend.argument(),
-                "--max-work",
-                "0",
-                "--stats",
-                "--json",
-            ],
-        );
+        let mut config = zetesis_cli::PublicationConfig::from(&options(&[
+            "--backend",
+            backend.argument(),
+            "--stats",
+            "--json",
+        ]));
+        config.solve.max_work = 0;
+        let (report, value) = typed(WORLDS, &config);
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(
             report.interruption,
@@ -353,13 +377,7 @@ mod physical {
     fn qualify_writer_failure(backend: GpuApi) {
         let error = zetesis_cli::run_detailed_with_diagnostics(
             WORLDS.into(),
-            &options(&[
-                "--backend",
-                backend.argument(),
-                "--batch-size",
-                "3",
-                "--stats",
-            ]),
+            &options(&["--backend", backend.argument(), "--stats"]),
             &mut zetesis_test_support::io::FailAt::new(b"Answer:"),
             &mut Vec::new(),
             &Cancellation::default(),

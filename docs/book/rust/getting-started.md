@@ -20,13 +20,12 @@ facts. `#show run/1` changes only the displayed channel, not those typed answers
 
 ## Set up a Rust application
 
-The packages are not published on crates.io. Use their paths in a pinned local
-checkout. These commands select the official `v0.3.0` source release and create
-sibling repository and application directories:
+The packages are not published on crates.io. These examples require zetesis
+0.4.0. Use paths in a pinned local checkout of that version. From the directory
+containing your `zetesis` checkout, record its revision and create a sibling
+application:
 
 ```sh
-git clone https://github.com/GregoryGelfond/zetesis.git
-git -C zetesis switch --detach v0.3.0
 git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app
@@ -34,8 +33,8 @@ cd answer-set-app
 rustup override set 1.97.1
 ```
 
-Record the full revision printed by `rev-parse`; keeping that detached checkout
-fixes the source used by all three path dependencies. To reproduce the setup
+Keep a clean checkout of the full revision printed by `rev-parse`; this fixes
+the source used by all three path dependencies. To reproduce the setup
 elsewhere, check out that same revision. The first Cargo build also fetches the
 repository's pinned themelios dependency; no separate themelios checkout or
 direct parser dependency is needed.

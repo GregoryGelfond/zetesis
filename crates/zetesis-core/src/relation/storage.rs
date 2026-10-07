@@ -5,8 +5,8 @@ use std::{cmp::Ordering, mem::size_of};
 use crate::catalog::{PredicateRef, TermRef};
 
 use super::{
-    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
-    Storage, Work, ceiling,
+    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, OwnedColumn, Relation, Resource,
+    Source, Storage, Work, ceiling,
 };
 
 pub(super) fn build<'source>(
@@ -52,12 +52,14 @@ pub(super) fn build<'source>(
         work.tick(1)?;
         ordered.push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
     }
+    let largest_id = dictionary
+        .len()
+        .checked_sub(1)
+        .map_or(Ok(0), u32::try_from)
+        .map_err(|_| Failure::Overflow)?;
     let mut columns = work.reserve(predicate.arity())?;
     for _ in 0..predicate.arity() {
-        let mut column = work.reserve(source.len())?;
-        work.tick(source.len() as u128)?;
-        column.resize(source.len(), 0);
-        columns.push(column);
+        columns.push(OwnedColumn::zeroed(source.len(), largest_id, &mut work)?);
     }
     let mut layout = Layout {
         dictionary,
@@ -72,7 +74,7 @@ pub(super) fn build<'source>(
             let value = atom.values().at(column).ok_or(Failure::Column)?;
             let id = lookup(&layout, &source, value, &mut work)?.ok_or(Failure::Dictionary)?;
             work.tick(1)?;
-            layout.columns[column][row] = id;
+            layout.columns[column].set(row, id);
         }
     }
     Ok(Relation {

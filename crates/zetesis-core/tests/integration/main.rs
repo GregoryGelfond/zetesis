@@ -23,3 +23,5 @@ mod seed_packing;
 mod seed_selections;
 mod structural_values;
 mod value_node_views;
+
+mod static_control;

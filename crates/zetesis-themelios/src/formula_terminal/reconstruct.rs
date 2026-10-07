@@ -1,6 +1,7 @@
 //! Extend selected base rows by the certified one-layer positive definitions.
 
 mod join;
+mod plan;
 
 use std::fmt;
 use zetesis_core::atom_interner::{AtomInterner, ClosedCatalog};
@@ -181,11 +182,14 @@ impl std::error::Error for ReconstructionError {
 
 /// Independent extension cursor over an immutable admitted owner. Each call
 /// starts from admission's account under the cursor's per-answer allowance;
-/// only the reported totals accumulate (saturating). Scratch and selected
-/// derived rows are private to each call. Nothing from a previous answer
-/// becomes true in a subsequent one through storage reuse.
+/// only the reported totals accumulate (saturating). The first call prepares
+/// the immutable pattern and frame layout plan under that call's allowance.
+/// Later calls reuse it, counting its retained capacity against their storage
+/// ceiling. Bindings, cursors and selected derived rows are private to each
+/// call. Nothing from a previous answer becomes true through plan reuse.
 pub struct TerminalReconstruction<'a> {
     owner: &'a TerminalFormula,
+    plan: Option<plan::Plan<'a>>,
     admission: ReconstructionCharges,
     allowance: ReconstructionCharges,
     /// Admission and every call so far, for reporting.
@@ -218,6 +222,7 @@ impl<'a> TerminalReconstruction<'a> {
         };
         Ok(Self {
             owner,
+            plan: None,
             admission,
             allowance: ceilings.saturating_sub(admission),
             total: admission,
@@ -253,7 +258,9 @@ impl<'a> TerminalReconstruction<'a> {
     /// the call's requested charge (what the refused operation needed, past the
     /// accepted one) as observed. Other ceilings are checked within
     /// the call as during admission. No full possible-support relation is
-    /// enumerated during reconstruction.
+    /// enumerated during reconstruction. The first call also binds the closed
+    /// components and prepares the immutable rule plan; its actual preparation
+    /// charge is included in that call's statistics, never charged again.
     ///
     /// # Errors
     /// Refuses a foreign owner, cancellation, a resource boundary or invalid
@@ -288,7 +295,7 @@ impl<'a> TerminalReconstruction<'a> {
         };
         let mut accounting = prepared.baseline.start();
         let result = accounting.with_cancellation(cancellation, |counters| {
-            extend(owner, model, counters, &limits)
+            extend(owner, &mut self.plan, model, counters, &limits)
         });
         self.latest = ReconstructionCharges {
             work: accounting.work,
@@ -309,8 +316,9 @@ impl<'a> TerminalReconstruction<'a> {
     }
 }
 
-fn extend(
-    owner: &TerminalFormula,
+fn extend<'a>(
+    owner: &'a TerminalFormula,
+    plan: &mut Option<plan::Plan<'a>>,
     model: &Model,
     counters: &mut Counters,
     limits: &crate::FormulaLimits,
@@ -327,7 +335,8 @@ fn extend(
         + prepared.closed.metadata_bytes()
         + size_of::<ClosedCatalog>() as u128
         + model.selection_bytes()
-        + size_of::<TerminalReconstruction<'_>>() as u128;
+        + size_of::<TerminalReconstruction<'_>>() as u128
+        + plan.as_ref().map_or(0, plan::Plan::retained_bytes);
     let mut work = Work {
         limits,
         counters,
@@ -335,13 +344,23 @@ fn extend(
         external,
     };
     let mut writer = work.writer(&prepared.closed.storage)?;
-    let components = prepared
-        .closed
-        .components
-        .as_ref()
-        .ok_or_else(|| components::missing(prepared.location))?
-        .bind_with(prepared.closed.storage.vocabulary_read(), || work.permit())
-        .map_err(|error| components::failure(error, limits, external, prepared.location))?;
+    if plan.is_none() {
+        let components = prepared
+            .closed
+            .components
+            .as_ref()
+            .ok_or_else(|| components::missing(prepared.location))?
+            .bind_with(prepared.closed.storage.vocabulary_read(), || work.permit())
+            .map_err(|error| components::failure(error, limits, external, prepared.location))?;
+        let built = plan::Plan::new(&prepared.deferred, components, &writer, &mut work)?;
+        // The preparation's temporary lease is gone. Transfer only its vector
+        // capacities; its header already belongs to this cursor, and its
+        // borrowed components remain counted with the original closed owner.
+        work.external += built.retained_bytes();
+        work.observe(writer.storage_bytes())?;
+        *plan = Some(built);
+    }
+    work.location = prepared.location;
     let mut atoms = model.atoms().iter();
     for _ in 0..atoms.len() {
         work.permit()?;
@@ -354,11 +373,9 @@ fn extend(
                 .insert_with(bound, || counters.work(limits, location))
         })?;
     }
-    for rule in &prepared.deferred {
-        work.location = rule.location;
-        work.permit()?;
-        join::derive(rule, components, model, &mut writer, &mut work)?;
-    }
+    plan.as_ref()
+        .expect("a complete immutable plan was published")
+        .derive(model, &mut writer, &mut work)?;
     work.location = prepared.location;
     publish(&mut writer, &mut work)
 }
@@ -402,3 +419,6 @@ fn publish(writer: &mut AtomInterner, work: &mut Work<'_>) -> Result<Model, Reco
     work.permit()?;
     Ok(model)
 }
+
+#[cfg(test)]
+mod tests;

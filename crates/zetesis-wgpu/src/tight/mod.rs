@@ -35,11 +35,12 @@ pub struct TightGpuLimits {
     /// Shared caller-owned theory/certificate/candidates, allocator overhead,
     /// driver-private allocations and deferred retirement are excluded. Not RSS.
     pub max_batch_bytes: u64,
-    /// Each candidate reserves `nodes + roots + producers + 2 * words`
-    /// operations, where `words = ceil(atoms / 32)`. One word scan initializes
+    /// Each candidate reserves `nodes + edges + roots + producers + 2 * words`
+    /// operations, where `edges` counts child occurrences and
+    /// `words = ceil(atoms / 32)`. One word scan initializes
     /// or constructs packed support under the selected [`TightSupport`] policy;
     /// the other finds unsupported candidate bits by words. This replaces the
-    /// former `nodes + roots + producers + atoms + words` accounting contract.
+    /// former accounting contract; native operand reads are included.
     /// Every scan completes, including initialization and scans after an original
     /// failure; this differs from scalar early-exit work. Insufficient work is
     /// refused before dispatch, never converted into a logical result.
@@ -93,7 +94,7 @@ pub struct TightGpuBatchStats {
     pub theory_uploaded: bool,
     /// Exact candidate-count transport was allocated or replaced.
     pub transport_allocated: bool,
-    /// Requested immutable node, root and producer buffer bytes, with padding.
+    /// Requested immutable header/operand, root and producer buffer bytes, with padding.
     pub resident_theory_bytes: u64,
     /// Requested uniform, candidate, truth, support, result and readback bytes.
     pub resident_transport_bytes: u64,

@@ -177,7 +177,7 @@ impl Compiler<'_> {
                 let binding = assignments
                     .next()
                     .expect("one binding marker per aggregate");
-                let aggregate = self.aggregate(
+                let mut aggregate = self.aggregate(
                     *negation,
                     aggregate,
                     guards.next().expect("one guard list per aggregate"),
@@ -185,6 +185,8 @@ impl Compiler<'_> {
                     binding,
                 )?;
                 self.assignment_scope(&aggregate)?;
+                aggregate.family_inputs =
+                    self.assignment_family_inputs(&aggregate, variables.count)?;
                 body.push(LiteralIr::Aggregate(aggregate));
             }
         }
@@ -302,6 +304,7 @@ impl Compiler<'_> {
         Ok(AggregateIr {
             id,
             binding,
+            family_inputs: Vec::new(),
             negation,
             function,
             guards,

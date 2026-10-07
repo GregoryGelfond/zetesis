@@ -22,7 +22,7 @@ pub struct ScalabilityOptions {
     /// Authored examples root; metadata and source digests are checked.
     #[arg(long, default_value = "examples")]
     pub examples: PathBuf,
-    /// Include the unchanged Einstein riddle as a thirteenth workload.
+    /// Include the unchanged Einstein riddle in the workload selection.
     #[arg(long)]
     pub include_einstein: bool,
     /// Modern zetesis executable; omitted uses this installed executable's solve.
@@ -34,9 +34,12 @@ pub struct ScalabilityOptions {
     /// CPU region thread counts, one through eight profiles, each at most 256.
     #[arg(long, value_delimiter = ',', num_args = 1.., default_value = "1,2,4,8,14")]
     pub threads: Vec<NonZeroUsize>,
-    /// Explicit native grounding expansion ceiling, retained in every profile.
-    #[arg(long)]
-    pub max_expansion_work: Option<usize>,
+    /// Native memory allowance in bytes or binary units; omitted, the solver's default.
+    #[arg(long, value_name = "SIZE", value_parser = zetesis_backend::parse_memory)]
+    pub memory: Option<u64>,
+    /// Cooperative native deadline in whole seconds, separate from the child timeout.
+    #[arg(long, value_name = "SECONDS")]
+    pub time_limit: Option<std::num::NonZeroU64>,
     /// Total campaign scheduling deadline, including all qualification children.
     #[arg(long, default_value_t = 1800)]
     pub campaign_seconds: u64,
@@ -64,10 +67,11 @@ impl ScalabilityOptions {
             .threads
             .iter()
             .map(|&workers| NativeExecution {
-                workers,
+                threads: workers,
                 formula_joins: Some(FormulaJoins::Indexed),
                 search: Some(SearchMethod::Regions),
-                max_expansion_work: self.max_expansion_work,
+                memory_bytes: self.memory,
+                time_limit_seconds: self.time_limit,
                 ..NativeExecution::default()
             })
             .collect();
@@ -101,6 +105,7 @@ pub(super) fn execute(
     limits.campaign_timeout = Duration::from_secs(options.campaign_seconds);
     limits.max_total_capture_bytes = options.total_capture_bytes;
     limits.max_report_bytes = options.report_bytes;
+    limits = scalability::limits(limits);
     let report = scalability::run_with_cancellation(
         &matrix::Request {
             tool: matrix::Tool {
@@ -117,7 +122,9 @@ pub(super) fn execute(
             report: destination,
             plan: options.plan().map_err(Error::Scalability)?,
             limits,
-            native_answers: zetesis_validation::answers::native_json::Limits::default(),
+            native_answers: scalability::native_answers(
+                zetesis_validation::answers::native_json::Limits::default(),
+            ),
             max_spelling_bytes: limits.answers.max_input_bytes,
             helper: None,
         },

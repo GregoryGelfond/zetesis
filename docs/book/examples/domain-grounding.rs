@@ -25,6 +25,7 @@ struct Observation {
     status: Cell<Option<Status>>,
     unknown_argument: Cell<bool>,
     work: Cell<GroundingWork>,
+    final_rule: Cell<Option<GroundingWork>>,
 }
 impl GroundingObserver for Observation {
     fn enter(&self) {}
@@ -48,12 +49,15 @@ impl GroundingObserver for Observation {
 
     fn phase_exit(
         &self,
-        _: GroundingPhase,
+        phase: GroundingPhase,
         _: Option<ProgramSite>,
         _: GroundingOutcome,
         work: GroundingWork,
     ) {
         self.work.set(self.work.get().checked_sum(work));
+        if phase == GroundingPhase::RuleInstantiation {
+            self.final_rule.set(Some(work));
+        }
     }
 }
 
@@ -74,6 +78,7 @@ fn ground(
 fn same_theory(left: &AdmittedFormula, right: &AdmittedFormula) {
     assert_eq!(left.atoms(), right.atoms());
     assert_eq!(left.theory().nodes(), right.theory().nodes());
+    assert_eq!(left.theory().operands(), right.theory().operands());
     assert_eq!(left.theory().roots(), right.theory().roots());
     assert_eq!(left.formula_origins(), right.formula_origins());
 }
@@ -97,11 +102,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let work = on.work.get();
     assert!(work.domain_prepare_work.is_some_and(|count| count > 0));
     assert!(work.domain_guard_checks.is_some_and(|count| count > 0));
-    // Indexed offers one c posting, then matches whole rows. In the final
-    // instantiation the guards reject two a rows, four b rows and eight c
-    // rows before copying their new bindings; the completion round before it
-    // rejected the same a and b rows, and the sum over the phases is twenty.
-    assert_eq!(work.domain_rejected_rows, Some(20));
+    // The connected order is a, c, b. Two a values have empty c postings;
+    // each remaining c posting has two Y values with empty b postings.
+    // Guards skip these empty probes; both routes offer the same 16 rows.
+    let before = off.final_rule.get().unwrap();
+    let after = on.final_rule.get().unwrap();
+    assert_eq!(before.join_rows, Some(4 + 2 * 4 + 2 * 2));
+    assert_eq!(after.join_rows, before.join_rows);
+    assert_eq!(before.join_probes, Some(1 + 4 + 2 * 4));
+    assert_eq!(after.join_probes, Some(1 + 2 + 2 * 2));
+    assert_eq!(after.domain_rejected_rows, Some(2 + 2 * 2));
+    // Completion rejects the same six rows before final instantiation.
+    assert_eq!(work.domain_rejected_rows, Some(12));
     assert!(work.join_probes.unwrap() < off.work.get().join_probes.unwrap());
 
     for limits in [

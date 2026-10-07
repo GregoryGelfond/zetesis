@@ -136,9 +136,12 @@ impl AtomInterner {
             pending,
             index,
             discovery,
+            spines,
             subtrees,
         } = self;
-        let retained = (snapshot, committed, pending, index, discovery, subtrees);
+        let retained = (
+            snapshot, committed, pending, index, discovery, spines, subtrees,
+        );
         let result = store
             .close_with(metadata, before)
             .map(|storage| ClosedCatalog { storage })

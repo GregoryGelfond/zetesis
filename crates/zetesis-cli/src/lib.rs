@@ -32,6 +32,9 @@ mod stage_timing;
 mod output;
 mod view;
 
+#[cfg(test)]
+use driver::fixture as publication_fixture;
+
 pub use view::{
     AnswerRenderer, AnswerView, BackendView, ConfigurationView, GroundingDisplay, HumanRenderer,
     JsonRenderer, PublicationConfig, PublicationView, SummaryDelivery, SummaryStage,

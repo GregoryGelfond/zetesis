@@ -5,7 +5,7 @@ use super::{
 };
 use std::fmt;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, Node};
+use zetesis_ferraris::{Interpretation, NodeView};
 use zetesis_objective::{Limits, Score};
 
 /// A score-only read of the prepared eligibility, without tuple evidence.
@@ -81,7 +81,8 @@ impl ObjectivePlan {
     /// The retained plan supplies numeric keys only, so contribution evidence
     /// always uses the ordinary evaluator.
     ///
-    /// One unit is charged per DAG node, followed by the numeric reducer's work.
+    /// One unit is charged per DAG node and operand occurrence, followed by the
+    /// numeric reducer's work.
     /// Priority lookup uses logarithmic map probes; the reducer charges one
     /// logical priority visit, not each map comparison.
     /// Temporary storage is linear in retained nodes and priority slots, bounded
@@ -118,15 +119,24 @@ impl ObjectivePlan {
         {
             return Ok(None);
         }
-        let mut values = work.reserve(self.nodes.len()).map_err(eligibility_error)?;
-        for node in &self.nodes {
+        let view = self.nodes.view();
+        let mut values = work.reserve(view.len()).map_err(eligibility_error)?;
+        for index in 0..view.len() {
             work.tick().map_err(eligibility_error)?;
-            let value = match *node {
-                Node::False => false,
-                Node::Atom(atom) => candidate.contains(atom),
-                Node::And(left, right) => values[left] && values[right],
-                Node::Or(left, right) => values[left] || values[right],
-                Node::Implies(left, right) => !values[left] || values[right],
+            let node = view.node(index).map_err(|error| {
+                eligibility_error(work.error(super::ObjectiveBoundErrorKind::Theory(error)))
+            })?;
+            let value = match node {
+                NodeView::False => false,
+                NodeView::Atom(atom) => candidate.contains(atom),
+                NodeView::And(row) => evaluate_group(row, &values, true, &mut work)?,
+                NodeView::Or(row) => evaluate_group(row, &values, false, &mut work)?,
+                NodeView::Implies(left, right) => {
+                    work.tick().map_err(eligibility_error)?;
+                    let antecedent = values[left];
+                    work.tick().map_err(eligibility_error)?;
+                    !antecedent || values[right]
+                }
             };
             values.push(value);
         }
@@ -152,6 +162,24 @@ impl ObjectivePlan {
             score: reduced.into_score(),
         }))
     }
+}
+
+fn evaluate_group(
+    row: &[usize],
+    values: &[bool],
+    conjunction: bool,
+    work: &mut Work<'_>,
+) -> Result<bool, ObjectiveScoreError> {
+    let mut value = conjunction;
+    for &child in row {
+        work.tick().map_err(eligibility_error)?;
+        if conjunction {
+            value &= values[child];
+        } else {
+            value |= values[child];
+        }
+    }
+    Ok(value)
 }
 
 fn eligibility_error(error: ObjectiveBoundError) -> ObjectiveScoreError {

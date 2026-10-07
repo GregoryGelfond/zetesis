@@ -1176,8 +1176,9 @@ fn advance(
 /// scalar, parallel and batched, and it runs on the coordinator before any
 /// worker starts. The clause kernel walks no region and gets `None`.
 ///
-/// The build is charged to `budget` first, one unit per node, and recorded
-/// once in the proposer's region counts in the same step, so search work and
+/// The build is charged to `budget` first, one unit per node and operand
+/// occurrence, and recorded once in the proposer's region counts in the same
+/// step, so search work and
 /// `regions.work` agree on every exit, a build that fails after its charge
 /// was admitted included. Its time, when timed, is one call of the candidate
 /// phase; a built index costs neither work nor a timed call.

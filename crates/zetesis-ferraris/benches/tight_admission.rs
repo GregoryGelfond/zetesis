@@ -41,36 +41,42 @@ struct Fixture {
 
 impl Fixture {
     fn new(order: Order, ordinary: bool, refused: bool) -> Self {
-        let mut nodes = vec![Node::False];
+        let mut nodes = vec![Node::falsum()];
         let mut roots = Vec::new();
         if ordinary {
             let left = nodes.len();
-            nodes.push(Node::Atom(CHOICES));
+            nodes.push(Node::atom(CHOICES));
             let right = nodes.len();
-            nodes.push(Node::Atom(CHOICES + 1));
+            nodes.push(Node::atom(CHOICES + 1));
             roots.push(nodes.len());
-            nodes.push(Node::Or(left, right));
+            nodes.push(Node::or_pair([left, right]));
         }
         for atom in 0..CHOICES {
             let positive = nodes.len();
-            nodes.push(Node::Atom(atom));
+            nodes.push(Node::atom(atom));
             let repeated = nodes.len();
-            nodes.push(Node::Atom(if refused && atom + 1 == CHOICES {
+            nodes.push(Node::atom(if refused && atom + 1 == CHOICES {
                 0
             } else {
                 atom
             }));
             let negative = nodes.len();
-            nodes.push(Node::Implies(repeated, 0));
+            nodes.push(Node::implies(repeated, 0));
             roots.push(nodes.len());
             nodes.push(if order.reversed(atom) {
-                Node::Or(negative, positive)
+                Node::or_pair([negative, positive])
             } else {
-                Node::Or(positive, negative)
+                Node::or_pair([positive, negative])
             });
         }
         Self {
-            theory: Theory::new(CHOICES + 2, nodes, roots, AdmissionLimits::default()).unwrap(),
+            theory: Theory::new(
+                CHOICES + 2,
+                zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+                roots,
+                AdmissionLimits::default(),
+            )
+            .unwrap(),
             refused,
         }
     }

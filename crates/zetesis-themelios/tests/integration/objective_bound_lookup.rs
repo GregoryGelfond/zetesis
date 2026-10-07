@@ -16,7 +16,7 @@ use zetesis_themelios::objective_bound::{
 fn theory(count: usize) -> Theory {
     Theory::new(
         count,
-        (0..count).map(Node::Atom).collect(),
+        zetesis_ferraris::FormulaParts::new((0..count).map(Node::atom).collect(), vec![]).unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )

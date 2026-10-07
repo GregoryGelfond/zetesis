@@ -7,12 +7,16 @@ use zetesis_ferraris::Node;
 fn choice() -> Theory {
     Theory::new(
         1,
-        vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::or_pair([0, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -36,7 +40,7 @@ fn ordinary_restrictions_keep_the_original_prepared_owner() {
     let receipt = search.statistics().reduct.preparation;
     let restriction = Theory::new(
         1,
-        vec![Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )

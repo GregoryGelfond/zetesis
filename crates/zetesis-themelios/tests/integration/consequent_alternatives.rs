@@ -248,11 +248,13 @@ fn original_rule(program: &AdmittedFormula, head: &str) -> usize {
         .iter()
         .copied()
         .filter(|root| {
-            let zetesis_ferraris::Node::Implies(_, consequent) = program.theory().nodes()[*root]
+            let zetesis_ferraris::NodeView::Implies(_, consequent) =
+                program.theory().view().node(*root).unwrap()
             else {
                 return false;
             };
-            program.theory().nodes()[consequent] == zetesis_ferraris::Node::Atom(atom)
+            program.theory().view().node(consequent).unwrap()
+                == zetesis_ferraris::NodeView::Atom(atom)
         })
         .collect();
     assert_eq!(

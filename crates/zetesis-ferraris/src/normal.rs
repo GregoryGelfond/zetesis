@@ -2,23 +2,23 @@
 
 use zetesis_core::GroundProgram;
 
-use crate::{AdmissionError, AdmissionLimits, Node, Theory};
+use crate::{
+    AdmissionError, AdmissionLimits, FormulaNodes, FormulaParts, FormulaTransaction, NodeView,
+    Theory,
+};
 
 /// Translate an already bounded static normal program into Ferraris formulas.
-/// Atom indices are exactly the input graph's dense indices, including unused
-/// carrier atoms. Each rule becomes `body -> head`; constraints imply falsum.
-/// Frozen true guards become double negations and false guards become single
-/// negations. In particular, a choice's true guard must not become an ordinary
-/// positive antecedent: `not not p -> p` supports either choice, while `p -> p`
-/// cannot support a nonempty stable model on its own.
+/// Atom indices remain the input graph's dense indices, including unused atoms.
+/// Each rule becomes `body -> head`; constraints imply falsum. Frozen true gates
+/// become double negations, false gates single negations. Complete bodies retain
+/// one native conjunction; choice gates never become positive antecedents.
 ///
-/// This performs no source parsing or grounding. All formula storage is counted
-/// and admitted before construction; the input graph remains caller-owned.
-/// The returned theory has its own interpretation identity.
+/// This parses no source. Inclusive node and operand dimensions admit all graph
+/// appends. Temporary body rows are bounded by the same operand ceiling. The
+/// returned theory has its own interpretation identity.
 ///
 /// # Errors
-/// Returns [`AdmissionError::Limit`] for excessive formula dimensions or count
-/// overflow, and [`AdmissionError::Allocation`] if storage cannot be reserved.
+/// Refuses excessive dimensions, invalid edges, overflow or failed allocation.
 pub fn from_ground_program(
     program: &GroundProgram,
     limits: AdmissionLimits,
@@ -26,146 +26,169 @@ pub fn from_ground_program(
     if program.atom_count() > limits.max_atoms || program.rules().len() > limits.max_roots {
         return Err(AdmissionError::Limit);
     }
-    let mut count = program.atom_count() as u128 + 2;
+    let mut nodes = FormulaNodes::default();
+    let mut transaction = nodes.transaction();
+    for atom in 0..program.atom_count() {
+        push(&mut transaction, NodeView::Atom(atom), limits)?;
+    }
+    let falsum = push(&mut transaction, NodeView::False, limits)?;
+    let truth = push(&mut transaction, NodeView::Implies(falsum, falsum), limits)?;
+    let mut roots = reserve(program.rules().len())?;
     for rule in program.rules() {
-        let literals = rule.positive().len() as u128
-            + rule.gate_true().len() as u128
-            + rule.gate_false().len() as u128;
-        count += literals.saturating_sub(1)
-            + 2 * rule.gate_true().len() as u128
-            + rule.gate_false().len() as u128
-            + 1;
-        if count > limits.max_nodes as u128 {
+        let count = rule
+            .positive()
+            .len()
+            .checked_add(rule.gate_true().len())
+            .and_then(|count| count.checked_add(rule.gate_false().len()))
+            .ok_or(AdmissionError::Limit)?;
+        if count > limits.max_operands {
             return Err(AdmissionError::Limit);
         }
-    }
-    if count > limits.max_nodes as u128 {
-        return Err(AdmissionError::Limit);
-    }
-    let count = usize::try_from(count).map_err(|_| AdmissionError::Limit)?;
-    let mut nodes = Vec::new();
-    nodes
-        .try_reserve_exact(count)
-        .map_err(|_| AdmissionError::Allocation)?;
-    let mut roots = Vec::new();
-    roots
-        .try_reserve_exact(program.rules().len())
-        .map_err(|_| AdmissionError::Allocation)?;
-    nodes.extend((0..program.atom_count()).map(Node::Atom));
-    let falsum = push(&mut nodes, Node::False);
-    let truth = push(&mut nodes, Node::Implies(falsum, falsum));
-    for rule in program.rules() {
-        let mut body = None;
-        for &atom in rule.positive() {
-            conjunct(&mut nodes, &mut body, atom as usize);
-        }
+        let mut body = reserve(count)?;
+        body.extend(rule.positive().iter().map(|&atom| atom as usize));
         for &atom in rule.gate_true() {
-            let negative = push(&mut nodes, Node::Implies(atom as usize, falsum));
-            let positive = push(&mut nodes, Node::Implies(negative, falsum));
-            conjunct(&mut nodes, &mut body, positive);
+            let negative = push(
+                &mut transaction,
+                NodeView::Implies(atom as usize, falsum),
+                limits,
+            )?;
+            body.push(push(
+                &mut transaction,
+                NodeView::Implies(negative, falsum),
+                limits,
+            )?);
         }
         for &atom in rule.gate_false() {
-            let negative = push(&mut nodes, Node::Implies(atom as usize, falsum));
-            conjunct(&mut nodes, &mut body, negative);
+            body.push(push(
+                &mut transaction,
+                NodeView::Implies(atom as usize, falsum),
+                limits,
+            )?);
         }
+        let body = if body.is_empty() {
+            truth
+        } else {
+            push(&mut transaction, NodeView::And(&body), limits)?
+        };
         let head = rule.head().map_or(falsum, |atom| atom as usize);
-        roots.push(push(&mut nodes, Node::Implies(body.unwrap_or(truth), head)));
+        roots.push(push(
+            &mut transaction,
+            NodeView::Implies(body, head),
+            limits,
+        )?);
     }
-    debug_assert_eq!(nodes.len(), count);
-    Theory::new(program.atom_count(), nodes, roots, limits)
+    transaction.commit();
+    Theory::new(program.atom_count(), nodes.into_parts(), roots, limits)
 }
 
-fn push(nodes: &mut Vec<Node>, node: Node) -> usize {
-    let index = nodes.len();
-    nodes.push(node);
-    index
+fn reserve<T>(count: usize) -> Result<Vec<T>, AdmissionError> {
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(count)
+        .map_err(|_| AdmissionError::Allocation)?;
+    Ok(values)
 }
 
-fn conjunct(nodes: &mut Vec<Node>, body: &mut Option<usize>, literal: usize) {
-    *body = Some(match *body {
-        None => literal,
-        Some(previous) => push(nodes, Node::And(previous, literal)),
-    });
+fn push(
+    transaction: &mut FormulaTransaction<'_>,
+    node: NodeView<'_>,
+    limits: AdmissionLimits,
+) -> Result<usize, AdmissionError> {
+    transaction.push(node, limits.max_nodes, limits.max_operands)
 }
 
 /// Translate a static normal program and add candidate-only support conditions.
-/// Each atom `a` gets the guard `not not (a -> OR producer_bodies)`. Every normal
-/// stable model has such a producer in its least-closure derivation. For a
-/// candidate satisfying the guard, its frozen reduct is true for every tested
-/// subset; the added guard therefore cannot remove a countermodel or create
-/// support. Self-supported positive cycles still need the minimality oracle.
+/// Each atom `a` gets `not not (a -> OR producer_bodies)`. Every normal stable
+/// model has such a producer in its least-closure derivation. A passing guard's
+/// reduct is true for every tested subset; self-supported cycles still need the
+/// minimality oracle. Complete producer disjunctions retain native groups.
 ///
-/// This is a specialization justified by the input's normal-rule structure,
-/// not a transformation for arbitrary formula theories. It avoids searching
-/// classical assignments containing carrier atoms with no possible producer.
-/// Formula dimensions include all support guards and producer disjunctions.
+/// This specialization uses normal-rule structure, not arbitrary formulas.
+/// Admission includes all support nodes and every logical operand occurrence.
+/// The paired original graph and the copied construction owner overlap briefly.
 ///
 /// # Errors
-/// Returns [`AdmissionError`] for the same reasons as [`from_ground_program`],
-/// with additional guard storage included in the admission limits.
+/// Refuses the same conditions as [`from_ground_program`], including additional
+/// support graph dimensions and temporary producer incidence allocation.
 pub fn from_ground_program_supported(
     program: &GroundProgram,
     limits: AdmissionLimits,
 ) -> Result<Theory, AdmissionError> {
     let original = from_ground_program(program, limits)?;
-    let roots_count = original.roots().len() as u128 + original.atom_count() as u128;
-    if roots_count > limits.max_roots as u128 {
+    let root_count = original
+        .roots()
+        .len()
+        .checked_add(original.atom_count())
+        .ok_or(AdmissionError::Limit)?;
+    if root_count > limits.max_roots {
         return Err(AdmissionError::Limit);
     }
-    let mut heads = Vec::new();
-    heads
-        .try_reserve_exact(original.atom_count())
-        .map_err(|_| AdmissionError::Allocation)?;
-    heads.resize(original.atom_count(), 0usize);
+    let (offsets, bodies) = producers(program, &original)?;
+    let mut raw_nodes = reserve(original.nodes().len())?;
+    raw_nodes.extend_from_slice(original.nodes());
+    let mut operands = reserve(original.operands().len())?;
+    operands.extend_from_slice(original.operands());
+    let mut nodes = FormulaNodes::new(FormulaParts::new(raw_nodes, operands)?);
+    let mut roots = reserve(root_count)?;
+    roots.extend_from_slice(original.roots());
+    let mut transaction = nodes.transaction();
+    let falsum = original.atom_count();
+    for atom in 0..original.atom_count() {
+        let row = &bodies[offsets[atom]..offsets[atom + 1]];
+        let body = if row.is_empty() {
+            falsum
+        } else {
+            push(&mut transaction, NodeView::Or(row), limits)?
+        };
+        let condition = push(&mut transaction, NodeView::Implies(atom, body), limits)?;
+        let negative = push(
+            &mut transaction,
+            NodeView::Implies(condition, falsum),
+            limits,
+        )?;
+        roots.push(push(
+            &mut transaction,
+            NodeView::Implies(negative, falsum),
+            limits,
+        )?);
+    }
+    transaction.commit();
+    Theory::new(original.atom_count(), nodes.into_parts(), roots, limits)
+}
+
+/// One flat producer incidence row per atom, preserving original rule order.
+fn producers(
+    program: &GroundProgram,
+    original: &Theory,
+) -> Result<(Vec<usize>, Vec<usize>), AdmissionError> {
+    let length = original
+        .atom_count()
+        .checked_add(1)
+        .ok_or(AdmissionError::Limit)?;
+    let mut offsets = reserve(length)?;
+    offsets.resize(length, 0usize);
     for rule in program.rules() {
         if let Some(head) = rule.head() {
-            heads[head as usize] += 1;
+            offsets[head as usize + 1] += 1;
         }
     }
-    let count = original.nodes().len() as u128
-        + 3 * original.atom_count() as u128
-        + heads
-            .iter()
-            .map(|count| count.saturating_sub(1) as u128)
-            .sum::<u128>();
-    if count > limits.max_nodes as u128 {
-        return Err(AdmissionError::Limit);
+    for atom in 0..original.atom_count() {
+        offsets[atom + 1] += offsets[atom];
     }
-    let count = usize::try_from(count).map_err(|_| AdmissionError::Limit)?;
-    let mut nodes = Vec::new();
-    nodes
-        .try_reserve_exact(count)
-        .map_err(|_| AdmissionError::Allocation)?;
-    nodes.extend_from_slice(original.nodes());
-    let mut roots = Vec::new();
-    roots
-        .try_reserve_exact(usize::try_from(roots_count).map_err(|_| AdmissionError::Limit)?)
-        .map_err(|_| AdmissionError::Allocation)?;
-    roots.extend_from_slice(original.roots());
-    let mut support = Vec::new();
-    support
-        .try_reserve_exact(original.atom_count())
-        .map_err(|_| AdmissionError::Allocation)?;
-    support.resize(original.atom_count(), None);
+    let count = offsets[original.atom_count()];
+    let mut bodies = reserve(count)?;
+    bodies.resize(count, 0);
+    let mut cursors = reserve(original.atom_count())?;
+    cursors.extend_from_slice(&offsets[..original.atom_count()]);
     for (rule, &root) in program.rules().iter().zip(original.roots()) {
         if let Some(head) = rule.head() {
-            let Node::Implies(body, _) = original.nodes()[root] else {
+            let NodeView::Implies(body, _) = original.view().node(root)? else {
                 unreachable!("normal translation constructs implication roots");
             };
-            let disjunction = &mut support[head as usize];
-            *disjunction = Some(match *disjunction {
-                None => body,
-                Some(previous) => push(&mut nodes, Node::Or(previous, body)),
-            });
+            let cursor = &mut cursors[head as usize];
+            bodies[*cursor] = body;
+            *cursor += 1;
         }
     }
-    // The direct translator puts falsum immediately after the atom nodes.
-    let falsum = original.atom_count();
-    for (atom, body) in support.into_iter().enumerate() {
-        let condition = push(&mut nodes, Node::Implies(atom, body.unwrap_or(falsum)));
-        let negative = push(&mut nodes, Node::Implies(condition, falsum));
-        roots.push(push(&mut nodes, Node::Implies(negative, falsum)));
-    }
-    debug_assert_eq!(nodes.len(), count);
-    Theory::new(original.atom_count(), nodes, roots, limits)
+    Ok((offsets, bodies))
 }

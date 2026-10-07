@@ -77,7 +77,7 @@ fn disjunction_positive_cycles_and_unmentioned_atoms_preserve_minimality() {
     assert_eq!(
         compare(&theory(
             3,
-            vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
             vec![2]
         )),
         BTreeSet::from([vec![0], vec![1]])
@@ -86,10 +86,10 @@ fn disjunction_positive_cycles_and_unmentioned_atoms_preserve_minimality() {
         compare(&theory(
             2,
             vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::Implies(0, 1),
-                Node::Implies(1, 0)
+                Node::atom(0),
+                Node::atom(1),
+                Node::implies(0, 1),
+                Node::implies(1, 0)
             ],
             vec![2, 3]
         )),
@@ -108,10 +108,10 @@ fn choices_double_negation_and_constraints_use_the_frozen_candidate() {
         compare(&theory(
             1,
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Implies(0, 1),
-                Node::Or(0, 2)
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::or_pair([0, 2])
             ],
             vec![3]
         )),
@@ -122,11 +122,11 @@ fn choices_double_negation_and_constraints_use_the_frozen_candidate() {
         compare(&theory(
             1,
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Implies(0, 1),
-                Node::Implies(2, 1),
-                Node::Implies(3, 0)
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::implies(2, 1),
+                Node::implies(3, 0)
             ],
             vec![4]
         )),
@@ -137,10 +137,10 @@ fn choices_double_negation_and_constraints_use_the_frozen_candidate() {
         compare(&theory(
             1,
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Implies(0, 1),
-                Node::Implies(2, 1)
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::implies(2, 1)
             ],
             vec![3]
         ))
@@ -149,7 +149,7 @@ fn choices_double_negation_and_constraints_use_the_frozen_candidate() {
     assert!(
         compare(&theory(
             1,
-            vec![Node::Atom(0), Node::False, Node::Implies(0, 1)],
+            vec![Node::atom(0), Node::falsum(), Node::implies(0, 1)],
             vec![0, 2]
         ))
         .is_empty()
@@ -162,23 +162,27 @@ fn zero_atoms_and_empty_roots_are_total() {
         compare(&theory(0, vec![], vec![])),
         BTreeSet::from([vec![]])
     );
-    assert!(compare(&theory(0, vec![Node::False], vec![0])).is_empty());
+    assert!(compare(&theory(0, vec![Node::falsum()], vec![0])).is_empty());
     assert_eq!(
-        compare(&theory(0, vec![Node::False, Node::Implies(0, 0)], vec![1])),
+        compare(&theory(
+            0,
+            vec![Node::falsum(), Node::implies(0, 0)],
+            vec![1]
+        )),
         BTreeSet::from([vec![]])
     );
 }
 
 fn generated(atoms: usize, operations: &[(u8, usize, usize)], roots: &[bool]) -> Theory {
-    let mut nodes: Vec<_> = (0..atoms).map(Node::Atom).collect();
-    nodes.push(Node::False);
+    let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
+    nodes.push(Node::falsum());
     for &(operation, left, right) in operations {
         let left = left % nodes.len();
         let right = right % nodes.len();
         nodes.push(match operation % 3 {
-            0 => Node::And(left, right),
-            1 => Node::Or(left, right),
-            _ => Node::Implies(left, right),
+            0 => Node::and_pair([left, right]),
+            1 => Node::or_pair([left, right]),
+            _ => Node::implies(left, right),
         });
     }
     let selected = roots
@@ -203,7 +207,7 @@ proptest! {
 
 #[test]
 fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
-    let input = theory(1, vec![Node::Atom(0)], vec![0]);
+    let input = theory(1, vec![Node::atom(0)], vec![0]);
     let mut exact = by_clauses(
         &input,
         Limits {
@@ -232,7 +236,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
     ));
     assert!(!refused.exhausted());
     assert!(refused.next().is_none());
-    let contradiction = theory(0, vec![Node::False], vec![0]);
+    let contradiction = theory(0, vec![Node::falsum()], vec![0]);
     let mut no_candidates = by_clauses(
         &contradiction,
         Limits {
@@ -277,13 +281,13 @@ fn verified_models_precede_the_history_limit_stop() {
     let choice = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
-            Node::Atom(1),
-            Node::Implies(4, 1),
-            Node::Or(4, 5),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::or_pair([0, 2]),
+            Node::atom(1),
+            Node::implies(4, 1),
+            Node::or_pair([4, 5]),
         ],
         vec![3, 6],
     );
@@ -352,8 +356,8 @@ fn verified_model_precedes_the_final_exclusion_work_stop() {
 
 #[test]
 fn foreign_identity_verification_limits_and_cancelled_enumeration_are_incomplete() {
-    let input = theory(1, vec![Node::Atom(0)], vec![0]);
-    let foreign = theory(1, vec![Node::Atom(0)], vec![0]);
+    let input = theory(1, vec![Node::atom(0)], vec![0]);
+    let foreign = theory(1, vec![Node::atom(0)], vec![0]);
     assert!(matches!(
         check(
             &input,
@@ -385,12 +389,12 @@ fn foreign_identity_verification_limits_and_cancelled_enumeration_are_incomplete
 
 #[test]
 fn repeated_commuted_classical_gates_fit_one_auxiliary_without_changing_reducts() {
-    let mut nodes = vec![Node::Atom(0), Node::Atom(1)];
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
     for index in 0..512 {
         nodes.push(if index % 2 == 0 {
-            Node::Or(0, 1)
+            Node::or_pair([0, 1])
         } else {
-            Node::Or(1, 0)
+            Node::or_pair([1, 0])
         });
     }
     let input = theory(2, nodes, (2..514).collect());

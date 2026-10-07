@@ -2,20 +2,25 @@
 
 use super::*;
 use crate::{Cancellation, SearchLimits, SearchStatistics};
+use zetesis_ferraris::Node;
 
 fn input() -> Theory {
     Theory::new(
         3,
-        vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Implies(0, 3),
-            Node::Or(0, 4),
-            Node::Or(1, 2),
-            Node::And(5, 6),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::falsum(),
+                Node::implies(0, 3),
+                Node::or_pair([0, 4]),
+                Node::or_pair([1, 2]),
+                Node::and_pair([5, 6]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![7],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -49,7 +54,9 @@ fn interrupted_reencoding_matches_fresh_candidate_state() {
     let cancellation = Cancellation::default();
     let limits = AdmissionLimits::default();
     let mut workspace = Workspace::default();
-    workspace.reserve(&theory, limits).unwrap();
+    workspace
+        .reserve(&theory, limits, &mut budget(&cancellation, u64::MAX))
+        .unwrap();
     let retained = workspace.retained_bytes();
     for mask in [7, 0, 5, 2, 7, 1, 6, 3, 4] {
         let candidate =
@@ -75,7 +82,9 @@ fn encoding_reuses_the_reserved_vector_allocations() {
     let limits = AdmissionLimits::default();
     let cancellation = Cancellation::default();
     let mut workspace = Workspace::default();
-    workspace.reserve(&theory, limits).unwrap();
+    workspace
+        .reserve(&theory, limits, &mut budget(&cancellation, u64::MAX))
+        .unwrap();
     workspace
         .encode(&theory, None, limits, &mut budget(&cancellation, 10_000))
         .unwrap();

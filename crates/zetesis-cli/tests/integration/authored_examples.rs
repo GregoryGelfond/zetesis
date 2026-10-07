@@ -66,7 +66,7 @@ fn default_limits_admit_the_complete_sudoku_grid() {
 }
 
 #[test]
-fn worker_scaling_override_reaches_the_explicit_solve_options() {
+fn memory_override_reaches_the_explicit_solve_options() {
     use zetesis_cli::Invocation;
     let profile = scalability::profiles(Some(300_000_000))[0];
     let invocation = Invocation::try_parse_from(
@@ -80,5 +80,5 @@ fn worker_scaling_override_reaches_the_explicit_solve_options() {
     };
     // Parsing the maintained invocation establishes that the optional profile
     // flag is accepted by the actual command, rather than only by a mock runner.
-    assert_eq!(options.max_expansion_work, Some(300_000_000));
+    assert_eq!(options.memory, 300_000_000);
 }

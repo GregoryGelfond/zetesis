@@ -14,12 +14,16 @@ fn choice() -> Theory {
     // a OR NOT a has both {} and {a} as stable models.
     Theory::new(
         1,
-        vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Implies(1, 0),
-            Node::Or(1, 2),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::implies(1, 0),
+                Node::or_pair([1, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3],
         AdmissionLimits::default(),
     )
@@ -40,7 +44,8 @@ fn enabling_clocks_preserves_models_and_all_deterministic_counters() {
         // a <- a has only the empty stable model, though {a} models the formula.
         Theory::new(
             1,
-            vec![Node::Atom(0), Node::Implies(0, 0)],
+            zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::implies(0, 0)], vec![])
+                .unwrap(),
             vec![1],
             AdmissionLimits::default(),
         )

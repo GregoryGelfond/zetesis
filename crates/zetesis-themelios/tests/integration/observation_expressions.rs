@@ -113,7 +113,10 @@ fn expression_observations_preserve_the_logical_theory() {
     let plain = formula(source);
     let shown = formula(&format!("{source} #show. #show f(X+10):p(X),X*2>3."));
     assert_eq!(plain.atoms(), shown.atoms());
-    assert_eq!(plain.theory().nodes(), shown.theory().nodes());
+    assert_eq!(
+        (plain.theory().nodes(), plain.theory().operands()),
+        (shown.theory().nodes(), shown.theory().operands())
+    );
     assert_eq!(plain.theory().roots(), shown.theory().roots());
 }
 

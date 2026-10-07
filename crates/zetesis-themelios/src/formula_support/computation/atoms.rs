@@ -1,7 +1,9 @@
 //! Assigned source atoms carry identity without claiming any membership.
 
 use zetesis_core::PatternRef;
+use zetesis_core::atom_interner::{PreparedPattern, PreparedRows, RowColumn};
 use zetesis_core::catalog::AtomRef;
+use zetesis_core::relation::{Relation, Row};
 
 use super::{Computation, Counters, FormulaFailure, FormulaLimits, ProgramSite, Terms};
 use crate::formula_binding::Binding;
@@ -66,6 +68,80 @@ impl Computation<'_, '_> {
             return Err(owner_failure(location));
         };
         append.assigned(
+            pattern,
+            binding.slots(),
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    pub(crate) fn prepare_pattern<'pattern>(
+        &self,
+        pattern: PatternRef<'pattern>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<PreparedPattern<'pattern>>, FormulaFailure> {
+        let Terms::Append(append) = &self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.prepare_pattern(
+            pattern,
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    pub(crate) fn prepare_rows<'rows, 'source>(
+        &self,
+        pattern: PatternRef<'source>,
+        sources: Vec<&'rows Relation<'source>>,
+        columns: Vec<Option<RowColumn>>,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<PreparedRows<'rows, 'source>>, FormulaFailure> {
+        let Terms::Append(append) = &self.terms else {
+            return Err(owner_failure(work.location));
+        };
+        append.prepare_rows(
+            pattern,
+            sources,
+            columns,
+            self.support.workspace_bytes(),
+            work,
+        )
+    }
+
+    pub(crate) fn row_atom(
+        &mut self,
+        pattern: &PreparedRows<'_, '_>,
+        rows: &[Row<'_, '_>],
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.rows_assigned(
+            pattern,
+            rows,
+            self.support.workspace_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    pub(crate) fn prepared_atom(
+        &mut self,
+        pattern: &PreparedPattern<'_>,
+        binding: &Binding<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<SourceAtom, FormulaFailure> {
+        let Terms::Append(append) = &mut self.terms else {
+            return Err(owner_failure(location));
+        };
+        append.prepared_assigned(
             pattern,
             binding.slots(),
             self.support.workspace_bytes(),

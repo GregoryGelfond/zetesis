@@ -24,13 +24,13 @@ use zetesis_theory_support::theories::theory;
 /// a <- b.  b <- a.  a | b | c.  A positive cycle the support law misses.
 fn cycle() -> Theory {
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Implies(1, 0),
-        Node::Implies(0, 1),
-        Node::Or(0, 1),
-        Node::Or(5, 2),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::implies(1, 0),
+        Node::implies(0, 1),
+        Node::or_pair([0, 1]),
+        Node::or_pair([5, 2]),
     ];
     theory(3, nodes, vec![3, 4, 6])
 }
@@ -38,17 +38,17 @@ fn cycle() -> Theory {
 /// {a}. {b}. c <- a, b.  c <- c.  A self-supporting rule.
 fn self_support() -> Theory {
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::False,
-        Node::Implies(0, 3),
-        Node::Or(0, 4),
-        Node::Implies(1, 3),
-        Node::Or(1, 6),
-        Node::And(0, 1),
-        Node::Implies(8, 2),
-        Node::Implies(2, 2),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::falsum(),
+        Node::implies(0, 3),
+        Node::or_pair([0, 4]),
+        Node::implies(1, 3),
+        Node::or_pair([1, 6]),
+        Node::and_pair([0, 1]),
+        Node::implies(8, 2),
+        Node::implies(2, 2),
     ];
     theory(3, nodes, vec![5, 7, 9, 10])
 }
@@ -58,13 +58,13 @@ fn self_support() -> Theory {
 /// the constraint's negative literal is false under it and freezes to falsum.
 fn loop_under_constraint() -> Theory {
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::False,
-        Node::Implies(1, 0),
-        Node::Implies(0, 1),
-        Node::Implies(0, 2),
-        Node::Implies(5, 2),
+        Node::atom(0),
+        Node::atom(1),
+        Node::falsum(),
+        Node::implies(1, 0),
+        Node::implies(0, 1),
+        Node::implies(0, 2),
+        Node::implies(5, 2),
     ];
     theory(2, nodes, vec![3, 4, 6])
 }
@@ -74,14 +74,14 @@ fn loop_under_constraint() -> Theory {
 /// disjunction above the masked node must still learn from it.
 fn masked_inside_a_consequent() -> Theory {
     let nodes = vec![
-        Node::Atom(0),       // m
-        Node::Atom(1),       // x
-        Node::Atom(2),       // c
-        Node::False,         // 3
-        Node::Implies(0, 3), // not m
-        Node::Or(4, 2),      // not m | c
-        Node::Implies(1, 5), // x -> (not m | c)
-        Node::Implies(2, 2), // c <- c
+        Node::atom(0),         // m
+        Node::atom(1),         // x
+        Node::atom(2),         // c
+        Node::falsum(),        // 3
+        Node::implies(0, 3),   // not m
+        Node::or_pair([4, 2]), // not m | c
+        Node::implies(1, 5),   // x -> (not m | c)
+        Node::implies(2, 2),   // c <- c
     ];
     theory(3, nodes, vec![0, 1, 6, 7])
 }

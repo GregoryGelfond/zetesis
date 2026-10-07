@@ -39,25 +39,20 @@ fn progress(outcome: &PublicationOutcome) -> Progress {
     progress
 }
 
-fn checked_footer(outcome: &PublicationOutcome, options: &mut Options) -> serde_json::Value {
+fn checked_footer(outcome: &PublicationOutcome) -> serde_json::Value {
     assert_eq!(outcome.publication().models(), 0);
-    checked_footer_records(outcome, options, &[])
+    checked_footer_records(outcome, &[])
 }
 
-fn checked_footer_records(
-    outcome: &PublicationOutcome,
-    options: &mut Options,
-    records: &[u8],
-) -> serde_json::Value {
+fn checked_footer_records(outcome: &PublicationOutcome, records: &[u8]) -> serde_json::Value {
     let expected_prefix = [PREFIX, records].concat();
     let expected = summary(&Ok(progress(outcome)), FIXTURE_BYTES).unwrap();
     assert!(!expected.is_empty());
     for maximum in 0..expected.len() {
-        options.max_json_record_bytes = maximum;
         let mut sink = Vec::new();
         let mut document = Document::new(&mut sink, true).unwrap();
         document.write_all(records).unwrap();
-        let failure = document.finish(Ok(progress(outcome)), options).unwrap_err();
+        let failure = document.finish(Ok(progress(outcome)), maximum).unwrap_err();
         assert!(matches!(
             *failure.cause,
             RunError::JsonRecord(ViewError::Bytes)
@@ -80,11 +75,12 @@ fn checked_footer_records(
             "footer must be admitted before its first byte"
         );
     }
-    options.max_json_record_bytes = expected.len();
     let mut sink = Vec::new();
     let mut document = Document::new(&mut sink, true).unwrap();
     document.write_all(records).unwrap();
-    let completed = document.finish(Ok(progress(outcome)), options).unwrap();
+    let completed = document
+        .finish(Ok(progress(outcome)), expected.len())
+        .unwrap();
     assert!(completed.publication().summary());
     assert_eq!(&sink[expected_prefix.len()..], expected);
     serde_json::from_slice(&sink).unwrap()
@@ -96,7 +92,7 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
         ("p. :- p.", "closure"),
         ("a | b. :- a. :- b.", "countermodel"),
     ] {
-        let mut options = options(oracle);
+        let options = options(oracle);
         let outcome = crate::run_finalized_with_diagnostics(
             source.into(),
             &options,
@@ -108,7 +104,7 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
         assert!(outcome.semantic().unsatisfiable());
         assert_eq!(outcome.publication().models(), 0);
         assert!(outcome.report().unwrap().phase_timings.is_some());
-        let document = checked_footer(&outcome, &mut options);
+        let document = checked_footer(&outcome);
         assert_eq!(document["outcome"]["status"], "unsatisfiable");
         assert_eq!(document["outcome"]["verified_models"], 0);
         assert_eq!(document["models"], serde_json::json!([]));
@@ -118,17 +114,18 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
 #[test]
 fn batched_cpu_footer_admission_preserves_exact_completion() {
     const MARKER: &[u8] = b"],\"outcome\":";
-    let mut options = options("countermodel");
-    options.completion_workers = std::num::NonZeroUsize::new(2).unwrap();
-    options.batch_size = std::num::NonZeroUsize::new(2).unwrap();
+    let options = options("countermodel");
+    let mut config = crate::PublicationConfig::from(&options);
+    config.solve.completion_workers = std::num::NonZeroUsize::new(2).unwrap();
+    config.solve.batch_size = std::num::NonZeroUsize::new(2).unwrap();
     // Two singleton answer sets remain after supported-candidate selection.
     // Both must pass the actual CPU residual-completion owner.
     let mut original = Vec::new();
-    let outcome = crate::run_finalized_with_diagnostics(
-        "a | b.".into(),
-        &options,
+    let outcome = crate::publication_fixture::json(
+        "a | b.",
+        &config,
+        FIXTURE_BYTES,
         &mut original,
-        &mut io::sink(),
         &Cancellation::default(),
     )
     .unwrap();
@@ -167,8 +164,7 @@ fn batched_cpu_footer_admission_preserves_exact_completion() {
         .windows(MARKER.len())
         .position(|bytes| bytes == MARKER)
         .unwrap();
-    let document =
-        checked_footer_records(&outcome, &mut options, &original[PREFIX.len()..boundary]);
+    let document = checked_footer_records(&outcome, &original[PREFIX.len()..boundary]);
     assert_eq!(document, parsed);
     let encoded = &document["statistics"]["execution"];
     assert!(encoded["adapter"].is_null());
@@ -198,15 +194,22 @@ fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
     ] {
         let mut options = options("closure");
         options.source_batching = selection;
+        let mut config = crate::PublicationConfig::from(&options);
         if source_stop {
-            options.max_source_work = 0;
+            config.solve.max_source_work = 0;
         } else {
-            options.max_work = 0;
+            config.solve.max_work = 0;
         }
-        let outcome = crate::run_finalized_with_diagnostics(
+        let admitted = zetesis_themelios::admit_extended(
             "a.".into(),
-            &options,
-            &mut io::sink(),
+            zetesis_themelios::AdmissionOptions::default(),
+            zetesis_themelios::ExpansionLimits::default(),
+        )
+        .unwrap();
+        let outcome = crate::publish_prepared(
+            crate::PreparedInput::admitted(&admitted),
+            &config,
+            &mut crate::JsonRenderer::new(io::sink(), FIXTURE_BYTES, config.solve.max_atoms),
             &mut io::sink(),
             &Cancellation::default(),
         )
@@ -230,7 +233,7 @@ fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
             }
         };
         assert_eq!(stats.last_stop, Some(expected));
-        let document = checked_footer(&outcome, &mut options);
+        let document = checked_footer(&outcome);
         assert_eq!(document["outcome"]["status"], "incomplete");
         assert_eq!(document["models"], serde_json::json!([]));
         let stop = &document["statistics"]["shared_execution"]["last_stop"];
@@ -241,7 +244,7 @@ fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
 
 #[test]
 fn footer_capacity_failure_cannot_replace_a_real_source_refusal() {
-    let mut options = options("countermodel");
+    let options = options("countermodel");
     let failure = crate::run_finalized_with_diagnostics(
         "#external a.".into(),
         &options,
@@ -261,11 +264,10 @@ fn footer_capacity_failure_cannot_replace_a_real_source_refusal() {
             Err(RunError::JsonRecord(ViewError::Bytes))
         ));
     }
-    options.max_json_record_bytes = expected.len() - 1;
     let mut sink = Vec::new();
     let retained = Document::new(&mut sink, true)
         .unwrap()
-        .finish(result, &options)
+        .finish(result, expected.len() - 1)
         .unwrap_err();
     assert!(matches!(*retained.cause, RunError::FormulaAdmission(_)));
     assert_eq!(retained.cause.to_string(), original);

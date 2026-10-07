@@ -55,7 +55,9 @@ pub use candidate::{
     SeedAtom, SeedAtoms, SeedError, SeedSelection, SeedSelectionError, SeedView,
 };
 pub use carrier::{AtomIter, CarrierAtom, CarrierError, CarrierFailure};
-pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
+pub use ground::{
+    AtomId, GroundProgram, GroundRule, StaticError, StaticFailure, StaticLimits, WordError,
+};
 pub use model::{
     AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelFailure, ModelIter,
     ModelOrder, ModelPublication, ModelPublicationFailure,

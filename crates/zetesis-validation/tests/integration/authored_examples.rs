@@ -25,11 +25,12 @@ fn reviewed_default_sources_retain_their_shared_typed_contracts() {
             "scalability/n-queens.lp",
             "scalability/pigeonhole.lp",
             "scalability/mastermind.lp",
+            "scalability/mastermind-nested.lp",
             "sudoku.lp",
             "einstein-riddle.lp"
         ]
     );
-    for (workload, count) in workloads.iter().zip([92, 0, 6_080, 1, 1]) {
+    for (workload, count) in workloads.iter().zip([92, 0, 6_080, 1, 1, 1]) {
         assert!(workload.is_authored());
         assert!(!workload.is_amended());
         assert!(!workload.is_generated());
@@ -52,8 +53,9 @@ fn reviewed_default_sources_retain_their_shared_typed_contracts() {
             value["sources"][0]["derived_sha256"]
         );
     }
-    assert_eq!(workloads[3].contract().unwrap().witnesses()[0].len(), 81);
-    assert_eq!(workloads[4].contract().unwrap().witnesses()[0].len(), 5);
+    assert_eq!(workloads[3].contract().unwrap().witnesses()[0].len(), 6);
+    assert_eq!(workloads[4].contract().unwrap().witnesses()[0].len(), 81);
+    assert_eq!(workloads[5].contract().unwrap().witnesses()[0].len(), 5);
 }
 
 #[test]
@@ -61,35 +63,36 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
     let corpus = examples::load(&root().join("correctness"), examples::Limits::default()).unwrap();
     let workloads =
         scalability::workloads(&corpus, &root(), true, WorkloadLimits::default()).unwrap();
-    assert_eq!(workloads.len(), 13);
+    assert_eq!(workloads.len(), 15);
     assert_eq!(
         workloads
             .iter()
             .map(Workload::identity)
             .collect::<BTreeSet<_>>()
             .len(),
-        13
+        15
     );
     assert_eq!(
         workloads
             .iter()
             .filter(|workload| workload.is_authored())
             .count(),
-        10
+        12
     );
     assert_eq!(
         workloads
             .iter()
             .filter(|workload| workload.is_amended())
             .count(),
-        5
+        6
     );
-    assert_eq!(workloads[11].entry(), "sudoku.lp");
-    assert_eq!(workloads[12].entry(), "einstein-riddle.lp");
+    assert_eq!(workloads[9].entry(), "scalability/mastermind-nested.lp");
+    assert_eq!(workloads[13].entry(), "sudoku.lp");
+    assert_eq!(workloads[14].entry(), "einstein-riddle.lp");
     for workload in &workloads {
         assert_eq!(workload.contract().is_none(), workload.is_amended());
     }
-    let edits: Vec<_> = workloads[..8]
+    let edits: Vec<_> = workloads[..9]
         .iter()
         .map(|workload| {
             let value = serde_json::to_value(workload).unwrap();
@@ -107,6 +110,8 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
     assert_eq!(edits[6][0]["before"], "6");
     assert_eq!(edits[6][0]["after"], "5");
     assert_eq!(edits[7], serde_json::json!([]));
+    assert_eq!(edits[8][0]["before"], "6");
+    assert_eq!(edits[8][0]["after"], "8");
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]

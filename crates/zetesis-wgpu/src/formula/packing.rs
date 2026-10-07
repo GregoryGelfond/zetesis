@@ -2,7 +2,7 @@
 
 use super::{FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict, ResidualReason};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_ferraris::{Interpretation, Node, Theory};
+use zetesis_ferraris::{Interpretation, Theory};
 
 pub(super) const PARAM_BYTES: u64 = 48;
 pub(super) const RESULT_WORDS: usize = 6;
@@ -45,6 +45,8 @@ pub(super) struct Shape {
     pub(super) atoms: u32,
     pub(super) nodes: u32,
     pub(super) roots: u32,
+    pub(super) edges: u32,
+    pub(super) wide_words: u32,
     pub(super) variables: u32,
     pub(super) words: u32,
     pub(super) node_bytes: u64,
@@ -56,13 +58,8 @@ impl Shape {
         let atoms = address(theory.atom_count())?;
         let nodes = address(theory.nodes().len())?;
         let roots = address(theory.roots().len())?;
-        let auxiliary = address(
-            theory
-                .nodes()
-                .iter()
-                .filter(|node| !matches!(node, Node::Atom(_)))
-                .count(),
-        )?;
+        let graph = crate::formula_graph::Shape::new(theory, device)?;
+        let auxiliary = graph.auxiliary;
         let variables = atoms
             .checked_add(auxiliary)
             .ok_or_else(|| capacity("formula variable addresses overflow"))?;
@@ -74,29 +71,33 @@ impl Shape {
             return Err(capacity("formula loop increment overflows u32"));
         }
         let words = atoms.div_ceil(32);
-        let node_bytes = mul(u64::from(nodes.max(1)), 16)?;
-        buffer(node_bytes, device)?;
-        let setup_work = nodes
-            .checked_mul(2)
-            .and_then(|n| n.checked_add(atoms))
-            .and_then(|n| n.checked_add(roots))
-            .ok_or_else(|| capacity("formula setup work overflows"))?;
-        let sweep_work = nodes
-            .checked_mul(9)
-            .and_then(|n| n.checked_add(atoms))
-            .and_then(|n| n.checked_add(65))
-            .ok_or_else(|| capacity("formula sweep work overflows"))?;
-        Ok(Self {
+        let node_bytes = graph.bytes;
+        let mut shape = Self {
             theory: theory.clone(),
             atoms,
             nodes,
             roots,
+            edges: graph.edges,
+            wide_words: graph.wide_words,
             variables,
             words,
             node_bytes,
-            setup_work,
-            sweep_work,
-        })
+            setup_work: 0,
+            sweep_work: 0,
+        };
+        shape.setup_work = nodes
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(shape.edges))
+            .and_then(|n| n.checked_add(atoms))
+            .and_then(|n| n.checked_add(roots))
+            .ok_or_else(|| capacity("formula setup work overflows"))?;
+        shape.sweep_work = nodes
+            .checked_mul(9)
+            .and_then(|n| shape.edges.checked_mul(2).and_then(|e| n.checked_add(e)))
+            .and_then(|n| n.checked_add(atoms))
+            .and_then(|n| n.checked_add(65))
+            .ok_or_else(|| capacity("formula sweep work overflows"))?;
+        Ok(shape)
     }
 }
 

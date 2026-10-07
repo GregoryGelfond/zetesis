@@ -24,14 +24,14 @@ fn restrictions_keep_the_original_reduct_and_semantic_instance() {
     let original = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
         ],
         vec![2, 3],
     );
-    let guard = theory(2, vec![Node::Atom(0)], vec![0]);
+    let guard = theory(2, vec![Node::atom(0)], vec![0]);
     let mut search =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(search.theory().same_instance(&original));
@@ -49,9 +49,9 @@ fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let first = search.next().unwrap().unwrap();
     assert!(key(&first).is_empty());
-    let tautology = theory(2, vec![Node::False, Node::Implies(0, 0)], vec![1]);
+    let tautology = theory(2, vec![Node::falsum(), Node::implies(0, 0)], vec![1]);
     search.restrict_candidates(&tautology).unwrap();
-    let positive = theory(2, vec![Node::Atom(0)], vec![0]);
+    let positive = theory(2, vec![Node::atom(0)], vec![0]);
     search.restrict_candidates(&positive).unwrap();
     assert_eq!(
         remaining(&mut search),
@@ -68,7 +68,7 @@ fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
     search.restrict_candidates(&positive).unwrap();
     let negative = theory(
         2,
-        vec![Node::False, Node::Atom(0), Node::Implies(1, 0)],
+        vec![Node::falsum(), Node::atom(0), Node::implies(1, 0)],
         vec![2],
     );
     search.restrict_candidates(&negative).unwrap();
@@ -86,7 +86,7 @@ fn a_late_capacity_failure_restores_auxiliary_ids_clauses_and_live_cursor() {
     let before = search.statistics();
     let guard = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     );
     assert!(matches!(
@@ -106,7 +106,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
     let original = choices(2);
     let guard = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     );
     let cancellation = Cancellation::default();
@@ -148,7 +148,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
     let zero = choices(0);
     let mut search = by_clauses(&zero, Limits::default(), Cancellation::default()).unwrap();
     search
-        .restrict_candidates(&theory(0, vec![Node::False], vec![0]))
+        .restrict_candidates(&theory(0, vec![Node::falsum()], vec![0]))
         .unwrap();
     assert!(remaining(&mut search).is_empty());
 }
@@ -162,12 +162,12 @@ proptest! {
         positive_loop in any::<bool>(),
     ) {
         let original = if positive_loop {
-            theory(3, vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1), Node::Implies(0, 1), Node::Implies(1, 0)], vec![2, 3, 4])
+            theory(3, vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1]), Node::implies(0, 1), Node::implies(1, 0)], vec![2, 3, 4])
         } else { choices(3) };
-        let mut nodes = vec![Node::False, Node::Atom(0), Node::Atom(1), Node::Atom(2)];
+        let mut nodes = vec![Node::falsum(), Node::atom(0), Node::atom(1), Node::atom(2)];
         for (operation, a, b) in instructions {
             let a=a % nodes.len();let b=b % nodes.len();
-            nodes.push(match operation {0=>Node::And(a,b),1=>Node::Or(a,b),_=>Node::Implies(a,b)});
+            nodes.push(match operation {0=>Node::and_pair([a, b]),1=>Node::or_pair([a, b]),_=>Node::implies(a,b)});
         }
         let roots=assert_roots.into_iter().enumerate().filter_map(|(index, selected)| selected.then_some(index % nodes.len())).collect();
         let guard=theory(3,nodes,roots);

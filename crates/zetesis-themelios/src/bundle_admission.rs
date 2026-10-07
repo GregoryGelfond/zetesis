@@ -263,7 +263,31 @@ pub fn admit_bundle_extended(
     options: BundleAdmissionOptions,
     limits: ExpansionLimits,
 ) -> Result<AdmittedBundle, BundleAdmissionFailure> {
-    match compile_bundle(&bundle, options, limits) {
+    admit_bundle_with_control(bundle, options, limits, None)
+}
+
+/// Admit the original bundle with shared cancellation and deadline control.
+/// Each bounded upstream source inspection is bracketed by polls; expansion
+/// uses the same token throughout its existing checked operations.
+///
+/// # Errors
+/// Retains the original bundle with ordinary admission errors or interruption.
+pub fn admit_bundle_extended_with_cancellation(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    limits: ExpansionLimits,
+    cancellation: &zetesis_cpu::Cancellation,
+) -> Result<AdmittedBundle, BundleAdmissionFailure> {
+    admit_bundle_with_control(bundle, options, limits, Some(cancellation.clone()))
+}
+
+fn admit_bundle_with_control(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    limits: ExpansionLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
+) -> Result<AdmittedBundle, BundleAdmissionFailure> {
+    match compile_bundle(&bundle, options, limits, cancellation) {
         Ok(compiled) => Ok(AdmittedBundle {
             program: compiled.program,
             bundle,
@@ -282,7 +306,11 @@ fn compile_bundle(
     bundle: &SourceBundle,
     options: BundleAdmissionOptions,
     limits: ExpansionLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<extended::Compilation, BundleAdmissionError> {
+    let budget = crate::expansion::Budget::new(limits, options.core_limits.max_templates)
+        .with_cancellation(cancellation);
+    budget.poll(crate::ProgramSite::program())?;
     check_include_identity(bundle)?;
     let mut definitions = BTreeMap::new();
     let mut statements = Vec::new();
@@ -290,6 +318,10 @@ fn compile_bundle(
     let mut metadata_count = 0;
     let mut source_metadata = metadata::Builder::default();
     for source in bundle.sources() {
+        budget.poll(crate::ProgramSite::source(Location {
+            source: source.id(),
+            span: source.source().span(),
+        }))?;
         let local = AdmissionOptions {
             source_id: source.id(),
             max_source_bytes: 0,
@@ -319,6 +351,10 @@ fn compile_bundle(
         if !raised.diagnostics().is_empty() {
             return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
         }
+        budget.poll(crate::ProgramSite::source(Location {
+            source: source.id(),
+            span: source.source().span(),
+        }))?;
         metadata::collect(raised.program(), &mut source_metadata)?;
         statements.extend(
             raised
@@ -339,7 +375,7 @@ fn compile_bundle(
     Ok(extended::compile_owned(
         &source,
         options.core_limits,
-        limits,
+        budget,
         location.into(),
         source_metadata.finish(location.into())?,
     )?)

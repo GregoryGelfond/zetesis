@@ -32,11 +32,7 @@ fn thread_comparison_varies_only_native_threads() {
         "1,2,4,8,14",
         "--grounder",
         "eager",
-        "--completion-workers",
-        "2",
-        "--batch-size",
-        "17",
-        "--max-expansion-work",
+        "--memory",
         "300000000",
     ]);
     let plan = options.plan().unwrap();
@@ -44,17 +40,15 @@ fn thread_comparison_varies_only_native_threads() {
     assert_eq!(
         plan.profiles()
             .iter()
-            .map(|p| p.workers.get())
+            .map(|p| p.threads.get())
             .collect::<Vec<_>>(),
         [1, 2, 4, 8, 14]
     );
     let first = plan.profiles()[0];
-    assert_eq!(first.max_expansion_work, Some(300_000_000));
-    assert_eq!(first.completion_workers.get(), 2);
-    assert_eq!(first.batch_size.get(), 17);
+    assert_eq!(first.memory_bytes, Some(300_000_000));
     for profile in plan.profiles() {
         let normalized = selected::NativeExecution {
-            workers: first.workers,
+            threads: first.threads,
             ..*profile
         };
         assert_eq!(

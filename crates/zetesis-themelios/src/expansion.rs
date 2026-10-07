@@ -27,14 +27,16 @@ pub struct ExpansionLimits {
     /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
     /// storage and constructed value node/spelling/frame reservations. Positive
     /// structural patterns also charge plan/cursor cells, constructor and slot
-    /// names, and requested capture-delta cells before allocation. Captures
-    /// borrow canonical terms; the delta does not copy captured payload.
+    /// names, and capture-delta capacity growth before allocation. Each join
+    /// reuses its delta; retained capacity is also counted by formula support
+    /// storage. Captures borrow canonical terms without copying their payload.
     /// Evaluated positive positions reserve copied term cells/text, flat
     /// operations, check instructions and initial distinct required-input slots.
     /// Conditional alternatives additionally charge scoped variable payload,
     /// including required-input copies, binding vectors and source atom/body-element
-    /// carriers. Aggregate consumer plans reserve instruction cells, required
-    /// outer slots, readiness/producers and temporary scheduling cells.
+    /// carriers. Aggregate family summaries reserve inherited slot indices once;
+    /// consumer plans borrow those reads and reserve scalar/range input slots,
+    /// instruction cells, readiness/producers and temporary scheduling cells.
     /// Ordinary Boolean choice keys additionally reserve their scalar identity payload.
     /// Finite affine binding analysis reserves expression/coefficient frames,
     /// inequalities and endpoint arrays before allocation.
@@ -44,6 +46,14 @@ pub struct ExpansionLimits {
     /// excluded, as do other AST carriers, provenance and allocator overhead.
     /// Original input structure remains bounded separately by admission options.
     pub max_scalar_bytes: usize,
+    /// Maximum named logical bytes in one materialized source-alternative family.
+    /// Pool constructors, local conditions, dependency projections and fact
+    /// intervals check their complete term/text/carrier envelope before cloning.
+    /// Repeated families do not accumulate this allowance. It is independent of
+    /// cumulative `max_values` and `max_scalar_bytes`; other retained program
+    /// state, spare allocation capacity, provenance and allocator overhead remain
+    /// outside this envelope. The host signed allocation extent is also checked.
+    pub max_family_bytes: usize,
     /// Maximum retained origin-evidence entries. Canonical-program evidence carries a
     /// statement identity and an optional real location; source-only relational
     /// evidence retains its parsed locations.
@@ -60,6 +70,7 @@ impl Default for ExpansionLimits {
             max_templates: 100_000,
             max_values: 1_000_000,
             max_scalar_bytes: 16_777_216,
+            max_family_bytes: 16_777_216,
             max_origin_locations: 1_000_000,
             max_metadata_statements: 1_024,
         }
@@ -98,6 +109,8 @@ pub enum ExpansionResource {
     /// Copied scalar payload, finite-pool positions, term/plan storage and
     /// constructed-value reservations and borrowed structural-capture delta cells.
     ScalarBytes,
+    /// Named logical bytes of one materialized source-alternative family, not traffic.
+    FamilyBytes,
     /// Retained origin-evidence entries in templates and expanded alternatives.
     Origins,
     /// Original declaration/display occurrences, counted before canonicalization.
@@ -294,8 +307,12 @@ impl Budget {
         mut self,
         cancellation: Option<zetesis_cpu::Cancellation>,
     ) -> Self {
-        self.cancellation = cancellation;
+        self.set_cancellation(cancellation);
         self
+    }
+
+    pub(crate) fn set_cancellation(&mut self, cancellation: Option<zetesis_cpu::Cancellation>) {
+        self.cancellation = cancellation;
     }
 
     pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
@@ -309,6 +326,22 @@ impl Budget {
                 .map_err(|reason| ExpansionFailure::Interrupted { reason, location })?;
         }
         Ok(())
+    }
+
+    /// A nonaccumulating pre-materialization bound; successful checks do not
+    /// consume cumulative expansion counters or a constraint scalar receipt.
+    pub(crate) fn check_family(
+        &self,
+        bytes: u128,
+        location: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
+        self.poll(location)?;
+        check(
+            ExpansionResource::FamilyBytes,
+            bytes,
+            self.limits.max_family_bytes.min(isize::MAX as usize),
+            location,
+        )
     }
 
     pub(crate) fn check_metadata(
@@ -371,8 +404,10 @@ impl Budget {
                 (&mut self.scalar_bytes, self.limits.max_scalar_bytes)
             }
             ExpansionResource::Origins => (&mut self.origins, self.limits.max_origin_locations),
-            ExpansionResource::Constants | ExpansionResource::MetadataStatements => {
-                unreachable!("source occurrence counts are checked directly")
+            ExpansionResource::Constants
+            | ExpansionResource::MetadataStatements
+            | ExpansionResource::FamilyBytes => {
+                unreachable!("source occurrence and family bounds are checked directly")
             }
         };
         let observed = used.saturating_add(amount);

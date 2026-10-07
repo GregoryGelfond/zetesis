@@ -28,11 +28,11 @@ fn header(
     writeln!(
         sink,
         "  configured: workers={}; batch={}; displayed models={} (0=all)",
-        options.workers, options.batch_size, options.models
+        options.workers, config.batch_size, options.models
     )?;
     writeln!(
         sink,
-        "  memory allowance: {} bytes (host physical memory {}); each session byte ceiling not given is the library default scaled by the allowance over 2 GiB; the admission and output ceilings keep their defaults",
+        "  memory allowance: {} bytes (host physical memory {}); shared policy for named input, grounding, solving and output capacities; not resident memory",
         options.memory,
         crate::options::host_memory()
             .map_or_else(|| "unreported".to_owned(), |bytes| bytes.to_string())
@@ -145,127 +145,47 @@ pub(crate) fn write_detailed(
     }
 }
 
-fn closure_limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
-    let share = if o.max_closure_bytes.is_none() {
-        format!(" (collective share of {} workers)", o.workers)
-    } else {
-        String::new()
-    };
+/// The public policy and the actual storage capacities derived from it.
+fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Result<()> {
     writeln!(
         sink,
-        "  independent CPU closure limits: named bytes/owner={}{share}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
-        o.closure_allowance(),
-        o.closure_collective(),
-        o.max_source_work
-    )
-}
-
-/// The ceilings as the session takes them: given, or scaled by the allowance.
-fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Result<()> {
+        "  work policy: cooperative cancellation; no cumulative operation budget"
+    )?;
     if let Some(seconds) = o.time_limit {
         writeln!(
             sink,
             "  requested process time limit: {seconds} s (cooperative; begins after input loading)"
         )?;
     }
-    if o.source_batching != crate::SourceBatching::Independent {
-        writeln!(
-            sink,
-            "  shared CPU limits: source work/batch={}; record visits plus antecedent tests/world={}; collective catalog atoms={}; host payload bytes={}",
-            o.max_source_work, o.max_work, o.max_atoms, c.max_batch_bytes
-        )?;
-    }
+    let resources = o.resources();
+    let source = resources.bundle_limits();
+    let formula = resources.formula_limits();
     writeln!(
         sink,
-        "  search limits: candidates={}; candidate restriction/formula work={}; decisions={}; CPU candidate/lazy GPU source batch/formula verification call work={}",
-        o.max_candidates, o.max_search_work, o.max_search_decisions, o.max_work
+        "  configured storage: source bytes/file={}; source bytes/graph={}; support bytes={}; formula nodes={}; formula operands={}",
+        source.max_file_bytes,
+        source.max_total_bytes,
+        formula.max_support_bytes,
+        formula.theory.max_nodes,
+        formula.theory.max_operands
     )?;
     writeln!(
         sink,
-        "  candidate restriction limits: copied payload bytes={}; atom occurrences={}; allocator/index overhead excluded",
-        c.max_candidate_bytes, o.max_atoms
-    )?;
-    writeln!(
-        sink,
-        "  projection history limits: entries={}; nodes={}; named capacity/overlap bytes={}; work shares the search allowance",
-        o.max_projection_entries, o.max_projection_nodes, c.max_projection_bytes
-    )?;
-    writeln!(
-        sink,
-        "  prepared reduct limits: cold preparation/each query bytes={}; collective owner/worker/result bytes={}; theory and allocator metadata excluded",
-        c.max_reduct_bytes, c.max_completion_scratch_bytes
-    )?;
-    closure_limits(sink, o)?;
-    writeln!(
-        sink,
-        "  requested grounding limits: atoms={}; carrier atoms={}; substitutions={}; ground rules={}; GPU batch bytes={}",
-        o.max_atoms,
-        o.max_carrier_atoms,
-        o.max_substitutions,
-        o.max_ground_rules,
+        "  configured execution storage: candidate bytes={}; reduct bytes/owner={}; completion bytes={}; closure bytes/worker={}; closure bytes/collective={}; batch bytes={}",
+        c.max_candidate_bytes,
+        c.max_reduct_bytes,
+        c.max_completion_scratch_bytes,
+        c.max_closure_bytes,
+        c.max_closure_batch_bytes,
         c.max_batch_bytes
     )?;
-    let formula = crate::admission::formula_limits(o);
     writeln!(
         sink,
-        "  formula profile ceilings: atoms={}; roots={}; nodes={}; source values={}; assignment values/operation={}; generated binding values={}; support rounds={}; work={} (applicable when formula admission is selected)",
-        formula.theory.max_atoms,
-        formula.theory.max_roots,
-        formula.theory.max_nodes,
-        formula.max_domain_values,
-        formula.max_assignment_values,
-        formula.max_generated_values,
-        formula.max_support_rounds,
-        formula.max_work
-    )?;
-    writeln!(
-        sink,
-        "  source limits: bytes/file={}; roots={}; files={}; total bytes={}; include depth={}",
-        o.max_source_bytes,
-        o.max_source_roots,
-        o.max_source_files,
-        o.max_total_source_bytes,
-        o.max_include_depth
-    )?;
-    writeln!(
-        sink,
-        "  expansion limits: work={}; templates={}; values={}; scalar bytes={}; eager support bytes={}",
-        crate::admission::expansion_limits(o).max_term_work,
-        o.max_expanded_templates,
-        o.max_expansion_values,
-        o.max_expansion_bytes,
-        o.max_support_bytes
-    )?;
-    answer_limits(sink, o, c)
-}
-
-fn answer_limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Result<()> {
-    writeln!(
-        sink,
-        "  model construction limits: work={}; bytes={}",
-        c.max_model_work, c.max_model_bytes
-    )?;
-    writeln!(
-        sink,
-        "  objective limits: work={}; bound work={}; bindings/model={}; keys/model={}; key bytes/model={}",
-        o.max_objective_work,
-        o.max_objective_bound_work,
-        o.max_objective_bindings,
-        o.max_objective_keys,
-        c.max_objective_key_bytes
-    )?;
-    writeln!(
-        sink,
-        "  incumbent limits: models={}; atoms={}; bytes={}",
-        o.max_optimal_models, o.max_optimal_atoms, c.max_optimal_bytes
-    )?;
-    writeln!(
-        sink,
-        "  observation limits/model: work={}; bindings={}; terms={}; bytes={}",
-        o.max_observation_work,
-        o.max_observation_bindings,
-        o.max_observation_terms,
-        o.max_observation_bytes
+        "  configured publication storage: model bytes={}; incumbent bytes={}; observation bytes={}; JSON record bytes={}",
+        c.max_model_bytes,
+        c.max_optimal_bytes,
+        resources.observation_limits().max_output_bytes,
+        resources.json_record_bytes()
     )
 }
 
@@ -416,7 +336,7 @@ fn details(
         writeln!(sink, "  interruption: {reason}")?;
     }
     if let Some(stats) = report.countermodel_statistics {
-        formula(sink, options, config, report)?;
+        formula(sink, config, report)?;
         countermodel(
             sink,
             config,
@@ -895,7 +815,6 @@ fn certificate(
 
 fn formula(
     sink: &mut impl Write,
-    options: &Options,
     config: &crate::SolveConfig,
     report: &Details<'_>,
 ) -> io::Result<()> {
@@ -929,7 +848,7 @@ fn formula(
         writeln!(
             sink,
             "  effective execution: backend={backend}; oracle={oracle}; grounder={grounder}; CPU completion requested workers={}; peak preflight workers={}; adapter={}",
-            options.completion_workers, execution.completion.effective_workers, execution.adapter
+            config.completion_workers, execution.completion.effective_workers, execution.adapter
         )?;
         writeln!(
             sink,
@@ -974,7 +893,7 @@ fn formula(
         writeln!(
             sink,
             "  formula batch limits: candidates={}; pending bytes={}",
-            options.batch_size, config.max_batch_bytes
+            config.batch_size, config.max_batch_bytes
         )?;
         if !execution.adapter.is_empty() {
             formula_gpu(sink, execution)?;

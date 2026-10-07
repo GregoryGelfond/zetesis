@@ -4,6 +4,8 @@ use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{AtomPattern, Predicate, Sign, Term};
 
+mod connected;
+
 use super::arrange;
 use crate::ExpansionLimits;
 use crate::expansion::Budget;
@@ -110,7 +112,7 @@ fn a_comparison_is_decided_before_an_unrelated_occurrence_of_the_same_size() {
 }
 
 #[test]
-fn a_smaller_relation_precedes_a_comparison_decider() {
+fn ready_comparisons_precede_smaller_generators() {
     let mut fixture = Fixture::default();
     let literals = [
         atom(&mut fixture, "big", &[0]),
@@ -119,7 +121,7 @@ fn a_smaller_relation_precedes_a_comparison_decider() {
     ];
     assert_eq!(
         order(&mut fixture, &literals, &[100, 10], 2),
-        ["small", "big"]
+        ["big", "small"]
     );
 }
 

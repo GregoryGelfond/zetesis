@@ -29,8 +29,8 @@ fn rich_producers_keep_the_original_reduct_subject() {
             reference::admit(&case.source, &zetesis_themelios::FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
         assert_eq!(
-            original.theory().nodes(),
-            observed.theory().nodes(),
+            (original.theory().nodes(), original.theory().operands()),
+            (observed.theory().nodes(), observed.theory().operands()),
             "{}",
             case.name
         );

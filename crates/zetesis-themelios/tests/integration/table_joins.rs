@@ -68,7 +68,10 @@ fn equal_theory(source: &str) -> GroundingWork {
     )
     .unwrap();
     assert_eq!(table.atoms(), indexed.atoms());
-    assert_eq!(table.theory().nodes(), indexed.theory().nodes());
+    assert_eq!(
+        (table.theory().nodes(), table.theory().operands()),
+        (indexed.theory().nodes(), indexed.theory().operands())
+    );
     assert_eq!(table.theory().roots(), indexed.theory().roots());
     assert_eq!(table.formula_origins(), indexed.formula_origins());
     assert_eq!(
@@ -213,8 +216,18 @@ fn simultaneous_table_storage_has_an_exact_ceiling() {
 }
 
 #[test]
-fn structural_patterns_retain_explicit_indexed_matching() {
+fn determined_structural_arguments_bypass_table_selection() {
     let work = equal_theory("d(1..2).r(f(1)).r(f(2)).{a(X)}:-d(X),r(f(X)).");
+    // d binds X, so the exact f(X) posting is selected before table dispatch.
+    assert_eq!(work.table_inapplicable_probes, Some(0));
+    assert!(work.indexed_probes.unwrap() > 0);
+    assert_eq!(work.unindexed_probes, Some(0));
+}
+
+#[test]
+fn partial_structural_arguments_keep_indexed_matching() {
+    let work = equal_theory("d(1..2).r(f(1,7)).r(f(1,8)).r(f(2,9)).{a(X,Y)}:-d(X),r(f(X,Y)).");
+    // d binds X but leaves Y open; the full constructor matcher must bind it.
     assert!(work.table_inapplicable_probes.unwrap() > 0);
     assert!(work.indexed_probes.unwrap() > 0);
 }

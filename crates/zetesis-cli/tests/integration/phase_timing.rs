@@ -138,10 +138,12 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
 
 #[test]
 fn disabled_objective_feedback_is_unmeasured_while_scoring_remains_measured() {
-    let (report, output, _) = solve(
+    let (report, output, _) = crate::support::prepared::formula_run(
         "1{a;b}1. #minimize{1,a:a;2,b:b}.",
-        &options(&["--max-objective-bound-work", "0"], true),
+        &["--stats"],
+        |config| config.solve.max_objective_bound_work = 0,
     );
+    let report = report.unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
     assert!(output.contains("Optimization: 1\n"));
@@ -167,20 +169,26 @@ fn admission_and_candidate_setup_failures_retain_attempts_not_false_work() {
     assert!(text.contains("phase admission_materialization: calls="));
     assert!(text.contains("phase candidate_setup: unmeasured"));
     assert!(text.contains("phase exact_reduct_membership: unmeasured"));
-    let (report, output, diagnostics) = solve("a|b.", &options(&["--max-search-work", "0"], true));
+    let (report, output, _) =
+        crate::support::prepared::formula_run("a|b.", &["--stats"], |config| {
+            config.solve.max_search_work = 0;
+        });
+    let report = report.unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
     assert!(!output.contains("SATISFIABLE"));
     assert!(output.contains("Models: 0 (search incomplete)"));
-    entered(&report.phase_timings.unwrap(), SolvePhase::CandidateSetup);
-    assert!(diagnostics.contains("phase candidate_generation: unmeasured"));
+    let timing = report.phase_timings.unwrap();
+    entered(&timing, SolvePhase::CandidateSetup);
+    assert!(timing.get(SolvePhase::CandidateGeneration).is_none());
 }
 
 #[test]
 fn retention_stop_and_failed_answer_write_never_claim_complete_output() {
-    let (report, output, _) = solve(
-        "p. #minimize{1:p}.",
-        &options(&["--max-optimal-bytes", "0"], true),
-    );
+    let (report, output, _) =
+        crate::support::prepared::formula_run("p. #minimize{1:p}.", &["--stats"], |config| {
+            config.solve.max_optimal_bytes = 0;
+        });
+    let report = report.unwrap();
     assert_eq!(report.completion, Completion::Interrupted);
     assert!(!output.contains("OPTIMUM FOUND"));
     entered(

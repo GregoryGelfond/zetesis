@@ -23,14 +23,14 @@ fn options() -> crate::Options {
 #[test]
 fn json_objective_work_matches_the_semantic_receipt() {
     for maximum in [1, crate::SolveConfig::DEFAULT.max_objective_work] {
-        let mut options = options();
-        options.max_objective_work = maximum;
+        let mut config = crate::PublicationConfig::from(&options());
+        config.solve.max_objective_work = maximum;
         let mut output = Vec::new();
-        let outcome = crate::run_finalized_with_diagnostics(
-            "{a}. #minimize {1,a:a}.".into(),
-            &options,
+        let outcome = crate::publication_fixture::json(
+            "{a}. #minimize {1,a:a}.",
+            &config,
+            65_536,
             &mut output,
-            &mut io::sink(),
             &Cancellation::default(),
         )
         .unwrap();
@@ -56,12 +56,11 @@ fn json_objective_work_matches_the_semantic_receipt() {
 
 #[test]
 fn publication_failure_keeps_the_objective_receipt_in_a_later_summary() {
-    let mut options = options();
-    options.max_json_record_bytes = 1;
-    let failure = crate::run_finalized_with_diagnostics(
-        "{a}. #minimize {1,a:a}.".into(),
-        &options,
-        &mut io::sink(),
+    let config = crate::PublicationConfig::from(&options());
+    let failure = crate::publication_fixture::json(
+        "{a}. #minimize {1,a:a}.",
+        &config,
+        1,
         &mut io::sink(),
         &Cancellation::default(),
     )

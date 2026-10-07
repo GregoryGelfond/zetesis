@@ -114,6 +114,35 @@ fn other_thread_spellings_are_refused() {
     }
 }
 
+#[test]
+fn memory_units_denote_exact_binary_quantities() {
+    for (spelling, bytes) in [
+        ("0", 0),
+        ("17B", 17),
+        ("3KiB", 3 << 10),
+        ("5MiB", 5 << 20),
+        ("7GiB", 7 << 30),
+        ("2TiB", 2 << 40),
+    ] {
+        assert_eq!(parse_memory(spelling), Ok(bytes), "{spelling}");
+    }
+    assert_eq!(parse_memory(&u64::MAX.to_string()), Ok(u64::MAX));
+}
+
+#[test]
+fn memory_quantities_cannot_overflow_bytes() {
+    assert!(parse_memory("18446744073709551616").is_err());
+    assert!(parse_memory("16777216TiB").is_err());
+    assert_eq!(parse_memory("16777215TiB"), Ok(16_777_215 << 40));
+}
+
+#[test]
+fn malformed_memory_quantities_are_refused() {
+    for spelling in ["", "-1", "1.5GiB", "KiB", "1MB", "1kib", " 1", "1 "] {
+        assert!(parse_memory(spelling).is_err(), "{spelling}");
+    }
+}
+
 #[cfg(feature = "clap")]
 mod command_line {
     use super::*;

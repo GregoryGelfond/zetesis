@@ -707,3 +707,90 @@ fn aggregate_buffer_capacity_remains_charged_until_last_shared_owner_drops() {
         );
     });
 }
+
+#[test]
+fn embedded_map_growth_keeps_one_header_owner() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut enclosing = computation.lease();
+        let header = size_of::<CoordinateMap<usize, usize>>();
+        enclosing.observe(header, location()).unwrap();
+        let mut map =
+            CoordinateMap::<usize, usize>::new(computation, &limits, counters, location())
+                .unwrap()
+                .into_embedded(location())
+                .unwrap();
+        assert_eq!(map.lease.bytes(), 0);
+        for key in 0..17 {
+            map.insert(
+                key,
+                key,
+                None,
+                Context::new(computation, &limits, counters, location()),
+            )
+            .unwrap();
+            assert_eq!(
+                map.lease.bytes(),
+                map.entries.capacity() * size_of::<(usize, usize)>()
+            );
+        }
+        assert_eq!(enclosing.bytes(), header);
+        let retained = map.lease.bytes();
+        let observer = computation.lease();
+        let allowance = computation
+            .allowance(&observer, &limits, location())
+            .unwrap();
+        drop(map);
+        assert_eq!(
+            computation
+                .allowance(&observer, &limits, location())
+                .unwrap(),
+            allowance + retained
+        );
+        drop(enclosing);
+        assert_eq!(
+            computation
+                .allowance(&observer, &limits, location())
+                .unwrap(),
+            allowance + retained + header
+        );
+    });
+}
+
+#[test]
+fn embedded_map_lookup_checks_exact_live_storage() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let mut enclosing = computation.lease();
+        enclosing
+            .observe(size_of::<CoordinateMap<usize, usize>>(), location())
+            .unwrap();
+        let map = prepared_map(computation, counters)
+            .into_embedded(location())
+            .unwrap();
+        let limits = FormulaLimits::default();
+        let observer = computation.lease();
+        let live = limits.max_support_bytes
+            - computation
+                .allowance(&observer, &limits, location())
+                .unwrap();
+        for (ceiling, accepted) in [(live, true), (live - 1, false)] {
+            let bounded = FormulaLimits {
+                max_support_bytes: ceiling,
+                ..limits
+            };
+            let result = map.find(&3, computation, &bounded, counters, location());
+            if accepted {
+                assert_eq!(result.unwrap(), Some(30));
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(FormulaFailure::Limit {
+                        resource: FormulaResource::SupportBytes,
+                        ..
+                    })
+                ));
+            }
+        }
+        assert_eq!(map.slice(), &[(1, 10), (3, 30)]);
+    });
+}

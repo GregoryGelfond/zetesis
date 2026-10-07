@@ -8,7 +8,7 @@ use zetesis_cpu::{
     Cancellation, CandidateLimits, CandidateRestrictionLimits, Candidates, Limits, Stop,
 };
 
-use crate::engine::Engine;
+use crate::engine::{Engine, PreparationFailure};
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
     ExecutionResources, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError,
@@ -39,11 +39,20 @@ impl<'a> ClosureSession<'a> {
         cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Result<Self, SolveError> {
-        let engine = match cancellation.poll() {
-            Ok(()) => Ok(phases.measure(SolvePhase::ExecutionSetup, || {
-                Engine::with_ground(config, program, ground, resources, observations, phases)
-            })?),
-            Err(stop) => Err(stop),
+        let engine = match phases.measure(SolvePhase::ExecutionSetup, || {
+            Engine::with_ground(
+                config,
+                program,
+                ground,
+                resources,
+                cancellation,
+                observations,
+                phases,
+            )
+        }) {
+            Ok(engine) => Ok(engine),
+            Err(PreparationFailure::Stopped(stop)) => Err(stop),
+            Err(PreparationFailure::Run(error)) => return Err(error),
         };
         let candidates = phases.measure(SolvePhase::CandidateSetup, || {
             let mut candidates = Candidates::restricted(

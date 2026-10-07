@@ -323,6 +323,10 @@ pub(crate) struct AggregateGuard {
 pub(crate) struct AggregateIr {
     pub id: usize,
     pub binding: Option<usize>,
+    /// Complete inherited element reads for an assignment family. The target,
+    /// local witnesses and guards are not inputs to its tuple/eligibility set.
+    /// Nonbinding aggregates keep their existing uncached lowering path.
+    pub family_inputs: Vec<usize>,
     pub negation: DefaultNegation,
     pub function: themelios_program::program::AggregateFunction,
     pub guards: Vec<AggregateGuard>,
@@ -1161,7 +1165,7 @@ impl Compiler<'_> {
         self.bindings(&mut head_values, &mut variables)?;
         variables.safety(self.location)?;
         body.extend(head_values);
-        let bindings =
+        let mut bindings =
             self.assignment_plan(&body, variables.count, body_variables, &choice_guards)?;
         let head = if let Some(head) = ordinary {
             head
@@ -1182,6 +1186,10 @@ impl Compiler<'_> {
                 elements,
             })
         };
+        if let Some(plan) = &mut bindings {
+            plan.continuation_inputs =
+                self.continuation_inputs(&body, &head, body_variables, plan)?;
+        }
         self.variable_limit(&variables)?;
         Ok(RuleIr {
             head,

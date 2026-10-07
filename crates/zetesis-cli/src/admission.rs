@@ -5,8 +5,8 @@ use std::io::Write;
 
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, ExpansionLimits, ParsedSource,
-    SourceBundle, SourceFailure, admit_bundle_extended,
+    BundleAdmissionError, BundleAdmissionOptions, ExpansionLimits, ParsedSource, SourceBundle,
+    SourceFailure, admit_bundle_extended_with_cancellation,
 };
 
 use crate::SolvePhase;
@@ -125,11 +125,7 @@ pub(crate) fn source(
     {
         return Ok(report);
     }
-    let admission = AdmissionOptions {
-        max_source_bytes: options.max_source_bytes,
-        core_limits: core_limits(options),
-        ..Default::default()
-    };
+    let admission = options.resources().admission_options();
     let source = if options.oracle == Oracle::Countermodel {
         Input::Text(source)
     } else {
@@ -139,7 +135,7 @@ pub(crate) fn source(
             })
             .map_err(|error| RunError::Expansion(error.into()))?;
         match phases.measure(SolvePhase::AdmissionMaterialization, || {
-            source.admit_extended(expansion_limits(options))
+            source.admit_extended_with_cancellation(expansion_limits(options), cancellation)
         }) {
             Ok(admitted) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
@@ -154,12 +150,16 @@ pub(crate) fn source(
                 )
                 .map_err(|failure| source_failure(failure, "<input>", admitted.source()));
             }
-            Err(error)
-                if options.oracle == Oracle::Auto && error.error().needs_formula_admission() =>
-            {
-                Input::Parsed(error.into_source())
+            Err(error) => {
+                if let Some(reason) = expansion_control(error.error()) {
+                    return crate::publication::interrupted(reason, renderer, diagnostics, phases);
+                }
+                if options.oracle == Oracle::Auto && error.error().needs_formula_admission() {
+                    Input::Parsed(error.into_source())
+                } else {
+                    return Err(RunError::Expansion(error.into_error()).into());
+                }
             }
-            Err(error) => return Err(RunError::Expansion(error.into_error()).into()),
         }
     };
     validate_formula(options)?;
@@ -169,14 +169,18 @@ pub(crate) fn source(
         return Ok(report);
     }
     let observer = phases.grounding_observer();
-    let admitted = phases
-        .measure(SolvePhase::AdmissionMaterialization, || {
+    let admitted: Result<FormulaInput, zetesis_themelios::FormulaFailure> =
+        phases.measure(SolvePhase::AdmissionMaterialization, || {
             let parsed = match source {
                 Input::Text(text) => ParsedSource::new(text, admission)?,
                 Input::Parsed(parsed) => parsed,
             };
             let prepared = parsed
-                .prepare_formula(expansion_limits(options), formula_limits(options))
+                .prepare_formula_with_cancellation(
+                    expansion_limits(options),
+                    formula_limits(options),
+                    cancellation,
+                )
                 .map_err(SourceFailure::into_error)?
                 .with_grounding_options(grounding_options(options))
                 .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
@@ -184,8 +188,16 @@ pub(crate) fn source(
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
             zetesis_solve::ground_formula(prepared, options.grounder, observer).map(FormulaInput)
-        })
-        .map_err(RunError::FormulaAdmission)?;
+        });
+    let admitted = match admitted {
+        Ok(admitted) => admitted,
+        Err(error) => {
+            if let Some(reason) = error.interruption() {
+                return crate::publication::interrupted(reason, renderer, diagnostics, phases);
+            }
+            return Err(RunError::FormulaAdmission(error).into());
+        }
+    };
     admitted.solve(options, renderer, diagnostics, cancellation, phases)
 }
 
@@ -221,7 +233,12 @@ pub(crate) fn bundle(
         bundle
     } else {
         match phases.measure(SolvePhase::AdmissionMaterialization, || {
-            admit_bundle_extended(bundle, bundle_options(options), expansion_limits(options))
+            admit_bundle_extended_with_cancellation(
+                bundle,
+                bundle_options(options),
+                expansion_limits(options),
+                cancellation,
+            )
         }) {
             Ok(admitted) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
@@ -236,14 +253,21 @@ pub(crate) fn bundle(
                 )
                 .map_err(|failure| bundle_failure(failure, admitted.bundle()));
             }
-            Err(error)
+            Err(error) => {
+                if let BundleAdmissionError::Expansion(expansion) = error.error()
+                    && let Some(reason) = expansion_control(expansion)
+                {
+                    return crate::publication::interrupted(reason, renderer, diagnostics, phases);
+                }
                 if options.oracle == Oracle::Auto
                     && matches!(error.error(), BundleAdmissionError::Expansion(expansion)
-                    if expansion.needs_formula_admission()) =>
-            {
-                error.into_bundle()
+            if expansion.needs_formula_admission())
+                {
+                    error.into_bundle()
+                } else {
+                    return Err(RunError::BundleAdmission(error).into());
+                }
             }
-            Err(error) => return Err(RunError::BundleAdmission(error).into()),
         }
     };
     validate_formula(options)?;
@@ -253,13 +277,14 @@ pub(crate) fn bundle(
         return Ok(report);
     }
     let observer = phases.grounding_observer();
-    let admitted = phases
-        .measure(SolvePhase::AdmissionMaterialization, || {
-            let prepared = zetesis_themelios::prepare_bundle_formula(
+    let admitted: Result<FormulaInput, zetesis_themelios::FormulaBundleFailure> =
+        phases.measure(SolvePhase::AdmissionMaterialization, || {
+            let prepared = zetesis_themelios::prepare_bundle_formula_with_cancellation(
                 bundle,
                 bundle_options(options),
                 expansion_limits(options),
                 formula_limits(options),
+                cancellation,
             )?
             .with_grounding_options(grounding_options(options))
             .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
@@ -267,9 +292,29 @@ pub(crate) fn bundle(
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
             zetesis_solve::ground_bundle(prepared, options.grounder, observer).map(FormulaInput)
-        })
-        .map_err(RunError::FormulaBundleAdmission)?;
+        });
+    let admitted = match admitted {
+        Ok(admitted) => admitted,
+        Err(error) => {
+            if let Some(reason) = error.error().interruption() {
+                return crate::publication::interrupted(reason, renderer, diagnostics, phases);
+            }
+            return Err(RunError::FormulaBundleAdmission(error).into());
+        }
+    };
     admitted.solve(options, renderer, diagnostics, cancellation, phases)
+}
+
+fn expansion_control(error: &zetesis_themelios::ExpansionFailure) -> Option<zetesis_cpu::Stop> {
+    if let zetesis_themelios::ExpansionFailure::Interrupted {
+        reason: reason @ (zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline),
+        ..
+    } = error
+    {
+        Some(*reason)
+    } else {
+        None
+    }
 }
 
 fn source_failure(
@@ -297,15 +342,7 @@ fn bundle_failure(mut failure: PublicationFailure, bundle: &SourceBundle) -> Pub
 }
 
 pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
-    ExpansionLimits {
-        max_term_work: options
-            .max_expansion_work
-            .unwrap_or_else(|| ExpansionLimits::default().max_term_work),
-        max_templates: options.max_expanded_templates,
-        max_values: options.max_expansion_values,
-        max_scalar_bytes: options.max_expansion_bytes,
-        ..Default::default()
-    }
+    options.resources().expansion_limits()
 }
 
 fn grounding_options(options: &Options) -> zetesis_themelios::GroundingOptions {
@@ -315,40 +352,15 @@ fn grounding_options(options: &Options) -> zetesis_themelios::GroundingOptions {
 }
 
 pub(crate) fn formula_limits(options: &Options) -> zetesis_themelios::FormulaLimits {
-    zetesis_themelios::FormulaLimits {
-        max_domain_values: options
-            .max_domain_values
-            .unwrap_or_else(|| zetesis_themelios::FormulaLimits::default().max_domain_values),
-        max_assignment_values: options.max_assignment_values,
-        max_generated_values: options.max_generated_values,
-        max_support_rounds: options.max_support_rounds,
-        max_support_bytes: options.max_support_bytes,
-        max_substitutions: u64::try_from(options.max_substitutions).unwrap_or(u64::MAX),
-        max_work: options.max_expansion_work.map_or_else(
-            || zetesis_themelios::FormulaLimits::default().max_work,
-            |work| u64::try_from(work).unwrap_or(u64::MAX),
-        ),
-        theory: zetesis_ferraris::AdmissionLimits {
-            max_atoms: options.max_atoms,
-            max_roots: options.max_ground_rules,
-            ..Default::default()
-        },
-        ..Default::default()
-    }
-}
-
-fn core_limits(options: &Options) -> zetesis_core::AdmissionLimits {
-    zetesis_core::AdmissionLimits {
-        max_domain_values: options
-            .max_domain_values
-            .unwrap_or_else(|| zetesis_core::AdmissionLimits::default().max_domain_values),
-        ..Default::default()
-    }
+    options.resources().formula_limits()
 }
 
 fn bundle_options(options: &Options) -> BundleAdmissionOptions {
+    let admission = options.resources().admission_options();
     BundleAdmissionOptions {
-        core_limits: core_limits(options),
-        ..Default::default()
+        max_syntax_nodes: admission.max_syntax_nodes,
+        max_syntax_depth: admission.max_syntax_depth,
+        max_body_elements: admission.max_body_elements,
+        core_limits: admission.core_limits,
     }
 }

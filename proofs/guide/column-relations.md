@@ -81,6 +81,22 @@ membership tests would find both values; selection at a shared row finds none.
 The laws also retain every input row for no equalities and reject every row
 when a requested whole value is absent from the dictionary.
 
+## Store columns at different widths
+
+[CompactColumns](../Zetesis/CompactColumns.lean) adds checked finite-word
+representations to the same dictionary and row domains. `packed_exact` shows
+that successful packing decodes to the complete original column. Its premise
+requires every actual identifier to fit; the number of distinct identifiers
+alone is insufficient. `resize_exact` preserves existing values when the new
+width represents them, and `append_prefix` retains the previous row sequence.
+
+`encoded_cell_exact` applies that round trip to aligned relation columns.
+`accepts_exact` and `selection_exact` then preserve equality checking and the
+entire selected row sequence, including equal tuples at different positions.
+The laws apply to 8-, 16- and 32-bit cells without assigning logical meaning to
+the numerical order of their IDs. They do not prove the Rust width-selection
+code, allocation accounting or the device buffer's offsets and packed lanes.
+
 ## What remains outside the proof
 
 The matcher in `full_matches_preserved` is total and pure. The theorem does not

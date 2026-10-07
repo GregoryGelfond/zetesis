@@ -17,18 +17,19 @@
 //! tested refinements, not mechanically verified implementations.
 #![forbid(unsafe_code)]
 
-mod formula;
+mod adapter;
+mod aggregate;
 mod candidates;
+mod context;
+mod formula;
+mod formula_graph;
+mod lazy;
 mod packing;
+mod relation;
 mod residency;
 mod runtime;
-mod context;
 mod selection;
-mod adapter;
-mod lazy;
 mod tight;
-mod aggregate;
-mod relation;
 
 use std::fmt;
 use std::time::Duration;

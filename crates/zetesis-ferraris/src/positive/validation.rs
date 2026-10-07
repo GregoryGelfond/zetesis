@@ -3,7 +3,7 @@
 use std::mem::size_of;
 
 use super::{Budget, PositiveError, PositivePlan, PositiveResource};
-use crate::{EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, Node};
+use crate::{EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, NodeView};
 use zetesis_cpu::Stop;
 
 pub(super) fn complete(
@@ -51,10 +51,22 @@ pub(super) fn complete(
     capacity?;
     let failed = truth.failed_root();
     if let Some(root) = failed {
-        let constraint = match least.theory().nodes()[root] {
-            Node::False => true,
-            Node::Implies(_, head) => least.theory().nodes()[head] == Node::False,
-            Node::Atom(_) | Node::And(..) | Node::Or(..) => false,
+        let constraint = match least
+            .theory()
+            .view()
+            .node(root)
+            .map_err(|_| Stop::InvalidProgram)?
+        {
+            NodeView::False => true,
+            NodeView::Implies(_, head) => {
+                least
+                    .theory()
+                    .view()
+                    .node(head)
+                    .map_err(|_| Stop::InvalidProgram)?
+                    == NodeView::False
+            }
+            NodeView::Atom(_) | NodeView::And(..) | NodeView::Or(..) => false,
         };
         if !constraint {
             return Err(PositiveError::InvalidClosure { root });

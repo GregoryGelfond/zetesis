@@ -22,10 +22,10 @@ fn options() -> Options {
     .unwrap()
 }
 
-fn diagnostic_refusal(options: &Options, marker: &str, cause: &str) {
+fn diagnostic_refusal(options: &zetesis_cli::PublicationConfig, marker: &str, cause: &str) {
     let mut complete = Vec::new();
-    let report = run_with_diagnostics(
-        SOURCE.into(),
+    let report = crate::support::prepared::human(
+        SOURCE,
         options,
         &mut io::sink(),
         &mut complete,
@@ -44,15 +44,15 @@ fn diagnostic_refusal(options: &Options, marker: &str, cause: &str) {
     for capacity in [start, start + marker.len(), end] {
         let mut diagnostics = BoundedWriter::new(capacity);
         let mut output = Vec::new();
-        let error = run_with_diagnostics(
-            SOURCE.into(),
+        let error = crate::support::prepared::human(
+            SOURCE,
             options,
             &mut output,
             &mut diagnostics,
             &Cancellation::default(),
         )
         .unwrap_err();
-        let RunError::Output(error) = error else {
+        let RunError::Output(error) = *error.cause else {
             panic!("expected output failure: {error}");
         };
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
@@ -67,17 +67,17 @@ fn diagnostic_refusal(options: &Options, marker: &str, cause: &str) {
 
 #[test]
 fn preparation_refusal_preserves_diagnostic_failure() {
-    let mut options = options();
-    options.max_objective_keys = 0;
+    let mut options = zetesis_cli::PublicationConfig::from(&options());
+    options.solve.max_objective_keys = 0;
     diagnostic_refusal(&options, "Objective preparation unavailable:", "Keys");
 }
 
 #[test]
 fn bound_refusal_preserves_diagnostic_failure() {
-    let mut options = options();
+    let mut options = zetesis_cli::PublicationConfig::from(&options());
     // Preparation has its own objective receipt. One bound unit admits its
     // initialization, then refuses the first copied eligibility node.
-    options.max_objective_bound_work = 1;
+    options.solve.max_objective_bound_work = 1;
     diagnostic_refusal(&options, "Objective pruning stopped:", "Work");
 }
 
@@ -85,8 +85,7 @@ fn bound_refusal_preserves_diagnostic_failure() {
 fn cancellation_before_auto_formula_fallback_has_no_fabricated_admission_or_model() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let mut options = options();
-    options.max_atoms = 0;
+    let options = options();
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(

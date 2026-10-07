@@ -9,6 +9,7 @@ fn dimension_refusal_precedes_node_validation() {
         max_atoms: 1,
         max_nodes: 1,
         max_roots: 1,
+        max_operands: 0,
     };
     for limits in [
         AdmissionLimits {
@@ -25,7 +26,13 @@ fn dimension_refusal_precedes_node_validation() {
         },
     ] {
         assert_eq!(
-            Theory::new(1, vec![Node::Atom(1)], vec![1], limits).unwrap_err(),
+            Theory::new(
+                1,
+                zetesis_ferraris::FormulaParts::new(vec![Node::atom(1)], vec![]).unwrap(),
+                vec![1],
+                limits
+            )
+            .unwrap_err(),
             AdmissionError::Limit,
         );
     }
@@ -37,11 +44,12 @@ fn padded_count_refusal_precedes_node_validation() {
         max_atoms: usize::MAX,
         max_nodes: 1,
         max_roots: 1,
+        max_operands: 0,
     };
     assert_eq!(
         Theory::new(
             usize::MAX - 62,
-            vec![Node::Atom(usize::MAX)],
+            zetesis_ferraris::FormulaParts::new(vec![Node::atom(usize::MAX)], vec![]).unwrap(),
             vec![1],
             limits
         )
@@ -55,7 +63,7 @@ fn last_representable_padded_count_is_admitted() {
     let atoms = usize::MAX - 63;
     let theory = Theory::new(
         atoms,
-        vec![],
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
         vec![],
         AdmissionLimits {
             max_atoms: usize::MAX,
@@ -69,17 +77,17 @@ fn last_representable_padded_count_is_admitted() {
 #[test]
 fn either_nonpreceding_operand_is_refused() {
     for node in [
-        Node::And(0, 1),
-        Node::And(1, 0),
-        Node::Or(0, 1),
-        Node::Or(1, 0),
-        Node::Implies(0, 1),
-        Node::Implies(1, 0),
+        Node::and_pair([0, 1]),
+        Node::and_pair([1, 0]),
+        Node::or_pair([0, 1]),
+        Node::or_pair([1, 0]),
+        Node::implies(0, 1),
+        Node::implies(1, 0),
     ] {
         assert_eq!(
             Theory::new(
                 0,
-                vec![Node::False, node],
+                zetesis_ferraris::FormulaParts::new(vec![Node::falsum(), node], vec![]).unwrap(),
                 vec![0],
                 AdmissionLimits::default()
             )
@@ -92,7 +100,13 @@ fn either_nonpreceding_operand_is_refused() {
 #[test]
 fn unasserted_atoms_are_validated() {
     assert_eq!(
-        Theory::new(0, vec![Node::Atom(0)], vec![], AdmissionLimits::default()).unwrap_err(),
+        Theory::new(
+            0,
+            zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap(),
+            vec![],
+            AdmissionLimits::default()
+        )
+        .unwrap_err(),
         AdmissionError::Atom,
     );
 }
@@ -103,16 +117,17 @@ proptest! {
         // Insert two independently known errors after a valid prefix. Reversing
         // their source order must reverse the reported error; invalid roots
         // remain later than either node error.
-        let mut nodes = vec![Node::False; prefix];
+        let mut nodes = vec![Node::falsum(); prefix];
         let (first, second, expected) = if atom_first {
-            (Node::Atom(1), Node::And(prefix + 1, 0), AdmissionError::Atom)
+            (Node::atom(1), Node::and_pair([prefix + 1, 0]), AdmissionError::Atom)
         } else {
-            (Node::And(prefix, 0), Node::Atom(1), AdmissionError::Edge)
+            (Node::and_pair([prefix, 0]), Node::atom(1), AdmissionError::Edge)
         };
         nodes.extend([first, second]);
         let roots = vec![nodes.len()];
         prop_assert_eq!(
-            Theory::new(1, nodes, roots, AdmissionLimits::default()).unwrap_err(),
+            Theory::new(1,
+zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(), roots, AdmissionLimits::default()).unwrap_err(),
             expected,
         );
     }

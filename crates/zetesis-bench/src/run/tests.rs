@@ -86,6 +86,11 @@ fn a_named_evidence_file_is_kept() {
 }
 
 #[test]
+fn native_memory_accepts_binary_units() {
+    assert_eq!(options(&["--memory", "3GiB"]).memory, Some(3 << 30));
+}
+
+#[test]
 fn a_clock_before_the_epoch_names_no_evidence() {
     let before = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
     assert!(matches!(options(&[]).report(before), Err(Error::Usage(_))));

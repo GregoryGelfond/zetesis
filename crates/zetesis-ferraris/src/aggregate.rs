@@ -66,11 +66,15 @@ pub struct AggregateLimits {
     pub max_elements: usize,
     /// Maximum total DAG nodes, including the existing prefix.
     pub max_nodes: usize,
-    /// Charged prefix checks, element/state/subset visits and node appends.
+    /// Maximum total logical child occurrences and arena cells, including the prefix.
+    /// Each temporary connective operand row obeys this same inclusive ceiling.
+    pub max_operands: usize,
+    /// Charged prefix checks, element/state/subset visits, operand preparation and appends.
     /// [`FormulaNodes`] reuses completed prefix checks while retaining the
     /// per-call control poll and total-node ceiling check.
     pub max_work: u64,
-    /// Maximum simultaneously retained algorithm cells, excluding DAG nodes.
+    /// Maximum simultaneously retained threshold or subset-state cells.
+    /// DAG storage and temporary connective operands obey their own ceilings.
     /// Threshold compilation uses two rows; general compilation uses subset bits.
     pub max_states: usize,
     /// Maximum subsets for exact general compilation, including the empty set.
@@ -82,6 +86,7 @@ impl Default for AggregateLimits {
         Self {
             max_elements: 4_096,
             max_nodes: 1_048_576,
+            max_operands: 2_097_152,
             max_work: 10_000_000,
             max_states: 1_048_576,
             max_subsets: 65_536,
@@ -111,6 +116,8 @@ pub struct AggregateStatistics {
     pub subsets: u64,
     /// Appended nodes; on error these nodes have been rolled back.
     pub nodes: usize,
+    /// Appended child occurrences, retained in the receipt after rollback.
+    pub operands: usize,
 }
 
 /// A completed aggregate root in the caller's extended DAG.
@@ -154,13 +161,15 @@ pub enum AggregateErrorKind {
     GuardLimit,
     /// Total node ceiling reached or already exceeded by the prefix.
     NodeLimit,
+    /// Total operand occurrence or arena ceiling reached.
+    OperandLimit,
     /// Charged work ceiling reached.
     WorkLimit,
     /// Required temporary state exceeds its ceiling.
     StateLimit,
     /// The full general subset space exceeds its ceiling.
     SubsetLimit,
-    /// An existing edge does not point to an earlier node.
+    /// Existing storage has an invalid native span or an edge to a non-earlier node.
     InvalidPrefix {
         /// Malformed existing node index.
         node: usize,
@@ -176,7 +185,7 @@ pub enum AggregateErrorKind {
     ArithmeticOverflow,
 }
 
-/// A refusal with partial accounting; the input DAG's length and nodes are intact.
+/// A refusal with partial accounting; both input formula buffers remain intact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AggregateError {
     pub(super) kind: AggregateErrorKind,
@@ -201,11 +210,17 @@ impl fmt::Display for AggregateError {
             AggregateErrorKind::ElementLimit => f.write_str("aggregate element limit exceeded"),
             AggregateErrorKind::GuardLimit => f.write_str("aggregate family guard limit exceeded"),
             AggregateErrorKind::NodeLimit => f.write_str("aggregate total node limit exceeded"),
+            AggregateErrorKind::OperandLimit => {
+                f.write_str("aggregate total operand limit exceeded")
+            }
             AggregateErrorKind::WorkLimit => f.write_str("aggregate work limit reached"),
             AggregateErrorKind::StateLimit => f.write_str("aggregate state limit exceeded"),
             AggregateErrorKind::SubsetLimit => f.write_str("aggregate subset limit exceeded"),
             AggregateErrorKind::InvalidPrefix { node } => {
-                write!(f, "aggregate input DAG has a forward edge at node {node}")
+                write!(
+                    f,
+                    "aggregate input DAG has invalid storage or edges at node {node}"
+                )
             }
             AggregateErrorKind::InvalidCondition { element } => {
                 write!(

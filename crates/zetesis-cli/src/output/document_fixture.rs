@@ -3,7 +3,7 @@
 //! through the production finalization controller; it does not classify outcomes.
 
 use crate::failure::Progress;
-use crate::{Options, PublicationFailure, PublicationOutcome, PublicationView, RunError};
+use crate::{PublicationFailure, PublicationOutcome, PublicationView, RunError};
 use std::io::{self, Write};
 
 pub(crate) struct Document<W> {
@@ -25,13 +25,10 @@ impl<W: Write> Document<W> {
     pub(crate) fn finish(
         self,
         result: Result<Progress, PublicationFailure>,
-        options: &Options,
+        record_bytes: usize,
     ) -> Result<PublicationOutcome, PublicationFailure> {
-        let mut renderer = crate::JsonRenderer::from_document(
-            self.output,
-            options.max_json_record_bytes,
-            options.max_atoms,
-        );
+        let mut renderer =
+            crate::JsonRenderer::from_document(self.output, record_bytes, usize::MAX);
         crate::publication::finalize(&mut renderer, result)
     }
 }

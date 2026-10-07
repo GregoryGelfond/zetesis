@@ -205,17 +205,11 @@ fn objective_bounds_match_signed_relations_and_keep_every_optimal_tie() {
             if hidden { "#show -p/2. #show p/2." } else { "" }
         );
         let mut expected = None;
-        for bound in ["0", "10000000"] {
-            let (report, output, diagnostics) = solve(
+        for bound in [0, 10_000_000] {
+            let (report, output, diagnostics) = crate::support::prepared::formula_run(
                 &source,
-                &[
-                    "--backend",
-                    "cpu",
-                    "--oracle",
-                    "countermodel",
-                    "--max-objective-bound-work",
-                    bound,
-                ],
+                &["--oracle", "countermodel"],
+                |config| config.solve.max_objective_bound_work = bound,
             );
             let report = report.unwrap();
             assert_eq!(report.completion, Completion::Exhausted);
@@ -246,7 +240,7 @@ fn objective_bounds_match_signed_relations_and_keep_every_optimal_tie() {
                 .countermodel_statistics
                 .unwrap()
                 .candidate_restrictions;
-            assert_eq!(restrictions > 0, bound != "0");
+            assert_eq!(restrictions > 0, bound != 0);
         }
     }
 }
@@ -330,19 +324,26 @@ fn numeric_show_negation_matches_the_original_reference() {
 
 #[test]
 fn signed_display_limits_refuse_before_any_partial_answer() {
-    for (flag, resource) in [
-        ("--max-observation-work", Resource::Work),
-        ("--max-observation-bindings", Resource::Bindings),
-        ("--max-observation-terms", Resource::Terms),
-        ("--max-observation-bytes", Resource::OutputBytes),
+    for resource in [
+        Resource::Work,
+        Resource::Bindings,
+        Resource::Terms,
+        Resource::OutputBytes,
     ] {
         for suffix in ["", "#minimize{0: -p(1)}."] {
             let source = format!("-p(1). #show. #show -seen(X): -p(X). {suffix}");
-            let (result, output, _) = solve(&source, &[flag, "0"]);
+            let (result, output, _) =
+                crate::support::prepared::formula_run(&source, &[], |config| match resource {
+                    Resource::Work => config.observations.max_work = 0,
+                    Resource::Bindings => config.observations.max_bindings = 0,
+                    Resource::Terms => config.observations.max_terms = 0,
+                    Resource::OutputBytes => config.observations.max_output_bytes = 0,
+                    _ => unreachable!("selected runtime observation population"),
+                });
             assert!(
                 matches!(result, Err(RunError::Observation(error)) if
                 matches!(error.kind(), ErrorKind::Limit {resource: actual, ..} if *actual == resource)),
-                "{flag}: {source}"
+                "{resource:?}: {source}"
             );
             assert!(!output.contains("Answer:"));
         }
@@ -366,18 +367,13 @@ fn both_signs_have_the_same_retained_tag_size() {
                 if hidden { "#show." } else { "" }
             );
             for ceiling in [PAYLOAD, PAYLOAD - 1] {
-                let (result, output, _) = solve(
+                let (result, output, _) = crate::support::prepared::formula_run(
                     &source,
-                    &[
-                        "--backend",
-                        "cpu",
-                        "--oracle",
-                        "countermodel",
-                        "--max-objective-bound-work",
-                        "0",
-                        "--max-optimal-bytes",
-                        &ceiling.to_string(),
-                    ],
+                    &["--oracle", "countermodel"],
+                    |config| {
+                        config.solve.max_objective_bound_work = 0;
+                        config.solve.max_optimal_bytes = ceiling;
+                    },
                 );
                 let report = result.expect("retention stop is a typed partial report");
                 assert_eq!(

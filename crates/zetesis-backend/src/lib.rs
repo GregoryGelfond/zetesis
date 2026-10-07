@@ -44,6 +44,32 @@ pub fn parse_threads(value: &str) -> Result<NonZeroUsize, String> {
     }
 }
 
+/// Read the common memory allowance: bytes or a whole number with a binary unit.
+///
+/// # Errors
+/// Refuses fractional, negative, unknown-unit or overflowing quantities.
+pub fn parse_memory(value: &str) -> Result<u64, String> {
+    let boundary = value
+        .find(|character: char| !character.is_ascii_digit())
+        .unwrap_or(value.len());
+    let (number, suffix) = value.split_at(boundary);
+    let factor = match suffix {
+        "" | "B" => Some(1),
+        "KiB" => Some(1 << 10),
+        "MiB" => Some(1 << 20),
+        "GiB" => Some(1 << 30),
+        "TiB" => Some(1 << 40),
+        _ => None,
+    };
+    number.parse::<u64>().ok()
+        .zip(factor)
+        .and_then(|(amount, factor)| amount.checked_mul(factor))
+        .ok_or_else(|| {
+            "expected bytes or a whole number with B, KiB, MiB, GiB or TiB; value must fit u64 bytes"
+                .to_owned()
+        })
+}
+
 /// How a program runs: its execution backend.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Backend {

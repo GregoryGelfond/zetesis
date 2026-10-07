@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use crate::support::aggregate_theories::{COMPARISONS, prefix};
+use crate::support::aggregate_theories::{COMPARISONS, copy, prefix, raw, snapshot};
 use crate::support::worlds::{eval, interpretation};
 use proptest::prelude::*;
 use zetesis_cpu::{Cancellation, Stop};
@@ -28,7 +28,7 @@ fn holds(comparison: Comparison, sum: i64, bound: i64) -> bool {
 
 fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
     let input = prefix();
-    let mut nodes = input.clone();
+    let mut nodes = copy(&input);
     let built = append_aggregate(
         &mut nodes,
         elements,
@@ -38,11 +38,17 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
         &Cancellation::default(),
     )
     .unwrap();
-    let theory = Theory::new(2, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![built.root()],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     for outer in 0..4 {
         let sum: i64 = elements
             .iter()
-            .filter(|element| eval(&input, element.condition, outer, None))
+            .filter(|element| eval(input.view(), element.condition, outer, None))
             .map(|element| i64::from(element.weight))
             .sum();
         let classical = holds(comparison, sum, bound);
@@ -63,7 +69,7 @@ fn verify(elements: &[Element], comparison: Comparison, bound: i64) {
         for inner in 0..4 {
             let sum: i64 = elements
                 .iter()
-                .filter(|element| eval(&input, element.condition, inner, Some(outer)))
+                .filter(|element| eval(input.view(), element.condition, inner, Some(outer)))
                 .map(|element| i64::from(element.weight))
                 .sum();
             let expected = classical && holds(comparison, sum, bound);
@@ -150,7 +156,7 @@ fn empty_zero_weight_and_extreme_scalar_guards_have_exact_truth_and_reducts() {
 
 #[test]
 fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
-    let mut nodes: Vec<_> = (0..64).map(Node::Atom).collect();
+    let mut nodes = raw((0..64).map(Node::atom).collect());
     let elements: Vec<_> = (0..64)
         .map(|condition| Element {
             weight: 1,
@@ -173,7 +179,13 @@ fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
     assert_eq!(built.statistics().subsets, 0);
     assert_eq!(built.statistics().states, 20);
     assert!(built.appended_nodes() < 2_200);
-    let theory = Theory::new(64, nodes, vec![built.root()], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        64,
+        nodes.into_parts(),
+        vec![built.root()],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     for size in [0, 7, 8, 9, 64] {
         let candidate = Interpretation::new(&theory, 0..size).unwrap();
         assert_eq!(
@@ -191,7 +203,7 @@ fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
 
 fn limited(elements: &[Element], limits: AggregateLimits) -> Error {
     let original = prefix();
-    let mut nodes = original.clone();
+    let mut nodes = copy(&original);
     let error = append_aggregate(
         &mut nodes,
         elements,
@@ -202,7 +214,8 @@ fn limited(elements: &[Element], limits: AggregateLimits) -> Error {
     )
     .expect_err("one inclusive budget is below required work");
     assert_eq!(
-        nodes, original,
+        snapshot(&nodes),
+        snapshot(&original),
         "rollback must preserve the entire existing DAG"
     );
     error.kind()
@@ -232,7 +245,8 @@ fn exact_compilation_ceilings_and_rollback_are_observable() {
     .unwrap();
     let exact = AggregateLimits {
         max_elements: elements.len(),
-        max_nodes: nodes.len(),
+        max_nodes: nodes.view().len(),
+        max_operands: nodes.parts().occurrences(),
         max_work: built.statistics().work,
         max_states: built.statistics().states,
         max_subsets: 0,
@@ -248,7 +262,7 @@ fn exact_compilation_ceilings_and_rollback_are_observable() {
     )
     .unwrap();
     assert_eq!(built, repeated);
-    assert_eq!(nodes, second);
+    assert_eq!(snapshot(&nodes), snapshot(&second));
     assert_eq!(
         limited(
             &elements,
@@ -353,8 +367,8 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
         ),
         Error::InvalidCondition { element: 0 }
     );
-    let mut nodes = vec![Node::And(0, 0)];
-    let before = nodes.clone();
+    let mut nodes = raw(vec![Node::and_pair([0, 0])]);
+    let before = copy(&nodes);
     assert_eq!(
         append_aggregate(
             &mut nodes,
@@ -368,7 +382,7 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
         .kind(),
         Error::InvalidPrefix { node: 0 }
     );
-    assert_eq!(nodes, before);
+    assert_eq!(snapshot(&nodes), snapshot(&before));
     let signed = vec![
         Element {
             weight: -1,
@@ -404,7 +418,7 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
         .kind(),
         Error::StateLimit
     );
-    assert_eq!(nodes, prefix());
+    assert_eq!(snapshot(&nodes), snapshot(&prefix()));
 }
 
 #[test]
@@ -418,7 +432,7 @@ fn cancellation_and_deadlines_precede_work_even_for_an_empty_aggregate() {
             Stop::Deadline,
         ),
     ] {
-        let mut nodes = Vec::new();
+        let mut nodes = zetesis_ferraris::FormulaNodes::default();
         let error = append_aggregate(
             &mut nodes,
             &[],
@@ -433,6 +447,33 @@ fn cancellation_and_deadlines_precede_work_even_for_an_empty_aggregate() {
         .unwrap_err();
         assert_eq!(error.kind(), Error::Control(expected));
         assert_eq!(error.statistics().work, 0);
-        assert!(nodes.is_empty());
+        assert!(nodes.view().is_empty());
+        assert!(nodes.parts().operands().is_empty());
+    }
+}
+
+#[test]
+fn native_subset_rows_preserve_frozen_truth() {
+    let elements = [-1, 2, 3, 4]
+        .into_iter()
+        .zip([2, 3, 4, 5])
+        .map(|(weight, condition)| Element { weight, condition })
+        .collect::<Vec<_>>();
+    let mut nodes = prefix();
+    let build = append_aggregate(
+        &mut nodes,
+        &elements,
+        Comparison::Eq,
+        1,
+        AggregateLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert!(
+        matches!(nodes.view().node(build.root()).unwrap(), zetesis_ferraris::NodeView::And(row) if row.len() > 2)
+    );
+    assert!((prefix().view().len()..nodes.view().len()).any(|index| matches!(nodes.view().node(index).unwrap(), zetesis_ferraris::NodeView::Or(row) if row.len() > 2)));
+    for comparison in COMPARISONS {
+        verify(&elements, comparison, 1);
     }
 }

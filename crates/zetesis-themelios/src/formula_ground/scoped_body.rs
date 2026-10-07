@@ -20,7 +20,7 @@ use zetesis_objective::ConditionNode;
 
 pub(super) struct ValidatedBody {
     atoms: Catalog,
-    nodes: Vec<Node>,
+    nodes: zetesis_ferraris::FormulaParts,
     root: usize,
 }
 
@@ -72,7 +72,7 @@ pub(super) fn validate_with_purpose(
     let root = result?;
     Ok(ValidatedBody {
         atoms: builder.catalog,
-        nodes: builder.nodes.into_vec(),
+        nodes: builder.nodes.into_parts(),
         root,
     })
 }
@@ -101,9 +101,10 @@ impl ValidatedBody {
             context.counters,
             context.location,
         )?;
-        for (index, node) in self.nodes.iter().take(count).enumerate() {
+        for index in 0..count {
+            let node = self.nodes.view().node(index).expect("owned formula node");
             context.counters.work(context.limits, context.location)?;
-            let activity = match *node {
+            let activity = match node {
                 Node::False => Activity::Absent,
                 Node::Atom(atom) => {
                     let source = self.atoms.source(
@@ -114,9 +115,27 @@ impl ValidatedBody {
                     )?;
                     eligibility.source_activity(&source, context)?
                 }
-                Node::And(left, right) => values.slice()[left].min(values.slice()[right]),
-                Node::Or(left, right) => values.slice()[left].max(values.slice()[right]),
+                Node::And(row) | Node::Or(row) => {
+                    let conjunction = matches!(node, Node::And(_));
+                    let mut activity = if conjunction {
+                        Activity::Required
+                    } else {
+                        Activity::Absent
+                    };
+                    for &child in row {
+                        context.counters.work(context.limits, context.location)?;
+                        activity = if conjunction {
+                            activity.min(values.slice()[child])
+                        } else {
+                            activity.max(values.slice()[child])
+                        };
+                    }
+                    activity
+                }
                 Node::Implies(left, right) => {
+                    context
+                        .counters
+                        .charge_work(2, context.limits, context.location)?;
                     values.slice()[left].negate().max(values.slice()[right])
                 }
             };
@@ -142,7 +161,7 @@ impl ValidatedBody {
             context.location,
         )?;
         needed.resize(
-            self.nodes.len(),
+            self.nodes.view().len(),
             false,
             context.computation,
             context.limits,
@@ -154,12 +173,20 @@ impl ValidatedBody {
         // Backward edges make one descending pass sufficient to find ancestors.
         for index in (0..=self.root).rev() {
             context.counters.work(context.limits, context.location)?;
-            if needed.slice()[index]
-                && let Node::And(left, right) | Node::Or(left, right) | Node::Implies(left, right) =
-                    self.nodes[index]
-            {
-                needed.slice_mut()[left] = true;
-                needed.slice_mut()[right] = true;
+            if needed.slice()[index] {
+                let pair;
+                let row = match self.nodes.view().node(index).expect("owned formula node") {
+                    Node::And(row) | Node::Or(row) => row,
+                    Node::Implies(a, b) => {
+                        pair = [a, b];
+                        &pair
+                    }
+                    Node::Atom(_) | Node::False => &[],
+                };
+                for &child in row {
+                    context.counters.work(context.limits, context.location)?;
+                    needed.slice_mut()[child] = true;
+                }
             }
         }
         let mut mapping = Buffer::new(
@@ -177,7 +204,8 @@ impl ValidatedBody {
             context.location,
         )?;
         let mut query = Query::new(context)?;
-        for (index, node) in self.nodes.into_iter().enumerate().take(self.root + 1) {
+        for index in 0..=self.root {
+            let node = self.nodes.view().node(index).expect("owned formula node");
             context.counters.work(context.limits, context.location)?;
             if !needed.slice()[index] {
                 continue;
@@ -185,11 +213,27 @@ impl ValidatedBody {
             let node = match node {
                 Node::False => ConditionNode::Boolean(false),
                 Node::Atom(atom) => ConditionNode::Atom(atom),
-                Node::And(left, right) => {
-                    ConditionNode::And(mapping.slice()[left], mapping.slice()[right])
-                }
-                Node::Or(left, right) => {
-                    ConditionNode::Or(mapping.slice()[left], mapping.slice()[right])
+                Node::And(row) | Node::Or(row) => {
+                    let conjunction = matches!(node, Node::And(_));
+                    let mut previous = None;
+                    for &child in row {
+                        context.counters.work(context.limits, context.location)?;
+                        let next = mapping.slice()[child];
+                        previous = Some(match previous {
+                            None => next,
+                            Some(previous) => query.node(
+                                if conjunction {
+                                    ConditionNode::And(previous, next)
+                                } else {
+                                    ConditionNode::Or(previous, next)
+                                },
+                                context,
+                            )?,
+                        });
+                    }
+                    mapping.slice_mut()[index] =
+                        previous.expect("stored groups have at least two children");
+                    continue;
                 }
                 Node::Implies(left, right) => {
                     let negated = query.node(ConditionNode::Not(mapping.slice()[left]), context)?;

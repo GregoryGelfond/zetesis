@@ -19,7 +19,19 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateErrorKind, AggregateExtremum, Interpretation, Limits, models, models_reduct,
 };
-use zetesis_ferraris::{Node, Theory, append_aggregate};
+use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView as Node, Theory, append_aggregate};
+
+fn copy(nodes: &FormulaNodes) -> FormulaNodes {
+    let (nodes, operands) = snapshot(nodes);
+    FormulaNodes::new(FormulaParts::new(nodes, operands).unwrap())
+}
+
+fn snapshot(nodes: &FormulaNodes) -> (Vec<zetesis_ferraris::Node>, Vec<usize>) {
+    (
+        nodes.parts().nodes().to_vec(),
+        nodes.parts().operands().to_vec(),
+    )
+}
 
 fn location() -> ProgramSite {
     ProgramSite::source(themelios_base::span::Location {
@@ -124,6 +136,43 @@ fn interpretation(theory: &Theory, bits: usize) -> Interpretation {
     Interpretation::new(theory, (0..2).filter(|atom| bits & (1 << atom) != 0)).unwrap()
 }
 
+fn compare_truth(grouped: &Theory, scalar: &Theory) {
+    for candidate in 0..4 {
+        let outer = interpretation(grouped, candidate);
+        let reference = interpretation(scalar, candidate);
+        assert_eq!(
+            models(grouped, &outer, Limits::default(), &Cancellation::default()).unwrap(),
+            models(
+                scalar,
+                &reference,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+        );
+        for tested in 0..4 {
+            assert_eq!(
+                models_reduct(
+                    grouped,
+                    &outer,
+                    &interpretation(grouped, tested),
+                    Limits::default(),
+                    &Cancellation::default()
+                )
+                .unwrap(),
+                models_reduct(
+                    scalar,
+                    &reference,
+                    &interpretation(scalar, tested),
+                    Limits::default(),
+                    &Cancellation::default()
+                )
+                .unwrap()
+            );
+        }
+    }
+}
+
 #[test]
 fn grouped_guards_preserve_scalar_frozen_truth() {
     for guards in [
@@ -142,7 +191,7 @@ fn grouped_guards_preserve_scalar_frozen_truth() {
             [1, 2],
             &guards,
             |builder, elements, source, binding| {
-                let mut scalar_nodes = builder.nodes.to_vec();
+                let mut scalar_nodes = copy(&builder.nodes);
                 let GroundAggregate::Numeric(entries) = &elements else {
                     unreachable!()
                 };
@@ -157,57 +206,34 @@ fn grouped_guards_preserve_scalar_frozen_truth() {
                         &Cancellation::default(),
                     )
                     .unwrap();
-                    scalar_nodes.push(Node::And(scalar_root, build.root()));
-                    scalar_root = scalar_nodes.len() - 1;
+                    let mut transaction = scalar_nodes.transaction();
+                    scalar_root = transaction
+                        .push(
+                            Node::And(&[scalar_root, build.root()]),
+                            usize::MAX,
+                            usize::MAX,
+                        )
+                        .unwrap();
+                    transaction.commit();
                 }
                 let root = builder
                     .aggregate_guards(elements, &source, binding, None, location())
                     .unwrap();
-                let grouped =
-                    Theory::new(2, builder.nodes.to_vec(), vec![root], builder.limits.theory)
-                        .unwrap();
-                let scalar =
-                    Theory::new(2, scalar_nodes, vec![scalar_root], builder.limits.theory).unwrap();
-                for candidate in 0..4 {
-                    let outer = interpretation(&grouped, candidate);
-                    let reference = interpretation(&scalar, candidate);
-                    assert_eq!(
-                        models(
-                            &grouped,
-                            &outer,
-                            Limits::default(),
-                            &Cancellation::default()
-                        )
-                        .unwrap(),
-                        models(
-                            &scalar,
-                            &reference,
-                            Limits::default(),
-                            &Cancellation::default()
-                        )
-                        .unwrap()
-                    );
-                    for tested in 0..4 {
-                        assert_eq!(
-                            models_reduct(
-                                &grouped,
-                                &outer,
-                                &interpretation(&grouped, tested),
-                                Limits::default(),
-                                &Cancellation::default()
-                            )
-                            .unwrap(),
-                            models_reduct(
-                                &scalar,
-                                &reference,
-                                &interpretation(&scalar, tested),
-                                Limits::default(),
-                                &Cancellation::default()
-                            )
-                            .unwrap()
-                        );
-                    }
-                }
+                let grouped = Theory::new(
+                    2,
+                    copy(&builder.nodes).into_parts(),
+                    vec![root],
+                    builder.limits.theory,
+                )
+                .unwrap();
+                let scalar = Theory::new(
+                    2,
+                    scalar_nodes.into_parts(),
+                    vec![scalar_root],
+                    builder.limits.theory,
+                )
+                .unwrap();
+                compare_truth(&grouped, &scalar);
             },
         );
     }
@@ -224,7 +250,7 @@ fn family_receipt_avoids_repeated_prefix_validation() {
                 unreachable!()
             };
             let guards = numeric(&sample());
-            let mut nodes = builder.nodes.to_vec();
+            let mut nodes = copy(&builder.nodes);
             let scalar_work: u64 = guards
                 .iter()
                 .map(|guard| {
@@ -249,13 +275,15 @@ fn family_receipt_avoids_repeated_prefix_validation() {
             assert_eq!(
                 builder.counters.accounting.work - before,
                 family.build.statistics().work
+                    + family.appended.suffix.view().len() as u64
+                    + family.appended.suffix.parts().operands().len() as u64
             );
         },
     );
 }
 
 #[test]
-fn canonical_remapping_retains_only_checked_prefix() {
+fn canonical_remapping_preserves_checked_ownership() {
     with_guards(
         &FormulaLimits::default(),
         [1, 2],
@@ -265,17 +293,22 @@ fn canonical_remapping_retains_only_checked_prefix() {
                 unreachable!()
             };
             let guards = numeric(&sample());
-            let prefix = builder.nodes.len();
+            let prefix = builder.nodes.view().len();
             let first = builder
                 .append_guard_family(elements.slice(), &guards, guards.len(), location())
                 .unwrap();
             assert!(first.build.appended_nodes() > 0);
-            builder.intern_appended(prefix, location()).unwrap();
+            builder
+                .intern_appended(&first.appended.suffix, location())
+                .unwrap();
 
-            // Reindexing removed the compiler suffix. A subsequent family must
-            // inspect the replacement nodes, but need not reinspect the prefix.
-            let mut reference = builder.nodes.to_vec();
-            assert!(reference.len() > prefix);
+            // Remapped rows entered the same checked owner. A cold reference
+            // verifies every node and occurrence; the retained owner need not.
+            let mut reference = copy(&builder.nodes);
+            assert!(reference.view().len() > prefix);
+            let original = snapshot(&builder.nodes);
+            let retained = builder.nodes.view().len() + builder.nodes.parts().occurrences();
+            let start = reference.view().len();
             let scalar = zetesis_ferraris::append_aggregate_family(
                 &mut reference,
                 elements.slice(),
@@ -290,11 +323,20 @@ fn canonical_remapping_retains_only_checked_prefix() {
             let reused = builder
                 .append_guard_family(elements.slice(), &guards, guards.len(), location())
                 .unwrap();
-            assert_eq!(&*builder.nodes, reference);
+            assert_eq!(snapshot(&builder.nodes), original);
             assert_eq!(reused.build.roots(), scalar.roots());
+            let suffix = &reused.appended.suffix;
+            assert_eq!(suffix.first(), start);
+            assert_eq!(suffix.view().len(), reference.view().len() - start);
+            for index in 0..suffix.view().len() {
+                assert_eq!(
+                    suffix.view().node(index).unwrap(),
+                    reference.view().node(start + index).unwrap()
+                );
+            }
             assert_eq!(
                 scalar.statistics().work - reused.build.statistics().work,
-                prefix as u64
+                retained as u64
             );
         },
     );
@@ -330,7 +372,7 @@ fn failed_family_work_survives_rollback() {
                 unreachable!()
             };
             let before = builder.counters.accounting.work;
-            let nodes = builder.nodes.to_vec();
+            let nodes = copy(&builder.nodes);
             let guards = numeric(&sample());
             let result =
                 builder.append_guard_family(elements.slice(), &guards, guards.len(), location());
@@ -348,7 +390,7 @@ fn failed_family_work_survives_rollback() {
                 assert!(error.statistics().nodes > 0);
             }
             assert_eq!(builder.counters.accounting.work - before, cap);
-            assert_eq!(&*builder.nodes, nodes);
+            assert_eq!(snapshot(&builder.nodes), snapshot(&nodes));
         });
     }
 }
@@ -365,14 +407,14 @@ fn refused_scalar_compilation_retains_spent_work() {
             &[(Relation::Ge, Value::Number(1))],
             |builder, elements, guards, binding| {
                 let before = builder.counters.accounting.work;
-                let nodes = builder.nodes.to_vec();
+                let nodes = copy(&builder.nodes);
                 let result = builder.aggregate_guards(elements, &guards, binding, None, location());
                 let Err(FormulaFailure::Aggregate { error, .. }) = result else {
                     panic!("compiler must exhaust its smaller allowance")
                 };
                 assert_eq!(error.kind(), AggregateErrorKind::WorkLimit);
                 assert_eq!(error.statistics().work, allowance);
-                assert_eq!(&*builder.nodes, nodes);
+                assert_eq!(snapshot(&builder.nodes), snapshot(&nodes));
                 builder.counters.accounting.work - before
             },
         )
@@ -396,14 +438,16 @@ fn returned_roots_remain_live_during_remapping() {
                 .allowance(&observer, builder.limits, location())
                 .unwrap();
             let guards = numeric(&sample());
-            let first = builder.nodes.len();
             let family = builder
                 .append_guard_family(elements.slice(), &guards, guards.len(), location())
                 .unwrap();
             let bytes = family.build.root_storage_bytes();
             assert!(bytes >= size_of::<Vec<usize>>() + guards.len() * size_of::<usize>());
-            let canonical = builder.intern_appended(first, location()).unwrap();
-            assert!(!canonical.is_empty());
+            let canonical = builder
+                .intern_appended(&family.appended.suffix, location())
+                .unwrap();
+            assert!(!canonical.slice().is_empty());
+            drop(canonical);
             assert_eq!(
                 before
                     - builder
@@ -411,6 +455,10 @@ fn returned_roots_remain_live_during_remapping() {
                         .allowance(&observer, builder.limits, location())
                         .unwrap(),
                 bytes
+                    + size_of::<zetesis_ferraris::FormulaSuffix>()
+                    + family.appended.suffix.parts().node_capacity()
+                        * size_of::<zetesis_ferraris::Node>()
+                    + family.appended.suffix.parts().operand_capacity() * size_of::<usize>()
             );
             drop(family);
             assert_eq!(
@@ -444,7 +492,7 @@ fn root_refusal_reports_the_configured_storage_limit() {
         let GroundAggregate::Numeric(elements) = elements else {
             unreachable!()
         };
-        let nodes = builder.nodes.to_vec();
+        let nodes = copy(&builder.nodes);
         let guards = numeric(&sample());
         let result =
             builder.append_guard_family(elements.slice(), &guards, guards.len(), location());
@@ -460,7 +508,7 @@ fn root_refusal_reports_the_configured_storage_limit() {
         assert_eq!(resource, FormulaResource::SupportBytes);
         assert_eq!(limit, limits.max_support_bytes as u128);
         assert_eq!(observed, (used + requested) as u128);
-        assert_eq!(&*builder.nodes, nodes);
+        assert_eq!(snapshot(&builder.nodes), snapshot(&nodes));
     });
 }
 
@@ -607,7 +655,7 @@ fn guard_family_uses_preparation_control() {
             let cancellation = Cancellation::default();
             builder.counters =
                 std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
-            let before = builder.nodes.to_vec();
+            let before = copy(&builder.nodes);
             cancellation.cancel();
             let guards = numeric(&[(Relation::Ge, Value::Number(1))]);
             let Err(error) =
@@ -618,7 +666,7 @@ fn guard_family_uses_preparation_control() {
             assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
             assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
                 if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
-            assert_eq!(&*builder.nodes, before);
+            assert_eq!(snapshot(&builder.nodes), snapshot(&before));
         },
     );
 }
@@ -636,7 +684,7 @@ fn signed_aggregate_uses_the_preparation_token() {
             let cancellation = Cancellation::default();
             builder.counters =
                 std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
-            let before = builder.nodes.to_vec();
+            let before = copy(&builder.nodes);
             cancellation.cancel();
             let error = builder
                 .numeric_root(
@@ -648,7 +696,7 @@ fn signed_aggregate_uses_the_preparation_token() {
                 .unwrap_err();
             assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
                 if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
-            assert_eq!(&*builder.nodes, before);
+            assert_eq!(snapshot(&builder.nodes), snapshot(&before));
         },
     );
 }
@@ -672,7 +720,7 @@ fn extrema_use_the_preparation_token() {
             let cancellation = Cancellation::default();
             builder.counters =
                 std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
-            let before = builder.nodes.to_vec();
+            let before = copy(&builder.nodes);
             cancellation.cancel();
             for kind in [AggregateExtremum::Min, AggregateExtremum::Max] {
                 let error = builder
@@ -686,7 +734,7 @@ fn extrema_use_the_preparation_token() {
                     .unwrap_err();
                 assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
                     if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
-                assert_eq!(&*builder.nodes, before);
+                assert_eq!(snapshot(&builder.nodes), snapshot(&before));
             }
         },
     );

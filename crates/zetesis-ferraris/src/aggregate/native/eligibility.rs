@@ -11,7 +11,7 @@ use crate::{Interpretation, oracle};
 /// Bounds for formula-prefix evaluation and retained tuple occurrence masks.
 #[derive(Clone, Copy, Debug)]
 pub struct EligibilityLimits {
-    /// Original/frozen node visits and copied tuple-condition observations.
+    /// Original/frozen node and operand visits, plus copied tuple observations.
     pub max_work: u64,
     /// Simultaneous node-truth scratch and output masks; borrowed theory, group,
     /// interpretations, stack and allocator metadata are excluded.

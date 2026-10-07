@@ -116,7 +116,7 @@ fn a_restriction_narrows_the_remaining_regions_without_restarting() {
     let first: Vec<Vec<usize>> = (0..2)
         .map(|_| search.next().unwrap().unwrap().atoms().collect())
         .collect();
-    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(2)], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     let rest = models(&mut search);
     assert!(search.exhausted());
@@ -137,7 +137,7 @@ fn a_restriction_charges_its_indexing_to_the_search_work() {
     let theory = choices(3);
     let mut search = regions(&theory, Limits::default());
     let before = search.statistics();
-    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(2)], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     let after = search.statistics();
     let indexed = after.regions.unwrap().counts.work - before.regions.unwrap().counts.work;
@@ -159,7 +159,7 @@ fn a_restriction_beyond_the_remaining_search_work_is_refused() {
         ..Limits::default()
     };
     let mut search = regions(&theory, limits);
-    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(2)], vec![0]);
     assert!(matches!(
         search.restrict_candidates(&restriction),
         Err(Incomplete::WorkLimit)
@@ -184,11 +184,12 @@ fn the_candidate_limit_stops_regions_without_exhaustion() {
 #[test]
 fn the_work_limit_stops_regions_without_exhaustion() {
     // Extracting the producers is charged at construction and indexing the
-    // theory, one unit per node, when the walk starts; the ceiling leaves a
+    // theory, one unit per node and operand occurrence, when the walk starts; the ceiling leaves a
     // little search beyond both, less than the first leaf needs.
     let theory = choices(4);
     let construction = regions(&theory, Limits::default()).statistics().search.work;
-    let walk = construction + u64::try_from(theory.nodes().len()).unwrap();
+    let walk =
+        construction + u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
     let max_work = walk + 10;
     let limits = Limits {
         search: SearchLimits {
@@ -213,12 +214,13 @@ fn the_work_limit_stops_regions_without_exhaustion() {
 #[test]
 fn the_original_index_charge_at_the_walks_start_is_inclusive() {
     // Construction charges only the producer extraction. The walk's first
-    // step charges the index whole, one unit per node, before building it:
+    // step charges the index whole, one unit per node and operand occurrence, before building it:
     // a ceiling short of that refuses it and spends nothing, and a ceiling
     // of exactly that admits it.
     let theory = choices(3);
     let construction = regions(&theory, Limits::default()).statistics().search.work;
-    let walk = construction + u64::try_from(theory.nodes().len()).unwrap();
+    let walk =
+        construction + u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
     for max_work in construction..=walk {
         let limits = Limits {
             search: SearchLimits {

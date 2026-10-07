@@ -1,0 +1,162 @@
+{
+  "schema": "zetesis.refinement.evaluation.native.v1",
+  "recordedOn": "2026-10-07",
+  "scope": "Refreshed generated native row getters, raw paired admission/construction, evaluator/frozen query, proper-subset search and public membership; inner tight operand classification only. The mathematical statements retain their existing contracts. Runtime-effect composition, outer tight recognition/producer correspondence, consuming checked-topology admission, source grounding, enumeration and devices are outside this record.",
+  "source": {
+    "inventory": "native-source-inputs.sha256",
+    "inventorySha256": "836f49dfb3313df6bb18d80b06b2d8c763f086cf06af3dbb76d130fe61614c1c",
+    "embeddedFerrarisFiles": 8,
+    "scope": "Exact source bytes embedded by this extraction. This is not an inventory or freshness assertion for every dependency Rust source; imported operations are additionally fixed by the complete normalized extraction and explicit external-model boundary.",
+    "manifests": [
+      {
+        "path": "Cargo.toml",
+        "sha256": "b32ba5aed00f86ed1186882ccaf0b993bbff64f9435454adcf7a69a84355bf9f"
+      },
+      {
+        "path": "Cargo.lock",
+        "sha256": "3eb49ecf375c387d51548c7a05d13baa0c2642b0c8b3678e2cdc13a3989ec2fc"
+      },
+      {
+        "path": "rust-toolchain.toml",
+        "sha256": "8e390d6a0838315f972690f46ef8bae8b7ecc9ee6c1ed70140ef852869c2482e"
+      },
+      {
+        "path": "crates/zetesis-ferraris/Cargo.toml",
+        "sha256": "2ffd39dbffa777402e2bf2fc8f50668d792f7877fc15b77c606e2ade08963b00"
+      },
+      {
+        "path": "crates/zetesis-core/Cargo.toml",
+        "sha256": "1e2a56c90057bd3f5aed7c7a7654f6e31112ca8235498b8ff4a6e193ca6edce2"
+      },
+      {
+        "path": "crates/zetesis-cpu/Cargo.toml",
+        "sha256": "98f0769acb99f3f72f44cf4fb5de2d9fbb58f5e06bf68b1e69731f5087f681e7"
+      }
+    ]
+  },
+  "tools": {
+    "charon": {
+      "version": "0.1.254 (b104e24fea7d721b71e6c39fd70f26ff20bc0980)",
+      "sha256": "0ffca3f346ea1572afc21f16b98e3b3953e301180c5e1e9898ce9ddef79d32ec",
+      "driverSha256": "dd9683888200014b93c9dd8cbd4b3641a1c093c8e05d7aa5a8a1b9698751643c"
+    },
+    "aeneas": {
+      "version": "nightly-2026.09.09-505b6ca",
+      "sha256": "e8690e9b5c2798b11c0d9baece6f610794353cb189d84b3f560e93b3589a41a4"
+    },
+    "rust": {
+      "toolchain": "nightly-2026-08-18-aarch64-apple-darwin",
+      "version": "rustc 1.100.0-nightly",
+      "commit": "8fa1c96cfd489e4c27654c144ae871ce2c4db6c6",
+      "binarySha256": "067254444273fb1a92203b004d33584e064d130ee146090f22dc98de82408da0",
+      "targetPointerWidth": 64
+    },
+    "lean": {
+      "version": "4.31.0",
+      "commit": "68218e876d2a38b1985b8590fff244a83c321783",
+      "backendRelease": "nightly-2026.09.09-505b6ca"
+    }
+  },
+  "extraction": {
+    "roots": [
+      "zetesis_ferraris::oracle::identities",
+      "{impl core::clone::Clone for zetesis_ferraris::theory::Theory}::clone",
+      "zetesis_ferraris::oracle::evaluate",
+      "zetesis_ferraris::oracle::failed_root",
+      "zetesis_ferraris::oracle::find_countermodel",
+      "zetesis_ferraris::oracle::check_subset",
+      "zetesis_ferraris::oracle::select_atoms",
+      "zetesis_ferraris::oracle::advance_subset",
+      "zetesis_ferraris::reduct",
+      "zetesis_ferraris::theory::validate_node",
+      "zetesis_ferraris::theory::validate_nodes",
+      "zetesis_ferraris::theory::validate_root",
+      "zetesis_ferraris::theory::validate_roots",
+      "zetesis_ferraris::theory::admit",
+      "zetesis_ferraris::theory::_::new",
+      "zetesis_ferraris::oracle::reserve",
+      "zetesis_ferraris::reduct::_::freeze",
+      "zetesis_ferraris::reduct::_::new",
+      "zetesis_ferraris::reduct::_::is_satisfied_by",
+      "zetesis_ferraris::theory::insert_atoms",
+      "zetesis_ferraris::oracle::check",
+      "zetesis_ferraris::checked::check_interpretation",
+      "zetesis_ferraris::checked::_::candidate",
+      "zetesis_ferraris::checked::_::verdict",
+      "zetesis_ferraris::checked::_::accepted",
+      "zetesis_ferraris::checked::_::statistics",
+      "zetesis_ferraris::checked::_::into_stable_interpretation",
+      "zetesis_ferraris::checked::_::theory",
+      "zetesis_ferraris::checked::_::interpretation",
+      "zetesis_ferraris::checked::_::into_interpretation",
+      "zetesis_ferraris::tight::compile::classify",
+      "zetesis_ferraris::atomic_choice::atom",
+      "zetesis_ferraris::atomic_choice::pair",
+      "zetesis_ferraris::tight::compile::producer"
+    ],
+    "include": [
+      "zetesis_ferraris",
+      "zetesis_cpu::cancellation",
+      "zetesis_ferraris::reduct::FrozenReduct",
+      "zetesis_ferraris::reduct::_::satisfied_by",
+      "zetesis_ferraris::reduct::_::theory"
+    ],
+    "exclude": [
+      "zetesis_ferraris::theory::{zetesis_ferraris::theory::FormulaTransaction}::new",
+      "zetesis_ferraris::reduct::_::candidate",
+      "zetesis_ferraris::reduct::_::fmt"
+    ],
+    "preset": "aeneas",
+    "sysroot": "default",
+    "cargoArguments": [
+      "--lib",
+      "--locked",
+      "--offline"
+    ],
+    "rawSha256": "f180f792197c60fb3c1b463d1bf2670beccdb8a961ac23bee657bb9d948a5f15",
+    "normalizedSourceSha256": "38bdb54e28bbf813f45216c35ef0e59f05f679a6f771b3056441622764fdb8fc",
+    "translationInputSha256": "adecdafd006df329ee3359fa7933d8803ac951926be9830bf03f05ef67bebcfb",
+    "replay": "native-replay/replay.sh",
+    "normalization": "The exact normalized-source hash is the replay guard. Raw destination metadata, embedded source text and short-name ordering may differ; source bytes are checked separately. Fourteen debug local names are changed, unused derived Debug registration is removed, and two unused Step registrations are cleared. The guarded inverse restores complete normalized and parsed raw input; no executable statement or function declaration is removed."
+  },
+  "adaptation": {
+    "inventory": "native-replay/inventory.json",
+    "normalizer": "native-replay/normalize.jq",
+    "inverse": "native-replay/restore-check.jq",
+    "providerBlock": "-- Explicit providers for the translated external allocation operations.\nvariable [ArcAllocation] [VectorReservation]\n\n",
+    "providerAnchor": "namespace ZetesisNativeExtract\n\n",
+    "externalTemplates": "Byte-identical to the preceding native generation; no new external model or provider."
+  },
+  "generated": {
+    "types": {
+      "path": "Native/Types.lean",
+      "sha256": "1248737e7956aa3f9c336c82abc4aca90d5d74a6bbef15df1e487a9719f3e810"
+    },
+    "functions": {
+      "path": "Native/Funs.lean",
+      "stockSha256": "f086e0ca8d1dc8c379ceb0f9346f9a434fa2396bad3ddb089778ec40e5639f29",
+      "boundSha256": "9d334247e741430ccf5b9171d43920cf1968917e422880bf8e272e58b216a47d"
+    }
+  },
+  "proof": {
+    "artifactInventory": "native-artifacts.sha256",
+    "artifactInventorySha256": "2823115a9c082da95db141a3394ec901c360fe082b9607814779bd1041a45449",
+    "localDependencyFiles": 105,
+    "externalImports": [
+      "Aeneas",
+      "Aeneas.Std.RangeIter",
+      "Init.Data.BitVec.Lemmas",
+      "Init.Data.List.Nat.Pairwise",
+      "Std"
+    ],
+    "audit": "NativeAudit.lean",
+    "allowedAxioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "verification": "native-verification.json",
+    "auditOutput": "native-axiom-audit.txt",
+    "auditedDeclarations": 348
+  }
+}

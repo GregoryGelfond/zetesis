@@ -18,11 +18,21 @@ impl Workspace {
         theory: &Theory,
         limits: AdmissionLimits,
     ) -> Result<(), Incomplete> {
-        let dimensions = encoding::ClauseReservation::new(theory, limits)?;
-        self.encoding.reserve(theory, limits)?;
+        let cancellation = crate::Cancellation::default();
+        let mut budget = Budget {
+            quota: search::LocalQuota,
+            limits: crate::SearchLimits {
+                max_work: u64::MAX,
+                max_decisions: 0,
+            },
+            cancellation: &cancellation,
+            statistics: crate::SearchStatistics::default(),
+        };
+        let gates = encoding::gate_count(theory, &mut budget)?;
+        let dimensions = encoding::ClauseReservation::new(theory, limits, gates)?;
+        self.encoding.reserve(theory, limits, &mut budget)?;
         let variables = usize::try_from(
-            (theory.atom_count() as u128 + theory.nodes().len() as u128)
-                .min(limits.max_variables as u128),
+            (theory.atom_count() as u128 + gates as u128).min(limits.max_variables as u128),
         )
         .map_err(|_| Incomplete::CounterOverflow)?;
         self.search.reserve(variables, dimensions.clauses)
@@ -51,7 +61,7 @@ mod tests {
     fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
         Theory::new(
             1,
-            nodes,
+            zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
             roots,
             zetesis_ferraris::AdmissionLimits::default(),
         )
@@ -65,14 +75,14 @@ mod tests {
         // adding not n would incorrectly force a and hide that witness.
         let input = theory(
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Implies(0, 1),
-                Node::Implies(2, 0),
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::implies(2, 0),
             ],
             vec![3],
         );
-        let fact = theory(vec![Node::Atom(0)], vec![0]);
+        let fact = theory(vec![Node::atom(0)], vec![0]);
         let mut workspace = Workspace::default();
         let cancellation = Cancellation::default();
         for original in [&input, &fact, &input] {
@@ -119,7 +129,7 @@ mod tests {
     fn reservation_failure_does_not_poison_later_encoding() {
         let huge = Theory::new(
             usize::MAX / 2,
-            vec![],
+            zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
             vec![],
             zetesis_ferraris::AdmissionLimits {
                 max_atoms: usize::MAX,
@@ -137,7 +147,7 @@ mod tests {
             workspace.reserve(&huge, limits),
             Err(Incomplete::Allocation)
         );
-        let fact = theory(vec![Node::Atom(0)], vec![0]);
+        let fact = theory(vec![Node::atom(0)], vec![0]);
         let candidate = Interpretation::new(&fact, [0]).unwrap();
         let cancellation = Cancellation::default();
         let mut budget = Budget {
@@ -159,10 +169,10 @@ mod tests {
     fn batch_completion_releases_the_previous_scalar_workspace() {
         let choice = theory(
             vec![
-                Node::Atom(0),
-                Node::False,
-                Node::Implies(0, 1),
-                Node::Or(0, 2),
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::or_pair([0, 2]),
             ],
             vec![3],
         );

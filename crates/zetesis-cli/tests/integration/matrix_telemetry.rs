@@ -10,7 +10,7 @@ use zetesis_validation::{
     selected::{NativeExecution, Oracle},
 };
 
-fn capture(source: &str, oracle: &str, workers: &str) -> (Report, Value, Vec<u8>) {
+fn capture(source: &str, oracle: &str, workers: &str, search: &str) -> (Report, Value, Vec<u8>) {
     let options = Options::try_parse_from([
         "zetesis",
         "--backend",
@@ -18,12 +18,10 @@ fn capture(source: &str, oracle: &str, workers: &str) -> (Report, Value, Vec<u8>
         "--grounder",
         "eager",
         "--search",
-        "clauses",
+        search,
         "--oracle",
         oracle,
-        "--workers",
-        "1",
-        "--completion-workers",
+        "--threads",
         workers,
         "--models",
         "0",
@@ -59,6 +57,7 @@ fn positive_publication_retains_its_actual_matrix_procedure() {
             "a. b:-a. a:-b. #minimize {2@3,k:b;1@1,k:a}. #show a/0.",
             "auto",
             workers,
+            "regions",
         );
         assert_eq!(report.models, 1);
         let certified = report.countermodel_statistics.unwrap().certified.unwrap();
@@ -88,30 +87,28 @@ fn positive_publication_retains_its_actual_matrix_procedure() {
 
 #[test]
 fn residual_publication_retains_cold_preparation_measurement() {
-    for workers in ["1", "2"] {
-        let (report, document, text) = capture("a | b.", "countermodel", workers);
-        assert_eq!(report.models, 2);
-        let search = report.countermodel_statistics.unwrap();
-        assert!(search.countermodel_queries > 0);
-        let timings = report.phase_timings.unwrap();
-        let preparation = timings.get(SolvePhase::ReductPreparation).unwrap();
-        assert_eq!(preparation.calls, 1);
-        let request = NativeExecution {
-            oracle: Oracle::Countermodel,
-            ..Default::default()
-        };
-        let observation = Observation::from_statistics(&document, &text, request).unwrap();
-        assert_eq!(observation.execution.procedure, Procedure::Countermodel);
-        assert_eq!(observation.timing.phase_schema, 5);
-        let observed = observation.timing.phases["reduct_preparation"]
-            .as_ref()
-            .unwrap();
-        assert_eq!(observed.calls, preparation.calls);
-        assert_eq!(
-            u128::from(observed.elapsed_ns),
-            preparation.elapsed.as_nanos()
-        );
-    }
+    let (report, document, text) = capture("a | b.", "countermodel", "1", "clauses");
+    assert_eq!(report.models, 2);
+    let search = report.countermodel_statistics.unwrap();
+    assert!(search.countermodel_queries > 0);
+    let timings = report.phase_timings.unwrap();
+    let preparation = timings.get(SolvePhase::ReductPreparation).unwrap();
+    assert_eq!(preparation.calls, 1);
+    let request = NativeExecution {
+        oracle: Oracle::Countermodel,
+        ..Default::default()
+    };
+    let observation = Observation::from_statistics(&document, &text, request).unwrap();
+    assert_eq!(observation.execution.procedure, Procedure::Countermodel);
+    assert_eq!(observation.timing.phase_schema, 5);
+    let observed = observation.timing.phases["reduct_preparation"]
+        .as_ref()
+        .unwrap();
+    assert_eq!(observed.calls, preparation.calls);
+    assert_eq!(
+        u128::from(observed.elapsed_ns),
+        preparation.elapsed.as_nanos()
+    );
 }
 
 #[test]
@@ -175,3 +172,28 @@ fn terminal_publication_retains_base_and_reconstruction_scopes() {
 }
 
 mod terminal_refusal;
+
+#[test]
+fn parallel_regions_publish_the_actual_countermodel_procedure() {
+    let (report, document, text) = capture("a | b.", "countermodel", "2", "regions");
+    assert_eq!(report.models, 2);
+    assert!(report.countermodel_statistics.unwrap().regions.is_some());
+    assert!(
+        std::str::from_utf8(&text)
+            .unwrap()
+            .contains("Parallel regions: 2 workers")
+    );
+    let observation = Observation::from_statistics(
+        &document,
+        &text,
+        NativeExecution {
+            oracle: Oracle::Countermodel,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(observation.execution.procedure, Procedure::Countermodel);
+    assert!(matches!(observation.execution.device, DeviceWork::Cpu));
+    // Region queries use their own frozen views, with no CNF preparation owner.
+    assert!(observation.timing.phases["reduct_preparation"].is_none());
+}

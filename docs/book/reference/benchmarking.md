@@ -60,7 +60,7 @@ inputs.
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
-| `scalability` | Ten authored and corpus workloads, with indexed formula joins and region search |
+| `scalability` | Fourteen authored and corpus workloads, with indexed formula joins and region search |
 
 `--case PATH` measures one case of the suite, named relative to the corpus
 directory; repeat it to measure several, in the order given. For `series`, use
@@ -70,10 +70,20 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no `--case`; it alone accepts `--examples`, its
 authored root, which defaults to `examples`, and `--include-einstein`, which
-adds the unchanged Einstein riddle as a thirteenth workload. The maintained
+adds the unchanged Einstein riddle as a fifteenth workload. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.
+Both scalability commands apply the population's measurement presets: at least
+16 MiB per invocation and decoded report, 4,194,304 native atom occurrences and
+8,388,608 native value-node occurrences. Atom-table reuse in compact JSON still
+counts every full-model occurrence. Larger caller capacities remain in force;
+per-value limits, timeouts, total capture and evidence ceilings stay as requested.
+The report records the resulting capacities in `limits` and
+`native_normalization_limits`. These measurement presets do not change solver
+resource limits or relax complete-family comparison. Library callers explicitly
+apply `scalability::limits` and `scalability::native_answers` before constructing
+their matrix request; execution itself never raises supplied limits.
 
 ### Profiles
 
@@ -110,11 +120,13 @@ The advanced controls, listed by `zetesis-bench run --help` and omitted from
 | `--oracle auto\|closure\|countermodel` | `auto` |
 | `--search regions\|clauses` | The suite's: region search for `scalability`, the solver's own otherwise |
 | `--formula-joins indexed\|table` | The suite's: indexed joins for `scalability`, the solver's own otherwise |
-| `--completion-workers` | One |
-| `--batch-size` | 64 candidate occurrences |
-| `--max-expansion-work` | None; a ceiling is recorded in the evidence, independent of the process deadline |
+| `--memory SIZE` | The solver's ordinary host-dependent memory allowance |
 | `--time-limit SECONDS` | None; a cooperative native deadline |
 | `--clingo-threads`, also `--clingo-workers` | One; clingo retains its stock search heuristics |
+
+New reports identify the ordinary resource policy. Historical reports retain
+their explicit work and batch settings; profiles with different policies must
+not be pooled as repeated measurements of one configuration.
 
 The maintained telemetry decoder reads every backend and grounder; its Vulkan
 decoding awaits qualification on a Vulkan host. It reports unsupported

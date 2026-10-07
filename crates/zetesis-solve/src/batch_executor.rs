@@ -120,7 +120,13 @@ mod tests {
     use zetesis_sat::BatchVerdict;
 
     fn theory() -> Theory {
-        Theory::new(1, Vec::new(), Vec::new(), AdmissionLimits::default()).unwrap()
+        Theory::new(
+            1,
+            zetesis_ferraris::FormulaParts::default(),
+            Vec::new(),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
     }
 
     #[test]

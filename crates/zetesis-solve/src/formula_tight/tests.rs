@@ -12,7 +12,11 @@ fn support_decisions_agree_with_independent_reducts() {
     for roots in [vec![], vec![0], vec![2], vec![0, 2]] {
         let theory = Theory::new(
             3,
-            vec![Node::Atom(0), Node::Atom(1), Node::Implies(0, 1)],
+            zetesis_ferraris::FormulaParts::new(
+                vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
+                vec![],
+            )
+            .unwrap(),
             roots,
             AdmissionLimits::default(),
         )

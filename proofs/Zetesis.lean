@@ -1,5 +1,7 @@
 import Zetesis.Core
 import Zetesis.AdjacencyRows
+import Zetesis.OperandArena
+import Zetesis.OperandTable
 import Zetesis.Transformers
 import Zetesis.Semantics
 import Zetesis.Iteration
@@ -112,6 +114,7 @@ import Zetesis.AggregateInvariants
 import Zetesis.IntegerEnvelopes
 import Zetesis.SourceMeasures
 import Zetesis.ColumnRelations
+import Zetesis.CompactColumns
 import Zetesis.DomainContraction
 import Zetesis.Observations
 import Zetesis.SourceSupport
@@ -161,3 +164,5 @@ import Zetesis.CounterSearch
 import Zetesis.PackedCounterSearch
 import Zetesis.TheoryAdmission
 import Zetesis.TightBodyRecognition
+import Zetesis.SupportTransposition
+import Zetesis.FactRejection

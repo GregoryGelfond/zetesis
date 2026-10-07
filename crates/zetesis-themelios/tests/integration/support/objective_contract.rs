@@ -40,7 +40,10 @@ pub(crate) fn check(fixture: &str, source: &str) {
         .expect("the preserved source has an appended objective");
     let original = reference::admit(&source[..objective], &FormulaLimits::default()).unwrap();
     assert_eq!(input.atoms(), original.atoms());
-    assert_eq!(input.theory().nodes(), original.theory().nodes());
+    assert_eq!(
+        (input.theory().nodes(), input.theory().operands()),
+        (original.theory().nodes(), original.theory().operands())
+    );
     assert_eq!(input.theory().roots(), original.theory().roots());
     assert_eq!(input.formula_origins(), original.formula_origins());
 }

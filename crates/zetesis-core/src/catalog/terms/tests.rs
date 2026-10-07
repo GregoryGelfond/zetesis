@@ -433,3 +433,99 @@ fn single_slot_read_preserves_every_caller_refusal() {
         assert_eq!(visited, cutoff);
     }
 }
+
+#[test]
+fn slot_comparison_matches_key_comparison() {
+    let mut store = storage::Store::new(usize::MAX);
+    let ids = [
+        admit(&mut store, &Value::Number(9)),
+        admit(&mut store, &Value::Number(-1)),
+    ];
+    let read = CatalogRead(storage::Read::from(&store));
+    let mut left = read.assignment();
+    let mut right = read.assignment();
+    left.resize_with(2, usize::MAX, SUCCESS).unwrap();
+    right.resize_with(2, usize::MAX, SUCCESS).unwrap();
+    for (slot, id) in ids.iter().copied().enumerate() {
+        left.set_with(slot, &key(&store, id), SUCCESS).unwrap();
+        right.set_with(slot, &key(&store, id), SUCCESS).unwrap();
+    }
+    for a in 0..2 {
+        for b in 0..2 {
+            assert_eq!(
+                left.as_slice().compare_slot(a, right.as_slice(), b),
+                left.as_slice()
+                    .compare_key(a, &right.key(b).unwrap().unwrap())
+            );
+        }
+    }
+    assert!(
+        left.as_slice()
+            .compare_slot(0, right.as_slice(), 1)
+            .unwrap()
+            .is_lt()
+    );
+}
+
+#[test]
+fn slot_comparison_preserves_authentication_order() {
+    let mut store = storage::Store::new(usize::MAX);
+    let id = admit(&mut store, &Value::Number(1));
+    let mut left = CatalogRead(storage::Read::from(&store)).assignment();
+    left.resize_with(2, usize::MAX, SUCCESS).unwrap();
+    left.set_with(0, &key(&store, id), SUCCESS).unwrap();
+    let right = CatalogRead(storage::Read::from(&store)).assignment();
+    let mut foreign_store = storage::Store::new(usize::MAX);
+    let foreign_id = admit(&mut foreign_store, &Value::Number(1));
+    let mut foreign = CatalogRead(storage::Read::from(&foreign_store)).assignment();
+    foreign.resize_with(1, usize::MAX, SUCCESS).unwrap();
+    foreign
+        .set_with(0, &key(&foreign_store, foreign_id), SUCCESS)
+        .unwrap();
+    assert!(matches!(
+        left.as_slice().compare_slot(0, foreign.as_slice(), 0),
+        Err(AssignmentError::Read(ReadError::ForeignCatalog))
+    ));
+    assert!(matches!(
+        left.as_slice().compare_slot(3, foreign.as_slice(), 3),
+        Err(AssignmentError::Read(ReadError::ForeignCatalog))
+    ));
+    assert_eq!(
+        left.as_slice().compare_slot(3, right.as_slice(), 3),
+        Err(AssignmentError::Slot { slot: 3, len: 2 })
+    );
+    assert_eq!(
+        left.as_slice().compare_slot(1, right.as_slice(), 3),
+        Err(AssignmentError::Unbound { slot: 1 })
+    );
+    assert_eq!(
+        left.as_slice().compare_slot(0, right.as_slice(), 3),
+        Err(AssignmentError::Slot { slot: 3, len: 0 })
+    );
+    assert_eq!(
+        left.as_slice().compare_slot(0, left.as_slice(), 1),
+        Err(AssignmentError::Unbound { slot: 1 })
+    );
+}
+
+#[test]
+fn slot_equality_does_not_certify_a_reader_prefix() {
+    let mut store = storage::Store::new(usize::MAX);
+    let old = store.snapshot(0).unwrap();
+    let id = admit(&mut store, &Value::Number(1));
+    let mut frame = CatalogRead(storage::Read::from(&store)).assignment();
+    frame.resize_with(1, usize::MAX, SUCCESS).unwrap();
+    frame.set_with(0, &key(&store, id), SUCCESS).unwrap();
+    assert_eq!(
+        frame.as_slice().compare_slot(0, frame.as_slice(), 0),
+        Ok(std::cmp::Ordering::Equal)
+    );
+    assert!(matches!(
+        frame
+            .as_slice()
+            .bind_with(CatalogRead(storage::Read::from(&old)), SUCCESS),
+        Err(AssignmentFailure::Assignment(AssignmentError::Read(
+            ReadError::OutsidePrefix
+        )))
+    ));
+}

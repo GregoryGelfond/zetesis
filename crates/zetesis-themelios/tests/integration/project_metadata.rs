@@ -23,7 +23,10 @@ fn selected_pair() -> (
 fn project_declarations_preserve_the_original_theory() {
     let (original, selected) = selected_pair();
     assert_eq!(selected.atoms(), original.atoms());
-    assert_eq!(selected.theory().nodes(), original.theory().nodes());
+    assert_eq!(
+        (selected.theory().nodes(), selected.theory().operands()),
+        (original.theory().nodes(), original.theory().operands())
+    );
     assert_eq!(selected.theory().roots(), original.theory().roots());
     assert_eq!(selected.formula_origins(), original.formula_origins());
 }
@@ -200,7 +203,10 @@ fn project_constants_use_a_separate_domain_allowance() {
     )
     .unwrap();
     assert_eq!(selected.atoms(), original.atoms());
-    assert_eq!(selected.theory().nodes(), original.theory().nodes());
+    assert_eq!(
+        (selected.theory().nodes(), selected.theory().operands()),
+        (original.theory().nodes(), original.theory().operands())
+    );
     assert_eq!(selected.theory().roots(), original.theory().roots());
     assert!(selected.projection().is_explicit());
     assert!(selected.projection().atoms().is_empty());

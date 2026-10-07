@@ -40,15 +40,11 @@ fn closed_values_are_preserved_across_membership_routes() {
 fn observation_channels_keep_hidden_full_ties_and_nested_whole_variables() {
     let source =
         "p(f(1)).{hidden}.#show p/1.#show p(X):p(X).#show seen(X):p(X).#minimize{0@1,X:p(X)}.";
-    for limit in ["0", "10000000"] {
-        let (report, output) = solve(
+    for limit in [0, 10_000_000] {
+        let (report, output, _) = crate::support::prepared::formula_run(
             source,
-            &[
-                "--oracle",
-                "countermodel",
-                "--max-objective-bound-work",
-                limit,
-            ],
+            &["--oracle", "countermodel"],
+            |config| config.solve.max_objective_bound_work = limit,
         );
         let report = report.unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
@@ -71,14 +67,10 @@ fn retained_structural_payload_is_admitted_before_publication() {
     const SCORE_BYTES: usize = 1 + 8 + 4 + 8;
     const RETAINED: usize = CATALOG_BYTES + SELECTION_BYTES + SCORE_BYTES;
     for ceiling in [RETAINED - 1, RETAINED] {
-        let (report, output) = solve(
+        let (report, output, _) = crate::support::prepared::formula_run(
             "p(f(1)).#minimize{0:p(f(1))}.",
-            &[
-                "--oracle",
-                "countermodel",
-                "--max-optimal-bytes",
-                &ceiling.to_string(),
-            ],
+            &["--oracle", "countermodel"],
+            |config| config.solve.max_optimal_bytes = ceiling,
         );
         let report = report.unwrap();
         if ceiling == RETAINED {
@@ -101,14 +93,10 @@ fn retained_structural_payload_is_admitted_before_publication() {
 #[test]
 fn rendered_structural_output_is_admitted_before_publication() {
     for ceiling in [17, 18] {
-        let (result, output) = solve(
+        let (result, output, _) = crate::support::prepared::formula_run(
             "p(f(1)).#show p/1.#show x:q.",
-            &[
-                "--oracle",
-                "countermodel",
-                "--max-observation-bytes",
-                &ceiling.to_string(),
-            ],
+            &["--oracle", "countermodel"],
+            |config| config.observations.max_output_bytes = ceiling,
         );
         if ceiling == 18 {
             assert_eq!(result.unwrap().models, 1);

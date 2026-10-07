@@ -14,12 +14,16 @@ fn shared_narrowing_never_executes_an_unleased_read() {
         Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
         1,
-        vec![
-            zetesis_ferraris::Node::False,
-            zetesis_ferraris::Node::Atom(0),
-            zetesis_ferraris::Node::Implies(1, 0),
-            zetesis_ferraris::Node::Or(1, 2),
-        ],
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                zetesis_ferraris::Node::falsum(),
+                zetesis_ferraris::Node::atom(0),
+                zetesis_ferraris::Node::implies(1, 0),
+                zetesis_ferraris::Node::or_pair([1, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
         vec![3],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -70,7 +74,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
         0,
-        vec![],
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -125,7 +129,7 @@ fn a_refused_certificate_refunds_its_reserved_work() {
         Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
         1,
-        vec![zetesis_ferraris::Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(0)], vec![]).unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )

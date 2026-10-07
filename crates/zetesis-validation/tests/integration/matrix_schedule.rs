@@ -194,7 +194,7 @@ fn matrix_population_has_finite_construction_bounds() {
         assert!(Plan::new(Suite::Baseline, profiles, workers, 0, 1).is_err());
     }
     let too_many_workers = NativeExecution {
-        workers: NonZeroUsize::new(257).unwrap(),
+        threads: NonZeroUsize::new(257).unwrap(),
         ..Default::default()
     };
     assert!(Plan::new(Suite::Queens, vec![too_many_workers], workers, 0, 1).is_err());
@@ -250,14 +250,7 @@ fn qualification_and_measurement_share_profile_bounds() {
         (vec![NativeExecution::default(); 9], one),
         (
             vec![NativeExecution {
-                workers: excessive,
-                ..NativeExecution::default()
-            }],
-            one,
-        ),
-        (
-            vec![NativeExecution {
-                completion_workers: excessive,
+                threads: excessive,
                 ..NativeExecution::default()
             }],
             one,

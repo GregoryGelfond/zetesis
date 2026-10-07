@@ -6,11 +6,11 @@
 //! reverse lookup can cost O(a² h²) metadata probes; each probe is charged. This
 //! depends on this tuple's width, never on shifting the historical dictionary.
 
-use std::{cmp::Ordering, mem::size_of};
+use std::cmp::Ordering;
 
 use crate::{
     catalog::{AtomRef, Atoms, TermRef, storage::TermId},
-    ordered_index::{Directions, Index, Link, Node, Step, position},
+    ordered_index::{Directions, Index, Link, Node, Planned, Step, position, spine::RightSpine},
 };
 
 use super::super::{
@@ -22,6 +22,7 @@ pub(super) struct Added {
     pub term: TermId,
 }
 
+#[derive(Default)]
 pub(super) struct Plan {
     pub ids: Vec<u32>,
     pub added: Vec<Added>,
@@ -30,7 +31,29 @@ pub(super) struct Plan {
     pub encoding_bytes: u128,
 }
 
+/// Temporary scalar scratch is admitted only after a novel row is established.
+/// A session includes its retained header and capacities at operation entry.
+#[derive(Clone, Copy)]
+pub(super) enum Admission {
+    Temporary,
+    Retained,
+}
+
 impl Plan {
+    pub(super) fn capacity_bytes(&self) -> usize {
+        super::vector_bytes(&self.ids)
+            + super::vector_bytes(&self.added)
+            + super::vector_bytes(&self.patches)
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.ids.clear();
+        self.added.clear();
+        self.patches.clear();
+        self.root = None;
+        self.encoding_bytes = 0;
+    }
+
     /// Only this tuple's unpublished distinct values are scanned. Historical
     /// dictionary hits use the complete canonical inverse instead.
     fn staged(
@@ -157,13 +180,6 @@ impl Plan {
         self.root = root;
         Ok(())
     }
-
-    pub fn release(self, work: &mut Work) {
-        work.release(self.ids);
-        work.release(self.added);
-        work.release(self.patches);
-        work.live -= size_of::<Self>();
-    }
 }
 
 pub(super) fn values(
@@ -171,22 +187,19 @@ pub(super) fn values(
     atoms: Atoms<'_>,
     atom: AtomRef<'_>,
     encoding_bytes: u128,
+    plan: &mut Plan,
     work: &mut Work,
-) -> Result<Plan, Failure> {
+) -> Result<(), Failure> {
     let Layout {
         dictionary, index, ..
     } = layout;
     let DictionaryIndex::Append(index) = index else {
         return Err(Failure::Dictionary);
     };
-    work.include(size_of::<Plan>())?;
-    let mut plan = Plan {
-        ids: work.reserve(atom.values().len())?,
-        added: work.reserve(atom.values().len())?,
-        patches: Vec::new(),
-        root: index.order.root,
-        encoding_bytes,
-    };
+    plan.root = index.order.root;
+    plan.encoding_bytes = encoding_bytes;
+    work.grow(&mut plan.ids, atom.values().len())?;
+    work.grow(&mut plan.added, atom.values().len())?;
     for (column, value) in atom.values().iter().enumerate() {
         work.tick(1)?;
         plan.encoding_bytes = plan
@@ -235,21 +248,42 @@ pub(super) fn values(
         plan.ids
             .push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
     }
-    Ok(plan)
+    Ok(())
+}
+
+/// Both routes come from this owner's actual checked tuple comparisons.
+#[derive(Clone, Copy)]
+pub(super) enum RowPath<'a> {
+    Recorded(&'a Directions),
+    BeyondLast(usize),
 }
 
 pub(super) fn row(
     index: &mut Index,
     id: usize,
-    route: &Directions,
+    route: RowPath<'_>,
+    retained: Option<RightSpine>,
     work: &mut Work,
-) -> Result<Link, Failure> {
-    index.path.clear();
-    let mut cursor = index.root;
-    for offset in 0..route.len() {
+) -> Result<Planned, Failure> {
+    let reuse = match (&route, retained) {
+        (RowPath::BeyondLast(last), Some(spine)) => {
+            work.tick(1)?;
+            spine.matches(index, index.root, *last)
+        }
+        _ => false,
+    };
+    if !reuse {
+        index.path.clear();
+    }
+    let mut cursor = if reuse { None } else { index.root };
+    let mut offset = 0;
+    while let Some(link) = cursor {
         work.tick(1)?;
-        let right = route.get(offset).ok_or(Failure::Dictionary)?;
-        let previous = position(cursor.ok_or(Failure::Dictionary)?);
+        let right = match &route {
+            RowPath::Recorded(directions) => directions.get(offset).ok_or(Failure::Dictionary)?,
+            RowPath::BeyondLast(_) => true,
+        };
+        let previous = position(link);
         let node = index.nodes[previous];
         push(
             index,
@@ -262,9 +296,16 @@ pub(super) fn row(
             work,
         )?;
         cursor = node.children[usize::from(right)];
+        offset += 1;
     }
-    if cursor.is_some() {
-        return Err(Failure::Dictionary);
+    match route {
+        RowPath::Recorded(directions) if offset != directions.len() => {
+            return Err(Failure::Dictionary);
+        }
+        RowPath::BeyondLast(last) => {
+            debug_assert_eq!(index.path.last().map(|step| step.id), Some(last));
+        }
+        RowPath::Recorded(_) => {}
     }
     push(
         index,
@@ -276,7 +317,7 @@ pub(super) fn row(
         },
         work,
     )?;
-    index.plan(id, &mut || work.tick(1))
+    index.plan_changes_from(index.root, id, &mut || work.tick(1))
 }
 
 fn push(index: &mut Index, step: Step, work: &mut Work) -> Result<(), Failure> {

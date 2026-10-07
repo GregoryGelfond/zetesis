@@ -58,8 +58,9 @@ fn failed_campaign(reference_only: bool, report: Option<&std::path::Path>) -> st
 
 fn check_failed_report(report: &Value, mode: &str) {
     assert_eq!(report["case_count"], 94);
-    assert_eq!(report["native_completion_workers"], 1);
-    assert_eq!(report["native_max_completion_scratch_bytes"], 268_435_456);
+    assert_eq!(report["native_resource_policy"], "ordinary");
+    assert_eq!(report["native_threads"], 1);
+    assert!(report["native_memory_bytes"].is_null());
     assert_eq!(report["mode"], mode);
     assert_eq!(report["requested_mode_passed"], false);
     assert_eq!(report["full_native_target_passed"], false);
@@ -108,22 +109,19 @@ fn native_hardware_options_are_user_visible_and_reject_invalid_values() {
     let help = String::from_utf8(help.stdout).unwrap();
     for flag in [
         "--native-backend",
-        "--native-batch-size",
+        "--threads",
         "--native-stats",
-        "--native-completion-workers",
-        "--native-max-completion-scratch-bytes",
+        "--memory",
+        "--time-limit",
     ] {
         assert!(help.contains(flag));
     }
     for (flag, value) in [
-        ("--native-batch-size", "0"),
+        ("--threads", "0"),
         ("--native-backend", "cuda"),
-        ("--native-completion-workers", "0"),
-        ("--native-max-completion-scratch-bytes", "-1"),
-        (
-            "--native-max-completion-scratch-bytes",
-            "18446744073709551616",
-        ),
+        ("--time-limit", "0"),
+        ("--memory", "-1"),
+        ("--memory", "18446744073709551616"),
     ] {
         let output = command().args([flag, value]).output().unwrap();
         assert_eq!(output.status.code(), Some(2));
@@ -145,11 +143,9 @@ fn native_hardware_options_are_user_visible_and_reject_invalid_values() {
             "metal",
             "--native-oracle",
             "countermodel",
-            "--native-batch-size",
-            "32",
-            "--native-completion-workers",
+            "--threads",
             "4",
-            "--native-max-completion-scratch-bytes",
+            "--memory",
             "0",
         ])
         .arg("--clingo")
@@ -159,9 +155,8 @@ fn native_hardware_options_are_user_visible_and_reject_invalid_values() {
     assert_eq!(output.status.code(), Some(1));
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["native_backend"], "metal");
-    assert_eq!(report["native_batch_size"], 32);
-    assert_eq!(report["native_completion_workers"], 4);
-    assert_eq!(report["native_max_completion_scratch_bytes"], 0);
+    assert_eq!(report["native_threads"], 4);
+    assert_eq!(report["native_memory_bytes"], 0);
     assert_eq!(report["physical_formula_route_required"], true);
     assert_eq!(report["effective_native_stats"], true);
     assert_eq!(report["full_physical_formula_route_passed"], false);
@@ -297,4 +292,23 @@ fn changed_example_manifest_emits_no_verified_report() {
             .unwrap()
             .contains("SHA-256")
     );
+}
+
+#[test]
+fn removed_solver_internal_controls_are_rejected() {
+    for flag in [
+        "--native-batch-size",
+        "--native-completion-workers",
+        "--native-max-completion-scratch-bytes",
+    ] {
+        let output = command().args([flag, "1"]).output().unwrap();
+        assert_eq!(output.status.code(), Some(2), "{flag}");
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8(output.stderr)
+                .unwrap()
+                .contains("unexpected argument"),
+            "{flag}"
+        );
+    }
 }

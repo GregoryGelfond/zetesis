@@ -218,11 +218,13 @@ fn conditional_truth_matches_quantified_witnesses() {
             .iter()
             .copied()
             .filter(|&root| {
-                let zetesis_ferraris::Node::Implies(_, head) = admitted.theory().nodes()[root]
+                let zetesis_ferraris::NodeView::Implies(_, head) =
+                    admitted.theory().view().node(root).unwrap()
                 else {
                     return false;
                 };
-                admitted.theory().nodes()[head] == zetesis_ferraris::Node::Atom(index("q"))
+                admitted.theory().view().node(head).unwrap()
+                    == zetesis_ferraris::NodeView::Atom(index("q"))
             })
             .collect();
         assert_eq!(

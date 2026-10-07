@@ -1,4 +1,4 @@
-use super::{Frame, Ownership};
+use super::{Advance, Frame, Ownership};
 use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
@@ -100,6 +100,7 @@ fn a_lent_row_uses_the_current_frame_route() {
                 .next_staged(
                     Ownership::Lend,
                     None,
+                    Advance::Base,
                     budget,
                     Context::new(computation, &FormulaLimits::default(), counters, location()),
                 )
@@ -512,6 +513,7 @@ fn generated_rows(head: bool) {
                     .next_staged(
                         Ownership::Lend,
                         None,
+                        Advance::Base,
                         budget,
                         Context::new(computation, &limits, counters, location()),
                     )

@@ -175,6 +175,27 @@ impl<'source> Support<'source> {
         )
     }
 
+    /// Probe resolved structural arguments through the same equality indexes.
+    pub(super) fn probe_arguments_at(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
+        pattern: PatternRef<'_>,
+        arguments: BindingView<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<&'source [usize]>, FormulaFailure> {
+        Self::admit(self.live_bytes(), limits, counters, location)?;
+        counters.record(Event::IndexedProbe);
+        self.relations.probe_arguments_at(
+            rows,
+            pattern,
+            arguments,
+            self.live_bytes() - self.relations.current_bytes(),
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
     fn indexed_limits(
         &self,
         limits: &FormulaLimits,

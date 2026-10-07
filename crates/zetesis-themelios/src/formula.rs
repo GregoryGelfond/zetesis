@@ -71,6 +71,8 @@ pub struct FormulaLimits {
     /// to each temporary builder. Retained original-model objective query nodes
     /// have the independent `objective.max_condition_nodes` ceiling.
     pub max_objective_formula_nodes: usize,
+    /// Logical operand occurrences in one transient objective-body formula.
+    pub max_objective_formula_operands: usize,
     /// Distinct scalar values in the logical source, independent of join work.
     /// The set behind this count retains each value once so that its payload
     /// is charged to the byte budget once.
@@ -137,9 +139,10 @@ pub struct FormulaLimits {
     /// steps spent are charged to the term work. A stop leaves every
     /// constraint not yet asked as written and is reported.
     pub max_key_work: u64,
-    /// Final dense atom, formula-node, and theory-root storage ceilings.
+    /// Final dense atom, formula-node, logical operand, and theory-root ceilings.
     pub theory: zetesis_ferraris::AdmissionLimits,
-    /// Per-aggregate translation ceilings, additionally capped by total formula work/nodes.
+    /// Per-aggregate ceilings, additionally capped by remaining formula work and
+    /// the active theory or objective node and operand ceilings.
     pub aggregate: zetesis_ferraris::AggregateLimits,
     /// Independent admission ceilings for lifted objective templates.
     pub objective: zetesis_objective::AdmissionLimits,
@@ -159,6 +162,7 @@ impl Default for FormulaLimits {
             max_objective_presence_entries: DEFAULT_OBJECTIVE_PRESENCE_ENTRIES,
             max_objective_formula_atoms: 65_536,
             max_objective_formula_nodes: 1_048_576,
+            max_objective_formula_operands: 2_097_152,
             max_domain_values: 1_000_000,
             max_assignment_values: 1_000_000,
             max_generated_values: 1_000_000,
@@ -239,6 +243,8 @@ pub enum FormulaResource {
     ObjectiveFormulaAtoms,
     /// Nodes in one transient objective-body formula.
     ObjectiveFormulaNodes,
+    /// Logical child occurrences in one transient objective-body formula.
+    ObjectiveFormulaOperands,
     /// Named canonical atom payload and interner metadata, including reservation
     /// overlap, bounded independently by `max_atom_storage_bytes`.
     AtomStorageBytes,
@@ -246,6 +252,8 @@ pub enum FormulaResource {
     Atoms,
     /// Formula DAG nodes.
     Nodes,
+    /// Formula DAG logical child occurrences and physical arena cells.
+    Operands,
     /// Theory roots.
     Roots,
     /// Retained original statement sites.
@@ -774,7 +782,9 @@ impl AdmittedFormula {
         &self.compiled.atoms
     }
     /// Original statement sites per theory root, preserving merged source evidence.
-    /// Necessary support guards collect producer origins and the first atom occurrence.
+    /// Necessary support guards collect producer origins and first atom occurrences.
+    /// A shared condition guard retains their sorted union across all requiring heads;
+    /// its root identity and position need not correspond to a single atom.
     #[must_use]
     pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
@@ -908,6 +918,7 @@ impl AdmittedFormulaBundle {
         &self.compiled.atoms
     }
     /// Original statement sites per theory root, with parsed evidence when available.
+    /// Shared necessary-condition guards merge evidence from every requiring head.
     #[must_use]
     pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
@@ -1290,8 +1301,9 @@ pub(crate) fn prepare_parsed(
     source: ParsedSource,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
-    match prepare_source(&source, expansion, limits) {
+    match prepare_source(&source, expansion, limits, cancellation) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormula::new(
             preparation,
             Owner::single(program, source.into_source()),
@@ -1305,20 +1317,25 @@ fn prepare_source(
     source: &ParsedSource,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
     let parsed = source.parsed();
     let options = source.options();
+    let location = ProgramSite::source(themelios_base::span::Location {
+        source: source.source().id(),
+        span: source.source().span(),
+    });
+    let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
+        .with_cancellation(cancellation);
+    budget.poll(location)?;
     profile::check_formula(parsed, options, false)?;
     extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
     metadata::check_count(parsed, expansion, &mut 0)?;
     formula_ir::check_objectives(parsed, limits, &mut 0)?;
     let mut metadata = metadata::Builder::new(limits.metadata_storage);
-    let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
+    budget.poll(location)?;
     let raised = Arc::new(crate::formula_raise::raise(parsed, &mut metadata)?);
-    let location = ProgramSite::source(themelios_base::span::Location {
-        source: source.source().id(),
-        span: source.source().span(),
-    });
+    budget.poll(location)?;
     let (preparation, metadata) =
         prepare(&raised, options.into(), budget, limits, location, metadata)?;
     Ok((preparation, metadata, raised))
@@ -1368,7 +1385,39 @@ pub fn prepare_bundle_formula(
     expansion: ExpansionLimits,
     limits: FormulaLimits,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
-    match prepare_bundle(&bundle, options, expansion, &limits) {
+    prepare_bundle_with_control(bundle, options, expansion, &limits, None)
+}
+
+/// Prepare original bundle formulas under shared cancellation/deadline control.
+/// The same token remains in the preparation through later materialization;
+/// upstream source inspection and raising remain bounded cooperative intervals.
+///
+/// # Errors
+/// Retains the original bundle with ordinary formula failures or interruption.
+pub fn prepare_bundle_formula_with_cancellation(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+    cancellation: &zetesis_cpu::Cancellation,
+) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
+    prepare_bundle_with_control(
+        bundle,
+        options,
+        expansion,
+        &limits,
+        Some(cancellation.clone()),
+    )
+}
+
+fn prepare_bundle_with_control(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: &FormulaLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
+) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
+    match prepare_bundle(&bundle, options, expansion, limits, cancellation) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormulaBundle::new(
             preparation,
             Owner::bundle(program, bundle),
@@ -1386,7 +1435,11 @@ fn prepare_bundle(
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
+    let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
+        .with_cancellation(cancellation);
+    budget.poll(ProgramSite::program())?;
     bundle_admission::check_include_identity(bundle)
         .map_err(|error| FormulaFailure::Include(Box::new(error)))?;
     let mut definitions = BTreeMap::new();
@@ -1395,8 +1448,12 @@ fn prepare_bundle(
     let mut metadata = metadata::Builder::new(limits.metadata_storage);
     let mut statements = Vec::new();
     let mut visited = 0;
-    let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     for source in bundle.sources() {
+        let site = ProgramSite::source(themelios_base::span::Location {
+            source: source.id(),
+            span: source.source().span(),
+        });
+        budget.poll(site)?;
         let local = AdmissionOptions {
             source_id: source.id(),
             max_source_bytes: 0,
@@ -1409,7 +1466,9 @@ fn prepare_bundle(
         extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
         metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
         formula_ir::check_objectives(source.parsed(), limits, &mut objective_count)?;
+        budget.poll(site)?;
         let raised = crate::formula_raise::raise(source.parsed(), &mut metadata)?;
+        budget.poll(site)?;
         statements.extend(
             raised
                 .statements()
@@ -1451,6 +1510,7 @@ fn prepare(
     }
     .prepare(source, metadata.project_selection().clone())?;
     let accounting = counters.into_accounting();
+    budget.poll(location)?;
     Ok((
         Preparation::new(prepared, catalog, accounting, budget, limits, location),
         metadata,

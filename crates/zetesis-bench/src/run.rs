@@ -30,7 +30,7 @@ pub enum Suite {
     Queens,
     /// The maintained 22-cell generated/constant workload series.
     Series,
-    /// Ten maintained authored/corpus workloads for thread comparisons.
+    /// Maintained authored/corpus workloads for thread comparisons.
     Scalability,
 }
 impl Suite {
@@ -242,29 +242,9 @@ pub struct RunOptions {
         help_heading = "Advanced measurement controls"
     )]
     pub formula_joins: Option<FormulaJoins>,
-    /// Native exact residual completion workers.
-    #[arg(
-        long,
-        default_value = "1",
-        hide_short_help = true,
-        help_heading = "Advanced measurement controls"
-    )]
-    pub completion_workers: NonZeroUsize,
-    /// Candidate batch ceiling.
-    #[arg(
-        long,
-        default_value = "64",
-        hide_short_help = true,
-        help_heading = "Advanced measurement controls"
-    )]
-    pub batch_size: NonZeroUsize,
-    /// Explicit native grounding expansion ceiling, retained in every profile.
-    #[arg(
-        long,
-        hide_short_help = true,
-        help_heading = "Advanced measurement controls"
-    )]
-    pub max_expansion_work: Option<usize>,
+    /// Native memory allowance in bytes or binary units; omitted, the solver's default.
+    #[arg(long, value_name = "SIZE", value_parser = zetesis_backend::parse_memory)]
+    pub memory: Option<u64>,
     /// Cooperative native deadline in whole seconds for every profile; omitted,
     /// none.
     #[arg(
@@ -351,9 +331,8 @@ impl RunOptions {
             backend: self.backend,
             grounder: self.grounder.into(),
             oracle: self.oracle.into(),
-            workers: self.threads,
-            completion_workers: self.completion_workers,
-            batch_size: self.batch_size,
+            threads: self.threads,
+            memory_bytes: self.memory,
             formula_joins: self
                 .formula_joins
                 .map(Into::into)
@@ -363,8 +342,6 @@ impl RunOptions {
                 .map(Into::into)
                 .or(scalability.then_some(selected::SearchMethod::Regions)),
             time_limit_seconds: self.time_limit,
-            max_expansion_work: self.max_expansion_work,
-            ..selected::NativeExecution::default()
         };
         let backends = if self.compare_backends.is_empty() {
             vec![self.backend]
@@ -388,7 +365,7 @@ impl RunOptions {
                     profiles.push(selected::NativeExecution {
                         backend,
                         grounder,
-                        workers,
+                        threads: workers,
                         ..base
                     });
                 }
@@ -535,10 +512,18 @@ pub(crate) fn execute(
     limits.max_report_bytes = options.report_bytes;
     let mut native_answers = zetesis_validation::answers::native_json::Limits::default();
     native_answers.report.max_input_bytes = options.native_report_bytes;
-    // The series knows its own record sizes; ceilings below them are raised.
-    if options.suite == Suite::Series {
-        limits = series::limits(limits);
-        native_answers = series::native_answers(native_answers);
+    // Maintained populations declare their measurement capacities, independently
+    // of the solver profiles. The complete request retains the chosen ceilings.
+    match options.suite {
+        Suite::Series => {
+            limits = series::limits(limits);
+            native_answers = series::native_answers(native_answers);
+        }
+        Suite::Scalability => {
+            limits = scalability::limits(limits);
+            native_answers = scalability::native_answers(native_answers);
+        }
+        Suite::Corpus | Suite::Baseline | Suite::Queens => {}
     }
     writeln!(
         diagnostics,

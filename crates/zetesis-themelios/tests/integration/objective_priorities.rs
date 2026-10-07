@@ -100,7 +100,10 @@ fn specialization_preserves_the_original_theory() {
     )
     .unwrap();
     assert_eq!(optimized.atoms(), ordinary.atoms());
-    assert_eq!(optimized.theory().nodes(), ordinary.theory().nodes());
+    assert_eq!(
+        (optimized.theory().nodes(), optimized.theory().operands()),
+        (ordinary.theory().nodes(), ordinary.theory().operands())
+    );
     assert_eq!(optimized.theory().roots(), ordinary.theory().roots());
     assert_eq!(optimized.formula_origins(), ordinary.formula_origins());
 }

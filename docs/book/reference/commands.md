@@ -94,7 +94,7 @@ matters. The reduct remains the criterion for accepting an answer.
 | `--threads auto` | The host's available parallelism; one if availability is unknown. |
 | `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
-| `--memory-budget SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
+| `--memory SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
 
 For formula inputs, automatic admission can reconstruct terminal positive
 definitions from each verified base answer. It returns full original answers;
@@ -117,16 +117,14 @@ and defers certified terminal definitions. Relational lazy
 closure retains its existing CPU and device routes.
 
 Hybrid statistics distinguish retained-core models from original answers accepted
-after complete constraint checks. The existing source work, substitution and
-scalar-byte options also set separate ceilings for each constraint check (one
-candidate); they bound the work per candidate, not the number of candidates, and
-admission and checking do not share one remaining allowance. A stopped check is
-incomplete, never an accepted answer or an UNSAT result.
+after complete constraint checks. Checks observe the solve's cancellation token
+and memory policy. Work and substitution counts remain available in statistics.
+A stopped check is incomplete, never an accepted answer or an UNSAT result.
 
 ```sh
 zetesis solve program.lp --backend cpu --threads 4
 zetesis solve program.lp --backend metal --grounder eager --all
-zetesis solve program.lp --time-limit 30s --memory-budget 4GiB
+zetesis solve program.lp --time-limit 30s --memory 4GiB
 ```
 
 An explicit positive thread count overrides this default. The thread setting
@@ -145,21 +143,20 @@ immediate stop; blocking input, frontend operations and a running device kernel
 cannot be preempted. Bare numeric durations retain their historical meaning in
 seconds. Fractional values and overflowing unit conversions are rejected.
 
-The memory allowance defaults to half of reported physical memory, with a
-minimum of two GiB; an unavailable reading falls back to two GiB. It scales
-specified session storage ceilings, not every allocation. Fixed admission/output
-limits and work/count limits retain their own defaults. This allowance is not
-a process RSS cap. Advanced help identifies which bytes each ceiling counts.
-Closure workers share a collective storage ceiling: increasing `--threads`
-reduces each worker's default share. Use an explicit thread count to balance
-parallelism with memory per worker.
+The public resource controls are `--threads`, `--memory` and the optional
+`--time-limit`. The memory allowance defaults to half of reported physical
+memory, with a minimum of two GiB; an unavailable reading falls back to two GiB.
+It determines named capacities for source loading, grounding, solving and
+output. These capacities do not cover every allocation and can overlap;
+the allowance is not a process RSS cap. Closure workers share a collective
+capacity, so increasing `--threads` reduces each worker's share.
 
-Formula model construction has separate controls: `--max-model-work` bounds
-cumulative preparation of atom order and construction of selected models;
-`--max-model-bytes` bounds prepared ranks and active construction metadata.
-Catalog storage and retained answer families remain under their own owners.
-Work defaults to one billion operations. The byte default is 64 MiB before
-scaling by the memory allowance; an explicit byte override is not scaled.
+Ordinary execution has no selected operation-count or grounding-round ceiling.
+Work counters remain available through `--stats`; counter overflow and storage
+failures remain checked. Optional analyses and GPU dispatches retain internal
+effort bounds. An optional analysis can decline its optimization; a device may
+refuse a dispatch that cannot perform its mandatory setup within its capacity.
+Explicit bounded library operations remain available for testing and embedding.
 
 ```sh
 zetesis help solve --advanced
@@ -226,8 +223,8 @@ steps, rule traversal, variants, domain guards and subsequent producer selection
 Subtracting these subtotals from construction work leaves plan preparation,
 initial scheduling, snapshot/query preparation and round control. Preparation
 before this build and later completed-support query setup are outside the total.
-These are accepted charges against the formula work limit, not durations or
-expansion-budget units. Failed and unwinding operations retain their accepted
+These are accepted formula-work charges, not durations or source-expansion
+counts. Failed and unwinding operations retain their accepted
 prefix; a refused charge itself is excluded. A partial count does not establish
 completed support. The existing public phase sequence is unchanged.
 
@@ -280,16 +277,17 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
-58-test physical qualification suite.
+59-test physical qualification suite.
 
 Corpus and backend checks accept every backend: `--backend cpu` (the default),
 `gpu`, `metal` or `vulkan`. GPU corpus checks request the eager general formula
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same twelve workloads as `zetesis-bench run --suite
+`test scalability` uses the same fourteen workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
-authored Mastermind at colors=5/6, unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
+authored Mastermind at colors=5/6/8, nested Mastermind at colors=8,
+unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
 Sudoku grid. It checks one
 complete clingo family and one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
@@ -298,7 +296,8 @@ counts default to `1,2,4,8,14`; one through eight profiles, each at most 256
 threads, are admitted. The positional corpus root defaults to
 `examples/correctness`, and `--examples` defaults to `examples`. Both must come
 from the maintained checkout. `--include-einstein` adds the unchanged Einstein
-riddle as a thirteenth workload; `--max-expansion-work` supplies an explicit native grounding ceiling.
+riddle as a fifteenth workload. `--memory` applies one native memory allowance
+to each requested thread profile.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in `--report NEW.json`.
 Amended inputs use the complete reference family rather than the original
@@ -307,8 +306,8 @@ default-size model count. A refusal or timeout remains a nonpass.
 The scalability workflow requires Linux or macOS for bounded child capture.
 Its overall scheduling deadline defaults to 1,800 seconds, adjustable with
 `--campaign-seconds`; cumulative captures and serialized evidence are separately
-bounded by `--total-capture-bytes` and `--report-bytes`. It never raises a native
-work ceiling or replaces an incomplete case to finish the population.
+bounded by `--total-capture-bytes` and `--report-bytes`. It never replaces an
+incomplete case to finish the population.
 
 `test backend` currently requires Linux or macOS for bounded child-process
 capture. On other platforms it reports the unavailable capture capability as a
@@ -373,7 +372,7 @@ bound to the protocols and identities in the [performance records](performance.m
 File-first invocations remain accepted, including `zetesis program.lp --models 0`.
 Their missing-input default remains standard input, and their existing statistics
 records are preserved. Prefer explicit `solve` in new scripts. The old flags
-`--workers` and `--memory` remain aliases for `--threads` and `--memory-budget`;
+`--workers` and `--memory-budget` remain aliases for `--threads` and `--memory`;
 `--models 0` maps to `--all`, and positive `--models N`
 maps to `--answers N`. Conflicting answer-selection flags are rejected.
 

@@ -42,7 +42,10 @@ fn source_activity_keeps_the_original_formula_owner() {
     let original = formula(source);
     let observed = formula(&format!("{source}#project p:not q."));
     assert_eq!(original.atoms(), observed.atoms());
-    assert_eq!(original.theory().nodes(), observed.theory().nodes());
+    assert_eq!(
+        (original.theory().nodes(), original.theory().operands()),
+        (observed.theory().nodes(), observed.theory().operands())
+    );
     assert_eq!(original.theory().roots(), observed.theory().roots());
     assert_eq!(original.formula_origins(), observed.formula_origins());
 }

@@ -3,20 +3,13 @@
 use super::{TightGpuCheck, TightGpuLimits, TightSupport, poll};
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, Node, Theory, TightPlan, TightVerdict};
+use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 32;
 pub(super) const RESULT_WORDS: usize = 6;
 pub(super) const RESULT_MAGIC: u32 = 0x5453_5031;
 pub(super) const RESULT_GROUPED_MAGIC: u32 = 0x5453_4731;
 
-// Wire tags mirror check.wgsl. Producer presence has its own explicit field;
-// an absent body never borrows a node identifier as a sentinel.
-const NODE_FALSE: u32 = 0;
-const NODE_ATOM: u32 = 1;
-const NODE_AND: u32 = 2;
-const NODE_OR: u32 = 3;
-const NODE_IMPLIES: u32 = 4;
 const STATUS_STABLE: u32 = 0;
 const STATUS_NOT_MODEL: u32 = 1;
 const STATUS_RESIDUAL: u32 = 2;
@@ -83,6 +76,8 @@ pub(super) struct Graph {
     pub(super) atoms: u32,
     pub(super) nodes: u32,
     pub(super) roots: u32,
+    pub(super) edges: u32,
+    pub(super) wide_words: u32,
     pub(super) producers: u32,
     pub(super) words: u32,
     pub(super) node_bytes: u64,
@@ -115,13 +110,8 @@ impl Graph {
             return Err(capacity("tight strided loop increment exceeds u32"));
         }
         let words = atoms.div_ceil(32);
-        let work = words
-            .checked_mul(2)
-            .and_then(|n| n.checked_add(nodes))
-            .and_then(|n| n.checked_add(roots))
-            .and_then(|n| n.checked_add(producers))
-            .ok_or_else(|| capacity("tight complete-scan work exceeds u32"))?;
-        let node_bytes = u64::from(nodes.max(1)) * 16;
+        let graph = crate::formula_graph::Shape::new(theory, packing.device)?;
+        let node_bytes = graph.bytes;
         let root_bytes = u64::from(roots.max(1)) * 4;
         let grouped = packing.support == TightSupport::Grouped;
         let producer_bytes = producer_storage(producers, words, packing.support)?;
@@ -130,11 +120,13 @@ impl Graph {
         }
         let bytes = sum(&[node_bytes, root_bytes, producer_bytes])?;
         let packing_bytes = sum(&[bytes, if grouped { u64::from(words) * 4 } else { 0 }])?;
-        Ok(Self {
+        let mut shape = Self {
             theory: theory.clone(),
             atoms,
             nodes,
             roots,
+            edges: graph.edges,
+            wide_words: graph.wide_words,
             producers,
             words,
             node_bytes,
@@ -142,9 +134,17 @@ impl Graph {
             producer_bytes,
             bytes,
             packing_bytes,
-            work,
+            work: 0,
             support: packing.support,
-        })
+        };
+        shape.work = words
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(nodes))
+            .and_then(|n| n.checked_add(shape.edges))
+            .and_then(|n| n.checked_add(roots))
+            .and_then(|n| n.checked_add(producers))
+            .ok_or_else(|| capacity("tight complete-scan work exceeds u32"))?;
+        Ok(shape)
     }
 
     pub(super) fn pack(
@@ -159,19 +159,21 @@ impl Graph {
             ));
         }
         let mut nodes = words(self.node_bytes)?;
-        for node in self.theory.nodes() {
+        let mut tail = 0;
+        for index in 0..self.theory.view().len() {
             poll(cancellation)?;
-            nodes.extend(match *node {
-                Node::False => [NODE_FALSE, 0, 0, 0],
-                Node::Atom(atom) => [NODE_ATOM, address(atom)?, 0, 0],
-                Node::And(a, b) => [NODE_AND, address(a)?, address(b)?, 0],
-                Node::Or(a, b) => [NODE_OR, address(a)?, address(b)?, 0],
-                Node::Implies(a, b) => [NODE_IMPLIES, address(a)?, address(b)?, 0],
-            });
+            nodes.extend(crate::formula_graph::header(
+                self.theory
+                    .view()
+                    .node(index)
+                    .expect("admitted formula node"),
+                &mut tail,
+            )?);
         }
-        if nodes.is_empty() {
-            nodes.extend([0; 4]);
+        if tail != self.wide_words {
+            return Err(capacity("tight operand coverage differs"));
         }
+        crate::formula_graph::append_operands(&self.theory, &mut nodes, cancellation)?;
         let mut roots = words(self.root_bytes)?;
         for &root in self.theory.roots() {
             poll(cancellation)?;

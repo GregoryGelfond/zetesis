@@ -147,13 +147,14 @@ fn exhausted_objective_search_retains_all_hidden_ties_before_failed_cost_publica
 
 #[test]
 fn observation_refusal_retains_verified_membership_without_an_answer_prefix() {
-    let mut options = options("countermodel");
-    options.max_observation_bytes = 0;
+    let mut config = zetesis_cli::PublicationConfig::from(&options("countermodel"));
+    config.observations.max_output_bytes = 0;
     let mut output = Vec::new();
-    let failure = run_detailed(
-        "a. #show seen:a.".into(),
-        &options,
+    let failure = crate::support::prepared::human(
+        "a. #show seen:a.",
+        &config,
         &mut output,
+        &mut Vec::new(),
         &Cancellation::default(),
     )
     .unwrap_err();
@@ -320,14 +321,15 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
 #[test]
 fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
     let source = "{a}. {b}.";
-    let mut options = options("closure");
-    options.batch_size = std::num::NonZeroUsize::new(64).unwrap();
-    options.max_candidates = 3;
+    let mut options = zetesis_cli::PublicationConfig::from(&options("closure"));
+    options.solve.batch_size = std::num::NonZeroUsize::new(64).unwrap();
+    options.solve.max_candidates = 3;
     let mut reference = Vec::new();
-    let report = run_detailed(
-        source.into(),
+    let report = crate::support::prepared::relational_human(
+        source,
         &options,
         &mut reference,
+        &mut Vec::new(),
         &Cancellation::default(),
     )
     .unwrap();
@@ -335,10 +337,11 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
     assert_eq!(report.models, 3);
     let first = answer_ends(&reference, false)[0];
     let mut output = BoundedWriter::new(first + 4);
-    let failure = run_detailed(
-        source.into(),
+    let failure = crate::support::prepared::relational_human(
+        source,
         &options,
         &mut output,
+        &mut Vec::new(),
         &Cancellation::default(),
     )
     .unwrap_err();
@@ -358,10 +361,11 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
 
     // A successfully requested stop keeps the established public Report invariant;
     // the observed candidate stop belongs to detailed failure evidence only.
-    options.models = 2;
-    let requested = run_detailed(
-        source.into(),
+    options.solve.models = 2;
+    let requested = crate::support::prepared::relational_human(
+        source,
         &options,
+        &mut Vec::new(),
         &mut Vec::new(),
         &Cancellation::default(),
     )
@@ -374,7 +378,10 @@ fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
 fn completed_closure_batch_membership_survives_a_later_requested_output_statistics_failure() {
     let source = "{a}. {b}.";
     let mut options = options("closure");
-    options.batch_size = std::num::NonZeroUsize::new(64).unwrap();
+    assert_eq!(
+        zetesis_cli::SolveConfig::from(&options).batch_size.get(),
+        64
+    );
     options.models = 2;
     options.stats = true;
     options.statistics_view = StatisticsView::Records;

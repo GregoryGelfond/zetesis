@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use zetesis_ferraris::{AggregateElement, Node};
+use zetesis_ferraris::{AggregateElement, FormulaNodes, NodeView};
 
 use super::{Kind, ObjectiveBoundError, ObjectiveBoundLimits, Work};
 
@@ -18,7 +18,7 @@ pub(super) fn prepare<'a>(
     elements: &'a [AggregateElement],
     bound: i64,
     falsum: usize,
-    nodes: &mut Vec<Node>,
+    nodes: &mut FormulaNodes,
     limits: ObjectiveBoundLimits,
     work: &mut Work<'_>,
 ) -> Result<(Cow<'a, [AggregateElement]>, i64), ObjectiveBoundError> {
@@ -58,7 +58,7 @@ pub(super) fn prepare<'a>(
         return Ok(original());
     };
     work.tick()?;
-    if !shape.fits(elements.len(), shifted, nodes.len(), limits, work) {
+    if !shape.fits(elements.len(), shifted, nodes, limits, work) {
         return Ok(original());
     }
     let mut normalized = work.reserve(elements.len())?;
@@ -70,7 +70,7 @@ pub(super) fn prepare<'a>(
                     .weight
                     .checked_neg()
                     .ok_or_else(|| work.error(Kind::Overflow))?,
-                condition: work.node(nodes, Node::Implies(element.condition, falsum))?,
+                condition: work.node(nodes, NodeView::Implies(element.condition, falsum))?,
             }
         } else {
             *element
@@ -86,7 +86,7 @@ impl Shape {
         &self,
         count: usize,
         shifted: i64,
-        prefix: usize,
+        prefix: &FormulaNodes,
         limits: ObjectiveBoundLimits,
         work: &Work<'_>,
     ) -> bool {
@@ -105,7 +105,8 @@ impl Shape {
         };
         let count = count as u128;
         let negative = self.negative as u128;
-        let prefix = prefix as u128;
+        let prefix_nodes = prefix.view().len() as u128;
+        let prefix_operands = prefix.parts().occurrences() as u128;
         let cells = maximum * self.nonzero as u128;
         let states = if maximum == 0 { 0 } else { 2 * (maximum + 1) };
         // Reject before multiplying the work estimate; selected cell counts
@@ -123,21 +124,24 @@ impl Shape {
             .and_then(|power| 1u128.checked_shl(power))
             .and_then(|subsets| subsets.checked_mul(2))
             .unwrap_or(u128::MAX);
-        let nodes = prefix + negative + 2 * cells + 7;
+        let nodes = prefix_nodes + negative + 2 * cells + 7;
+        let operands = prefix_operands + 2 * negative + 4 * cells + 12;
         let row_work = if maximum == 0 {
             0
         } else {
-            maximum + 1 + count + 3 * cells
+            maximum + 1 + count + 7 * cells
         };
-        // Kernel prefix/input validation, two constants, two guard scans and
-        // their three connective nodes. Include the normalized prefix here.
-        let family_work = 10 + prefix + negative + count + row_work;
-        let normalize_work = count + negative;
+        // Checked construction retains prefix validation. Charge input visits,
+        // constants, both guard scans and their connective operand visits.
+        let family_work = 18 + count + row_work;
+        let normalize_work = count + 3 * negative;
         let remaining = u128::from(limits.max_work - work.statistics.work);
         cells <= subset_visits
             && nodes <= limits.aggregate.max_nodes as u128
+            && operands <= limits.aggregate.max_operands as u128
             && family_work <= u128::from(limits.aggregate.max_work)
-            // Include the caller's two suffix nodes and final topology scan.
-            && normalize_work + family_work + 2 + nodes <= remaining
+            // Two suffix appends; admission recounts nodes, checks topology
+            // and visits the sole root. Each edge occurrence remains charged.
+            && normalize_work + family_work + 6 + 2 * nodes + operands < remaining
     }
 }

@@ -18,10 +18,23 @@ enum RowPreparation {
         predicate: PredicateId,
         arity: usize,
         hash: u64,
+        column: Option<usize>,
     },
 }
 
 impl PreparedAtom {
+    /// A location is only a hint: publication checks its signed predicate in
+    /// the current tail before reuse. It carries no tuple-absence authority.
+    pub(crate) fn with_column(mut self, column: usize) -> Self {
+        if let RowPreparation::Vacant {
+            column: location, ..
+        } = &mut self.0
+        {
+            *location = Some(column);
+        }
+        self
+    }
+
     /// Transfer the opaque single-use result into its publication state.
     fn into_preparation(self) -> RowPreparation {
         self.0
@@ -418,13 +431,14 @@ impl Store {
         mut argument: impl FnMut(usize) -> TermId,
         work: &mut Work<'_, E>,
     ) -> Result<AtomId, Failure<E>> {
-        let (predicate, arity, hash) = match prepared.into_preparation() {
+        let (predicate, arity, hash, column) = match prepared.into_preparation() {
             RowPreparation::Present(id) => return Ok(id),
             RowPreparation::Vacant {
                 predicate,
                 arity,
                 hash,
-            } => (predicate, arity, hash),
+                column,
+            } => (predicate, arity, hash, column),
         };
         work.step()?;
         let id = AtomId(next_id(self.counts().atoms)?);
@@ -434,7 +448,7 @@ impl Store {
                 .ok_or(Fault::Shape)?,
         )
         .map_err(|_| Fault::IdExhausted)?;
-        let block = self.column_block(predicate, arity, work)?;
+        let block = self.column_block(predicate, arity, column, work)?;
         for column in &mut self.tail.columns[block].arguments {
             work.reserve(column, 1, &mut self.budget)?;
         }
@@ -504,6 +518,7 @@ impl Store {
                 predicate,
                 arity,
                 hash,
+                column: None,
             },
             RowPreparation::Present,
         )))
@@ -557,17 +572,44 @@ impl Store {
         Ok(true)
     }
 
+    /// Candidate location in the current tail, or its next insertion position.
+    /// No absence result survives this immutable operation. The consuming
+    /// writer must validate the actual block predicate before reusing it.
+    pub(crate) fn atom_column_location_with<E>(
+        &self,
+        predicate: PredicateId,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<usize, E> {
+        for (index, column) in self.tail.columns.iter().enumerate() {
+            before()?;
+            if column.predicate == predicate {
+                return Ok(index);
+            }
+        }
+        Ok(self.tail.columns.len())
+    }
+
     fn column_block<E>(
         &mut self,
         predicate: PredicateId,
         arity: usize,
+        location: Option<usize>,
         work: &mut Work<'_, E>,
     ) -> Result<usize, Failure<E>> {
-        for index in 0..self.tail.columns.len() {
+        if let Some(index) = location {
             work.step()?;
-            if self.tail.columns[index].predicate == predicate {
+            if self
+                .tail
+                .columns
+                .get(index)
+                .is_some_and(|column| column.predicate == predicate)
+            {
                 return Ok(index);
             }
+        }
+        let index = self.atom_column_location_with(predicate, || work.step())?;
+        if index < self.tail.columns.len() {
+            return Ok(index);
         }
         work.reserve(&mut self.tail.columns, 1, &mut self.budget)?;
         let mut arguments = Vec::new();

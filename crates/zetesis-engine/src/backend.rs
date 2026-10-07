@@ -80,7 +80,8 @@ impl Backend for Solver {
 
     fn lower(&mut self, door: Door<'_>) -> Result<(), Fault> {
         let program = door.program();
-        validate_program_formula(program, self.config.admission).map_err(faults::admission)?;
+        validate_program_formula(program, self.config.resources().program_admission_options())
+            .map_err(faults::admission)?;
         let lowered = Lowered {
             program: Arc::new(program.clone()),
             show: ShowRule::of(program.statements().filter_map(
@@ -152,7 +153,7 @@ impl Backend for Solver {
                 &lowered.program,
                 owner.metadata(),
                 window,
-                self.config.output,
+                self.config.output(),
             ),
             Err(error) => Run::pending(faults::session(error, &lowered.program)?, window),
         };

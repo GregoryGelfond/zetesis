@@ -364,7 +364,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
     assert_eq!(report["full_native_target_passed"], true);
     assert_eq!(report["full_native_answer_parity_passed"], true);
     assert_eq!(report["native_backend"], "cpu");
-    assert_eq!(report["native_batch_size"], 64);
+    assert_eq!(report["native_threads"], 1);
     assert_eq!(report["effective_native_stats"], false);
     assert_eq!(
         report["phase_timing_cases"],
@@ -472,7 +472,7 @@ fn phase_measurements_preserve_failed_attempts_without_changing_semantic_decisio
 }
 
 #[test]
-fn native_backend_batch_and_stats_are_passed_without_a_solver_wrapper() {
+fn native_public_controls_reach_the_solver() {
     let directory = tempfile::tempdir().unwrap();
     let loaded = loaded(directory.path(), 1);
     let mut options = options(directory.path());
@@ -483,7 +483,8 @@ fn native_backend_batch_and_stats_are_passed_without_a_solver_wrapper() {
         (Backend::Gpu(Some(GpuApi::Vulkan)), "vulkan"),
     ] {
         options.native_backend = backend;
-        options.native_batch_size = 7.try_into().unwrap();
+        options.native_threads = 7.try_into().unwrap();
+        options.native_memory_bytes = Some(4096);
         options.native_stats = true;
         let result = check(&options, &loaded, "pass");
         let arguments: Vec<std::ffi::OsString> =
@@ -497,12 +498,10 @@ fn native_backend_batch_and_stats_are_passed_without_a_solver_wrapper() {
                 "auto".into(),
                 "--models".into(),
                 "0".into(),
-                "--batch-size".into(),
+                "--workers".into(),
                 "7".into(),
-                "--completion-workers".into(),
-                "1".into(),
-                "--max-completion-scratch-bytes".into(),
-                "268435456".into(),
+                "--memory".into(),
+                "4096".into(),
                 "--stats".into(),
                 loaded.root.join("synthetic.lp").into_os_string(),
             ]
@@ -791,63 +790,63 @@ fn malformed_native_records_cannot_supply_complete_costed_models() {
 }
 
 #[test]
-fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_parity() {
+fn public_resource_requests_retain_completion_evidence() {
     let directory = tempfile::tempdir().unwrap();
     let loaded = loaded(directory.path(), 1);
     let mut options = options(directory.path());
     options.native_backend = Backend::Gpu(Some(GpuApi::Metal));
     options.native_oracle = NativeOracle::Countermodel;
-    for workers in [1, 2, 4] {
-        options.native_completion_workers = workers.try_into().unwrap();
-        options.native_max_completion_scratch_bytes = 4096;
+    options.native_memory_bytes = Some(268_435_456);
+    for threads in [1, 2, 4] {
+        options.native_threads = threads.try_into().unwrap();
         let stats = include_str!("../../../tests/fixtures/formula_statistics_completion.txt")
             .replace(
                 "CPU completion requested workers=4",
-                &format!("CPU completion requested workers={workers}"),
-            )
-            .replace("scratch limit=268435456", "scratch limit=4096");
+                &format!("CPU completion requested workers={threads}"),
+            );
         options.zetesis = emitting(directory.path(), "native", NATIVE, &stats, 0);
         let result = check(&options, &loaded, "pass");
         let arguments: Vec<std::ffi::OsString> =
             serde_json::from_value(result["native_arguments"].clone()).unwrap();
         for (flag, value) in [
-            ("--completion-workers", workers.to_string()),
-            ("--max-completion-scratch-bytes", "4096".into()),
+            ("--workers", threads.to_string()),
+            ("--memory", "268435456".into()),
         ] {
             let index = arguments.iter().position(|a| a == flag).unwrap();
             assert_eq!(arguments[index + 1], value.as_str());
         }
         let evidence = &result["native_formula_execution"]["completion"];
-        assert_eq!(evidence["requested_workers"], workers);
-        assert_eq!(evidence["max_logical_scratch_bytes"], 4096);
-        options.native_max_completion_scratch_bytes = 4095;
-        let result = check(&options, &loaded, "native_execution_unqualified");
-        assert_eq!(result["native_answer_parity_passed"], true);
+        assert_eq!(evidence["requested_workers"], threads);
+        assert_eq!(evidence["max_logical_scratch_bytes"], 268_435_456);
     }
-    options.native_backend = Backend::Cpu;
-    options.native_max_completion_scratch_bytes = 0;
+    options.native_memory_bytes = Some(268_435_455);
+    let result = check(&options, &loaded, "native_execution_unqualified");
+    assert_eq!(result["native_answer_parity_passed"], true);
+}
+
+#[test]
+fn ordinary_memory_refusal_does_not_establish_completion() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = loaded(directory.path(), 1);
+    let mut options = options(directory.path());
+    options.native_memory_bytes = Some(0);
+    options.native_stats = true;
     options.zetesis = emitting(
         directory.path(),
         "native",
         "INCOMPLETE\n",
-        "completion logical scratch byte limit reached",
+        "named memory allowance reached",
         3,
     );
     let result = check(&options, &loaded, "native_incomplete");
     let arguments: Vec<std::ffi::OsString> =
         serde_json::from_value(result["native_arguments"].clone()).unwrap();
-    let index = arguments
-        .iter()
-        .position(|a| a == "--max-completion-scratch-bytes")
-        .unwrap();
+    let index = arguments.iter().position(|a| a == "--memory").unwrap();
     assert_eq!(arguments[index + 1], "0");
-    assert!(arguments.contains(&"--stats".into()));
     let (report, passed) = run(&options, &loaded);
     assert!(!passed);
-    assert_eq!(report["native_completion_workers"], 4);
-    assert_eq!(report["native_max_completion_scratch_bytes"], 0);
-    assert_eq!(report["effective_native_stats"], true);
-    assert_eq!(report["physical_formula_route_required"], false);
+    assert_eq!(report["native_resource_policy"], "ordinary");
+    assert_eq!(report["native_memory_bytes"], 0);
     assert_eq!(report["status_counts"]["native_incomplete"], 1);
 }
 

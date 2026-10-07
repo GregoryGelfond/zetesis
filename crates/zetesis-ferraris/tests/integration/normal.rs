@@ -123,6 +123,7 @@ fn exact_formula_dimensions_are_admitted_before_construction() {
     let exact = AdmissionLimits {
         max_atoms: full.atom_count(),
         max_nodes: full.nodes().len(),
+        max_operands: full.parts().occurrences(),
         max_roots: full.roots().len(),
     };
     assert!(from_ground_program(&ground, exact).is_ok());
@@ -158,6 +159,7 @@ fn supported_guards_obey_exact_admission_limits() {
     let exact = AdmissionLimits {
         max_atoms: full.atom_count(),
         max_nodes: full.nodes().len(),
+        max_operands: full.parts().occurrences(),
         max_roots: full.roots().len(),
     };
     assert!(from_ground_program_supported(&ground, exact).is_ok());

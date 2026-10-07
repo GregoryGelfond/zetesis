@@ -128,7 +128,10 @@ fn construction_admissions(resource: ExpansionResource) {
             Ok(actual) => {
                 assert!(limit > 0);
                 assert_eq!(actual.atoms(), expected.atoms());
-                assert_eq!(actual.theory().nodes(), expected.theory().nodes());
+                assert_eq!(
+                    (actual.theory().nodes(), actual.theory().operands()),
+                    (expected.theory().nodes(), expected.theory().operands())
+                );
                 assert_eq!(actual.theory().roots(), expected.theory().roots());
                 assert_eq!(actual.formula_origins(), expected.formula_origins());
                 return;

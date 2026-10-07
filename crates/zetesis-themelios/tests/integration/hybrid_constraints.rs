@@ -366,15 +366,26 @@ fn a_check_is_refused_relative_to_its_own_allowance() {
     // A violating candidate stops at the first constraint; a satisfying one
     // scans both. The ceiling admits the cheap first check, so the costly
     // second check is refused against the ceiling itself, not the checker's
-    // history.
-    let owner = admit("{p}. {q(1..9)}. :-p. :-q(X),q(Y),X<Y.");
-    let violating = model(&owner, &["p"]);
+    // history. Reaching the last q value makes the first allowance large
+    // enough to prepare the second join, so this tests execution work.
+    let owner = admit("{p}. {q(1..32)}. :-p,q(X). :-q(X),q(Y),X<Y.");
+    let violating = model(&owner, &["p", "q(32)"]);
     let satisfying = model(&owner, &[]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    baseline
-        .check(&violating, &Cancellation::default())
-        .unwrap();
+    assert!(matches!(
+        baseline
+            .check(&violating, &Cancellation::default())
+            .unwrap(),
+        ConstraintVerdict::Violated { .. }
+    ));
     let cheap = baseline.statistics().work;
+    assert_eq!(
+        baseline
+            .check(&satisfying, &Cancellation::default())
+            .unwrap(),
+        ConstraintVerdict::Satisfied
+    );
+    assert!(baseline.statistics().work - cheap > cheap);
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_work: cheap,

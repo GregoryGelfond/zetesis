@@ -60,7 +60,7 @@ fn a_restriction_reaches_the_workers_for_what_they_have_not_visited() {
     )
     .unwrap();
     let first: Vec<usize> = parallel.next().unwrap().unwrap().atoms().collect();
-    let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
     parallel.restrict_candidates(&restriction).unwrap();
     let rest = family(&mut parallel);
     assert!(parallel.exhausted());
@@ -93,7 +93,7 @@ fn a_restriction_charges_its_indexing_to_the_shared_search_work() {
     )
     .unwrap();
     let before = parallel.statistics();
-    let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
     parallel.restrict_candidates(&restriction).unwrap();
     let after = parallel.statistics();
     let indexed = after.regions.unwrap().counts.work - before.regions.unwrap().counts.work;
@@ -124,7 +124,7 @@ fn a_restriction_beyond_the_shared_search_work_is_refused() {
     let mut parallel =
         StableModels::with_region_workers(&theory, workers(4), limits, Cancellation::default())
             .unwrap();
-    let restriction = theory_over(&theory, vec![Node::Atom(7)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
     assert!(matches!(
         parallel.restrict_candidates(&restriction),
         Err(Incomplete::WorkLimit)
@@ -582,7 +582,7 @@ fn restrictions_after_certificate_setup_charge_the_shared_work() {
             .unwrap()
     );
     let before = search.statistics().search.work;
-    let restriction = theory_over(&theory, vec![Node::Atom(2)], vec![0]);
+    let restriction = theory_over(&theory, vec![Node::atom(2)], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     assert_eq!(search.statistics().search.work, before + 1);
     assert_eq!(family(&mut search).len(), 4);

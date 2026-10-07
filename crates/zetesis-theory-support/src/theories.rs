@@ -1,22 +1,24 @@
 //! Small Ferraris theories, and their interpretations chosen by bit mask.
 
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_ferraris::{AdmissionLimits, FormulaParts, Interpretation, Node, Theory};
 
 /// The theory over `atoms` atoms with `nodes` and `roots`, under the default
-/// admission limits.
+/// admission limits. This small-fixture helper accepts inline nodes; theories
+/// with arena-backed groups use [`FormulaParts`] directly.
 ///
 /// # Panics
 /// Panics if the theory is refused, as a node naming an absent atom or node
 /// is.
 #[must_use]
 pub fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
+    let parts = FormulaParts::new(nodes, Vec::new()).unwrap();
+    Theory::new(atoms, parts, roots, AdmissionLimits::default()).unwrap()
 }
 
 /// The theory of the one fact `a`: one atom, which is its one root.
 #[must_use]
 pub fn fact() -> Theory {
-    theory(1, vec![Node::Atom(0)], vec![0])
+    theory(1, vec![Node::atom(0)], vec![0])
 }
 
 /// The interpretation of `theory` holding the atoms whose bits `mask` sets.
@@ -40,7 +42,7 @@ mod tests {
     fn a_theory_holds_the_atoms_and_nodes_it_is_built_from() {
         let built = theory(
             2,
-            vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
             vec![2],
         );
         assert_eq!(built.atom_count(), 2);
@@ -51,13 +53,13 @@ mod tests {
     fn the_fact_theory_roots_its_one_atom() {
         let built = fact();
         assert_eq!(built.atom_count(), 1);
-        assert_eq!(built.nodes(), [Node::Atom(0)]);
+        assert_eq!(built.nodes(), [Node::atom(0)]);
         assert_eq!(built.roots(), [0]);
     }
 
     #[test]
     fn an_interpretation_holds_the_atoms_its_mask_sets() {
-        let built = theory(3, vec![Node::Atom(0), Node::Atom(1), Node::Atom(2)], vec![]);
+        let built = theory(3, vec![Node::atom(0), Node::atom(1), Node::atom(2)], vec![]);
         let chosen = interpretation(&built, 0b101);
         assert_eq!(chosen.atoms().collect::<Vec<_>>(), [0, 2]);
     }

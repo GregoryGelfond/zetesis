@@ -109,8 +109,8 @@ fn source_carriers_preserve_original_equalities() {
         let observed = admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(observed.atoms(), source.atoms(), "{}", case.name);
         assert_eq!(
-            observed.theory().nodes(),
-            source.theory().nodes(),
+            (observed.theory().nodes(), observed.theory().operands()),
+            (source.theory().nodes(), source.theory().operands()),
             "{}",
             case.name
         );
@@ -276,8 +276,8 @@ fn selected_carriers_preserve_original_equalities() {
         let selected = admit(&case.source, &FormulaLimits::default()).unwrap();
         assert_eq!(original.atoms(), selected.atoms(), "{}", case.name);
         assert_eq!(
-            original.theory().nodes(),
-            selected.theory().nodes(),
+            (original.theory().nodes(), original.theory().operands()),
+            (selected.theory().nodes(), selected.theory().operands()),
             "{}",
             case.name
         );

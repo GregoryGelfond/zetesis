@@ -5,6 +5,8 @@ use zetesis_backend::GpuApi;
 use zetesis_core::{Atom, Predicate, Value, relation::Limits};
 use zetesis_cpu::Stop;
 
+mod compact;
+
 fn interrupted_copy(backend: GpuApi) {
     let mut executor =
         GpuRelationExecutor::new_selected(GpuOptions::default(), GpuSelection { api: backend })
@@ -21,9 +23,9 @@ fn interrupted_copy(backend: GpuApi) {
         .unwrap()];
     let context = executor.context().clone();
     for stop in [Stop::Cancelled, Stop::Deadline] {
-        // Poll 1 precedes allocation; 2/3 precede columns 0/1; poll 4 follows
-        // both copies. Every refusal below therefore owns a mapped buffer.
-        for stop_at in [2, 3, 4] {
+        // Poll 1 precedes allocation; later polls cover both column entries,
+        // both packed payloads and completed upload. Each refusal owns a map.
+        for stop_at in 2..=6 {
             let mut polls = 0;
             let result = executor.prepare_with(&relation, RelationGpuLimits::default(), || {
                 polls += 1;

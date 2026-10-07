@@ -212,73 +212,39 @@ impl SupportCatalog {
         record_owner_peak(self.owner.storage_peak_bytes(), outer, counters);
         committed.map_err(|error| atom_failure(error, limits, outer, location))?;
         *self.growth.get_mut() = 0;
-        let mut previous: Option<(PredicateRef<'_>, usize)> = None;
-        for position in 0..self.pending.len() {
+        let mut position = 0;
+        while position < self.pending.len() {
             counters.work(limits, location)?;
-            let discovery = self.pending[position];
             let mut memory =
                 Memory::new(self.bytes(location)?, workspace, limits, counters, location);
-            // Only relation metadata and postings change during this append.
+            // Only relation metadata and postings change during this run.
             // Preserve every other owner's subtotal, including demand, once.
             let unchanged_bytes = memory
                 .bytes
                 .checked_sub(self.index_bytes)
                 .ok_or_else(|| failure(Failure::Overflow, location))?;
             let read = self.owner.read();
-            let atom = self
+            let first = self
                 .owner
-                .get(discovery)
+                .get(self.pending[position])
                 .expect("same authority's pending discovery");
-            let predicate = atom.predicate();
-            let index = match previous {
-                Some((prior, index))
-                    if predicate.equals_ref_with(prior, || counters.work(limits, location))? =>
-                {
-                    index
-                }
-                _ => catalog_index(
-                    &mut self.rows,
-                    self.demand.as_ref(),
-                    read,
-                    predicate,
-                    &mut memory,
-                    counters,
-                )?,
-            };
-            // Only this contiguous predicate run reuses the index: inserting a
-            // different relation may shift every later directory position.
-            previous = Some((predicate, index));
-            let source = &mut self.rows[index];
-            let old_bytes = source.catalog.retained_bytes();
-            let outer_bytes = memory.outside(old_bytes)?;
-            let mut checked = relation_limits(
-                limits,
+            let predicate = first.predicate();
+            let index = catalog_index(
+                &mut self.rows,
+                self.demand.as_ref(),
+                read,
+                predicate,
+                &mut memory,
                 counters,
-                predicate.arity(),
-                old_bytes + memory.remaining()?,
-            );
-            checked.max_values = usize::MAX;
-            let receipt = source
-                .catalog
-                .insert(atom, checked)
-                .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
-            counters.record(Event::SupportPeakBytes(
-                outer_bytes as u128 + receipt.storage.peak_construction_bytes as u128,
-            ));
-            counters.charge_work(receipt.storage.construction_work, limits, location)?;
-            memory.release(old_bytes);
-            memory.add(receipt.storage.retained_bytes)?;
-            if receipt.inserted {
-                ceiling(
-                    FormulaResource::SupportIndexEntries,
-                    self.entries as u128 + source.indexed() as u128,
-                    limits.max_support_index_entries as u128,
-                    location,
-                )?;
-                source.append_postings(read, receipt.row, &mut memory, counters)?;
-                self.entries += source.indexed();
-                counters.record(Event::SupportAtom);
-            }
+            )?;
+            position += self.rows[index].append_run(
+                &self.owner,
+                &self.pending[position..],
+                predicate,
+                &mut self.entries,
+                &mut memory,
+                counters,
+            )?;
             self.index_bytes = memory
                 .bytes
                 .checked_sub(unchanged_bytes)
@@ -544,26 +510,113 @@ impl CatalogRows {
             .count()
     }
 
-    fn append_postings(
+    /// Publish a contiguous predicate run with one reusable tuple plan. The
+    /// caller has already charged entry to its first pending row.
+    fn append_run(
         &mut self,
-        read: CatalogRead<'_>,
+        owner: &AtomInterner,
+        pending: &[usize],
+        predicate: PredicateRef<'_>,
+        entries: &mut usize,
+        memory: &mut Memory<'_>,
+        counters: &mut Counters,
+    ) -> Result<usize, FormulaFailure> {
+        let limits = memory.limits;
+        let location = memory.location;
+        let mut position = 0;
+        // An exclusive session lasts only for this contiguous predicate run.
+        // A different relation may shift later directory positions.
+        let indexed = self.indexed();
+        let mut catalog_bytes = self.catalog.retained_bytes();
+        let outer_bytes = memory.outside(catalog_bytes)?;
+        let mut checked = relation_limits(
+            limits,
+            counters,
+            predicate.arity(),
+            catalog_bytes + memory.remaining()?,
+        );
+        checked.max_values = usize::MAX;
+        let mut append = self
+            .catalog
+            .appender(checked)
+            .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
+        let mut scratch_bytes = append.scratch_bytes();
+        memory.add(scratch_bytes)?;
+        loop {
+            let atom = owner
+                .get(pending[position])
+                .expect("same authority's pending discovery");
+            let old_bytes = catalog_bytes + scratch_bytes;
+            let outer_bytes = memory.outside(old_bytes)?;
+            let mut checked = relation_limits(
+                limits,
+                counters,
+                predicate.arity(),
+                old_bytes + memory.remaining()?,
+            );
+            checked.max_values = usize::MAX;
+            let appended = append
+                .insert(atom, checked)
+                .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
+            let receipt = appended.insertion;
+            counters.record(Event::SupportPeakBytes(
+                outer_bytes as u128 + receipt.storage.peak_construction_bytes as u128,
+            ));
+            counters.charge_work(receipt.storage.construction_work, limits, location)?;
+            catalog_bytes = receipt.storage.retained_bytes;
+            scratch_bytes = appended.scratch_bytes;
+            memory.release(old_bytes);
+            memory.add(catalog_bytes + scratch_bytes)?;
+            if let Some(ids) = appended.equality_ids {
+                ceiling(
+                    FormulaResource::SupportIndexEntries,
+                    *entries as u128 + indexed as u128,
+                    limits.max_support_index_entries as u128,
+                    location,
+                )?;
+                CatalogRows::append_postings(
+                    &mut self.columns,
+                    ids,
+                    receipt.row,
+                    memory,
+                    counters,
+                )?;
+                *entries += indexed;
+                counters.record(Event::SupportAtom);
+            }
+            position += 1;
+            if position == pending.len() {
+                break;
+            }
+            let next = owner
+                .get(pending[position])
+                .expect("same authority's pending discovery");
+            if !predicate.equals_ref_with(next.predicate(), || counters.work(limits, location))? {
+                break;
+            }
+            counters.work(limits, location)?;
+        }
+        drop(append);
+        memory.release(scratch_bytes);
+        Ok(position)
+    }
+
+    // These IDs are lent by the same catalog's completed row transaction.
+    // Consume them before the next insertion can replace its plan.
+    fn append_postings(
+        columns: &mut [Option<BTreeMap<u32, Vec<usize>>>],
+        ids: &[u32],
         row: usize,
         memory: &mut Memory<'_>,
         counters: &mut Counters,
     ) -> Result<(), FormulaFailure> {
-        let view = self
-            .catalog
-            .view(read)
-            .map_err(|error| failure(error, memory.location))?;
-        memory.add(size_of::<Relation<'_>>())?;
-        for (column, postings) in self
-            .columns
+        for (column, postings) in columns
             .iter_mut()
             .enumerate()
             .filter_map(|(column, postings)| postings.as_mut().map(|postings| (column, postings)))
         {
             counters.work(memory.limits, memory.location)?;
-            let id = view.column(column).expect("checked column")[row];
+            let id = ids[column];
             let posting = match postings.entry(id) {
                 Entry::Occupied(entry) => entry.into_mut(),
                 Entry::Vacant(entry) => {
@@ -578,7 +631,6 @@ impl CatalogRows {
             posting.push(row);
             counters.record(Event::SupportIndexEntry);
         }
-        memory.release(size_of::<Relation<'_>>());
         Ok(())
     }
 }
@@ -830,6 +882,49 @@ impl<'source> Relations<'source> {
         outer_bytes: usize,
         work: GroundingWork<'_>,
     ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
+        let location = work.location;
+        let selected =
+            self.probe_columns(rows, pattern, outer_bytes, work, |column| {
+                match pattern.terms().at(column).expect("checked pattern arity") {
+                    TemplateTerm::Constant(value) => Ok(Some(value)),
+                    TemplateTerm::Variable(variable) => {
+                        if variable >= values.len() {
+                            return Err(FormulaFailure::UnsafeVariable { variable, location });
+                        }
+                        Ok(values.get(variable))
+                    }
+                }
+            })?;
+        #[cfg(test)]
+        if let Some(rows) = rows {
+            super::postings::observe(rows, pattern, values, selected);
+        }
+        Ok(selected)
+    }
+
+    /// Exact argument keys supply only necessary equalities; the ordinary
+    /// matcher still checks every offered row. Columns preserve source order.
+    pub(super) fn probe_arguments_at<'rows>(
+        &self,
+        rows: Option<&'rows RelationRows<'source>>,
+        pattern: PatternRef<'_>,
+        arguments: BindingView<'_>,
+        outer_bytes: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
+        self.probe_columns(rows, pattern, outer_bytes, work, |column| {
+            Ok(arguments.get(column))
+        })
+    }
+
+    fn probe_columns<'rows, 'value>(
+        &self,
+        rows: Option<&'rows RelationRows<'source>>,
+        pattern: PatternRef<'_>,
+        outer_bytes: usize,
+        work: GroundingWork<'_>,
+        mut value_at: impl FnMut(usize) -> Result<Option<TermRef<'value>>, FormulaFailure>,
+    ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
         let GroundingWork {
             limits,
             counters,
@@ -849,19 +944,9 @@ impl<'source> Relations<'source> {
         memory.add(0)?;
         let mut selected: Option<&[usize]> = None;
         let mut possible = true;
-        let terms = pattern.terms();
-        for column in 0..terms.len() {
+        for column in 0..pattern.predicate().arity() {
             counters.work(limits, location)?;
-            let term = terms.at(column).expect("checked pattern arity");
-            let value = match term {
-                TemplateTerm::Constant(value) => Some(value),
-                TemplateTerm::Variable(variable) => {
-                    if variable >= values.len() {
-                        return Err(FormulaFailure::UnsafeVariable { variable, location });
-                    }
-                    values.get(variable)
-                }
-            };
+            let value = value_at(column)?;
             if let Some(value) = value {
                 let outside = memory.outside(rows.relation.storage().retained_bytes)?;
                 let base_work = counters.accounting.work;
@@ -917,8 +1002,6 @@ impl<'source> Relations<'source> {
         if !possible {
             selected = Some(&[]);
         }
-        #[cfg(test)]
-        super::postings::observe(rows, pattern, values, selected);
         Ok(selected)
     }
 }

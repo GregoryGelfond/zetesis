@@ -31,67 +31,67 @@
 //! Source acceptance is not a parser-to-Lean or Rust implementation proof.
 #![forbid(unsafe_code)]
 
+mod compile;
 mod diagnostic;
-mod source_diagnostics;
 mod parsed_source;
 mod profile;
-mod compile;
 mod program_admission;
-mod program_relational;
 mod program_limits;
+mod program_relational;
 mod program_site;
+mod source_diagnostics;
 pub use program_site::{ProgramSite, StatementId};
-mod formula_program_check;
-mod formula_owner;
-mod coherence;
 mod bundle;
 mod bundle_admission;
+mod coherence;
 mod expansion;
 mod extended;
 mod fact_expansion;
-mod integer_range;
-mod metadata;
 mod formula;
-mod formula_warning;
-mod formula_raise;
-mod formula_ir;
-mod formula_project_ir;
-mod formula_value;
-mod formula_value_ir;
-mod formula_range_ir;
 mod formula_aggregate_ir;
 mod formula_analysis;
-mod formula_pool;
-mod formula_assignment_ir;
 mod formula_assignment;
+mod formula_assignment_ir;
 mod formula_assignment_plan;
-mod formula_objective_dependencies;
-mod formula_source_activity;
-mod formula_ground;
-mod grounding_observer;
-mod formula_factor;
-mod formula_guard;
-mod formula_conditional;
-mod formula_conditional_ir;
-mod formula_consequent_ir;
-mod formula_conditional_projection;
-mod formula_conditional_head_ir;
-mod formula_head_aggregate;
-mod formula_support;
-mod scalar_arithmetic;
-mod formula_binding_plan;
+mod formula_binding;
+mod formula_binding_cursor;
 mod formula_binding_guard;
 mod formula_binding_ir;
+mod formula_binding_plan;
 mod formula_choice_ir;
+mod formula_conditional;
+mod formula_conditional_head_ir;
+mod formula_conditional_ir;
+mod formula_conditional_projection;
+mod formula_consequent_ir;
+mod formula_factor;
+mod formula_ground;
+mod formula_guard;
+mod formula_head_aggregate;
 mod formula_head_ir;
-mod formula_binding_cursor;
-mod formula_binding;
-mod formula_projection_ir;
+mod formula_ir;
+mod formula_objective_dependencies;
+mod formula_owner;
 mod formula_pattern;
 mod formula_pattern_ir;
+mod formula_pool;
+mod formula_program_check;
+mod formula_project_ir;
+mod formula_projection_ir;
+mod formula_raise;
+mod formula_range_ir;
+mod formula_source_activity;
+mod formula_support;
+mod formula_value;
+mod formula_value_ir;
+mod formula_warning;
 mod formula_weak;
+mod grounding_observer;
+mod integer_range;
+mod metadata;
 pub mod objective_bound;
 pub mod observation;
+mod scalar_arithmetic;
 pub mod symbols;
 
 pub use parsed_source::{ParsedSource, SourceFailure};
@@ -122,7 +122,7 @@ pub use bundle::{
 };
 pub use bundle_admission::{
     AdmittedBundle, BundleAdmissionError, BundleAdmissionFailure, BundleAdmissionOptions,
-    admit_bundle_extended,
+    admit_bundle_extended, admit_bundle_extended_with_cancellation,
 };
 pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature, SyntaxFailure};
 pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource, ExpansionUsage};
@@ -132,8 +132,8 @@ pub use formula::{
     FormulaLimits, FormulaPurpose, FormulaResource, PreparedFormula, PreparedFormulaBundle,
     ProgramFormulaOptions, admit_bundle_formula, admit_bundle_formula_with_grounding_observer,
     admit_formula, admit_formula_with_grounding_observer, admit_program_formula,
-    prepare_bundle_formula, prepare_formula, prepare_program_formula, prepare_program_formula_with,
-    validate_program_formula,
+    prepare_bundle_formula, prepare_bundle_formula_with_cancellation, prepare_formula,
+    prepare_program_formula, prepare_program_formula_with, validate_program_formula,
 };
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
@@ -154,12 +154,12 @@ pub use formula_count_plan::{
     CountPlan, CountPlanFailure, CountPlanFailureKind, CountPlanLimits, CountPlanResource,
     CountPlanStatistics, CountPlanStatus,
 };
-mod grounding_options;
 mod formula_domains;
 mod formula_keys;
-mod word_hash;
+mod grounding_options;
 #[cfg(test)]
 mod test_support;
+mod word_hash;
 pub use formula_keys::KeyAnalysis;
 pub use grounding_observer::{
     DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,

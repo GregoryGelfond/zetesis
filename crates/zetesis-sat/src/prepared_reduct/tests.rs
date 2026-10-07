@@ -21,7 +21,7 @@ fn builder() -> Builder {
         data: Data {
             theory: Theory::new(
                 1,
-                vec![],
+                zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
                 vec![],
                 zetesis_ferraris::AdmissionLimits::default(),
             )

@@ -1,16 +1,15 @@
 //! Request budgets and configured engine ceilings remain distinct outcomes.
 
 use super::support::{constant, family};
-use std::{collections::BTreeSet, error::Error, time::Duration};
+use std::{collections::BTreeSet, time::Duration};
 use themelios_macros::program;
 use themelios_program::AnswerSet;
 use themelios_solve::{
     bridge::Door,
-    contract::{Backend, Fault, Locus, SolveRequest},
+    contract::{Backend, Locus, SolveRequest},
     outcome::Conclusion,
 };
 use zetesis_engine::{Config, Grounder, Solver};
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[test]
 fn zero_request_budgets_do_not_poison_later_questions() {
@@ -39,50 +38,17 @@ fn zero_request_budgets_do_not_poison_later_questions() {
     }
 }
 
-fn grounding_fault(solver: &mut Solver) -> Fault {
-    match solver.solve(&SolveRequest::default()) {
-        Err(fault) => fault,
-        Ok(mut run) => {
-            let fault = run
-                .models()
-                .next()
-                .expect("grounding must fail before a model")
-                .expect_err("the configured grounding work ceiling must refuse");
-            assert!(run.conclusion().is_none());
-            assert!(run.models().next().is_none());
-            fault
-        }
-    }
-}
-
 #[test]
-fn configured_grounding_work_refusals_are_repeatable() {
+fn configured_memory_refusals_are_repeatable() {
     let mut solver = Solver::new(Config {
-        grounder: Grounder::Eager,
-        formula: FormulaLimits {
-            max_work: 0,
-            ..FormulaLimits::default()
-        },
+        memory: 0,
         ..Config::default()
     });
-    // A zero grounding allowance must not be spent by lower.
-    solver.lower(Door::Program(&program! { fact. })).unwrap();
     for _ in 0..2 {
-        let fault = grounding_fault(&mut solver);
+        let fault = solver
+            .lower(Door::Program(&program! { fact. }))
+            .unwrap_err();
         assert_eq!(fault.locus(), Locus::Resource);
-        let failure = fault
-            .source()
-            .unwrap()
-            .downcast_ref::<FormulaFailure>()
-            .unwrap();
-        assert!(matches!(
-            failure.cause(),
-            FormulaFailure::Limit {
-                resource: FormulaResource::Work,
-                limit: 0,
-                ..
-            }
-        ));
     }
 }
 

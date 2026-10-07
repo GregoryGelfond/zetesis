@@ -41,12 +41,12 @@ fn independent_disjunctions_have_only_supported_selections() {
     let original = theory(
         4,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Atom(3),
-            Node::Or(0, 1),
-            Node::Or(2, 3),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::atom(3),
+            Node::or_pair([0, 1]),
+            Node::or_pair([2, 3]),
         ],
         vec![4, 5],
     );
@@ -62,7 +62,7 @@ fn independent_disjunctions_have_only_supported_selections() {
 fn independent_facts_can_support_both_disjuncts() {
     let original = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![0, 1, 2],
     );
     assert!(satisfies(&restrictions(&original), 3));
@@ -72,7 +72,7 @@ fn independent_facts_can_support_both_disjuncts() {
 fn duplicate_head_occurrences_do_not_exclude_support() {
     let original = theory(
         1,
-        vec![Node::Atom(0), Node::Or(0, 0), Node::Or(1, 1)],
+        vec![Node::atom(0), Node::or_pair([0, 0]), Node::or_pair([1, 1])],
         vec![2],
     );
     assert!(satisfies(&restrictions(&original), 1));
@@ -83,11 +83,11 @@ fn false_rule_bodies_cannot_supply_support() {
     let original = theory(
         2,
         vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Or(1, 2),
-            Node::Implies(0, 3),
+            Node::falsum(),
+            Node::atom(0),
+            Node::atom(1),
+            Node::or_pair([1, 2]),
+            Node::implies(0, 3),
         ],
         vec![4],
     );
@@ -105,10 +105,10 @@ fn rich_asserted_heads_decline_the_certificate() {
     let original = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Or(0, 1),
-            Node::And(0, 1),
+            Node::atom(0),
+            Node::atom(1),
+            Node::or_pair([0, 1]),
+            Node::and_pair([0, 1]),
         ],
         vec![2, 3],
     );
@@ -119,7 +119,7 @@ fn rich_asserted_heads_decline_the_certificate() {
 
 #[test]
 fn ordinary_atoms_do_not_trigger_disjunctive_construction() {
-    let original = theory(1, vec![Node::Atom(0)], vec![0]);
+    let original = theory(1, vec![Node::atom(0)], vec![0]);
     assert!(
         support_restriction(&original, limits(), &Cancellation::default())
             .result
@@ -132,7 +132,7 @@ fn ordinary_atoms_do_not_trigger_disjunctive_construction() {
 fn work_exhaustion_retains_charged_construction() {
     let original = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     );
     let completed = support_restriction(&original, limits(), &Cancellation::default());
@@ -172,7 +172,7 @@ fn work_exhaustion_retains_charged_construction() {
 fn cancelled_construction_returns_no_restriction() {
     let original = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     );
     let cancellation = Cancellation::default();
@@ -190,18 +190,18 @@ fn support_preserves_every_small_reduct_answer_set() {
     // Exercise every subset of these asserted rules, including cycles,
     // disjunction, arbitrary implication bodies, and frozen constraints.
     let nodes = vec![
-        Node::False,
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Or(1, 2),
-        Node::Or(2, 3),
-        Node::Implies(1, 2),
-        Node::Implies(2, 1),
-        Node::Implies(1, 0),
-        Node::Implies(8, 4),
-        Node::Implies(6, 5),
-        Node::Implies(4, 0),
+        Node::falsum(),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::or_pair([1, 2]),
+        Node::or_pair([2, 3]),
+        Node::implies(1, 2),
+        Node::implies(2, 1),
+        Node::implies(1, 0),
+        Node::implies(8, 4),
+        Node::implies(6, 5),
+        Node::implies(4, 0),
     ];
     let optional = [1, 3, 5, 6, 7, 9, 10, 11];
     for chosen in 0..256 {
@@ -240,12 +240,12 @@ fn atomic_choices_supply_selected_head_support() {
     let original = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::False,
-            Node::Or(0, 1),
-            Node::Implies(0, 2),
-            Node::Or(0, 4),
+            Node::atom(0),
+            Node::atom(1),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(0, 2),
+            Node::or_pair([0, 4]),
         ],
         vec![3, 5],
     );
@@ -265,18 +265,18 @@ fn exact_choices_without_ordinary_disjunction_decline() {
     let original = theory(
         1,
         vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Implies(1, 0),
-            Node::Or(1, 2),
+            Node::falsum(),
+            Node::atom(0),
+            Node::implies(1, 0),
+            Node::or_pair([1, 2]),
         ],
         vec![3],
     );
     let attempt = support_restriction(&original, limits(), &Cancellation::default());
     assert!(attempt.result.unwrap().is_none());
-    // Four node classifications and one complete root inspection. The bounded
+    // Four node classifications, two disjunction operands and one root. The bounded
     // atomic-choice shape read is part of that charged root operation.
-    assert_eq!(attempt.work, 5);
+    assert_eq!(attempt.work, 7);
 }
 
 #[test]
@@ -285,22 +285,22 @@ fn conditional_choices_require_the_original_body() {
         // (a or b), and an independent choice of c only when a is true.
         // The negative c uses a separate occurrence with the same atom index.
         let choice = if reversed {
-            Node::Or(6, 2)
+            Node::or_pair([6, 2])
         } else {
-            Node::Or(2, 6)
+            Node::or_pair([2, 6])
         };
         let original = theory(
             3,
             vec![
-                Node::Atom(0),
-                Node::Atom(1),
-                Node::Atom(2),
-                Node::False,
-                Node::Or(0, 1),
-                Node::Atom(2),
-                Node::Implies(5, 3),
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::falsum(),
+                Node::or_pair([0, 1]),
+                Node::atom(2),
+                Node::implies(5, 3),
                 choice,
-                Node::Implies(0, 7),
+                Node::implies(0, 7),
             ],
             vec![4, 8],
         );
@@ -315,18 +315,18 @@ fn conditional_choices_require_the_original_body() {
 #[test]
 fn opaque_choice_alternatives_decline_complete_extraction() {
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::False,
-        Node::Or(0, 1),
-        Node::Implies(0, 2),
-        Node::Implies(1, 2),
-        Node::Or(0, 4),
-        Node::Or(0, 5),
-        Node::Implies(4, 2),
-        Node::Or(0, 8),
-        Node::And(6, 6),
-        Node::Or(6, 1),
+        Node::atom(0),
+        Node::atom(1),
+        Node::falsum(),
+        Node::or_pair([0, 1]),
+        Node::implies(0, 2),
+        Node::implies(1, 2),
+        Node::or_pair([0, 4]),
+        Node::or_pair([0, 5]),
+        Node::implies(4, 2),
+        Node::or_pair([0, 8]),
+        Node::and_pair([6, 6]),
+        Node::or_pair([6, 1]),
     ];
     // Cross-atom, double-negated, conjunction and nested-choice alternatives.
     // The ordinary disjunction remains first, so no partial root inventory is
@@ -345,21 +345,21 @@ fn opaque_choice_alternatives_decline_complete_extraction() {
 #[test]
 fn mixed_support_preserves_every_small_reduct_answer_set() {
     let nodes = vec![
-        Node::False,
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Atom(2),
-        Node::Or(1, 2),
-        Node::Implies(3, 0),
-        Node::Or(3, 5),
-        Node::Or(5, 3),
-        Node::Implies(1, 6),
-        Node::Implies(1, 2),
-        Node::Implies(9, 7),
-        Node::Implies(2, 1),
-        Node::Implies(4, 0),
-        Node::Or(4, 4),
-        Node::Implies(0, 6),
+        Node::falsum(),
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::or_pair([1, 2]),
+        Node::implies(3, 0),
+        Node::or_pair([3, 5]),
+        Node::or_pair([5, 3]),
+        Node::implies(1, 6),
+        Node::implies(1, 2),
+        Node::implies(9, 7),
+        Node::implies(2, 1),
+        Node::implies(4, 0),
+        Node::or_pair([4, 4]),
+        Node::implies(0, 6),
     ];
     let optional = [1, 3, 6, 8, 10, 11, 12, 14];
     for chosen in 0..256 {
@@ -399,13 +399,14 @@ fn support_admission_dimensions_are_inclusive() {
     use zetesis_ferraris::AdmissionError;
     let original = theory(
         2,
-        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
         vec![2],
     );
     let result = restrictions(&original);
     let exact = AdmissionLimits {
         max_atoms: 2,
         max_nodes: result.nodes().len(),
+        max_operands: result.parts().occurrences(),
         max_roots: 2,
     };
     assert!(
@@ -434,6 +435,10 @@ fn support_admission_dimensions_are_inclusive() {
             max_roots: 1,
             ..exact
         },
+        AdmissionLimits {
+            max_operands: exact.max_operands - 1,
+            ..exact
+        },
     ] {
         assert!(matches!(
             support_restriction(
@@ -455,13 +460,13 @@ fn mixed_work_refusals_publish_no_partial_restriction() {
     let original = theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Or(0, 1),
-            Node::Implies(2, 3),
-            Node::Or(2, 5),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 3),
+            Node::or_pair([2, 5]),
         ],
         vec![4, 6],
     );
@@ -493,13 +498,13 @@ fn mixed_node_limits_publish_no_partial_restriction() {
     let original = theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::False,
-            Node::Or(0, 1),
-            Node::Implies(2, 3),
-            Node::Or(2, 5),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 3),
+            Node::or_pair([2, 5]),
         ],
         vec![4, 6],
     );
@@ -525,22 +530,39 @@ fn mixed_node_limits_publish_no_partial_restriction() {
 
 #[test]
 fn shared_head_dags_do_not_expand_into_occurrence_trees() {
-    let mut nodes = vec![Node::Atom(0)];
-    for _ in 0..128 {
-        let previous = nodes.len() - 1;
-        nodes.push(Node::Or(previous, previous));
+    for depth in [1, 8, 128] {
+        let mut nodes = vec![Node::atom(0)];
+        for _ in 0..depth {
+            let previous = nodes.len() - 1;
+            nodes.push(Node::or_pair([previous, previous]));
+        }
+        let original = theory(1, nodes, vec![depth]);
+        // Every shared node expands once. Including operand visits and final
+        // admission (2N + E + R), each added level costs fifteen operations.
+        let complete_work = 15 * u64::try_from(depth).unwrap() + 82;
+        let attempt = support_restriction(
+            &original,
+            SupportLimits {
+                max_work: complete_work,
+                ..limits()
+            },
+            &Cancellation::default(),
+        );
+        assert_eq!(attempt.work, complete_work);
+        let result = attempt.result.unwrap().unwrap();
+        assert!(satisfies(&result, 1));
+        let stopped = support_restriction(
+            &original,
+            SupportLimits {
+                max_work: complete_work - 1,
+                ..limits()
+            },
+            &Cancellation::default(),
+        );
+        assert_eq!(stopped.work, complete_work - 1);
+        assert!(matches!(
+            stopped.result,
+            Err(SupportError::Stopped(Stop::WorkLimit))
+        ));
     }
-    let original = theory(1, nodes, vec![128]);
-    let result = support_restriction(
-        &original,
-        SupportLimits {
-            max_work: 1_000,
-            ..limits()
-        },
-        &Cancellation::default(),
-    )
-    .result
-    .unwrap()
-    .unwrap();
-    assert!(satisfies(&result, 1));
 }

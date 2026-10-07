@@ -162,38 +162,83 @@
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 35,
+      "line": 52,
       "name": "Zetesis.AggregateDependencies.row_membership"
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 47,
+      "line": 64,
       "name": "Zetesis.AggregateDependencies.covered_extension"
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 55,
+      "line": 72,
       "name": "Zetesis.AggregateDependencies.covered_sum"
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 70,
+      "line": 87,
       "name": "Zetesis.AggregateDependencies.covered_continuation"
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 82,
+      "line": 99,
       "name": "Zetesis.AggregateDependencies.appended_predecessors"
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 96,
+      "line": 113,
       "name": "Zetesis.AggregateDependencies.original_rows"
     },
     {
       "file": "Zetesis/AggregateDependencies.lean",
-      "line": 114,
+      "line": 131,
       "name": "Zetesis.AggregateDependencies.frozen_rows"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 217,
+      "name": "Zetesis.AggregateDependencies.Reuse.compute_agrees"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 228,
+      "name": "Zetesis.AggregateDependencies.Reuse.restart_exact"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 258,
+      "name": "Zetesis.AggregateDependencies.Reuse.next_preserves"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 286,
+      "name": "Zetesis.AggregateDependencies.Reuse.drain_exact"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 345,
+      "name": "Zetesis.AggregateDependencies.Reuse.reuse_rows_exact"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 373,
+      "name": "Zetesis.AggregateDependencies.Reuse.direct_rows_complete"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 394,
+      "name": "Zetesis.AggregateDependencies.Reuse.clauses_exact"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 450,
+      "name": "Zetesis.AggregateDependencies.SupportReuse.merge_repeated"
+    },
+    {
+      "file": "Zetesis/AggregateDependencies.lean",
+      "line": 496,
+      "name": "Zetesis.AggregateDependencies.SupportReuse.reuse_exact"
     },
     {
       "file": "Zetesis/AggregateInvariants.lean",
@@ -1321,6 +1366,51 @@
       "name": "Zetesis.ColumnRelations.applicability_exact"
     },
     {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 37,
+      "name": "Zetesis.CompactColumns.cell_roundtrip"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 43,
+      "name": "Zetesis.CompactColumns.column_roundtrip"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 59,
+      "name": "Zetesis.CompactColumns.packed_exact"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 69,
+      "name": "Zetesis.CompactColumns.refusal_iff"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 81,
+      "name": "Zetesis.CompactColumns.resize_exact"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 87,
+      "name": "Zetesis.CompactColumns.append_prefix"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 116,
+      "name": "Zetesis.CompactColumns.encoded_cell_exact"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 135,
+      "name": "Zetesis.CompactColumns.accepts_exact"
+    },
+    {
+      "file": "Zetesis/CompactColumns.lean",
+      "line": 151,
+      "name": "Zetesis.CompactColumns.selection_exact"
+    },
+    {
       "file": "Zetesis/ConditionalConsumers.lean",
       "line": 28,
       "name": "Zetesis.ConditionalConsumers.original_body"
@@ -2384,6 +2474,31 @@
       "file": "Zetesis/ExtremumPresence.lean",
       "line": 73,
       "name": "Zetesis.ExtremumPresence.mandatory_class_excludes_numeric_result"
+    },
+    {
+      "file": "Zetesis/FactRejection.lean",
+      "line": 33,
+      "name": "Zetesis.FactRejection.blocked_original"
+    },
+    {
+      "file": "Zetesis/FactRejection.lean",
+      "line": 47,
+      "name": "Zetesis.FactRejection.blocked_reduct"
+    },
+    {
+      "file": "Zetesis/FactRejection.lean",
+      "line": 66,
+      "name": "Zetesis.FactRejection.original_omit"
+    },
+    {
+      "file": "Zetesis/FactRejection.lean",
+      "line": 84,
+      "name": "Zetesis.FactRejection.reduct_omit"
+    },
+    {
+      "file": "Zetesis/FactRejection.lean",
+      "line": 106,
+      "name": "Zetesis.FactRejection.stable_omit"
     },
     {
       "file": "Zetesis/Feedback.lean",
@@ -4474,6 +4589,121 @@
       "file": "Zetesis/Observations.lean",
       "line": 161,
       "name": "Zetesis.Observations.display_deduplication_can_shrink_a_family"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 48,
+      "name": "Zetesis.Refinement.OperandArena.read_exact"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 54,
+      "name": "Zetesis.Refinement.OperandArena.contents_length"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 63,
+      "name": "Zetesis.Refinement.OperandArena.read_appended"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 82,
+      "name": "Zetesis.Refinement.OperandArena.validate_exact"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 102,
+      "name": "Zetesis.Refinement.OperandArena.gather_exact"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 135,
+      "name": "Zetesis.Refinement.OperandArena.satisfies_disjunction_fold"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 148,
+      "name": "Zetesis.Refinement.OperandArena.reduct_disjunction_fold"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 160,
+      "name": "Zetesis.Refinement.OperandArena.satisfies_disjunction"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 167,
+      "name": "Zetesis.Refinement.OperandArena.reduct_disjunction"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 181,
+      "name": "Zetesis.Refinement.OperandArena.formula_pair"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 188,
+      "name": "Zetesis.Refinement.OperandArena.formula_singleton"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 206,
+      "name": "Zetesis.Refinement.OperandArena.evaluate_exact"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 221,
+      "name": "Zetesis.Refinement.OperandArena.evaluate_map"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 242,
+      "name": "Zetesis.Refinement.OperandArena.original_exact"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 268,
+      "name": "Zetesis.Refinement.OperandArena.reduct_exact"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 295,
+      "name": "Zetesis.Refinement.OperandArena.evaluate_rejected"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 314,
+      "name": "Zetesis.Refinement.OperandArena.frozen_missing_mask"
+    },
+    {
+      "file": "Zetesis/OperandArena.lean",
+      "line": 328,
+      "name": "Zetesis.Refinement.OperandArena.frozen_exact"
+    },
+    {
+      "file": "Zetesis/OperandTable.lean",
+      "line": 59,
+      "name": "Zetesis.Refinement.OperandTable.meanings_length"
+    },
+    {
+      "file": "Zetesis/OperandTable.lean",
+      "line": 81,
+      "name": "Zetesis.Refinement.OperandTable.read_original_exact"
+    },
+    {
+      "file": "Zetesis/OperandTable.lean",
+      "line": 98,
+      "name": "Zetesis.Refinement.OperandTable.read_reduct_exact"
+    },
+    {
+      "file": "Zetesis/OperandTable.lean",
+      "line": 159,
+      "name": "Zetesis.Refinement.OperandTable.original_exact"
+    },
+    {
+      "file": "Zetesis/OperandTable.lean",
+      "line": 203,
+      "name": "Zetesis.Refinement.OperandTable.reduct_exact"
     },
     {
       "file": "Zetesis/Optimization.lean",
@@ -6951,6 +7181,46 @@
       "name": "Zetesis.SubsetCounter.carried_population_is_updated"
     },
     {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 42,
+      "name": "Zetesis.SupportTransposition.head_guards_exact"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 60,
+      "name": "Zetesis.SupportTransposition.condition_guards_exact"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 80,
+      "name": "Zetesis.SupportTransposition.requirements_equivalent"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 96,
+      "name": "Zetesis.SupportTransposition.guarded_original"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 102,
+      "name": "Zetesis.SupportTransposition.guarded_frozen"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 108,
+      "name": "Zetesis.SupportTransposition.original_exact"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 118,
+      "name": "Zetesis.SupportTransposition.frozen_exact"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 129,
+      "name": "Zetesis.SupportTransposition.answer_sets_in_context"
+    },
+    {
       "file": "Zetesis/TableBindings.lean",
       "line": 57,
       "name": "Zetesis.TableBindings.flat_match_survives"
@@ -7814,6 +8084,7 @@
     "Zetesis/ClauseValidation.lean",
     "Zetesis/ClosedCatalog.lean",
     "Zetesis/ColumnRelations.lean",
+    "Zetesis/CompactColumns.lean",
     "Zetesis/ConditionalConsumers.lean",
     "Zetesis/ConditionalHeadSupport.lean",
     "Zetesis/ConditionalHeads.lean",
@@ -7841,6 +8112,7 @@
     "Zetesis/ExtremumCandidates.lean",
     "Zetesis/ExtremumHeadActivity.lean",
     "Zetesis/ExtremumPresence.lean",
+    "Zetesis/FactRejection.lean",
     "Zetesis/Feedback.lean",
     "Zetesis/Ferraris.lean",
     "Zetesis/FerrarisGuards.lean",
@@ -7885,6 +8157,8 @@
     "Zetesis/ObjectiveValues.lean",
     "Zetesis/ObservationBindings.lean",
     "Zetesis/Observations.lean",
+    "Zetesis/OperandArena.lean",
+    "Zetesis/OperandTable.lean",
     "Zetesis/Optimization.lean",
     "Zetesis/OptionalIndex.lean",
     "Zetesis/OrderedBounds.lean",
@@ -7933,6 +8207,7 @@
     "Zetesis/StructuralBindings.lean",
     "Zetesis/StructuredWitnesses.lean",
     "Zetesis/SubsetCounter.lean",
+    "Zetesis/SupportTransposition.lean",
     "Zetesis/TableBindings.lean",
     "Zetesis/TerminalDefinitions.lean",
     "Zetesis/TernaryWatch.lean",
@@ -7952,13 +8227,13 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "51dae2e70158e39835a0d7a0de2601ea45aabdad5ed0cc277c6d1b6dd7a46ad1",
-    "Zetesis.lean": "0a997e51795d18a86a90e51ee345ff71c4f01395cc57c3bb8cf8f9a6dd7b0265",
+    "Audit.lean": "bc84c0367d4f2e13b2a85f63aadda6d8068f46d89a0133a1bb750898a30ab7bb",
+    "Zetesis.lean": "6d8061044651b7bd929a941c1c686f7e6a647fe1dc371d6431429f4f3613e22e",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
-    "Zetesis/AggregateDependencies.lean": "2d97c139688e882e85fe34c5f4b2e698e9c92bbfd138ff5339f85251341c20ed",
+    "Zetesis/AggregateDependencies.lean": "b21d2b1d84b19dcb43a1fe0276b0cc9dc72b4bf930c3928ffcfae14f96ca9b2f",
     "Zetesis/AggregateInvariants.lean": "10325fff693ad5da094baed2303c68de4b1b09a0208c88df38b38981d226036e",
     "Zetesis/AggregateRanges.lean": "d19d56b57cd98e862e730f498441c5e94d41c679d170d187f0726897b7b4e64f",
     "Zetesis/AggregateReduct.lean": "c5901d211c3bd3fffe388d87fa77efd1b66a79c3024cdec6dd63b7e77521a556",
@@ -7981,6 +8256,7 @@
     "Zetesis/ClauseValidation.lean": "399729eb4722afff90326418ac7b280ad8e5b87bc14fb6650e75c517957736c4",
     "Zetesis/ClosedCatalog.lean": "7737e15e89e65edecb015f3f2e106803c6f8f2aefbb986e227a6e442114b5c9a",
     "Zetesis/ColumnRelations.lean": "d4af6d98f76e143bdef15095a0f2db9afeeed56cbb85585cf097e2767a6ee6c6",
+    "Zetesis/CompactColumns.lean": "910aaf69f5c349092f781b17bdf91c92ee0ba899590df519ac4a719a0d480252",
     "Zetesis/ConditionalConsumers.lean": "448c154cb481418551f21c0516fa74e63ccfe16d32e00ff1109d7d68874c5bca",
     "Zetesis/ConditionalHeadSupport.lean": "10bbf703c3d7a89622ddaa12fe0857572cc6714d2a39281f5837f9715a9f64b1",
     "Zetesis/ConditionalHeads.lean": "96710ef9ca93e0765f566eb2c85dde88e8e821c6cd85fe46f863d22d8d59b5ea",
@@ -8008,6 +8284,7 @@
     "Zetesis/ExtremumCandidates.lean": "412cfbd3a4bdfc757dbb5be010c6c74c806d35bd268c7d87ba4ab50d8c0c8477",
     "Zetesis/ExtremumHeadActivity.lean": "2fbfd68e7f63d1860b667ab296e18c7a483f119be206e075ab443d208bd90681",
     "Zetesis/ExtremumPresence.lean": "03e419e744139ab81f1f89130cd187baa22f54fb50f9ddbc94b7e7dc9fac742e",
+    "Zetesis/FactRejection.lean": "c464b36695792c5f44355e8f9aa632752af17e7f07b8b4254d4b6ae82cfb0eb8",
     "Zetesis/Feedback.lean": "55c1f1a03e5b831ae91fbb238829106bd56ec673cab0ee083a6431f8a579b04e",
     "Zetesis/Ferraris.lean": "ac797719930791395d517d5f73276bd646ed1cd4dadc369cbcec15099cfb29ee",
     "Zetesis/FerrarisGuards.lean": "3405925c851745d20b0ba054c0bdb14b64e2702f50f5115e43c8f56b868fdafe",
@@ -8052,6 +8329,8 @@
     "Zetesis/ObjectiveValues.lean": "7b9f638d0bc06f6fd2d9154c79fc110441e52fe220a82ebd00b051c4e399310d",
     "Zetesis/ObservationBindings.lean": "8ab0f7400a227f84246fcdd5e08abbf83c9832c73a6c4ffb1c225471568a4c95",
     "Zetesis/Observations.lean": "170567aea24bcd1c7975d7d0a7a31df91506e7d185de4e4922b3a9c36f245169",
+    "Zetesis/OperandArena.lean": "de1f928fc672cc401800828ddb6fb35378a7959ab1b12efc4a9c5f5d6e54fecc",
+    "Zetesis/OperandTable.lean": "814f0814636552cdaf328ae599f3d5e665a03cf29e5bb55cf010a111193c9fbd",
     "Zetesis/Optimization.lean": "b913fcfa9a5ce52ef3f26754e6a1a14f3bef3ad314d3e474516467c9e931a227",
     "Zetesis/OptionalIndex.lean": "a34226123cff7834e8171673bf9df269594269a6403ffe7f26e6520361ddc421",
     "Zetesis/OrderedBounds.lean": "b29093f47a0993ad392826a3b0c70f137f3a88c22857e9d874be98722420d5d7",
@@ -8100,6 +8379,7 @@
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",
     "Zetesis/SubsetCounter.lean": "83fa58ee8faa1cded7aaacffd132ae59293860e4250d43162e58bcd83ce62f32",
+    "Zetesis/SupportTransposition.lean": "4d861b84240d1c4369e09dc087293db844e2cd1c5bc19dda75c542c078b75fa3",
     "Zetesis/TableBindings.lean": "dd0584c9a72627b8205f5c6773bfd3b50be67a9f48dee86322567d86df822e6b",
     "Zetesis/TerminalDefinitions.lean": "5d58652ba9c73381248f195e2d416dad03953a059854b87a82d78fa964da0513",
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
@@ -8118,7 +8398,7 @@
     "Zetesis/WorldMasks.lean": "ad0145f55bf5c1b0faffda9a20182bb9ff6f84226b7749760ffa290aeb451c59",
     "Zetesis/WorldViews.lean": "581ab6a65fc2659b8695d49af1bae6ef61008cdc59156aaba5b0c164c23cef89",
     "lake-manifest.json": "69364e6460074266ebff2f411cee9d04264803f6f813e49150fa5daa67da8ddd",
-    "lakefile.lean": "e322a840d100057b52048c58875cb1e56f53dd145e13e507cbb988936fddd274",
+    "lakefile.lean": "36ad575ebf985959204ec9fc2c4abc5613fc25de49b788db51ec1853931e1f3c",
     "lean-toolchain": "3aac669c7a910ec2389f4e4f921b605adf6ebf2d1e0c9b9cd0be4d33f3f5db71"
   }
 }

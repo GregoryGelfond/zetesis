@@ -1,3 +1,4 @@
+import Evaluator.Funs
 import SliceInsertion
 
 open Aeneas Aeneas.Std Result ControlFlow

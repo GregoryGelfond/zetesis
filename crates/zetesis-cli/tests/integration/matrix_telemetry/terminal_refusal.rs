@@ -1,9 +1,10 @@
-//! Actual CLI resource refusal preserves only complete reconstructed answers.
+//! Typed publication refusal preserves only complete reconstructed answers.
 
 use clap::Parser;
 use serde_json::Value;
 use zetesis_cli::{
-    Completion, Options, Report, RunError, RunFailure, run_detailed_with_diagnostics,
+    Completion, JsonRenderer, Options, PublicationConfig, PublicationOutcome, PublicationReport,
+    Report, RunError, RunFailure, publish_prepared,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{FormulaFailure, FormulaResource, ReconstructionError};
@@ -14,40 +15,49 @@ use zetesis_validation::answers::{self, native_json};
 const PROGRAM: &str = "n(1;2). a(1) | b(1). c(X):-a(X). c(X):-b(X). w(X,Y):-a(X),n(Y).";
 
 fn capture(work: Option<u64>, models: &str) -> (Result<Report, RunFailure>, Vec<u8>) {
-    let options = Options::try_parse_from(
-        [
-            "zetesis",
-            "--backend",
-            "cpu",
-            "--grounder",
-            "auto",
-            "--search",
-            "regions",
-            "--workers",
-            "1",
-            "--completion-workers",
-            "1",
-            "--models",
-            models,
-            "--json",
-            "--stats",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .chain(
-            work.into_iter()
-                .flat_map(|limit| ["--max-expansion-work".to_owned(), limit.to_string()]),
-        ),
-    )
+    let options = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--grounder",
+        "auto",
+        "--search",
+        "regions",
+        "--workers",
+        "1",
+        "--models",
+        models,
+        "--json",
+        "--stats",
+    ])
     .unwrap();
+    let resources = zetesis_solve::Resources::default();
+    let mut formula = resources.formula_limits();
+    if let Some(work) = work {
+        formula.max_work = work;
+    }
+    let prepared =
+        zetesis_themelios::ParsedSource::new(PROGRAM.into(), resources.admission_options())
+            .unwrap()
+            .prepare_formula(resources.expansion_limits(), formula)
+            .unwrap();
+    let owner =
+        zetesis_solve::ground_formula(prepared, zetesis_solve::Grounder::Auto, None).unwrap();
     let mut output = Vec::new();
-    let result = run_detailed_with_diagnostics(
-        PROGRAM.into(),
-        &options,
-        &mut output,
+    let result = publish_prepared(
+        owner.input(),
+        &PublicationConfig::from(&options),
+        &mut JsonRenderer::new(
+            &mut output,
+            resources.json_record_bytes(),
+            resources.formula_limits().theory.max_atoms,
+        ),
         &mut Vec::new(),
         &Cancellation::default(),
-    );
+    )
+    .and_then(PublicationOutcome::into_legacy)
+    .map(PublicationReport::into_report)
+    .map_err(zetesis_cli::PublicationFailure::into_legacy);
     (result, output)
 }
 

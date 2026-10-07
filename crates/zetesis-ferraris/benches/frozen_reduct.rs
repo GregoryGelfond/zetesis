@@ -24,12 +24,18 @@ struct Fixture {
 
 impl Fixture {
     fn new(depth: usize, queries: usize) -> Self {
-        let mut nodes: Vec<_> = (0..ATOMS).map(Node::Atom).collect();
+        let mut nodes: Vec<_> = (0..ATOMS).map(Node::atom).collect();
         for level in 0..depth {
-            nodes.push(Node::Implies(nodes.len() - 1, level % ATOMS));
+            nodes.push(Node::implies(nodes.len() - 1, level % ATOMS));
         }
         let roots = vec![nodes.len() - 1];
-        let theory = Theory::new(ATOMS, nodes, roots, AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            ATOMS,
+            zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+            roots,
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         Self {
             candidate: Interpretation::new(&theory, 0..ATOMS).unwrap(),
             tested: (0..queries)

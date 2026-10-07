@@ -33,8 +33,9 @@ pub struct FrozenReduct<'a> {
 impl<'a> FrozenReduct<'a> {
     /// Freeze the candidate's own theory with one topological evaluation.
     ///
-    /// For N DAG nodes, this charges exactly N node evaluations and retains N
-    /// Boolean values, with O(N) work and storage. The candidate's packed words
+    /// For N DAG nodes and E logical child occurrences, this charges exactly
+    /// N + E operations and retains N Boolean values: O(N + E) work and O(N)
+    /// storage. Repeated children count separately. The candidate's packed words
     /// and theory are borrowed, not cloned. No root or proper subset is tested;
     /// `limits.max_subsets` has no effect. Even an empty DAG polls control.
     ///
@@ -74,8 +75,9 @@ impl<'a> FrozenReduct<'a> {
     /// it need not be a subset of the candidate. An independently admitted equal
     /// theory has a different identity and is refused before control is polled.
     ///
-    /// For N DAG nodes and R asserted roots, a query charges N node evaluations
-    /// and then one test per root through the first failure, at most N + R work.
+    /// For N DAG nodes, E child occurrences and R asserted roots, a query charges
+    /// N + E evaluations and then one test per root through the first failure,
+    /// at most N + E + R work.
     /// It uses N temporary Boolean values, released on completion or stop. The
     /// freeze is reused unchanged. This is a fresh per-query budget, excluding
     /// construction and previous queries; `limits.max_subsets` has no effect.

@@ -67,7 +67,11 @@ fn closed_query_bounds_preserve_all_candidate_ties() {
     let atoms = [atom("a"), atom("b"), atom("c")];
     let original = Theory::new(
         3,
-        vec![Node::Atom(0), Node::Atom(1), Node::Atom(2)],
+        zetesis_ferraris::FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::atom(2)],
+            vec![],
+        )
+        .unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )

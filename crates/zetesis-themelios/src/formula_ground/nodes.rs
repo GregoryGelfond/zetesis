@@ -1,65 +1,166 @@
-//! Exact node lookup; the node sequence alone fixes dense identity and order.
+//! Exact semantic node lookup over the sole paired formula owner.
 //!
-//! A key is a kind and two child identities the builder assigned densely, so
-//! it carries nothing an input author chooses and needs no randomized hash: a
-//! fixed multiplicative mix of the three words places it. No hash-table
-//! traversal emits nodes or selects IDs. Expected lookup is constant table
-//! work; collisions can require linear work and growth can rehash prior keys.
-//! Hashes establish bucket placement only: the complete node key decides
-//! identity.
+//! Hash buckets link node IDs; keys retain no copied operand rows. Collision
+//! checks borrow complete ordered operands from the owner, so arena offsets do
+//! not establish identity. Node publication order alone assigns dense IDs.
 
 use std::collections::HashMap;
-use std::hash::{BuildHasher, BuildHasherDefault};
-
-use crate::word_hash::WordHasher;
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 
 use crate::ProgramSite;
-use zetesis_ferraris::{FormulaNodes, Node};
-
 use crate::formula::ceiling;
+use crate::word_hash::WordHasher;
 use crate::{FormulaFailure, FormulaResource};
+use zetesis_ferraris::{FormulaNodes, NodeView};
 
-type Key = (u8, usize, usize);
-pub(super) type Index = HashMap<Key, usize, BuildHasherDefault<WordHasher>>;
+const END: usize = usize::MAX;
+
+pub(super) struct Index<S = BuildHasherDefault<WordHasher>> {
+    hash: S,
+    buckets: HashMap<u64, usize, BuildHasherDefault<WordHasher>>,
+    links: Vec<usize>,
+}
+impl<S: Default> Default for Index<S> {
+    fn default() -> Self {
+        Self {
+            hash: S::default(),
+            buckets: HashMap::default(),
+            links: Vec::new(),
+        }
+    }
+}
 
 pub(super) fn intern<S: BuildHasher>(
-    index: &mut HashMap<Key, usize, S>,
+    index: &mut Index<S>,
     nodes: &mut FormulaNodes,
-    node: Node,
-    bound: (FormulaResource, usize),
+    node: NodeView<'_>,
+    bounds: [(FormulaResource, usize); 2],
     location: ProgramSite,
+    mut work: impl FnMut() -> Result<(), FormulaFailure>,
 ) -> Result<(usize, bool), FormulaFailure> {
-    let key = key(node);
-    if let Some(&id) = index.get(&key) {
-        return Ok((id, false));
+    let mut hasher = index.hash.build_hasher();
+    visit(node, |word| {
+        work()?;
+        word.hash(&mut hasher);
+        Ok(())
+    })?;
+    let hash = hasher.finish();
+    let previous = index.buckets.get(&hash).copied().unwrap_or(END);
+    let mut cursor = previous;
+    while cursor != END {
+        work()?;
+        let old = nodes
+            .view()
+            .node(cursor)
+            .map_err(|error| FormulaFailure::Theory { error, location })?;
+        if equal(old, node, &mut work)? {
+            return Ok((cursor, false));
+        }
+        cursor = index.links[cursor];
     }
-    // HashMap::entry may reserve for a vacant key before yielding the entry.
-    // Perform miss admission before any mutating table operation instead.
-    ceiling(bound.0, nodes.len() as u128 + 1, bound.1 as u128, location)?;
-    let id = nodes.len();
-    nodes.push(node);
-    index.insert(key, id);
+    let id = nodes.view().len();
+    ceiling(bounds[0].0, id as u128 + 1, bounds[0].1 as u128, location)?;
+    let occurrences = match node {
+        NodeView::And(row) | NodeView::Or(row) => row.len(),
+        NodeView::Implies(_, _) => 2,
+        NodeView::Atom(_) | NodeView::False => 0,
+    };
+    ceiling(
+        bounds[1].0,
+        nodes.parts().occurrences() as u128 + occurrences as u128,
+        bounds[1].1 as u128,
+        location,
+    )?;
+    // Charge child validation, arena copying and any moved index cells before
+    // their growth. Both reservations precede authoritative graph publication.
+    let wide = matches!(node, NodeView::And(row) | NodeView::Or(row) if row.len() >= 3);
+    let growth = usize::from(index.links.len() == index.links.capacity()) * index.links.len()
+        + usize::from(index.buckets.len() == index.buckets.capacity()) * index.buckets.len();
+    for _ in 0..occurrences
+        .saturating_mul(if wide { 2 } else { 1 })
+        .saturating_add(growth)
+    {
+        work()?;
+    }
+    index
+        .links
+        .try_reserve(1)
+        .map_err(|error| FormulaFailure::MetadataAllocation { error, location })?;
+    index
+        .buckets
+        .try_reserve(1)
+        .map_err(|error| FormulaFailure::MetadataAllocation { error, location })?;
+    let mut transaction = nodes.transaction();
+    let found = transaction
+        .push(node, bounds[0].1, bounds[1].1)
+        .map_err(|error| FormulaFailure::Theory { error, location })?;
+    debug_assert_eq!(
+        found, id,
+        "builder normalizes empty/singleton groups before interning"
+    );
+    transaction.commit();
+    index.links.push(previous);
+    index.buckets.insert(hash, id);
     Ok((id, true))
 }
 
-fn key(node: Node) -> Key {
-    match node {
-        Node::False => (0, 0, 0),
-        Node::Atom(atom) => (1, atom, 0),
-        Node::And(left, right) => (2, left, right),
-        Node::Or(left, right) => (3, left, right),
-        Node::Implies(left, right) => (4, left, right),
+fn visit(
+    node: NodeView<'_>,
+    mut word: impl FnMut(usize) -> Result<(), FormulaFailure>,
+) -> Result<(), FormulaFailure> {
+    let pair;
+    let (kind, operands) = match node {
+        NodeView::False => (0, &[][..]),
+        NodeView::Atom(atom) => {
+            pair = [atom, 0];
+            (1, &pair[..1])
+        }
+        NodeView::And(row) => (2, row),
+        NodeView::Or(row) => (3, row),
+        NodeView::Implies(left, right) => {
+            pair = [left, right];
+            (4, &pair[..])
+        }
+    };
+    word(kind)?;
+    word(operands.len())?;
+    for &child in operands {
+        word(child)?;
+    }
+    Ok(())
+}
+
+fn equal(
+    left: NodeView<'_>,
+    right: NodeView<'_>,
+    work: &mut impl FnMut() -> Result<(), FormulaFailure>,
+) -> Result<bool, FormulaFailure> {
+    match (left, right) {
+        (NodeView::And(a), NodeView::And(b)) | (NodeView::Or(a), NodeView::Or(b)) => {
+            if a.len() != b.len() {
+                return Ok(false);
+            }
+            for (a, b) in a.iter().zip(b) {
+                work()?;
+                if a != b {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        _ => {
+            work()?;
+            Ok(left == right)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::hash::{BuildHasherDefault, Hasher};
-
+    use super::*;
+    use std::hash::Hasher;
     use themelios_base::source::SourceId;
     use themelios_base::span::{ByteOffset, Span};
-
-    use super::*;
 
     #[derive(Default)]
     struct Collision;
@@ -75,152 +176,84 @@ mod tests {
             span: Span::empty(ByteOffset::new(2)),
         })
     }
-
-    fn sequence() -> [Node; 6] {
-        [
-            Node::False,
-            Node::Implies(0, 0),
-            Node::Atom(0),
-            Node::And(2, 2),
-            Node::Or(2, 3),
-            Node::Implies(4, 2),
-        ]
-    }
-    #[test]
-    fn collisions_preserve_first_node_identity() {
-        let mut index = HashMap::<_, _, BuildHasherDefault<Collision>>::default();
-        let mut nodes = FormulaNodes::default();
-        for (id, node) in sequence().into_iter().enumerate() {
-            assert_eq!(
-                intern(
-                    &mut index,
-                    &mut nodes,
-                    node,
-                    (FormulaResource::Nodes, 6),
-                    location()
-                )
-                .unwrap(),
-                (id, true)
-            );
-        }
-        for (id, node) in sequence().into_iter().enumerate().rev() {
-            assert_eq!(
-                intern(
-                    &mut index,
-                    &mut nodes,
-                    node,
-                    (FormulaResource::Nodes, 6),
-                    location()
-                )
-                .unwrap(),
-                (id, false)
-            );
-        }
-        assert_eq!(&*nodes, sequence());
-        assert_eq!(index.len(), sequence().len());
-    }
-    #[test]
-    fn a_node_ceiling_preserves_both_owners() {
-        let mut index = Index::default();
-        let mut nodes = FormulaNodes::default();
+    fn insert<S: BuildHasher>(
+        index: &mut Index<S>,
+        nodes: &mut FormulaNodes,
+        node: NodeView<'_>,
+        max_nodes: usize,
+        max_operands: usize,
+    ) -> Result<(usize, bool), FormulaFailure> {
         intern(
-            &mut index,
-            &mut nodes,
-            Node::False,
-            (FormulaResource::Nodes, 1),
+            index,
+            nodes,
+            node,
+            [
+                (FormulaResource::Nodes, max_nodes),
+                (FormulaResource::Operands, max_operands),
+            ],
             location(),
+            || Ok(()),
         )
-        .unwrap();
-        assert!(
-            matches!(intern(&mut index, &mut nodes, Node::Atom(0), (FormulaResource::Nodes, 1), location()), Err(FormulaFailure::Limit { resource: FormulaResource::Nodes, observed: 2, limit: 1, location: found }) if found == location())
-        );
-        assert_eq!(&*nodes, [Node::False]);
-        assert_eq!(index.len(), 1);
+    }
+    #[test]
+    fn collisions_preserve_complete_operand_identity() {
+        let mut index = Index::<BuildHasherDefault<Collision>>::default();
+        let mut nodes = FormulaNodes::default();
+        for atom in 0..3 {
+            insert(&mut index, &mut nodes, NodeView::Atom(atom), 6, 20).unwrap();
+        }
+        let first = insert(&mut index, &mut nodes, NodeView::And(&[0, 1, 2, 1]), 6, 20).unwrap();
+        assert_eq!(first, (3, true));
         assert_eq!(
-            intern(
-                &mut index,
-                &mut nodes,
-                Node::Atom(0),
-                (FormulaResource::Nodes, 2),
-                location()
+            insert(&mut index, &mut nodes, NodeView::And(&[0, 1, 2, 1]), 6, 20).unwrap(),
+            (3, false)
+        );
+        assert_eq!(
+            insert(&mut index, &mut nodes, NodeView::And(&[0, 1, 2, 0]), 6, 20).unwrap(),
+            (4, true)
+        );
+        assert_eq!(
+            insert(&mut index, &mut nodes, NodeView::Or(&[0, 1, 2, 1]), 6, 20).unwrap(),
+            (5, true)
+        );
+        assert_eq!(nodes.parts().operands().len(), 12);
+    }
+    #[test]
+    fn refusal_precedes_index_growth() {
+        let mut index = Index::<BuildHasherDefault<Collision>>::default();
+        let mut nodes = FormulaNodes::default();
+        assert!(insert(&mut index, &mut nodes, NodeView::False, 0, 0).is_err());
+        assert_eq!(index.buckets.capacity(), 0);
+        assert_eq!(index.links.capacity(), 0);
+        assert_eq!(nodes.parts().node_capacity(), 0);
+        insert(&mut index, &mut nodes, NodeView::False, 2, 0).unwrap();
+        let capacities = (
+            index.links.capacity(),
+            index.buckets.capacity(),
+            nodes.parts().node_capacity(),
+        );
+        assert!(matches!(
+            insert(&mut index, &mut nodes, NodeView::And(&[0, 0, 0]), 2, 2),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Operands,
+                observed: 3,
+                limit: 2,
+                ..
+            })
+        ));
+        assert_eq!(
+            capacities,
+            (
+                index.links.capacity(),
+                index.buckets.capacity(),
+                nodes.parts().node_capacity()
             )
-            .unwrap(),
+        );
+        assert_eq!(nodes.view().len(), 1);
+        assert!(nodes.parts().operands().is_empty());
+        assert_eq!(
+            insert(&mut index, &mut nodes, NodeView::And(&[0, 0, 0]), 2, 3).unwrap(),
             (1, true)
         );
-    }
-    #[test]
-    fn zero_node_admission_allocates_no_index() {
-        let mut index = Index::default();
-        let mut nodes = FormulaNodes::default();
-        assert!(
-            intern(
-                &mut index,
-                &mut nodes,
-                Node::False,
-                (FormulaResource::Nodes, 0),
-                location()
-            )
-            .is_err()
-        );
-        assert_eq!(index.capacity(), 0);
-        assert_eq!(nodes.capacity(), 0);
-    }
-
-    #[test]
-    fn refused_growth_preserves_index_capacity() {
-        let mut index = Index::default();
-        let mut nodes = FormulaNodes::default();
-        intern(
-            &mut index,
-            &mut nodes,
-            Node::False,
-            (FormulaResource::Nodes, usize::MAX),
-            location(),
-        )
-        .unwrap();
-        while index.len() < index.capacity() {
-            let node = Node::Atom(nodes.len());
-            intern(
-                &mut index,
-                &mut nodes,
-                node,
-                (FormulaResource::Nodes, usize::MAX),
-                location(),
-            )
-            .unwrap();
-        }
-        let capacity = index.capacity();
-        let node_capacity = nodes.capacity();
-        let before = nodes.to_vec();
-        let proposed = Node::Atom(nodes.len());
-        let mut control_index = index.clone();
-        let mut control_nodes = FormulaNodes::new(nodes.to_vec());
-        intern(
-            &mut control_index,
-            &mut control_nodes,
-            proposed,
-            (FormulaResource::Nodes, usize::MAX),
-            location(),
-        )
-        .unwrap();
-        assert!(
-            control_index.capacity() > capacity,
-            "control insertion actually grows the index"
-        );
-        let limit = nodes.len();
-        assert!(
-            intern(
-                &mut index,
-                &mut nodes,
-                proposed,
-                (FormulaResource::Nodes, limit),
-                location()
-            )
-            .is_err()
-        );
-        assert_eq!(index.capacity(), capacity);
-        assert_eq!(nodes.capacity(), node_capacity);
-        assert_eq!(&*nodes, before);
-        assert_eq!(index.len(), limit);
     }
 }

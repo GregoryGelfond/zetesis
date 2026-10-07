@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use crate::support::aggregate_theories::{COMPARISONS, prefix, push};
+use crate::support::aggregate_theories::{COMPARISONS, copy, prefix, push, raw, snapshot};
 use crate::support::worlds::{eval, interpretation};
 use proptest::prelude::*;
 use zetesis_cpu::{Cancellation, Stop};
@@ -28,7 +28,11 @@ fn holds(comparison: Comparison, value: i128, bound: i64) -> bool {
     }
 }
 
-fn reference(elements: &[Element], comparison: Comparison, bound: i64) -> (Vec<Node>, usize) {
+fn reference(
+    elements: &[Element],
+    comparison: Comparison,
+    bound: i64,
+) -> (zetesis_ferraris::FormulaNodes, usize) {
     let mut nodes = prefix();
     let mut root = 1;
     for subset in 0usize..(1 << elements.len()) {
@@ -44,20 +48,32 @@ fn reference(elements: &[Element], comparison: Comparison, bound: i64) -> (Vec<N
         let mut consequent = 0;
         for (index, element) in elements.iter().enumerate() {
             if subset & (1 << index) == 0 {
-                consequent = push(&mut nodes, Node::Or(consequent, element.condition));
+                consequent = push(
+                    &mut nodes,
+                    zetesis_ferraris::NodeView::Or(&[consequent, element.condition]),
+                );
             } else {
-                antecedent = push(&mut nodes, Node::And(antecedent, element.condition));
+                antecedent = push(
+                    &mut nodes,
+                    zetesis_ferraris::NodeView::And(&[antecedent, element.condition]),
+                );
             }
         }
-        let implication = push(&mut nodes, Node::Implies(antecedent, consequent));
-        root = push(&mut nodes, Node::And(root, implication));
+        let implication = push(
+            &mut nodes,
+            zetesis_ferraris::NodeView::Implies(antecedent, consequent),
+        );
+        root = push(
+            &mut nodes,
+            zetesis_ferraris::NodeView::And(&[root, implication]),
+        );
     }
     (nodes, root)
 }
 
 fn verify(elements: &[Element], guards: &[Guard]) {
     let input = prefix();
-    let mut nodes = input.clone();
+    let mut nodes = copy(&input);
     let family = append_aggregate_family(
         &mut nodes,
         elements,
@@ -68,17 +84,26 @@ fn verify(elements: &[Element], guards: &[Guard]) {
     .unwrap();
     assert_eq!(family.roots().len(), guards.len());
     for (&root, guard) in family.roots().iter().zip(guards) {
-        let theory = Theory::new(2, nodes.clone(), vec![root], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            2,
+            copy(&nodes).into_parts(),
+            vec![root],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let (reference, reference_root) = reference(elements, guard.comparison, guard.bound);
         for outer in 0..4 {
             let sum = elements
                 .iter()
-                .filter(|element| eval(&input, element.condition, outer, None))
+                .filter(|element| eval(input.view(), element.condition, outer, None))
                 .map(|element| i128::from(element.weight))
                 .sum();
             let classical = holds(guard.comparison, sum, guard.bound);
             let candidate = interpretation(&theory, outer);
-            assert_eq!(eval(&reference, reference_root, outer, None), classical);
+            assert_eq!(
+                eval(reference.view(), reference_root, outer, None),
+                classical
+            );
             assert_eq!(
                 models(
                     &theory,
@@ -92,12 +117,12 @@ fn verify(elements: &[Element], guards: &[Guard]) {
             for inner in 0..4 {
                 let sum = elements
                     .iter()
-                    .filter(|element| eval(&input, element.condition, inner, Some(outer)))
+                    .filter(|element| eval(input.view(), element.condition, inner, Some(outer)))
                     .map(|element| i128::from(element.weight))
                     .sum();
                 let expected = classical && holds(guard.comparison, sum, guard.bound);
                 assert_eq!(
-                    eval(&reference, reference_root, inner, Some(outer)),
+                    eval(reference.view(), reference_root, inner, Some(outer)),
                     expected
                 );
                 assert_eq!(
@@ -219,7 +244,7 @@ fn empty_zero_signed_and_extreme_guards_have_no_numeric_wraparound() {
 
 #[test]
 fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
-    let input: Vec<_> = (0..16).map(Node::Atom).collect();
+    let input = raw((0..16).map(Node::atom).collect());
     let elements: Vec<_> = (0..16)
         .map(|condition| Element {
             weight: 1,
@@ -233,7 +258,7 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
         })
         .collect();
     guards.push(guards[8]);
-    let mut nodes = input.clone();
+    let mut nodes = copy(&input);
     let family = append_aggregate_family(
         &mut nodes,
         &elements,
@@ -254,7 +279,7 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
     let isolated_work: u64 = guards
         .iter()
         .map(|guard| {
-            let mut isolated = input.clone();
+            let mut isolated = copy(&input);
             append_aggregate(
                 &mut isolated,
                 &elements,
@@ -274,8 +299,13 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
         family.statistics().work
     );
     for (&root, guard) in family.roots().iter().zip(&guards) {
-        let theory =
-            Theory::new(16, nodes.clone(), vec![root], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            16,
+            copy(&nodes).into_parts(),
+            vec![root],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         for count in [0, 7, 8, 9, 16] {
             let candidate = Interpretation::new(&theory, 0..count).unwrap();
             assert_eq!(
@@ -294,7 +324,7 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
 
 fn limited(elements: &[Element], guards: &[Guard], limits: FamilyLimits) -> Error {
     let original = prefix();
-    let mut nodes = original.clone();
+    let mut nodes = copy(&original);
     let error = append_aggregate_family(
         &mut nodes,
         elements,
@@ -304,7 +334,8 @@ fn limited(elements: &[Element], guards: &[Guard], limits: FamilyLimits) -> Erro
     )
     .unwrap_err();
     assert_eq!(
-        nodes, original,
+        snapshot(&nodes),
+        snapshot(&original),
         "an incomplete family must roll back every appended node"
     );
     error.kind()
@@ -344,7 +375,8 @@ fn family_guard_node_work_state_and_element_ceilings_are_inclusive() {
     let exact = FamilyLimits {
         aggregate: AggregateLimits {
             max_elements: elements.len(),
-            max_nodes: nodes.len(),
+            max_nodes: nodes.view().len(),
+            max_operands: nodes.parts().occurrences(),
             max_work: family.statistics().work,
             max_states: family.statistics().states,
             max_subsets: 0,
@@ -363,7 +395,7 @@ fn family_guard_node_work_state_and_element_ceilings_are_inclusive() {
         .unwrap(),
         family
     );
-    assert_eq!(repeated, nodes);
+    assert_eq!(snapshot(&repeated), snapshot(&nodes));
     assert_eq!(
         limited(
             &elements,
@@ -489,13 +521,13 @@ fn signed_subset_budget_is_cumulative_and_late_refusal_is_atomic() {
     .unwrap_err();
     assert_eq!(error.statistics().subsets, 8);
     assert!(error.statistics().nodes > 2);
-    assert_eq!(partial, prefix());
+    assert_eq!(snapshot(&partial), snapshot(&prefix()));
 }
 
 #[test]
 fn empty_family_still_validates_and_appends_nothing() {
     let original = prefix();
-    let mut nodes = original.clone();
+    let mut nodes = copy(&original);
     let family = append_aggregate_family(
         &mut nodes,
         &[Element {
@@ -505,7 +537,7 @@ fn empty_family_still_validates_and_appends_nothing() {
         &[],
         FamilyLimits {
             aggregate: AggregateLimits {
-                max_nodes: original.len(),
+                max_nodes: original.view().len(),
                 max_states: 0,
                 max_subsets: 0,
                 ..AggregateLimits::default()
@@ -517,7 +549,7 @@ fn empty_family_still_validates_and_appends_nothing() {
     .unwrap();
     assert!(family.roots().is_empty());
     assert_eq!(family.appended_nodes(), 0);
-    assert_eq!(nodes, original);
+    assert_eq!(snapshot(&nodes), snapshot(&original));
     assert_eq!(
         limited(
             &[Element {
@@ -529,7 +561,7 @@ fn empty_family_still_validates_and_appends_nothing() {
         ),
         Error::InvalidCondition { element: 0 }
     );
-    let mut bad = vec![Node::And(0, 0)];
+    let mut bad = raw(vec![Node::and_pair([0, 0])]);
     assert_eq!(
         append_aggregate_family(
             &mut bad,
@@ -542,7 +574,7 @@ fn empty_family_still_validates_and_appends_nothing() {
         .kind(),
         Error::InvalidPrefix { node: 0 }
     );
-    assert_eq!(bad, vec![Node::And(0, 0)]);
+    assert_eq!(snapshot(&bad), (vec![Node::and_pair([0, 0])], vec![]));
 }
 
 #[test]
@@ -556,7 +588,7 @@ fn cancellation_and_deadlines_do_not_produce_empty_success() {
             Stop::Deadline,
         ),
     ] {
-        let mut nodes = Vec::new();
+        let mut nodes = zetesis_ferraris::FormulaNodes::default();
         let error = append_aggregate_family(
             &mut nodes,
             &[],
@@ -573,6 +605,7 @@ fn cancellation_and_deadlines_do_not_produce_empty_success() {
         .unwrap_err();
         assert_eq!(error.kind(), Error::Control(expected));
         assert_eq!(error.statistics().work, 0);
-        assert!(nodes.is_empty());
+        assert!(nodes.view().is_empty());
+        assert!(nodes.parts().operands().is_empty());
     }
 }

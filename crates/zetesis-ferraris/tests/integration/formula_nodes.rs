@@ -1,4 +1,6 @@
-//! Retained topology checks preserve the aggregate compiler's exact output.
+//! Retained topology checks preserve aggregate output and final theory admission.
+
+mod admission;
 
 use std::time::Instant;
 
@@ -9,11 +11,11 @@ use zetesis_ferraris::{
     AggregateBuild, AggregateComparison as Comparison, AggregateElement as Element, AggregateError,
     AggregateErrorKind as Error, AggregateExtremum as Extremum, AggregateFamilyBuild,
     AggregateFamilyLimits as FamilyLimits, AggregateGuard as Guard, AggregateLimits, FormulaNodes,
-    Node, ValueExtremumElement, append_aggregate, append_aggregate_family, append_extremum,
-    append_value_extremum, append_value_extremum_refs,
+    FormulaParts, Node, NodeView, ValueExtremumElement, append_aggregate, append_aggregate_family,
+    append_extremum, append_value_extremum, append_value_extremum_refs,
 };
 
-use crate::support::aggregate_theories::{COMPARISONS, prefix};
+use crate::support::aggregate_theories::{COMPARISONS, copy, prefix, push, snapshot};
 use crate::support::worlds::eval;
 
 fn scan(
@@ -32,9 +34,14 @@ fn scan(
 }
 
 fn checked() -> FormulaNodes {
-    let mut nodes = FormulaNodes::new(prefix());
+    let mut nodes = prefix();
     scan(&mut nodes, AggregateLimits::default()).unwrap();
     nodes
+}
+
+// A fresh raw owner must check every node and every logical child occurrence.
+fn size(nodes: &FormulaNodes) -> u64 {
+    u64::try_from(nodes.view().len() + nodes.parts().occurrences()).unwrap()
 }
 
 fn elements(weight: i32) -> [Element; 2] {
@@ -64,14 +71,11 @@ fn guards() -> [Guard; 2] {
 }
 
 #[test]
-fn completed_scans_charge_only_new_nodes() {
+fn checked_appends_retain_completed_validation() {
     let input = prefix();
-    let mut nodes = FormulaNodes::new(input.clone());
+    let mut nodes = copy(&input);
     let first = scan(&mut nodes, AggregateLimits::default()).unwrap();
-    assert_eq!(
-        first.statistics().work,
-        1 + u64::try_from(input.len()).unwrap()
-    );
+    assert_eq!(first.statistics().work, 1 + size(&input));
     assert_eq!(
         scan(&mut nodes, AggregateLimits::default())
             .unwrap()
@@ -79,21 +83,25 @@ fn completed_scans_charge_only_new_nodes() {
             .work,
         1
     );
-    nodes.push(Node::And(2, 3));
-    nodes.push(Node::Implies(0, 0));
+    push(&mut nodes, NodeView::And(&[2, 3]));
+    push(&mut nodes, NodeView::Implies(0, 0));
     assert_eq!(
         scan(&mut nodes, AggregateLimits::default())
             .unwrap()
             .statistics()
             .work,
-        3
+        1
     );
-    assert_eq!(&nodes[..input.len()], &input);
+    assert_eq!(
+        &nodes.parts().nodes()[..input.view().len()],
+        input.parts().nodes()
+    );
+    assert_eq!(nodes.parts().operands(), input.parts().operands());
 }
 
 #[test]
 fn independent_families_preserve_frozen_reducts() {
-    let mut nodes = FormulaNodes::new(prefix());
+    let mut nodes = prefix();
     let mut raw = prefix();
     let mut previously_checked = 0;
     for weight in [-1, 0, 1] {
@@ -108,7 +116,7 @@ fn independent_families_preserve_frozen_reducts() {
                     bound: -1,
                 },
             ];
-            let old_len = nodes.len();
+            raw = copy(&raw);
             let actual = nodes
                 .append_aggregate_family(
                     &elements(weight),
@@ -125,23 +133,23 @@ fn independent_families_preserve_frozen_reducts() {
                 &Cancellation::default(),
             )
             .unwrap();
-            assert_eq!(&*nodes, raw);
+            assert_eq!(snapshot(&nodes), snapshot(&raw));
             assert_eq!(actual.roots(), expected.roots());
             assert_eq!(actual.profile(), expected.profile());
             let mut statistics = expected.statistics();
-            statistics.work -= u64::try_from(previously_checked).unwrap();
+            statistics.work -= previously_checked;
             assert_eq!(actual.statistics(), statistics);
-            previously_checked = old_len;
+            previously_checked = size(&nodes);
             for (&root, &reference) in actual.roots().iter().zip(expected.roots()) {
                 for outer in 0..4 {
                     assert_eq!(
-                        eval(&nodes, root, outer, None),
-                        eval(&raw, reference, outer, None)
+                        eval(nodes.view(), root, outer, None),
+                        eval(raw.view(), reference, outer, None)
                     );
                     for inner in 0..4 {
                         assert_eq!(
-                            eval(&nodes, root, inner, Some(outer)),
-                            eval(&raw, reference, inner, Some(outer))
+                            eval(nodes.view(), root, inner, Some(outer)),
+                            eval(raw.view(), reference, inner, Some(outer))
                         );
                     }
                 }
@@ -150,11 +158,11 @@ fn independent_families_preserve_frozen_reducts() {
     }
 }
 
-fn compare_build(actual: AggregateBuild, expected: AggregateBuild, checked: usize) {
+fn compare_build(actual: AggregateBuild, expected: AggregateBuild, checked: u64) {
     assert_eq!(actual.root(), expected.root());
     assert_eq!(actual.profile(), expected.profile());
     let mut statistics = expected.statistics();
-    statistics.work -= u64::try_from(checked).unwrap();
+    statistics.work -= checked;
     assert_eq!(actual.statistics(), statistics);
 }
 
@@ -164,8 +172,7 @@ fn numeric_compilers_share_completed_prefix_checks() {
     let mut raw = prefix();
     let limits = AggregateLimits::default();
     let control = Cancellation::default();
-    let mut retained = raw.len();
-    let previous = raw.len();
+    let mut retained = size(&raw);
     compare_build(
         nodes
             .append_aggregate(&elements(-1), Comparison::Ne, 1, limits, &control)
@@ -173,8 +180,8 @@ fn numeric_compilers_share_completed_prefix_checks() {
         append_aggregate(&mut raw, &elements(-1), Comparison::Ne, 1, limits, &control).unwrap(),
         retained,
     );
-    retained = previous;
-    let previous = raw.len();
+    retained = size(&raw);
+    raw = copy(&raw);
     compare_build(
         nodes
             .append_extremum(
@@ -198,12 +205,8 @@ fn numeric_compilers_share_completed_prefix_checks() {
         .unwrap(),
         retained,
     );
-    assert_eq!(&*nodes, raw);
-    let unchecked = nodes.len() - previous;
-    assert_eq!(
-        scan(&mut nodes, limits).unwrap().statistics().work,
-        1 + u64::try_from(unchecked).unwrap()
-    );
+    assert_eq!(snapshot(&nodes), snapshot(&raw));
+    assert_eq!(scan(&mut nodes, limits).unwrap().statistics().work, 1);
 }
 
 #[test]
@@ -212,7 +215,7 @@ fn typed_compilers_share_completed_prefix_checks() {
     let mut raw = prefix();
     let limits = AggregateLimits::default();
     let control = Cancellation::default();
-    let retained = raw.len();
+    let mut retained = size(&raw);
     let values = [
         ValueExtremumElement {
             value: Value::Symbol("a".into()),
@@ -247,7 +250,8 @@ fn typed_compilers_share_completed_prefix_checks() {
         .unwrap(),
         retained,
     );
-    let last_input = raw.len();
+    retained = size(&raw);
+    raw = copy(&raw);
     let borrowed = || {
         values.iter().map(|element| ValueExtremumElement {
             value: (&element.value).into(),
@@ -277,17 +281,13 @@ fn typed_compilers_share_completed_prefix_checks() {
         .unwrap(),
         retained,
     );
-    assert_eq!(&*nodes, raw);
-    let unchecked = nodes.len() - last_input;
-    assert_eq!(
-        scan(&mut nodes, limits).unwrap().statistics().work,
-        1 + u64::try_from(unchecked).unwrap()
-    );
+    assert_eq!(snapshot(&nodes), snapshot(&raw));
+    assert_eq!(scan(&mut nodes, limits).unwrap().statistics().work, 1);
 }
 
 #[test]
 fn incomplete_scans_publish_no_new_frontier() {
-    let mut nodes = FormulaNodes::new(prefix());
+    let mut nodes = prefix();
     let failure = scan(
         &mut nodes,
         AggregateLimits {
@@ -298,7 +298,7 @@ fn incomplete_scans_publish_no_new_frontier() {
     .unwrap_err();
     assert_eq!(failure.kind(), Error::WorkLimit);
     assert_eq!(failure.statistics().work, 3);
-    let expected = 1 + u64::try_from(nodes.len()).unwrap();
+    let expected = 1 + size(&nodes);
     assert_eq!(
         scan(&mut nodes, AggregateLimits::default())
             .unwrap()
@@ -309,55 +309,60 @@ fn incomplete_scans_publish_no_new_frontier() {
 }
 
 #[test]
-fn malformed_suffix_survives_failed_validation() {
-    let mut nodes = checked();
-    let original = nodes.to_vec();
-    let invalid = nodes.len();
-    nodes.push(Node::And(0, invalid));
+fn malformed_raw_suffix_survives_failed_validation() {
+    let input = prefix();
+    let (mut raw, operands) = snapshot(&input);
+    let invalid = raw.len();
+    raw.push(Node::and_pair([0, invalid]));
+    let mut nodes = FormulaNodes::new(FormulaParts::new(raw, operands).unwrap());
+    let original = snapshot(&nodes);
     for _ in 0..2 {
         let failure = scan(&mut nodes, AggregateLimits::default()).unwrap_err();
         assert_eq!(failure.kind(), Error::InvalidPrefix { node: invalid });
-        assert_eq!(failure.statistics().work, 2);
-        assert_eq!(nodes[invalid], Node::And(0, invalid));
+        assert_eq!(snapshot(&nodes), original);
     }
-    nodes.truncate(invalid);
-    nodes.push(Node::And(2, 3));
+}
+
+#[test]
+fn detached_suffix_restores_paired_input() {
+    let mut nodes = checked();
+    let original = snapshot(&nodes);
+    let first = nodes.view().len();
+    let mut transaction = nodes.transaction();
+    let row = [2, 3, 4, 5];
+    assert_eq!(
+        transaction
+            .push(NodeView::And(&row), usize::MAX, usize::MAX)
+            .unwrap(),
+        first
+    );
+    let suffix = transaction.detach().unwrap();
+    assert_eq!(suffix.first(), first);
+    assert_eq!(suffix.view().node(0).unwrap(), NodeView::And(&row));
+    assert_eq!(snapshot(&nodes), original);
     assert_eq!(
         scan(&mut nodes, AggregateLimits::default())
             .unwrap()
             .statistics()
             .work,
-        2
+        1
     );
-    assert_eq!(&nodes[..invalid], original);
 }
 
 #[test]
-fn removed_suffixes_discard_their_validation() {
-    for split in [false, true] {
-        let mut nodes = checked();
-        if split {
-            assert_eq!(nodes.split_off(4), prefix()[4..]);
-        } else {
-            nodes.truncate(4);
-        }
-        nodes.push(Node::Or(4, 0));
-        let failure = scan(&mut nodes, AggregateLimits::default()).unwrap_err();
-        assert_eq!(failure.kind(), Error::InvalidPrefix { node: 4 });
-        assert_eq!(failure.statistics().work, 2);
-    }
-}
-
-#[test]
-fn extracted_vectors_carry_no_validation_evidence() {
+fn extracted_parts_carry_no_validation_evidence() {
     let nodes = checked();
-    let address = nodes.as_ptr();
-    let capacity = nodes.capacity();
-    let raw = nodes.into_vec();
-    assert_eq!(raw.as_ptr(), address);
-    assert_eq!(raw.capacity(), capacity);
-    let mut wrapped = FormulaNodes::new(raw);
-    let expected = 1 + u64::try_from(wrapped.len()).unwrap();
+    let address = nodes.parts().nodes().as_ptr();
+    let operands = nodes.parts().operands().as_ptr();
+    let capacity = nodes.parts().node_capacity();
+    let operand_capacity = nodes.parts().operand_capacity();
+    let parts = nodes.into_parts();
+    assert_eq!(parts.nodes().as_ptr(), address);
+    assert_eq!(parts.operands().as_ptr(), operands);
+    assert_eq!(parts.node_capacity(), capacity);
+    assert_eq!(parts.operand_capacity(), operand_capacity);
+    let mut wrapped = FormulaNodes::new(parts);
+    let expected = 1 + size(&wrapped);
     assert_eq!(
         scan(&mut wrapped, AggregateLimits::default())
             .unwrap()
@@ -379,20 +384,20 @@ fn reused_prefix_still_obeys_control() {
         ),
     ] {
         let mut nodes = checked();
-        let original = nodes.to_vec();
+        let original = snapshot(&nodes);
         let failure = nodes
             .append_aggregate_family(&[], &[], FamilyLimits::default(), &control)
             .unwrap_err();
         assert_eq!(failure.kind(), Error::Control(stop));
         assert_eq!(failure.statistics().work, 0);
-        assert_eq!(&*nodes, original);
+        assert_eq!(snapshot(&nodes), original);
     }
 }
 
 #[test]
 fn reused_prefix_still_obeys_total_node_ceiling() {
     let mut nodes = checked();
-    let count = nodes.len();
+    let count = nodes.view().len();
     let failure = scan(
         &mut nodes,
         AggregateLimits {
@@ -440,12 +445,12 @@ fn every_work_refusal_restores_original_nodes() {
     let mut saw_append = false;
     for max_work in 0..exact.statistics().work {
         let mut nodes = checked();
-        let original = nodes.to_vec();
+        let original = snapshot(&nodes);
         let failure = compile(&mut nodes, max_work).unwrap_err();
         assert_eq!(failure.kind(), Error::WorkLimit);
         assert_eq!(failure.statistics().work, max_work);
         saw_append |= failure.statistics().nodes > 0;
-        assert_eq!(&*nodes, original);
+        assert_eq!(snapshot(&nodes), original);
         assert_eq!(
             scan(&mut nodes, AggregateLimits::default())
                 .unwrap()
@@ -457,13 +462,13 @@ fn every_work_refusal_restores_original_nodes() {
     assert!(saw_append);
     let mut nodes = checked();
     assert_eq!(compile(&mut nodes, exact.statistics().work).unwrap(), exact);
-    assert_eq!(&*nodes, &*complete);
+    assert_eq!(snapshot(&nodes), snapshot(&complete));
 }
 
 #[test]
-fn completed_validation_survives_later_refusal() {
-    let mut nodes = FormulaNodes::new(prefix());
-    let original = nodes.to_vec();
+fn refusal_restores_the_initial_validation_frontier() {
+    let mut nodes = prefix();
+    let original = snapshot(&nodes);
     let failure = nodes
         .append_aggregate(
             &elements(1),
@@ -478,12 +483,46 @@ fn completed_validation_survives_later_refusal() {
         .unwrap_err();
     assert_eq!(failure.kind(), Error::StateLimit);
     assert!(failure.statistics().nodes > 0);
-    assert_eq!(&*nodes, original);
+    assert_eq!(snapshot(&nodes), original);
     assert_eq!(
         scan(&mut nodes, AggregateLimits::default())
             .unwrap()
             .statistics()
             .work,
+        1 + size(&nodes)
+    );
+}
+
+#[test]
+fn reused_prefix_obeys_the_operand_ceiling() {
+    let mut nodes = checked();
+    push(&mut nodes, NodeView::Or(&[2, 3, 4, 5]));
+    scan(&mut nodes, AggregateLimits::default()).unwrap();
+    let original = snapshot(&nodes);
+    let count = nodes.parts().occurrences();
+    let failure = scan(
+        &mut nodes,
+        AggregateLimits {
+            max_operands: count - 1,
+            ..AggregateLimits::default()
+        },
+    )
+    .unwrap_err();
+    assert_eq!(failure.kind(), Error::OperandLimit);
+    assert_eq!(failure.statistics().work, 1);
+    assert_eq!(snapshot(&nodes), original);
+    assert_eq!(
+        scan(
+            &mut nodes,
+            AggregateLimits {
+                max_operands: count,
+                max_work: 1,
+                ..AggregateLimits::default()
+            }
+        )
+        .unwrap()
+        .statistics()
+        .work,
         1
     );
 }
@@ -491,26 +530,22 @@ fn completed_validation_survives_later_refusal() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(96))]
     #[test]
-    fn suffix_edits_preserve_prefix_rejection(actions in prop::collection::vec((0u8..4, 0usize..24), 0..48)) {
-        let mut nodes = FormulaNodes::default();
-        let mut raw = Vec::new();
-        for (action, index) in actions {
-            match action {
-                0 | 1 => {
-                    let node = if action == 0 { Node::False } else { Node::Implies(index, 0) };
-                    nodes.push(node);
-                    raw.push(node);
-                }
-                2 => { nodes.truncate(index); raw.truncate(index); }
-                _ => {
-                    let at = index.min(raw.len());
-                    prop_assert_eq!(nodes.split_off(at), raw.split_off(at));
-                }
+    fn suffix_transactions_preserve_retained_validation(actions in prop::collection::vec((any::<bool>(), prop::collection::vec(0usize..11, 2..8)), 0..24)) {
+        let mut nodes = checked();
+        for (commit, row) in actions {
+            let before = snapshot(&nodes);
+            {
+                let mut transaction = nodes.transaction();
+                transaction.push(NodeView::And(&row), usize::MAX, usize::MAX).unwrap();
+                if commit { transaction.commit(); }
             }
-            let actual = scan(&mut nodes, AggregateLimits::default()).map(|_| ()).map_err(AggregateError::kind);
-            let expected = append_aggregate_family(&mut raw, &[], &[], FamilyLimits::default(), &Cancellation::default()).map(|_| ()).map_err(AggregateError::kind);
-            prop_assert_eq!(actual, expected);
-            prop_assert_eq!(&*nodes, &raw);
+            if !commit { prop_assert_eq!(snapshot(&nodes), before); }
+            let actual = scan(&mut nodes, AggregateLimits::default()).unwrap();
+            prop_assert_eq!(actual.statistics().work, 1);
+            let mut cold = copy(&nodes);
+            let expected = scan(&mut cold, AggregateLimits::default()).unwrap();
+            prop_assert_eq!(expected.statistics().work, 1 + size(&cold));
+            prop_assert_eq!(snapshot(&nodes), snapshot(&cold));
         }
     }
 }

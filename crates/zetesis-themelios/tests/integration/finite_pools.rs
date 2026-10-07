@@ -790,3 +790,26 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
         println!("zero-arity disjuncts={count}, inclusive projection nodes={exact}");
     }
 }
+
+#[test]
+fn compact_source_refuses_an_oversized_materialized_pool() {
+    let arguments = ["(0;1)"; 12].join(",");
+    let source = format!("p(f({arguments})).");
+    let error = limited(
+        &source,
+        ExpansionLimits {
+            max_term_work: usize::MAX,
+            max_values: usize::MAX,
+            max_scalar_bytes: usize::MAX,
+            max_family_bytes: 1024,
+            ..ExpansionLimits::default()
+        },
+        &FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
+        resource: ExpansionResource::FamilyBytes, limit: 1024, observed, ..
+    }) if observed > 1_000_000)
+    );
+}

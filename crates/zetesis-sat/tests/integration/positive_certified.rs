@@ -23,12 +23,12 @@ fn cycle(seed: bool, constraint: bool) -> Theory {
     theory(
         3,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
-            Node::False,
-            Node::Implies(1, 4),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
+            Node::falsum(),
+            Node::implies(1, 4),
         ],
         roots,
     )
@@ -67,13 +67,13 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
     // Every subset of two facts, two cyclic rules and two positive constraints;
     // the third carrier atom is deliberately unmentioned in every theory.
     let nodes = vec![
-        Node::Atom(0),
-        Node::Atom(1),
-        Node::Implies(0, 1),
-        Node::Implies(1, 0),
-        Node::False,
-        Node::Implies(0, 4),
-        Node::Implies(1, 4),
+        Node::atom(0),
+        Node::atom(1),
+        Node::implies(0, 1),
+        Node::implies(1, 0),
+        Node::falsum(),
+        Node::implies(0, 4),
+        Node::implies(1, 4),
     ];
     let possible = [0, 1, 2, 3, 5, 6];
     for mask in 0..64 {
@@ -113,10 +113,10 @@ fn region_positive_cycles_preserve_the_clause_family() {
     let original = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
         ],
         vec![2, 3],
     );
@@ -164,13 +164,13 @@ fn region_positive_constraints_exclude_the_answer_family() {
     let original = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
-            Node::False,
-            Node::Implies(0, 4),
-            Node::Implies(5, 4),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
+            Node::falsum(),
+            Node::implies(0, 4),
+            Node::implies(5, 4),
         ],
         vec![2, 3, 6],
     );
@@ -296,10 +296,10 @@ fn positive_grammar_refusal_can_select_the_tight_plan() {
     let original = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Or(0, 2),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::or_pair([0, 2]),
         ],
         vec![3],
     );
@@ -439,7 +439,9 @@ fn a_positive_check_failure_keeps_the_pending_subject() {
         Limits {
             // Independent proposal validation fits. The positive check additionally
             // scans the complete atom carrier for equality with the least model.
-            max_verification_work: (original.nodes().len() + original.roots().len()) as u64,
+            max_verification_work: (original.nodes().len()
+                + original.parts().occurrences()
+                + original.roots().len()) as u64,
             ..Default::default()
         },
         Cancellation::default(),
@@ -534,10 +536,10 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
     let original = theory(
         1,
         vec![
-            Node::Atom(0),
-            Node::False,
-            Node::Implies(0, 1),
-            Node::Implies(2, 1),
+            Node::atom(0),
+            Node::falsum(),
+            Node::implies(0, 1),
+            Node::implies(2, 1),
         ],
         vec![3],
     );

@@ -3,6 +3,7 @@
 //! Every new positive tuple combination has a unique first occurrence whose
 //! row was appended in the previous round. Earlier occurrences use old rows,
 //! that occurrence uses new rows, and later occurrences use all current rows.
+//! Flat and structural positive occurrences use the same row partition.
 //! Scalar checks and generators remain with the complete existing matcher.
 //! Ordinary negative atoms are non-inputs: their truth remains in the emitted
 //! formula, while their already-bound arguments supply no support restriction.
@@ -42,7 +43,7 @@ pub(super) fn variants<'a, 'source>(
     for literal in &rule.body {
         counters.work(limits, rule.location)?;
         match literal {
-            LiteralIr::Atom(DefaultNegation::None, _) => inputs += 1,
+            LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_) => inputs += 1,
             // Join::new collects only positive inputs. Flat negative atoms
             // neither generate bindings nor filter possible heads; any argument
             // evaluation is a separate, retained scalar operation in the IR.
@@ -54,11 +55,19 @@ pub(super) fn variants<'a, 'source>(
             | LiteralIr::HeadGuard(_)
             | LiteralIr::Bind { .. }
             | LiteralIr::Range { .. } => {}
-            LiteralIr::PatternAtom(_)
-            | LiteralIr::ProjectedAtom(..)
-            | LiteralIr::Conditional(_)
-            | LiteralIr::Aggregate(_) => certified = false,
+            LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
+                certified = false;
+            }
         }
+    }
+    #[cfg(test)]
+    if !tests::structural_enabled()
+        && rule
+            .body
+            .iter()
+            .any(|literal| matches!(literal, LiteralIr::PatternAtom(_)))
+    {
+        certified = false;
     }
     Ok(Variants {
         rule,
@@ -113,7 +122,12 @@ impl Variants<'_, '_> {
                 counters.work(limits, self.rule.location)?;
                 let literal = &self.rule.body[occurrence];
                 self.next += 1;
-                if let LiteralIr::Atom(DefaultNegation::None, atom) = literal {
+                let atom = match literal {
+                    LiteralIr::Atom(DefaultNegation::None, atom) => Some(*atom),
+                    LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
+                    _ => None,
+                };
+                if let Some(atom) = atom {
                     let components = self
                         .support
                         .components()
@@ -122,6 +136,10 @@ impl Variants<'_, '_> {
                     if self.support.old_rows(atom.predicate())
                         < self.support.row_count(atom.predicate())
                     {
+                        #[cfg(test)]
+                        if matches!(literal, LiteralIr::PatternAtom(_)) {
+                            tests::record_structural();
+                        }
                         return Ok(Some(Variant::Delta(occurrence)));
                     }
                 }

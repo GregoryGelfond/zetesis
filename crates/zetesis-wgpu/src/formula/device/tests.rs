@@ -33,7 +33,13 @@ fn busy_preserves_state(backend: GpuApi) {
     assert!(oracle.info().is_hardware_gpu());
     assert_eq!(oracle.info().backend(), backend.name());
     let context = oracle.context().clone();
-    let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
+        vec![0],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let candidates = [Interpretation::new(&theory, [0]).unwrap()];
     oracle
         .propagate_batch(&theory, &candidates, super::super::FormulaLimits::default())
@@ -74,7 +80,11 @@ fn cold_preparation_refusals(
     use zetesis_ferraris::{AdmissionLimits, Node};
     let next = Theory::new(
         1,
-        vec![Node::Atom(0), Node::Atom(0), Node::And(0, 1)],
+        zetesis_ferraris::FormulaParts::new(
+            vec![Node::atom(0), Node::atom(0), Node::and_pair([0, 1])],
+            Vec::new(),
+        )
+        .unwrap(),
         vec![2],
         AdmissionLimits::default(),
     )
@@ -119,13 +129,13 @@ fn cold_preparation_refusals(
             .theory
             .same_instance(old)
     );
-    // Minimum setup8 passes; the two-level setup10 refuses after cold packing.
+    // Minimum setup10 passes; the two-level setup12 refuses after cold packing.
     let error = oracle
         .propagate_batch(
             &next,
             &inputs,
             FormulaLimits {
-                max_work_per_candidate: 9,
+                max_work_per_candidate: 11,
                 ..Default::default()
             },
         )
@@ -193,8 +203,13 @@ fn reused_profile(backend: GpuApi) {
         )
         .unwrap();
         require_profile_device(&profile, backend);
-        let theory =
-            Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
+        let theory = Theory::new(
+            1,
+            zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
+            vec![0],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let candidates = [Interpretation::new(&theory, [0]).unwrap()];
         let mut previous = GpuFormulaOracle::from_profile(&profile).unwrap();
         let expected = previous
@@ -307,7 +322,7 @@ fn profile_lifecycle(backend: GpuApi) {
         Err(error) if error.kind() == GpuErrorKind::Device));
     let empty = Theory::new(
         0,
-        vec![],
+        zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
         vec![],
         zetesis_ferraris::AdmissionLimits::default(),
     )
@@ -342,7 +357,8 @@ fn submission_receipt(backend: GpuApi) {
     require_profile_device(oracle.compiled_profile(), backend);
     let theory = Theory::new(
         1,
-        vec![zetesis_ferraris::Node::Atom(0)],
+        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(0)], Vec::new())
+            .unwrap(),
         vec![0],
         zetesis_ferraris::AdmissionLimits::default(),
     )

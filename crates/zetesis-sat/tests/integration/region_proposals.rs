@@ -34,10 +34,10 @@ fn shared_indexes_preserve_non_tight_answer_families() {
     let mut roots = choices.roots().to_vec();
     let left = nodes.len();
     nodes.extend([
-        Node::Atom(3),
-        Node::Atom(4),
-        Node::Implies(left, left + 1),
-        Node::Implies(left + 1, left),
+        Node::atom(3),
+        Node::atom(4),
+        Node::implies(left, left + 1),
+        Node::implies(left + 1, left),
     ]);
     roots.extend([left + 2, left + 3]);
     let theory = theory(5, nodes, roots);
@@ -159,16 +159,16 @@ fn three_choices() -> Theory {
     theory(
         3,
         vec![
-            Node::False,
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Atom(2),
-            Node::Implies(1, 0),
-            Node::Or(1, 4),
-            Node::Implies(2, 0),
-            Node::Or(2, 6),
-            Node::Implies(3, 0),
-            Node::Or(3, 8),
+            Node::falsum(),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 0),
+            Node::or_pair([1, 4]),
+            Node::implies(2, 0),
+            Node::or_pair([2, 6]),
+            Node::implies(3, 0),
+            Node::or_pair([3, 8]),
         ],
         vec![5, 7, 9],
     )
@@ -216,7 +216,7 @@ fn stopped_frontier_retains_its_ownership_receipt() {
         .statistics()
         .search
         .work
-        + u64::try_from(theory.nodes().len()).unwrap();
+        + u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
     for extra in 1..4096 {
         let ceiling = walk + extra;
         let mut search = proposed(
@@ -290,12 +290,12 @@ fn batched_producers_preserve_the_complete_answer_family() {
         choice_theories::choices(5),
         theory(
             2,
-            vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
             vec![2],
         ),
-        theory(1, vec![Node::Atom(0), Node::Implies(0, 0)], vec![1]),
+        theory(1, vec![Node::atom(0), Node::implies(0, 0)], vec![1]),
         theory(0, vec![], vec![]),
-        theory(0, vec![Node::False], vec![0]),
+        theory(0, vec![Node::falsum()], vec![0]),
     ];
     for theory in inputs {
         let expected = expected(&theory);
@@ -322,10 +322,10 @@ fn producers_leave_nonminimal_models_to_the_checker() {
     let theory = theory(
         2,
         vec![
-            Node::Atom(0),
-            Node::Atom(1),
-            Node::Implies(0, 1),
-            Node::Implies(1, 0),
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
         ],
         vec![2, 3],
     );
@@ -397,7 +397,7 @@ fn candidate_exhaustion_follows_the_completed_prefix() {
 
 #[test]
 fn an_empty_family_needs_no_candidate_allowance() {
-    let theory = theory(0, vec![Node::False], vec![0]);
+    let theory = theory(0, vec![Node::falsum()], vec![0]);
     let mut search = proposed(
         &theory,
         Limits {
@@ -413,12 +413,12 @@ fn an_empty_family_needs_no_candidate_allowance() {
 fn production_respects_the_shared_work_ceiling() {
     let theory = choice_theories::choices(6);
     // The work charged when the walk starts: the producer extraction at
-    // construction, then the original index, one unit per node.
+    // construction, then the original index, one unit per node and operand occurrence.
     let setup = proposed(&theory, Limits::default())
         .statistics()
         .search
         .work
-        + u64::try_from(theory.nodes().len()).unwrap();
+        + u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
     for extra in [0, 1, 8, 64] {
         let ceiling = setup + extra;
         let limits = Limits {
@@ -469,7 +469,7 @@ fn a_restriction_reaches_the_retained_frontier() {
     let theory = choice_theories::choices(6);
     let mut search = proposed(&theory, Limits::default());
     let first = search.next_batch(batch(3), residual).unwrap();
-    let restriction = choice_theories::theory_over(&theory, vec![Node::Atom(5)], vec![0]);
+    let restriction = choice_theories::theory_over(&theory, vec![Node::atom(5)], vec![0]);
     search.restrict_candidates(&restriction).unwrap();
     let mut seen: BTreeSet<Vec<usize>> = first
         .iter()
