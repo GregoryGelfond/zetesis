@@ -164,7 +164,9 @@ fn json_distinguishes_core_models_from_original_membership() {
         .unwrap()
         .region_filter
         .unwrap();
-    assert!(regions.refuted > 0);
+    // The unit source constraint cuts b before a rejected region is formed.
+    assert_eq!(regions.refuted, 0);
+    assert!(regions.checks > 0);
     assert_eq!(
         document["statistics"]["search"]["region_filter"]["refuted"],
         regions.refuted
@@ -300,33 +302,50 @@ fn hybrid_bundle_uses_original_include_sources() {
 }
 
 #[test]
-fn hybrid_refuses_unsupported_admission_features() {
-    for (source, extra, expected) in [
-        ("a|b. #minimize{1:a}.", vec![], HybridFeature::Objectives),
-        (
-            SOURCE,
-            vec!["--formula-joins", "table"],
-            HybridFeature::TableJoins,
-        ),
-    ] {
-        let mut config = options(&extra);
-        config.grounder = Grounder::Lazy;
-        let mut output = Vec::new();
-        let failure = run_finalized_with_diagnostics(
-            source.into(),
-            &config,
-            &mut output,
-            &mut io::sink(),
-            &Cancellation::default(),
-        )
-        .unwrap_err();
-        assert!(matches!(failure.cause.as_ref(), RunError::FormulaAdmission(
-            FormulaFailure::HybridUnsupported { feature, .. }
-        ) if *feature == expected));
+fn hybrid_refuses_table_joins() {
+    let mut config = options(&["--formula-joins", "table"]);
+    config.grounder = Grounder::Lazy;
+    let mut output = Vec::new();
+    let failure = run_finalized_with_diagnostics(
+        SOURCE.into(),
+        &config,
+        &mut output,
+        &mut io::sink(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        failure.cause.as_ref(),
+        RunError::FormulaAdmission(FormulaFailure::HybridUnsupported {
+            feature: HybridFeature::TableJoins,
+            ..
+        })
+    ));
+    let document: Json = serde_json::from_slice(&output).unwrap();
+    assert_eq!(document["outcome"]["status"], "failed");
+    assert_eq!(document["outcome"]["coverage"], "unavailable");
+    assert_eq!(document["models"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn hybrid_optimization_preserves_optimal_ties() {
+    let source = include_str!("../fixtures/hybrid-objectives.lp");
+    for grounder in ["eager", "lazy"] {
+        let (outcome, output, _) = solve(source, &options(&["--grounder", grounder]));
+        assert_eq!(outcome.semantic().completion(), Some(Completion::Exhausted));
+        assert_eq!(family(&output), expected());
         let document: Json = serde_json::from_slice(&output).unwrap();
-        assert_eq!(document["outcome"]["status"], "failed");
-        assert_eq!(document["outcome"]["coverage"], "unavailable");
-        assert_eq!(document["models"].as_array().unwrap().len(), 0);
+        let optimization = &document["outcome"]["optimization"];
+        assert_eq!(optimization["optimal"], true);
+        assert_eq!(optimization["tied_models"], 2);
+        assert_eq!(
+            optimization["costs"],
+            serde_json::json!([{"priority": 0, "value": 1}])
+        );
+        assert_eq!(
+            outcome.semantic().hybrid_execution().is_some(),
+            grounder == "lazy"
+        );
     }
 }
 

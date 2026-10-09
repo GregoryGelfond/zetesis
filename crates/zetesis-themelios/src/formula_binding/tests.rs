@@ -198,3 +198,7 @@ fn stopped_copy_preserves_the_source_frame() {
         }
     });
 }
+
+mod reads;
+
+mod copies;

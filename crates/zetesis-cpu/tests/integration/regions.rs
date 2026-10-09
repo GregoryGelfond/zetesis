@@ -122,6 +122,34 @@ fn regions_are_equal_by_their_decisions_whatever_their_order() {
 }
 
 #[test]
+fn decision_words_represent_the_exact_region() {
+    for atoms in [0_usize, 1, 63, 64, 65, 127, 128, 129] {
+        let mut region = Region::all_open(atoms);
+        for atom in 0..atoms {
+            match atom % 3 {
+                0 => assert!(region.hold(atom)),
+                1 => assert!(region.cut(atom)),
+                _ => {}
+            }
+        }
+        let (held, cut) = region.decision_words();
+        assert_eq!(held.len(), atoms.div_ceil(64));
+        assert_eq!(cut.len(), held.len());
+        for atom in 0..atoms {
+            let flag = 1_u64 << (atom % 64);
+            assert_eq!(held[atom / 64] & flag != 0, atom % 3 == 0);
+            assert_eq!(cut[atom / 64] & flag != 0, atom % 3 == 1);
+        }
+        assert!(held.iter().zip(cut).all(|(held, cut)| held & cut == 0));
+        let tail = atoms % 64;
+        if tail != 0 {
+            let unused = !((1_u64 << tail) - 1);
+            assert_eq!((held[held.len() - 1] | cut[cut.len() - 1]) & unused, 0);
+        }
+    }
+}
+
+#[test]
 fn a_split_partitions_a_region_on_one_atom_cut_first() {
     let region = Region::all_open(2);
     let (cut, held) = region.split(1);

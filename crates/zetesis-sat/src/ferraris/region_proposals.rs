@@ -461,22 +461,20 @@ impl Round<'_> {
         filter: &mut Option<crate::region_filter::Worker<'a>>,
         timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Step, Incomplete> {
+        let mut check = self.filter.map(|factory| crate::region_filter::Check {
+            filter: factory,
+            worker: filter,
+            timings,
+        });
         if regions::narrow(
             (self.theory, self.narrower, self.producers),
             self.restrictions,
-            region,
-            knowledge,
+            (region, knowledge),
             scratch,
             budget,
             counts,
+            check.as_mut(),
         )? == Narrowing::Refuted
-            || match self.filter {
-                Some(factory) => {
-                    factory.check(filter, self.theory, region, self.cancellation, timings)?
-                        == crate::RegionFeasibility::Refuted
-                }
-                None => false,
-            }
         {
             counts.refuted = 1;
             return Ok(Step::Refuted);

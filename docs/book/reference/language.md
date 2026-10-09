@@ -13,8 +13,9 @@ the broader finite Ferraris representation. Automatic formula admission can
 defer eligible terminal positive definitions and reconstruct them from verified
 base answers; the remaining rules are materialized eagerly.
 Explicit lazy CPU execution can retain a producer core and stream
-eligible ordinary constraints; objectives and table joins are currently refused
-by this hybrid profile. Complete possible support and source arithmetic
+eligible ordinary constraints. Objectives are scored after complete original
+constraint checks and disable terminal deferral. This hybrid profile requires
+indexed joins. Complete possible support and source arithmetic
 admission remain required. See the [grounding profiles](../architecture/grounding.md#eager-and-lazy-execution).
 Selecting a GPU does not expand the accepted source language.
 

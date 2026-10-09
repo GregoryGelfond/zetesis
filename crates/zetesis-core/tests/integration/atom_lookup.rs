@@ -1,6 +1,8 @@
 //! Typed lookup agrees with canonical identity and preserves original row owners.
 //! Refused construction/comparison exposes no partial index, range or membership.
 
+mod prepared;
+
 use std::{cmp::Ordering, convert::Infallible};
 use zetesis_core::catalog::AtomRef;
 

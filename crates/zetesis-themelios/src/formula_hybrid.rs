@@ -4,7 +4,9 @@
 //! checker establishes satisfaction, never reduct minimality. Every successful
 //! check exhausts its required source instances; a violation may stop early.
 
+mod consequences;
 mod selection;
+pub use consequences::{ConstraintConsequence, ConstraintRegionPass};
 
 use crate::formula_support::{Context, GroundingWork};
 
@@ -23,18 +25,18 @@ use crate::formula::Compiled;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_owner::Owner;
-use crate::formula_support::{Accounting, CompletedSupport, Counters, PreparedRule, RowFilter};
+use crate::formula_support::{
+    Accounting, CompletedSupport, Counters, PositiveRows, PreparedRule, RowFilter,
+};
 use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
     SourceMetadata,
 };
-use selection::{Selection, SourceRows};
+use selection::{RulePredicates, Selection, SourceRows};
 
-/// Capability deliberately outside the first hybrid schedule.
+/// Capability outside the hybrid schedule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HybridFeature {
-    /// Objective programs require separate acceptance/scoring composition.
-    Objectives,
     /// Ordinary hybrid probes require the indexed strategy. Certified computed
     /// domains may still use the shared finite-table selector internally.
     TableJoins,
@@ -42,7 +44,6 @@ pub enum HybridFeature {
 impl fmt::Display for HybridFeature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::Objectives => "objectives",
             Self::TableJoins => "table joins",
         })
     }
@@ -66,6 +67,8 @@ struct Core {
     /// The kept source rows' positions in `compiled.atoms`, set by the first
     /// checker whose region check needs them and lent likewise.
     rows: OnceLock<selection::RowPositions>,
+    /// Immutable rule dependencies and original atom groups, shared by checkers.
+    incremental: OnceLock<consequences::IncrementalPlan>,
 }
 
 /// A materialized producer core with the integrity constraints streamed over it:
@@ -98,7 +101,7 @@ struct Admitted {
 ///
 /// Cloning shares all retained source, atoms and indexes. The core's answer sets
 /// are proposals; only those satisfying the streamed constraints are answer
-/// sets of this owner. No objectives are admitted by this initial schedule.
+/// sets of this owner. Objectives are scored only after this complete check.
 #[derive(Clone)]
 pub struct HybridFormula(Arc<Admitted>);
 impl fmt::Debug for HybridFormula {
@@ -193,7 +196,8 @@ impl HybridFormula {
         self.0.core.0.source.warning_view(self.warnings())
     }
 
-    /// Empty objective program; authored objective declarations are refused.
+    /// Original objectives, scored only after complete streamed constraint
+    /// acceptance has established an answer of the original program.
     #[must_use]
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
         &self.0.core.0.compiled.objectives
@@ -301,6 +305,7 @@ impl StreamedCore {
             source,
             index: OnceLock::new(),
             rows: OnceLock::new(),
+            incremental: OnceLock::new(),
         }))
     }
 
@@ -326,7 +331,8 @@ impl StreamedCore {
         &self.0.compiled.atoms
     }
 
-    /// Objectives of the admitted program; none under the hybrid schedule.
+    /// Objectives of the original admitted program. Score a core answer only
+    /// after it satisfies every streamed original constraint.
     #[must_use]
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
         &self.0.compiled.objectives
@@ -392,6 +398,9 @@ impl StreamedCore {
     /// Prepare an independent checker whose charges share `allowance` with all
     /// other attached checkers, including final full-model checking. Cancellation
     /// is polled during charged setup work and before publishing the checker.
+    /// Accepted setup charges are published before return, including on failure.
+    /// Checks publish their charges when they return, fail or unwind; live
+    /// shared statistics can lag the operation's exact local receipt.
     ///
     /// # Errors
     /// Returns a typed preparation/resource/control refusal with its local
@@ -448,6 +457,11 @@ impl StreamedCore {
                 index: None,
                 rows: None,
                 plans: Vec::new(),
+                predicates: Vec::new(),
+                shared_incremental: &self.0.incremental,
+                incremental_plan: None,
+                incremental: None,
+                incremental_eligible: None,
             })
         } else {
             None
@@ -460,12 +474,14 @@ impl StreamedCore {
             allowance,
             settled: (0, 0),
             settled_scalar_bytes: 0,
+            consequence_active: false,
             accounting: counters.into_accounting(),
         })
     }
 }
 
-/// Allowances for each check of a checker (one candidate model or region),
+/// Allowances for each check of a checker (one model, region-refutation scan,
+/// or complete candidate closure including all of its consequence passes),
 /// independent of source admission and reduct-oracle work. A checker's first
 /// check also covers its preparation; each later check is measured from the
 /// charges accepted when the previous one ended. They bound the work spent on
@@ -543,6 +559,8 @@ pub enum ConstraintRegionVerdict {
 pub enum ConstraintCheckCause {
     /// The model catalog or supplied region theory has a different owner.
     WrongProgram,
+    /// A continuation was requested without an unfinished consequence closure.
+    NoActiveRegion,
     /// Region coordinates do not span the authenticated original atom catalog.
     WrongRegionSize {
         /// Original catalog dimension.
@@ -607,6 +625,9 @@ impl fmt::Display for ConstraintCheckCause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::WrongProgram => f.write_str("constraint candidate belongs to another program"),
+            Self::NoActiveRegion => {
+                f.write_str("constraint consequence has no active region closure")
+            }
             Self::WrongRegionSize { expected, actual } => {
                 write!(
                     f,
@@ -622,7 +643,7 @@ impl fmt::Display for ConstraintCheckCause {
 impl std::error::Error for ConstraintCheckCause {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::WrongProgram | Self::WrongRegionSize { .. } => None,
+            Self::WrongProgram | Self::NoActiveRegion | Self::WrongRegionSize { .. } => None,
             Self::Index(error) => Some(error),
             Self::Stopped(error) => Some(error),
             Self::Source(error) => Some(error.as_ref()),
@@ -647,6 +668,7 @@ impl ConstraintCheckFailure {
             ConstraintCheckCause::Source(error)
             | ConstraintCheckCause::Index(AtomIndexError::Stopped(error)) => error.interruption(),
             ConstraintCheckCause::WrongProgram
+            | ConstraintCheckCause::NoActiveRegion
             | ConstraintCheckCause::WrongRegionSize { .. }
             | ConstraintCheckCause::Index(_) => None,
         }
@@ -664,13 +686,16 @@ impl std::error::Error for ConstraintCheckFailure {
 }
 
 /// Mutable per-session work and scalar state over an immutable admitted owner.
-/// No constraint instances or candidate truth are retained between checks.
+/// No grounded constraint instances are retained. Pending consequences belong
+/// to one authenticated closure. Successfully completed no-consequence scans
+/// can survive into another closure when its decision masks authenticate their
+/// unchanged dependencies. Ordinary checks invalidate candidate evidence.
 /// The checker can move between threads. Grounding observation and each check's
 /// runtime control remain local to the synchronous operation that uses them.
 pub struct ConstraintChecker<'a> {
     owner: &'a StreamedCore,
     prepared: Option<PreparedConstraints<'a>>,
-    /// The current check's scalar-byte budget, fresh for every check.
+    /// The current check's scalar budget, shared by every consequence pass.
     budget: Budget,
     /// The ceilings each check gets for itself.
     limits: ConstraintCheckLimits,
@@ -682,6 +707,9 @@ pub struct ConstraintChecker<'a> {
     settled: (u64, u64),
     /// Scalar bytes requested by every finished check's budget.
     settled_scalar_bytes: usize,
+    /// An explicit First pass opened one candidate closure. Its counters and
+    /// scalar budget survive Hold/Cut results and unwind until that closure ends.
+    consequence_active: bool,
     accounting: Accounting,
 }
 /// A nonempty source and its borrowed snapshot are present or absent together.
@@ -697,9 +725,86 @@ struct PreparedConstraints<'a> {
     rows: Option<SourceRows<'a>>,
     /// Lazily prepared after each rule's first successful predicate gate.
     plans: Vec<Option<PreparedRule<'a>>>,
+    /// Occurrence-local predicate windows, borrowed from external source/index
+    /// owners and prepared before the rule's first region predicate gate.
+    predicates: Vec<Option<RulePredicates<'a>>>,
+    /// This exact core alone publishes the immutable mapping. Admitting a
+    /// borrow once also survives discarded mutable state after an unwind.
+    shared_incremental: &'a OnceLock<consequences::IncrementalPlan>,
+    incremental_plan: Option<&'a consequences::IncrementalPlan>,
+    incremental: Option<consequences::Incremental<'a>>,
+    incremental_eligible: Option<bool>,
 }
 
 impl<'a> PreparedConstraints<'a> {
+    fn selection<'check>(
+        &'check self,
+        rule_index: usize,
+        region: &'check Region,
+    ) -> Selection<'check, 'a> {
+        Selection {
+            rows: self.rows.as_ref().expect("prepared before region scan"),
+            index: self.index.expect("prepared before region scan").lookup(),
+            predicates: self.predicates.get(rule_index).and_then(Option::as_ref),
+            region,
+        }
+    }
+
+    /// Resolve every atom occurrence of this rule before its first region gate.
+    /// This performs no binding or scalar evaluation. It may charge/refuse
+    /// preparation for later occurrences before an earlier predicate would have
+    /// rejected the rule; successful views retain no candidate decisions.
+    fn prepare_predicates(
+        &mut self,
+        rule_index: usize,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        if self.predicates.is_empty() {
+            self.predicates = RulePredicates::slots(
+                &self.source.rules,
+                &mut self.completed,
+                &self.limits,
+                counters,
+            )?;
+        }
+        if self.predicates[rule_index].is_none() {
+            self.predicates[rule_index] = Some(RulePredicates::new(
+                &self.source.rules[rule_index],
+                self.index.expect("prepared before region scan").lookup(),
+                &mut self.completed,
+                &self.limits,
+                counters,
+            )?);
+        }
+        Ok(())
+    }
+
+    fn prepare_rule(
+        &mut self,
+        rule_index: usize,
+        budget: &mut Budget,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        if self.plans.is_empty() {
+            self.plans = PreparedRule::slots(
+                &self.source.rules,
+                &mut self.completed,
+                &self.limits,
+                counters,
+            )?;
+        }
+        if self.plans[rule_index].is_none() {
+            self.plans[rule_index] = Some(PreparedRule::new(
+                &self.source.rules[rule_index],
+                &mut self.completed,
+                &self.limits,
+                budget,
+                counters,
+            )?);
+        }
+        Ok(())
+    }
+
     fn prepare_selection(
         &mut self,
         core: &'a StreamedCore,
@@ -939,17 +1044,11 @@ impl ConstraintChecker<'_> {
         candidate: Candidate<'_>,
         cancellation: &Cancellation,
     ) -> Result<Option<ProgramSite>, ConstraintCheckFailure> {
-        // Each check gets the configured ceilings as its own allowance above
-        // the charges accepted when the previous check ended (the first
-        // check's includes preparation), so the ceilings bound each
-        // candidate, never the number of candidates.
-        let start = self.settled;
-        self.budget.set_cancellation(Some(cancellation.clone()));
-        if let Some(prepared) = &mut self.prepared {
-            prepared.limits.max_work = start.0.saturating_add(self.limits.max_work);
-            prepared.limits.max_substitutions =
-                start.1.saturating_add(self.limits.max_substitutions);
+        self.invalidate_consequences();
+        if self.consequence_active {
+            self.settle_check();
         }
+        let start = self.prepare_pass(cancellation);
         let result = self.authenticate(candidate).and_then(|()| {
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             let verdict = self
@@ -960,26 +1059,54 @@ impl ConstraintChecker<'_> {
                     {
                         prepared.prepare_selection(self.owner, counters)?;
                     }
-                    Self::scan(
-                        self.prepared.as_mut(),
-                        &mut self.budget,
-                        counters,
-                        candidate,
-                    )
-                    .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
+                    self.budget
+                        .with_settled_receipt(|budget| {
+                            Self::scan(self.prepared.as_mut(), budget, counters, candidate)
+                        })
+                        .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
                 })?;
             cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
             Ok(verdict)
         });
-        // Settle this check: the next one is measured from here.
-        self.settled = (self.accounting.work, self.accounting.substitutions);
         let statistics = self.statistics();
-        self.settled_scalar_bytes = statistics.scalar_bytes;
-        self.budget = check_budget(self.limits, self.allowance.clone());
+        self.finish_check();
         result.map_err(|cause| ConstraintCheckFailure {
             cause: cause.relative_to(start).retain_input(&self.owner.0.source),
             statistics,
         })
+    }
+
+    /// Publication at each pass is separate from renewal at the closure boundary.
+    fn prepare_pass(&mut self, cancellation: &Cancellation) -> (u64, u64) {
+        let start = self.settled;
+        self.budget.set_cancellation(Some(cancellation.clone()));
+        if let Some(prepared) = &mut self.prepared {
+            prepared.limits.max_work = start.0.saturating_add(self.limits.max_work);
+            prepared.limits.max_substitutions =
+                start.1.saturating_add(self.limits.max_substitutions);
+        }
+        start
+    }
+
+    fn invalidate_consequences(&mut self) {
+        if let Some(prepared) = &mut self.prepared
+            && let Some(incremental) = &mut prepared.incremental
+        {
+            incremental.reset();
+        }
+    }
+
+    fn finish_check(&mut self) {
+        self.invalidate_consequences();
+        self.settle_check();
+    }
+
+    /// Renew one closure's allowance independently of retained semantic evidence.
+    fn settle_check(&mut self) {
+        self.settled = (self.accounting.work, self.accounting.substitutions);
+        self.settled_scalar_bytes = self.statistics().scalar_bytes;
+        self.budget = check_budget(self.limits, self.allowance.clone());
+        self.consequence_active = false;
     }
 
     fn scan(
@@ -992,43 +1119,28 @@ impl ConstraintChecker<'_> {
             return Ok(None);
         };
         let constraints = prepared.source;
-        let selection = match candidate {
-            Candidate::Model(_) => None,
-            Candidate::Region(_, region) => Some(Selection {
-                rows: prepared.rows.as_ref().expect("prepared before region scan"),
-                index: prepared
-                    .index
-                    .expect("prepared before region scan")
-                    .lookup(),
-                region,
-            }),
-        };
         for (rule_index, rule) in constraints.rules.iter().enumerate() {
-            if let Some(selection) = &selection
-                && !selection.possible(rule, &prepared.completed, &prepared.limits, counters)?
+            if matches!(candidate, Candidate::Region(..)) {
+                prepared.prepare_predicates(rule_index, counters)?;
+            }
+            if let Candidate::Region(_, region) = candidate
+                && !prepared.selection(rule_index, region).possible(
+                    rule,
+                    &prepared.completed,
+                    &prepared.limits,
+                    counters,
+                )?
             {
                 continue;
             }
+            prepared.prepare_rule(rule_index, budget, counters)?;
+            let selection = match candidate {
+                Candidate::Model(_) => None,
+                Candidate::Region(_, region) => Some(prepared.selection(rule_index, region)),
+            };
             let filter = selection
                 .as_ref()
                 .map(|selection| selection as &dyn RowFilter);
-            if prepared.plans.is_empty() {
-                prepared.plans = PreparedRule::slots(
-                    &constraints.rules,
-                    &mut prepared.completed,
-                    &prepared.limits,
-                    counters,
-                )?;
-            }
-            if prepared.plans[rule_index].is_none() {
-                prepared.plans[rule_index] = Some(PreparedRule::new(
-                    rule,
-                    &mut prepared.completed,
-                    &prepared.limits,
-                    budget,
-                    counters,
-                )?);
-            }
             let queries = prepared.completed.queries(
                 crate::JoinStrategy::Indexed,
                 &prepared.limits,
@@ -1058,8 +1170,10 @@ impl ConstraintChecker<'_> {
                     && body(
                         &rule.body,
                         &row.values,
+                        row.positives.as_ref(),
                         candidate,
                         prepared.index.map(CatalogIndex::lookup),
+                        prepared.predicates.get(rule_index).and_then(Option::as_ref),
                         Context::new(&computation, &prepared.limits, counters, rule.location),
                     )?
                 {
@@ -1081,11 +1195,17 @@ pub(crate) fn eligible(rule: &RuleIr) -> bool {
         })
 }
 
+/// `scan` pairs a row loan with the same immutable region borrowed by its
+/// filter, and with that row's binding. Body identity authenticates the literal
+/// occurrences; it does not establish region identity independently. Models
+/// always query their own interpretation, even if a loan is supplied.
 fn body(
     literals: &[LiteralIr],
     binding: &Binding<'_>,
+    positives: Option<&PositiveRows<'_>>,
     candidate: Candidate<'_>,
     index: Option<AtomLookup<'_, '_>>,
+    predicates: Option<&RulePredicates<'_>>,
     context: Context<'_, &crate::formula_support::Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
     let Context {
@@ -1097,15 +1217,29 @@ fn body(
                 location,
             },
     } = context;
-    for literal in literals {
+    // Positive source evidence is local to this exact body and immutable
+    // region. A final model always authenticates its own selected atoms.
+    let positives = matches!(candidate, Candidate::Region(..))
+        && positives.is_some_and(|proof| proof.covers(literals));
+    let mut view = None;
+    for (occurrence, literal) in literals.iter().enumerate() {
         let Some((negation, pattern)) = literal_atom(literal) else {
             continue;
         };
         counters.work(limits, location)?;
-        let view = binding.view(computation.read(), limits, counters, location)?;
+        if positives && negation == DefaultNegation::None {
+            continue;
+        }
+        let binding_view = if let Some(view) = view {
+            view
+        } else {
+            let checked = binding.view(computation.read(), limits, counters, location)?;
+            view = Some(checked);
+            checked
+        };
         let key = computation
             .static_pattern(*pattern, limits, counters, location)?
-            .key(view)
+            .key(binding_view)
             .map_err(|error| FormulaFailure::UnsafeVariable {
                 variable: error.variable,
                 location,
@@ -1122,9 +1256,15 @@ fn body(
                 }
             }
             Candidate::Region(_, region) => {
-                let row = index
-                    .expect("prepared before region scan")
-                    .get_key_with(&key, || counters.work(limits, location))?;
+                let row = if let Some(prepared) =
+                    predicates.and_then(|prepared| prepared.at(literals, occurrence))
+                {
+                    prepared.get_key_with(&key, || counters.work(limits, location))?
+                } else {
+                    index
+                        .expect("prepared before region scan")
+                        .get_key_with(&key, || counters.work(limits, location))?
+                };
                 // Passing source rows contributed every occurrence to the
                 // completed catalog at admission, including unsupported atoms.
                 let position = row
@@ -1171,6 +1311,49 @@ fn literal_atom(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn binding_aliases_retain_distinct_positive_occurrences() {
+        let owner = crate::prepare_formula(
+            "{p(1)}. :-p(X),p(Y),X=Y.".into(),
+            crate::AdmissionOptions::default(),
+            crate::ExpansionLimits::default(),
+            crate::FormulaLimits::default(),
+        )
+        .unwrap()
+        .ground_hybrid()
+        .unwrap();
+        let mut checker = owner
+            .checker(crate::ConstraintCheckLimits::default())
+            .unwrap();
+        let prepared = checker.prepared.as_ref().unwrap();
+        assert_eq!(prepared.source.rules.len(), 1);
+        assert_eq!(
+            prepared.source.rules[0]
+                .body
+                .iter()
+                .filter(|literal| {
+                    matches!(
+                        super::literal_atom(literal),
+                        Some((themelios_program::program::DefaultNegation::None, _))
+                    )
+                })
+                .count(),
+            2,
+            "the source did not coalesce binding-dependent aliases"
+        );
+        assert_eq!(
+            checker
+                .consequence_region(
+                    owner.core_theory(),
+                    &zetesis_cpu::regions::Region::all_open(1),
+                    &zetesis_cpu::Cancellation::default(),
+                    crate::ConstraintRegionPass::First,
+                )
+                .unwrap(),
+            crate::ConstraintConsequence::NoConsequence
+        );
+    }
+
     #[test]
     fn impossible_predicates_prepare_no_join_plans() {
         let owner = crate::prepare_formula(

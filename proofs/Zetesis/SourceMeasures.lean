@@ -128,4 +128,25 @@ theorem source_priority_presence [DecidableEq V] {σ χ : Type u}
   rw [ObjectivePriorities.completed_presence priority _ _ filtered_complete resolve]
   simp only [and_assoc]
 
+/-- With no required keys, the count carrier contains exactly the natural
+numbers up to the number of possible occurrences. A selection cannot be longer
+than its source; conversely, taking the first `value` occurrences realizes every
+value within that bound.
+
+This law counts list occurrences. An aggregate caller must first provide distinct
+complete tuple keys to interpret that length as ASP count; equal measured values
+alone do not identify keys. Checked numeric conversion and resource limits remain
+implementation obligations. -/
+theorem count_carrier_membership [DecidableEq K] (possible : List K) (value : Nat) :
+    value ∈ carrier [] possible List.length ↔ value ≤ possible.length := by
+  rw [carrier_membership]
+  constructor
+  · rintro ⟨selected, ⟨inside, _⟩, measured⟩
+    have count_bounded : selected.length ≤ possible.length := inside.length_le
+    simpa only [measured] using count_bounded
+  · intro bounded
+    have prefix_admissible : Admissible [] possible (possible.take value) :=
+      ⟨List.take_sublist value possible, List.nil_subset _⟩
+    exact ⟨possible.take value, prefix_admissible, List.length_take_of_le bounded⟩
+
 end Zetesis.SourceMeasures

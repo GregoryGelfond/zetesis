@@ -1,0 +1,1 @@
+{p}. :-p,not p. #minimize {0@0:p}.

@@ -529,3 +529,5 @@ fn slot_equality_does_not_certify_a_reader_prefix() {
         )))
     ));
 }
+
+mod copies;

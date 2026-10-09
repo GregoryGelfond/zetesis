@@ -1129,16 +1129,25 @@ impl<'a> AtomRef<'a> {
         if !order.is_eq() {
             return Ok(order);
         }
-        for column in 0..atom.arity() {
-            before()?;
-            let term = atom.at_valid_column(column);
-            let query_term = other.argument_with(column, &mut before)?;
-            let order = term.compare_ref_with(query_term, &mut before)?;
-            if !order.is_eq() {
-                return Ok(order);
-            }
+        compare_key_arguments(atom, other, before)
+    }
+
+    /// Compare arguments after the caller established equal signed predicates
+    /// and arities. Only the checked predicate view and full-key comparison
+    /// use this boundary; an unrelated predicate cannot authorize it.
+    pub(crate) fn compare_key_arguments_with<E>(
+        self,
+        other: &crate::AtomKey<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Ordering, E> {
+        if let AtomSource::Ingress(atom) = self.0 {
+            return other
+                .compare_values_with(atom, before)
+                .map(Ordering::reverse);
         }
-        Ok(Ordering::Equal)
+        before()?;
+        let atom = self.read();
+        compare_key_arguments(atom, other, before)
     }
     /// Explicitly copy an atom into the owned ingress representation. Each term
     /// obeys the node/depth limits; the byte allowance also includes the argument
@@ -1471,6 +1480,24 @@ fn copy_node(
         },
         ValueNodeRef::Tuple { arity } => ValueNode::Tuple { arity },
     })
+}
+
+/// Argument order after equal predicate/arity has been established.
+fn compare_key_arguments<E>(
+    atom: AtomRead<'_>,
+    other: &crate::AtomKey<'_>,
+    mut before: impl FnMut() -> Result<(), E>,
+) -> Result<Ordering, E> {
+    for column in 0..atom.arity() {
+        before()?;
+        let term = atom.at_valid_column(column);
+        let query_term = other.argument_with(column, &mut before)?;
+        let order = term.compare_ref_with(query_term, &mut before)?;
+        if !order.is_eq() {
+            return Ok(order);
+        }
+    }
+    Ok(Ordering::Equal)
 }
 
 #[cfg(test)]

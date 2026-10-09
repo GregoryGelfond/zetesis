@@ -43,11 +43,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
     super::super::regions::narrow(
         (&original, &narrower, None),
         &conditions,
-        &mut region,
-        &mut knowledge,
+        (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
+        None,
     )
     .unwrap();
     assert!(!region.is_held(0) && !region.is_held(1));
@@ -58,11 +58,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
         super::super::regions::narrow(
             (&original, &narrower, None),
             &conditions,
-            &mut region,
-            &mut knowledge,
+            (&mut region, &mut knowledge),
             &mut zetesis_ferraris::NarrowingScratch::default(),
             &mut budget,
-            &mut counts
+            &mut counts,
+            None,
         )
         .unwrap(),
         Narrowing::Refuted
@@ -217,11 +217,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     super::super::regions::narrow(
         (&original, &narrower, None),
         &conditions,
-        &mut region,
-        &mut knowledge,
+        (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
+        None,
     )
     .unwrap();
     let permanent = theory(
@@ -234,11 +234,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     super::super::regions::narrow(
         (&original, &narrower, None),
         &conditions,
-        &mut region,
-        &mut knowledge,
+        (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
+        None,
     )
     .unwrap();
     assert!(region.is_cut(0) && region.is_held(1));
@@ -270,4 +270,49 @@ fn the_first_knowledge_slot_is_reserved_exactly() {
     let permanent = guard(true);
     knowledge.permanent(1, &Narrower::new(&permanent)).unwrap();
     assert_eq!(knowledge.entries.len(), 2);
+}
+
+#[test]
+fn copying_knowledge_replaces_the_bound_generation() {
+    let bound = Bound::prepare(&guard(false), 1).unwrap();
+    let mut source = CandidateKnowledge::default();
+    source.bound(&bound).unwrap();
+    let mut destination = CandidateKnowledge::default();
+    destination
+        .bound(&Bound::prepare(&guard(true), 2).unwrap())
+        .unwrap();
+    destination.clone_from(&source);
+    assert_eq!(destination.bound_generation, source.bound_generation);
+
+    source = CandidateKnowledge::default();
+    destination.clone_from(&source);
+    assert_eq!(destination.bound_generation, None);
+    assert!(destination.entries.is_empty());
+}
+
+#[test]
+fn copying_knowledge_does_not_retain_surplus_capacity() {
+    let narrower = Narrower::new(&guard(false));
+    let mut source = CandidateKnowledge::default();
+    source.permanent(0, &narrower).unwrap();
+    let mut destination = source.clone();
+    destination.entries.reserve_exact(7);
+    assert!(destination.entries.capacity() > source.entries.len());
+    destination.clone_from(&source);
+    assert_eq!(
+        destination.allocated_bytes(),
+        source.clone().allocated_bytes()
+    );
+}
+
+#[test]
+fn compatible_copies_reuse_the_knowledge_vector() {
+    let narrower = Narrower::new(&guard(false));
+    let mut source = CandidateKnowledge::default();
+    source.permanent(0, &narrower).unwrap();
+    let mut destination = source.clone();
+    let before = destination.entries.as_ptr();
+    destination.clone_from(&source);
+    assert_eq!(destination.entries.as_ptr(), before);
+    assert_ne!(destination.entries.as_ptr(), source.entries.as_ptr());
 }

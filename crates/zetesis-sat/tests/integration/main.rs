@@ -22,6 +22,7 @@ mod prepared_reduct;
 mod projection_history;
 mod reduct_regions;
 mod refusal_contracts;
+mod region_consequences;
 mod region_filters;
 mod region_proposals;
 mod regions;

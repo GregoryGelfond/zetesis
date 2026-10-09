@@ -66,8 +66,18 @@ pub(super) fn compact_fits(upper_bound: usize) -> bool {
     size_of::<u32>() < size_of::<usize>() && u32::try_from(upper_bound).is_ok()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(super) struct Counters<C>(Box<[C]>);
+
+impl<C: Clone> Clone for Counters<C> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.0.clone_from(&source.0);
+    }
+}
 
 impl<C: Count> Counters<C> {
     /// Allocation remains the existing infallible Knowledge construction

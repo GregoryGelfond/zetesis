@@ -82,6 +82,7 @@ fn refuses_with_its_prefix(warm: bool) {
     other
         .charge_work(u128::from(spent), &FormulaLimits::default(), location())
         .unwrap();
+    other.accounting.settle();
     with_support(warm, |support| {
         let observer = Observer::default();
         let profile = Profile::new(Some(&observer));
@@ -100,6 +101,7 @@ fn refuses_with_its_prefix(warm: bool) {
         assert_eq!(receipt.table_query_work, Some(u64::from(warm)));
         assert!(u128::from(receipt.support_peak_bytes.unwrap()) > support.live_bytes() as u128);
         assert_eq!(counters.accounting.work, prefix + 1);
+        counters.accounting.settle();
         assert_eq!(allowance.statistics().work, spent + max_work);
         assert_eq!(
             allowance.statistics().work,

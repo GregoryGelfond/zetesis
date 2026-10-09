@@ -20,7 +20,7 @@ pub(crate) struct Accounting {
     pub(crate) work: u64,
     pub(crate) substitutions: u64,
     pub(super) generated_values: Option<Generated>,
-    pub(super) allowance: Option<crate::ConstraintAllowance>,
+    pub(super) allowance: Option<crate::constraint_allowance::Pending>,
 }
 
 impl Counters {
@@ -34,7 +34,8 @@ impl Counters {
         self.accounting.workspace.bytes()
     }
 
-    pub(crate) fn into_accounting(self) -> Accounting {
+    pub(crate) fn into_accounting(mut self) -> Accounting {
+        self.accounting.settle();
         self.accounting
     }
 }
@@ -79,6 +80,13 @@ impl std::fmt::Display for AccountingHandoffError {
 impl std::error::Error for AccountingHandoffError {}
 
 impl Accounting {
+    /// Publish pending shared charges without resetting accepted local history.
+    pub(crate) fn settle(&mut self) {
+        if let Some(allowance) = &mut self.allowance {
+            allowance.settle();
+        }
+    }
+
     /// Inline generated-history storage already represented by its own lease.
     pub(crate) fn leased_header_bytes(&self) -> usize {
         self.generated_values
@@ -115,7 +123,7 @@ impl Accounting {
     /// Move the complete history in and back; never clone or reset its values.
     /// (A reconstruction call starts a new account from the copied baseline; the
     /// live account is never reset.)
-    /// The guard restores accepted charges on success, refusal and unwind.
+    /// The guard publishes and restores accepted charges on success, refusal and unwind.
     pub(crate) fn with_cancellation<T>(
         &mut self,
         cancellation: &Cancellation,
@@ -139,6 +147,7 @@ struct Active<'a> {
 }
 impl Drop for Active<'_> {
     fn drop(&mut self) {
+        self.counters.accounting.settle();
         mem::swap(self.retained, &mut self.counters.accounting);
     }
 }

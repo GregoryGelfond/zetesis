@@ -72,7 +72,7 @@ fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     assert_eq!(left.seeded, right.seeded);
 }
 
-fn same_knowledge(left: &Knowledge, right: &Knowledge) {
+pub(super) fn same_knowledge(left: &Knowledge, right: &Knowledge) {
     match (&left.width, &right.width) {
         (Width::Compact(l), Width::Native(r)) => same_known(l, r),
         (Width::Compact(l), Width::Compact(r)) => same_known(l, r),

@@ -221,10 +221,19 @@ Reuse preserves consumed work and pending-candidate accounting after a refusal.
 `PreparedFormula::ground_hybrid()` and its bundle counterpart return a shared
 `HybridFormula` owning the original source, retained core and streamed constraint
 plans. Pass it through `PreparedInput::hybrid(&owner)`. The current profile uses
-CPU execution, indexed joins and no objectives; richer constraints remain in
+CPU execution and indexed joins; richer constraints remain in
 the eager core. `Backend::Cpu` and `Grounder::Lazy` or `Auto` are accepted.
 A GPU backend, eager schedule, closure oracle or external batch executor is
 refused for this profile.
+
+Objective programs use the ordinary scoring and optimal-answer selection.
+Each new core answer must satisfy the streamed constraints before it can be
+scored, retained or used to improve an objective bound. Rejected proposals leave
+the incumbent unchanged. An interrupted check cannot establish optimality.
+Retained optimal ties have already passed the check and are not checked again
+when returned. A model limit caps returned optimal ties without stopping the
+search for a better answer; `AnswerSelection::All` instead limits accepted
+answers in enumeration order.
 
 Preparation still completes possible support, arithmetic admission and the atom
 catalog. Eligible instances are visited during admission, but their full
@@ -239,14 +248,20 @@ evaluation in a hybrid session.
 
 The session first rejects candidate regions with a certain source-constraint
 violation. This operation runs only on original candidate regions and returns
-`NotRefuted` when it cannot establish exclusion. It does not change proper-subset
+`NotRefuted` when it cannot establish exclusion. Source constraints may also
+hold or cut one open atom when their other body literals are true. The session
+alternates these deductions with formula propagation before choosing a split,
+using one source allowance for the entire closure. It does not change proper-subset
 queries of the frozen reduct. The ordinary formula enumerator obtains surviving
 core answers, then
 checks the streamed constraints before returning an `AnswerSet` of the original
 `Subject::Hybrid`. A violation rejects that core answer. A completed check permits
 publication; an interrupted or failed check remains pending and establishes
-neither acceptance nor exhaustion. A positive model limit counts accepted
-original-program answers, not rejected core proposals.
+neither acceptance nor exhaustion. With `AnswerSelection::All`, a positive model
+limit counts accepted original-program answers. With `Optimal`, it caps retained
+and delivered best-known ties without stopping the search for a better answer.
+Exhaustion establishes their optimality; an interrupted search can return verified
+incumbents without proving an optimum.
 
 This example checks every full answer, including the domain facts. The core has
 eight answers; early region rejection leaves four for membership and final
@@ -266,8 +281,9 @@ Run the maintained example from a checkout:
 cargo run --locked -p zetesis-solve --no-default-features --example book-hybrid
 ```
 
-`SolveConfig::constraints` supplies cumulative `ConstraintCheckLimits` for that
-session: charged work, substitutions and structural-capture reservations. The
+`SolveConfig::constraints` supplies `ConstraintCheckLimits` for each candidate
+closure or final answer check: charged work, substitutions and structural-capture
+reservations. The session retains a cumulative receipt across these operations. The
 retained `max_scalar_bytes` field bounds requested capture-delta capacity growth;
 each join reuses those cells, which borrow canonical terms. Flat binding copies retain IDs and frozen
 constructor lookup reuses admitted terms, so neither adds a scalar-byte charge.
@@ -275,8 +291,9 @@ Their physical storage remains under the admitted support allowance. The
 `scalar_bytes` receipt is cumulative reserved bytes, not live capacity or RSS.
 These limits are separate from source admission and per-candidate reduct-oracle
 limits. Completed support indexes are reused; constraint joins run for regions
-and for consumed core answers. The worker checks and final checker share one
-allowance. Additional region scans and preparation can cost more than the avoided membership work,
+and for consumed core answers. The worker checks and final checker share that
+receipt. Consequence passes within one closure share its allowance. Additional
+region scans and preparation can cost more than the avoided membership work,
 so the schedule still needs workload-specific measurement.
 
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,

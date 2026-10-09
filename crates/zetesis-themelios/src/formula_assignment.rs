@@ -1,4 +1,5 @@
 //! Bounded candidate values from complete, canonical full-tuple local joins.
+mod counts;
 mod sums;
 pub(crate) use sums::sums;
 
@@ -219,11 +220,14 @@ pub(crate) fn candidates(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Binding<'static>, FormulaFailure> {
-    if matches!(
-        function,
-        AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus
-    ) {
-        let numbers = sums(
+    // Both callers supply one contribution per coalesced full tuple: `values`
+    // uses `contribution(Count, _)`, and final grounding uses the same function
+    // (or unit atom keys) before grouping. Count never consumes tuple weights.
+    let numbers = match function {
+        AggregateFunction::Count => {
+            counts::counts(weights, computation, limits, counters, location)?
+        }
+        AggregateFunction::Sum | AggregateFunction::SumPlus => sums(
             weights
                 .into_iter()
                 .filter(|weight| function != AggregateFunction::SumPlus || *weight > 0),
@@ -231,28 +235,30 @@ pub(crate) fn candidates(
             limits,
             counters,
             location,
-        )?;
-        let mut result = Binding::new(computation, limits, counters, location)?;
-        result.extend_scope(numbers.len(), computation, limits, counters, location)?;
-        for (slot, &number) in numbers.iter().enumerate() {
-            let key = computation.number(number, limits, counters, location)?;
-            result.set(slot, &key, limits, counters, location)?;
+        )?,
+        AggregateFunction::Min | AggregateFunction::Max => {
+            let mut possible = Binding::new(computation, limits, counters, location)?;
+            for weight in weights {
+                let slot = possible.len();
+                possible.extend_scope(slot + 1, computation, limits, counters, location)?;
+                let key = computation.number(weight, limits, counters, location)?;
+                possible.set(slot, &key, limits, counters, location)?;
+            }
+            return extrema_candidates(
+                function,
+                possible.slots(),
+                computation,
+                limits,
+                counters,
+                location,
+            );
         }
-        return Ok(result);
+    };
+    let mut result = Binding::new(computation, limits, counters, location)?;
+    result.extend_scope(numbers.len(), computation, limits, counters, location)?;
+    for (slot, &number) in numbers.iter().enumerate() {
+        let key = computation.number(number, limits, counters, location)?;
+        result.set(slot, &key, limits, counters, location)?;
     }
-    let mut possible = Binding::new(computation, limits, counters, location)?;
-    for weight in weights {
-        let slot = possible.len();
-        possible.extend_scope(slot + 1, computation, limits, counters, location)?;
-        let key = computation.number(weight, limits, counters, location)?;
-        possible.set(slot, &key, limits, counters, location)?;
-    }
-    extrema_candidates(
-        function,
-        possible.slots(),
-        computation,
-        limits,
-        counters,
-        location,
-    )
+    Ok(result)
 }

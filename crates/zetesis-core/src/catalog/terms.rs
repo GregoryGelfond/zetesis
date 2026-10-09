@@ -118,6 +118,15 @@ impl<'a> TermRead<'a> {
         })
     }
 
+    /// Reborrow an existing term through this reader without retaining a scope.
+    /// The returned view has this exact reader's lifetime and prefix.
+    /// # Errors
+    /// Refuses ingress, foreign vocabulary, or an inaccessible newer term.
+    pub fn borrow_term(self, value: TermRef<'_>) -> Result<TermRef<'a>, ReadError> {
+        let id = self.selected_term(value)?;
+        self.resolve(id).ok_or(ReadError::OutsidePrefix)
+    }
+
     /// Authenticate a borrowed coordinate without retaining another scope handle.
     pub(super) fn selected_term(self, value: TermRef<'_>) -> Result<storage::TermId, ReadError> {
         let (read, id) = value.scoped().ok_or(ReadError::Uninterned)?;
@@ -316,17 +325,75 @@ impl TermAssignment {
         &mut self,
         slot: usize,
         key: &TermKey,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(), AssignmentFailure<E>> {
+        self.set_id_with(slot, key.id, self.scope.same(&key.scope), before)
+    }
+
+    /// Copy a borrowed canonical term into one existing slot without retaining
+    /// another vocabulary witness. Authenticate the source against `read`
+    /// before calling `before`; then admit the destination check and write
+    /// through the same two callbacks as `set_with`. No storage is allocated.
+    /// The reader and borrowed value remain live for this operation only.
+    /// # Errors
+    /// Refuses an uninterned, foreign or inaccessible source before caller work.
+    /// Then refuses caller work, foreign destination or invalid destination slot
+    /// before mutation, in that order.
+    pub fn set_term_with<'read, E>(
+        &mut self,
+        slot: usize,
+        read: impl Into<TermRead<'read>>,
+        value: TermRef<'_>,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(), AssignmentFailure<E>> {
+        let read = read.into();
+        let id = read.selected_term(value).map_err(AssignmentError::from)?;
+        self.set_id_with(slot, id, read.accepts(&self.scope), before)
+    }
+
+    /// Copy one present source slot using its borrowed vocabulary witness.
+    /// This is metadata copying: no reader or term-prefix check is required.
+    /// The destination retains its existing witness and only the ID is copied.
+    /// Source presence is checked before the two destination-work callbacks.
+    /// # Errors
+    /// Refuses an invalid or absent source before caller work; then refuses
+    /// caller work, foreign destination or invalid destination before mutation.
+    pub fn copy_slot_with<E>(
+        &mut self,
+        slot: usize,
+        source: AssignmentSlice<'_>,
+        source_slot: usize,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<(), AssignmentFailure<E>> {
+        let id = source
+            .slots
+            .get(source_slot)
+            .ok_or(AssignmentError::Slot {
+                slot: source_slot,
+                len: source.len(),
+            })?
+            .ok_or(AssignmentError::Unbound { slot: source_slot })?;
+        self.set_id_with(slot, id, self.scope.same(source.scope), before)
+    }
+
+    fn set_id_with<E>(
+        &mut self,
+        slot: usize,
+        id: storage::TermId,
+        same_scope: bool,
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<(), AssignmentFailure<E>> {
         before().map_err(AssignmentFailure::Stopped)?;
-        check_scope(&self.scope, &key.scope)?;
+        if !same_scope {
+            return Err(AssignmentError::Read(ReadError::ForeignCatalog).into());
+        }
         let len = self.len();
         let target = self
             .slots
             .get_mut(slot)
             .ok_or(AssignmentError::Slot { slot, len })?;
         before().map_err(AssignmentFailure::Stopped)?;
-        *target = Some(key.id);
+        *target = Some(id);
         Ok(())
     }
     /// Clear one existing variable slot without a logical sentinel value.

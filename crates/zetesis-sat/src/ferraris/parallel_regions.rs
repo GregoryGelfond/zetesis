@@ -58,6 +58,11 @@
 //! Storage grows with the observed depth rather than reserving that bound for
 //! every worker. Capacity and payloads are released after joining. Fallible slot
 //! growth does not make region or knowledge cloning fallible.
+//! Each worker may retain one refuted region's knowledge allocation until its
+//! next split or exit. Copying the current parent's complete knowledge into it
+//! reuses storage without retaining any conclusions from the refuted region.
+//! This adds at most one knowledge bundle per worker; copying remains linear
+//! in the payload, and queued children own independent arrays.
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
@@ -1062,6 +1067,7 @@ struct Workspaces<'a> {
     scratch: NarrowingScratch,
     membership: crate::prepared_reduct::State,
     filter: Option<crate::region_filter::Worker<'a>>,
+    retired_knowledge: Option<CandidateKnowledge>,
 }
 
 impl Workspaces<'_> {
@@ -1070,6 +1076,19 @@ impl Workspaces<'_> {
             scratch: NarrowingScratch::default(),
             membership: crate::prepared_reduct::State::new(crate::SearchMethod::Regions),
             filter: None,
+            retired_knowledge: None,
+        }
+    }
+
+    /// Copy the current parent, reusing at most one retired allocation. No
+    /// logical state from its former region survives the complete overwrite.
+    fn copy_knowledge(&mut self, parent: &CandidateKnowledge) -> CandidateKnowledge {
+        match self.retired_knowledge.take() {
+            Some(mut retired) => {
+                retired.clone_from(parent);
+                retired
+            }
+            None => parent.clone(),
         }
     }
 }
@@ -1096,34 +1115,27 @@ fn step<'a>(
     Live::add(&shared.live.regions, 1);
     let before = report.regions;
     let started = timing::start(report.statistics.phase_timings.as_ref());
-    let narrowing: Result<Narrowing, Incomplete> = (|| {
-        let narrowing = super::regions::narrow(
-            (
-                original.theory(),
-                original.narrower(),
-                shared.producers.as_ref(),
-            ),
-            &restrictions,
-            &mut region,
-            &mut knowledge,
-            &mut workspaces.scratch,
-            budget,
-            &mut report.regions,
-        )?;
-        if narrowing != Narrowing::Refuted
-            && let Some(factory) = shared.filter.as_ref()
-            && factory.check(
-                &mut workspaces.filter,
-                original.theory(),
-                &region,
-                &shared.cancellation,
-                &mut report.statistics.phase_timings,
-            )? == crate::RegionFeasibility::Refuted
-        {
-            return Ok(Narrowing::Refuted);
-        }
-        Ok(narrowing)
-    })();
+    let mut check = shared
+        .filter
+        .as_ref()
+        .map(|filter| crate::region_filter::Check {
+            filter,
+            worker: &mut workspaces.filter,
+            timings: &mut report.statistics.phase_timings,
+        });
+    let narrowing = super::regions::narrow(
+        (
+            original.theory(),
+            original.narrower(),
+            shared.producers.as_ref(),
+        ),
+        &restrictions,
+        (&mut region, &mut knowledge),
+        &mut workspaces.scratch,
+        budget,
+        &mut report.regions,
+        check.as_mut(),
+    );
     timing::finish(
         &mut report.statistics.phase_timings,
         Phase::Candidates,
@@ -1141,6 +1153,7 @@ fn step<'a>(
     if narrowing == Narrowing::Refuted {
         report.regions.refuted += 1;
         Live::add(&shared.live.refuted, 1);
+        workspaces.retired_knowledge = Some(knowledge);
         return Ok(Stepped::Resolved(None));
     }
     let Some(atom) = region.split_atom() else {
@@ -1160,7 +1173,7 @@ fn step<'a>(
     // Each child carries its own copy of the knowledge, linear in the theory:
     // what the parent learned holds in both.
     let (cut, held) = region.split(atom);
-    let held = (held, knowledge.clone());
+    let held = (held, workspaces.copy_knowledge(&knowledge));
     shared.publish_split(index, held, (cut, knowledge), reserve_regions)?;
     Ok(Stepped::Split)
 }

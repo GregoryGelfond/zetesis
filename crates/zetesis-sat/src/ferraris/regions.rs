@@ -68,11 +68,11 @@ pub struct RegionCounts {
     /// or the proper-subset models and the candidate itself.
     pub leaves: usize,
     /// Propagation events: nodes and atoms learned and their neighbours
-    /// revisited, and support rechecks.
+    /// revisited, support rechecks, and fresh source-consequence mask updates.
     pub propagations: u64,
-    /// Atoms the readings held.
+    /// Atoms the readings or original source consequences held.
     pub held: u64,
-    /// Atoms the readings cut.
+    /// Atoms the readings or original source consequences cut.
     pub cut: u64,
     /// Node reads, root tests and producer checks, and for the candidate
     /// tree the producer extraction, the indexing of each restriction and,
@@ -82,7 +82,8 @@ pub struct RegionCounts {
     /// certificate walks no
     /// region and indexes no theory. Enumeration queries share the walk's
     /// original index. A standalone membership query includes its own index
-    /// construction in its reduct counts.
+    /// construction in its reduct counts. Each fresh source-consequence mask
+    /// update costs one unit; source join work is accounted separately.
     pub work: u64,
 }
 
@@ -346,23 +347,20 @@ impl RegionSearch {
         let mut worker = None;
         let before = traversal.statistics();
         let visit = traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
-            let narrowing = narrow(
+            let mut check = factory.map(|filter| crate::region_filter::Check {
+                filter,
+                worker: &mut worker,
+                timings,
+            });
+            narrow(
                 (formulas, narrower, producers.as_ref()),
                 restrictions,
-                region,
-                knowledge,
+                (region, knowledge),
                 scratch,
                 budget,
                 &mut statistics.counts,
-            )?;
-            if narrowing != Narrowing::Refuted
-                && let Some(filter) = factory
-                && filter.check(&mut worker, theory, region, budget.cancellation, timings)?
-                    == crate::RegionFeasibility::Refuted
-            {
-                return Ok(Narrowing::Refuted);
-            }
-            Ok(narrowing)
+                check.as_mut(),
+            )
         });
         let after = traversal.statistics();
         for _ in 0..after.splits_since(before) {
@@ -386,16 +384,21 @@ impl RegionSearch {
 /// restriction, else the original theory. This preserves the traversal policy
 /// of narrowing those subjects in sequence while charging only the final
 /// subject's scan, one count read per open atom. Ties prefer the lower atom.
+/// Streamed original constraints may then decide one open atom, returning to
+/// propagation before the next source pass. These passes share one allowance.
+/// Every source decision decreases the number of open atoms; no source clause
+/// is added to the theory or its frozen reduct.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
     restrictions: &Conditions<R>,
-    region: &mut Region,
-    knowledge: &mut CandidateKnowledge,
+    (region, knowledge): (&mut Region, &mut CandidateKnowledge),
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
+    mut filter: Option<&mut crate::region_filter::Check<'_, '_>>,
 ) -> Result<Narrowing, Incomplete> {
     let mut changed = false;
+    let mut pass = crate::RegionPass::First;
     loop {
         let mut round = false;
         for (index, (formulas, narrower)) in std::iter::once((theory, narrower))
@@ -442,6 +445,19 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         }
         changed |= round;
         if !round {
+            if let Some(filter) = &mut filter {
+                let consequence = filter.consequence(theory, region, budget.cancellation, pass)?;
+                match consequence {
+                    crate::RegionConsequence::Refuted => return Ok(Narrowing::Refuted),
+                    crate::RegionConsequence::Unchanged => {}
+                    crate::RegionConsequence::Hold(_) | crate::RegionConsequence::Cut(_) => {
+                        apply_consequence(consequence, region, budget, counts)?;
+                        changed = true;
+                        pass = crate::RegionPass::Continue;
+                        continue;
+                    }
+                }
+            }
             // Preserve the last subject's preference from the established
             // narrowing order. Every subject is closed for the final region,
             // so earlier rounds and subjects need no ranking scan.
@@ -469,6 +485,41 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             return Ok(Narrowing::Fixed { changed });
         }
     }
+}
+
+/// Charge one fresh mask update before publishing it. Its validity was checked
+/// against the immutable region by the callback boundary.
+fn apply_consequence<Q: Quota>(
+    consequence: crate::RegionConsequence,
+    region: &mut Region,
+    budget: &mut Budget<'_, Q>,
+    counts: &mut RegionCounts,
+) -> Result<(), Incomplete> {
+    let (atom, held) = match consequence {
+        crate::RegionConsequence::Hold(atom) => (atom, true),
+        crate::RegionConsequence::Cut(atom) => (atom, false),
+        _ => return Err(Incomplete::InvalidRegionConsequence),
+    };
+    let mut updated = *counts;
+    updated.add(RegionCounts {
+        held: u64::from(held),
+        cut: u64::from(!held),
+        work: 1,
+        propagations: 1,
+        ..RegionCounts::default()
+    })?;
+    budget.cancellation.poll()?;
+    budget.tick()?;
+    let applied = if held {
+        region.hold(atom)
+    } else {
+        region.cut(atom)
+    };
+    if !applied {
+        return Err(Incomplete::InvalidRegionConsequence);
+    }
+    *counts = updated;
+    Ok(())
 }
 
 /// Check only accumulated candidate conditions on a certified singleton.

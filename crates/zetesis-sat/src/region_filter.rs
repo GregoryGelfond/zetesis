@@ -1,4 +1,4 @@
-//! Candidate-only feasibility, independent of the frozen-reduct traversal.
+//! Original candidate consequences, independent of the frozen-reduct traversal.
 
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -18,6 +18,31 @@ pub enum RegionFeasibility {
     NotRefuted,
     /// No interpretation represented by this region may be returned.
     Refuted,
+}
+
+/// Position of a source check within one candidate closure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionPass {
+    /// Begin this region's allowance, including any deferred preparation.
+    First,
+    /// Continue the same allowance after a fresh consequence and propagation.
+    Continue,
+}
+
+/// A consequence of the original program for every interpretation in a region.
+///
+/// Decisions use the authenticated theory's atom coordinates. They must concern
+/// an open atom; the traversal rejects stale or out-of-range decisions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionConsequence {
+    /// No further consequence was established; this is not satisfaction.
+    Unchanged,
+    /// No sought answer belongs to this region.
+    Refuted,
+    /// Every sought answer in the region contains this atom.
+    Hold(usize),
+    /// No sought answer in the region contains this atom.
+    Cut(usize),
 }
 
 /// A caller-owned original-program condition used only on candidate regions.
@@ -62,6 +87,29 @@ pub trait RegionFilterWorker {
         region: &Region,
         cancellation: &Cancellation,
     ) -> Result<RegionFeasibility, Incomplete>;
+
+    /// Read one consequence after original and candidate-restriction closure.
+    /// A fresh decision causes another propagation round before continuation.
+    /// All continuations share the first pass's allowance. No consequence is
+    /// installed as a supporting rule or used in a frozen-reduct query.
+    ///
+    /// The default retains the feasibility-only callback contract.
+    ///
+    /// # Errors
+    /// Any failure leaves candidate coverage incomplete.
+    fn consequence(
+        &mut self,
+        theory: &Theory,
+        region: &Region,
+        cancellation: &Cancellation,
+        _pass: RegionPass,
+    ) -> Result<RegionConsequence, Incomplete> {
+        self.check(theory, region, cancellation)
+            .map(|verdict| match verdict {
+                RegionFeasibility::NotRefuted => RegionConsequence::Unchanged,
+                RegionFeasibility::Refuted => RegionConsequence::Refuted,
+            })
+    }
 }
 
 /// Callback attempts, independent of source-work and reduct-work accounting.
@@ -71,7 +119,7 @@ pub trait RegionFilterWorker {
 pub struct RegionFilterStatistics {
     /// Worker preparations attempted, including refused preparations.
     pub preparations: u64,
-    /// Region checks attempted, including refused checks.
+    /// Source passes attempted, including continuations and refused checks.
     pub checks: u64,
     /// Completed region refutations.
     pub refuted: u64,
@@ -184,6 +232,67 @@ impl Worker<'_> {
             Err(_) => self.filter.increment(&self.filter.failed),
             Ok(RegionFeasibility::NotRefuted) => {}
         }
+        result
+    }
+
+    fn consequence(
+        &mut self,
+        theory: &Theory,
+        region: &Region,
+        cancellation: &Cancellation,
+        pass: RegionPass,
+    ) -> Result<RegionConsequence, Incomplete> {
+        self.filter.increment(&self.filter.checks);
+        let result = self
+            .checker
+            .consequence(theory, region, cancellation, pass)
+            .and_then(|consequence| {
+                cancellation.poll()?;
+                match consequence {
+                    RegionConsequence::Hold(atom) | RegionConsequence::Cut(atom)
+                        if !region.is_open(atom) =>
+                    {
+                        Err(Incomplete::InvalidRegionConsequence)
+                    }
+                    _ => Ok(consequence),
+                }
+            });
+        match result {
+            Ok(RegionConsequence::Refuted) => self.filter.increment(&self.filter.refuted),
+            Err(_) => self.filter.increment(&self.filter.failed),
+            Ok(_) => {}
+        }
+        result
+    }
+}
+
+/// One closure's callback state. The worker survives between closures; the pass
+/// marker does not. Neither preparation nor a source pass changes region truth.
+pub(crate) struct Check<'a, 'b> {
+    pub(crate) filter: &'a Filter,
+    pub(crate) worker: &'b mut Option<Worker<'a>>,
+    pub(crate) timings: &'b mut Option<SearchPhaseTimings>,
+}
+
+impl Check<'_, '_> {
+    pub(crate) fn consequence(
+        &mut self,
+        theory: &Theory,
+        region: &Region,
+        cancellation: &Cancellation,
+        pass: RegionPass,
+    ) -> Result<RegionConsequence, Incomplete> {
+        let started = timing::start(self.timings.as_ref());
+        let result = (|| {
+            let worker = match self.worker {
+                Some(worker) => worker,
+                None => self
+                    .worker
+                    .insert(self.filter.worker(theory, cancellation)?),
+            };
+            worker.consequence(theory, region, cancellation, pass)
+        })();
+        timing::finish(self.timings, Phase::OriginalValidation, started);
         result
     }
 }

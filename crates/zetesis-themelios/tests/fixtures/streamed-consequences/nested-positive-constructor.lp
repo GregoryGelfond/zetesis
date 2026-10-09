@@ -1,0 +1,1 @@
+{h(in_state(v,open),0)}. :-h(in_state(V,open),0).

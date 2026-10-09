@@ -50,6 +50,28 @@ fn counter_clones_own_independent_values() {
     clones_are_independent::<usize>();
 }
 
+fn reuse<C: Count>() {
+    let mut source = Counters::<C>::zeros(2);
+    source.add(0, 3);
+    let mut destination = Counters::<C>::zeros(2);
+    destination.add(1, 7);
+    let before = destination.0.as_ptr();
+    destination.clone_from(&source);
+    assert_eq!(destination.0.as_ptr(), before);
+    assert_ne!(destination.0.as_ptr(), source.0.as_ptr());
+    assert_eq!((destination.get(0), destination.get(1)), (3, 0));
+    destination.decrement(0);
+    source.add(1, 1);
+    assert_eq!((source.get(0), source.get(1)), (3, 1));
+    assert_eq!((destination.get(0), destination.get(1)), (2, 0));
+}
+
+#[test]
+fn equal_length_copies_reuse_independent_counter_storage() {
+    reuse::<u32>();
+    reuse::<usize>();
+}
+
 fn follow<C: Count>(operations: &[(usize, bool)]) -> Result<(), TestCaseError> {
     let mut counts = Counters::<C>::zeros(4);
     let mut reference = [0usize; 4];

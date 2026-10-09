@@ -380,6 +380,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::ClosedEnumerator => "closed_enumerator",
                 Incomplete::LateCertificate => "late_certificate",
                 Incomplete::RegionFilter => "region_filter",
+                Incomplete::InvalidRegionConsequence => "invalid_region_consequence",
                 Incomplete::RegionFilterUnsupported => "region_filter_unsupported",
                 Incomplete::LateRegionFilter => "late_region_filter",
                 Incomplete::RegionFilterAlreadySet => "region_filter_already_set",

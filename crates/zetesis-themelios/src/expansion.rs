@@ -289,8 +289,8 @@ impl std::error::Error for ExpansionFailure {
 /// budget as a whole or are discarded with it, never both.
 /// Runtime constraint checkers can additionally attach a shared cumulative
 /// scalar receipt. Charges reported to it are never rolled back or refunded;
-/// tentative source admission does not attach one.
-#[derive(Clone)]
+/// tentative source admission does not attach one. A clone copies enforcement
+/// history, but starts with no pending shared charges: the original owns those.
 pub(crate) struct Budget {
     limits: ExpansionLimits,
     work: u128,
@@ -298,11 +298,36 @@ pub(crate) struct Budget {
     values: u128,
     scalar_bytes: u128,
     origins: u128,
-    allowance: Option<crate::ConstraintAllowance>,
+    allowance: Option<crate::constraint_allowance::Pending>,
     cancellation: Option<zetesis_cpu::Cancellation>,
 }
 
+impl Clone for Budget {
+    fn clone(&self) -> Self {
+        Self {
+            limits: self.limits,
+            work: self.work,
+            templates: self.templates,
+            values: self.values,
+            scalar_bytes: self.scalar_bytes,
+            origins: self.origins,
+            allowance: self
+                .allowance
+                .as_ref()
+                .map(crate::constraint_allowance::Pending::fork),
+            cancellation: self.cancellation.clone(),
+        }
+    }
+}
+
 impl Budget {
+    /// Publish the operation's scalar prefix when it returns or unwinds, even
+    /// if the budget remains alive for a later check.
+    pub(crate) fn with_settled_receipt<T>(&mut self, action: impl FnOnce(&mut Self) -> T) -> T {
+        let active = ScalarReceipt(self);
+        action(active.0)
+    }
+
     pub(crate) fn with_cancellation(
         mut self,
         cancellation: Option<zetesis_cpu::Cancellation>,
@@ -385,7 +410,7 @@ impl Budget {
     }
 
     pub(crate) fn with_allowance(mut self, allowance: crate::ConstraintAllowance) -> Self {
-        self.allowance = Some(allowance);
+        self.allowance = Some(crate::constraint_allowance::Pending::new(allowance));
         self
     }
 
@@ -413,7 +438,7 @@ impl Budget {
         let observed = used.saturating_add(amount);
         check(resource, observed, ceiling, location)?;
         if matches!(resource, ExpansionResource::ScalarBytes)
-            && let Some(allowance) = &self.allowance
+            && let Some(allowance) = &mut self.allowance
         {
             allowance.scalar(amount);
         }
@@ -461,3 +486,17 @@ pub(crate) fn check(
         Ok(())
     }
 }
+
+/// Settlement does not reset enforcement history or retain runtime control.
+struct ScalarReceipt<'a>(&'a mut Budget);
+
+impl Drop for ScalarReceipt<'_> {
+    fn drop(&mut self) {
+        if let Some(allowance) = &mut self.0.allowance {
+            allowance.settle();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

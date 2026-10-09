@@ -1,5 +1,7 @@
 //! Aggregate assignment values are proposals whose equality remains in the reduct.
 
+mod counts;
+
 use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;

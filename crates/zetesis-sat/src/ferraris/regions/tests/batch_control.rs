@@ -78,11 +78,14 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
     let stop = narrow(
         (&theory, &narrower, None),
         &Conditions::<(Theory, Narrower)>::default(),
-        &mut Region::all_open(theory.atom_count()),
-        &mut CandidateKnowledge::default(),
+        (
+            &mut Region::all_open(theory.atom_count()),
+            &mut CandidateKnowledge::default(),
+        ),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
+        None,
     )
     .expect_err("cancellation stops the narrowing");
     (stop, counts.work)

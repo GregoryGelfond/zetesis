@@ -131,6 +131,10 @@ fn countermodel_stops_have_distinct_machine_codes() {
         (Incomplete::ClosedEnumerator, "closed_enumerator"),
         (Incomplete::LateCertificate, "late_certificate"),
         (Incomplete::InvalidWitness, "invalid_witness"),
+        (
+            Incomplete::InvalidRegionConsequence,
+            "invalid_region_consequence",
+        ),
         (Incomplete::CounterOverflow, "counter_overflow"),
     ] {
         let mut out = Buffer::new(4096);

@@ -1,0 +1,1 @@
+{p}. :-p. #minimize{0@4,key:p}.

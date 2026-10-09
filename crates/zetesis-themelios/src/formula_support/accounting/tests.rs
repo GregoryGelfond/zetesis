@@ -175,6 +175,7 @@ fn zero_work_preserves_an_exhausted_allowance() {
     counters.work(&limits, location()).unwrap();
     counters.charge_work(0, &limits, location()).unwrap();
     assert_eq!(counters.accounting.work, 1);
+    counters.accounting.settle();
     assert_eq!(allowance.statistics().work, 1);
 }
 
@@ -324,8 +325,8 @@ fn resume_preserves_the_exact_shared_receipt_without_previous_cancellation() {
     assert_eq!(allowance.statistics().work, 2);
     resumed.work(&limits, location()).unwrap();
     assert_eq!(resumed.accounting.work, 3);
+    resumed.accounting.settle();
     assert_eq!(allowance.statistics().work, 3);
-    assert_eq!(resumed.accounting.work, 3);
     assert_eq!(resumed.accounting.substitutions, 1);
     assert_eq!(allowance.statistics().work, 3);
     assert_eq!(allowance.statistics().substitutions, 1);
@@ -399,4 +400,99 @@ fn flat_baseline_retires_only_generated_metadata() {
     let baseline = accounting.into_flat_baseline().unwrap();
     assert_eq!(baseline.generated_values, 1);
     assert_eq!(baseline.start().workspace.bytes(), 0);
+}
+
+#[test]
+fn refused_checks_settle_only_accepted_charges() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let cancellation = Cancellation::default();
+    let mut accounting =
+        super::Counters::with_allowance(allowance.clone(), &cancellation).into_accounting();
+    let limits = FormulaLimits {
+        max_work: 3,
+        max_substitutions: 1,
+        ..Default::default()
+    };
+    let failure = accounting.with_cancellation(&cancellation, |counters| {
+        counters.charge_work(2, &limits, location())?;
+        counters.substitution(&limits, location())?;
+        assert_eq!(
+            allowance.statistics(),
+            crate::ConstraintCheckStatistics::default()
+        );
+        counters.charge_work(2, &limits, location())
+    });
+    assert!(matches!(
+        failure,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            limit: 3,
+            observed: 4,
+            ..
+        })
+    ));
+    assert_eq!(
+        allowance.statistics(),
+        crate::ConstraintCheckStatistics {
+            work: 2,
+            substitutions: 1,
+            scalar_bytes: 0,
+        }
+    );
+    drop(accounting);
+    assert_eq!(allowance.statistics().work, 2);
+}
+
+#[test]
+fn interrupted_checks_settle_the_accepted_prefix() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let cancellation = Cancellation::default();
+    let mut accounting =
+        super::Counters::with_allowance(allowance.clone(), &cancellation).into_accounting();
+    let failure = accounting.with_cancellation(&cancellation, |counters| {
+        counters.work(&FormulaLimits::default(), location())?;
+        counters.substitution(&FormulaLimits::default(), location())?;
+        cancellation.cancel();
+        counters.work(&FormulaLimits::default(), location())
+    });
+    assert!(matches!(
+        failure,
+        Err(FormulaFailure::Interrupted {
+            reason: Stop::Cancelled,
+            ..
+        })
+    ));
+    assert_eq!(
+        allowance.statistics(),
+        crate::ConstraintCheckStatistics {
+            work: 1,
+            substitutions: 1,
+            scalar_bytes: 0,
+        }
+    );
+}
+
+#[test]
+fn dropping_counters_settles_preparation_charges() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut counters = super::Counters::with_allowance(allowance.clone(), &Cancellation::default());
+    counters
+        .work(&FormulaLimits::default(), location())
+        .unwrap();
+    counters
+        .substitution(&FormulaLimits::default(), location())
+        .unwrap();
+    assert_eq!(
+        allowance.statistics(),
+        crate::ConstraintCheckStatistics::default()
+    );
+    drop(counters);
+    assert_eq!(
+        allowance.statistics(),
+        crate::ConstraintCheckStatistics {
+            work: 1,
+            substitutions: 1,
+            scalar_bytes: 0,
+        }
+    );
 }

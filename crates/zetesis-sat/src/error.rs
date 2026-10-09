@@ -60,6 +60,8 @@ pub enum Incomplete {
     /// A caller-owned candidate-region filter retained an external failure.
     /// Its adapter must supply the typed receipt; this never means exhaustion.
     RegionFilter,
+    /// A source callback returned a decision for an atom that is not open.
+    InvalidRegionConsequence,
     /// Original-region filtering is unavailable for the selected proposer.
     RegionFilterUnsupported,
     /// A region filter cannot be installed after candidate traversal began.
@@ -130,6 +132,9 @@ impl fmt::Display for Incomplete {
             }
             Self::RegionFilter => {
                 f.write_str("candidate-region filter failed; inspect its receipt")
+            }
+            Self::InvalidRegionConsequence => {
+                f.write_str("candidate-region consequence does not decide an open atom")
             }
             Self::RegionFilterUnsupported => {
                 f.write_str("candidate-region filtering requires region search")

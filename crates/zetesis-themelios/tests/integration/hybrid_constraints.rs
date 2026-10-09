@@ -203,15 +203,17 @@ fn scoped_constraints_remain_eager() {
 }
 
 #[test]
-fn objective_programs_refuse_the_hybrid_schedule() {
-    let result = prepare("{p}. #minimize{1:p}.").ground_hybrid();
-    assert!(matches!(
-        result,
-        Err(FormulaFailure::HybridUnsupported {
-            feature: HybridFeature::Objectives,
-            ..
-        })
-    ));
+fn hybrid_admission_preserves_original_objectives() {
+    let source = "{p}. :-not p. #minimize{2@3,key:p}.";
+    let eager = prepare(source).ground().unwrap();
+    let hybrid = admit(source);
+    assert_eq!(hybrid.streamed_templates(), 1);
+    assert!(hybrid.objectives().is_present());
+    assert_eq!(hybrid.objectives().priorities(), &[3]);
+    assert_eq!(
+        hybrid.objectives().templates().iter().collect::<Vec<_>>(),
+        eager.objectives().templates().iter().collect::<Vec<_>>()
+    );
 }
 
 #[test]
@@ -412,9 +414,11 @@ fn a_check_is_refused_relative_to_its_own_allowance() {
 
 #[test]
 fn each_check_has_its_own_scalar_allowance() {
-    // Structural captures reserve delta cells on each scan. Frozen constructor
-    // lookups and binding ID copies do not consume this scalar-byte allowance.
-    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
+    // The first check includes one-time structural preparation as well as its
+    // scan. Three checks under that ceiling must match the unbounded receipts.
+    let owner = admit(include_str!(
+        "../fixtures/hybrid-constraints/scalar-allowance.lp"
+    ));
     let candidate = model(&owner, &["p(f(1))"]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
@@ -423,21 +427,30 @@ fn each_check_has_its_own_scalar_allowance() {
             .unwrap(),
         ConstraintVerdict::Satisfied
     );
-    let complete = baseline.statistics();
-    assert!(complete.scalar_bytes > 0);
+    let first = baseline.statistics().scalar_bytes;
+    assert!(first > 0);
+    for _ in 0..2 {
+        assert_eq!(
+            baseline
+                .check(&candidate, &Cancellation::default())
+                .unwrap(),
+            ConstraintVerdict::Satisfied
+        );
+    }
     let mut checker = owner
         .checker(ConstraintCheckLimits {
-            max_scalar_bytes: complete.scalar_bytes,
+            max_scalar_bytes: first,
             ..Default::default()
         })
         .unwrap();
-    for _ in 0..2 {
+    for _ in 0..3 {
         assert_eq!(
             checker.check(&candidate, &Cancellation::default()).unwrap(),
             ConstraintVerdict::Satisfied
         );
     }
-    assert_eq!(checker.statistics().scalar_bytes, 2 * complete.scalar_bytes);
+    assert!(checker.statistics().scalar_bytes > first);
+    assert_eq!(checker.statistics(), baseline.statistics());
 }
 
 #[test]
@@ -663,4 +676,105 @@ fn checkers_sharing_an_allowance_each_check_within_it() {
             scalar_bytes: 3 * complete.scalar_bytes,
         }
     );
+}
+
+#[test]
+fn preparation_publishes_before_returning_the_checker() {
+    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
+    let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
+    let checker = owner
+        .checker_with_allowance(&allowance, &Cancellation::default())
+        .unwrap();
+    assert!(checker.statistics().work > 0);
+    assert_eq!(allowance.statistics(), checker.statistics());
+    let before = allowance.statistics();
+    drop(checker);
+    assert_eq!(allowance.statistics(), before);
+}
+
+#[test]
+fn preparation_refusals_publish_their_accepted_prefix() {
+    let owner = admit("{p(1);q(1);r(1)}. :-p(X),q(X),r(X).");
+    let complete = owner
+        .checker(ConstraintCheckLimits::default())
+        .unwrap()
+        .statistics();
+    let mut accepted_prefix = false;
+    for max_work in 0..complete.work {
+        let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
+            max_work,
+            ..Default::default()
+        });
+        let failure = owner
+            .checker_with_allowance(&allowance, &Cancellation::default())
+            .err()
+            .expect("each smaller setup allowance must refuse");
+        assert!(
+            matches!(failure.cause, ConstraintCheckCause::Source(ref error)
+                if matches!(error.as_ref(), FormulaFailure::Limit {
+                    resource: FormulaResource::Work, limit, ..
+                } if *limit == u128::from(max_work))
+            )
+        );
+        accepted_prefix |= failure.statistics.work > 0;
+        assert_eq!(allowance.statistics(), failure.statistics);
+    }
+    assert!(
+        accepted_prefix,
+        "setup must exercise failure after accepted work"
+    );
+}
+
+#[test]
+fn completed_checks_publish_before_returning() {
+    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
+    let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
+    let cancellation = Cancellation::default();
+    let mut checker = owner
+        .checker_with_allowance(&allowance, &cancellation)
+        .unwrap();
+    let satisfying = model(&owner, &["p(f(1))"]);
+    let violating = model(&owner, &["p(f(2))"]);
+    for (candidate, satisfied) in [(&satisfying, true), (&violating, false)] {
+        let verdict = checker.check(candidate, &cancellation).unwrap();
+        assert_eq!(matches!(verdict, ConstraintVerdict::Satisfied), satisfied);
+        assert!(checker.statistics().scalar_bytes > 0);
+        assert!(checker.statistics().substitutions > 0);
+        assert_eq!(allowance.statistics(), checker.statistics());
+    }
+}
+
+#[test]
+fn refused_checks_publish_before_returning() {
+    // Both structural bindings survive the source filter. The empty candidate
+    // makes each body false, so no earlier violation can stop the scan.
+    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>0.");
+    let cancellation = Cancellation::default();
+    let candidate = model(&owner, &[]);
+    let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    assert_eq!(
+        baseline.check(&candidate, &cancellation).unwrap(),
+        ConstraintVerdict::Satisfied
+    );
+    assert_eq!(baseline.statistics().substitutions, 2);
+    assert!(baseline.statistics().scalar_bytes > 0);
+    let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
+        max_substitutions: 1,
+        ..Default::default()
+    });
+    let mut checker = owner
+        .checker_with_allowance(&allowance, &cancellation)
+        .unwrap();
+    let failure = checker.check(&candidate, &cancellation).unwrap_err();
+    assert!(
+        matches!(failure.cause, ConstraintCheckCause::Source(ref error)
+            if matches!(error.as_ref(), FormulaFailure::Limit {
+                resource: FormulaResource::Substitutions, limit: 1, observed: 2, ..
+            })
+        )
+    );
+    assert_eq!(failure.statistics.substitutions, 1);
+    assert!(failure.statistics.scalar_bytes > 0);
+    assert_eq!(allowance.statistics(), failure.statistics);
+    assert_eq!(checker.statistics(), failure.statistics);
 }

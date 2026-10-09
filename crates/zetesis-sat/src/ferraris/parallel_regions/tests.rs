@@ -50,11 +50,11 @@ fn shared_narrowing_never_executes_an_unleased_read() {
     let result = super::super::regions::narrow(
         (&theory, &narrower, None),
         &Conditions::<(Theory, Narrower)>::default(),
-        &mut region,
-        &mut knowledge,
+        (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
+        None,
     );
     assert!(matches!(result, Err(Incomplete::WorkLimit)));
     assert_eq!(

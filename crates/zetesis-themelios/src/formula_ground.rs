@@ -127,15 +127,9 @@ pub(crate) fn ground(
         .map(|grounded| grounded.compiled)
 }
 
-/// The hybrid schedule's capability restrictions: no objectives, indexed joins.
+/// The hybrid schedule requires indexed joins.
 fn hybrid_supported(preparation: &crate::formula::Preparation) -> Result<(), FormulaFailure> {
     preparation.budget.poll(preparation.location)?;
-    if let Some(&location) = preparation.program.objective_declarations.first() {
-        return Err(FormulaFailure::HybridUnsupported {
-            feature: crate::HybridFeature::Objectives,
-            location,
-        });
-    }
     if preparation.options.joins != crate::JoinStrategy::Indexed {
         return Err(FormulaFailure::HybridUnsupported {
             feature: crate::HybridFeature::TableJoins,

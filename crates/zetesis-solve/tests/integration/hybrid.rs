@@ -194,7 +194,7 @@ fn streamed_constraints_preserve_the_complete_family() {
 }
 
 #[test]
-fn region_refutation_avoids_rejected_core_membership() {
+fn source_consequences_avoid_rejected_core_membership() {
     let admitted = hybrid(MONOTONE, &limits());
     for workers in [1, 4] {
         let config = SolveConfig {
@@ -210,11 +210,14 @@ fn region_refutation_avoids_rejected_core_membership() {
         assert_eq!(statistics.pending, 0);
         let search = outcome.countermodel_statistics().unwrap();
         let regions = search.region_filter.unwrap();
-        assert!(regions.refuted > 0);
-        assert!(regions.checks >= regions.refuted);
+        // Source consequences exclude the forbidden combinations before they
+        // form a region with a true constraint body, or a complete proposal.
+        assert_eq!(regions.refuted, 0);
+        assert!(regions.checks > 0);
         assert_eq!(regions.failed, 0);
         assert!(!regions.overflowed);
-        assert!(search.candidates < 64);
+        assert_eq!(search.candidates, 7);
+        assert_eq!(search.search.decisions, 6);
     }
 }
 

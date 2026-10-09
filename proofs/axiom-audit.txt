@@ -1377,6 +1377,7 @@
 'Zetesis.SourceMeasures.invariant_carrier' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.possible_extension' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.source_priority_presence' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceMeasures.count_carrier_membership' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceSupport.unchanged_round_closed' does not depend on any axioms
 'Zetesis.SourceSupport.stages_inside_closed' does not depend on any axioms
 'Zetesis.SourceSupport.stable_inside_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1385,6 +1386,41 @@
 'Zetesis.StorageOwners.active_storage_within_limit' depends on axioms: [propext, Quot.sound]
 'Zetesis.StorageOwners.sum_within_component_bounds' depends on axioms: [propext, Quot.sound]
 'Zetesis.StorageOwners.shared_idle_active_within_limit' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.body_satisfied' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.contains_of_inside' does not depend on any axioms
+'Zetesis.StreamedConsequences.fresh_not_sure' depends on axioms: [propext]
+'Zetesis.StreamedConsequences.aliased_open_occurrence_blocks' depends on axioms: [propext]
+'Zetesis.StreamedConsequences.all_true_refutes' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.unit_literal_false' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.unit_negative_holds' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.unit_positive_cuts' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.unit_double_negative_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.falsify_inside' does not depend on any axioms
+'Zetesis.StreamedConsequences.contains_falsify' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.unit_preserves_models' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.unit_preserves_answers' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.unit_survives_narrowing' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.unit_snapshot_consequence' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.snapshot_consequence_survives' does not depend on any axioms
+'Zetesis.StreamedConsequences.contains_falsify_batch' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.batch_preserves_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.batch_prefix_preserves_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.batch_preserves_answers' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.literal_sure_unchanged' depends on axioms: [propext]
+'Zetesis.StreamedConsequences.unit_body_unchanged' depends on axioms: [propext]
+'Zetesis.StreamedConsequences.consequence_unchanged' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.completed_template_unchanged' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.fresh_of_inside' does not depend on any axioms
+'Zetesis.StreamedConsequences.falsify_not_fresh' depends on axioms: [propext]
+'Zetesis.StreamedConsequences.open_count_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.falsify_decreases_open' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.steps_preserve' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.steps_bounded' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.no_unbounded_steps' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.no_unit_can_hide_violation' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.pending_after_decision_retains_answer' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.StreamedConstraints.clear_append' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConstraints.clear_permutation' depends on axioms: [propext]
 'Zetesis.StreamedConstraints.scan_preserves' depends on axioms: [propext, Quot.sound]
@@ -1396,6 +1432,7 @@
 'Zetesis.StreamedConstraints.clear_iff_models' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConstraints.stable_iff_completed_partition' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedConstraints.pending_can_hide_violation' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedOptimization.completed_ties_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedRegions.sure_antecedent_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedRegions.held_body_satisfied' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedRegions.necessary_selection_preserves_witness' depends on axioms: [propext]

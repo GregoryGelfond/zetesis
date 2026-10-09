@@ -49,7 +49,9 @@ pub mod relation;
 
 pub use argument_unification::{UnificationError, UnificationFailure};
 pub use atom_key::{AtomKey, BindingView};
-pub use atom_lookup::{AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows, CatalogIndex};
+pub use atom_lookup::{
+    AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows, CatalogIndex, PredicateLookup,
+};
 pub use candidate::{
     GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, GateIndexFailure, Seed,
     SeedAtom, SeedAtoms, SeedError, SeedSelection, SeedSelectionError, SeedView,

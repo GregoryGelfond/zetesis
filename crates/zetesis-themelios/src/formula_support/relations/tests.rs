@@ -568,6 +568,7 @@ fn shared_probe_refusal_preserves_its_dictionary_prefix() {
     // Predicate resolution now precedes the key and dictionary probes.
     // Every admitted prefix reaches the shared receipt exactly.
     assert_eq!(counters.accounting.work, 2);
+    counters.accounting.settle();
     assert_eq!(allowance.statistics().work, 2);
 }
 
@@ -599,6 +600,7 @@ fn shared_probe_matches_local_execution() {
         .unwrap();
     assert_eq!(actual, expected);
     assert_eq!(shared.accounting.work, local.accounting.work);
+    shared.accounting.settle();
     assert_eq!(allowance.statistics().work, local.accounting.work);
 }
 

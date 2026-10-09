@@ -222,6 +222,7 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::ClosedEnumerator
         | E::LateCertificate
         | E::RegionFilter
+        | E::InvalidRegionConsequence
         | E::RegionFilterUnsupported
         | E::LateRegionFilter
         | E::RegionFilterAlreadySet

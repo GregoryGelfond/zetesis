@@ -280,14 +280,13 @@ fn computed_fixture(source: &str) -> (CompletedCatalog, crate::formula_ir::Prepa
 }
 
 fn values(
-    row: &super::super::Row<'_>,
+    binding: &Binding<'_>,
     computation: &Computation<'_, '_>,
     location: ProgramSite,
 ) -> Vec<i32> {
-    (0..row.values.len())
+    (0..binding.len())
         .map(|slot| {
-            match row
-                .values
+            match binding
                 .read(slot, computation.read(), location)
                 .unwrap()
                 .descriptor()
@@ -349,7 +348,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
             .unwrap()
         {
             if row.passes {
-                actual.push(values(&row, &computation, rule.location));
+                actual.push(values(&row.values, &computation, rule.location));
             }
         }
         let borrowed_work = counters.accounting.work - before;
@@ -385,7 +384,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
             .unwrap()
         {
             if row.passes {
-                expected.push(values(&row, &computation, rule.location));
+                expected.push(values(&row.values, &computation, rule.location));
             }
         }
         assert_eq!(actual, vec![vec![4, 2], vec![5, 2]]);

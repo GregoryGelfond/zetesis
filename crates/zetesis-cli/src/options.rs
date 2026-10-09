@@ -53,8 +53,9 @@ pub struct Options {
     /// `eager` instantiates every rule before solving. `lazy` instantiates on
     /// demand: relational source joins on CPU or GPU, or, for formula inputs on
     /// the CPU, a producer core with eligible constraints streamed and terminal
-    /// definitions (derived predicates nothing reads) reconstructed per answer;
-    /// objectives and table joins are refused. `auto` admits relational source
+    /// definitions (derived predicates nothing reads) reconstructed per answer.
+    /// Objectives require complete constraint checks before scoring and disable
+    /// terminal deferral. Table joins are refused. `auto` admits relational source
     /// joins where it can, else instantiates an eager base and defers terminal
     /// definitions. Formula GPU execution needs an eager base. Grounding limits
     /// still apply.

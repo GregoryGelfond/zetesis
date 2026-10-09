@@ -32,6 +32,11 @@ so repeated arguments and variable positions retain their meaning. An empty
 support relation may coexist with a nonempty vocabulary. Neither term admission
 nor a compiled pattern asserts an atom's truth.
 
+A variable binding retains its vocabulary identity once. Reading a bound value
+borrows that vocabulary directly and checks the slot and readable term prefix;
+it does not acquire another owning handle for the duration of the read. Values
+that must survive a reader or a mutable computation still use scoped owned keys.
+
 Construct canonical programs through `zetesis`: macros let you write ASP
 directly, while typed constructors suit larger applications that compose
 programs from data and reusable components. Both produce the same
@@ -418,8 +423,10 @@ and every other relation are released at admission. Closing is charged as
 formula work, and its transient peak is admitted against `max_support_bytes`. Producers and constraints with aggregates,
 projected atoms or conditional scopes remain in `core_theory()`. Ordinary
 atom/scalar integrity constraints retain their prepared templates instead of
-complete formula DAGs. This first schedule requires indexed joins and refuses
-objective programs explicitly. The existing `ground()` methods remain eager.
+complete formula DAGs. This schedule requires indexed joins. Objective programs
+are prepared by the same operation as eager grounding; solving checks the
+original constraints before scoring an answer. The existing `ground()` methods
+remain eager.
 
 Use `PreparedInput::hybrid(&owner)` for solving. A core answer is only a proposal:
 the session checks the retained constraints before returning an answer of the
@@ -445,19 +452,70 @@ same core, on any thread, borrows it for one unit of work and pairs the
 positions with its own occurrence maps in work proportional to the number of
 kept predicates. Checkers racing on a first use may each build, and one result
 is kept; a refused build keeps nothing. Each checker's support ledger counts the
-shared structures' retained bytes, as it counts the shared support base. Region checks select known-held
-positive rows before binding, while retaining rows without a known correspondence.
+shared structures' retained bytes, as it counts the shared support base.
+Region checks select known-held positive rows before binding, while retaining
+rows without a known correspondence. Each join authenticates a joined positive
+literal's exact source occurrence map once and reuses it across backtracking.
+Subsequent rows use their original source positions in the existing dense-ID map
+and read the current region's held bits; equal atom contents do not establish
+that mapping.
 A necessary signed-predicate test can avoid a template that cannot have a sure
-body. Neither operation changes the final full-model check or arithmetic admission.
+body. Before its first region predicate test, each rule prepares windows for all
+its original atom occurrences. Region selection reuses their original-row windows and reads current
+truth; body checks use their canonical key windows. The exact body slice
+authenticates the association; a different body uses the ordinary full-index path.
+Final model checks use the model's selected
+lookup, independently of prepared region metadata. These borrowed windows retain
+no bindings or truth. Their preparation and retained capacity are charged, so
+bounded-work prefixes can differ. Arithmetic admission is unchanged.
 The method checks the coordinate convention, not the origin
 of an arbitrary caller-created region. Use it only to restrict original
 candidates, never to evaluate their frozen reducts.
 
+`consequence_region` can additionally return `Hold { atom, site }` or
+`Cut { atom, site }` for one open atom forced by a scalar-passing original
+constraint. `ConstraintRegionPass::First` begins a candidate closure;
+`Continue` spends the same allowance after that decision and ordinary formula
+propagation. `NoConsequence` and `Refuted { site }` finish the closure. Continuing
+without an active closure is a typed error. A returned decision applies only to
+the supplied region or a narrowing of it. The exact theory and the final original
+and reduct acceptance checks remain unchanged.
+For constraints containing only atom patterns, comparisons and admitted
+constructor assignments, the checker can collect several deductions from one
+rule against the same region. It still returns one deduction per call, allowing
+ordinary formula propagation between them. Reuse checks both held and cut masks;
+an unrelated region discards the saved deductions without renewing the allowance.
+A completed scan that found no deduction can be skipped until a predicate it
+reads changes. Changes from ordinary propagation count too. Successful
+`NoConsequence` settles the finished allowance while retaining that completed
+scan evidence. The next `First` gets a new allowance and may reuse the evidence
+after checking both decision masks; a sibling or reopened decision invalidates
+it. Errors, refutations, ordinary checks and abandoned productive batches also
+invalidate candidate evidence. Productive or interrupted scans do not establish
+a reusable negative result.
+
+For eligible nongenerated bindings, one join enumerates prefixes with at most
+one mapped open positive occurrence. The remaining mapped positives must be
+held; unmapped rows retain ordinary checks and prevent a truth loan. Generated
+bindings and arithmetic outside this fragment retain the separate query modes.
+The arithmetic fallback preserves its existing failure order.
+Traversal and batching can change order and resource-limited prefixes; neither
+changes the original satisfaction or reduct checks.
+
+The core shares immutable signed-predicate dependencies and original atom-group
+coordinates. Each checker admits the complete mapping's retained bytes once,
+even when its mutable state must be discarded and recreated. First-use races
+can build independently; only a completed mapping is published. Masks, dirty
+flags and pending deductions remain local and use accounted support storage.
+No ground-constraint table is retained.
+Multiple open occurrences remaining after normalization are conservatively
+left undecided.
+
 Support dictionaries and equality indexes are reused. Ordinary joins lend their
 current binding; generators retain their existing owned-row requirements.
 Prepared constraint plans borrow the immutable source components. Each checker
-owns its traversal and query workspace, so retaining a plan retains no candidate
-state or mutable workspace from another checker.
+owns its traversal, query workspace and closure-local deductions. Prepared plans
+contain no candidate truth, and no mutable workspace is shared between checkers.
 Candidate truth uses borrowed typed atom keys, with no temporary formula DAG or
 copied atom per instance. Original source-family arithmetic validation completes
 before the hybrid owner is returned, independently of later candidate truth.
@@ -468,7 +526,9 @@ Hybrid admission preserves its original expansion-budget prefix. It also keeps
 prepared constraint plans and the support relations they read, which eager
 grounding can release after emission, and, once a region check has used them,
 the core's typed atom index (two integer orders over the core's atoms) and the
-kept support rows' positions in it. The existing source, scalar and support ceilings still apply;
+kept support rows' positions in it, together with the immutable dependency
+mapping once consequence checking needs it. The existing source, scalar and
+support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
 atom guards. `streamed_templates()` counts lowered templates, including pool
@@ -480,15 +540,20 @@ byte allowance for structural capture-delta capacity growth within each join:
 the first check's allowance also
 covers the checker's preparation, and each later check is measured from the
 charges accepted when the previous one ended. The limits bound the work spent
-on one candidate, never the number of candidates. A refusal reports the check's
+on one candidate, never the number of candidates. A consequence closure shares
+these limits across every continuation, including its final scan. A refusal reports the check's
 own allowance as its limit. ID-only copies and lookups do not consume the byte
 allowance.
 For parallel composition, create `ConstraintAllowance::new(limits)` and
 use `checker_with_allowance(&allowance, &cancellation)` for every worker and final
 checker. Each check of each checker gets `limits`; the clones share one
 cumulative receipt of every accepted charge, and no limit is multiplied by the
-worker count. `allowance.statistics()` is exact after those workers join;
-live fields are independently observed monotone counters. Snapshot descriptors
+worker count. Preparation and checks publish accepted charges when they return,
+fail or unwind; dropping a checker also publishes any pending charges.
+`allowance.statistics()` is exact after all operations settle or workers join.
+During a running check its fields are independently observed monotone lower
+bounds and can omit in-flight charges. Check-local and failure receipts remain
+exact. These publication boundaries change no ceiling or cancellation poll. Snapshot descriptors
 are prepared once per checker, without copying support rows; per-operation
 binding/storage ceilings remain those of the admitted source. A new checker
 starts its own local receipt; a supplied shared allowance continues across

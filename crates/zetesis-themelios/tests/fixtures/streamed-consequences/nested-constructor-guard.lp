@@ -1,0 +1,1 @@
+{holds_at(at(p,left),0)}. :-holds_at(at(P,left),T),T!=1.

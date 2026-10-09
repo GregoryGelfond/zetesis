@@ -78,20 +78,18 @@ impl<'a> Scratch<'a> {
             )?;
             for column in 0..terms.len() {
                 work.counters.work(work.limits, work.location)?;
-                let key = match terms.at(column).expect("admitted pattern column") {
-                    TemplateTerm::Constant(value) => {
-                        Some(computation.read().term_key(value).map_err(|error| {
-                            crate::formula_binding::assignment(error.into(), work.location)
-                        })?)
-                    }
+                match terms.at(column).expect("admitted pattern column") {
+                    TemplateTerm::Constant(value) => self.arguments.set_term_with(
+                        column,
+                        value,
+                        computation.read(),
+                        work.location,
+                        || work.counters.work(work.limits, work.location),
+                    )?,
                     TemplateTerm::Variable(slot) if incoming.is_bound(slot, work.location)? => {
-                        Some(incoming.key(slot, work.location)?)
+                        self.arguments.copy_slot(column, incoming, slot, work)?;
                     }
-                    TemplateTerm::Variable(_) => None,
-                };
-                if let Some(key) = key {
-                    self.arguments
-                        .set(column, &key, work.limits, work.counters, work.location)?;
+                    TemplateTerm::Variable(_) => {}
                 }
             }
         }

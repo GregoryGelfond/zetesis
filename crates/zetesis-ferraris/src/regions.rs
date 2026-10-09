@@ -161,6 +161,9 @@ pub struct Producers {
     by_head: Adjacency,
     /// The producers whose body is this node.
     by_body: Adjacency,
+    /// Some extracted producer has at least two distinct heads. When false, holding a
+    /// head cannot invalidate any other head's support.
+    has_competing_heads: bool,
 }
 
 /// The outcome of extracting a theory's producers.
@@ -221,6 +224,7 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
         });
     }
     let mut rules = Vec::new();
+    let mut has_competing_heads = false;
     for &root in theory.roots() {
         work.tick()?;
         let (body, head) = match nodes.node(root).map_err(|_| Stop::InvalidProgram)? {
@@ -257,6 +261,7 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
         } else {
             return Ok(None);
         };
+        has_competing_heads |= heads.len() > 1;
         rules.push(Producer {
             body,
             heads,
@@ -281,6 +286,7 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
         rules,
         by_head,
         by_body,
+        has_competing_heads,
     }))
 }
 
@@ -573,9 +579,31 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// or from a region not enclosing it, is unsound, and nothing checks it.
 /// The proposers keep the invariant by carrying each region's knowledge
 /// from its parent and by narrowing with the narrower that made it.
-#[derive(Clone, Debug)]
+///
+/// Cloning owns an independent copy. [`Clone::clone_from`] overwrites every
+/// field, reusing equal-length arrays at the same counter width. The
+/// destination's previous knowledge contributes no authority; the source's
+/// narrowing preconditions still apply. Changed lengths or widths use fresh
+/// storage, with the same infallible allocation boundary as [`Clone::clone`].
+#[derive(Debug)]
 pub struct Knowledge {
     width: Width,
+}
+
+impl Clone for Knowledge {
+    fn clone(&self) -> Self {
+        Self {
+            width: self.width.clone(),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        match (&mut self.width, &source.width) {
+            (Width::Compact(destination), Width::Compact(source)) => destination.clone_from(source),
+            (Width::Native(destination), Width::Native(source)) => destination.clone_from(source),
+            (destination, source) => destination.clone_from(source),
+        }
+    }
 }
 
 /// The knowledge at the counter width chosen when it was created: the
@@ -1071,7 +1099,7 @@ fn most_constrained<C: Count>(
 /// learns something is revisited once, and only its parents, operands and
 /// dependent producers are read, a chain learning from an operand by one
 /// counter step.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Known<C> {
     sure: Box<[u64]>,
     never: Box<[u64]>,
@@ -1091,6 +1119,34 @@ struct Known<C> {
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
+}
+
+impl<C: Clone> Clone for Known<C> {
+    fn clone(&self) -> Self {
+        Self {
+            sure: self.sure.clone(),
+            never: self.never.clone(),
+            atom_sure: self.atom_sure.clone(),
+            atom_never: self.atom_never.clone(),
+            sure_operands: self.sure_operands.clone(),
+            never_operands: self.never_operands.clone(),
+            unknown: self.unknown.clone(),
+            seen: self.seen.clone(),
+            seeded: self.seeded,
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.sure.clone_from(&source.sure);
+        self.never.clone_from(&source.never);
+        self.atom_sure.clone_from(&source.atom_sure);
+        self.atom_never.clone_from(&source.atom_never);
+        self.sure_operands.clone_from(&source.sure_operands);
+        self.never_operands.clone_from(&source.never_operands);
+        self.unknown.clone_from(&source.unknown);
+        self.seen.clone_from(&source.seen);
+        self.seeded = source.seeded;
+    }
 }
 
 /// The worklists of a narrowing: what a closure has learned and must still
@@ -1359,7 +1415,11 @@ impl<C: Count> Closure<'_, C> {
     /// again, since what it leaves them may have narrowed. A node false
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
-    /// parent under the mask likewise.
+    /// parent under the mask likewise. A newly false body wakes its heads
+    /// here, once for its false-node event. All node events run before support
+    /// rechecks, so repeated teaching of a known parent needs no body scan.
+    /// Closed inherited knowledge already completed these wakeups; a refused
+    /// closure is abandoned with its pending events.
     fn revisit(
         &mut self,
         subject: Subject<'_>,
@@ -1378,6 +1438,13 @@ impl<C: Count> Closure<'_, C> {
         let mut step = Step::Unchanged;
         if !masked(node) {
             step = step.join(self.teach_operands(subject, index, node, work)?);
+            if !value && let Some(producers) = subject.producers {
+                for &producer in &producers.by_body[node] {
+                    for &head in &producers.rules[producer].heads {
+                        self.lists.queue_recheck(head);
+                    }
+                }
+            }
         }
         for &parent in &index.parents[node] {
             work.tick()?;
@@ -1387,12 +1454,7 @@ impl<C: Count> Closure<'_, C> {
             step = step.join(if let Some(chain) = index.chain_of[parent] {
                 self.operand_changed(index, chain_position(chain), value, work)?
             } else {
-                let up = self.learn_from_operands(nodes, parent);
-                if bit(&self.known.sure, parent) || bit(&self.known.never, parent) {
-                    up.join(self.teach_operands(subject, index, parent, work)?)
-                } else {
-                    up
-                }
+                self.revisit_implication(nodes, parent)
             });
         }
         Ok(step)
@@ -1443,8 +1505,10 @@ impl<C: Count> Closure<'_, C> {
     /// The one operand of a chain not yet known learns what the chain's
     /// own knowledge leaves it: to hold, in a disjunction known to hold
     /// whose others fail; to fail, in a conjunction known to fail whose
-    /// others hold. The operands are scanned once for it; a node's bit is
-    /// set when it learns and counted when it is revisited, so the scan
+    /// others hold. A counted witness already at the required polarity
+    /// makes the scan redundant. Otherwise the operands are scanned once;
+    /// a node's bit is set when it learns and counted when it is revisited,
+    /// so the scan
     /// may find none, every operand being known with one count pending,
     /// and then the pending step decides the chain.
     fn unit(&mut self, index: &Narrower, chain: usize, work: &mut Work<'_>) -> Result<Step, Stop> {
@@ -1453,6 +1517,17 @@ impl<C: Count> Closure<'_, C> {
             ref operands,
             ..
         } = index.chains[chain];
+        // Callers have counted all but one operand at the opposite polarity.
+        // A processed witness is therefore the sole possible target, already
+        // known as required. Bits precede their events, but counts never do.
+        let witnessed = if disjunction {
+            self.known.sure_operands.get(chain) != 0
+        } else {
+            self.known.never_operands.get(chain) != 0
+        };
+        if witnessed {
+            return Ok(Step::Unchanged);
+        }
         for &operand in operands {
             work.tick()?;
             let open = if disjunction {
@@ -1471,9 +1546,8 @@ impl<C: Count> Closure<'_, C> {
         Ok(Step::Unchanged)
     }
 
-    /// A known node teaches its operands what its knowledge leaves them,
-    /// tells its atom, and, when it is a body that fails, has the
-    /// producers' heads rechecked. A chain known to hold forces its one
+    /// A known node teaches its operands what its knowledge leaves them and
+    /// tells its atom. A chain known to hold forces its one
     /// open operand (disjunction) or every operand (conjunction); known to
     /// fail, every operand (disjunction) or its one open operand
     /// (conjunction).
@@ -1490,15 +1564,19 @@ impl<C: Count> Closure<'_, C> {
             frozen,
         } = subject;
         let nodes = theory.view();
-        let mut step = Step::Unchanged;
         if let Some(chain) = index.chain_of[node] {
-            step = step.join(self.teach_chain(index, chain_position(chain), work)?);
+            // A chain link identifies an And/Or root. Its complete downward
+            // rule is the chain's; the generic connective arms teach nothing.
+            return self.teach_chain(index, chain_position(chain), work);
         }
-        if bit(&self.known.sure, node) {
-            step = step.join(match nodes.node(node).expect("admitted node") {
-                NodeView::Atom(atom) => {
+        Ok(match nodes.node(node).expect("admitted node") {
+            NodeView::Atom(atom) => {
+                let mut step = Step::Unchanged;
+                if bit(&self.known.sure, node) {
                     // A held head blocks the other heads of its producers.
-                    if let Some(producers) = producers {
+                    if let Some(producers) = producers
+                        && producers.has_competing_heads
+                    {
                         for &producer in &producers.by_head[atom] {
                             for &head in &producers.rules[producer].heads {
                                 if head != atom {
@@ -1507,36 +1585,36 @@ impl<C: Count> Closure<'_, C> {
                             }
                         }
                     }
-                    self.atom(index, producers, frozen, atom, true)
+                    step = step.join(self.atom(index, producers, frozen, atom, true));
                 }
-                NodeView::False => Step::Contradiction,
-                NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
-                NodeView::Implies(a, b) => {
-                    if bit(&self.known.sure, a) {
-                        self.sure(b)
-                    } else if bit(&self.known.never, b) {
-                        self.never(a)
-                    } else {
-                        Step::Unchanged
-                    }
+                if bit(&self.known.never, node) {
+                    step = step.join(self.atom(index, producers, frozen, atom, false));
                 }
+                step
+            }
+            NodeView::False if bit(&self.known.sure, node) => Step::Contradiction,
+            NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
+            NodeView::Implies(a, b) => self.teach_implication(node, a, b),
+        })
+    }
+
+    /// The same downward implication rules serve a node's own event and a
+    /// known parent's response to an operand. Neither adds a charged visit.
+    fn teach_implication(&mut self, node: usize, a: usize, b: usize) -> Step {
+        let mut step = Step::Unchanged;
+        if bit(&self.known.sure, node) {
+            step = step.join(if bit(&self.known.sure, a) {
+                self.sure(b)
+            } else if bit(&self.known.never, b) {
+                self.never(a)
+            } else {
+                Step::Unchanged
             });
         }
         if bit(&self.known.never, node) {
-            step = step.join(match nodes.node(node).expect("admitted node") {
-                NodeView::Atom(atom) => self.atom(index, producers, frozen, atom, false),
-                NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
-                NodeView::Implies(a, b) => self.sure(a).join(self.never(b)),
-            });
-            if let Some(producers) = producers {
-                for &producer in &producers.by_body[node] {
-                    for &head in &producers.rules[producer].heads {
-                        self.lists.queue_recheck(head);
-                    }
-                }
-            }
+            step = step.join(self.sure(a).join(self.never(b)));
         }
-        Ok(step)
+        step
     }
 
     /// What a chain's own knowledge leaves its operands.
@@ -1578,24 +1656,27 @@ impl<C: Count> Closure<'_, C> {
         Ok(step)
     }
 
-    /// An implication learns from its operands what the connective
-    /// dictates; chains learn by their counters.
-    fn learn_from_operands(&mut self, nodes: FormulaView<'_>, node: usize) -> Step {
-        match nodes.node(node).expect("admitted node") {
-            NodeView::Implies(a, b) => {
-                let mut up = Step::Unchanged;
-                if bit(&self.known.never, a) || bit(&self.known.sure, b) {
-                    up = up.join(self.sure(node));
-                }
-                if bit(&self.known.sure, a) && bit(&self.known.never, b) {
-                    up = up.join(self.never(node));
-                }
-                up
-            }
-            NodeView::Atom(_) | NodeView::False | NodeView::And(..) | NodeView::Or(..) => {
-                Step::Unchanged
+    /// A non-chain parent in `dependencies` is an implication. Decode it
+    /// once, learn upward first, then teach with the parent's resulting state.
+    /// A newly learned parent still has its own queued event and wakeups.
+    fn revisit_implication(&mut self, nodes: FormulaView<'_>, node: usize) -> Step {
+        let NodeView::Implies(a, b) = nodes.node(node).expect("admitted node") else {
+            unreachable!("a non-chain parent is an implication");
+        };
+        let mut up = Step::Unchanged;
+        if bit(&self.known.never, a) || bit(&self.known.sure, b) {
+            up = up.join(self.sure(node));
+            // A satisfied implication teaches no new operand truth. Its own
+            // event remains queued if the parent just became known. A false
+            // parent still follows the complete contradictory teaching path.
+            if up != Step::Contradiction {
+                return up;
             }
         }
+        if bit(&self.known.sure, a) && bit(&self.known.never, b) {
+            up = up.join(self.never(node));
+        }
+        up.join(self.teach_implication(node, a, b))
     }
 
     /// An atom none of its producers can support is known to fail, and an
@@ -1603,7 +1684,12 @@ impl<C: Count> Closure<'_, C> {
     /// forces that producer's body (`unsupported_cut`,
     /// `sole_support_forces`). A producer can support its atom when its
     /// body is not known to fail and, unless it is a choice, no other of
-    /// its heads is known to hold.
+    /// its heads is known to hold. An open atom needs only one possible
+    /// supporter to remain open; a held atom with two cannot force a sole
+    /// body. Stop at those witnesses and charge only visited producers.
+    /// Conclusions of no or sole support still require the complete scan.
+    /// Later body failure, a competing held head or this atom becoming held
+    /// queues a fresh recheck; no witness is retained between closures.
     fn recheck(
         &mut self,
         index: &Narrower,
@@ -1614,6 +1700,7 @@ impl<C: Count> Closure<'_, C> {
         if bit(&self.known.atom_never, atom) {
             return Ok(Step::Unchanged);
         }
+        let held = bit(&self.known.atom_sure, atom);
         let mut supporters = 0;
         let mut sole = None;
         for &producer in &producers.by_head[atom] {
@@ -1629,12 +1716,15 @@ impl<C: Count> Closure<'_, C> {
                     .any(|&head| head != atom && bit(&self.known.atom_sure, head));
             if !body_impossible && !other_held {
                 supporters += 1;
+                if !held || supporters == 2 {
+                    return Ok(Step::Unchanged);
+                }
                 sole = producer.body;
             }
         }
         Ok(match (supporters, sole) {
             (0, _) => self.atom(index, Some(producers), None, atom, false),
-            (1, Some(body)) if bit(&self.known.atom_sure, atom) => self.sure(body),
+            (1, Some(body)) if held => self.sure(body),
             _ => Step::Unchanged,
         })
     }

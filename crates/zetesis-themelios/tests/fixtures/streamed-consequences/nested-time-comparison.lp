@@ -1,0 +1,1 @@
+{selected(m,stage(0),1)}. :-selected(M,stage(T),Start),Start!=T.

@@ -6,6 +6,7 @@ mod closure_receipts;
 mod closure_reservation;
 mod failures;
 mod hybrid;
+mod hybrid_objectives;
 mod language_consumers;
 mod lazy_terminal_sessions;
 mod measurements;

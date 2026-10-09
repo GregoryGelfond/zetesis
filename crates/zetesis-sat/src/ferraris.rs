@@ -678,7 +678,7 @@ impl StableModels {
     }
 
     /// Install a caller-owned original-program condition before traversal.
-    /// Certificates may already be prepared. The filter can only refute
+    /// Certificates may already be prepared. The filter can narrow or refute
     /// candidate regions; it never participates in frozen-reduct queries.
     /// Exhaustion then covers the family allowed by this filter as well as
     /// explicit candidate restrictions. See [`crate::RegionFilter`] for the

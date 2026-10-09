@@ -117,11 +117,11 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
                     search.shared.producers.as_ref(),
                 ),
                 &conditions,
-                region,
-                knowledge,
+                (region, knowledge),
                 &mut zetesis_ferraris::NarrowingScratch::default(),
                 &mut budget,
                 &mut report.regions,
+                None,
             )
             .unwrap(),
             Narrowing::Refuted,
@@ -145,6 +145,97 @@ fn find_work_steals_a_peer_region_then_reports_done_at_quiescence() {
     // outstanding: the frontier is resolved.
     search.shared.termination.resolve();
     assert!(find_work(&search.shared, 1, IDLE_WAIT).is_none());
+}
+
+#[test]
+fn a_split_overwrites_retired_knowledge() {
+    use zetesis_ferraris::Node;
+    use zetesis_theory_support::theories::theory;
+
+    let (search, original) = search_atoms(2, 2);
+    let mut workspaces = Workspaces::new();
+    let mut report = report();
+    let mut budget = budget(&search.shared);
+    let root = search.shared.take_local(0).unwrap();
+    assert!(matches!(
+        step(
+            &search.shared,
+            &original,
+            root,
+            0,
+            &mut workspaces,
+            &mut budget,
+            &mut report,
+        )
+        .unwrap(),
+        Stepped::Split
+    ));
+    // The cut child becomes contradictory after a new permanent restriction.
+    let restriction = theory(2, vec![Node::atom(0)], vec![0]);
+    let narrower = Narrower::new(&restriction);
+    search
+        .shared
+        .restrictions
+        .write()
+        .unwrap()
+        .permanent
+        .push(Arc::new((restriction, narrower)));
+    let cut = search.shared.take_local(0).unwrap();
+    assert!(cut.0.is_cut(0));
+    assert!(matches!(
+        step(
+            &search.shared,
+            &original,
+            cut,
+            0,
+            &mut workspaces,
+            &mut budget,
+            &mut report,
+        )
+        .unwrap(),
+        Stepped::Resolved(None)
+    ));
+    search.shared.termination.resolve();
+    assert!(workspaces.retired_knowledge.is_some());
+
+    let held = search.shared.take_local(0).unwrap();
+    assert!(held.0.is_held(0));
+    assert!(matches!(
+        step(
+            &search.shared,
+            &original,
+            held,
+            0,
+            &mut workspaces,
+            &mut budget,
+            &mut report,
+        )
+        .unwrap(),
+        Stepped::Split
+    ));
+    assert!(workspaces.retired_knowledge.is_none());
+    // Both children must reach membership checking. Reusing the contradictory
+    // conclusions would instead refute the copied child during narrowing.
+    for _ in 0..2 {
+        let child = search.shared.take_local(0).unwrap();
+        assert!(matches!(
+            step(
+                &search.shared,
+                &original,
+                child,
+                0,
+                &mut workspaces,
+                &mut budget,
+                &mut report,
+            )
+            .unwrap(),
+            Stepped::Resolved(_)
+        ));
+        search.shared.termination.resolve();
+    }
+    assert_eq!(report.regions.leaves, 2);
+    assert_eq!(report.regions.refuted, 1);
+    assert_eq!(outstanding(&search.shared), 0);
 }
 
 #[test]

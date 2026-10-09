@@ -86,11 +86,11 @@ fn closed(
     let result = narrow(
         (&original, &narrower, None),
         conditions,
-        &mut region,
-        &mut CandidateKnowledge::default(),
+        (&mut region, &mut CandidateKnowledge::default()),
         &mut NarrowingScratch::default(),
         &mut budget,
         &mut counts,
+        None,
     );
     (result, region, counts, budget.statistics.work)
 }

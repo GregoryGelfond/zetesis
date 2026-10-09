@@ -60,6 +60,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         if let Some(previous) = self.final_outcome.take() {
             let mut outcome = self.snapshot(phases);
             outcome.search_state = previous.search_state;
+            // Completion already moved these models into the delivery queue.
+            // Joining workers refreshes search receipts, not retained evidence.
+            outcome.retained = previous.retained;
             self.final_outcome = Some(outcome);
         }
         result
@@ -242,7 +245,27 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         cancellation: &Cancellation,
         phases: &Recorder,
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
-        let next = self.next_result(config, observations, cancellation, phases);
+        self.next_with_acceptance(config, observations, cancellation, phases, &mut |_| {
+            Ok(true)
+        })
+    }
+
+    /// Qualify each newly constructed model before scoring, retention or bound
+    /// feedback. Ordinary formula execution uses a statically specialized
+    /// identity callback. Retained answers bypass this callback.
+    ///
+    /// A callback failure returns before classifying completion: its owner must
+    /// settle shared failures and workers, then call [`Self::conclude`]. It must
+    /// not resume candidate production after that failure.
+    pub(crate) fn next_with_acceptance(
+        &mut self,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+        accept: &mut impl FnMut(&Model) -> Result<bool, SolveError>,
+    ) -> Option<Result<(Model, Option<Score>), SolveError>> {
+        let next = self.next_result(config, observations, cancellation, phases, accept);
         self.import_timings(
             phases,
             self.models
@@ -258,6 +281,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         observations: &mut impl ExecutionSink,
         cancellation: &Cancellation,
         phases: &Recorder,
+        accept: &mut impl FnMut(&Model) -> Result<bool, SolveError>,
     ) -> Option<Result<(Model, Option<Score>), SolveError>> {
         if let Some(error) = self.pending_error.take() {
             return Some(Err(error));
@@ -304,6 +328,11 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     Ok(model) => model,
                     Err(failure) => return self.finish_construction_failure(failure, phases),
                 };
+            match accept(&model) {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(error) => return Some(Err(error)),
+            }
             if !self.input.objectives.is_present() {
                 self.yielded += 1;
                 return Some(Ok((model, None)));
@@ -444,11 +473,28 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         self.next_retained().map(Ok)
     }
 
-    fn next_retained(&mut self) -> Option<(Model, Option<Score>)> {
+    pub(crate) fn next_retained(&mut self) -> Option<(Model, Option<Score>)> {
         self.ready.next().map(|model| {
             let score = self.incumbents.score().cloned();
             (model, score)
         })
+    }
+
+    /// Apply an enclosing acceptance stage's settled classification. The caller
+    /// has joined workers and resolved any shared original-source failure first.
+    /// Reclassification preserves an already draining queue; an unclassified
+    /// fault retains its evidence but publishes no more answers.
+    pub(crate) fn conclude(&mut self, state: Option<SearchState>, phases: &Recorder) {
+        if let Some(outcome) = &mut self.final_outcome {
+            outcome.search_state = state;
+        } else if let Some(state) = state {
+            self.complete(state, phases);
+        } else {
+            self.final_outcome = Some(self.snapshot(phases));
+        }
+        if state.is_none() {
+            self.ready = Vec::new().into_iter();
+        }
     }
 
     fn complete(&mut self, search_state: SearchState, phases: &Recorder) {

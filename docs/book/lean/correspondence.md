@@ -806,7 +806,14 @@ canonical storage identity, which is distinct from ASP term order. Existing
 identity laws explain the denotation; stable merge sorting, binary search,
 lifetimes and their charged failure prefixes remain Rust correspondence
 obligations. Independent scan, shuffled-catalog and work-cutoff tests check
-these concrete boundaries.
+these concrete boundaries. A prepared `PredicateLookup` restricts both existing
+orders to one complete signed predicate and arity. After the query predicate
+matches, argument-only comparison must agree with full-key comparison. Exact
+window bounds, original occurrence order, borrowed ownership and refusal
+propagation are Rust obligations. The region consumer must associate each window
+with the exact source occurrence and read current truth; final model lookup must
+still exclude unselected atoms. No new truth or logical restriction is inferred
+from preparing a window.
 
 `SeedSelections.materialization_exact` shows that ordering and coalescing the
 atom denotations of shared handles preserves their exact true set. Distinct
@@ -1295,6 +1302,14 @@ giving at most `atom_count + 1` live entries per deque. Slot capacity grows
 fallibly as needed and is released after joining, including a partially launched
 worker set. This slot reservation does not make region/knowledge payload cloning
 fallible.
+A native worker may retain one refuted region's knowledge allocation for its
+next split. `Knowledge::clone_from` and `CandidateKnowledge::clone_from` must
+overwrite every logical field from the parent, preserving the same knowledge as
+a fresh clone and independent child ownership. Compatible arrays reuse storage;
+incompatible shapes are replaced. The retained bundle is not a pending region
+and carries no authority to narrow a different region. Complete overwrite,
+allocation independence and the one-bundle retention bound are Rust obligations;
+the frontier laws alone do not establish them.
 An idle worker that observes cancellation or a deadline
 records the typed stop before publishing closure. The coordinator may already
 be waiting after its own control poll; channel disconnection must retain that
@@ -1329,6 +1344,20 @@ retains its charged prefix on refusal and installs no partial preference.
 Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
 the existing laws do not verify these Rust ordering and accounting operations.
+
+An implication parent is decoded once before its upward and downward propagation.
+Both that path and an implication's own event use the same downward rules. A
+chain's indexed operation supplies its complete downward result. These dispatch
+choices preserve the `FormulaBounds` and `FormulaChains` rules; exact Rust queue
+order, contradiction handling, work and interruption prefixes remain refinement
+obligations, exercised by transition and complete-state regressions.
+
+A satisfied implication revisit omits downward teaching only after marking the
+parent true succeeds. A false antecedent or true consequent then makes every
+remaining operand update redundant; the parent's queued event remains. A
+contradictory parent follows the complete existing teaching path. The finite
+state regressions cover distinct and aliased operands, but the concrete Rust
+queue correspondence remains an obligation.
 
 ## Candidate generation and query representation
 
@@ -1371,6 +1400,17 @@ child cloning remain Rust obligations. The cross-word original/frozen
 regressions are executable evidence for those boundaries, not formal refinement.
 Retained-byte accounting includes the owned masks; the full seen-mask scan and
 snapshot writes are outside the existing charged-read work counters.
+
+The last-operand scan in `Closure::unit` can return unchanged when an already
+processed operand witnesses the required polarity: sure for a disjunction,
+never for a conjunction. Its callers have counted every other operand at the
+opposite polarity, so the sole target is already known. The existing
+`FormulaChains.disj_chain_unit` and `conj_chain_unit` laws supply the semantic
+unit rule, not this counter implementation. Rust must establish unique operand
+incidences, counts that never lead their corresponding bits, preserved pending
+events and contradiction handling. A set bit whose event is still pending does
+not alone justify the shortcut. The omitted scan changes charged work and
+resource-limited prefixes; no exact old work count is claimed.
 
 The region candidate walk and frozen proper-subset queries share one
 immutable index constructed with the exact original `Theory`, built by its one
@@ -1545,7 +1585,30 @@ support snapshot. The Rust
 [`structural` probe](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/structural.rs)
 uses the existing term lookup and column postings, then retains the complete
 matcher and source-occurrence delta interval. It writes no incoming slot and
-publishes no term. Partial or anonymous arguments retain the original route.
+publishes no term. This exact-value probe cannot narrow a partially bound or
+anonymous argument.
+
+For captured lazy constraints, the Rust
+[`PatternRows`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/prepared/pattern_rows.rs)
+retains original row positions accepted by the structural matcher with an empty
+incoming binding. [`ConstructorPatterns.acceptance_iff_consistent`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ConstructorPatterns.lean#L173)
+and [`StructuralBindings.matching_complete`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StructuralBindings.lean#L151)
+supply the abstract necessity argument: a successful bound match gives a
+consistent extension, which also extends the empty binding, so additional
+incoming equalities cannot rescue a static mismatch.
+[`DomainBindings.guarded_continuations_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean#L79)
+preserves ordered complete continuations under such a necessary selection;
+[`TableBindings.join_family_preserved`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TableBindings.lean#L161)
+composes unchanged step families. The runtime may choose this posting or a
+smaller existing equality posting, while retaining the full matcher and original
+source atoms. This grants no candidate truth. Correspondence still requires
+complete pattern extraction, constants and aliases, exact occurrence and
+completed-carrier ownership, increasing row positions, and unchanged residual
+scalar and signed-body checks. Preparation runs after source-family capture;
+it cannot replace that validation or suppress its warnings. Fallible matching,
+charged preparation and retained capacity, cancellation, and interrupted prefixes
+remain Rust obligations. These general laws and executable regression tests do
+not constitute a refinement proof of `PatternRows`.
 
 Within one Join, successful argument resolution may retain its complete scoped
 input projection and canonical result for the same immutable argument.
@@ -1914,6 +1977,16 @@ The occurrence-count fuel bound does not bound Rust join or expression work;
 less retained materialization need not mean less replay work. See the
 [constraint-stream guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md).
 
+[`StreamedOptimization.completed_ties_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedOptimization.lean)
+filters a sound, complete finite list of retained-theory answer sets by those
+completed partition scans before selecting the minimum integer cost and its
+ties. Pointwise original evaluation and partition coverage make the filtered
+list sound and complete for the full theory, so the existing optimization law
+identifies its selected membership with full-theory optimality. This is a
+composition over one unbounded integer cost. Rust acceptance and incumbent
+ordering, priority-vector scoring, checked arithmetic, candidate-bound feedback
+and interruption handling remain separate implementation obligations.
+
 [`StreamedRegions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedRegions.lean)
 adds a sufficient original-candidate region test using the existing `Cube` and
 `FormulaBounds.Sure` readings. Positive and double-negated atoms held in the
@@ -1927,6 +2000,12 @@ the necessary held/cut conditions for positive-row and signed-predicate filters;
 the predicate domain must include each admitted atom, including unsupported
 negative occurrences. The lemma does not prove Rust's row-to-dense-ID mapping,
 join traversal, or equivalence of resource-limited prefixes.
+The Rust join authenticates each joined positive occurrence's exact source map
+once per cursor and reuses it across backtracking, while reading current region
+truth for every row. This preserves the abstract row authority and selection
+premises. The prepared source slot and settlement of shared receipts remain
+Rust implementation obligations. The abstract laws do not certify runtime
+ownership, synchronization or failure handling.
 Hybrid join-plan reuse adds a representation obligation: the cached order and
 comparison schedule must equal fresh planning for the same rule, empty outer
 binding and completed support owner. Candidate truth, bindings and arithmetic
@@ -1941,6 +2020,51 @@ family-coverage obligation. Concrete lowering, discharged guards, complete body
 readings, catalog-coordinate identity and sound candidate bounds remain premises
 to establish. This law does not authorize applying the same original-constraint
 hook inside a proper-subset search of the frozen reduct.
+
+[`StreamedConsequences`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedConsequences.lean)
+extends this semantic boundary to an original constraint with one open literal
+occurrence and every other occurrence sure, after successful scalar filtering.
+`unit_literal_false` forces that occurrence false in every original model of
+the region: a default-negated pivot holds its atom; a positive or double-negated
+pivot cuts it. `unit_preserves_models` and `unit_preserves_answers` retain the
+same original theory and its full satisfaction and reduct obligations. A second
+open occurrence of an aliased atom blocks this conservative test, independent of
+sign. This does not prove completeness of Rust's selected positive-pivot queries.
+
+`batch_preserves_answers` permits a finite list of consequences proved against
+one immutable region to be applied at any narrower region. The prefix law does
+not claim completion of the remaining decisions. `completed_template_unchanged`
+permits reuse of a completed negative scan when both truth bounds agree on every
+atom read by every instance. Its premises include complete instance coverage and
+the same successful scalar results. Rust must separately establish that coverage,
+authenticate region lineage, invalidate changed dependencies and preserve fault
+handling; equal decided masks alone cannot detect a held/cut reversal.
+Successful `NoConsequence` may preserve this completed evidence across a new
+`First` call while closing the previous allowance. Rust must authenticate the
+same core, compare both masks, invalidate changed dependencies or incompatible
+regions, and start the new allowance independently of evidence reuse. Errors,
+refutations, ordinary checks and abandoned productive scans invalidate the
+saved evidence. The existing law does not prove that lifecycle, the completion
+marker, cancellation ordering or receipt settlement, and reusable negative scans
+do not establish original satisfaction or reduct minimality.
+
+Sharing the immutable rule-to-predicate and atom-to-predicate mappings adds no
+semantic premise. Rust must establish that the published mapping belongs to
+the exact core, covers every dependency and retains no candidate decisions.
+Concurrent publication, per-checker byte admission and independent mutable
+progress remain implementation obligations; the semantic reuse laws do not
+verify their ownership or accounting.
+
+`steps_preserve` composes such consequences with any separately justified
+monotone formula closure. `steps_bounded` and `no_unbounded_steps` bound completed
+fresh decisions by a finite carrier's initial open count. They neither count
+source work nor renew an allowance: all source passes for one candidate closure
+share one allowance. Correct runtime ownership and settlement of that allowance,
+occurrence identities, canonical atom mapping, scalar diagnostics, polling and
+one-decision commit remain implementation obligations. The explicit no-unit and
+pending-after-decision counterexamples retain the distinction between no current
+consequence, interruption and completed original satisfaction. See the
+[consequence guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md).
 
 For membership checking, clause search restricts candidates to the least
 interpretation; region search may still propose a larger original model of a
@@ -2213,6 +2337,18 @@ classification, carrier reduction, checked arithmetic and unary transport remain
 implementation obligations. The mathematical list enumerator is a reference
 definition; it does not verify the Rust subset-sum or extremum operations.
 
+[`SourceMeasures.count_carrier_membership`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean#L140)
+specializes carrier membership to no required keys and the measure `List.length`:
+the possible values are exactly the naturals up to the list length. This law
+counts occurrences; the aggregate callers must first coalesce complete tuple
+keys and supply one unit contribution per key. It justifies membership in the
+direct count proposal range, not Rust's ordered buffer, numeric conversion or
+resource behavior. Checked `i32` increments, distinct full-key coverage and
+unchanged later aggregate equality and source diagnostics remain implementation
+obligations. In particular, unconditional witnesses are still optional during
+proposal generation; removing unrealizable count values could suppress a
+required diagnostic.
+
 [`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
 proves directed bound coverage and integer floor/ceiling laws.
 `filtered_bindings_exact` states that a covering envelope followed by the original
@@ -2322,6 +2458,30 @@ scratch remain charged to the checker, independently of the original admission
 receipt. Retained preparation is charged once; borrowed headers do not claim a
 second allocation. Existing laws do not verify this capture/frozen correspondence, typed
 failure propagation, or the concrete Rust storage accounting.
+
+Within a selected constraint cursor, an all-held positive prefix can justify
+omitting repeated positive atom lookup after complete scalar success. The Rust
+obligation is that the prefix covers every original positive occurrence, every
+row has the exact mapped identity, and undo truncates evidence with the binding.
+An alternative loan identifies one matched open positive occurrence and proves
+the others held. Its original occurrence index and dense atom identity must
+refer to that same completed binding; negative literals retain their ordinary
+truth checks. This is the positive part of `StreamedConsequences.UnitBody`,
+not a claim that every remaining literal is sure.
+The borrowed body evidence must be consumed with that same immutable region.
+It grants no source-family or model-membership authority; final model checks
+ignore it. This is a representation refinement of the body check, not an
+additional formal certification of the cursor.
+
+The total nongenerated route shares the held-only and designated-positive-pivot
+queries in one traversal allowing at most one mapped open positive occurrence.
+Its correspondence must cover the union of those queries, including the
+all-held case, without lending truth across an unmapped row or stale binding.
+The first matched open occurrence still limits traversal beyond an unmapped
+gap, and backtracking must remove that restriction at its recorded depth.
+Partial arithmetic and generated frames retain their existing query schedule.
+These coverage and diagnostic obligations are not discharged by `UnitBody` or
+the batch laws.
 
 After that obligation is established, `GroundGuards.guard_original` and
 `guard_frozen` identify each evaluated comparison with the same Boolean in both

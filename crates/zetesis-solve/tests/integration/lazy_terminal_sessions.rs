@@ -10,8 +10,8 @@ use zetesis_solve::{
 };
 use zetesis_themelios::{
     AdmissionOptions, BaseKind, ConstraintCheckLimits, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaMaterialization, HybridFeature, HybridFormula, TerminalBase,
-    TerminalFormula, prepare_formula,
+    FormulaLimits, FormulaMaterialization, HybridFormula, TerminalBase, TerminalFormula,
+    prepare_formula,
 };
 
 fn lazy(source: &str) -> Result<FormulaMaterialization<HybridFormula>, FormulaFailure> {
@@ -179,14 +179,11 @@ fn a_hybrid_terminal_base_runs_on_the_cpu_only() {
 }
 
 #[test]
-fn objectives_under_lazy_grounding_are_refused() {
-    assert!(matches!(
-        lazy("{a}. #minimize{1:a}."),
-        Err(FormulaFailure::HybridUnsupported {
-            feature: HybridFeature::Objectives,
-            ..
-        })
-    ));
+fn objectives_under_lazy_grounding_are_materialized() {
+    let FormulaMaterialization::Complete(owner) = lazy("{a}. #minimize{1:a}.").unwrap() else {
+        panic!("objectives must retain complete producers");
+    };
+    assert!(owner.objectives().is_present());
 }
 
 #[test]

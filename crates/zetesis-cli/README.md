@@ -224,8 +224,9 @@ Automatic finite formula admission can defer eligible terminal positive definiti
 and reconstruct them from verified base answers; it grounds the remaining rules
 eagerly. Explicit lazy CPU execution
 can stream ordinary constraints after complete support and arithmetic admission,
-while retaining producers and ineligible constraints. This hybrid profile currently
-refuses objectives, table joins and explicit devices; see the
+while retaining producers and ineligible constraints. Objectives are scored only
+after complete original constraint checks; their presence disables terminal
+deferral. This hybrid profile requires indexed joins and the CPU backend; see the
 [grounding contract](../../docs/book/architecture/grounding.md#eager-and-lazy-execution).
 With `--oracle auto`, complete-theory checks can select ranked support
 on CPU or a device. Device tight checking evaluates original truth and complete

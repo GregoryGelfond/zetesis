@@ -72,10 +72,10 @@ themelios-solve backend adapter remains separate integration work.
 An explicit `ground_hybrid()` instead returns an immutable shared `HybridFormula`.
 It completes original support and arithmetic admission, materializes producers
 and richer constraints, and retains ordinary atom/scalar integrity constraints
-for repeat checking. Indexed joins are required; objectives are currently
-refused. `core_theory()` is only the producer core. A solve session combines its
-membership result with complete streamed constraint satisfaction before returning
-an answer of the original program.
+for repeat checking. Indexed joins are required. `core_theory()` is only the
+producer core. A solve session combines its membership result with complete
+streamed constraint satisfaction before scoring or returning an answer of the
+original program. Objectives retain the ordinary scoring and optimal-tie rules.
 
 The independent `ConstraintChecker` accepts only models sharing the owner's exact
 atom catalog, reuses support indexes and borrowed bindings, and retains cumulative

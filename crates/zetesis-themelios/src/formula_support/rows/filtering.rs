@@ -86,8 +86,19 @@ impl<F> RowFilter for Select<F>
 where
     F: Fn(zetesis_core::relation::Row<'_, '_>) -> bool,
 {
+    fn resolve(
+        &self,
+        _: zetesis_core::catalog::Atoms<'_>,
+        _: &FormulaLimits,
+        _: &mut Counters,
+        _: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        Ok(0)
+    }
+
     fn permits(
         &self,
+        _: usize,
         row: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
@@ -105,6 +116,8 @@ struct Run {
     work: u64,
     substitutions: u64,
 }
+
+mod evidence;
 
 fn unfiltered(wrapped: bool, max_work: u64) -> Run {
     let mut fixture = Fixture::from_atoms(
@@ -150,12 +163,16 @@ fn unfiltered(wrapped: bool, max_work: u64) -> Run {
         let mut rows = Vec::new();
         let failure = loop {
             let next = if wrapped {
-                filtered.next_row(computation, &limits, budget, counters, location())
+                filtered
+                    .next_row(computation, &limits, budget, counters, location())
+                    .map(|row| row.map(|row| (exported(&row.values, computation), row.passes)))
             } else {
-                ordinary.next_row(computation, &limits, budget, counters, location())
+                ordinary
+                    .next_row(computation, &limits, budget, counters, location())
+                    .map(|row| row.map(|row| (exported(&row.values, computation), row.passes)))
             };
             match next {
-                Ok(Some(row)) => rows.push((exported(&row.values, computation), row.passes)),
+                Ok(Some(row)) => rows.push(row),
                 Ok(None) => break None,
                 Err(error) => break Some(format!("{error:?}")),
             }
@@ -478,8 +495,19 @@ fn empty_positive_inputs_keep_their_scalar_row() {
 struct RefuseSecond(Cell<usize>);
 
 impl RowFilter for RefuseSecond {
+    fn resolve(
+        &self,
+        _: zetesis_core::catalog::Atoms<'_>,
+        _: &FormulaLimits,
+        _: &mut Counters,
+        _: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        Ok(0)
+    }
+
     fn permits(
         &self,
+        _: usize,
         _: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
@@ -619,4 +647,212 @@ fn source_atom_positions_match_relation_occurrences() {
             }
         },
     );
+}
+
+/// Test filter whose slots name exact occurrence maps, so a crossed slot is
+/// observable independently of whether every row happens to be accepted.
+struct ResolvedSources<'a> {
+    sources: Vec<zetesis_core::catalog::Atoms<'a>>,
+    resolutions: Cell<usize>,
+    visits: Cell<usize>,
+    refuse: Cell<bool>,
+}
+
+impl RowFilter for ResolvedSources<'_> {
+    fn resolve(
+        &self,
+        atoms: zetesis_core::catalog::Atoms<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        counters.work(limits, location)?;
+        self.resolutions.set(self.resolutions.get() + 1);
+        if self.refuse.get() {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location,
+            });
+        }
+        Ok(self
+            .sources
+            .iter()
+            .position(|source| source.same_occurrences(atoms))
+            .unwrap())
+    }
+
+    fn permits(
+        &self,
+        source: usize,
+        row: zetesis_core::relation::Row<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        counters.work(limits, location)?;
+        assert!(row.occurrence_in(self.sources[source]).is_some());
+        self.visits.set(self.visits.get() + 1);
+        Ok(true)
+    }
+}
+
+#[test]
+fn backtracking_reuses_each_occurrences_source() {
+    let mut fixture = Fixture::from_atoms(
+        [
+            atom("p", &[1]),
+            atom("p", &[2]),
+            atom("q", &[3]),
+            atom("q", &[4]),
+            atom("q", &[5]),
+        ],
+        location(),
+    );
+    let rule = rule(
+        vec![
+            pattern(&mut fixture, "p", &[0]),
+            pattern(&mut fixture, "q", &[1]),
+            pattern(&mut fixture, "p", &[2]),
+        ],
+        3,
+    );
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let selection = ResolvedSources {
+            sources: support.source_atoms().map(|(_, atoms)| atoms).collect(),
+            resolutions: Cell::new(0),
+            visits: Cell::new(0),
+            refuse: Cell::new(false),
+        };
+        let mut results = Vec::new();
+        for filter in [Some(&selection as &dyn RowFilter), None] {
+            let mut rows = Join::filtered_rule(
+                &rule,
+                support,
+                filter,
+                None,
+                budget,
+                crate::formula_support::Context::new(
+                    computation,
+                    &FormulaLimits::default(),
+                    counters,
+                    rule.location,
+                ),
+            )
+            .unwrap();
+            let mut found = Vec::new();
+            while let Some(row) = rows
+                .next_row(
+                    computation,
+                    &FormulaLimits::default(),
+                    budget,
+                    counters,
+                    location(),
+                )
+                .unwrap()
+            {
+                found.push((exported(&row.values, computation), row.passes));
+            }
+            results.push(found);
+        }
+        assert_eq!(results[0].len(), 12);
+        assert_eq!(results[0], results[1]);
+        assert_eq!(
+            selection.resolutions.get(),
+            3,
+            "one per occurrence, including the repeated predicate"
+        );
+        assert!(selection.visits.get() > selection.resolutions.get());
+    });
+}
+
+#[test]
+fn refused_source_resolution_publishes_no_slot() {
+    let mut fixture = Fixture::from_atoms([atom("p", &[1])], location());
+    let rule = rule(vec![pattern(&mut fixture, "p", &[0])], 1);
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let selection = ResolvedSources {
+            sources: support.source_atoms().map(|(_, atoms)| atoms).collect(),
+            resolutions: Cell::new(0),
+            visits: Cell::new(0),
+            refuse: Cell::new(true),
+        };
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        let before = counters.accounting.work;
+        assert!(matches!(
+            rows.next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location()
+            ),
+            Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                ..
+            })
+        ));
+        assert_eq!(selection.resolutions.get(), 1);
+        assert_eq!(selection.visits.get(), 0);
+        assert!(counters.accounting.work > before);
+        assert_eq!(counters.accounting.substitutions, 0);
+        assert!(matches!(
+            rows.join.resolutions[rows.join.depth],
+            crate::formula_support::Resolution::Unresolved
+        ));
+        assert_eq!(exported(&rows.join.values, computation), vec![None]);
+    });
+}
+
+#[test]
+fn absent_sources_do_not_resolve_the_filter() {
+    let mut fixture = Fixture::default();
+    let rule = rule(vec![pattern(&mut fixture, "missing", &[0])], 1);
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let selection = ResolvedSources {
+            sources: Vec::new(),
+            resolutions: Cell::new(0),
+            visits: Cell::new(0),
+            refuse: Cell::new(true),
+        };
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            crate::formula_support::Context::new(
+                computation,
+                &FormulaLimits::default(),
+                counters,
+                rule.location,
+            ),
+        )
+        .unwrap();
+        assert!(
+            rows.next_row(
+                computation,
+                &FormulaLimits::default(),
+                budget,
+                counters,
+                location()
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert_eq!(selection.resolutions.get(), 0);
+        assert_eq!(selection.visits.get(), 0);
+    });
 }

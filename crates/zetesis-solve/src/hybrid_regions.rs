@@ -2,8 +2,8 @@
 //!
 //! The factory owns an immutable source handle. Workers share its catalog index
 //! and row positions, while retaining their own rule plans and check state.
-//! Cumulative allowances and the first fault are shared; candidate truth remains
-//! worker-local.
+//! Cumulative receipts and the first fault are shared. Each candidate closure
+//! has its own allowance; candidate truth remains worker-local.
 //! Neither this adapter nor its source checker participates in a frozen-reduct
 //! proper-subset query.
 
@@ -11,10 +11,12 @@ use std::sync::{Mutex, PoisonError};
 
 use zetesis_cpu::{Cancellation, regions::Region};
 use zetesis_ferraris::Theory;
-use zetesis_sat::{Incomplete, RegionFeasibility, RegionFilter, RegionFilterWorker};
+use zetesis_sat::{
+    Incomplete, RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterWorker, RegionPass,
+};
 use zetesis_themelios::{
-    ConstraintAllowance, ConstraintCheckFailure, ConstraintChecker, ConstraintRegionVerdict,
-    StreamedCore,
+    ConstraintAllowance, ConstraintCheckFailure, ConstraintChecker, ConstraintConsequence,
+    ConstraintRegionPass, ConstraintRegionVerdict, StreamedCore,
 };
 
 pub(crate) struct Constraints {
@@ -97,6 +99,28 @@ struct Worker<'a> {
 }
 
 impl RegionFilterWorker for Worker<'_> {
+    fn consequence(
+        &mut self,
+        theory: &Theory,
+        region: &Region,
+        cancellation: &Cancellation,
+        pass: RegionPass,
+    ) -> Result<RegionConsequence, Incomplete> {
+        let pass = match pass {
+            RegionPass::First => ConstraintRegionPass::First,
+            RegionPass::Continue => ConstraintRegionPass::Continue,
+        };
+        self.checker
+            .consequence_region(theory, region, cancellation, pass)
+            .map(|consequence| match consequence {
+                ConstraintConsequence::NoConsequence => RegionConsequence::Unchanged,
+                ConstraintConsequence::Refuted { .. } => RegionConsequence::Refuted,
+                ConstraintConsequence::Hold { atom, .. } => RegionConsequence::Hold(atom),
+                ConstraintConsequence::Cut { atom, .. } => RegionConsequence::Cut(atom),
+            })
+            .map_err(|error| self.source.stopped(error))
+    }
+
     fn check(
         &mut self,
         theory: &Theory,

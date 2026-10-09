@@ -4,8 +4,21 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- Support objectives with lazy CPU formula grounding. Check the original
+  constraints before scoring an answer or updating a bound, and preserve
+  optimal ties and explicit interruption outcomes.
+- Derive candidate consequences from streamed integrity constraints before
+  splitting. Source deductions and formula propagation share a fixed point;
+  final answer acceptance still checks original satisfaction and the reduct.
+
 ### Changed
 
+- Construct possible count values directly, preserving tuple identity and
+  arithmetic diagnostics.
+- Skip structurally impossible rows during lazy constraint checking, while
+  retaining the original matching and arithmetic diagnostics.
 - Rank formula-region splits once after the original theory and candidate
   restrictions reach a shared propagation fixed point. Preserve the existing
   precedence of the active bound, latest permanent restriction and original
@@ -16,12 +29,41 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Reconstruct terminal answers from authenticated canonical base identities,
   avoiding repeated tuple lookup and atom-order searches. Each answer retains
   its own selection and all its true atoms, independently of displayed output.
+- Stop producer scans once enough support is known. Complete scans still
+  establish missing or sole support; later changes trigger a fresh check.
+  Avoid rescheduling checks for unchanged failed rule bodies.
+- Reuse exact source occurrence authentication across rows of each lazy
+  constraint join, preserving row order and current candidate truth.
+- Reuse deductions from eligible streamed constraints as a candidate narrows,
+  and repeat completed checks only when relevant atom decisions change.
+- Reuse prepared predicate lookups and completed constraint scans between
+  compatible candidate regions. Avoid repeated operand scans during propagation.
+- Share immutable dependency preparation across lazy checkers and combine
+  eligible positive-pivot queries into one traversal, retaining per-checker
+  state and complete answer checks.
+- Omit competing-head support scans when every producer has a single head.
+- Accumulate constraint-check statistics locally and publish them at preparation
+  and check boundaries, preserving resource limits and accepted failure receipts.
+- Read bound terms without temporary ownership handles, retaining vocabulary and
+  term-prefix checks. Reuse decoded implications during formula propagation.
+- Copy bound terms and compare immutable expression leaves through borrowed
+  canonical identities. Reuse established positive literals within a streamed
+  constraint check, and avoid redundant teaching from satisfied implications.
 
 ### Fixed
 
 - Prepare tight and positive-program certificates within the session's memory
   and search allowances. Fixed internal size limits no longer force otherwise
   eligible programs onto general reduct checking.
+
+### Compatibility
+
+- Remove `HybridFeature::Objectives`: lazy CPU formula grounding now admits
+  objectives. Rust callers matching this former refusal can remove that arm.
+- `ConstraintAllowance::statistics()` now reports settled charges: live readings
+  can omit charges from an active check. Shared totals are exact after all
+  operations settle, up to counter saturation; local and failure receipts remain
+  exact.
 
 ## 0.4.0 — 2026-10-07
 

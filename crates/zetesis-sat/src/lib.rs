@@ -20,7 +20,8 @@ mod ferraris;
 mod timing;
 mod region_filter;
 pub use region_filter::{
-    RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
+    RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
+    RegionPass,
 };
 mod checked;
 mod prepared_reduct;

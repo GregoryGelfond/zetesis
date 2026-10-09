@@ -16,6 +16,7 @@ use crate::formula_ir::{Expression, Operation};
 use crate::grounding_observer::Event;
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
+mod comparisons;
 mod scratch;
 use scratch::{Frame, Scratch};
 

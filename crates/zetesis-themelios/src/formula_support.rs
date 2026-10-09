@@ -21,13 +21,13 @@ mod accounting;
 mod generated;
 mod heads;
 pub(crate) use heads::RowHead;
-pub(crate) mod witnesses;
 mod observation;
 mod term_selection;
 mod term_table;
+pub(crate) mod witnesses;
 pub(crate) use term_table::TermTable;
-mod structural;
 mod buffer;
+mod structural;
 pub(crate) use buffer::Buffer;
 pub(crate) use term_selection::TermSelection;
 #[cfg(test)]
@@ -81,7 +81,7 @@ use relations::RelationRows;
 pub(crate) use relations::{
     ClosedSource, Relations, SourceAtom, SourceScope, SupportCatalog, atom_failure, owner_limits,
 };
-pub(crate) use rows::{FilteredRows, RowFilter};
+pub(crate) use rows::{FilteredRows, PositiveRows, RowFilter, RowSelection};
 
 /// Possible atoms after a complete support round added no new head.
 ///
@@ -345,7 +345,7 @@ impl Counters {
     ) -> Self {
         Self {
             accounting: Accounting {
-                allowance: Some(allowance),
+                allowance: Some(crate::constraint_allowance::Pending::new(allowance)),
                 ..Accounting::default()
             },
             cancellation: Some(cancellation.clone()),
@@ -381,7 +381,7 @@ impl Counters {
         charge_work(
             &mut self.accounting.work,
             self.cancellation.as_ref(),
-            self.accounting.allowance.as_ref(),
+            self.accounting.allowance.as_mut(),
             amount,
             limits,
             location,
@@ -420,7 +420,7 @@ impl Counters {
                 charge_work(
                     &mut self.accounting.work,
                     self.cancellation.as_ref(),
-                    self.accounting.allowance.as_ref(),
+                    self.accounting.allowance.as_mut(),
                     1,
                     limits,
                     location,
@@ -456,7 +456,7 @@ impl Counters {
             u128::from(limits.max_substitutions),
             location,
         )?;
-        if let Some(allowance) = &self.accounting.allowance {
+        if let Some(allowance) = &mut self.accounting.allowance {
             allowance.substitution();
         }
         self.accounting.substitutions += 1;
@@ -465,14 +465,14 @@ impl Counters {
 }
 
 /// Charge `amount` units of formula work: poll cancellation, check the work
-/// ceiling, charge the shared allowance, then count. Every charged unit runs
+/// ceiling, record the local pending receipt, then count. Every charged unit runs
 /// on this path, so it inlines into its callers; the site is read only when a
 /// failure is built, on the cold path.
 #[inline]
 fn charge_work(
     work: &mut u64,
     cancellation: Option<&zetesis_cpu::Cancellation>,
-    allowance: Option<&crate::ConstraintAllowance>,
+    allowance: Option<&mut crate::constraint_allowance::Pending>,
     amount: u128,
     limits: &FormulaLimits,
     location: ProgramSite,
@@ -488,10 +488,11 @@ fn charge_work(
         u128::from(limits.max_work),
         location,
     )?;
+    let amount = u64::try_from(amount).expect("charged work fits its u64 ceiling");
     if let Some(allowance) = allowance {
         allowance.work(amount);
     }
-    *work += u64::try_from(amount).expect("charged work fits its u64 ceiling");
+    *work += amount;
     Ok(())
 }
 
@@ -1008,7 +1009,13 @@ pub(crate) struct Join<'a, 'source> {
     head_slots: std::ops::Range<usize>,
     delta: Option<usize>,
     domains: Option<&'a queries::Guards<'a, 'source>>,
+    // Installed only by filtered_rule before traversal; never replaced while
+    // its authenticated source slots or held prefix can be retained.
     row_filter: Option<&'a dyn RowFilter>,
+    /// Current matched positives are held, except at most one mapped open pivot.
+    /// Enabled only for a borrowed non-generated filtered binding; undo
+    /// truncates it with that binding. No truth survives a cursor/check.
+    positive_prefix: Option<rows::PositivePrefix>,
     support: &'a Support<'source>,
     values: Binding<'static>,
     lease: StorageLease,
@@ -1023,6 +1030,8 @@ pub(crate) struct Join<'a, 'source> {
     /// same lease counts their retained capacity, including after refusal.
     pattern_captures: Vec<(usize, TermRef<'source>)>,
     structural_query: Option<structural::Scratch<'a>>,
+    /// Immutable necessary rows, borrowed only by post-capture prepared joins.
+    pattern_rows: Option<&'a prepared::PatternRows<'a>>,
     witnesses: Option<witnesses::Witnesses<'source>>,
     depth: usize,
     traversal: Traversal,
@@ -1045,14 +1054,26 @@ enum Probe<'a, 'source> {
 #[derive(Clone, Copy)]
 enum Resolution<'source> {
     Unresolved,
-    Resolved(Option<&'source relations::RelationRows<'source>>),
+    Resolved {
+        rows: Option<&'source relations::RelationRows<'source>>,
+        /// A slot in this join's row filter, authenticated for these exact
+        /// source occurrences. Absent without a filter or an offered source.
+        filter_source: Option<usize>,
+    },
 }
 
 impl<'source> Resolution<'source> {
     fn rows(self) -> Option<&'source relations::RelationRows<'source>> {
         match self {
             Self::Unresolved => unreachable!("a prepared probe has resolved its relation"),
-            Self::Resolved(rows) => rows,
+            Self::Resolved { rows, .. } => rows,
+        }
+    }
+
+    fn filter_source(self) -> Option<usize> {
+        match self {
+            Self::Unresolved => unreachable!("a prepared probe has resolved its filter"),
+            Self::Resolved { filter_source, .. } => filter_source,
         }
     }
 }
@@ -1170,6 +1191,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 Context::new(computation, limits, counters, rule.location),
             )?;
             join.configure_rule(rule, limits, counters)?;
+            join.pattern_rows = prepared.pattern_rows.as_ref();
             if prepared.total.is_some() {
                 join.certified_total = true;
                 join.coverage = Coverage::Selected;
@@ -1553,21 +1575,17 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            projections: match total {
-                Some(values) => projections::Projections::borrowed(
-                    values,
-                    &Context::new(computation, limits, counters, location),
-                )?,
-                None => projections::Projections::new(&Context::new(
-                    computation,
-                    limits,
-                    counters,
-                    location,
-                ))?,
+            projections: {
+                let context = Context::new(computation, limits, counters, location);
+                match total {
+                    Some(values) => projections::Projections::borrowed(values, &context)?,
+                    None => projections::Projections::new(&context)?,
+                }
             },
             delta,
             domains: None,
             row_filter: None,
+            positive_prefix: None,
             support,
             values,
             lease,
@@ -1579,6 +1597,7 @@ impl<'a, 'source> Join<'a, 'source> {
             changes: Vec::new(),
             pattern_captures: Vec::new(),
             structural_query: None,
+            pattern_rows: None,
             witnesses: None,
             depth: 0,
             traversal: Traversal::Searching,
@@ -2298,7 +2317,15 @@ impl<'a, 'source> Join<'a, 'source> {
                 continue;
             };
             counters.record(Event::JoinRow);
-            if !self.permits_row(pattern, atom, limits, counters, location)? {
+            let selected = self.permits_row(pattern, atom, limits, counters, location)?;
+            if !selected.permits() {
+                continue;
+            }
+            if self
+                .positive_prefix
+                .as_ref()
+                .is_some_and(|prefix| !prefix.permits(selected))
+            {
                 continue;
             }
             let matches = self.match_row(
@@ -2311,6 +2338,11 @@ impl<'a, 'source> Join<'a, 'source> {
                 if let Some(witnesses) = &mut self.witnesses {
                     counters.work(limits, location)?;
                     witnesses.push(self.depth, atom);
+                }
+                // Pattern matching and prefix scalars must succeed before a
+                // mapped row's identity can describe this completed binding.
+                if let Some(prefix) = &mut self.positive_prefix {
+                    prefix.advance(self.depth, pattern.source, selected);
                 }
                 self.depth += 1;
             } else {
@@ -2336,12 +2368,21 @@ impl<'a, 'source> Join<'a, 'source> {
         // Relation ownership is independent of how the row source was prepared.
         // A preselected probe still needs this snapshot's owner before row access.
         if matches!(self.resolutions[self.depth], Resolution::Unresolved) {
-            self.resolutions[self.depth] = Resolution::Resolved(self.support.resolve(
-                pattern.atom(),
-                limits,
-                counters,
-                location,
-            )?);
+            let rows = self
+                .support
+                .resolve(pattern.atom(), limits, counters, location)?;
+            let filter_source = match (self.row_filter, rows) {
+                (Some(filter), Some(source)) if source.row_count() != 0 => {
+                    Some(filter.resolve(source.atoms, limits, counters, location)?)
+                }
+                _ => None,
+            };
+            // Neither the source nor its filter slot is published after a
+            // refused authentication. Backtracking keeps this immutable pair.
+            self.resolutions[self.depth] = Resolution::Resolved {
+                rows,
+                filter_source,
+            };
         }
         if self.probes[self.depth].is_none() {
             let source = self.resolutions[self.depth].rows();
@@ -2405,6 +2446,20 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Probe<'a, 'source>, FormulaFailure> {
+        let selected = self
+            .pattern_rows
+            .map(|pattern_rows| {
+                pattern_rows.posting(self.depth, source, limits, counters, location)
+            })
+            .transpose()?
+            .flatten();
+        // Both postings are necessary conditions over the same ordered source.
+        // Keep the smaller one; the ordinary matcher checks their conjunction.
+        let posting = match (posting, selected) {
+            (Some(indexed), Some(selected)) if selected.len() < indexed.len() => Some(selected),
+            (None, Some(selected)) => Some(selected),
+            (indexed, _) => indexed,
+        };
         let total = source.map_or(0, relations::RelationRows::row_count);
         Ok(Probe::Indexed(if self.delta.is_some() {
             let old = source.map_or(0, relations::RelationRows::old_rows);
@@ -2424,18 +2479,25 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
-    ) -> Result<bool, FormulaFailure> {
-        if let Some(filter) = self.row_filter
-            && !filter.permits(atom, limits, counters, location)?
-        {
-            return Ok(false);
+    ) -> Result<RowSelection, FormulaFailure> {
+        let selected = if let Some(filter) = self.row_filter {
+            let source = self.resolutions[self.depth]
+                .filter_source()
+                .expect("an offered filtered row has an authenticated source");
+            filter.select(source, pattern.source, atom, limits, counters, location)?
+        } else {
+            RowSelection::Possible
+        };
+        if !selected.permits() {
+            return Ok(selected);
         }
         if self.coverage == Coverage::Selected
             && let Some(domains) = self.domains
+            && !domains.permits(pattern.source, atom.position(), limits, counters, location)?
         {
-            return domains.permits(pattern.source, atom.position(), limits, counters, location);
+            return Ok(RowSelection::Rejected);
         }
-        Ok(true)
+        Ok(selected)
     }
     fn match_row(
         &mut self,
@@ -2483,13 +2545,10 @@ impl<'a, 'source> Join<'a, 'source> {
                 )?;
                 for index in 0..self.pattern_captures.len() {
                     let (slot, value) = self.pattern_captures[index];
-                    let key = computation.read().term_key(value).map_err(|error| {
-                        crate::formula_binding::assignment(
-                            zetesis_core::catalog::AssignmentError::Read(error),
-                            location,
-                        )
-                    })?;
-                    self.values.set(slot, &key, limits, counters, location)?;
+                    self.values
+                        .set_term_with(slot, value, computation.read(), location, || {
+                            counters.work(limits, location)
+                        })?;
                     self.changes[self.depth].push(slot);
                 }
                 Ok(true)
@@ -2508,16 +2567,36 @@ impl<'a, 'source> Join<'a, 'source> {
                     Some(self.values.read(variable, computation.read(), location)?)
                 }
                 TemplateTerm::Variable(variable) => {
-                    let key = computation.read().term_key(value).map_err(|error| {
-                        crate::formula_binding::assignment(
-                            zetesis_core::catalog::AssignmentError::Read(error),
-                            location,
-                        )
-                    })?;
-                    self.reserve_trail(1, computation, limits, counters, location)?;
-                    self.values
-                        .set(variable, &key, limits, counters, location)?;
-                    self.changes[self.depth].push(variable);
+                    let old = self.changes[self.depth].capacity() * size_of::<usize>();
+                    let other = self.storage_bytes() - old;
+                    let trail = &mut self.changes[self.depth];
+                    let lease = &mut self.lease;
+                    let trail_bytes = &mut self.trail_bytes;
+                    let mut reserve_before_set = true;
+                    self.values.set_term_with(
+                        variable,
+                        value,
+                        computation.read(),
+                        location,
+                        || {
+                            // Source authentication precedes reservation; the
+                            // next callback has only the ordinary set charge.
+                            if std::mem::take(&mut reserve_before_set) {
+                                let result = reserve(
+                                    trail,
+                                    1,
+                                    lease,
+                                    other,
+                                    Context::new(&*computation, limits, counters, location),
+                                );
+                                *trail_bytes =
+                                    *trail_bytes - old + trail.capacity() * size_of::<usize>();
+                                result?;
+                            }
+                            counters.work(limits, location)
+                        },
+                    )?;
+                    trail.push(variable);
                     None
                 }
             };
@@ -2559,31 +2638,11 @@ impl<'a, 'source> Join<'a, 'source> {
                     Context::new(computation, limits, counters, location),
                 )
             } else {
-                self.evaluation
-                    .source_values(
-                        [left, right],
-                        |variable| self.values.key(variable, location),
-                        computation,
-                        limits,
-                        counters,
-                        location,
-                    )
-                    .and_then(|[left, right]| {
-                        let read = computation.read();
-                        let left = read.term(&left).map_err(|error| {
-                            crate::formula_binding::assignment(
-                                zetesis_core::catalog::AssignmentError::Read(error),
-                                location,
-                            )
-                        })?;
-                        let right = read.term(&right).map_err(|error| {
-                            crate::formula_binding::assignment(
-                                zetesis_core::catalog::AssignmentError::Read(error),
-                                location,
-                            )
-                        })?;
-                        compare(left, relation, right, limits, counters, location)
-                    })
+                self.evaluation.source_comparison(
+                    ([left, right], relation),
+                    &self.values,
+                    Context::new(computation, limits, counters, location),
+                )
             };
             match compared {
                 Ok(false) if self.certified_total => {
@@ -2636,6 +2695,9 @@ impl<'a, 'source> Join<'a, 'source> {
             .clear_trail(&mut self.changes[depth], limits, counters, location)?;
         if let Some(witnesses) = &mut self.witnesses {
             witnesses.undo(depth);
+        }
+        if let Some(prefix) = &mut self.positive_prefix {
+            prefix.undo(depth);
         }
         if self.failure.as_ref().is_some_and(|(at, _)| *at >= depth) {
             self.failure = None;

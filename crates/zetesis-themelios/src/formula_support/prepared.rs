@@ -1,4 +1,7 @@
-//! Reusable ordering for an exact rule over completed immutable support.
+//! Reusable rule queries over completed immutable support.
+
+mod pattern_rows;
+pub(super) use pattern_rows::PatternRows;
 
 use super::{
     CompletedQueries, CompletedSupport, Completion, Computation, Context, Counters, Evaluation,
@@ -10,13 +13,15 @@ use crate::formula_binding::Binding;
 use crate::formula_ir::RuleIr;
 use crate::{FormulaFailure, FormulaLimits};
 
-/// One immutable rule and completed carrier own the ordering and any successful
-/// finite totality preparation. No candidate, filter or traversal is retained.
+/// One immutable rule and completed carrier own the ordering, necessary pattern
+/// rows and any successful finite totality preparation. No candidate truth or
+/// traversal cursor is retained.
 pub(crate) struct PreparedRule<'source> {
     pub(super) rule: &'source RuleIr,
     completion: &'source Completion,
     pub(super) plan: order::Plan<'source>,
     pub(super) total: Option<ProjectionValues<'source>>,
+    pub(super) pattern_rows: Option<PatternRows<'source>>,
 }
 
 impl<'source> PreparedRule<'source> {
@@ -135,6 +140,13 @@ impl<'source> PreparedRule<'source> {
         } else {
             None
         };
+        let pattern_rows = PatternRows::prepare(
+            &plan,
+            &completed.relations,
+            rule.variables,
+            budget,
+            Context::new(&computation, limits, counters, rule.location),
+        )?;
         drop(plan_storage);
         completed.admit_workspace(plan.retained_bytes(), limits, counters, rule.location)?;
         completed.retain_workspace(
@@ -145,6 +157,7 @@ impl<'source> PreparedRule<'source> {
             completion: completed.completion,
             plan,
             total,
+            pattern_rows,
         })
     }
 

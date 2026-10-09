@@ -211,9 +211,7 @@ impl<'a> Prepared<'a> {
         for node in &source.nodes {
             work.counters.work(work.limits, work.location)?;
             if let PatternNode::Slot(slot) = node {
-                let value = incoming.key(*slot, work.location)?;
-                self.values
-                    .set(position, &value, work.limits, work.counters, work.location)?;
+                self.values.copy_slot(position, incoming, *slot, work)?;
                 position += 1;
             }
         }

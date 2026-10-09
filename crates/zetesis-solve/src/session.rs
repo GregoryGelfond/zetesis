@@ -83,8 +83,8 @@ impl<'a> PreparedInput<'a> {
 
     /// Borrow a coherent producer theory and its admitted streamed constraints.
     /// No grounding or solving occurs here. The CPU backend supports lazy and
-    /// automatic grounding; objectives and device checking are not part of this
-    /// initial hybrid profile.
+    /// automatic grounding. Objectives are scored only after complete original
+    /// constraint acceptance. Device checking is outside this hybrid profile.
     #[must_use]
     pub fn hybrid(owner: &'a zetesis_themelios::HybridFormula) -> Self {
         Self {
@@ -222,6 +222,7 @@ impl<'a> PreparedInput<'a> {
     fn selection(self, requested: AnswerSelection) -> AnswerSelection {
         match self.input {
             Prepared::Formula(input) if input.objectives.is_present() => requested,
+            Prepared::Hybrid(owner) if owner.objectives().is_present() => requested,
             _ => AnswerSelection::All,
         }
     }

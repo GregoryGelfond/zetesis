@@ -46,6 +46,25 @@ One retained model representation serves execution and result consumers. Source
 syntax and explicit output exports have their own ownership boundaries. Scoped
 term workspaces can refer to this catalog without becoming model selections.
 
+## Prepared atom lookup
+
+`AtomLookup::prepare_predicate_with` lends a `PredicateLookup` for one signed
+predicate and arity. It borrows two windows of the existing index: canonical
+key order for complete-key membership, and original occurrence order for
+`rows()`. Neither order can substitute for the other. Preparation charges four
+binary bounds and retains no atom payload or truth.
+
+`PredicateLookup::get_key_with` returns `None` without inspecting the query or
+invoking the callback when the window is empty. Otherwise it checks the query
+predicate once, then compares arguments within the key window. A different
+predicate or absent tuple returns
+`None`; callback refusal remains an error. Equal predicates from another query
+owner compare by contents, while returned positions always belong to the
+prepared index's source. The borrowed view cannot outlive its index, source or
+predicate. See the
+[lookup API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_lookup.rs)
+for charged operations and failure boundaries.
+
 ## Reusing semantic order
 
 `ModelOrder::prepare_with` borrows one fixed catalog and prepares integer ranks

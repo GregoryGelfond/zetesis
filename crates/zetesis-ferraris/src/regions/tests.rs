@@ -17,14 +17,19 @@ fn compact_mut(knowledge: &mut Knowledge) -> &mut Known<u32> {
     }
 }
 
+mod body_wakeups;
 mod chain_links;
 mod chains;
+mod cloning;
+mod competing_heads;
 mod copy_costs;
 mod counters;
+mod implications;
 mod metering;
 mod preference;
 mod rechecks;
 mod scratch;
+mod units;
 
 /// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the
 /// closure reads every node and parent: a predictable number of charges.

@@ -1,0 +1,1 @@
+{p;q;r}. :-p,not q. :-not r.

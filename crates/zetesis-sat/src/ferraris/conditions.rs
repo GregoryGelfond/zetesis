@@ -69,12 +69,37 @@ impl<R: Borrow<(Theory, Narrower)>> Conditions<R> {
 /// Every slot, the original theory's included, is created by
 /// [`Self::permanent`] or [`Self::bound`] at the region's first narrowing
 /// under its theory, so there is one creation path.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub(super) struct CandidateKnowledge {
     /// Original theory first, then permanent restrictions, then the optional
     /// bound. Keeping one vector avoids another allocation on each region copy.
     entries: Vec<Knowledge>,
     bound_generation: Option<u64>,
+}
+
+impl Clone for CandidateKnowledge {
+    fn clone(&self) -> Self {
+        Self {
+            entries: self.entries.clone(),
+            bound_generation: self.bound_generation,
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        let Self {
+            entries,
+            bound_generation,
+        } = source;
+        // Published children retain no more vector capacity than a fresh
+        // clone. Compatible entries reuse their arrays, overwriting every
+        // conclusion and counter from the current parent.
+        if self.entries.capacity() == entries.len() {
+            self.entries.clone_from(entries);
+        } else {
+            self.entries = Vec::from(entries.as_slice());
+        }
+        self.bound_generation = *bound_generation;
+    }
 }
 
 impl CandidateKnowledge {

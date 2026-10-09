@@ -266,6 +266,19 @@ impl Region {
     pub fn decided(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
         self.decided_since(&[])
     }
+    /// Borrow the held and cut masks, in that order, without copying.
+    /// Both slices contain `self.len().div_ceil(64)` words. Bit `atom % 64`
+    /// in word `atom / 64` represents that atom. The masks are disjoint;
+    /// unused high bits of the last word are zero.
+    ///
+    /// Keeping both polarities permits exact comparison with an earlier region.
+    /// Their union alone cannot distinguish removing or reversing a decision.
+    /// The slices remain borrowed from this region; retaining a snapshot requires
+    /// caller-owned storage and its own resource accounting.
+    #[must_use]
+    pub fn decision_words(&self) -> (&[u64], &[u64]) {
+        (&self.held, &self.cut)
+    }
     /// The two regions an open atom splits this one into: cut, then held.
     /// Neither inherits a preference; their narrowing sets their own.
     ///

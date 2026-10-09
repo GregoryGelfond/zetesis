@@ -125,6 +125,17 @@ families belong to one completed support snapshot; they never carry results
 across growing support rounds. Complete tuple identity and eligibility formulas
 remain unchanged, including their frozen-reduct meaning.
 
+Count assignments coalesce complete tuple keys before constructing proposals.
+Each distinct key contributes one, regardless of its first field or how many
+witnesses produce it. On success,
+[`formula_assignment::counts`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/counts.rs)
+constructs exactly the ordered values `0..=N` for `N` keys, using
+checked increments in one bounded buffer. Weighted sums retain subset-sum
+construction. This count carrier still includes unrealizable values: the
+original aggregate equality decides truth, and proposal traversal preserves
+required source warnings and errors. Value, storage, work and cancellation
+checks remain active.
+
 Independent compilations share the ground builder's `FormulaNodes` owner. It
 retains paired node and operand buffers and the extent of committed topology
 validation; subsequent compilers inspect only the unchecked suffix. Reading
@@ -251,8 +262,9 @@ first separate [terminal positive definitions](#terminal-definition-analysis),
 ground the base and reconstruct those definitions from each verified base answer.
 Explicit eager admission materializes the complete theory. An explicit
 **hybrid formula** profile instead retains every producer and streams eligible
-integrity constraints. It currently runs on CPU with indexed joins and no
-objectives. Constraints containing aggregates, projected atoms or conditional
+integrity constraints. It currently runs on CPU with indexed joins. Objectives
+are scored only after the original constraint check completes. Constraints
+containing aggregates, projected atoms or conditional
 scopes remain eager; ordinary atom/scalar constraints use the shared binding
 and evaluation operations. Existing eager entry points remain unchanged.
 
@@ -279,12 +291,17 @@ walk the core's candidate regions:
 for each surviving answer of the core:
     check the streamed constraint instances against that answer
     violation  -> reject this proposal
-    complete   -> return an answer of the original program
+    complete   -> accept an answer of the original program
     stopped    -> retain an incomplete outcome
+    score the accepted answer when objectives are present
+    use only accepted incumbents to restrict remaining candidates
+return the requested answer selection, preserving all optimal ties when requested
 ```
 
-An exhausted core plus completed checks establishes original-program exhaustion.
-A core answer alone does not. The
+Exhausting the core with completed checks enumerates the original answer family.
+For optimal selection, exhaustive search under sound incumbent bounds instead
+establishes the optimum and its requested ties. A core answer alone establishes
+neither conclusion. The
 [constraint-filtering law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md)
 justifies this composition around the reduct. Its premises still require correct
 source instances, original truth and complete coverage; it does not verify the
@@ -300,6 +317,43 @@ therefore suffices to reject that region. Finding no witness returns
 [region-refutation laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedRegions.lean)
 make the applicability and coverage argument explicit.
 
+Streaming also permits consequences before a body becomes certainly true. If
+exactly one body occurrence is open and every other literal is true, the open
+literal must be false. Thus `:- p, not q.` holds q when p is held; `:- p, q.`
+cuts q in the same situation. Positive and double-negated pivots are cut;
+default-negated pivots are held. Several open occurrences remaining after source
+normalization are conservatively left undecided, even when they name the same atom.
+
+Candidate closure alternates formula propagation with source deductions:
+
+```text
+begin one source allowance for the candidate region
+repeat:
+    close the original formulas and candidate restrictions over the region
+    stream joins of original constraints whose scalar guards pass
+    if a body is certainly true: refute the region
+    if one body occurrence is open: make that literal false in the region
+    otherwise: select the next split, or submit the complete candidate
+```
+
+Each consequence decides a previously open atom, so the region's atom count
+bounds the number of consequences. All source passes share one allowance;
+continuing after a consequence does not renew it. An interruption leaves the
+region unresolved. These consequences restrict candidates; they provide no
+support for atoms and do not replace final original satisfaction or reduct
+membership.
+
+Within the admitted constructor-and-comparison fragment, one rule scan may
+produce a bounded batch of deductions. Each remains valid after the region
+narrows, so the solver consumes them one at a time with formula propagation
+between them. Exact held/cut masks authenticate this reuse; a sibling region
+starts fresh. A completed scan with no deduction is reused only while all the
+signed predicates it reads have unchanged bounds. These checks use packed masks
+and predicate dependencies, not a stored table of ground constraints. Potentially
+failing arithmetic retains the sequential scan. The
+[batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
+state the semantic premises separately from runtime error and storage handling.
+
 This is an original candidate restriction. It never enters a proper-subset
 search under a frozen reduct, and never replaces that membership check. The
 optional existing clause-search route retains final constraint checking without
@@ -309,20 +363,47 @@ The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/cr
 retains prepared constraints, the closed canonical base and the support
 relations (with their postings) that those constraints read; discovery and
 order indexes and other relations are released when admission closes support. Each checker has its
-own mutable state and prepares a checked dense atom lookup on its first region
+own mutable state and borrows a checked dense atom lookup on its first region
 operation. A prepared correspondence maps support rows to original dense atom
-IDs without copying their tuples. The region selects held positive rows before
-binding or scalar evaluation; a missing correspondence conservatively retains
-the row. A necessary template test also checks whether each signed predicate
+IDs without copying their tuples. Refutation selects held positive rows before
+binding or scalar evaluation. In the admitted total fragment, consequences use
+one traversal that permits at most one mapped open positive occurrence. Other
+mapped positive rows must be held. Partial arithmetic and generated bindings
+retain separate held-only and designated-open-occurrence traversals. A missing
+correspondence conservatively retains the row without lending truth evidence.
+A necessary template test also checks whether each signed predicate
 has any held atom, or any cut atom for a default-negated literal. The latter
 uses the whole original catalog, including unsupported negative occurrences.
 These selections can retain extra work; the complete body test still establishes
 each refutation. They do not filter the separate arithmetic-admission traversal
 or the final candidate check.
 
-Native persistent workers retain the preparation; scalar pulls and joined
-producer rounds prepare checkers for their operation. The indexed query wrapper
-borrows existing indexes and allocates nothing. Ordinary rows remain borrowed,
+A selected join can lend evidence that every positive occurrence in its current
+body already matched a mapped, held row, or that exactly one matched occurrence
+is open. In the latter case it also lends that occurrence's dense atom identity.
+The cursor keeps constant-sized prefix evidence; backtracking truncates it with
+the binding. Once scalar checks pass, the body check can omit those repeated
+positive atom lookups.
+The evidence belongs to the exact body, binding and immutable region, and ends
+before cursor advance. Unmapped rows, generated bindings and head suffixes keep
+ordinary lookup. Negative and double-negative literals still inspect their
+truth; complete model checks never use this region evidence.
+
+Invalidating a pending batch does not scan the atom catalog. The undelivered
+entries identify exactly which deduplication slots need clearing. Cleanup is
+charged and must finish before any new consequence can be delivered; interruption
+retains cleanup progress without retaining authority to use the old deductions.
+
+The core also shares an immutable mapping from rules to signed predicates and
+from original atom IDs to those predicates. The first successful builder
+publishes it; each checker admits its retained capacity against its own storage
+ceiling. Candidate masks, dirty flags, pending deductions and workspace remain
+local. Predicate references used while building the mapping are temporary.
+
+Native persistent workers retain their checkers; scalar pulls and joined
+producer rounds prepare checkers for their operation and borrow the same core
+mappings. The indexed query wrapper borrows existing indexes and allocates
+nothing. Ordinary rows remain borrowed,
 and typed candidate lookup copies no atom. The eager builder keeps its bulk
 materialization path. No channel or task is created for each instance.
 
@@ -334,15 +415,20 @@ counts against the support-byte allowance. A failed preparation publishes no pla
 Ordinary eager joins still prepare against their current support snapshot, whose
 row counts can change as the fixed point grows.
 
-All source checks within a hybrid session share one cumulative allowance for
-work, substitutions and copied scalar bytes. Charges precede the operations,
-including failed attempts; adding workers does not multiply the allowance.
-The final outcome joins workers before publishing settled receipts. Region
-attempts and refutations remain distinct from core answers checked, original
-answers accepted and frozen-reduct work.
-Zero-byte scalar charges, such as copying an inline number, require no shared
-counter update. Zero work charges still poll cancellation. Positive charges
-retain the same atomic admission and all-or-nothing failure behavior.
+Each source model check, region-refutation check or candidate closure gets its
+own work, substitution and scalar-capture ceilings. All consequence passes of
+one closure share those ceilings; publishing a pass's receipt does not renew
+them. Checker preparation belongs to its first check's allowance.
+
+Checkers share a cumulative receipt, not a cumulative admission ceiling.
+Charges are admitted locally before their operations and published when
+preparation or a check returns, fails or unwinds, and when a checker drops.
+In-flight charges may remain local; live receipt fields are independent,
+monotone lower bounds. Joined receipts are exact until their fields saturate.
+Zero work charges still poll cancellation. The final outcome joins workers
+before publishing settled receipts. Region attempts and refutations remain
+distinct from core answers checked, original answers accepted and
+frozen-reduct work.
 
 Streaming can avoid a constraint-node or root ceiling, but the finite atom
 and support envelope must still fit. Retained source plans and support also
@@ -536,6 +622,14 @@ returns a located failure for a missing required input. Local joins cannot bind
 an absent outer input. Generator backtracking clears exhausted outputs before an
 earlier input changes. Owning frame capacities, including optional cells, are
 charged separately from copied value payloads.
+
+Single-slot transfers copy authenticated canonical IDs between the existing
+frames without creating temporary ownership handles. Source authority, slot
+presence and destination checks retain their specified order. Comparisons whose
+two operands are immutable variable or constant leaves likewise borrow their
+values from one reader. General expressions retain owned keys while later
+evaluation may extend the vocabulary. Both routes retain arithmetic diagnostics,
+workspace admission and interruption checks.
 
 Support generation and rule instantiation consume ordinary completed bindings
 through the same borrowed-row mechanism. Head admission finishes before the join
@@ -762,6 +856,21 @@ retained capacity and replacement overlap remain under `max_support_bytes`.
 A mismatch or refusal clears the staged captures, and a successful match clears
 them after committing bindings to the ordinary undo trail. This changes neither
 candidate-row selection nor constructor, constant and repeated-variable checks.
+
+After capture, lazy constraint checkers can prepare
+[`PatternRows`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/prepared/pattern_rows.rs)
+over completed support. The ordinary structural matcher selects source row
+positions using an empty incoming binding, preserving constructors, constants
+and repeated-variable relationships. Later bindings add equalities, so they
+cannot make an excluded row match. Each probe chooses this selection or a
+smaller existing equality posting, then runs the ordinary matcher and body
+checks. Original rows and canonical terms keep their existing owners; the
+selection carries no candidate truth. A full, nonselective list is discarded.
+Preparation visits each source row and charges temporary and retained capacity.
+Selections live with the checker's prepared rules; independent checkers prepare
+and retain their own selections. The
+[correspondence boundary](../lean/correspondence.md) distinguishes the necessary
+selection law from executable matching, ownership and resource obligations.
 
 Ordinary positive atom heads with positive flat or structural witnesses and pure
 scalar checks or generators use [delta joins](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs).

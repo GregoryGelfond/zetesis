@@ -106,8 +106,13 @@ fn explicit_lazy_formula_publishes_checked_original_answers() {
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(document["statistics"]["hybrid_execution"]["accepted"], 2);
     assert_eq!(document["statistics"]["hybrid_execution"]["rejected"], 0);
+    // The original constraint cuts b before a rejected region is formed.
+    assert_eq!(
+        document["statistics"]["search"]["region_filter"]["refuted"],
+        0
+    );
     assert!(
-        document["statistics"]["search"]["region_filter"]["refuted"]
+        document["statistics"]["search"]["region_filter"]["checks"]
             .as_u64()
             .is_some_and(|count| count > 0)
     );

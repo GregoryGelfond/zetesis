@@ -432,3 +432,5 @@ fn the_shared_receipt_sums_every_workers_charges() {
             },)
     );
 }
+
+mod consequences;

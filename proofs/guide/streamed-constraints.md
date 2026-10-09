@@ -57,6 +57,25 @@ The retained theory need not be positive, and constraint bodies need not be
 monotone. A violating constraint rejects a candidate; it does not establish
 that no other retained-theory candidate is an answer set.
 
+## Ranking the accepted answer sets
+
+[`StreamedOptimization.completed_ties_exact`](../Zetesis/StreamedOptimization.lean)
+connects these completed checks to optimal ties. Start with a finite list that
+contains exactly the retained theory's answer sets, allowing duplicate entries.
+Filter that list by completing every covered constraint part, then select the
+least integer cost and all ties. The resulting membership is exactly optimality
+for the retained theory plus the original constraints. Pointwise test agreement
+is required only on the supplied list; a full-theory answer belongs there by
+the constraint-filtering law and retained-theory coverage.
+
+The proof establishes soundness and completeness of the filtered list before
+applying `Optimization.completed_ties_exact`. Its cost is one unbounded integer.
+It does not verify a runtime acceptance callback, incumbent publication,
+priority-vector scoring, checked arithmetic or candidate-bound feedback. Those
+need their own correspondence arguments. In particular, an unfinished source
+check cannot admit a proposal for ranking, and an incomplete candidate list
+cannot establish the theorem's exhaustive optimum conclusion.
+
 ## Refuting a region before it becomes a candidate
 
 [`StreamedRegions`](../Zetesis/StreamedRegions.lean) supplies a different,

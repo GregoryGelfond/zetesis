@@ -159,7 +159,8 @@ impl PreparedFormula {
     /// Materialize producers and ineligible constraints while retaining ordinary
     /// atom/scalar integrity constraints for repeated bounded satisfaction checks.
     /// Complete possible support and original arithmetic admission still run.
-    /// This explicit schedule currently requires indexed joins and no objectives.
+    /// This explicit schedule requires indexed joins. Objectives are retained;
+    /// solving must check the original constraints before scoring a core answer.
     /// No solver runs; core answer sets still require the retained constraints.
     ///
     /// # Errors
@@ -260,8 +261,10 @@ impl PreparedFormula {
     /// nothing deferred, the program) is grounded under the hybrid schedule:
     /// its producer core is instantiated and its eligible integrity constraints
     /// are streamed. A terminal owner's base is then [`crate::BaseKind::Hybrid`],
-    /// even with no eligible constraint. Objectives are refused, after the
-    /// partition's charges, as [`Self::ground_hybrid`] refuses them.
+    /// even with no eligible constraint. Objective declarations disable terminal
+    /// deferral and produce [`crate::FormulaMaterialization::Complete`] with a
+    /// [`crate::HybridFormula`], retaining every producer. Score its answers only
+    /// after complete streamed constraint acceptance.
     ///
     /// # Errors
     /// Returns the failures of [`Self::ground_adaptive`] and

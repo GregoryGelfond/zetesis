@@ -18,10 +18,12 @@ import Zetesis.PositiveTheory
 import Zetesis.ConstrainedPositive
 import Zetesis.StreamedConstraints
 import Zetesis.StreamedRegions
+import Zetesis.StreamedConsequences
 import Zetesis.ProducerScheduling
 import Zetesis.FerrarisGuards
 import Zetesis.FerrarisMask
 import Zetesis.Optimization
+import Zetesis.StreamedOptimization
 import Zetesis.QueryCompaction
 import Zetesis.Thresholds
 import Zetesis.AggregateAssignment

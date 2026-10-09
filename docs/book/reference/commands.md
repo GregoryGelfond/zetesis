@@ -107,7 +107,9 @@ the producer core is materialized, while eligible integrity constraints are
 checked from their admitted source families. Certified terminal definitions are
 deferred too, and reconstructed from each accepted base answer, as automatic
 admission does over an eager base. It runs on the CPU backend, uses indexed
-joins and refuses objective declarations and table joins.
+joins and refuses table joins. With objectives, terminal definitions remain in
+the core. Only answers that pass every original constraint enter scoring and
+optimal-tie retention.
 
 The three grounders: `eager` instantiates every rule before solving; `lazy`
 instantiates on demand wherever admitted — relational source joins, or the

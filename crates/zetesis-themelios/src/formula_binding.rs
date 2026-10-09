@@ -138,6 +138,47 @@ impl Binding<'static> {
             .map_err(|error| failure(error, location))
     }
 
+    /// Authenticate the row before the first destination-work callback. The
+    /// caller may reserve undo metadata there before charging the ordinary set.
+    pub(crate) fn set_term_with(
+        &mut self,
+        variable: usize,
+        value: TermRef<'_>,
+        read: CatalogRead<'_>,
+        location: ProgramSite,
+        before: impl FnMut() -> Result<(), FormulaFailure>,
+    ) -> Result<(), FormulaFailure> {
+        self.owned()
+            .set_term_with(variable, read, value, before)
+            .map_err(|error| failure(error, location))
+    }
+
+    /// A metadata copy keeps source absence ahead of destination failures and
+    /// imposes no accessible-reader-prefix requirement on either frame.
+    pub(crate) fn copy_slot(
+        &mut self,
+        variable: usize,
+        source: &Binding<'_>,
+        source_variable: usize,
+        work: &mut crate::formula_support::GroundingWork<'_>,
+    ) -> Result<(), FormulaFailure> {
+        match source.slots().is_bound(source_variable) {
+            Ok(true) => {}
+            Ok(false) | Err(AssignmentError::Slot { .. }) => {
+                return Err(FormulaFailure::UnsafeVariable {
+                    variable: source_variable,
+                    location: work.location,
+                });
+            }
+            Err(error) => return Err(assignment(error, work.location)),
+        }
+        self.owned()
+            .copy_slot_with(variable, source.slots(), source_variable, || {
+                work.counters.work(work.limits, work.location)
+            })
+            .map_err(|error| failure(error, work.location))
+    }
+
     pub(crate) fn extend_scope(
         &mut self,
         end: usize,
@@ -269,9 +310,33 @@ impl Binding<'_> {
         read: CatalogRead<'read>,
         location: ProgramSite,
     ) -> Result<TermRef<'read>, FormulaFailure> {
-        let key = self.key(variable, location)?;
-        read.term(&key)
-            .map_err(|error| assignment(AssignmentError::Read(error), location))
+        self.read_with(variable, read, location, || Ok(()))
+    }
+
+    /// Preserve source presence before caller work and reader authentication.
+    /// Evaluation uses this boundary for the charge formerly made after `key`.
+    pub(crate) fn read_with<'read>(
+        &self,
+        variable: usize,
+        read: CatalogRead<'read>,
+        location: ProgramSite,
+        before: impl FnOnce() -> Result<(), FormulaFailure>,
+    ) -> Result<TermRef<'read>, FormulaFailure> {
+        let slots = self.slots();
+        // Keep slot/absence errors ahead of reader authority errors. The frame
+        // retains its vocabulary witness; reading a cell needs no owned key.
+        match slots.is_bound(variable) {
+            Ok(true) => {}
+            Ok(false) | Err(AssignmentError::Slot { .. }) => {
+                return Err(FormulaFailure::UnsafeVariable { variable, location });
+            }
+            Err(error) => return Err(assignment(error, location)),
+        }
+        before()?;
+        slots
+            .term_with(read, variable, || Ok(()))
+            .map_err(|error| failure(error, location))?
+            .ok_or(FormulaFailure::UnsafeVariable { variable, location })
     }
 
     pub(crate) fn view<'a>(

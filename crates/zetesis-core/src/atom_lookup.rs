@@ -374,19 +374,56 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
         })
     }
 
+    /// Prepare repeated lookup of one signed predicate and arity. Both windows
+    /// borrow the authoritative index: keys stay in complete atom order and
+    /// rows retain original occurrence order. No atom or index is copied.
+    /// Four binary bounds charge their probes and predicate comparisons.
+    ///
+    /// # Errors
+    /// Returns the first callback refusal without publishing a partial view.
+    pub fn prepare_predicate_with<'query, E>(
+        self,
+        predicate: impl Into<PredicateRef<'query>>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<PredicateLookup<'index, 'source, 'query>, E> {
+        let predicate = predicate.into();
+        let key_low = self.bound_in(self.keys, predicate, false, &mut before)?;
+        let key_high = self.bound_in(self.keys, predicate, true, &mut before)?;
+        let row_low = self.bound(predicate, false, &mut before)?;
+        let row_high = self.bound(predicate, true, &mut before)?;
+        Ok(PredicateLookup {
+            predicate,
+            lookup: Self {
+                atoms: self.atoms,
+                keys: &self.keys[key_low..key_high],
+                rows: &self.rows[row_low..row_high],
+            },
+        })
+    }
+
     fn bound<E>(
         self,
         predicate: PredicateRef<'_>,
         after: bool,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<usize, E> {
-        let (mut low, mut high) = (0, self.rows.len());
+        self.bound_in(self.rows, predicate, after, before)
+    }
+
+    fn bound_in<E>(
+        self,
+        positions: &[usize],
+        predicate: PredicateRef<'_>,
+        after: bool,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<usize, E> {
+        let (mut low, mut high) = (0, positions.len());
         while low < high {
             before()?;
             let middle = low + (high - low) / 2;
             let order = self
                 .atoms
-                .at(self.rows[middle])
+                .at(positions[middle])
                 .predicate()
                 .compare_ref_with(predicate, &mut *before)?;
             if order.is_lt() || (after && order.is_eq()) {
@@ -451,6 +488,57 @@ impl<'index, 'source> AtomLookup<'index, 'source> {
             }
         }
         Ok(None)
+    }
+}
+
+/// A prepared signed-predicate view over one authoritative atom index.
+/// Its canonical-key window and original-row window have different orders.
+/// It borrows the index, source atoms and predicate; no truth is retained.
+#[derive(Clone, Copy, Debug)]
+pub struct PredicateLookup<'index, 'source, 'query> {
+    lookup: AtomLookup<'index, 'source>,
+    predicate: PredicateRef<'query>,
+}
+
+impl<'index, 'source> PredicateLookup<'index, 'source, '_> {
+    /// The selected atoms in original occurrence order, retaining dense IDs.
+    #[must_use]
+    pub fn rows(self) -> AtomRows<'index, 'source> {
+        AtomRows {
+            atoms: self.lookup.atoms,
+            positions: self.lookup.rows.iter(),
+        }
+    }
+
+    /// Find a complete key of this signed predicate and arity. An empty window
+    /// returns `None` without reading the query or invoking the callback.
+    /// Otherwise check the query predicate once, then compare only arguments
+    /// within the canonical key window. Equal predicates from independent owners
+    /// remain equal by contents. A different predicate or absent tuple returns
+    /// `None`.
+    ///
+    /// # Errors
+    /// Every visited descriptor and probe is charged before work. A callback
+    /// refusal remains an error, never absence, and leaves the view reusable.
+    pub fn get_key_with<E>(
+        self,
+        query: &crate::AtomKey<'_>,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<AtomRow<'source>>, E> {
+        if self.lookup.keys.is_empty() {
+            return Ok(None);
+        }
+        let predicate = query.predicate_with(&mut before)?;
+        if !self
+            .predicate
+            .compare_ref_with(predicate, &mut before)?
+            .is_eq()
+        {
+            return Ok(None);
+        }
+        self.lookup.find_with(&mut before, |atom, before| {
+            atom.compare_key_arguments_with(query, before)
+        })
     }
 }
 

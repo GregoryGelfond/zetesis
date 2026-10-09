@@ -266,3 +266,5 @@ fn a_construction_stop_precedes_a_later_source_worker_failure() {
         Some(&receipt)
     );
 }
+
+mod objective_tests;

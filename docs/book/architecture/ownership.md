@@ -161,6 +161,19 @@ narrowing empties the scratch it borrows before reading it, and no scratch is
 shared between threads. Evaluation workspaces, budget leases and traversal
 state remain separate.
 
+The immutable producer index records whether any producer has several distinct
+heads. If none does, holding an atom cannot block support for a competing head,
+so propagation omits that scan. The property is derived from the extracted head
+sets; it is not a cached conclusion about candidate truth.
+
+A native candidate worker may keep one refuted region's knowledge allocation
+until its next split or exit. Before giving it to a child, the worker overwrites
+every conclusion, counter and bound generation from the current parent. Arrays
+of the same shape reuse their allocation; changed shapes are copied into fresh
+storage. Children retain independent ownership and no more vector capacity than
+a fresh copy. This saves allocation work, not the linear cost of copying the
+parent, and can retain one extra knowledge bundle per worker between splits.
+
 Region queries check retained workspace storage before evaluation and before
 returning a successful verdict. The final check includes scratch grown by the
 query; every attempt records its retained peak, including a failed attempt.
@@ -246,7 +259,7 @@ and the owned decision and knowledge buffers of queued regions. An empty frontie
 can retain capacity. The count and byte peaks are maxima over frontier changes;
 they need not occur together.
 
-The observation excludes active regions, temporary split copies, shared immutable
+The observation excludes active regions, retired worker storage, temporary split copies, shared immutable
 indexes, candidate batches, thread stacks, allocator overhead and device storage.
 It is neither peak process memory nor a memory limit. Uninstrumented traversal
 routes report absence, not zero. The statistics JSON preserves that distinction
