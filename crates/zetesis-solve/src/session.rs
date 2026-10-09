@@ -233,7 +233,7 @@ impl<'a> PreparedInput<'a> {
         }
         // A hybrid terminal base runs as the hybrid route does: an eager
         // request contradicts its materialization and is refused, automatic
-        // and lazy requests run it, under the hybrid backend and batching
+        // and lazy requests run it, under the hybrid oracle and batching
         // restrictions.
         if let Prepared::TerminalDefinitions(owner) = self.input
             && owner.base_kind() == zetesis_themelios::BaseKind::Hybrid
@@ -833,12 +833,26 @@ impl<'a> Session<'a> {
         }
         outcome
     }
-    /// End an unfinished session and retain its current evidence. Coverage stays
-    /// unavailable unless the retained engine already established a terminal state.
+    /// End an unfinished session and retain its settled evidence. Native workers
+    /// are joined without cancelling the caller's token. Coverage stays unavailable
+    /// unless the retained engine established a terminal state or cleanup stopped.
     #[must_use]
     pub fn stop(mut self) -> SemanticOutcome {
-        if let State::TerminalDefinitions(state) = &mut self.state {
-            state.stop(self.phases.recorder());
+        let phases = self.phases.recorder();
+        match &mut self.state {
+            State::Formula(state) => {
+                let previous = state.outcome(phases).search_state();
+                let cleanup = state.stop(phases);
+                state.conclude(crate::completion::after_cleanup(previous, cleanup), phases);
+            }
+            State::Hybrid(state) => {
+                let previous = state.outcome(phases).search_state();
+                // A source fault leaves its settled evidence unclassified;
+                // consuming stop has no further answer or error to publish.
+                let _ = state.conclude(previous, phases);
+            }
+            State::TerminalDefinitions(state) => state.stop(phases),
+            State::Closure(_) | State::Stopped(_) => {}
         }
         self.progress()
     }

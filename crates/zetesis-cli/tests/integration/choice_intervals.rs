@@ -1,7 +1,7 @@
 //! Automatic routing preserves choice groups, observed ties and objective slots.
 
 use crate::support::runs::enumerated as solve;
-use zetesis_cli::{Backend, Completion, RunError};
+use zetesis_cli::{Completion, RunError};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, ProfileFeature,
 };
@@ -87,31 +87,6 @@ fn explicit_closure_refuses_interval_choices_without_emitting_answers() {
         )))
     ));
     assert!(crate::support::human::preamble(&output), "{output}");
-}
-
-#[test]
-fn explicit_lazy_device_choices_are_refused_before_discovery() {
-    for (arguments, expected) in [
-        (
-            vec!["--backend", "metal", "--grounder", "lazy"],
-            Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
-        ),
-        (
-            vec!["--backend", "gpu", "--grounder", "lazy"],
-            Backend::Gpu(None),
-        ),
-    ] {
-        // Hybrid formula checking is CPU-only, independently of the existing
-        // relational lazy device capability.
-        let (result, output, diagnostics) = solve("1 {p(1..4)} 1.", &arguments);
-        let error = result.expect_err("lazy choice route must be refused");
-        assert!(matches!(error, RunError::HybridBackend { backend } if backend == expected));
-        assert!(
-            crate::support::human::preamble(&output),
-            "{arguments:?}: {output}"
-        );
-        assert!(diagnostics.is_empty(), "{arguments:?}: {diagnostics}");
-    }
 }
 
 #[test]

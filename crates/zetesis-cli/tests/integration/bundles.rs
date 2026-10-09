@@ -380,26 +380,3 @@ fn files_resolve_original_includes_but_strings_have_no_implicit_base_path() {
     .unwrap_err();
     assert!(matches!(error, RunError::FormulaAdmission(_)));
 }
-
-#[test]
-fn lazy_formula_bundle_is_refused_before_device_discovery() {
-    let fixture = Fixture::new();
-    fixture.write("entry.lp", "a | b.");
-    let error = run_bundle_with_diagnostics(
-        fixture.bundle(),
-        &options(&["--backend", "metal", "--grounder", "lazy"]),
-        &mut Vec::new(),
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            RunError::HybridBackend {
-                backend: zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
-            }
-        ),
-        "{error}"
-    );
-}

@@ -343,7 +343,7 @@ fn model_retention_failures_preserve_the_typed_cause() {
 }
 
 #[test]
-fn hybrid_device_policy_is_refused_before_parsing() {
+fn hybrid_device_admission_failure_precedes_device_discovery() {
     let mut options = options(&["--oracle", "countermodel", "--grounder", "lazy"]);
     options.backend = zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
     let mut output = Vec::new();
@@ -356,26 +356,15 @@ fn hybrid_device_policy_is_refused_before_parsing() {
         &Cancellation::default(),
     )
     .unwrap_err();
-    match &error {
-        RunError::HybridBackend { backend } => {
-            assert_eq!(*backend, options.backend);
-        }
-        _ => panic!("route validation must precede source admission: {error}"),
-    }
-    let message = error.to_string();
-    assert!(
-        message
-            .contains("streamed formula constraints run only on the cpu backend; requested metal"),
-        "{message}"
-    );
-    assert!(error.source().is_none());
+    assert!(matches!(error, RunError::FormulaAdmission(_)));
+    assert!(error.source().is_some());
     let output = std::str::from_utf8(&output).unwrap();
     assert!(!output.contains("Answer:"));
     assert!(
         !output.contains("Backend:"),
         "no backend may be initialized"
     );
-    assert!(diagnostics.is_empty());
+    assert!(!String::from_utf8(diagnostics).unwrap().contains("Backend:"));
 }
 
 #[test]

@@ -178,3 +178,4 @@ fn a_refused_certificate_refunds_its_reserved_work() {
 
 mod coordination_tests;
 mod timing_tests;
+mod cancellation_tests;

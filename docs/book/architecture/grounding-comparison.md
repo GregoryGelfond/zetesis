@@ -18,9 +18,10 @@ acceptance criterion.
 
 These routes do not have equal language coverage. The
 [language reference](../reference/language.md) identifies the current profiles.
-The CPU hybrid formula profile retains bounded choices and other producers
+The hybrid formula profile retains bounded choices and other producers
 eagerly. It streams eligible ordinary constraints and scores objectives only after
-those checks complete. Table joins remain unsupported in this profile. General
+those checks complete. Core membership uses the selected CPU or GPU executor;
+source joins and constraint checks run on the host. Table joins remain unsupported in this profile. General
 demand-driven formula producers are not implemented.
 
 ![Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds.](grounding-comparison.svg)
@@ -247,8 +248,11 @@ profile's [hybrid constraint schedule](grounding.md#eager-and-lazy-execution).
 Parsing, source ownership and source joins run on the host. In the relational
 lazy device path, Metal computes per-world positive consequences and frozen-gate
 tests from bounded source chunks; it is not replaying a CPU-completed closure.
-The general formula GPU path consumes an eager theory and retains exact CPU
-completion of residual membership work. Neither path is full GPU grounding.
+The formula GPU path checks a retained theory: the complete eager theory or the
+producer core of hybrid grounding. Tight cores use complete support checking;
+general cores retain exact CPU completion of unresolved device results. Hybrid
+answers then pass every streamed constraint on the host before scoring or
+publication. Neither path is full GPU grounding.
 
 Avoiding a rule vector can save storage. Repeated joins, masks, demanded
 catalogs, concurrent workspaces and transfers also cost memory and time. A useful

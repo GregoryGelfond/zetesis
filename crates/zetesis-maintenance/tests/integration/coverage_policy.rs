@@ -136,8 +136,8 @@ fn physical_selection_is_a_fixed_contract() {
             ),
         TABLE
             .replace(
-                "session-resources|integration|9|",
-                "session-resources|integration|8|",
+                "session-resources|integration|13|",
+                "session-resources|integration|12|",
             )
             .replace(
                 " session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
@@ -380,7 +380,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 59);
+    assert_eq!(record["expected_physical_tests"], 63);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
@@ -417,7 +417,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["relation", "test", "integration", 2],
             ["context", "test", "integration", 1],
             ["solve-context", "lib", "workspace libraries", 3],
-            ["session-resources", "test", "integration", 9],
+            ["session-resources", "test", "integration", 13],
             ["language-consumers", "test", "integration", 2],
             ["static", "test", "integration", 2]
         ])
@@ -431,7 +431,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[12]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 59);
+    assert_eq!(tests.len(), 63);
     let formula_tests = serde_json::json!([
         "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
@@ -447,7 +447,11 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         "session_resources_gpu::metal_tight_sessions_preserve_complete_families",
         "session_resources_gpu::metal_general_formulas_keep_device_execution",
         "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
-        "session_resources_gpu::metal_terminal_sessions_preserve_complete_families"
+        "session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
+        "hybrid_gpu::metal_hybrid_preserves_complete_scored_families",
+        "hybrid_gpu::metal_hybrid_source_failure_preserves_pending_acceptance",
+        "hybrid_gpu::metal_hybrid_cancellation_stops_queued_core_models",
+        "hybrid_gpu::metal_hybrid_reconstructs_only_accepted_answers"
     ]);
     assert_eq!(groups[11]["tests"], session_tests);
     let static_tests = serde_json::json!([
@@ -461,7 +465,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("59 exact Metal tests: "));
+    assert!(scope.starts_with("63 exact Metal tests: "));
     assert!(scope.contains("complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch"));
     assert!(scope.contains("completed-support table joins with actual GPU candidates and complete CPU/Metal answer families"));
     assert!(scope.contains("static constructor and complete closure/reference checks"));
@@ -570,9 +574,9 @@ fn each_physical_stage_names_its_backend() {
             record["workspace_stages"],
             serde_json::json!(["portable", label])
         );
-        assert_eq!(record["expected_physical_tests"], 59);
+        assert_eq!(record["expected_physical_tests"], 63);
         let scope = record["physical_scope"].as_str().unwrap();
-        assert!(scope.starts_with(&format!("59 exact {} tests: ", api.name())));
+        assert!(scope.starts_with(&format!("63 exact {} tests: ", api.name())));
         assert!(scope.contains(&format!("complete CPU/{} answer families", api.name())));
     }
 }

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use clap::Parser;
-use zetesis_cli::{Completion, Interruption, Options, Report, RunError, run_with_diagnostics};
+use zetesis_cli::{Completion, Interruption, Options, Report, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 
 fn solve(
@@ -144,34 +144,6 @@ fn cancellation_precedes_eager_materialization() {
     assert!(report.formula_execution.is_none());
     assert!(report.lazy_execution.is_none());
     assert!(report.shared_execution.is_none());
-}
-
-#[test]
-fn hybrid_device_requests_are_refused_before_source() {
-    for arguments in [
-        vec!["--backend", "metal", "--grounder", "lazy"],
-        vec!["--backend", "gpu", "--grounder", "lazy"],
-    ] {
-        let options = Options::try_parse_from(
-            ["zetesis", "--oracle", "countermodel"]
-                .into_iter()
-                .chain(arguments),
-        )
-        .unwrap();
-        let mut output = Vec::new();
-        let result = run_with_diagnostics(
-            "invalid ? source".into(),
-            &options,
-            &mut output,
-            &mut Vec::new(),
-            &Cancellation::default(),
-        );
-        assert!(matches!(result, Err(RunError::HybridBackend { backend })
-            if backend == options.backend));
-        assert!(crate::support::human::preamble(&String::from_utf8_lossy(
-            &output
-        )));
-    }
 }
 
 fn queens(size: usize) -> String {

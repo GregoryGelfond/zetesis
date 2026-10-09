@@ -1235,7 +1235,9 @@ impl<C> Known<C> {
     }
 }
 
-/// What a step of the closure did.
+/// What a step of the closure did. Contradiction is terminal: subsequent
+/// propagation cannot restore the region, so its knowledge and pending events
+/// are discarded instead of completing dependent work.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Step {
     Unchanged,
@@ -1245,6 +1247,8 @@ enum Step {
 }
 
 impl Step {
+    /// Combine completed results. Arguments are evaluated eagerly, so a caller
+    /// must return a contradiction before starting another operation.
     fn join(self, other: Self) -> Self {
         match (self, other) {
             (Self::Contradiction, _) | (_, Self::Contradiction) => Self::Contradiction,
@@ -1339,6 +1343,9 @@ impl<C: Count> Closure<'_, C> {
             } else {
                 self.never(node)
             });
+            if step == Step::Contradiction {
+                return step;
+            }
         }
         if value && producers.is_some() {
             self.lists.queue_recheck(atom);
@@ -1375,10 +1382,16 @@ impl<C: Count> Closure<'_, C> {
                 ) || frozen.is_some_and(|truth| !truth[node]);
                 if falsum {
                     step = step.join(self.never(node));
+                    if step == Step::Contradiction {
+                        return Ok(step);
+                    }
                 }
             }
             for &root in theory.roots() {
                 step = step.join(self.sure(root));
+                if step == Step::Contradiction {
+                    return Ok(step);
+                }
             }
             if producers.is_some() {
                 for atom in 0..theory.atom_count() {
@@ -1392,8 +1405,15 @@ impl<C: Count> Closure<'_, C> {
         let seen = std::mem::take(&mut self.known.seen);
         for (atom, value) in region.decided_since(seen) {
             step = step.join(self.atom(index, producers, frozen, atom, value));
+            if step == Step::Contradiction {
+                break;
+            }
         }
-        region.snapshot_decided(seen);
+        if step != Step::Contradiction {
+            region.snapshot_decided(seen);
+        }
+        // Restore the borrowed storage even when this knowledge is discarded;
+        // only a completed incorporation may record all decisions as seen.
         self.known.seen = seen;
         if step == Step::Contradiction {
             return Ok(step);
@@ -1426,7 +1446,9 @@ impl<C: Count> Closure<'_, C> {
     /// here, once for its false-node event. All node events run before support
     /// rechecks, so repeated teaching of a known parent needs no body scan.
     /// Closed inherited knowledge already completed these wakeups; a refused
-    /// closure is abandoned with its pending events.
+    /// closure is abandoned with its pending events. Once this event proves a
+    /// contradiction, no remaining neighbour can restore the region; leave its
+    /// unread tail uncharged and abandon the knowledge with the region.
     fn revisit(
         &mut self,
         subject: Subject<'_>,
@@ -1445,6 +1467,9 @@ impl<C: Count> Closure<'_, C> {
         let mut step = Step::Unchanged;
         if !masked(node) {
             step = step.join(self.teach_operands(subject, index, node, work)?);
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
             if !value && let Some(producers) = subject.producers {
                 for &producer in &producers.by_body[node] {
                     for &head in &producers.rules[producer].heads {
@@ -1463,6 +1488,9 @@ impl<C: Count> Closure<'_, C> {
             } else {
                 self.revisit_implication(nodes, parent)
             });
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
         }
         Ok(step)
     }
@@ -1578,7 +1606,6 @@ impl<C: Count> Closure<'_, C> {
         }
         Ok(match nodes.node(node).expect("admitted node") {
             NodeView::Atom(atom) => {
-                let mut step = Step::Unchanged;
                 if bit(self.known.sure, node) {
                     // A held head blocks the other heads of its producers.
                     if let Some(producers) = producers
@@ -1592,12 +1619,12 @@ impl<C: Count> Closure<'_, C> {
                             }
                         }
                     }
-                    step = step.join(self.atom(index, producers, frozen, atom, true));
+                    self.atom(index, producers, frozen, atom, true)
+                } else if bit(self.known.never, node) {
+                    self.atom(index, producers, frozen, atom, false)
+                } else {
+                    Step::Unchanged
                 }
-                if bit(self.known.never, node) {
-                    step = step.join(self.atom(index, producers, frozen, atom, false));
-                }
-                step
             }
             NodeView::False if bit(self.known.sure, node) => Step::Contradiction,
             NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
@@ -1608,26 +1635,31 @@ impl<C: Count> Closure<'_, C> {
     /// The same downward implication rules serve a node's own event and a
     /// known parent's response to an operand. Neither adds a charged visit.
     fn teach_implication(&mut self, node: usize, a: usize, b: usize) -> Step {
-        let mut step = Step::Unchanged;
         if bit(self.known.sure, node) {
-            step = step.join(if bit(self.known.sure, a) {
+            return if bit(self.known.sure, a) {
                 self.sure(b)
             } else if bit(self.known.never, b) {
                 self.never(a)
             } else {
                 Step::Unchanged
-            });
+            };
         }
         if bit(self.known.never, node) {
-            step = step.join(self.sure(a).join(self.never(b)));
+            let step = self.sure(a);
+            if step == Step::Contradiction {
+                return step;
+            }
+            return step.join(self.never(b));
         }
-        step
+        Step::Unchanged
     }
 
     /// What a chain's own knowledge leaves its operands. A complete processed
     /// count means every operand already has the required bit, so its downward
     /// scan teaches nothing. Counts never lead bits; the root's own event,
     /// parents and support wakeups still run even when this scan is omitted.
+    /// A contradictory operand ends the scan: the region is already refuted,
+    /// and neither the remaining operands nor their work permits are needed.
     fn teach_chain(
         &mut self,
         index: &Narrower,
@@ -1650,15 +1682,20 @@ impl<C: Count> Closure<'_, C> {
                 for &operand in operands {
                     work.tick()?;
                     step = step.join(self.sure(operand));
+                    if step == Step::Contradiction {
+                        return Ok(step);
+                    }
                 }
             }
-        }
-        if bit(self.known.never, root) {
+        } else if bit(self.known.never, root) {
             if disjunction {
                 if self.known.never_operands.get(chain) != total {
                     for &operand in operands {
                         work.tick()?;
                         step = step.join(self.never(operand));
+                        if step == Step::Contradiction {
+                            return Ok(step);
+                        }
                     }
                 }
             } else if self.known.sure_operands.get(chain) + 1 == total {
@@ -1677,16 +1714,16 @@ impl<C: Count> Closure<'_, C> {
         };
         let mut up = Step::Unchanged;
         if bit(self.known.never, a) || bit(self.known.sure, b) {
-            up = up.join(self.sure(node));
             // A satisfied implication teaches no new operand truth. Its own
-            // event remains queued if the parent just became known. A false
-            // parent still follows the complete contradictory teaching path.
-            if up != Step::Contradiction {
-                return up;
-            }
+            // event remains queued if the parent just became known; a false
+            // parent refutes immediately without further teaching.
+            return self.sure(node);
         }
         if bit(self.known.sure, a) && bit(self.known.never, b) {
             up = up.join(self.never(node));
+            if up == Step::Contradiction {
+                return up;
+            }
         }
         up.join(self.teach_implication(node, a, b))
     }

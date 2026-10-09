@@ -1463,6 +1463,15 @@ The root event still updates parents, ranking and support wakeups. Pending bits
 without a complete processed count retain the scan. This does not change the
 `FormulaChains` laws or discharge the concrete queue and counter obligations.
 
+A propagation operation stops when it first establishes contradiction. The
+remaining operands, parents and support wakeups cannot restore a model:
+`FormulaBounds.known_contradiction_refutes` excludes every answer set in that
+region. Rust must abandon its unfinished knowledge, restore borrowed state and
+clear pending scratch before reuse. The earlier exit charges only work actually
+visited; it may establish refutation before a quota would have stopped the old
+trailing scan. This is a semantic justification, not a proof of those Rust
+state-management obligations.
+
 The region candidate walk and frozen proper-subset queries share one
 immutable index constructed with the exact original `Theory`, built by its one
 owner when the walk first needs it. Reuse checks instance identity. Each
@@ -2027,6 +2036,15 @@ owner identity, cursor coverage and bounded execution remain separate obligation
 The occurrence-count fuel bound does not bound Rust join or expression work;
 less retained materialization need not mean less replay work. See the
 [constraint-stream guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md).
+
+The hybrid executor composes this law with either CPU or GPU core membership.
+Host source consequences narrow only original candidate regions. The device
+checks the retained core; complete streamed acceptance still precedes scoring,
+bound feedback and publication. Device batches may contain core answers awaiting
+that acceptance, so core membership and original-answer counts remain distinct.
+The law is independent of the execution backend. Core identity, complete source
+coverage, queue ownership and interruption accounting are still concrete Rust
+and shader correspondence obligations; selecting a GPU does not discharge them.
 
 [`StreamedOptimization.completed_ties_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedOptimization.lean)
 filters a sound, complete finite list of retained-theory answer sets by those

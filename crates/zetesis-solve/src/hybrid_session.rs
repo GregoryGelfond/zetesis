@@ -3,8 +3,10 @@
 //! The retained core uses the ordinary formula session. Its answers
 //! become answers of the original subject only after all streamed constraints
 //! are satisfied. Only those complete original answers enter scoring, incumbent
-//! retention and objective-bound feedback. This remains a CPU formula route;
-//! terminal-definition objectives and device hybrid checking are excluded.
+//! retention and objective-bound feedback. The retained formula core uses the
+//! selected backend;
+//! streamed constraints are checked on the host before scoring or publication.
+//! Terminal-definition objectives remain excluded.
 //! The append-constraints law justifies this composition; source
 //! instance coverage and completed admission remain separate prerequisites.
 

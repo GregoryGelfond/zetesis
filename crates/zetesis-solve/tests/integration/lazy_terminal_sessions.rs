@@ -161,24 +161,6 @@ fn an_automatic_request_runs_a_hybrid_terminal_base() {
 }
 
 #[test]
-fn a_hybrid_terminal_base_runs_on_the_cpu_only() {
-    let owner = lazy_terminal(OPTIONAL);
-    let config = SolveConfig {
-        backend: Backend::Gpu(None),
-        ..config(Grounder::Lazy)
-    };
-    assert!(matches!(
-        Session::builder(
-            PreparedInput::terminal(&owner),
-            config,
-            Cancellation::default()
-        )
-        .collect(WorldViewLimits::default()),
-        Err(failure) if refused(&failure, |error| matches!(error, SolveError::HybridBackend { .. }))
-    ));
-}
-
-#[test]
 fn objectives_under_lazy_grounding_are_materialized() {
     let FormulaMaterialization::Complete(owner) = lazy("{a}. #minimize{1:a}.").unwrap() else {
         panic!("objectives must retain complete producers");

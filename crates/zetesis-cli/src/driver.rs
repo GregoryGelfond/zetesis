@@ -88,11 +88,6 @@ pub enum RunError {
     ConstraintFailureMissing,
     /// Consumed core-answer accounting cannot represent another answer.
     HybridStatisticsOverflow,
-    /// Streamed formula constraints do not have a device executor yet.
-    HybridBackend {
-        /// Explicitly requested execution hardware.
-        backend: Backend,
-    },
     /// Fixed-domain projected enumeration failed with full membership retained.
     Projection(zetesis_solve::ProjectionError),
     /// Reading a bounded standard-input source failed before semantic admission.
@@ -232,8 +227,6 @@ impl fmt::Display for RunError {
             Self::Constraint(error) => error.fmt(f),
             Self::ConstraintFailureMissing => f.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => f.write_str("hybrid answer accounting overflow"),
-            Self::HybridBackend { backend } => write!(f,
-                "streamed formula constraints run only on the cpu backend; requested {}", backend.label()),
             Self::Executor(error) => error.fmt(f),
             Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
@@ -386,7 +379,6 @@ impl std::error::Error for RunError {
             | Self::ConstraintFailureMissing
             | Self::TerminalStatisticsOverflow
             | Self::HybridStatisticsOverflow
-            | Self::HybridBackend { .. }
             | Self::BackendUnavailable
             | Self::UnsupportedCombination { .. }
             | Self::UnsupportedOracle { .. }
@@ -809,7 +801,6 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::Constraint(error) => Self::Constraint(error),
             SolveError::ConstraintFailureMissing => Self::ConstraintFailureMissing,
             SolveError::HybridStatisticsOverflow => Self::HybridStatisticsOverflow,
-            SolveError::HybridBackend { backend } => Self::HybridBackend { backend },
             SolveError::Executor(error) => Self::Executor(error),
             SolveError::Projection(error) => Self::Projection(error),
             SolveError::Batch(error) => Self::Batch(error),

@@ -280,7 +280,6 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::Constraint(_) => "constraint",
         RunError::ConstraintFailureMissing => "constraint_failure_missing",
         RunError::HybridStatisticsOverflow => "hybrid_statistics_overflow",
-        RunError::HybridBackend { .. } => "hybrid_backend",
         RunError::Input(_) => "input",
         RunError::TimeLimitRange { .. } => "time_limit_range",
         RunError::DeadlineTimer(_) => "deadline_timer",

@@ -867,7 +867,9 @@ impl Iterator for StableModels {
                 None
             }
             Err(error) => {
-                self.terminal = true;
+                // Terminal evidence includes every worker's settled prefix.
+                // Cleanup cannot replace the interruption that stopped this pull.
+                let _ = self.stop();
                 Some(Err(error))
             }
         }

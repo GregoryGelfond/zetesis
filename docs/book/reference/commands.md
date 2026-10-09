@@ -102,12 +102,13 @@ definitions from each verified base answer. It returns full original answers;
 [grounding contract](../architecture/grounding.md#terminal-definition-analysis).
 Explicit `--grounder eager` still requests complete materialization.
 
-For a formula input, explicit `--grounder lazy` selects CPU hybrid grounding:
+For a formula input, explicit `--grounder lazy` selects hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
 checked from their admitted source families. Certified terminal definitions are
 deferred too, and reconstructed from each accepted base answer, as automatic
-admission does over an eager base. It runs on the CPU backend, uses indexed
-joins and refuses table joins. With objectives, terminal definitions remain in
+admission does over an eager base. The core uses the selected CPU or GPU backend;
+source joins and streamed constraint checks run on the host. Hybrid grounding
+uses indexed joins and refuses table joins. With objectives, terminal definitions remain in
 the core. Only answers that pass every original constraint enter scoring and
 optimal-tie retention.
 

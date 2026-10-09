@@ -176,7 +176,7 @@ fn solve_class(error: &SolveError) -> Class {
         | SolveError::CandidateStreamNotExhausted
         | SolveError::FormulaBatchShape { .. } => Class::Engine,
         // The remaining CPU variants concern an incompatible configured profile:
-        // Projection, HybridBackend, BackendUnavailable, UnsupportedOracle,
+        // Projection, BackendUnavailable, UnsupportedOracle,
         // UnsupportedSourceBatching or PreparedInput. Cargo feature unification
         // can also expose Gpu/LazyGpu errors without a matching adapter feature.
         // This closed CPU, unprojected profile admits none of those paths. Any

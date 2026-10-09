@@ -17,11 +17,6 @@ pub enum SolveError {
     ConstraintFailureMissing,
     /// Consumed core-answer accounting cannot represent another answer.
     HybridStatisticsOverflow,
-    /// Streamed formula constraints do not have a device executor yet.
-    HybridBackend {
-        /// Explicitly requested execution hardware.
-        backend: Backend,
-    },
     /// Explicit batch executor selection, protocol, or original external failure.
     Executor(crate::ExecutorError),
     /// Fixed-domain answer projection failed after preserving full membership.
@@ -102,8 +97,6 @@ impl fmt::Display for SolveError {
             Self::Constraint(error) => error.fmt(formatter),
             Self::ConstraintFailureMissing => formatter.write_str("source region check stopped without its failure receipt"),
             Self::HybridStatisticsOverflow => formatter.write_str("hybrid answer accounting overflow"),
-            Self::HybridBackend { backend } => write!(formatter,
-                "streamed formula constraints run only on the cpu backend; requested {}", backend.label()),
             Self::Executor(error) => error.fmt(formatter),
             Self::Projection(error) => error.fmt(formatter),
             Self::Batch(error) => error.fmt(formatter),
@@ -168,7 +161,6 @@ impl std::error::Error for SolveError {
             | Self::TerminalStatisticsOverflow
             | Self::ConstraintFailureMissing
             | Self::HybridStatisticsOverflow
-            | Self::HybridBackend { .. }
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
             | Self::ClosureReservation { .. }

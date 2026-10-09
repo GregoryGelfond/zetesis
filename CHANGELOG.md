@@ -8,9 +8,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 - Evaluate eligible stratified normal programs directly, checking all original
   constraints before publishing their unique answer.
-- Support objectives with lazy CPU formula grounding. Check the original
+- Support objectives with lazy formula grounding. Check the original
   constraints before scoring an answer or updating a bound, and preserve
   optimal ties and explicit interruption outcomes.
+- Allow GPU checking with hybrid lazy grounding. The selected device checks
+  the retained formula core; host checks establish satisfaction of streamed
+  constraints before an answer is scored or returned.
 - Derive candidate consequences from streamed integrity constraints before
   splitting. Source deductions and formula propagation share a fixed point;
   final answer acceptance still checks original satisfaction and the reduct.
@@ -27,6 +30,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   construct possible count values directly without changing tuple identity.
 - Reduce repeated formula propagation, support scans and split ranking while
   preserving candidate coverage and reduct membership.
+- Stop propagation when a region is proved contradictory, without visiting
+  the remaining operands or parent formulas.
 - Store candidate knowledge together and reuse borrowed terms and cancellation
   flags, reducing allocation and ownership overhead while keeping workers independent.
 - Reconstruct terminal answers from authenticated base identities without
@@ -39,11 +44,16 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Prepare tight and positive-program certificates within the session's memory
   and search allowances. Fixed internal size limits no longer force otherwise
   eligible programs onto general reduct checking.
+- Settle parallel worker statistics before returning a stopped session's
+  report, preserving its original interruption reason and incomplete coverage.
 
 ### Compatibility
 
-- Remove `HybridFeature::Objectives`: lazy CPU formula grounding now admits
+- Remove `HybridFeature::Objectives`: lazy formula grounding now admits
   objectives. Rust callers matching this former refusal can remove that arm.
+- Remove `SolveError::HybridBackend`, its CLI counterpart and the JSON
+  `hybrid_backend` error kind: hybrid sessions now accept GPU backends.
+  Device availability and resource failures retain their existing typed errors.
 - `ConstraintAllowance::statistics()` now reports settled charges: live readings
   can omit charges from an active check. Shared totals are exact after all
   operations settle, up to counter saturation; local and failure receipts remain

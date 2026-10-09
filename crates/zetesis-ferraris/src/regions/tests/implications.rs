@@ -35,7 +35,7 @@ fn knowledge(index: &Narrower, values: [Option<bool>; 3]) -> Knowledge {
 }
 
 /// A three-valued reference, independent of packed bits and Step joining.
-/// Conflicting conclusions keep the earlier truth and record a contradiction.
+/// Conflicting conclusions keep the earlier truth and end the event.
 struct Consequences {
     values: [Option<bool>; 3],
     events: Vec<(usize, bool)>,
@@ -62,6 +62,9 @@ impl Consequences {
             };
             if let Some(value) = truth {
                 self.learn(2, value);
+                if self.contradiction {
+                    return;
+                }
             }
         }
         match self.values[2] {
@@ -72,7 +75,9 @@ impl Consequences {
             },
             Some(false) => {
                 self.learn(0, true);
-                self.learn(consequent, false);
+                if !self.contradiction {
+                    self.learn(consequent, false);
+                }
             }
             None => {}
         }

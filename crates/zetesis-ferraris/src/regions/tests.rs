@@ -22,6 +22,7 @@ mod chain_links;
 mod chains;
 mod cloning;
 mod competing_heads;
+mod contradictions;
 mod copy_costs;
 mod counters;
 mod implications;

@@ -222,12 +222,28 @@ fn processed_totals_preserve_downward_teaching() {
             for wide in [false, true] {
                 let previous = attempt(&index, values, wide, true, u64::MAX, Teaching::Operands);
                 let current = attempt(&index, values, wide, false, u64::MAX, Teaching::Operands);
-                same(&current, &previous);
                 assert_eq!(previous.work, 4);
-                let complete = values.iter().all(|&value| value == counted);
-                assert_eq!(current.work, if complete { 0 } else { 4 });
-                if complete {
-                    assert!(matches!(current.result, Ok(Step::Unchanged)));
+                let conflict = values.iter().position(|&value| {
+                    if disjunction {
+                        matches!(value, 3 | 4)
+                    } else {
+                        matches!(value, 1 | 2)
+                    }
+                });
+                if let Some(position) = conflict {
+                    // The full scan and its shortened prefix both refute.
+                    // Their partial knowledge is discarded, not compared as
+                    // completed closure; only the prefix needs work permits.
+                    assert!(previous.result == Ok(Step::Contradiction));
+                    assert!(current.result == previous.result);
+                    assert_eq!(current.work, u64::try_from(position + 1).unwrap());
+                } else {
+                    same(&current, &previous);
+                    let complete = values.iter().all(|&value| value == counted);
+                    assert_eq!(current.work, if complete { 0 } else { 4 });
+                    if complete {
+                        assert!(matches!(current.result, Ok(Step::Unchanged)));
+                    }
                 }
             }
         }

@@ -1153,9 +1153,9 @@ fn stopped_requests_publish_no_models() {
 fn setup_refusals_have_unavailable_coverage() {
     for (source, extra, kind) in [
         (
-            "a.",
+            "p(.",
             vec!["--oracle", "countermodel", "--grounder", "lazy"],
-            "hybrid_backend",
+            "formula_admission",
         ),
         ("p(.", vec!["--grounder", "lazy"], "expansion"),
         ("p(.", vec!["--oracle", "countermodel"], "formula_admission"),
@@ -1166,7 +1166,7 @@ fn setup_refusals_have_unavailable_coverage() {
         ),
     ] {
         let mut configured = options(&extra);
-        if kind == "hybrid_backend" {
+        if kind == "formula_admission" && extra.contains(&"lazy") {
             configured.backend = zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
         }
         if kind == "expansion" {

@@ -262,7 +262,8 @@ first separate [terminal positive definitions](#terminal-definition-analysis),
 ground the base and reconstruct those definitions from each verified base answer.
 Explicit eager admission materializes the complete theory. An explicit
 **hybrid formula** profile instead retains every producer and streams eligible
-integrity constraints. It currently runs on CPU with indexed joins. Objectives
+integrity constraints. It uses indexed host joins and the selected CPU or GPU
+executor for core membership. Objectives
 are scored only after the original constraint check completes. Constraints
 containing aggregates, projected atoms or conditional
 scopes remain eager; ordinary atom/scalar constraints use the shared binding

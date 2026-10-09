@@ -186,6 +186,15 @@ fn cancellation_precedes_explicit_formula_device_initialization() {
     for arguments in [
         vec!["--backend", "metal"],
         vec!["--backend", "gpu", "--oracle", "countermodel"],
+        vec!["--backend", "metal", "--grounder", "lazy"],
+        vec![
+            "--backend",
+            "gpu",
+            "--oracle",
+            "countermodel",
+            "--grounder",
+            "lazy",
+        ],
     ] {
         let cancellation = Cancellation::default();
         cancellation.cancel();
@@ -227,26 +236,6 @@ fn formula_admission_precedes_device_initialization() {
 }
 
 #[test]
-fn formula_device_route_refuses_explicit_lazy_grounding() {
-    let mut output = Vec::new();
-    let error = run_with_diagnostics(
-        "1 {a;b} 1.".into(),
-        &options(&["--backend", "metal", "--grounder", "lazy"]),
-        &mut output,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        error,
-        RunError::HybridBackend {
-            backend: zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
-        }
-    ));
-    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
-}
-
-#[test]
 fn automatic_formula_route_reports_the_checked_cpu_specialization() {
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
@@ -269,17 +258,19 @@ fn automatic_formula_route_reports_the_checked_cpu_specialization() {
 #[cfg(not(feature = "gpu"))]
 #[test]
 fn cpu_only_formula_hardware_request_is_explicitly_unavailable() {
-    let mut output = Vec::new();
-    let error = run_with_diagnostics(
-        "1 {a;b} 1.".into(),
-        &options(&["--backend", "metal"]),
-        &mut output,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(error, RunError::BackendUnavailable));
-    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
+    for grounder in ["eager", "lazy"] {
+        let mut output = Vec::new();
+        let error = run_with_diagnostics(
+            "1 {a;b} 1.".into(),
+            &options(&["--backend", "metal", "--grounder", grounder]),
+            &mut output,
+            &mut Vec::new(),
+            &Cancellation::default(),
+        )
+        .unwrap_err();
+        assert!(matches!(error, RunError::BackendUnavailable));
+        assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
+    }
 }
 
 #[cfg(feature = "gpu")]
@@ -413,6 +404,7 @@ mod physical {
     }
 
     fn qualify_formula_results(backend: GpuApi) {
+        qualify_hybrid_output(backend);
         for source in [
             "a | b.",
             "{a;b;c;d}. x:-x. :-a,b. #show.",
@@ -441,6 +433,67 @@ mod physical {
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);
+            }
+        }
+    }
+
+    fn qualify_hybrid_output(backend: GpuApi) {
+        for source in [
+            include_str!("../fixtures/hybrid-gpu/objectives.lp"),
+            include_str!("../fixtures/hybrid-gpu/terminal.lp"),
+        ] {
+            for json in [false, true] {
+                let mut expected = Vec::new();
+                let mut cpu_options = options(&["--backend", "cpu", "--grounder", "eager"]);
+                cpu_options.json = json;
+                let cpu = run_with_diagnostics(
+                    source.into(),
+                    &cpu_options,
+                    &mut expected,
+                    &mut Vec::new(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+                assert_eq!(cpu.completion, Completion::Exhausted);
+                for oracle in ["auto", "countermodel"] {
+                    let mut actual = Vec::new();
+                    let mut diagnostics = Vec::new();
+                    let mut configuration = options(&[
+                        "--backend",
+                        backend.argument(),
+                        "--oracle",
+                        oracle,
+                        "--grounder",
+                        "lazy",
+                        "--stats",
+                    ]);
+                    configuration.json = json;
+                    let report = run_with_diagnostics(
+                        source.into(),
+                        &configuration,
+                        &mut actual,
+                        &mut diagnostics,
+                        &Cancellation::default(),
+                    )
+                    .unwrap();
+                    assert_eq!(report.completion, Completion::Exhausted);
+                    assert_eq!(report.models, cpu.models);
+                    if json {
+                        assert_eq!(full_records(&actual), full_records(&expected));
+                    } else {
+                        assert_eq!(displayed_records(&actual), displayed_records(&expected));
+                    }
+                    let core = report.hybrid_execution.unwrap();
+                    assert_eq!(core.pending, 0);
+                    assert_eq!(core.core_answers, core.accepted + core.rejected);
+                    let execution = report.formula_execution.unwrap();
+                    assert!(execution.adapter.contains(backend.name()));
+                    assert!(execution.gpu_candidates > 0);
+                    let text = String::from_utf8(diagnostics).unwrap();
+                    assert!(text.contains("core grounding: eager"), "{text}");
+                    assert!(text.contains("original constraints"), "{text}");
+                    assert!(text.contains("grounder=hybrid"), "{text}");
+                }
             }
         }
     }

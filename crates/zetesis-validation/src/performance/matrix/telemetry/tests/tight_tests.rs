@@ -2,7 +2,7 @@
 
 use super::*;
 
-fn tight_fixture() -> (Value, String) {
+pub(super) fn tight_fixture() -> (Value, String) {
     let (mut document, text) = formula_fixture();
     let text = text
         .replace(

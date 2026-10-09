@@ -174,7 +174,7 @@ Neither participates in production answer-set search.
 
 The hardware gate selects Metal on macOS and Vulkan elsewhere. Override the
 selection with `scripts/check.sh hardware --metal` or `--vulkan`.
-Each backend has a reviewed selection of 59 exact tests in 14 groups.
+Each backend has a reviewed selection of 63 exact tests in 14 groups.
 This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.

@@ -5,8 +5,7 @@ use std::collections::BTreeSet;
 
 use clap::Parser;
 use zetesis_cli::{
-    Backend, Completion, Grounder, Interruption, Options, Oracle, Report, RunError,
-    run_with_diagnostics,
+    Completion, Interruption, Options, Oracle, Report, RunError, run_with_diagnostics,
 };
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
@@ -405,18 +404,5 @@ fn incomplete_oracles_do_not_claim_unsatisfiable() {
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("INCOMPLETE:"));
         assert!(!output.contains("UNSATISFIABLE"));
-    }
-}
-
-#[test]
-fn hybrid_formula_refuses_unavailable_device_routes() {
-    for backend in Backend::ALL.into_iter().filter(|backend| backend.is_gpu()) {
-        let mut configured = options(&[]);
-        configured.backend = backend;
-        configured.grounder = Grounder::Lazy;
-        assert!(matches!(
-            assert_refused_without_output("1 {a;b} 1.", &configured),
-            RunError::HybridBackend { backend: requested } if requested == backend
-        ));
     }
 }

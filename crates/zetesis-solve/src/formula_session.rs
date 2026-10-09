@@ -498,13 +498,17 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     }
 
     fn complete(&mut self, search_state: SearchState, phases: &Recorder) {
+        let cleanup = self.stop(phases);
         let mut outcome = self.snapshot(phases);
-        outcome.search_state = Some(search_state);
+        outcome.search_state = crate::completion::after_cleanup(Some(search_state), cleanup);
         self.final_outcome = Some(outcome);
         self.ready = self.incumbents.take_models();
     }
 
     fn fail(&mut self, error: SolveError, phases: &Recorder) {
+        // Preserve the primary fault, but settle worker receipts before
+        // publishing its checked prefix. Live progress never performs this join.
+        let _ = self.stop(phases);
         self.final_outcome = Some(self.snapshot(phases));
         self.pending_error = Some(error);
     }

@@ -234,16 +234,12 @@ impl SolveConfig {
     /// constraints. This does not admit source or construct an executor.
     ///
     /// # Errors
-    /// Refuses eager materialization, closure membership, device execution and
-    /// shared relational source rounds for this initial CPU formula profile.
+    /// Refuses eager materialization, closure membership and shared relational
+    /// source rounds. The retained formula core uses the selected backend;
+    /// streamed constraints are checked on the host.
     pub fn validate_hybrid(&self) -> Result<(), crate::SolveError> {
         if self.source_batching != SourceBatching::Independent {
             return Err(crate::SolveError::UnsupportedSourceBatching);
-        }
-        if self.backend.is_gpu() {
-            return Err(crate::SolveError::HybridBackend {
-                backend: self.backend,
-            });
         }
         if self.oracle == Oracle::Closure || self.grounder == Grounder::Eager {
             return Err(crate::SolveError::PreparedInput {

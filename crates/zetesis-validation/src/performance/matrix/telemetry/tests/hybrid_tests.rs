@@ -183,3 +183,72 @@ fn ordinary_cpu_observations_have_no_hybrid_receipt() {
             .is_none()
     );
 }
+
+fn device_hybrid(tight: bool) -> (Value, String, NativeExecution) {
+    let (mut document, text) = if tight {
+        super::tight_tests::tight_fixture()
+    } else {
+        formula_fixture()
+    };
+    document["statistics"]["stage_timings"]["grounding_mode"] = json!("mixed");
+    document["statistics"]["search"] = json!({"scope":"retained_core","stable_models":2});
+    document["statistics"]["hybrid_execution"] = json!({"core_answers":2,"accepted":1,
+        "rejected":1,"pending":0,"constraints":{"work":10,"substitutions":9,"scalar_bytes":8}});
+    document["outcome"] = json!({"verified_models":1});
+    let text = text
+        .replace("grounding_mode: eager", "grounding_mode: mixed")
+        .replace("grounder=eager", "grounder=hybrid");
+    (
+        document,
+        text,
+        NativeExecution {
+            grounder: Grounder::Lazy,
+            ..metal()
+        },
+    )
+}
+
+#[test]
+fn device_core_membership_is_distinct_from_original_acceptance() {
+    for tight in [false, true] {
+        let (document, text, request) = device_hybrid(tight);
+        let observation = observe(&document, text.as_bytes(), request).unwrap();
+        let receipt = observation.hybrid.unwrap();
+        assert_eq!(
+            (receipt.core_answers, receipt.accepted, receipt.rejected),
+            (2, 1, 1)
+        );
+        assert_eq!(
+            observation.execution.procedure,
+            if tight {
+                Procedure::TightSupport
+            } else {
+                Procedure::Countermodel
+            }
+        );
+        assert!(matches!(
+            observation.execution.device,
+            DeviceWork::Formula { candidates: 2, .. }
+                | DeviceWork::TightSupport { candidates: 2, .. }
+        ));
+    }
+}
+
+#[test]
+fn device_core_records_cannot_replace_original_acceptance() {
+    for tight in [false, true] {
+        let (document, text, request) = device_hybrid(tight);
+        for (field, value) in [("verified_models", json!(2)), ("verified_models", json!(0))] {
+            let mut invalid = document.clone();
+            invalid["outcome"][field] = value;
+            assert!(observe(&invalid, text.as_bytes(), request).is_err());
+        }
+        let mut pending = document.clone();
+        pending["statistics"]["hybrid_execution"]["rejected"] = json!(0);
+        pending["statistics"]["hybrid_execution"]["pending"] = json!(1);
+        assert!(observe(&pending, text.as_bytes(), request).is_err());
+        let mut missing = document;
+        missing["statistics"]["hybrid_execution"] = Value::Null;
+        assert!(observe(&missing, text.as_bytes(), request).is_err());
+    }
+}

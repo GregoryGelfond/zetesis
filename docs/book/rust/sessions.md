@@ -90,6 +90,12 @@ candidates have been checked. Inspect `SemanticOutcome::completion()`; it is
 optional precisely because a consumer may stop before a terminal classification
 exists.
 
+Live `progress()` readings do not wait for workers. Terminal reports and
+`stop()` join native workers before recording their final work and decision
+counts. They preserve the original interruption reason and do not cancel a
+caller-owned token. Cooperative cleanup may extend beyond a requested deadline;
+it does not establish exhaustive coverage.
+
 For `Session::new` with an objective, the search phase ends before retained incumbents are yielded.
 Exhausted search establishes optimum ties; an interrupted phase may yield
 unproved incumbents. A score alone is not an optimum certificate. Use the
@@ -231,11 +237,13 @@ Reuse preserves consumed work and pending-candidate accounting after a refusal.
 
 `PreparedFormula::ground_hybrid()` and its bundle counterpart return a shared
 `HybridFormula` owning the original source, retained core and streamed constraint
-plans. Pass it through `PreparedInput::hybrid(&owner)`. The current profile uses
-CPU execution and indexed joins; richer constraints remain in
-the eager core. `Backend::Cpu` and `Grounder::Lazy` or `Auto` are accepted.
-A GPU backend, eager schedule, closure oracle or external batch executor is
-refused for this profile.
+plans. Pass it through `PreparedInput::hybrid(&owner)`. The profile uses indexed
+host joins; richer constraints remain in the eager core. `Grounder::Lazy` or
+`Auto` can use CPU or GPU core membership. A GPU request uses the existing tight
+checker or general formula executor, with exact CPU completion of unresolved
+results. Source-constraint propagation and final acceptance remain on the host.
+An eager schedule, closure oracle or external batch executor is refused for
+this profile.
 
 Objective programs use the ordinary scoring and optimal-answer selection.
 Each new core answer must satisfy the streamed constraints before it can be
@@ -310,8 +318,10 @@ so the schedule still needs workload-specific measurement.
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
 `accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
 Their invariant is `core_answers = accepted + rejected + pending`. Core answers
-still buffered by the inner enumerator are excluded. Formula search statistics
-include `region_filter` counts for attempted preparations, region checks,
+still buffered by the inner enumerator are excluded. Search statistics and
+device batch receipts describe the retained core. A device-checked core
+answer is counted as an original answer only after complete source acceptance.
+The `region_filter` counters record attempted preparations, region checks,
 refutations and failures. Those are not core-answer counts. Core membership
 statistics describe surviving proposals; `verified_models()` counts original-program
 answers. Cancellation or a deadline observed during source checking uses

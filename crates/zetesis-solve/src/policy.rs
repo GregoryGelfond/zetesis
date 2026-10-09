@@ -12,7 +12,8 @@ pub enum Grounder {
     /// store, or, for formula programs, a producer core with eligible
     /// constraints streamed and terminal definitions reconstructed per answer.
     /// A GPU backend checks joined sources in immutable relational rounds; the
-    /// hybrid formula schedule runs on the CPU.
+    /// hybrid formula schedule checks its retained core on the device and streamed
+    /// constraints on the host.
     Lazy,
     /// Materialize a bounded static program before checking on CPU or GPU.
     Eager,

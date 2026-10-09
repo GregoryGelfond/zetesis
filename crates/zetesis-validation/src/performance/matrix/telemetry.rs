@@ -75,13 +75,10 @@ pub(super) fn observe(
     } else {
         "mixed"
     };
-    if hybrid.is_some()
-        && (timing.grounding_mode != hybrid_mode
-            || backend != Backend::Cpu
-            || procedure == Procedure::Closure)
+    if hybrid.is_some() && (timing.grounding_mode != hybrid_mode || procedure == Procedure::Closure)
     {
         return Err(
-            "hybrid source checking requires mixed grounding and CPU formula membership".into(),
+            "hybrid source checking requires mixed grounding and formula membership".into(),
         );
     }
     if let Some(receipt) = &terminal {
@@ -98,7 +95,14 @@ pub(super) fn observe(
         statistics,
         route,
         effective_backend,
-        taken,
+        // An authenticated hybrid receipt establishes eager core membership
+        // followed by host acceptance. Device counters describe that core, not
+        // the original answer population checked by `hybrid::read`.
+        if hybrid.is_some() {
+            Grounder::Eager
+        } else {
+            taken
+        },
         backend,
         procedure,
         adapter.as_deref(),

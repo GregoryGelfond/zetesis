@@ -6,3 +6,4 @@ mod exhaustion_tests;
 mod construction_tests;
 mod objective_work_tests;
 mod acceptance_tests;
+mod completion_tests;
