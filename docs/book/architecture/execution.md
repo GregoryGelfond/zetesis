@@ -92,6 +92,13 @@ on the open atom the narrowing found most constrained, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
+Once a step proves a region contradictory, narrowing discards it without
+visiting the remaining operands, parents or support wakeups. Work accounting
+covers the visited prefix; cleanup still settles worker receipts. Partial
+knowledge from a refuted or interrupted closure is not reused as a completed
+closure. This stopping rule applies to the region decision: operations returning
+a complete truth vector or least closure must still construct that result.
+
 The knowledge of a region holds in every region inside it
 (`FormulaBounds.known_mono`), so a split hands each child a copy of its
 parent's knowledge and the child learns only what the split decided; the
