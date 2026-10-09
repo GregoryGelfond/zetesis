@@ -4,7 +4,7 @@ use std::time::Instant;
 use zetesis_cpu::{Cancellation, CancellationSlot, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, Interpretation, Node, OperandSpan, Theory, TightCheckLimits,
-    TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict,
+    TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict, TightWorkspace,
 };
 use zetesis_theory_support::theories::fact as theory;
 
@@ -110,6 +110,7 @@ fn mixed_checks_retain_every_exact_work_prefix() {
     let run = slot.open(None).unwrap();
     let cancellation = run.cancellation();
     let plan = TightPlan::compile(&theory, TightPlanLimits::default(), cancellation).unwrap();
+    let mut workspace = TightWorkspace::default();
     // Every node is evaluated, including the unused final implication. Wide
     // groups retain repeated operands; the root and producer scans retain the
     // repeated original root. A complete check charges 11 + 17 + 4 + 4 + 4.
@@ -125,6 +126,13 @@ fn mixed_checks_retain_every_exact_work_prefix() {
             },
             40,
         ),
+        (
+            &[1, 2][..],
+            TightVerdict::Residual {
+                unsupported_atom: 1,
+            },
+            38,
+        ),
     ] {
         let candidate = Interpretation::new(&theory, atoms.iter().copied()).unwrap();
         for max_work in (0..=complete_work).chain([u64::MAX]) {
@@ -136,6 +144,17 @@ fn mixed_checks_retain_every_exact_work_prefix() {
                 },
                 cancellation,
             );
+            let reused = workspace.check(
+                &plan,
+                &candidate,
+                TightCheckLimits {
+                    max_work,
+                    ..Default::default()
+                },
+                cancellation,
+            );
+            assert_eq!(reused.work, attempt.work);
+            assert_eq!(reused.result, attempt.result);
             assert_eq!(attempt.work, max_work.min(complete_work));
             if max_work < complete_work {
                 assert_eq!(attempt.result, Err(TightError::Limit(TightResource::Work)));
@@ -144,6 +163,85 @@ fn mixed_checks_retain_every_exact_work_prefix() {
                 assert_eq!(check.work, complete_work);
                 assert_eq!(check.verdict, verdict);
             }
+        }
+    }
+}
+
+#[test]
+fn interrupted_scratch_remains_subject_to_storage_limits() {
+    let theory = mixed_theory();
+    let cancellation = Cancellation::default();
+    let plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+    let mut workspace = TightWorkspace::default();
+    let stopped = workspace.check(
+        &plan,
+        &candidate,
+        TightCheckLimits {
+            max_work: 0,
+            ..Default::default()
+        },
+        &cancellation,
+    );
+    assert_eq!(stopped.result, Err(TightError::Limit(TightResource::Work)));
+    let retained = workspace.retained_bytes();
+    assert!(retained >= theory.nodes().len() as u128);
+
+    let smaller = self::theory();
+    let smaller_plan =
+        TightPlan::compile(&smaller, TightPlanLimits::default(), &cancellation).unwrap();
+    let smaller_candidate = Interpretation::new(&smaller, [0]).unwrap();
+    let limits = TightCheckLimits {
+        max_bytes: smaller_plan.statistics().resident_bytes
+            + u64::try_from(smaller.nodes().len() + smaller.atom_count()).unwrap(),
+        ..Default::default()
+    };
+    assert!(
+        smaller_plan
+            .check(&smaller_candidate, limits, &cancellation)
+            .is_ok()
+    );
+    let refused = workspace.check(&smaller_plan, &smaller_candidate, limits, &cancellation);
+    assert_eq!(refused.result, Err(TightError::Limit(TightResource::Bytes)));
+    assert_eq!(refused.work, 0);
+    assert_eq!(workspace.retained_bytes(), retained);
+}
+
+#[test]
+fn retained_scratch_accepts_its_exact_storage_allowance() {
+    let theory = mixed_theory();
+    let cancellation = Cancellation::default();
+    let plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+    let mut workspace = TightWorkspace::default();
+    let first = workspace
+        .check(
+            &plan,
+            &candidate,
+            TightCheckLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    let exact =
+        u64::try_from(u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes())
+            .unwrap();
+    assert_eq!(first.logical_bytes, exact);
+    for max_bytes in [exact - 1, exact] {
+        let attempt = workspace.check(
+            &plan,
+            &candidate,
+            TightCheckLimits {
+                max_bytes,
+                ..Default::default()
+            },
+            &cancellation,
+        );
+        if max_bytes == exact {
+            assert_eq!(attempt.result, Ok(first));
+        } else {
+            assert_eq!(attempt.work, 0);
+            assert_eq!(attempt.result, Err(TightError::Limit(TightResource::Bytes)));
         }
     }
 }
@@ -165,6 +263,17 @@ fn cancellation_precedes_tight_resource_refusal() {
         max_bytes: 0,
         max_work: 0,
     };
+    let mut workspace = TightWorkspace::default();
+    workspace
+        .check(
+            &plan,
+            &candidate,
+            TightCheckLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    let retained = workspace.retained_bytes();
     for expected in [Stop::Deadline, Stop::Cancelled] {
         if expected == Stop::Cancelled {
             slot.cancel();
@@ -172,6 +281,10 @@ fn cancellation_precedes_tight_resource_refusal() {
         let attempt = plan.check_accounted(&candidate, limits, cancellation);
         assert_eq!(attempt.work, 0);
         assert_eq!(attempt.result, Err(TightError::Stopped(expected)));
+        let reused = workspace.check(&plan, &candidate, limits, cancellation);
+        assert_eq!(reused.work, 0);
+        assert_eq!(reused.result, attempt.result);
+        assert_eq!(workspace.retained_bytes(), retained);
     }
 }
 
@@ -185,9 +298,24 @@ fn foreign_identity_precedes_tight_cancellation() {
     )
     .unwrap();
     let foreign = Interpretation::new(&mixed_theory(), [0, 1, 2]).unwrap();
+    let mut workspace = TightWorkspace::default();
+    workspace
+        .check(
+            &plan,
+            &Interpretation::new(&theory, [0, 1, 2]).unwrap(),
+            TightCheckLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    let retained = workspace.retained_bytes();
     let cancellation = Cancellation::with_deadline(Instant::now()).unwrap();
     cancellation.cancel();
     let attempt = plan.check_accounted(&foreign, TightCheckLimits::default(), &cancellation);
     assert_eq!(attempt.work, 0);
     assert_eq!(attempt.result, Err(TightError::Stopped(Stop::WrongProgram)));
+    let reused = workspace.check(&plan, &foreign, TightCheckLimits::default(), &cancellation);
+    assert_eq!(reused.work, 0);
+    assert_eq!(reused.result, attempt.result);
+    assert_eq!(workspace.retained_bytes(), retained);
 }

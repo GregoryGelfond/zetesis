@@ -87,6 +87,8 @@ pub enum Procedure {
     TightSupport,
     /// Certified positive consequences followed by original constraint validation.
     PositiveConsequences,
+    /// Direct evaluation of a certified stratified normal theory.
+    StratifiedConsequences,
 }
 /// Decoded general-device outcomes requiring exact residual membership checks.
 /// These count device verdicts, separately from host completion attempts and

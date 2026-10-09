@@ -240,21 +240,25 @@ fn sat_admission_class(error: zetesis_sat::AdmissionError) -> Class {
 }
 
 fn certificate_class(error: zetesis_sat::CertificateError) -> Class {
-    use zetesis_ferraris::{EvaluationError, PositiveError, TightError};
+    use zetesis_ferraris::{EvaluationError, PositiveError, StratifiedError, TightError};
     use zetesis_sat::CertificateError;
     match error {
         CertificateError::Restriction(error) => sat_admission_class(error),
         CertificateError::Evaluation(EvaluationError::Stopped(stop))
         | CertificateError::Tight(TightError::Stopped(stop))
-        | CertificateError::Positive(PositiveError::Stopped(stop)) => stop_class(stop),
+        | CertificateError::Positive(PositiveError::Stopped(stop))
+        | CertificateError::Stratified(StratifiedError::Stopped(stop)) => stop_class(stop),
         CertificateError::Evaluation(EvaluationError::Storage { .. })
         | CertificateError::Tight(TightError::Limit(_))
-        | CertificateError::Positive(PositiveError::Limit { .. } | PositiveError::Overflow) => {
+        | CertificateError::Positive(PositiveError::Limit { .. } | PositiveError::Overflow)
+        | CertificateError::Stratified(StratifiedError::Limit { .. } | StratifiedError::Overflow) => {
             Class::Resource
         }
         // Ordinary ineligibility must decline the optional native optimization;
         // it cannot terminate the adapter's otherwise supported answer search.
-        CertificateError::Tight(_) | CertificateError::Positive(_) => Class::Engine,
+        CertificateError::Tight(_)
+        | CertificateError::Positive(_)
+        | CertificateError::Stratified(_) => Class::Engine,
     }
 }
 

@@ -6,6 +6,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- Evaluate eligible stratified normal programs directly, checking all original
+  constraints before publishing their unique answer.
 - Support objectives with lazy CPU formula grounding. Check the original
   constraints before scoring an answer or updating a bound, and preserve
   optimal ties and explicit interruption outcomes.
@@ -15,6 +17,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Retain CPU tight-checking storage between candidates, with independent
+  workspaces for parallel workers.
 - Reuse prepared lazy constraint checks between compatible candidates, and
   revisit only affected atom occurrences when complete coverage is established.
 - Filter structurally impossible or absent positive atoms before constraint

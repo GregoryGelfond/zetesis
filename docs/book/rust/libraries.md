@@ -76,7 +76,7 @@ row or locating a gate atom does not establish answer-set membership. See
 | Reuse scalar query preparation | `PreparedQueries`, `PreparationLimits`, `ClosureWorkspace` | [Repeated checks](parallel.md#reuse-preparation-across-scalar-checks) |
 | Build finite formulas and check membership | `zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}` | [Finite reducts](reducts.md) |
 | Reuse original truth or a frozen reduct | `EvaluationWorkspace`, `FormulaEvaluation`, `FrozenReduct` | [Finite reducts](reducts.md) |
-| Use checked formula specializations | `zetesis_ferraris::{PositivePlan, TightPlan}` | [Formula plans](sessions.md#formula-membership-plans) |
+| Use checked formula specializations | `zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}` | [Formula plans](sessions.md#formula-membership-plans) |
 | Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
 | Enumerate formula answers and complete reduct queries | `zetesis_sat::{StableModels, SearchMethod, check_with, PreparedReduct, ReductWorkspace}` | [Sessions](sessions.md) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |

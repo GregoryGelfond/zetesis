@@ -1,9 +1,11 @@
 use super::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
-    filled, reserve,
 };
 use crate::{Interpretation, NodeView};
 use zetesis_cpu::{Cancellation, Stop};
+
+#[cfg(test)]
+mod tests;
 
 impl TightPlan {
     /// Check original satisfaction and every present atom's producer support.
@@ -32,12 +34,53 @@ impl TightPlan {
         limits: TightCheckLimits,
         cancellation: &Cancellation,
     ) -> TightAttempt<TightCheck> {
+        TightWorkspace::default().check(self, candidate, limits, cancellation)
+    }
+}
+
+/// Reusable truth and support storage for complete tight-certificate checks.
+///
+/// Each call recomputes every formula truth and clears support before reading
+/// producers. Capacity survives checks and interruptions; no candidate truth
+/// survives as evidence. Checks remain linear in nodes, operand occurrences,
+/// tested roots, producers and atoms. Storage is linear in the largest admitted
+/// node and atom counts. Each concurrent checker owns an exclusive workspace;
+/// immutable plans may be shared.
+#[derive(Debug, Default)]
+pub struct TightWorkspace {
+    values: Vec<u8>,
+    supported: Vec<u8>,
+}
+
+impl TightWorkspace {
+    /// Actual retained vector payload, excluding headers, the plan, its shared
+    /// theory and allocator bookkeeping. A failed check can retain new capacity.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        self.values.capacity() as u128 + self.supported.capacity() as u128
+    }
+
+    /// Check original satisfaction and ranked support using retained storage.
+    ///
+    /// Identity failure precedes cancellation, which precedes storage admission.
+    /// Work and error attribution match [`TightPlan::check_accounted`]. Byte
+    /// ceilings include existing capacity, even for a smaller subsequent theory;
+    /// checks do not shrink storage. Every outcome retains its charged work and
+    /// leaves actual capacity observable through [`Self::retained_bytes`].
+    #[must_use]
+    pub fn check(
+        &mut self,
+        plan: &TightPlan,
+        candidate: &Interpretation,
+        limits: TightCheckLimits,
+        cancellation: &Cancellation,
+    ) -> TightAttempt<TightCheck> {
         let mut work = Work {
             used: 0,
             max: limits.max_work,
             cancellation: cancellation.polling(),
         };
-        let result = self.evaluate(candidate, limits, &mut work);
+        let result = self.evaluate(plan, candidate, limits, &mut work);
         TightAttempt {
             result,
             work: work.used,
@@ -45,28 +88,28 @@ impl TightPlan {
     }
 
     fn evaluate(
-        &self,
+        &mut self,
+        plan: &TightPlan,
         candidate: &Interpretation,
         limits: TightCheckLimits,
         work: &mut Work<'_>,
     ) -> Result<TightCheck, TightError> {
-        if !self.theory.same_instance(candidate.theory()) {
+        if !plan.theory.same_instance(candidate.theory()) {
             return Err(Stop::WrongProgram.into());
         }
         work.cancellation.poll()?;
-        let logical_bytes = bytes(
-            u128::from(self.statistics.resident_bytes)
-                + self.theory.nodes().len() as u128
-                + self.theory.atom_count() as u128,
-            limits.max_bytes,
-        )?;
+        self.admit(plan, limits.max_bytes)?;
         // Explicit byte cells give candidate tiles a fixed payload bound.
         // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
-        let mut values = reserve::<u8>(self.theory.nodes().len())?;
-        for index in 0..self.theory.view().len() {
+        self.values.clear();
+        self.values
+            .try_reserve_exact(plan.theory.nodes().len())
+            .map_err(|_| Stop::Allocation)?;
+        let logical_bytes = self.admit(plan, limits.max_bytes)?;
+        for index in 0..plan.theory.view().len() {
             work.tick()?;
-            values.push(u8::from(
-                match self
+            self.values.push(u8::from(
+                match plan
                     .theory
                     .view()
                     .node(index)
@@ -74,21 +117,25 @@ impl TightPlan {
                 {
                     NodeView::Atom(atom) => candidate.contains(atom),
                     NodeView::False => false,
-                    NodeView::And(operands) => evaluate_operands(operands, &values, true, work)?,
-                    NodeView::Or(operands) => evaluate_operands(operands, &values, false, work)?,
+                    NodeView::And(operands) => {
+                        evaluate_operands(operands, &self.values, true, work)?
+                    }
+                    NodeView::Or(operands) => {
+                        evaluate_operands(operands, &self.values, false, work)?
+                    }
                     NodeView::Implies(a, b) => {
                         work.tick()?;
-                        let left = values[a];
+                        let left = self.values[a];
                         work.tick()?;
-                        let right = values[b];
+                        let right = self.values[b];
                         left == 0 || right != 0
                     }
                 },
             ));
         }
-        for &root in self.theory.roots() {
+        for &root in plan.theory.roots() {
             work.tick()?;
-            if values[root] == 0 {
+            if self.values[root] == 0 {
                 return Ok(TightCheck {
                     verdict: TightVerdict::NotModel { root },
                     work: work.used,
@@ -96,14 +143,19 @@ impl TightPlan {
                 });
             }
         }
-        let mut supported = filled(self.theory.atom_count(), 0u8)?;
-        for producer in &self.producers {
+        self.supported.clear();
+        self.supported
+            .try_reserve_exact(plan.theory.atom_count())
+            .map_err(|_| Stop::Allocation)?;
+        let logical_bytes = self.admit(plan, limits.max_bytes)?;
+        self.supported.resize(plan.theory.atom_count(), 0);
+        for producer in &plan.producers {
             work.tick()?;
-            if producer.body.is_none_or(|body| values[body] != 0) {
-                supported[producer.head] = 1;
+            if producer.body.is_none_or(|body| self.values[body] != 0) {
+                self.supported[producer.head] = 1;
             }
         }
-        for (atom, support) in supported.into_iter().enumerate() {
+        for (atom, &support) in self.supported.iter().enumerate() {
             work.tick()?;
             if candidate.contains(atom) && support == 0 {
                 return Ok(TightCheck {
@@ -120,6 +172,15 @@ impl TightPlan {
             work: work.used,
             logical_bytes,
         })
+    }
+
+    fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
+        bytes(
+            u128::from(plan.statistics.resident_bytes)
+                + self.values.capacity().max(plan.theory.nodes().len()) as u128
+                + self.supported.capacity().max(plan.theory.atom_count()) as u128,
+            limit,
+        )
     }
 }
 

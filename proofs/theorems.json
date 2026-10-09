@@ -6635,6 +6635,46 @@
     "line": 87
   },
   {
+    "name": "Zetesis.StratifiedEvaluation.gamma_prefix_sub",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 58
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.gamma_agrees",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.consecutive_agree",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 104
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.final_fixed",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 117
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.stages_agree_fixed",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 127
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.fixed_iff_final",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 142
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.normalized_answer_set_iff",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 159
+  },
+  {
+    "name": "Zetesis.StratifiedEvaluation.answer_set_iff",
+    "file": "Zetesis/StratifiedEvaluation.lean",
+    "line": 179
+  },
+  {
     "name": "Zetesis.StreamedConsequences.body_satisfied",
     "file": "Zetesis/StreamedConsequences.lean",
     "line": 64

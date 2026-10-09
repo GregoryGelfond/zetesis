@@ -13,6 +13,7 @@ mod measurements;
 mod memory_allowance;
 mod model_construction;
 mod positive_sessions;
+mod stratified_sessions;
 mod projected_reference;
 mod projected_sessions;
 mod region_workers;

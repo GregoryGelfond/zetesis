@@ -60,6 +60,84 @@ fn nested_certificate_limits_are_resource_faults() {
     );
 }
 
+fn stratified_interruption(error: zetesis_ferraris::StratifiedError) -> Interruption {
+    Interruption::Countermodel(zetesis_sat::Incomplete::Certificate(
+        zetesis_sat::CertificateError::Stratified(error),
+    ))
+}
+
+#[test]
+fn stratified_controls_are_conclusions() {
+    for (stop, conclusion) in [
+        (Stop::Cancelled, Conclusion::Interrupted),
+        (Stop::Deadline, Conclusion::Budget),
+    ] {
+        let reason = stratified_interruption(zetesis_ferraris::StratifiedError::Stopped(stop));
+        assert_eq!(interruption(reason), Ok(conclusion));
+    }
+}
+
+#[test]
+fn stratified_resources_are_faults() {
+    use zetesis_ferraris::{StratifiedError, StratifiedResource};
+
+    for error in [
+        StratifiedError::Limit {
+            resource: StratifiedResource::Dependencies,
+            observed: 2,
+            limit: 1,
+        },
+        StratifiedError::Limit {
+            resource: StratifiedResource::Bytes,
+            observed: 8,
+            limit: 7,
+        },
+        StratifiedError::Limit {
+            resource: StratifiedResource::Work,
+            observed: 2,
+            limit: 1,
+        },
+        StratifiedError::Overflow,
+        StratifiedError::Stopped(Stop::Allocation),
+    ] {
+        let fault = interruption(stratified_interruption(error)).expect_err("resource refusal");
+        assert_eq!(fault.locus(), Locus::Resource);
+    }
+}
+
+#[test]
+fn stratified_invariant_failures_are_engine_faults() {
+    use zetesis_ferraris::StratifiedError;
+
+    // Ineligibility normally selects another checker. If it escapes that
+    // selection boundary, it is an engine failure, not an exhausted search.
+    for error in [
+        StratifiedError::UnsupportedRoot { root: 0 },
+        StratifiedError::UnsupportedBody { root: 2, body: 1 },
+        StratifiedError::NegativeCycle { atom: 0, body: 1 },
+        StratifiedError::InvalidClosure { root: 0 },
+        StratifiedError::Stopped(Stop::InvalidProgram),
+        StratifiedError::Stopped(Stop::WrongProgram),
+    ] {
+        let fault = interruption(stratified_interruption(error)).expect_err("engine refusal");
+        assert_eq!(fault.locus(), Locus::Engine);
+    }
+}
+
+#[test]
+fn stratified_faults_retain_the_native_cause() {
+    let native =
+        stratified_interruption(zetesis_ferraris::StratifiedError::InvalidClosure { root: 7 });
+    let fault = interruption(native).expect_err("native invariant failure");
+    assert_eq!(
+        fault
+            .source()
+            .expect("typed cause")
+            .downcast_ref::<Interruption>(),
+        Some(&native)
+    );
+}
+
 #[test]
 fn invalid_native_witnesses_are_engine_faults() {
     let reason = Interruption::Countermodel(zetesis_sat::Incomplete::InvalidWitness);

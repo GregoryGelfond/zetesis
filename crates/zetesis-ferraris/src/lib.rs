@@ -20,6 +20,7 @@ mod checked;
 mod support;
 mod atomic_choice;
 mod positive;
+mod stratified;
 mod regions;
 pub mod partition;
 
@@ -54,6 +55,7 @@ pub use zetesis_cpu::regions::{Narrowing, Region};
 pub use tight::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
     TightPlanStatistics, TightProducer, TightProducerKind, TightResource, TightVerdict,
+    TightWorkspace,
 };
 
 pub use support::{SupportAttempt, SupportError, SupportLimits, support_restriction};
@@ -61,4 +63,9 @@ pub use support::{SupportAttempt, SupportError, SupportLimits, support_restricti
 pub use positive::{
     PositiveAttempt, PositiveError, PositivePlan, PositivePlanLimits, PositivePlanStatistics,
     PositiveResource,
+};
+
+pub use stratified::{
+    StratifiedAttempt, StratifiedError, StratifiedPlan, StratifiedPlanLimits,
+    StratifiedPlanStatistics, StratifiedResource,
 };

@@ -1,8 +1,8 @@
 //! Optional complete-theory certificates under the enumeration budget.
 
 mod candidates;
-mod positive;
-pub(super) use candidates::PositiveCandidates;
+mod determined;
+pub(super) use candidates::DeterminedCandidates;
 mod types;
 pub use types::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
@@ -16,8 +16,15 @@ use crate::{AdmissionError, Cancellation, Incomplete, Limits, SearchStatistics};
 use std::sync::Arc;
 use zetesis_ferraris::{
     Interpretation, PositiveError, PositivePlan, PositivePlanLimits, PositiveResource,
-    TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict,
+    StratifiedError, StratifiedPlan, StratifiedPlanLimits, StratifiedResource, TightCheckLimits,
+    TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict, TightWorkspace,
 };
+
+/// Exclusive scratch retained by one membership checker, never by a shared plan.
+#[derive(Debug, Default)]
+pub(super) struct Workspace {
+    tight: TightWorkspace,
+}
 
 #[derive(Debug)]
 pub(super) enum Certification {
@@ -27,6 +34,10 @@ pub(super) enum Certification {
     },
     Positive {
         plan: PositivePlan,
+        max_bytes: usize,
+    },
+    Stratified {
+        plan: StratifiedPlan,
         max_bytes: usize,
     },
 }
@@ -52,15 +63,32 @@ impl Certificate {
 }
 
 impl Certification {
+    fn determined(&self) -> Option<determined::Determined<'_>> {
+        match self {
+            Self::Tight { .. } => None,
+            Self::Positive { plan, .. } => Some(determined::Determined {
+                interpretation: plan.least_consequences(),
+                failed_constraint: plan.failed_constraint(),
+                retained_bytes: plan.statistics().retained_bytes,
+            }),
+            Self::Stratified { plan, .. } => Some(determined::Determined {
+                interpretation: plan.consequences(),
+                failed_constraint: plan.failed_constraint(),
+                retained_bytes: plan.statistics().retained_bytes,
+            }),
+        }
+    }
+
     /// A complete check's work bound in the primitive's charged units:
     /// tight checking visits every node, operand occurrence, root, producer
-    /// and atom once; positive checking compares atoms, then visits nodes,
+    /// and atom once; deterministic checking compares atoms, then visits nodes,
     /// operand occurrences and roots. Early
     /// refusals or refutations can consume less, never more.
     pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
         let (theory, producers) = match self {
             Self::Tight { plan, .. } => (plan.theory(), plan.producers().len()),
             Self::Positive { plan, .. } => (plan.theory(), 0),
+            Self::Stratified { plan, .. } => (plan.theory(), 0),
         };
         [
             theory.atom_count(),
@@ -81,6 +109,7 @@ impl Certification {
 enum Kind {
     Tight,
     Positive,
+    Stratified,
 }
 
 /// Only checked evidence from the actual selected plan produces these values.
@@ -91,14 +120,14 @@ pub(super) enum Verdict {
     /// tight plan. By `TightPlans.stable_supported` the candidate is not an
     /// answer set: the candidate without that atom models its reduct.
     Unsupported,
-    /// An original model differs from the positive producers' least
-    /// consequences, which are a proper-subset model of its frozen reduct.
+    /// An original model differs from a completely determined answer.
+    /// The complete producer certificate establishes that it is not stable.
     NonMinimal,
 }
 
 impl From<Verdict> for crate::ferraris::Decision {
     /// What the enumeration does with a certificate's verdict: a refutation
-    /// by support or least consequences is a refutation, and a candidate that is not a
+    /// by support or direct consequences is a refutation, and a candidate that is not a
     /// model is invalid, since every proposed candidate is one.
     fn from(verdict: Verdict) -> Self {
         match verdict {
@@ -145,7 +174,7 @@ impl StableModels {
     pub fn prepared_tight_certificate(&self) -> Option<Arc<TightPlan>> {
         match self.certificate.as_ref()?.plan.as_ref() {
             Certification::Tight { plan, .. } => Some(Arc::clone(plan)),
-            Certification::Positive { .. } => None,
+            Certification::Positive { .. } | Certification::Stratified { .. } => None,
         }
     }
 
@@ -172,10 +201,10 @@ impl StableModels {
 
     /// Try complete-original-theory class certificates in the requested order.
     /// The order is only a scheduling hint; each plan checks every original root.
-    /// For clause search, a positive plan installs exact original-atom units for
-    /// its least model, or an empty clause for a violated original constraint.
+    /// For clause search, a deterministic plan installs exact original-atom units for
+    /// its determined interpretation, or an empty clause for a violated constraint.
     /// Units are transactional and consume the existing candidate CNF admission;
-    /// no restriction formula DAG is copied. Region modes propose only the least
+    /// no restriction formula DAG is copied. Region modes propose only the determined
     /// interpretation, if it satisfies the original constraints and accumulated
     /// candidate conditions. Independent membership checks retain the original owner.
     /// Original theory and reduct semantics are unchanged.
@@ -195,11 +224,12 @@ impl StableModels {
         limits: CertificateLimits,
         order: CertificateOrder,
     ) -> Result<bool, Incomplete> {
-        let kinds = match order {
-            CertificateOrder::TightFirst => [Kind::Tight, Kind::Positive],
-            CertificateOrder::PositiveFirst => [Kind::Positive, Kind::Tight],
+        let kinds: &[Kind] = match order {
+            CertificateOrder::TightFirst => &[Kind::Tight, Kind::Positive],
+            CertificateOrder::PositiveFirst => &[Kind::Positive, Kind::Tight],
+            CertificateOrder::StratifiedFirst => &[Kind::Stratified, Kind::Tight, Kind::Positive],
         };
-        self.configure_certificates(limits, &kinds, Use::Cpu)
+        self.configure_certificates(limits, kinds, Use::Cpu)
     }
 
     fn configure_certificates(
@@ -234,6 +264,7 @@ impl StableModels {
                 let prepared = match kind {
                     Kind::Tight => self.prepare_tight(limits.tight, &mut stats),
                     Kind::Positive => self.prepare_positive(limits.positive, &mut stats),
+                    Kind::Stratified => self.prepare_stratified(limits.stratified, &mut stats),
                 }?;
                 if let Some(plan) = prepared {
                     stats.plan = Some(match &plan {
@@ -243,14 +274,18 @@ impl StableModels {
                         Certification::Positive { plan, .. } => {
                             CertificatePlanStatistics::Positive(plan.statistics())
                         }
+                        Certification::Stratified { plan, .. } => {
+                            CertificatePlanStatistics::Stratified(plan.statistics())
+                        }
                     });
                     stats.refusal = None;
                     let plan = Arc::new(plan);
                     if usage == Use::Cpu
-                        && matches!(plan.as_ref(), Certification::Positive { .. })
+                        && plan.determined().is_some()
                         && !matches!(self.proposer, super::Proposer::Clauses(_))
                     {
-                        self.positive_candidates = Some(PositiveCandidates::new(Arc::clone(&plan)));
+                        self.determined_candidates =
+                            Some(DeterminedCandidates::new(Arc::clone(&plan)));
                     }
                     self.certificate = Some(Certificate { plan, usage });
                     return Ok(true);
@@ -328,6 +363,56 @@ impl StableModels {
                 };
             }
         };
+        self.prepare_determined(
+            Certification::Positive {
+                plan,
+                max_bytes: limits.max_bytes,
+            },
+            stats,
+        )
+    }
+
+    fn prepare_stratified(
+        &mut self,
+        mut limits: StratifiedPlanLimits,
+        stats: &mut CertifiedStatistics,
+    ) -> Result<Option<Certification>, Incomplete> {
+        limits.max_work = limits.max_work.min(self.remaining_certificate_work());
+        let attempt = StratifiedPlan::compile_accounted(&self.theory, limits, &self.cancellation);
+        self.statistics.search.work += attempt.statistics.work;
+        stats.construction_work += attempt.statistics.work;
+        stats.stratified_attempt = Some(attempt.statistics);
+        let plan = match attempt.result {
+            Ok(plan) => plan,
+            Err(error) => {
+                stats.stratified_refusal = Some(error);
+                stats.refusal = Some(CertificateError::Stratified(error));
+                return match error {
+                    StratifiedError::InvalidClosure { .. } => Err(Incomplete::InvalidWitness),
+                    StratifiedError::Stopped(stop) => Err(stop.into()),
+                    StratifiedError::Limit {
+                        resource: StratifiedResource::Work,
+                        ..
+                    } if self.remaining_certificate_work() == 0 => Err(Incomplete::WorkLimit),
+                    _ => Ok(None),
+                };
+            }
+        };
+        self.prepare_determined(
+            Certification::Stratified {
+                plan,
+                max_bytes: limits.max_bytes,
+            },
+            stats,
+        )
+    }
+
+    fn prepare_determined(
+        &mut self,
+        certificate: Certification,
+        stats: &mut CertifiedStatistics,
+    ) -> Result<Option<Certification>, Incomplete> {
+        let plan = certificate.determined().ok_or(Incomplete::InvalidWitness)?;
         let mut budget = Budget {
             quota: LocalQuota,
             limits: self.limits.search,
@@ -338,21 +423,21 @@ impl StableModels {
         // singleton cursor only after this complete plan has been installed.
         let result = match &mut self.proposer {
             super::Proposer::Clauses(clauses) => {
-                positive::restrict(&plan, &mut clauses.cnf, &mut budget)
+                determined::restrict(plan, &mut clauses.cnf, &mut budget)
             }
             super::Proposer::Regions(_)
             | super::Proposer::Parallel(_)
             | super::Proposer::Proposals(_) => Ok(0),
         };
-        stats.restriction_work = budget.statistics.work - self.statistics.search.work;
+        stats.restriction_work = stats
+            .restriction_work
+            .checked_add(budget.statistics.work - self.statistics.search.work)
+            .ok_or(Incomplete::CounterOverflow)?;
         self.statistics.search = budget.statistics;
         match result {
             Ok(clauses) => {
                 stats.restriction_clauses = clauses;
-                Ok(Some(Certification::Positive {
-                    plan,
-                    max_bytes: limits.max_bytes,
-                }))
+                Ok(Some(certificate))
             }
             Err(Incomplete::Admission(
                 error @ (AdmissionError::Limit { .. } | AdmissionError::Overflow),
@@ -371,6 +456,7 @@ impl StableModels {
 /// bounded allowance first and settles the returned work before publication.
 pub(super) fn classify(
     certificate: &Certification,
+    workspace: &mut Workspace,
     candidate: &Interpretation,
     limits: Limits,
     cancellation: &Cancellation,
@@ -380,6 +466,7 @@ pub(super) fn classify(
     let started = timing::start(statistics.phase_timings.as_ref());
     let result = evaluate(
         certificate,
+        workspace,
         candidate,
         limits,
         cancellation,
@@ -392,6 +479,7 @@ pub(super) fn classify(
 
 fn evaluate(
     certificate: &Certification,
+    workspace: &mut Workspace,
     candidate: &Interpretation,
     limits: Limits,
     cancellation: &Cancellation,
@@ -406,13 +494,53 @@ fn evaluate(
     let before = search.work;
     let result = match certificate {
         Certification::Tight { plan, max_bytes } => {
-            check_tight(plan, candidate, *max_bytes, limits, cancellation, search)
+            let result = check_tight(
+                plan,
+                &mut workspace.tight,
+                candidate,
+                *max_bytes,
+                limits,
+                cancellation,
+                search,
+            );
+            let retained =
+                u128::from(plan.statistics().resident_bytes) + workspace.tight.retained_bytes();
+            stats.tight_check_peak_bytes =
+                Some(stats.tight_check_peak_bytes.unwrap_or(0).max(retained));
+            result
         }
         Certification::Positive { plan, max_bytes } => {
-            let (result, peak) =
-                positive::check(plan, candidate, *max_bytes, limits, cancellation, search);
+            let (result, peak) = determined::check(
+                determined::Determined {
+                    interpretation: plan.least_consequences(),
+                    failed_constraint: plan.failed_constraint(),
+                    retained_bytes: plan.statistics().retained_bytes,
+                },
+                candidate,
+                *max_bytes,
+                limits,
+                cancellation,
+                search,
+            );
             stats.positive_check_peak_bytes =
                 Some(stats.positive_check_peak_bytes.unwrap_or(0).max(peak));
+            result
+        }
+        Certification::Stratified { plan, max_bytes } => {
+            let (result, peak) = determined::check(
+                determined::Determined {
+                    interpretation: plan.consequences(),
+                    failed_constraint: plan.failed_constraint(),
+                    retained_bytes: plan.statistics().retained_bytes,
+                },
+                candidate,
+                *max_bytes,
+                limits,
+                cancellation,
+                search,
+            );
+            stats.stratified_check_peak_bytes =
+                Some(stats.stratified_check_peak_bytes.unwrap_or(0).max(peak));
             result
         }
     };
@@ -431,6 +559,7 @@ fn evaluate(
 
 fn check_tight(
     plan: &TightPlan,
+    workspace: &mut TightWorkspace,
     candidate: &Interpretation,
     max_bytes: u64,
     limits: Limits,
@@ -438,7 +567,8 @@ fn check_tight(
     search: &mut SearchStatistics,
 ) -> Result<Verdict, Incomplete> {
     let remaining = limits.search.max_work.saturating_sub(search.work);
-    let attempt = plan.check_accounted(
+    let attempt = workspace.check(
+        plan,
         candidate,
         TightCheckLimits {
             max_bytes,

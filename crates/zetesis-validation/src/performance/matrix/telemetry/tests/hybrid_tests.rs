@@ -105,6 +105,7 @@ fn hybrid_core_certificates_do_not_claim_eager_source_execution() {
     for (name, procedure) in [
         ("tight-support", Procedure::TightSupport),
         ("positive-consequences", Procedure::PositiveConsequences),
+        ("stratified-consequences", Procedure::StratifiedConsequences),
     ] {
         let text = text.replace("oracle=countermodel", &format!("oracle={name}"));
         let observed = observe(&document, text.as_bytes(), request).unwrap();

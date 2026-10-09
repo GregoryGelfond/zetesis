@@ -247,6 +247,7 @@ impl StableModels {
                 }
                 *verdict = match super::certified::classify(
                     certificate,
+                    &mut self.certificate_workspace,
                     candidate,
                     self.limits,
                     &self.cancellation,
@@ -285,7 +286,7 @@ impl StableModels {
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
         };
-        if self.positive_candidates.is_none()
+        if self.determined_candidates.is_none()
             && let Some(index) = &index
             && let super::Proposer::Proposals(proposals) = &mut self.proposer
         {
@@ -322,8 +323,8 @@ impl StableModels {
             return Ok(());
         }
         while self.batch.pending.len() < limits.max_candidates.get() {
-            let walk = match self.positive_candidates.as_mut() {
-                Some(candidates) => super::Walk::Positive(candidates),
+            let walk = match self.determined_candidates.as_mut() {
+                Some(candidates) => super::Walk::Determined(candidates),
                 None => super::Walk::Index(index.as_ref()),
             };
             match proposal(
@@ -367,7 +368,7 @@ impl StableModels {
     /// build site, as in scalar iteration; the positive cursor walks no
     /// region and builds no index. A refused build charge stops the batch.
     fn walk_index(&mut self) -> Result<Option<Arc<IndexedTheory>>, Incomplete> {
-        if self.positive_candidates.is_some() {
+        if self.determined_candidates.is_some() {
             return Ok(None);
         }
         let mut budget = Budget {

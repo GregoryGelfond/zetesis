@@ -29,3 +29,4 @@ mod regions;
 mod restrictions;
 mod semantic_receipts;
 mod stopped_batches;
+mod stratified_certified;

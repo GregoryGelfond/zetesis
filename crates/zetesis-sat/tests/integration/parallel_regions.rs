@@ -461,6 +461,34 @@ fn parallel_certificates_charge_the_scalar_work() {
 }
 
 #[test]
+fn tight_check_storage_is_local_to_each_worker() {
+    let (scalar_models, scalar, scalar_exhausted) = certified_family(1, Limits::default());
+    let (parallel_models, parallel, parallel_exhausted) = certified_family(3, Limits::default());
+    assert!(scalar_exhausted && parallel_exhausted);
+    assert_eq!((scalar_models, parallel_models), (32, 32));
+    let scalar = scalar.certified.unwrap();
+    let parallel = parallel.certified.unwrap();
+    assert!(matches!(
+        scalar.plan,
+        Some(zetesis_sat::CertificatePlanStatistics::Tight(_))
+    ));
+    assert!(matches!(
+        parallel.plan,
+        Some(zetesis_sat::CertificatePlanStatistics::Tight(_))
+    ));
+    assert_eq!((scalar.checks, parallel.checks), (32, 32));
+    let original = choices(5);
+    let Some(zetesis_sat::CertificatePlanStatistics::Tight(plan)) = scalar.plan else {
+        panic!("tight certificate required");
+    };
+    let expected = u128::from(plan.resident_bytes)
+        + original.nodes().len() as u128
+        + original.atom_count() as u128;
+    assert_eq!(scalar.tight_check_peak_bytes, Some(expected));
+    assert_eq!(parallel.tight_check_peak_bytes, Some(expected));
+}
+
+#[test]
 fn certificate_work_cannot_exceed_the_shared_ceiling() {
     let (_, scalar, _) = certified_family(1, Limits::default());
     let limits = Limits {

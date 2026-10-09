@@ -164,6 +164,8 @@ pub enum ExecutionObservation<'a> {
     /// Complete positive atomic-head classification and least consequences enable
     /// the unique-answer restriction; original constraints remain authoritative.
     PositiveMembership,
+    /// Complete original stratified normal theory determines at most one answer.
+    StratifiedMembership,
     /// General reduct checking remains after an optional certificate refusal.
     GeneralMembership(zetesis_sat::CertificateError),
     /// Optional objective-plan preparation was refused; exact search remains.

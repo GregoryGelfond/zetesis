@@ -365,7 +365,8 @@ pub struct StableModels {
     pending_error: Option<Incomplete>,
     batch: batch::State,
     certificate: Option<certified::Certificate>,
-    positive_candidates: Option<certified::PositiveCandidates>,
+    certificate_workspace: certified::Workspace,
+    determined_candidates: Option<certified::DeterminedCandidates>,
     bound_generation: u64,
     reduct: crate::prepared_reduct::State,
     /// The original theory's index, built when a region walk first needs it
@@ -434,7 +435,8 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
-            positive_candidates: None,
+            certificate_workspace: certified::Workspace::default(),
+            determined_candidates: None,
             bound_generation: 0,
             reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
             index: OriginalIndex::new(theory),
@@ -485,7 +487,8 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
-            positive_candidates: None,
+            certificate_workspace: certified::Workspace::default(),
+            determined_candidates: None,
             bound_generation: 0,
             reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
             index: OriginalIndex::new(theory),
@@ -546,7 +549,8 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certificate: None,
-            positive_candidates: None,
+            certificate_workspace: certified::Workspace::default(),
+            determined_candidates: None,
             bound_generation: 0,
             reduct: crate::prepared_reduct::State::new(method),
             index: OriginalIndex::new(theory),
@@ -765,7 +769,7 @@ impl StableModels {
                 regions: Some(proposals.statistics()),
                 ..self.statistics
             },
-            Proposer::Parallel(parallel) if self.positive_candidates.is_none() => {
+            Proposer::Parallel(parallel) if self.determined_candidates.is_none() => {
                 let merged = parallel.merged();
                 let merged = &merged;
                 let mut certified = self.statistics.certified;
@@ -775,7 +779,9 @@ impl StableModels {
                     into.refuted = from.refuted;
                     into.failed = from.failed;
                     into.checking_work = from.checking_work;
+                    into.tight_check_peak_bytes = from.tight_check_peak_bytes;
                     into.positive_check_peak_bytes = from.positive_check_peak_bytes;
+                    into.stratified_check_peak_bytes = from.stratified_check_peak_bytes;
                 }
                 Statistics {
                     regions: Some(parallel.statistics()),
@@ -824,9 +830,10 @@ impl StableModels {
                     .certificate
                     .as_ref()
                     .and_then(certified::Certificate::cpu),
+                certificate_workspace: &mut self.certificate_workspace,
                 reduct: &mut self.reduct,
                 index: &mut self.index,
-                positive_candidates: self.positive_candidates.as_mut(),
+                determined_candidates: self.determined_candidates.as_mut(),
             },
             &mut self.proposer,
             &mut budget,
@@ -895,9 +902,10 @@ struct Membership<'a> {
     /// The certificate as the enumeration owns it, so that workers can
     /// share it; the coordinator reads through it.
     certificate: Option<&'a std::sync::Arc<certified::Certification>>,
+    certificate_workspace: &'a mut certified::Workspace,
     reduct: &'a mut crate::prepared_reduct::State,
     index: &'a mut OriginalIndex,
-    positive_candidates: Option<&'a mut certified::PositiveCandidates>,
+    determined_candidates: Option<&'a mut certified::DeterminedCandidates>,
 }
 
 /// The component that proposes classical candidates: it realizes the
@@ -919,7 +927,7 @@ enum Proposer {
 /// region, or the proposer's own walk with the original index it reads
 /// (`None` under the clause kernel, which reads none).
 enum Walk<'a> {
-    Positive(&'a mut certified::PositiveCandidates),
+    Determined(&'a mut certified::DeterminedCandidates),
     Index(Option<&'a std::sync::Arc<IndexedTheory>>),
 }
 
@@ -981,7 +989,7 @@ impl Proposer {
         statistics: &mut Statistics,
     ) -> Result<Option<Proposal>, Incomplete> {
         let index = match walk {
-            Walk::Positive(candidates) => {
+            Walk::Determined(candidates) => {
                 return candidates
                     .propose(self, theory, limits, budget, statistics)
                     .map(|candidate| candidate.map(Proposal::Candidate));
@@ -1102,11 +1110,12 @@ fn advance(
         theory,
         limits,
         certificate,
+        certificate_workspace,
         reduct,
         index,
-        mut positive_candidates,
+        mut determined_candidates,
     } = membership_input;
-    let index = if positive_candidates.is_none() {
+    let index = if determined_candidates.is_none() {
         walk_index(index, proposer, budget, &mut statistics.phase_timings)?
     } else {
         None
@@ -1115,11 +1124,11 @@ fn advance(
         // The parallel walk's workers time their own phases; the wait for
         // their models is not a phase.
         let started = match proposer {
-            Proposer::Parallel(_) if positive_candidates.is_none() => None,
+            Proposer::Parallel(_) if determined_candidates.is_none() => None,
             _ => timing::start(statistics.phase_timings.as_ref()),
         };
-        let walk = match positive_candidates.as_deref_mut() {
-            Some(candidates) => Walk::Positive(candidates),
+        let walk = match determined_candidates.as_deref_mut() {
+            Some(candidates) => Walk::Determined(candidates),
             None => Walk::Index(index),
         };
         let proposal = proposer.propose(theory, walk, limits, certificate, budget, statistics);
@@ -1137,6 +1146,7 @@ fn advance(
         let decision: Decision = if let Some(certificate) = certificate {
             certified::classify(
                 certificate,
+                certificate_workspace,
                 &candidate,
                 limits,
                 budget.cancellation,

@@ -25,6 +25,14 @@ fn plan() -> PositivePlan {
     .unwrap()
 }
 
+fn determined(plan: &PositivePlan) -> super::determined::Determined<'_> {
+    super::determined::Determined {
+        interpretation: plan.least_consequences(),
+        failed_constraint: plan.failed_constraint(),
+        retained_bytes: plan.statistics().retained_bytes,
+    }
+}
+
 fn original(limits: AdmissionLimits) -> Cnf {
     Cnf::new(3, vec![vec![Literal::new(0, true)]], limits).unwrap()
 }
@@ -51,7 +59,7 @@ fn unit_admission_refusal_preserves_the_original_cnf() {
         statistics: SearchStatistics::default(),
     };
     assert_eq!(
-        super::positive::restrict(&plan, &mut cnf, &mut budget),
+        super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
         Err(Incomplete::Admission(AdmissionError::Limit {
             resource: Resource::Clauses,
             observed: 3,
@@ -84,14 +92,14 @@ fn stopped_unit_construction_rolls_back_every_partial_prefix() {
             statistics: SearchStatistics::default(),
         };
         assert_eq!(
-            super::positive::restrict(&plan, &mut cnf, &mut budget),
+            super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
             Err(Incomplete::WorkLimit)
         );
         assert_eq!(budget.statistics.work, limit);
         assert_eq!(contents(&cnf), before);
         budget.limits.max_work = limit + required;
         assert_eq!(
-            super::positive::restrict(&plan, &mut cnf, &mut budget),
+            super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
             Ok(3)
         );
         assert_eq!(budget.statistics.work, limit + required);
@@ -110,7 +118,7 @@ fn committed_units_select_exactly_the_least_interpretation() {
         statistics: SearchStatistics::default(),
     };
     assert_eq!(
-        super::positive::restrict(&plan, &mut cnf, &mut budget),
+        super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
         Ok(3)
     );
     assert_eq!(cnf.variables(), 3, "no auxiliary identity was added");
@@ -146,8 +154,8 @@ fn positive_membership_rejects_equal_looking_foreign_owners() {
     .unwrap();
     let candidate = zetesis_ferraris::Interpretation::new(&foreign, [0]).unwrap();
     let mut search = SearchStatistics::default();
-    let (result, _) = super::positive::check(
-        &plan,
+    let (result, _) = super::determined::check(
+        determined(&plan),
         &candidate,
         usize::MAX,
         crate::Limits::default(),
@@ -163,8 +171,8 @@ fn positive_membership_refutes_a_nonleast_model() {
     let plan = plan();
     let candidate = zetesis_ferraris::Interpretation::new(plan.theory(), [0, 2]).unwrap();
     let mut search = SearchStatistics::default();
-    let (result, _) = super::positive::check(
-        &plan,
+    let (result, _) = super::determined::check(
+        determined(&plan),
         &candidate,
         usize::MAX,
         crate::Limits::default(),
@@ -183,8 +191,8 @@ fn positive_membership_identifies_a_nonmodel() {
     let plan = plan();
     let candidate = zetesis_ferraris::Interpretation::new(plan.theory(), []).unwrap();
     let mut search = SearchStatistics::default();
-    let (result, _) = super::positive::check(
-        &plan,
+    let (result, _) = super::determined::check(
+        determined(&plan),
         &candidate,
         usize::MAX,
         crate::Limits::default(),
@@ -259,6 +267,7 @@ fn complete_certificate_allowances_include_every_operand() {
                 let mut search = SearchStatistics::default();
                 let result = super::classify(
                     &certificate,
+                    &mut super::Workspace::default(),
                     &candidate,
                     crate::Limits {
                         search: SearchLimits {

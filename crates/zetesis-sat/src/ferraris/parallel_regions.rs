@@ -676,7 +676,7 @@ impl ParallelRegions {
         Ok(())
     }
 
-    pub(super) fn permits_positive(
+    pub(super) fn permits_determined(
         &mut self,
         candidate: &Interpretation,
         budget: &mut Budget<'_>,
@@ -914,9 +914,21 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
         add(&mut into.refuted, from.refuted)?;
         add(&mut into.failed, from.failed)?;
         add(&mut into.checking_work, from.checking_work)?;
+        into.tight_check_peak_bytes =
+            match (into.tight_check_peak_bytes, from.tight_check_peak_bytes) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, b) => a.or(b),
+            };
         into.positive_check_peak_bytes = match (
             into.positive_check_peak_bytes,
             from.positive_check_peak_bytes,
+        ) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+        into.stratified_check_peak_bytes = match (
+            into.stratified_check_peak_bytes,
+            from.stratified_check_peak_bytes,
         ) {
             (Some(a), Some(b)) => Some(a.max(b)),
             (a, b) => a.or(b),
@@ -1066,6 +1078,7 @@ enum Stepped {
 struct Workspaces<'a> {
     scratch: NarrowingScratch,
     membership: crate::prepared_reduct::State,
+    certificate: certified::Workspace,
     filter: Option<crate::region_filter::Worker<'a>>,
     retired_knowledge: Option<CandidateKnowledge>,
 }
@@ -1075,6 +1088,7 @@ impl Workspaces<'_> {
         Self {
             scratch: NarrowingScratch::default(),
             membership: crate::prepared_reduct::State::new(crate::SearchMethod::Regions),
+            certificate: certified::Workspace::default(),
             filter: None,
             retired_knowledge: None,
         }
@@ -1165,6 +1179,7 @@ fn step<'a>(
             &region,
             budget,
             &mut workspaces.membership,
+            &mut workspaces.certificate,
             report,
         )
         .map(Stepped::Resolved);
@@ -1185,6 +1200,7 @@ fn leaf<'a>(
     region: &Region,
     budget: &mut Budget<'a, WorkLease<'a>>,
     membership: &mut crate::prepared_reduct::State,
+    workspace: &mut certified::Workspace,
     report: &mut WorkerReport,
 ) -> Result<Option<Interpretation>, Incomplete> {
     let candidate = super::regions::leaf_interpretation(original.theory(), region)?;
@@ -1217,6 +1233,7 @@ fn leaf<'a>(
         }
         let verdict = certified::classify(
             certificate,
+            workspace,
             &candidate,
             limits,
             budget.cancellation,

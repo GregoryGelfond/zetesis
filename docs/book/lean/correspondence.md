@@ -27,7 +27,7 @@ separate; the two generations are not interchangeable proof records.
 `zetesis_solve::Resources` derives ordinary admission, execution and publication
 capacities from memory and worker count. It selects no operational ceiling on
 mandatory CPU work; checked counter maxima, cancellation and allocation failures
-remain. Tight and positive certificate preparation uses the session's scratch
+remain. Tight, positive and stratified certificate preparation uses the session's scratch
 allowance and remaining search work, with checked population counters. Other
 optional fail-open analyses and individual GPU dispatches retain separate bounds.
 Materialized source families have a separate memory capacity from cumulative
@@ -42,6 +42,13 @@ claims neither a proof of total process memory nor end-to-end verification.
 
 ## Tight-body classification
 
+CPU tight membership now retains its truth and support vectors in a worker-local
+`TightWorkspace`. The semantic scan and charged operations are unchanged; all
+truth cells are overwritten and support cells reset before reuse. Existing
+`TightEvaluation` laws still require exact original truth, complete producers
+and valid ranks. Those laws do not prove the Rust workspace's allocation,
+reset or retained-capacity behavior, which has separate regression checks.
+
 `TightClassification.completed_semantics` connects the retained binary generation's
 tight-body classifier to `TightBodyRecognition`: successful classification covers every
 stored node, preserves its exact formula syntax, and distinguishes bodies with
@@ -53,6 +60,23 @@ optimized-route correspondence, not a proof of the whole tight certificate.
 Producer coverage, ranks and membership checking remain separate obligations.
 See [the refinement account](evaluation.md#recognizing-bodies-for-tight-checking)
 for the fixed-provider scope.
+
+## Stratified normal evaluation
+
+[`StratifiedEvaluation.answer_set_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StratifiedEvaluation.lean)
+derives a unique answer candidate from syntactic rank conditions. Positive
+dependencies may stay in a stratum; frozen gates must read earlier strata.
+Repeated complete reduct closures settle those strata, giving a unique fixed
+point. The existing normalized/Ferraris bridge and constraint-filtering law
+then characterize answer-set membership, including arbitrary extra constraints.
+
+Rust `StratifiedPlan` recognizes a narrower normal formula grammar, computes
+signed strongly connected components and propagates positive consequences in
+that order. The theorem does not yet prove this graph recognition, the formula
+translation, or equivalence of the component queue to the staged definition.
+Those obligations are distinct from the established mathematical law. Exhaustive
+small-theory comparisons exercise the concrete result against general reduct
+membership; interruption and storage tests check its bounded outcomes.
 
 ## Atomic-choice recognition
 

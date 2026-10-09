@@ -1,4 +1,4 @@
-//! Complete positive evidence restricts the proposed answer family to one row.
+//! Complete deterministic evidence restricts the proposed answer family to one row.
 
 use std::sync::Arc;
 
@@ -8,16 +8,16 @@ use crate::ferraris::{Limits, Proposer, Statistics};
 use crate::search::Budget;
 use zetesis_ferraris::{Interpretation, Theory};
 
-/// A successful original-owner positive plan is the coverage certificate. The
+/// A successful original-owner deterministic plan is the coverage certificate. The
 /// existing proposer retains candidate restrictions, filter and preparation
 /// receipts; its region frontier is never entered while this cursor is active.
 #[derive(Debug)]
-pub(in crate::ferraris) struct PositiveCandidates {
+pub(in crate::ferraris) struct DeterminedCandidates {
     certificate: Arc<Certification>,
     remaining: bool,
 }
 
-impl PositiveCandidates {
+impl DeterminedCandidates {
     pub(in crate::ferraris) fn new(certificate: Arc<Certification>) -> Self {
         Self {
             certificate,
@@ -34,30 +34,31 @@ impl PositiveCandidates {
         statistics: &mut Statistics,
     ) -> Result<Option<Interpretation>, Incomplete> {
         budget.cancellation.poll()?;
-        let Certification::Positive { plan, .. } = self.certificate.as_ref() else {
-            return Err(Incomplete::InvalidWitness);
-        };
-        if !theory.same_instance(plan.theory()) {
+        let plan = self
+            .certificate
+            .determined()
+            .ok_or(Incomplete::InvalidWitness)?;
+        if !theory.same_instance(plan.interpretation.theory()) {
             return Err(Incomplete::WrongTheory);
         }
         if !self.remaining {
             return Ok(None);
         }
-        if plan.failed_constraint().is_some() {
+        if plan.failed_constraint.is_some() {
             self.remaining = false;
             return Ok(None);
         }
-        let candidate = plan.least_consequences();
+        let candidate = plan.interpretation;
         let permitted = match source {
             Proposer::Clauses(_) => return Err(Incomplete::InvalidWitness),
             Proposer::Regions(regions) => {
-                regions.permits_positive(candidate, budget, &mut statistics.phase_timings)
+                regions.permits_determined(candidate, budget, &mut statistics.phase_timings)
             }
             Proposer::Parallel(parallel) => {
-                parallel.permits_positive(candidate, budget, &mut statistics.phase_timings)
+                parallel.permits_determined(candidate, budget, &mut statistics.phase_timings)
             }
             Proposer::Proposals(proposals) => {
-                proposals.permits_positive(candidate, budget, &mut statistics.phase_timings)
+                proposals.permits_determined(candidate, budget, &mut statistics.phase_timings)
             }
         }?;
         budget.cancellation.poll()?;

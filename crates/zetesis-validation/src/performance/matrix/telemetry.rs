@@ -87,10 +87,12 @@ pub(super) fn observe(
     if let Some(receipt) = &terminal {
         terminal::execution(receipt, &timing, procedure)?;
     }
-    if procedure == Procedure::PositiveConsequences
-        && (backend != Backend::Cpu || (taken != Grounder::Eager && hybrid.is_none()))
+    if matches!(
+        procedure,
+        Procedure::PositiveConsequences | Procedure::StratifiedConsequences
+    ) && (backend != Backend::Cpu || (taken != Grounder::Eager && hybrid.is_none()))
     {
-        return Err("positive consequences require the eager CPU formula route".into());
+        return Err("direct consequences require the eager CPU formula route".into());
     }
     let device = device(
         statistics,
@@ -120,6 +122,7 @@ fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
         "countermodel" => Procedure::Countermodel,
         "tight-support" => Procedure::TightSupport,
         "positive-consequences" => Procedure::PositiveConsequences,
+        "stratified-consequences" => Procedure::StratifiedConsequences,
         _ => return Err("unsupported actual oracle metadata".into()),
     };
     let matches_request = match request {

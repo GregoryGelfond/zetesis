@@ -3,6 +3,8 @@
 mod compile;
 mod evaluate;
 
+pub use evaluate::TightWorkspace;
+
 use std::fmt;
 
 use crate::Theory;
@@ -37,7 +39,9 @@ impl Default for TightPlanLimits {
 /// Per-candidate bounds, independent of enumeration and exact-query budgets.
 #[derive(Clone, Copy, Debug)]
 pub struct TightCheckLimits {
-    /// Logical bytes for the retained plan and candidate evaluation scratch.
+    /// Logical bytes for the retained plan and actual evaluation-vector capacities,
+    /// including capacity retained from earlier checks. Vector headers, the
+    /// shared theory and allocator overhead are excluded.
     pub max_bytes: u64,
     /// Charged node evaluations, original-root tests, producers and atom scans.
     pub max_work: u64,
@@ -238,7 +242,10 @@ pub struct TightCheck {
     pub verdict: TightVerdict,
     /// Charged operations actually performed before this result.
     pub work: u64,
-    /// Plan and evaluation scratch logical payload bytes.
+    /// Plan and admitted evaluation-vector payload bytes. This includes the
+    /// complete support vector even when an earlier original-root failure
+    /// makes its allocation unnecessary; retained payload is available from
+    /// [`TightWorkspace::retained_bytes`].
     pub logical_bytes: u64,
 }
 

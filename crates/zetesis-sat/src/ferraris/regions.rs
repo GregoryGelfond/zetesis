@@ -307,7 +307,7 @@ impl RegionSearch {
         Ok(())
     }
 
-    pub(super) fn permits_positive(
+    pub(super) fn permits_determined(
         &mut self,
         candidate: &Interpretation,
         budget: &mut Budget<'_>,

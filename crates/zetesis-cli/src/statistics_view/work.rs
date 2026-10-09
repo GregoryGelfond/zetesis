@@ -50,6 +50,9 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
         let operation = match statistics.certified.and_then(|receipt| receipt.plan) {
             Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => "tight support",
             Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => "positive consequences",
+            Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => {
+                "stratified consequences"
+            }
             None => "general reduct",
         };
         return format!("CPU native formula ({operation})");

@@ -361,6 +361,19 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
     assert_eq!(stream.batch_statistics().pending, 2);
     assert_eq!(stream.statistics().stable_models, 0);
     assert_eq!(stream.statistics().certified.unwrap().failed, 1);
+    let certified = stream.statistics().certified.unwrap();
+    assert!(matches!(
+        certified.plan,
+        Some(zetesis_sat::CertificatePlanStatistics::Tight(_))
+    ));
+    assert_eq!(
+        certified.tight_check_peak_bytes,
+        Some(
+            u128::from(probe.statistics().resident_bytes)
+                + original.nodes().len() as u128
+                + original.atom_count() as u128
+        ),
+    );
     assert_eq!(pool.last_statistics(), None);
     assert!(!stream.exhausted());
 }

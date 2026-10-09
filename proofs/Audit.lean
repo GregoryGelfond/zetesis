@@ -1327,6 +1327,14 @@ import Zetesis
 #print axioms Zetesis.StorageOwners.active_storage_within_limit
 #print axioms Zetesis.StorageOwners.sum_within_component_bounds
 #print axioms Zetesis.StorageOwners.shared_idle_active_within_limit
+#print axioms Zetesis.StratifiedEvaluation.gamma_prefix_sub
+#print axioms Zetesis.StratifiedEvaluation.gamma_agrees
+#print axioms Zetesis.StratifiedEvaluation.consecutive_agree
+#print axioms Zetesis.StratifiedEvaluation.final_fixed
+#print axioms Zetesis.StratifiedEvaluation.stages_agree_fixed
+#print axioms Zetesis.StratifiedEvaluation.fixed_iff_final
+#print axioms Zetesis.StratifiedEvaluation.normalized_answer_set_iff
+#print axioms Zetesis.StratifiedEvaluation.answer_set_iff
 #print axioms Zetesis.StreamedConsequences.body_satisfied
 #print axioms Zetesis.StreamedConsequences.contains_of_inside
 #print axioms Zetesis.StreamedConsequences.fresh_not_sure

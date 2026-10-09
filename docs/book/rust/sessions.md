@@ -56,7 +56,7 @@ capacities are not a global resident-memory guarantee. Explicit limit fields
 remain available when an embedding needs a bounded operation; other optional
 analyses and device dispatches also retain internal effort bounds.
 
-Tight and positive certificate preparation uses the session's named scratch
+Tight, positive and stratified certificate preparation uses the session's named scratch
 allowance and shared search work. It has no separate fixed producer, dependency
 or operation-count cutoff. Each certificate still checks the complete theory;
 unsupported programs or insufficient certificate storage leave general reduct
@@ -139,7 +139,7 @@ routes leave it absent and expose their own receipts.
 
 An ordinary CPU formula session with `Oracle::Auto` attempts an applicable class
 plan before general reduct checking. Full normalized source analysis can prefer
-positive consequence checking; a dependency projection supplies no such class
+positive or stratified consequence checking; a dependency projection supplies no such class
 certificate. Attempt order is only a hint: each plan validates the complete
 original ground theory itself.
 
@@ -147,10 +147,21 @@ original ground theory itself.
 and arbitrary constraints. It computes their least consequences once, then
 checks original roots through the first failure. Clause search restricts candidates
 to that interpretation, or excludes them all when a constraint fails. Region search
-still checks original models and refutes any larger interpretation. A failed constraint leaves no answer
+uses a singleton cursor, checking accumulated restrictions before publication.
+A failed constraint leaves no answer
 set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
-plan changes the definition of membership. The
+plan changes the definition of membership. CPU tight checks retain exclusive
+`TightWorkspace` scratch in each worker; immutable plans can be shared. Every
+call checks its retained capacity against the current allowance. Interrupted
+or rejected candidates cannot leave truth or support in the next check.
+
+`StratifiedPlan` extends direct evaluation to the supported stratified normal
+grammar. It completes positive components in signed dependency order and checks
+the original constraints. Positive and stratified certificates share the same
+single-answer publication mechanism. Unsupported formulas fall back to another
+applicable certificate or general reduct checking. This direct route is currently
+CPU-only; an explicit GPU request retains its device checking contract. The
 [semantic argument](../architecture/semantics.md) explains their relation to the
 frozen reduct.
 
@@ -186,8 +197,8 @@ before such a start failure.
 
 Class-shape or optional-capacity refusals retain general checking. Cancellation,
 exhausted shared work and allocation failure remain explicit interruptions.
-`ExecutionObservation::PositiveMembership` and `TightMembership` report the
-selected plan; the search statistics retain attempted construction, restrictions
+`ExecutionObservation::PositiveMembership`, `StratifiedMembership` and
+`TightMembership` report the selected plan; the search statistics retain attempted construction, restrictions
 and checking work. Use `Oracle::Countermodel` to select the general comparison
 path explicitly. Automatic device execution uses tight checking when its exact
 certificate is available; other theories retain general device checking.

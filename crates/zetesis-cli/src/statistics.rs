@@ -782,17 +782,35 @@ fn certificate(
                 plan.peak_bytes,
                 plan.retained_bytes
             )?,
+            zetesis_sat::CertificatePlanStatistics::Stratified(plan) => writeln!(
+                sink,
+                "  stratified certificate: components={}; derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}",
+                plan.components,
+                plan.derived_atoms,
+                plan.activated_nodes,
+                plan.dependencies,
+                plan.propagated_dependencies,
+                plan.peak_bytes,
+                plan.retained_bytes
+            )?,
         }
     }
     writeln!(
         sink,
-        "  class attempts: tight refusal={:?}; positive refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}",
+        "  class attempts: tight refusal={:?}; positive refusal={:?}; stratified refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}",
         certified.tight_refusal,
         certified.positive_refusal,
+        certified.stratified_refusal,
         certified.restriction_refusal,
         certified.restriction_work,
         certified.restriction_clauses
     )?;
+    if let Some(peak) = certified.tight_check_peak_bytes {
+        writeln!(
+            sink,
+            "  tight checking: peak plan and evaluation bytes={peak}"
+        )?;
+    }
     if let Some(peak) = certified.positive_check_peak_bytes {
         writeln!(
             sink,
@@ -807,6 +825,23 @@ fn certificate(
         writeln!(
             sink,
             "  positive preparation attempt: work={}; observed peak bytes={}; primitive retained bytes={}; positive plan not selected",
+            attempt.work, attempt.peak_bytes, attempt.retained_bytes
+        )?;
+    }
+    if let Some(peak) = certified.stratified_check_peak_bytes {
+        writeln!(
+            sink,
+            "  stratified checking: peak plan and evaluation bytes={peak}"
+        )?;
+    }
+    if !matches!(
+        certified.plan,
+        Some(zetesis_sat::CertificatePlanStatistics::Stratified(_))
+    ) && let Some(attempt) = certified.stratified_attempt
+    {
+        writeln!(
+            sink,
+            "  stratified preparation attempt: work={}; observed peak bytes={}; primitive retained bytes={}; stratified plan not selected",
             attempt.work, attempt.peak_bytes, attempt.retained_bytes
         )?;
     }
@@ -835,6 +870,7 @@ fn formula(
     {
         Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => "tight-support",
         Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => "positive-consequences",
+        Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => "stratified-consequences",
         None => "countermodel",
     };
     if let Some(execution) = report.formula_execution {

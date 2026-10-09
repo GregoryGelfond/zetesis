@@ -25,13 +25,17 @@ pub(crate) fn certificate_order(
     analysis: &zetesis_themelios::analysis::Analysis,
     basis: zetesis_themelios::AnalysisBasis,
 ) -> zetesis_sat::CertificateOrder {
+    use zetesis_themelios::analysis::classify::{HornKind, Normality, Stratification};
+    let classes = analysis.classes();
     if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
-        && matches!(
-            analysis.classes().horn(),
-            zetesis_themelios::analysis::classify::HornKind::Horn
-        )
+        && matches!(classes.horn(), HornKind::Horn)
     {
         zetesis_sat::CertificateOrder::PositiveFirst
+    } else if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
+        && matches!(classes.normality(), Normality::Normal)
+        && matches!(classes.stratification(), Stratification::Stratified)
+    {
+        zetesis_sat::CertificateOrder::StratifiedFirst
     } else {
         zetesis_sat::CertificateOrder::TightFirst
     }
@@ -69,6 +73,9 @@ pub(crate) fn prepare_certificate(
             Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => {
                 diagnostics.record(Event::PositiveMembership)?;
             }
+            Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => {
+                diagnostics.record(Event::StratifiedMembership)?;
+            }
             None => return Ok(Some(zetesis_sat::Incomplete::InvalidWitness)),
         },
         Ok(false) => diagnostics.record(Event::GeneralMembership(
@@ -96,6 +103,11 @@ fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
             max_work: options.max_search_work,
         },
         positive: zetesis_ferraris::PositivePlanLimits {
+            max_dependencies: usize::MAX,
+            max_bytes: usize::try_from(options.max_completion_scratch_bytes).unwrap_or(usize::MAX),
+            max_work: options.max_search_work,
+        },
+        stratified: zetesis_ferraris::StratifiedPlanLimits {
             max_dependencies: usize::MAX,
             max_bytes: usize::try_from(options.max_completion_scratch_bytes).unwrap_or(usize::MAX),
             max_work: options.max_search_work,

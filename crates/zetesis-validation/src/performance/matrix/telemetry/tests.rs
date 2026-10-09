@@ -564,6 +564,22 @@ fn positive_consequences_remains_a_distinct_procedure() {
 }
 
 #[test]
+fn stratified_consequences_is_a_distinct_procedure() {
+    let (document, text) = prepared_fixture();
+    let text = text.replace("oracle=closure", "oracle=stratified-consequences");
+    let observed = observe(&document, text.as_bytes(), NativeExecution::default()).unwrap();
+    assert_eq!(
+        observed.execution.procedure,
+        Procedure::StratifiedConsequences
+    );
+    assert!(matches!(observed.execution.device, DeviceWork::Cpu));
+    assert_eq!(
+        serde_json::to_value(observed.execution.procedure).unwrap(),
+        "stratified_consequences"
+    );
+}
+
+#[test]
 fn positive_consequences_cannot_satisfy_an_explicit_oracle_request() {
     let (document, text) = prepared_fixture();
     let text = text.replace("oracle=closure", "oracle=positive-consequences");
@@ -599,7 +615,7 @@ fn positive_consequences_cannot_describe_a_metal_route() {
     };
     assert_eq!(
         observe(&document, text.as_bytes(), request).unwrap_err(),
-        "positive consequences require the eager CPU formula route"
+        "direct consequences require the eager CPU formula route"
     );
 }
 
@@ -630,7 +646,7 @@ fn positive_consequences_cannot_describe_lazy_grounding() {
     };
     assert_eq!(
         observe(&document, text.as_bytes(), request).unwrap_err(),
-        "positive consequences require the eager CPU formula route"
+        "direct consequences require the eager CPU formula route"
     );
 }
 

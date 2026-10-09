@@ -169,3 +169,4 @@ import Zetesis.TheoryAdmission
 import Zetesis.TightBodyRecognition
 import Zetesis.SupportTransposition
 import Zetesis.FactRejection
+import Zetesis.StratifiedEvaluation

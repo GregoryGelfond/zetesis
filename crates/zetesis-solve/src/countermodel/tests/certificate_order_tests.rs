@@ -33,3 +33,21 @@ fn choice_source_keeps_tight_first() {
         CertificateOrder::TightFirst,
     );
 }
+
+#[test]
+fn complete_stratified_source_prefers_direct_evaluation() {
+    let owner = admitted(include_str!("../../../tests/fixtures/stratified/cycle.lp"));
+    assert_eq!(
+        certificate_order(owner.source_analysis(), owner.analysis_basis()),
+        CertificateOrder::StratifiedFirst
+    );
+}
+
+#[test]
+fn dependency_projection_does_not_select_stratified_first() {
+    let owner = admitted(include_str!("../../../tests/fixtures/stratified/cycle.lp"));
+    assert_eq!(
+        certificate_order(owner.source_analysis(), AnalysisBasis::DependencyProjection),
+        CertificateOrder::TightFirst
+    );
+}

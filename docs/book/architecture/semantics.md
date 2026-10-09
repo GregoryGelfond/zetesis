@@ -81,6 +81,35 @@ aggregates. These constructs require their own source-to-formula preservation
 arguments. Classical equivalence of two aggregate expressions is insufficient:
 the replacement must preserve the required frozen-reduct behavior as well.
 
+## Evaluate stratified normal programs directly
+
+When positive dependencies stay within or below a component and every negative
+dependency reaches an earlier component, normal producers determine one
+interpretation. Complete each positive fixed point before consulting its absence
+in a later component:
+
+```text
+completed := empty interpretation
+for component in dependency order:
+    freeze negative literals using completed predecessors
+    completed := completed union least consequences of this component
+check every original constraint in completed
+```
+
+This is a specialization of the reduct definition. Positive cycles are allowed;
+negative cycles are not. Constraints may exclude the computed interpretation but
+cannot create another answer. Tightness alone does not justify this algorithm:
+`a :- not b. b :- not a.` is tight and has two answer sets.
+
+`StratifiedPlan` checks the complete original formula theory. It admits atomic
+facts and atomic-head rules with conjunctions of atoms, falsum, truth and single
+default-negated atoms. It rejects choices and more general producer formulas.
+Signed dependencies and queued positive propagation use the original atom IDs
+and formula graph; the result retains its original theory owner. The
+[stratified evaluation proof](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StratifiedEvaluation.lean)
+establishes the mathematical reduct argument. Recognition of the Rust grammar
+and correspondence of its component schedule remain implementation obligations.
+
 ## Membership, enumeration, and optimization
 
 Membership answers whether one candidate is an answer set. Enumeration also
