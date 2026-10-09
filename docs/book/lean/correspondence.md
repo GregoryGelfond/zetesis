@@ -1301,8 +1301,9 @@ statistics trail committed work by up to one grant per worker. Its shared
 allowance includes
 coordinator certificate preparation; each worker reserves a finite checking
 bound before running its certificate and settles its actual returned work.
-The bounds follow the checkers' charged visits: nodes, roots, producers and atoms
-for a tight check, and atoms, nodes and roots for a positive check. An unwind
+The bounds follow the checkers' charged visits: nodes, operand occurrences, roots,
+producers and atoms for tight checking; atoms, nodes, operand occurrences and
+roots for positive or stratified checking. An unwind
 consumes its reservation conservatively and yields an incomplete worker failure.
 Returning unused grants before an idle wait, releasing blocked
 sends before joining on iterator drop, and counting joined certificate checks
