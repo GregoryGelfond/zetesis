@@ -160,13 +160,18 @@ fn support_attempt(
     }
     closure.lists.nodes.clear();
     closure.lists.learned.clear();
-    let before = closure.known.clone();
+    let before = [
+        closure.known.sure.to_vec(),
+        closure.known.never.to_vec(),
+        closure.known.atom_sure.to_vec(),
+        closure.known.atom_never.to_vec(),
+    ];
     let result = closure.recheck(&index, &producers, 0, work);
     if result.is_err() {
-        assert_eq!(closure.known.sure, before.sure);
-        assert_eq!(closure.known.never, before.never);
-        assert_eq!(closure.known.atom_sure, before.atom_sure);
-        assert_eq!(closure.known.atom_never, before.atom_never);
+        assert_eq!(&*closure.known.sure, before[0].as_slice());
+        assert_eq!(&*closure.known.never, before[1].as_slice());
+        assert_eq!(&*closure.known.atom_sure, before[2].as_slice());
+        assert_eq!(&*closure.known.atom_never, before[3].as_slice());
         assert!(closure.lists.nodes.is_empty());
         assert!(closure.lists.learned.is_empty());
         assert!(closure.lists.heads.is_empty());

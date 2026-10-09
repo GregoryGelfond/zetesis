@@ -450,17 +450,16 @@ impl PreparationContext<'_> {
             compiler.budget,
             fallback,
         )?;
-        let asked =
-            crate::formula_keys::ask_all(&analyzed, &owners, limits, compiler.budget, fallback)?;
-        let keyed_constraints = asked.rules.len();
-        if keyed_constraints > 0 {
-            analyzed = replace_asked(
+        let (replacements, keyed_constraints, key_analysis) =
+            plan_constraint_replacements(&mut compiler, &analyzed, &owners, fallback)?;
+        if !replacements.is_empty() {
+            analyzed = replace_constraints(
                 &mut compiler,
                 &constants,
                 &mut parts,
                 &analyzed,
                 &owners,
-                asked.rules,
+                replacements,
                 fallback,
             )?;
         }
@@ -504,9 +503,60 @@ impl PreparationContext<'_> {
             objective_declarations: parts.objective_declarations,
             objective_extrema,
             keyed_constraints,
-            key_analysis: asked.analysis,
+            key_analysis,
         })
     }
+}
+
+/// Prepare the two disjoint constraint rewrites against one authoritative
+/// analyzed program, sharing its lazy all-producer fact certificate.
+fn plan_constraint_replacements(
+    compiler: &mut Compiler<'_>,
+    analyzed: &SourceProgram,
+    owners: &crate::formula_keys::owners::Owners,
+    site: ProgramSite,
+) -> Result<
+    (
+        crate::formula_rewrite::Replacements,
+        usize,
+        crate::formula_keys::KeyAnalysis,
+    ),
+    FormulaFailure,
+> {
+    let mut facts = crate::formula_rewrite::FixedFacts::new(analyzed);
+    let asked = crate::formula_keys::ask_all(
+        analyzed,
+        owners,
+        compiler.limits,
+        compiler.budget,
+        site,
+        &mut facts,
+    )?;
+    let keyed_constraints = asked.rules.len();
+    let mut replacements: crate::formula_rewrite::Replacements = asked
+        .rules
+        .into_iter()
+        .map(|(owner, (provenance, rules))| {
+            (
+                owner,
+                crate::formula_rewrite::Replacement {
+                    provenance,
+                    rules,
+                    tag: "zetesis-keyed-constraint",
+                },
+            )
+        })
+        .collect();
+    if !compiler.dependency_projection {
+        replacements.extend(crate::formula_fixed_constraints::specialize(
+            analyzed,
+            owners,
+            &mut facts,
+            compiler.budget,
+            site,
+        )?);
+    }
+    Ok((replacements, keyed_constraints, asked.analysis))
 }
 
 /// What the statements compile to, in source order: the rules and the
@@ -523,18 +573,18 @@ struct Parts {
 }
 
 /// Replace each written constraint's rules and analyzed statement by those
-/// of the constraints asked in its place, compiled as any statement is,
+/// of the certified constraints in its place, compiled as any statement is,
 /// under the written constraint's provenance and the transformation's tag.
 /// The analyzed statements of the rest are kept as they are; the program is
 /// rebuilt once. The written constraint's charges stay charged: it was
 /// compiled.
-fn replace_asked(
+fn replace_constraints(
     compiler: &mut Compiler<'_>,
     constants: &BTreeMap<String, Symbol>,
     parts: &mut Parts,
     analyzed: &SourceProgram,
     owners: &crate::formula_keys::owners::Owners,
-    asked: BTreeMap<StatementId, (themelios_program::provenance::Provenance, Vec<Rule>)>,
+    asked: crate::formula_rewrite::Replacements,
     fallback: ProgramSite,
 ) -> Result<SourceProgram, FormulaFailure> {
     parts.rules.retain(|rule| {
@@ -552,10 +602,15 @@ fn replace_asked(
         })
         .map(|(_, carrier)| carrier.clone())
         .collect();
-    let tag = themelios_program::provenance::Provenance::from(Origin::Transformed(
-        TransformTag::new("zetesis-keyed-constraint"),
-    ));
-    for (owner, (provenance, rules)) in asked {
+    for (owner, replacement) in asked {
+        let crate::formula_rewrite::Replacement {
+            provenance,
+            rules,
+            tag,
+        } = replacement;
+        let tag = themelios_program::provenance::Provenance::from(Origin::Transformed(
+            TransformTag::new(tag),
+        ));
         for rule in rules {
             let carrier =
                 WithProvenance::new(Statement::Rule(rule), provenance.clone().merge(tag.clone()));

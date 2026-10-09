@@ -85,15 +85,7 @@ fn close(
 /// pending effect is hidden behind agreement of the published region alone.
 fn same_knowledge(left: &Knowledge, right: &Knowledge) {
     let (left, right) = (super::compact(left), super::compact(right));
-    for (left, right) in [
-        (&left.sure, &right.sure),
-        (&left.never, &right.never),
-        (&left.atom_sure, &right.atom_sure),
-        (&left.atom_never, &right.atom_never),
-        (&left.seen, &right.seen),
-    ] {
-        assert_eq!(left, right);
-    }
+    assert_eq!(left.masks.slices(), right.masks.slices());
     for (left, right) in [
         (&left.sure_operands, &right.sure_operands),
         (&left.never_operands, &right.never_operands),

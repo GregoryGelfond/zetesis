@@ -619,6 +619,7 @@ import Zetesis
 #print axioms Zetesis.FiniteValues.original_literal_identity
 #print axioms Zetesis.FiniteValues.frozen_literal_identity
 #print axioms Zetesis.FiniteValues.failed_step
+#print axioms Zetesis.FixedWitnessConstraints.bodies_fire_together
 #print axioms Zetesis.FormulaBounds.read_sound
 #print axioms Zetesis.FormulaBounds.sure_sound
 #print axioms Zetesis.FormulaBounds.never_sound

@@ -15,6 +15,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Specialize positive constraints over fixed fact relations, removing repeated
+  witnesses while preserving original atoms and statement identity.
+- Avoid repeating completed lazy constraint checks when a changed atom cannot
+  match any occurrence in the constraint.
+- Store candidate knowledge masks together, reducing allocations while keeping
+  each candidate independently owned.
 - Construct possible count values directly, preserving tuple identity and
   arithmetic diagnostics.
 - Skip structurally impossible rows during lazy constraint checking, while

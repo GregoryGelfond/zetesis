@@ -257,3 +257,63 @@ fn an_aggregate_head_leaves_every_predicate_without_facts() {
     // predicate's facts are known to be all that produces it.
     assert_eq!(digits("digit(2). q(1). 1 = #count { X : q(X) }."), None);
 }
+
+#[test]
+fn fixed_tuples_preserve_correlation() {
+    let program = source("r(1,9). r(2,8).");
+    let mut work = KeyWork::new(100);
+    let facts = FactIndex::read(&program, &mut work).unwrap();
+    let rows = facts
+        .tuples(&signature("r", 2), &mut work)
+        .unwrap()
+        .unwrap();
+    let tuples: Vec<Vec<_>> = rows.iter().map(|row| row.to_vec()).collect();
+    let expected: Vec<Vec<_>> = [[1, 9], [2, 8]]
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|value| themelios_program::term::Term::Symbolic(Symbol::Number(value)))
+                .collect()
+        })
+        .collect();
+    assert_eq!(tuples, expected);
+}
+
+#[test]
+fn absent_fixed_tuples_are_empty() {
+    let program = source("p(1).");
+    let mut work = KeyWork::new(100);
+    let facts = FactIndex::read(&program, &mut work).unwrap();
+    assert_eq!(
+        facts.tuples(&signature("r", 2), &mut work).unwrap(),
+        Some(&[][..])
+    );
+}
+
+#[test]
+fn other_producers_leave_fixed_tuples_unproved() {
+    let program = source("r(1,9). r(2,8) :- p.");
+    let mut work = KeyWork::new(100);
+    let facts = FactIndex::read(&program, &mut work).unwrap();
+    assert!(
+        facts
+            .tuples(&signature("r", 2), &mut work)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn a_tuple_query_refuses_before_spending_an_unavailable_step() {
+    let program = source("r(1,9).");
+    let facts = FactIndex::read(&program, &mut KeyWork::new(100)).unwrap();
+    let mut query = KeyWork::new(0);
+    assert_eq!(
+        facts
+            .tuples(&signature("r", 2), &mut query)
+            .unwrap_err()
+            .observed,
+        1
+    );
+    assert_eq!(query.steps(), 0);
+}

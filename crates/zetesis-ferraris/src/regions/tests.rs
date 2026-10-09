@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use super::{Counters, Knowledge, Known, Width};
+use super::{Counters, Knowledge, Known, KnownMut, Width};
 
 /// The compact-width closure state the test theories' knowledge uses.
 fn compact(knowledge: &Knowledge) -> &Known<u32> {
@@ -10,9 +10,9 @@ fn compact(knowledge: &Knowledge) -> &Known<u32> {
     }
 }
 
-fn compact_mut(knowledge: &mut Knowledge) -> &mut Known<u32> {
+fn compact_mut(knowledge: &mut Knowledge) -> KnownMut<'_, u32> {
     match &mut knowledge.width {
-        Width::Compact(known) => known,
+        Width::Compact(known) => known.borrow(),
         Width::Native(_) => panic!("the test theories use compact counters"),
     }
 }
@@ -25,6 +25,7 @@ mod competing_heads;
 mod copy_costs;
 mod counters;
 mod implications;
+mod masks;
 mod metering;
 mod preference;
 mod rechecks;
@@ -227,14 +228,12 @@ fn retained_bytes_counts_the_seen_mask() {
     };
     let k = compact(&knowledge);
     let expected = size_of::<Knowledge>() as u128
-        + (k.sure.len() + k.never.len() + k.atom_sure.len() + k.atom_never.len()) as u128
-            * size_of::<u64>() as u128
+        + (2 * 5usize.div_ceil(64) + 3 * 130usize.div_ceil(64)) as u128 * size_of::<u64>() as u128
         + k.sure_operands.allocated_bytes()
         + k.never_operands.allocated_bytes()
-        + k.unknown.allocated_bytes()
-        + k.seen.len() as u128 * size_of::<u64>() as u128;
+        + k.unknown.allocated_bytes();
     assert_eq!(knowledge.retained_bytes(), expected);
-    assert!(k.seen.len() >= 3, "the seen mask is a real allocation here");
+    assert_eq!(k.masks.slices()[4].len(), 3);
 }
 
 fn propagated_decisions_are_seen(frozen: bool) {

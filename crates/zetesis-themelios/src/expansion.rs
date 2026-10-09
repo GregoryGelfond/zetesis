@@ -446,8 +446,14 @@ impl Budget {
         Ok(())
     }
 
-    /// The charges accepted so far. Each is at most its ceiling, so the
-    /// narrowing cannot fail.
+    /// Output headroom for an optional rewrite before it commits a family.
+    /// Original compilation charges stay spent; replacement compilation will
+    /// charge each accepted template normally.
+    pub(crate) fn remaining_templates(&self) -> usize {
+        usize::try_from((self.limits.max_templates as u128).saturating_sub(self.templates))
+            .expect("remaining templates do not exceed a usize limit")
+    }
+
     /// The term work still allowed under the ceiling, for a reading that
     /// bounds itself by it before it starts.
     pub(crate) fn remaining_term_work(&self) -> u64 {
@@ -455,6 +461,7 @@ impl Budget {
             .unwrap_or(u64::MAX)
     }
 
+    /// The charges accepted so far. Each is at most its ceiling.
     pub(crate) fn usage(&self) -> ExpansionUsage {
         let narrow = |charged: u128| {
             usize::try_from(charged).expect("an accepted charge is at most its usize ceiling")

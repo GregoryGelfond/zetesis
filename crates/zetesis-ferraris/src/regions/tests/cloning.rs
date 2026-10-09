@@ -46,13 +46,7 @@ fn refuted(theory: &Theory, narrower: &Narrower) -> Knowledge {
 
 fn flag_addresses(knowledge: &Knowledge) -> [*const u64; 5] {
     fn addresses<C>(known: &Known<C>) -> [*const u64; 5] {
-        [
-            known.sure.as_ptr(),
-            known.never.as_ptr(),
-            known.atom_sure.as_ptr(),
-            known.atom_never.as_ptr(),
-            known.seen.as_ptr(),
-        ]
+        known.masks.slices().map(<[u64]>::as_ptr)
     }
     match &knowledge.width {
         Width::Compact(known) => addresses(known),

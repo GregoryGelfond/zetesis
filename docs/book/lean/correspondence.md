@@ -549,6 +549,19 @@ This permits the same rewrite for parsed and constructed programs; provenance
 supplies diagnostic evidence, not identity. The owner map and replacement step
 must establish this association before applying the contextual preservation law.
 
+The fixed-witness source specialization uses the same contextual replacement
+law. A complete all-producer fact certificate makes the selected block true for
+exactly its matching tuples on every answer set of the unchanged rest. Projecting
+whole tuples onto the block variables still read by the residual body then preserves
+whether some constraint fires. The
+[`FixedWitnessConstraints.bodies_fire_together`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FixedWitnessConstraints.lean)
+law states this step under fixed-condition and exact projection premises;
+`KeyedConstraints.asked_constraints_preserve` supplies answer-set equality.
+Neither law establishes the Rust recognizer's producer coverage, scope analysis,
+typed substitution, original-owner mapping, constructor validation or charged
+failure behavior. The implementation conservatively retains unsupported or
+unfinished families and introduces no new semantic atoms.
+
 ## Arithmetic families
 
 [`ArithmeticFamilies`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ArithmeticFamilies.lean)
@@ -1386,9 +1399,15 @@ in the solver. The [candidate cursor contract](https://github.com/GregoryGelfond
 and [projection-index contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
 describe their concrete ownership and failure boundaries.
 
-The packed `Region` stores disjoint held and cut masks over real atoms, while
-`Knowledge` stores sure/never masks separately over nodes and atoms. Its seen
-snapshot denotes the region decisions already incorporated; differencing the
+The packed `Region` stores disjoint held and cut masks over real atoms.
+`Knowledge` owns one word block with disjoint node-sure, node-never, atom-sure,
+atom-never and seen spans; its three propagation-counter arrays retain their
+selected width. Splitting the block once into borrowed slices changes no
+`FormulaBounds.Known` judgement or propagation charge. Checked span boundaries,
+complete copying of shape and contents, independent child ownership and truthful
+retained-byte receipts remain Rust obligations; `known_mono` does not verify this
+layout, allocation behavior or performance. The seen snapshot denotes the region
+decisions already incorporated; differencing the
 current decided mask supplies only new decisions, and the completed snapshot
 also includes atoms learned by propagation. `FormulaBounds.known_mono` supplies
 the mathematical ancestor-inheritance law. The Rust API additionally requires
@@ -2047,6 +2066,16 @@ refutations, ordinary checks and abandoned productive scans invalidate the
 saved evidence. The existing law does not prove that lifecycle, the completion
 marker, cancellation ordering or receipt settlement, and reusable negative scans
 do not establish original satisfaction or reduct minimality.
+
+A single changed atom may be excluded from a template's reads by necessary
+constant or constructor mismatches at every occurrence of its signed predicate.
+Rust must establish that every full match satisfies these necessary tests, with
+all default-negation polarities retained. Variables, repeated-variable equality
+and lowered temporary slots are conservatively unconstrained; multiple changed
+atoms retain the predicate-level invalidation. This refines the dependency used
+by `completed_template_unchanged`; it adds no semantic law. Canonical atom and
+component ownership, occurrence alignment, charged reads and failure invalidation
+remain implementation obligations. The Lean law does not verify the matcher.
 
 Sharing the immutable rule-to-predicate and atom-to-predicate mappings adds no
 semantic premise. Rust must establish that the published mapping belongs to

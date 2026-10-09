@@ -155,6 +155,7 @@ import Zetesis.ConditionalHeadSupport
 import Zetesis.ObservationBindings
 import Zetesis.ProjectedAnswers
 import Zetesis.KeyedConstraints
+import Zetesis.FixedWitnessConstraints
 import Zetesis.RowSteps
 import Zetesis.IndexedEvaluation
 import Zetesis.SubsetCounter

@@ -52,6 +52,12 @@ and `unit_body_unchanged` preserve the existing occurrence-based tests.
 scalar evaluation. `consequence_unchanged` preserves this availability when
 all its atom reads are unchanged. `completed_template_unchanged` lifts that law
 over an explicitly covered instance family and a completed negative scan.
+The dependency may overapproximate the possible grounded reads; it need not
+contain every atom sharing a predicate. Excluding a changed atom therefore
+requires showing that no instance can read it, for example because every relevant
+occurrence has a necessary constant or constructor mismatch. The existing law
+then applies directly. It does not prove a concrete occurrence matcher, its
+coverage across signs and scopes, or its resource and failure behavior.
 
 These reuse laws do not prove that a concrete dirty list covers every changed
 read, that a retained batch belongs to the current owner or region, or that a

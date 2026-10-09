@@ -3096,6 +3096,11 @@
       "name": "Zetesis.FiniteValues.failed_step"
     },
     {
+      "file": "Zetesis/FixedWitnessConstraints.lean",
+      "line": 39,
+      "name": "Zetesis.FixedWitnessConstraints.bodies_fire_together"
+    },
+    {
       "file": "Zetesis/FormulaBounds.lean",
       "line": 69,
       "name": "Zetesis.FormulaBounds.read_sound"
@@ -8298,6 +8303,7 @@
     "Zetesis/FinitePools.lean",
     "Zetesis/FiniteTables.lean",
     "Zetesis/FiniteValues.lean",
+    "Zetesis/FixedWitnessConstraints.lean",
     "Zetesis/FormulaBounds.lean",
     "Zetesis/FormulaChains.lean",
     "Zetesis/FormulaRegions.lean",
@@ -8404,8 +8410,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "331baddbfaa69052a9b21f990ab3007ad786d2065422a98825edc1c1815d644a",
-    "Zetesis.lean": "b3df8108a7277498563635d2bbe05fffd80ee893470b2c38b19b3932c634ffc4",
+    "Audit.lean": "d516b2fb679fef71e7c74c8df23806df5f3a0404aaddd62f53d3bad3a3fce4a3",
+    "Zetesis.lean": "017e8abb0e2d7f5094b971053b6c97f94b2d630ec72dbeed82fcc9d19f0fe371",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -8472,6 +8478,7 @@
     "Zetesis/FinitePools.lean": "01be7e9da07048a530b9df7059ea4aed970921085a3a063524243b19c1ed6f43",
     "Zetesis/FiniteTables.lean": "892e5722be539571301797e33d2c42a0cb552bc765081523a7fc06f874cd3177",
     "Zetesis/FiniteValues.lean": "14e3d4f778b607fabdaa2c9153c7341618ab895f73158095efb46ff1d12d5788",
+    "Zetesis/FixedWitnessConstraints.lean": "cd04d3ee169908eccb49bc6aa8ee16556ca668d1ead3ccc18967b63af1644229",
     "Zetesis/FormulaBounds.lean": "9a258d50b67196acca383b5bab85ba96cdbac7838f8b921d5f8f710b88601b36",
     "Zetesis/FormulaChains.lean": "d6e62b3f270347f2b3f0f818b36200a5512d2aec6a5a7be8a6d7e376420b8cca",
     "Zetesis/FormulaRegions.lean": "64a8e7764e6e5afa11355dc71601c3a19b8f77bbea71c2c497aa5b77cc62451a",

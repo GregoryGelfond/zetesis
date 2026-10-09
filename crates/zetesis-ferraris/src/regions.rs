@@ -49,8 +49,10 @@ use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod counters;
+mod masks;
 use adjacency::Adjacency;
 use counters::{Count, Counters, compact_fits};
+use masks::Masks;
 
 /// The work ceiling of one narrowing, and of producer extraction. Every
 /// propagation event reads at least one node, so the work bounds the
@@ -581,7 +583,9 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// from its parent and by narrowing with the narrower that made it.
 ///
 /// Cloning owns an independent copy. [`Clone::clone_from`] overwrites every
-/// field, reusing equal-length arrays at the same counter width. The
+/// field, reusing equal-length storage at the same counter width. The five
+/// masks occupy disjoint slices of one owned block; copying also replaces its
+/// node/atom boundaries, even when the total block length is unchanged. The
 /// destination's previous knowledge contributes no authority; the source's
 /// narrowing preconditions still apply. Changed lengths or widths use fresh
 /// storage, with the same infallible allocation boundary as [`Clone::clone`].
@@ -679,20 +683,11 @@ impl<C: Count> Known<C> {
     /// Payload and capacities owned by this closure state; the enclosing
     /// [`Knowledge`] header is counted by its owner.
     fn retained_bytes(&self) -> u128 {
-        let known = self;
-        let flag_words = [
-            known.sure.len(),
-            known.never.len(),
-            known.atom_sure.len(),
-            known.atom_never.len(),
-        ];
-        let counters = [&known.sure_operands, &known.never_operands, &known.unknown];
-        flag_words.into_iter().map(|n| n as u128).sum::<u128>() * size_of::<u64>() as u128
-            + counters
+        self.masks.words.len() as u128 * size_of::<u64>() as u128
+            + [&self.sure_operands, &self.never_operands, &self.unknown]
                 .into_iter()
                 .map(Counters::allocated_bytes)
                 .sum::<u128>()
-            + known.seen.len() as u128 * size_of::<u64>() as u128
     }
 }
 
@@ -1040,7 +1035,7 @@ impl Narrower {
         // belongs to another region; it is discarded before this one reads.
         scratch.prepare(subject.theory.atom_count());
         let mut closure = Closure {
-            known,
+            known: known.borrow(),
             lists: scratch,
         };
         if closure.close(subject, self, region, work, statistics)? == Step::Contradiction {
@@ -1049,9 +1044,9 @@ impl Narrower {
         // The atoms this closure learned decide the region; the region's own
         // decisions, the split's and those made here, are then all seen.
         let mut changed = false;
-        for atom in scratch.learned.drain(..) {
+        for atom in closure.lists.learned.drain(..) {
             let was_open = region.is_open(atom);
-            let decided = if bit(&known.atom_sure, atom) {
+            let decided = if bit(closure.known.atom_sure, atom) {
                 statistics.held += u64::from(was_open);
                 region.hold(atom)
             } else {
@@ -1061,7 +1056,7 @@ impl Narrower {
             debug_assert!(decided, "a learned atom agrees with the region");
             changed |= was_open;
         }
-        region.snapshot_decided(&mut known.seen);
+        region.snapshot_decided(closure.known.seen);
         Ok(Narrowing::Fixed { changed })
     }
 }
@@ -1101,10 +1096,7 @@ fn most_constrained<C: Count>(
 /// counter step.
 #[derive(Debug)]
 struct Known<C> {
-    sure: Box<[u64]>,
-    never: Box<[u64]>,
-    atom_sure: Box<[u64]>,
-    atom_never: Box<[u64]>,
+    masks: Masks,
     /// Per chain, the operands known to hold.
     sure_operands: Counters<C>,
     /// Per chain, the operands known to fail.
@@ -1113,9 +1105,6 @@ struct Known<C> {
     /// A parent is counted once here and taken off once when it is
     /// revisited, so the count never goes below zero.
     unknown: Counters<C>,
-    /// The region's decided-mask snapshot already told to this closure; new
-    /// decisions are the region's decided atoms not set here.
-    seen: Box<[u64]>,
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
@@ -1124,27 +1113,19 @@ struct Known<C> {
 impl<C: Clone> Clone for Known<C> {
     fn clone(&self) -> Self {
         Self {
-            sure: self.sure.clone(),
-            never: self.never.clone(),
-            atom_sure: self.atom_sure.clone(),
-            atom_never: self.atom_never.clone(),
+            masks: self.masks.clone(),
             sure_operands: self.sure_operands.clone(),
             never_operands: self.never_operands.clone(),
             unknown: self.unknown.clone(),
-            seen: self.seen.clone(),
             seeded: self.seeded,
         }
     }
 
     fn clone_from(&mut self, source: &Self) {
-        self.sure.clone_from(&source.sure);
-        self.never.clone_from(&source.never);
-        self.atom_sure.clone_from(&source.atom_sure);
-        self.atom_never.clone_from(&source.atom_never);
+        self.masks.clone_from(&source.masks);
         self.sure_operands.clone_from(&source.sure_operands);
         self.never_operands.clone_from(&source.never_operands);
         self.unknown.clone_from(&source.unknown);
-        self.seen.clone_from(&source.seen);
         self.seeded = source.seeded;
     }
 }
@@ -1218,8 +1199,40 @@ impl NarrowingScratch {
 /// One narrowing's closure: a region's knowledge and the walker's
 /// worklists, borrowed together for the call.
 struct Closure<'a, C> {
-    known: &'a mut Known<C>,
+    known: KnownMut<'a, C>,
     lists: &'a mut NarrowingScratch,
+}
+
+/// Disjoint borrows of one knowledge for a narrowing. Mask boundaries are
+/// checked once here; hot bit accesses retain ordinary slice indexing.
+struct KnownMut<'a, C> {
+    sure: &'a mut [u64],
+    never: &'a mut [u64],
+    atom_sure: &'a mut [u64],
+    atom_never: &'a mut [u64],
+    /// Region decisions already incorporated into the closure.
+    seen: &'a mut [u64],
+    sure_operands: &'a mut Counters<C>,
+    never_operands: &'a mut Counters<C>,
+    unknown: &'a mut Counters<C>,
+    seeded: &'a mut bool,
+}
+
+impl<C> Known<C> {
+    fn borrow(&mut self) -> KnownMut<'_, C> {
+        let [sure, never, atom_sure, atom_never, seen] = self.masks.split();
+        KnownMut {
+            sure,
+            never,
+            atom_sure,
+            atom_never,
+            seen,
+            sure_operands: &mut self.sure_operands,
+            never_operands: &mut self.never_operands,
+            unknown: &mut self.unknown,
+            seeded: &mut self.seeded,
+        }
+    }
 }
 
 /// What a step of the closure did.
@@ -1266,16 +1279,11 @@ fn learn(known: &mut [u64], opposite: &[u64], index: usize) -> Step {
 
 impl<C: Count> Known<C> {
     fn empty(nodes: usize, chains: usize, unknown: Counters<C>) -> Self {
-        let seen = vec![0u64; unknown.len().div_ceil(64)].into_boxed_slice();
         Self {
-            sure: vec![0; flag_words(nodes)].into_boxed_slice(),
-            never: vec![0; flag_words(nodes)].into_boxed_slice(),
-            atom_sure: vec![0; flag_words(unknown.len())].into_boxed_slice(),
-            atom_never: vec![0; flag_words(unknown.len())].into_boxed_slice(),
+            masks: Masks::empty(nodes, unknown.len()),
             sure_operands: Counters::zeros(chains),
             never_operands: Counters::zeros(chains),
             unknown,
-            seen,
             seeded: false,
         }
     }
@@ -1284,7 +1292,7 @@ impl<C: Count> Known<C> {
 impl<C: Count> Closure<'_, C> {
     /// A node learns to hold; it is revisited if that is new.
     fn sure(&mut self, index: usize) -> Step {
-        let step = learn(&mut self.known.sure, &self.known.never, index);
+        let step = learn(self.known.sure, self.known.never, index);
         if step == Step::Changed {
             self.lists.nodes.push((index, true));
         }
@@ -1293,7 +1301,7 @@ impl<C: Count> Closure<'_, C> {
 
     /// A node learns to fail; it is revisited if that is new.
     fn never(&mut self, index: usize) -> Step {
-        let step = learn(&mut self.known.never, &self.known.sure, index);
+        let step = learn(self.known.never, self.known.sure, index);
         if step == Step::Changed {
             self.lists.nodes.push((index, false));
         }
@@ -1313,9 +1321,9 @@ impl<C: Count> Closure<'_, C> {
         value: bool,
     ) -> Step {
         let step = if value {
-            learn(&mut self.known.atom_sure, &self.known.atom_never, atom)
+            learn(self.known.atom_sure, self.known.atom_never, atom)
         } else {
-            learn(&mut self.known.atom_never, &self.known.atom_sure, atom)
+            learn(self.known.atom_never, self.known.atom_sure, atom)
         };
         if step != Step::Changed {
             return step;
@@ -1356,7 +1364,7 @@ impl<C: Count> Closure<'_, C> {
         } = subject;
         let nodes = theory.view();
         let mut step = Step::Unchanged;
-        if !self.known.seeded {
+        if !*self.known.seeded {
             for node in 0..nodes.len() {
                 if index.absorbed[node] {
                     continue;
@@ -1377,16 +1385,15 @@ impl<C: Count> Closure<'_, C> {
                     self.lists.queue_recheck(atom);
                 }
             }
-            self.known.seeded = true;
+            *self.known.seeded = true;
         }
-        // Take the seen mask out so the new-decision iterator borrows the local
-        // rather than `self`, leaving `self.atom` free to mutate the closure;
-        // the swap moves a box pointer and copies nothing.
-        let mut seen = std::mem::take(&mut self.known.seen);
-        for (atom, value) in region.decided_since(&seen) {
+        // Move only the disjoint seen borrow so the iterator leaves
+        // `self.atom` free to update the other masks. No words are copied.
+        let seen = std::mem::take(&mut self.known.seen);
+        for (atom, value) in region.decided_since(seen) {
             step = step.join(self.atom(index, producers, frozen, atom, value));
         }
-        region.snapshot_decided(&mut seen);
+        region.snapshot_decided(seen);
         self.known.seen = seen;
         if step == Step::Contradiction {
             return Ok(step);
@@ -1490,12 +1497,12 @@ impl<C: Count> Closure<'_, C> {
         Ok(match (disjunction, value) {
             (true, true) => self.sure(root),
             (true, false) if never == total => self.never(root),
-            (true, false) if bit(&self.known.sure, root) && never + 1 == total => {
+            (true, false) if bit(self.known.sure, root) && never + 1 == total => {
                 self.unit(index, chain, work)?
             }
             (false, false) => self.never(root),
             (false, true) if sure == total => self.sure(root),
-            (false, true) if bit(&self.known.never, root) && sure + 1 == total => {
+            (false, true) if bit(self.known.never, root) && sure + 1 == total => {
                 self.unit(index, chain, work)?
             }
             _ => Step::Unchanged,
@@ -1531,9 +1538,9 @@ impl<C: Count> Closure<'_, C> {
         for &operand in operands {
             work.tick()?;
             let open = if disjunction {
-                !bit(&self.known.never, operand)
+                !bit(self.known.never, operand)
             } else {
-                !bit(&self.known.sure, operand)
+                !bit(self.known.sure, operand)
             };
             if open {
                 return Ok(if disjunction {
@@ -1572,7 +1579,7 @@ impl<C: Count> Closure<'_, C> {
         Ok(match nodes.node(node).expect("admitted node") {
             NodeView::Atom(atom) => {
                 let mut step = Step::Unchanged;
-                if bit(&self.known.sure, node) {
+                if bit(self.known.sure, node) {
                     // A held head blocks the other heads of its producers.
                     if let Some(producers) = producers
                         && producers.has_competing_heads
@@ -1587,12 +1594,12 @@ impl<C: Count> Closure<'_, C> {
                     }
                     step = step.join(self.atom(index, producers, frozen, atom, true));
                 }
-                if bit(&self.known.never, node) {
+                if bit(self.known.never, node) {
                     step = step.join(self.atom(index, producers, frozen, atom, false));
                 }
                 step
             }
-            NodeView::False if bit(&self.known.sure, node) => Step::Contradiction,
+            NodeView::False if bit(self.known.sure, node) => Step::Contradiction,
             NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
             NodeView::Implies(a, b) => self.teach_implication(node, a, b),
         })
@@ -1602,16 +1609,16 @@ impl<C: Count> Closure<'_, C> {
     /// known parent's response to an operand. Neither adds a charged visit.
     fn teach_implication(&mut self, node: usize, a: usize, b: usize) -> Step {
         let mut step = Step::Unchanged;
-        if bit(&self.known.sure, node) {
-            step = step.join(if bit(&self.known.sure, a) {
+        if bit(self.known.sure, node) {
+            step = step.join(if bit(self.known.sure, a) {
                 self.sure(b)
-            } else if bit(&self.known.never, b) {
+            } else if bit(self.known.never, b) {
                 self.never(a)
             } else {
                 Step::Unchanged
             });
         }
-        if bit(&self.known.never, node) {
+        if bit(self.known.never, node) {
             step = step.join(self.sure(a).join(self.never(b)));
         }
         step
@@ -1631,7 +1638,7 @@ impl<C: Count> Closure<'_, C> {
         } = index.chains[chain];
         let total = operands.len();
         let mut step = Step::Unchanged;
-        if bit(&self.known.sure, root) {
+        if bit(self.known.sure, root) {
             if disjunction {
                 if self.known.never_operands.get(chain) + 1 == total {
                     step = step.join(self.unit(index, chain, work)?);
@@ -1643,7 +1650,7 @@ impl<C: Count> Closure<'_, C> {
                 }
             }
         }
-        if bit(&self.known.never, root) {
+        if bit(self.known.never, root) {
             if disjunction {
                 for &operand in operands {
                     work.tick()?;
@@ -1664,7 +1671,7 @@ impl<C: Count> Closure<'_, C> {
             unreachable!("a non-chain parent is an implication");
         };
         let mut up = Step::Unchanged;
-        if bit(&self.known.never, a) || bit(&self.known.sure, b) {
+        if bit(self.known.never, a) || bit(self.known.sure, b) {
             up = up.join(self.sure(node));
             // A satisfied implication teaches no new operand truth. Its own
             // event remains queued if the parent just became known. A false
@@ -1673,7 +1680,7 @@ impl<C: Count> Closure<'_, C> {
                 return up;
             }
         }
-        if bit(&self.known.sure, a) && bit(&self.known.never, b) {
+        if bit(self.known.sure, a) && bit(self.known.never, b) {
             up = up.join(self.never(node));
         }
         up.join(self.teach_implication(node, a, b))
@@ -1697,10 +1704,10 @@ impl<C: Count> Closure<'_, C> {
         atom: usize,
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
-        if bit(&self.known.atom_never, atom) {
+        if bit(self.known.atom_never, atom) {
             return Ok(Step::Unchanged);
         }
-        let held = bit(&self.known.atom_sure, atom);
+        let held = bit(self.known.atom_sure, atom);
         let mut supporters = 0;
         let mut sole = None;
         for &producer in &producers.by_head[atom] {
@@ -1708,12 +1715,12 @@ impl<C: Count> Closure<'_, C> {
             let producer = &producers.rules[producer];
             let body_impossible = producer
                 .body
-                .is_some_and(|body| bit(&self.known.never, body));
+                .is_some_and(|body| bit(self.known.never, body));
             let other_held = !producer.choice
                 && producer
                     .heads
                     .iter()
-                    .any(|&head| head != atom && bit(&self.known.atom_sure, head));
+                    .any(|&head| head != atom && bit(self.known.atom_sure, head));
             if !body_impossible && !other_held {
                 supporters += 1;
                 if !held || supporters == 2 {

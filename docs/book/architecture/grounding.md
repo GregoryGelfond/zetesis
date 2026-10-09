@@ -347,10 +347,13 @@ Within the admitted constructor-and-comparison fragment, one rule scan may
 produce a bounded batch of deductions. Each remains valid after the region
 narrows, so the solver consumes them one at a time with formula propagation
 between them. Exact held/cut masks authenticate this reuse; a sibling region
-starts fresh. A completed scan with no deduction is reused only while all the
-signed predicates it reads have unchanged bounds. These checks use packed masks
-and predicate dependencies, not a stored table of ground constraints. Potentially
-failing arithmetic retains the sequential scan. The
+starts fresh. A completed scan with no deduction is reused only while every
+possible atom read has unchanged bounds. If one atom changes in a signed
+predicate, fixed constants or constructor shapes can establish that none of a
+constraint's occurrences can read it. Variables remain unconstrained for this
+test; several changed atoms retain predicate-level invalidation. These charged
+checks use the existing packed masks and predicate dependencies, without a table
+of ground constraints. Potentially failing arithmetic retains the sequential scan. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
 state the semantic premises separately from runtime error and storage handling.
 

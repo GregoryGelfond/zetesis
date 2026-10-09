@@ -237,6 +237,31 @@ impl<'p> FactIndex<'p> {
         Ok(index)
     }
 
+    /// Borrow complete argument tuples when facts are the only producers.
+    ///
+    /// The rows retain their original tuple correlation and program order.
+    /// `None` means the fixed relation is unproved; `Some(&[])` establishes an
+    /// absent signature's empty relation. The consumer still checks the term
+    /// forms it accepts and charges each row/term it inspects. One work step
+    /// authenticates this query; no term or row is copied.
+    ///
+    /// # Errors
+    /// Returns the work stop before answering the query.
+    pub fn tuples(
+        &self,
+        signature: &Signature,
+        work: &mut KeyWork,
+    ) -> Result<Option<&[&'p [Term]]>, Stop> {
+        work.step()?;
+        if self.opaque {
+            return Ok(None);
+        }
+        Ok(match self.signatures.get(signature) {
+            None => Some(&[]),
+            Some(rows) => rows.as_deref(),
+        })
+    }
+
     /// The values at `position` of the facts of `signature`, in program order,
     /// when facts are its only producers: `None` when anything else produces
     /// it or a fact holds something other than a scalar at that position.

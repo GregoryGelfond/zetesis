@@ -51,10 +51,10 @@ fn scan<C: Count>(
     let chain = &index.chains[0];
     for &operand in &chain.operands {
         work.tick()?;
-        let opposite = if chain.disjunction {
-            &closure.known.never
+        let opposite: &[u64] = if chain.disjunction {
+            closure.known.never
         } else {
-            &closure.known.sure
+            closure.known.sure
         };
         if !bit(opposite, operand) {
             return Ok(if chain.disjunction {
@@ -124,7 +124,7 @@ fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit:
     let result = match &mut knowledge.width {
         Width::Compact(known) => call(
             &mut Closure {
-                known,
+                known: known.borrow(),
                 lists: &mut scratch,
             },
             index,
@@ -133,7 +133,7 @@ fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit:
         ),
         Width::Native(known) => call(
             &mut Closure {
-                known,
+                known: known.borrow(),
                 lists: &mut scratch,
             },
             index,
@@ -244,17 +244,17 @@ fn the_last_opposite_event_still_refutes_the_chain() {
         assert_eq!(work.spent, 4);
         assert!(bit(
             if disjunction {
-                &closure.known.sure
+                closure.known.sure
             } else {
-                &closure.known.never
+                closure.known.never
             },
             7
         ));
         assert!(!bit(
             if disjunction {
-                &closure.known.never
+                closure.known.never
             } else {
-                &closure.known.sure
+                closure.known.sure
             },
             7
         ));

@@ -3095,6 +3095,11 @@
     "line": 123
   },
   {
+    "name": "Zetesis.FixedWitnessConstraints.bodies_fire_together",
+    "file": "Zetesis/FixedWitnessConstraints.lean",
+    "line": 39
+  },
+  {
     "name": "Zetesis.FormulaBounds.read_sound",
     "file": "Zetesis/FormulaBounds.lean",
     "line": 69

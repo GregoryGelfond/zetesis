@@ -42,15 +42,7 @@ impl Arrays {
 
     fn known<C: Count>(knowledge: &Knowledge, known: &Known<C>) -> Self {
         let mut arrays = Self::default();
-        for words in [
-            &known.sure,
-            &known.never,
-            &known.atom_sure,
-            &known.atom_never,
-            &known.seen,
-        ] {
-            arrays.add::<u64>(words.len(), words.len());
-        }
+        arrays.add::<u64>(known.masks.words.len(), known.masks.words.len());
         for counters in [&known.sure_operands, &known.never_operands, &known.unknown] {
             arrays.add::<C>(counters.len(), counters.len());
         }
@@ -189,7 +181,7 @@ fn traversal_copies_only_live_knowledge_arrays() {
         assert_eq!(selected_stats, native_stats);
         assert_eq!(selected_leaves, native_leaves);
         assert_eq!(selected.calls, (1 << FREE_ATOMS) - 1);
-        assert_eq!(selected.nonempty_allocations, 8 * selected.calls);
+        assert_eq!(selected.nonempty_allocations, 4 * selected.calls);
         assert_eq!(selected.nonempty_allocations, native.nonempty_allocations);
         let counter_values = atoms + 2 * narrower.chains.len();
         let saved_width = size_of::<usize>() - size_of::<u32>().min(size_of::<usize>());

@@ -46,6 +46,7 @@ mod finite_bindings;
 mod finite_chains;
 mod finite_pools;
 mod finite_values;
+mod fixed_constraints;
 mod formula;
 mod formula_analysis;
 mod formula_assignments;

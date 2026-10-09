@@ -485,8 +485,15 @@ constructor assignments, the checker can collect several deductions from one
 rule against the same region. It still returns one deduction per call, allowing
 ordinary formula propagation between them. Reuse checks both held and cut masks;
 an unrelated region discards the saved deductions without renewing the allowance.
-A completed scan that found no deduction can be skipped until a predicate it
-reads changes. Changes from ordinary propagation count too. Successful
+A completed scan that found no deduction can be skipped until a possible atom
+read changes. For a signed predicate with one changed atom, the checker tests
+necessary constants and constructor shapes at every occurrence that reads that
+predicate. Only a mismatch can exclude the changed atom; repeated variables and
+lowered temporary slots remain independent wildcards. Several changed atoms
+retain ordinary predicate-level invalidation. Default negation and double
+negation retain their dependencies, and changes from ordinary propagation count
+too. The existing per-predicate change buffer records the single atom or several
+changes; its capacity and the extra canonical term reads are charged. Successful
 `NoConsequence` settles the finished allowance while retaining that completed
 scan evidence. The next `First` gets a new allowance and may reuse the evidence
 after checking both decision masks; a sibling or reopened decision invalidates
@@ -833,11 +840,49 @@ constraint unchanged. Transformation provenance remains evidence, while
 `formula_origins()` names the original constraint. `keyed_constraints()` on the admitted formula
 counts the constraints asked; the answer sets are the same either way, which
 the contract tests state against the hand-asked program and against clingo.
-A constraint outside the two patterns is left as written, and so is one
-with an anonymous variable in a key position: the asked atom stands under
+The keyed-value rewrite leaves a constraint outside these two patterns as
+written, including one with an anonymous variable in a key position: the asked atom stands under
 `not`, where `p(_, t)` holds when some key has the value `t`, so
 `not p(_, t)` would forbid only that no key has it, while the written
 constraint forbids a wrong value at every key.
+
+## Constraints over fixed witnesses
+
+Preparation can also specialize a positive constraint using a complete fixed
+fact relation. In `:- edge(X,Y), allowed(Y), bad(X,T).`, if facts are the only
+producers of `edge` and `allowed`, the complete matching `(X,Y)` tuples can be
+projected to their distinct `X` values. One residual `:- bad(x,T).` replaces
+all matching witnesses for each such value. Original facts remain; no auxiliary
+predicate or new answer-reconstruction step is introduced.
+
+The recognizer in
+[`formula_fixed_constraints`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_fixed_constraints.rs)
+uses one flat positive anchor and fixed unary guards. The entire constraint
+must contain only positive ordinary atoms and pure constructor patterns;
+numeric operations, comparisons, default negation and local scopes are excluded.
+Constants, repeated variables, arity and strong sign match exactly. Anchor
+variables used anywhere outside the removed block, including inside constructors,
+remain in the projected interface. Specialization requires both local and retained
+variables, a nonempty complete projection and repeated witnesses.
+Other shapes keep the original constraint.
+
+`FactIndex::tuples` lends the existing correlated rows only after all-producer
+certification. A possible-support relation is insufficient. Keyed-value and
+fixed-witness preparation share one lazy fact reading of the same normalized
+program. Replacement requires an unambiguous original owner and preserves its
+statement identity and source provenance. Typed substitution validates newly
+ground constructor values before accepting the entire family; a logical value
+refusal leaves the original in place. Original source admission precedes the
+rewrite, and the original program and full answer vocabulary remain available.
+
+Optional work and output bounds, tightened by the remaining term-work,
+template and family-byte allowances, can leave a proposal unchanged. No partial
+family is published. Accepted work stays charged; cancellation and fallible
+allocation retain typed failures. Replacement compilation spends the existing
+budgets, so resource-limited prefixes can change. The
+[correspondence account](../lean/correspondence.md#keyed-constraints-and-checked-source-arithmetic)
+separates equality of constraint firing from the compiler's coverage, ownership,
+diagnostic and resource obligations.
 
 ## Inspect terminal positive definitions
 

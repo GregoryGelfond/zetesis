@@ -31,14 +31,10 @@ pub(super) fn native(knowledge: &Knowledge) -> Knowledge {
     };
     Knowledge {
         width: Width::Native(Known {
-            sure: known.sure.clone(),
-            never: known.never.clone(),
-            atom_sure: known.atom_sure.clone(),
-            atom_never: known.atom_never.clone(),
+            masks: known.masks.clone(),
             sure_operands: widened(&known.sure_operands),
             never_operands: widened(&known.never_operands),
             unknown: widened(&known.unknown),
-            seen: known.seen.clone(),
             seeded: known.seeded,
         }),
     }
@@ -61,14 +57,10 @@ fn counts(knowledge: &Knowledge) -> [Vec<usize>; 3] {
 }
 
 fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
-    assert_eq!(left.sure, right.sure);
-    assert_eq!(left.never, right.never);
-    assert_eq!(left.atom_sure, right.atom_sure);
-    assert_eq!(left.atom_never, right.atom_never);
+    assert_eq!(left.masks.slices(), right.masks.slices());
     assert_eq!(values(&left.sure_operands), values(&right.sure_operands));
     assert_eq!(values(&left.never_operands), values(&right.never_operands));
     assert_eq!(values(&left.unknown), values(&right.unknown));
-    assert_eq!(left.seen, right.seen);
     assert_eq!(left.seeded, right.seeded);
 }
 

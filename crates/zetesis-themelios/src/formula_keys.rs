@@ -123,11 +123,12 @@ pub(crate) fn ask_all(
     limits: &FormulaLimits,
     budget: &mut Budget,
     location: ProgramSite,
+    facts: &mut crate::formula_rewrite::FixedFacts<'_>,
 ) -> Result<Asked, FormulaFailure> {
     // The shared key-work ceiling bounds the analysis between control polls.
     budget.poll(location)?;
     let mut work = KeyWork::new(limits.max_key_work.min(budget.remaining_term_work()));
-    let asked = ask_under(analyzed, owners, &mut work, budget, location);
+    let asked = ask_under(analyzed, owners, &mut work, budget, location, facts);
     budget.charge(
         ExpansionResource::TermWork,
         u128::from(work.steps()),
@@ -142,6 +143,7 @@ fn ask_under(
     work: &mut KeyWork,
     budget: &mut Budget,
     location: ProgramSite,
+    facts: &mut crate::formula_rewrite::FixedFacts<'_>,
 ) -> Result<Asked, FormulaFailure> {
     let mut asked = Asked {
         rules: BTreeMap::new(),
@@ -160,7 +162,7 @@ fn ask_under(
     let keys: BTreeMap<&Signature, &KeyedRelation<'_>> =
         keys.iter().map(|key| (key.signature(), key)).collect();
     // Every question about facts below is answered from one reading.
-    let facts = match FactIndex::read(analyzed, work) {
+    let facts = match facts.read(work) {
         Ok(facts) => facts,
         Err(stop) => {
             asked.analysis = KeyAnalysis::Stopped(stop);
@@ -175,7 +177,7 @@ fn ask_under(
             continue;
         };
         let site = crate::extended::origin(statement, location.with_statement(owner));
-        match ask(statement, &keys, &facts, work, budget, site)? {
+        match ask(statement, &keys, facts, work, budget, site)? {
             Outcome::Asked(rules) => {
                 asked
                     .rules

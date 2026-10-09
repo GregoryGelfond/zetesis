@@ -131,7 +131,7 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
             oracle_first_failure=$oracle_exit
         fi
     }
-    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output arithmetic_validation:: support_delta:: extremal_terms:: observation_bindings:: objective_rich_cycles:: objective_pools:: conditional_heads:: keyed_constraints:: strong_negation::
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test integration -- --ignored --show-output arithmetic_validation:: support_delta:: extremal_terms:: observation_bindings:: objective_rich_cycles:: objective_pools:: conditional_heads:: keyed_constraints:: fixed_constraints:: strong_negation::
     oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration language_consumers::original_sources_retain_declared_reference_results -- --ignored --show-output
     oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test integration -- --ignored --show-output projected_reference::
     oracle_test --locked --no-fail-fast -p zetesis-validation --test integration -- --ignored --show-output example_parity:: authored_examples::

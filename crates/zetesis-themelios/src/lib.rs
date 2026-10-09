@@ -156,6 +156,8 @@ pub use formula_count_plan::{
 };
 mod formula_domains;
 mod formula_keys;
+mod formula_rewrite;
+mod formula_fixed_constraints;
 mod grounding_options;
 #[cfg(test)]
 mod test_support;

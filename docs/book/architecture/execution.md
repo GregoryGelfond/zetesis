@@ -98,7 +98,14 @@ parent's knowledge and the child learns only what the split decided; the
 regions still share nothing. The readings are arrays over the DAG, and the
 regions partition the space exactly, so generation has the closure route's
 shape: data-parallel work inside a region and share-nothing regions beside
-one another. A candidate-only restriction narrows the regions still to visit
+one another. The node-sure, node-never, atom-sure, atom-never and seen masks
+occupy disjoint spans of one owned word block. Narrowing splits that block once
+into borrowed slices; child copies remain independent and include every span,
+its boundaries, all three counter arrays and the seeded state. Consolidating
+storage changes no propagation rule or work charge. Payload copy volume is
+unchanged; allocation and retained-header costs can differ, including under a
+memory allowance. The arrays retain their existing infallible allocation
+boundary. A candidate-only restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking

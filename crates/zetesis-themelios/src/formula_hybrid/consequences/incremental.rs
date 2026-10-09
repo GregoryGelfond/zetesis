@@ -13,6 +13,9 @@ use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 use zetesis_core::catalog::PredicateRef;
 use zetesis_cpu::regions::Region;
 
+mod wakeups;
+use wakeups::Change;
+
 type ReadContext<'a, 'b, 'c> = Context<'a, &'a Computation<'b, 'c>>;
 
 /// Reuse only successfully captured source prefixes. Capture exhausts the
@@ -108,7 +111,7 @@ struct Preparation<'source> {
 pub(in crate::formula_hybrid) struct Incremental<'source> {
     lease: StorageLease,
     plan: &'source Plan,
-    changed: Vec<bool>,
+    changed: Vec<Change>,
     clean: Vec<bool>,
     held: Vec<u64>,
     cut: Vec<u64>,
@@ -404,7 +407,7 @@ impl<'source> Incremental<'source> {
         );
         for _ in 0..self.plan.predicate_count {
             counters.work(limits, site)?;
-            self.changed.push(false);
+            self.changed.push(Change::None);
         }
         let (held, cut) = region.decision_words();
         reserve_field!(
@@ -453,11 +456,12 @@ impl<'source> Incremental<'source> {
 
     fn synchronize(
         &mut self,
+        prepared: &PreparedConstraints<'_>,
         region: &Region,
-        limits: &FormulaLimits,
         counters: &mut Counters,
-        site: ProgramSite,
     ) -> Result<(), FormulaFailure> {
+        let limits = &prepared.limits;
+        let site = prepared.source.location;
         let (held, cut) = region.decision_words();
         let mut monotone = self.valid;
         for ((&old_held, &old_cut), (&held, &cut)) in
@@ -476,7 +480,7 @@ impl<'source> Incremental<'source> {
         }
         for changed in &mut self.changed {
             counters.work(limits, site)?;
-            *changed = false;
+            *changed = Change::None;
         }
         for (word, (&held, &cut)) in held.iter().zip(cut).enumerate() {
             counters.work(limits, site)?;
@@ -486,7 +490,7 @@ impl<'source> Incremental<'source> {
                     counters.work(limits, site)?;
                     let atom = word * u64::BITS as usize + changed.trailing_zeros() as usize;
                     if let Some(group) = self.plan.atom_predicates[atom] {
-                        self.changed[group] = true;
+                        self.changed[group].include(atom);
                     }
                     changed &= changed - 1;
                 }
@@ -498,15 +502,14 @@ impl<'source> Incremental<'source> {
             for (rule, clean) in self.clean.iter_mut().enumerate() {
                 counters.work(limits, site)?;
                 if *clean {
-                    for &group in &self.plan.dependencies
-                        [self.plan.offsets[rule]..self.plan.offsets[rule + 1]]
-                    {
-                        counters.work(limits, site)?;
-                        if self.changed[group] {
-                            *clean = false;
-                            break;
-                        }
-                    }
+                    *clean = !wakeups::changed(
+                        &prepared.source.rules[rule],
+                        &self.plan.dependencies
+                            [self.plan.offsets[rule]..self.plan.offsets[rule + 1]],
+                        &self.changed,
+                        prepared,
+                        counters,
+                    )?;
                 }
             }
         }
@@ -604,8 +607,7 @@ impl<'source> Incremental<'source> {
         counters: &mut Counters,
         region: &Region,
     ) -> Result<ConstraintConsequence, FormulaFailure> {
-        let site = prepared.source.location;
-        self.synchronize(region, &prepared.limits, counters, site)?;
+        self.synchronize(prepared, region, counters)?;
         if let Some(consequence) = self.pop(region, &prepared.limits, counters)? {
             return Ok(consequence);
         }
