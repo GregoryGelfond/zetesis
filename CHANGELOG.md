@@ -15,52 +15,20 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
-- Restrict eligible lazy constraint rechecks to occurrences of a newly true
-  atom. Preserve full checks when several atoms change or the restriction
-  cannot establish complete coverage.
-- Exclude absent positive atoms before joining a candidate's final constraints,
-  using the same source-row mapping as region checks. Complete body checks and
-  reduct membership remain required.
-- Specialize positive constraints over fixed fact relations, removing repeated
-  witnesses while preserving original atoms and statement identity.
-- Avoid repeating completed lazy constraint checks when a changed atom cannot
-  match any occurrence in the constraint.
-- Store candidate knowledge masks together, reducing allocations while keeping
-  each candidate independently owned.
-- Construct possible count values directly, preserving tuple identity and
-  arithmetic diagnostics.
-- Skip structurally impossible rows during lazy constraint checking, while
-  retaining the original matching and arithmetic diagnostics.
-- Rank formula-region splits once after the original theory and candidate
-  restrictions reach a shared propagation fixed point. Preserve the existing
-  precedence of the active bound, latest permanent restriction and original
-  theory, and visit open atoms directly through packed masks.
-- Reuse borrowed cancellation flags during tight certificate preparation and
-  checking, preserving per-operation polling, interruption precedence and exact
-  work accounting.
-- Reconstruct terminal answers from authenticated canonical base identities,
-  avoiding repeated tuple lookup and atom-order searches. Each answer retains
-  its own selection and all its true atoms, independently of displayed output.
-- Stop producer scans once enough support is known. Complete scans still
-  establish missing or sole support; later changes trigger a fresh check.
-  Avoid rescheduling checks for unchanged failed rule bodies.
-- Reuse exact source occurrence authentication across rows of each lazy
-  constraint join, preserving row order and current candidate truth.
-- Reuse deductions from eligible streamed constraints as a candidate narrows,
-  and repeat completed checks only when relevant atom decisions change.
-- Reuse prepared predicate lookups and completed constraint scans between
-  compatible candidate regions. Avoid repeated operand scans during propagation.
-- Share immutable dependency preparation across lazy checkers and combine
-  eligible positive-pivot queries into one traversal, retaining per-checker
-  state and complete answer checks.
-- Omit competing-head support scans when every producer has a single head.
+- Reuse prepared lazy constraint checks between compatible candidates, and
+  revisit only affected atom occurrences when complete coverage is established.
+- Filter structurally impossible or absent positive atoms before constraint
+  joins, while preserving complete body checks and arithmetic diagnostics.
+- Remove repeated witnesses from constraints over fixed fact relations, and
+  construct possible count values directly without changing tuple identity.
+- Reduce repeated formula propagation, support scans and split ranking while
+  preserving candidate coverage and reduct membership.
+- Store candidate knowledge together and reuse borrowed terms and cancellation
+  flags, reducing allocation and ownership overhead while keeping workers independent.
+- Reconstruct terminal answers from authenticated base identities without
+  repeating tuple lookup or atom ordering; displayed output remains separate.
 - Accumulate constraint-check statistics locally and publish them at preparation
   and check boundaries, preserving resource limits and accepted failure receipts.
-- Read bound terms without temporary ownership handles, retaining vocabulary and
-  term-prefix checks. Reuse decoded implications during formula propagation.
-- Copy bound terms and compare immutable expression leaves through borrowed
-  canonical identities. Reuse established positive literals within a streamed
-  constraint check, and avoid redundant teaching from satisfied implications.
 
 ### Fixed
 

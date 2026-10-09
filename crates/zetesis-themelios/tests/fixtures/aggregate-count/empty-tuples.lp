@@ -2,4 +2,3 @@
 {p}.
 q(N) :- N = #count { : p; : not p }.
 z(N) :- N = #count {}.
-

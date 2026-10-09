@@ -68,9 +68,9 @@ states the preservation law; it does not verify worker synchronization.
 `SolveConfig::max_objective_work` counts one preparation attempt plus every
 score read or detailed fallback, including refused prefixes. Preparation is
 capped by both the remaining objective allowance and the standalone plan's
-10-million-unit default. The ordinary 100-million-unit objective default leaves
-at least 90 million units after that attempt. A smaller explicit work limit can
-be consumed by preparation; detailed fallback remains subject to the actual
+10-million-unit default. Ordinary solving sets the cumulative allowance to
+`u64::MAX`; Rust callers can supply a smaller explicit limit. Preparation can
+consume that limit; detailed fallback remains subject to the actual
 remainder and cannot report a score or complete optimum after exhaustion.
 Zero skips optional preparation and preserves the mandatory evaluator's zero-work
 refusal. `max_objective_bound_work` counts optional constraint generation alone;

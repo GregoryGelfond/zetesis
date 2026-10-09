@@ -379,15 +379,16 @@ impl RegionSearch {
 /// point is reached when a full round changes nothing. Every charged read
 /// spends a budget permit reserved in batches of at most `NARROWING_BATCH`,
 /// unspent permits are refunded, and even a failed narrowing contributes its
-/// admitted prefix to the counts. Select the split once after the joint
-/// fixed point, using the current candidate bound, else the latest permanent
-/// restriction, else the original theory. This preserves the traversal policy
-/// of narrowing those subjects in sequence while charging only the final
-/// subject's scan, one count read per open atom. Ties prefer the lower atom.
-/// Streamed original constraints may then decide one open atom, returning to
-/// propagation before the next source pass. These passes share one allowance.
-/// Every source decision decreases the number of open atoms; no source clause
-/// is added to the theory or its frozen reduct.
+/// admitted prefix to the counts. Streamed original constraints may decide one
+/// open atom, returning to propagation before the next source pass. These passes
+/// share one allowance. Every source decision decreases the number of open atoms;
+/// no source clause is added to the theory or its frozen reduct.
+///
+/// Select the split once after the joint fixed point, using the current
+/// candidate bound, else the latest permanent restriction, else the original
+/// theory. This preserves the traversal policy of narrowing those subjects in
+/// sequence while charging only the final subject's scan, one count read per
+/// open atom. Ties prefer the lower atom.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
     restrictions: &Conditions<R>,
