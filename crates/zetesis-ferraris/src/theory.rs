@@ -84,6 +84,7 @@ impl Node {
         }
     }
 
+    #[inline]
     fn view<'a>(&'a self, operands: &'a [usize]) -> Result<NodeView<'a>, AdmissionError> {
         match &self.0 {
             Storage::Atom(atom) => Ok(NodeView::Atom(*atom)),
@@ -166,6 +167,7 @@ impl<'a> FormulaView<'a> {
     /// Refuses an absent node, a noncanonical span arity, overflow or a range
     /// outside the paired arena. Admitted [`Theory`] views cannot fail for an
     /// index below their node count.
+    #[inline]
     pub fn node(self, index: usize) -> Result<NodeView<'a>, AdmissionError> {
         self.nodes
             .get(index)

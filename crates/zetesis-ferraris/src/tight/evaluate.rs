@@ -1,7 +1,7 @@
 use super::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
 };
-use crate::{Interpretation, NodeView};
+use crate::{FormulaView, Interpretation, NodeView};
 use zetesis_cpu::{Cancellation, Stop};
 
 #[cfg(test)]
@@ -106,33 +106,7 @@ impl TightWorkspace {
             .try_reserve_exact(plan.theory.nodes().len())
             .map_err(|_| Stop::Allocation)?;
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
-        for index in 0..plan.theory.view().len() {
-            work.tick()?;
-            self.values.push(u8::from(
-                match plan
-                    .theory
-                    .view()
-                    .node(index)
-                    .map_err(|_| Stop::InvalidProgram)?
-                {
-                    NodeView::Atom(atom) => candidate.contains(atom),
-                    NodeView::False => false,
-                    NodeView::And(operands) => {
-                        evaluate_operands(operands, &self.values, true, work)?
-                    }
-                    NodeView::Or(operands) => {
-                        evaluate_operands(operands, &self.values, false, work)?
-                    }
-                    NodeView::Implies(a, b) => {
-                        work.tick()?;
-                        let left = self.values[a];
-                        work.tick()?;
-                        let right = self.values[b];
-                        left == 0 || right != 0
-                    }
-                },
-            ));
-        }
+        evaluate_truth(plan.theory.view(), candidate, &mut self.values, work)?;
         for &root in plan.theory.roots() {
             work.tick()?;
             if self.values[root] == 0 {
@@ -182,6 +156,35 @@ impl TightWorkspace {
             limit,
         )
     }
+}
+
+/// Write each formula truth in admitted topological order. The caller clears
+/// and reserves the target first; a stopped prefix is never membership evidence.
+fn evaluate_truth(
+    view: FormulaView<'_>,
+    candidate: &Interpretation,
+    values: &mut Vec<u8>,
+    work: &mut Work<'_>,
+) -> Result<(), TightError> {
+    for index in 0..view.len() {
+        work.tick()?;
+        values.push(u8::from(
+            match view.node(index).map_err(|_| Stop::InvalidProgram)? {
+                NodeView::Atom(atom) => candidate.contains(atom),
+                NodeView::False => false,
+                NodeView::And(operands) => evaluate_operands(operands, values, true, work)?,
+                NodeView::Or(operands) => evaluate_operands(operands, values, false, work)?,
+                NodeView::Implies(a, b) => {
+                    work.tick()?;
+                    let left = values[a];
+                    work.tick()?;
+                    let right = values[b];
+                    left == 0 || right != 0
+                }
+            },
+        ));
+    }
+    Ok(())
 }
 
 fn evaluate_operands(
