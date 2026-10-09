@@ -245,12 +245,12 @@ fn checkers_sharing_an_allowance_each_check_within_its_ceiling() {
             .unwrap(),
         ConstraintRegionVerdict::Refuted { .. }
     ));
-    assert_eq!(
+    assert!(matches!(
         final_checker
-            .check(&completion(&owner, 0), &cancellation)
+            .check(&completion(&owner, 1), &cancellation)
             .unwrap(),
-        ConstraintVerdict::Satisfied
-    );
+        ConstraintVerdict::Violated { .. }
+    ));
     assert_eq!(allowance.statistics().substitutions, 2);
 }
 
@@ -333,6 +333,13 @@ fn shared_setup_honors_precancellation() {
 fn a_later_checker_prepares_under_its_own_ceiling() {
     let owner = admit("{p}. :-p.");
     let cancellation = Cancellation::default();
+    // Compare checkers attaching to the same prepared shared row identities.
+    // Each must still charge its own preparation against its own ceiling.
+    owner
+        .checker(ConstraintCheckLimits::default())
+        .unwrap()
+        .check(&completion(&owner, 0), &cancellation)
+        .unwrap();
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     baseline
         .check(&completion(&owner, 0), &cancellation)
@@ -404,10 +411,10 @@ fn the_shared_receipt_sums_every_workers_charges() {
                         .checker_with_allowance(allowance, &cancellation)
                         .unwrap();
                     for _ in 0..3 {
-                        assert_eq!(
-                            checker.check(&completion(owner, 0), &cancellation).unwrap(),
-                            ConstraintVerdict::Satisfied
-                        );
+                        assert!(matches!(
+                            checker.check(&completion(owner, 1), &cancellation).unwrap(),
+                            ConstraintVerdict::Violated { .. }
+                        ));
                     }
                     checker.statistics()
                 })

@@ -245,7 +245,7 @@ fn shared_plan_does_not_share_candidate_progress() {
     assert!(!state(&first).pending.is_empty());
     assert!(state(&second).pending.is_empty());
     assert_ne!(state(&first).held, state(&second).held);
-    assert_ne!(state(&first).clean, state(&second).clean);
+    assert_ne!(state(&first).scans, state(&second).scans);
 }
 
 #[test]

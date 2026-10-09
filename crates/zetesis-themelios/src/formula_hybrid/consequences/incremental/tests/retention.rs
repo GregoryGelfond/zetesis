@@ -16,7 +16,7 @@ fn completed(owner: &HybridFormula) -> crate::ConstraintChecker<'_> {
         ConstraintConsequence::NoConsequence
     );
     assert!(state(&checker).valid);
-    assert_eq!(state(&checker).clean, [true]);
+    assert_eq!(state(&checker).scans, [Scan::Clean]);
     assert!(state(&checker).pending.is_empty());
     assert!(!checker.consequence_active);
     checker
@@ -45,7 +45,7 @@ fn irrelevant_decisions_reuse_a_completed_scan() {
             ConstraintConsequence::NoConsequence
         );
         assert!(state(checker).valid);
-        assert_eq!(state(checker).clean, [true]);
+        assert_eq!(state(checker).scans, [Scan::Clean]);
         assert!(state(checker).pending.is_empty());
     }
     assert!(
@@ -63,7 +63,7 @@ fn relevant_decisions_wake_a_completed_scan() {
         matches!(pass(&mut checker, &region, ConstraintRegionPass::First),
         ConstraintConsequence::Cut { atom: selected, .. } if selected == atom(&owner, "q"))
     );
-    assert!(!state(&checker).clean[0]);
+    assert_ne!(state(&checker).scans[0], Scan::Clean);
     assert!(checker.consequence_active);
 }
 
@@ -81,7 +81,7 @@ fn changed_bound_detects_unit(reopen: bool) {
         pass(&mut checker, &old, ConstraintRegionPass::First),
         ConstraintConsequence::NoConsequence
     );
-    assert!(state(&checker).valid && state(&checker).clean[0]);
+    assert!(state(&checker).valid && state(&checker).scans[0] == Scan::Clean);
     let mut next = Region::all_open(old.len());
     let expected = if reopen {
         assert!(next.hold(q));
@@ -152,7 +152,7 @@ fn a_new_first_retires_an_unapplied_batch() {
         first
     );
     assert!(checker.statistics().substitutions > before);
-    assert!(state(&checker).clean.iter().all(|clean| !clean));
+    assert!(state(&checker).scans.iter().all(|scan| *scan == Scan::Full));
     assert_eq!(state(&checker).next, 1);
 }
 

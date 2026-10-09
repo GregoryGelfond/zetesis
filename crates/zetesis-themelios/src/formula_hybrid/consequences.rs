@@ -80,7 +80,11 @@ impl ConstraintChecker<'_> {
     /// or ordinary model/region check also retires an unfinished closure.
     /// A successful `NoConsequence` retains only completed rule-scan evidence:
     /// the next `First` authenticates monotone masks and rechecks rules whose
-    /// signed predicates changed. This reuse never carries a pending decision
+    /// possible reads changed. If every relevant change is one newly held
+    /// positive atom, a completed unproductive total nongenerated rule scans
+    /// the union anchored at each original occurrence of that atom. Negative
+    /// reads, cuts and multiple changed atoms retain a full scan. Deferred
+    /// deltas accumulate until the rule is scanned. This reuse never carries a pending decision
     /// across closures or renews an active closure's allowance.
     ///
     /// Total nongenerated rules use one join permitting at most one open
@@ -203,6 +207,23 @@ fn scan_rule(
     counters: &mut Counters,
     region: &Region,
     rule_index: usize,
+    visit: impl FnMut(
+        ConstraintConsequence,
+        Context<'_, &crate::formula_support::Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure>,
+) -> Result<ConstraintConsequence, FormulaFailure> {
+    scan_selected_rule(prepared, budget, counters, region, rule_index, None, visit)
+}
+
+/// A completed negative premise permits the union of all positive-occurrence
+/// anchors for one newly held atom. Other modes retain the complete rule scan.
+fn scan_selected_rule(
+    prepared: &mut PreparedConstraints<'_>,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    region: &Region,
+    rule_index: usize,
+    delta: Option<usize>,
     mut visit: impl FnMut(
         ConstraintConsequence,
         Context<'_, &crate::formula_support::Computation<'_, '_>>,
@@ -231,12 +252,29 @@ fn scan_rule(
             counters,
         )?
         .map(|selection| selection.mode);
-        return match mode {
-            Some(mode) => scan_mode(
-                prepared, budget, counters, region, rule_index, mode, &mut visit,
-            ),
-            None => Ok(ConstraintConsequence::NoConsequence),
+        let Some(mode) = mode else {
+            return Ok(ConstraintConsequence::NoConsequence);
         };
+        let Some(atom) = delta else {
+            return scan_mode(
+                prepared,
+                budget,
+                counters,
+                region,
+                rule_index,
+                Query { mode, anchor: None },
+                &mut visit,
+            );
+        };
+        return scan_anchors(
+            prepared,
+            budget,
+            counters,
+            region,
+            rule_index,
+            (mode, atom),
+            &mut visit,
+        );
     }
     for pivot in std::iter::once(None).chain((0..rule.body.len()).map(Some)) {
         counters.work(&prepared.limits, rule.location)?;
@@ -258,7 +296,13 @@ fn scan_rule(
             continue;
         }
         let consequence = scan_mode(
-            prepared, budget, counters, region, rule_index, mode, &mut visit,
+            prepared,
+            budget,
+            counters,
+            region,
+            rule_index,
+            Query { mode, anchor: None },
+            &mut visit,
         )?;
         if consequence != ConstraintConsequence::NoConsequence {
             return Ok(consequence);
@@ -267,13 +311,86 @@ fn scan_rule(
     Ok(ConstraintConsequence::NoConsequence)
 }
 
+/// Exhaust all matching original occurrences without changing their prepared
+/// depths. An unchanged witness was excluded by the old complete negative scan;
+/// every new witness must read the held delta at one of these occurrences.
+fn scan_anchors(
+    prepared: &mut PreparedConstraints<'_>,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    region: &Region,
+    rule_index: usize,
+    delta: (ConsequenceMode, usize),
+    visit: &mut impl FnMut(
+        ConstraintConsequence,
+        Context<'_, &crate::formula_support::Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure>,
+) -> Result<ConstraintConsequence, FormulaFailure> {
+    let (mode, atom) = delta;
+    // Overlapping anchors are intentional. Every duplicate substitution
+    // pays the ordinary work; the existing pending queue coalesces units.
+    for occurrence in 0..prepared.source.rules[rule_index].body.len() {
+        let rule = &prepared.source.rules[rule_index];
+        counters.work(&prepared.limits, rule.location)?;
+        let Some((DefaultNegation::None, pattern)) = literal_atom(&rule.body[occurrence]) else {
+            continue;
+        };
+        let changed = prepared
+            .index
+            .expect("prepared core")
+            .catalog()
+            .atoms()
+            .at(atom)
+            .expect("authenticated positive delta");
+        let components = prepared
+            .completed
+            .components()
+            .ok_or_else(|| crate::formula_support::components::missing(rule.location))?;
+        let predicate = pattern
+            .get(components, &prepared.limits, counters, rule.location)?
+            .predicate();
+        if !predicate
+            .compare_ref_with(changed.predicate(), || {
+                counters.work(&prepared.limits, rule.location)
+            })?
+            .is_eq()
+        {
+            continue;
+        }
+        let consequence = scan_mode(
+            prepared,
+            budget,
+            counters,
+            region,
+            rule_index,
+            Query {
+                mode,
+                anchor: Some((occurrence, atom)),
+            },
+            visit,
+        )?;
+        if consequence != ConstraintConsequence::NoConsequence {
+            return Ok(consequence);
+        }
+    }
+    Ok(ConstraintConsequence::NoConsequence)
+}
+
+/// The current consequence mode, optionally restricted at one original
+/// positive occurrence to a dense atom from the authenticated core.
+#[derive(Clone, Copy)]
+struct Query {
+    mode: ConsequenceMode,
+    anchor: Option<(usize, usize)>,
+}
+
 fn scan_mode(
     prepared: &mut PreparedConstraints<'_>,
     budget: &mut Budget,
     counters: &mut Counters,
     region: &Region,
     rule_index: usize,
-    mode: ConsequenceMode,
+    query: Query,
     visit: &mut impl FnMut(
         ConstraintConsequence,
         Context<'_, &crate::formula_support::Computation<'_, '_>>,
@@ -283,7 +400,7 @@ fn scan_mode(
     prepared.prepare_rule(rule_index, budget, counters)?;
     let selection = ConsequenceSelection {
         selection: prepared.selection(rule_index, region),
-        mode,
+        mode: query.mode,
     };
     let queries = prepared.completed.queries(
         crate::JoinStrategy::Indexed,
@@ -303,6 +420,17 @@ fn scan_mode(
             budget,
             counters,
         )?;
+    if let Some((occurrence, atom)) = query.anchor {
+        counters.work(&prepared.limits, rule.location)?;
+        let atom = prepared
+            .index
+            .expect("prepared core")
+            .catalog()
+            .atoms()
+            .at(atom)
+            .expect("authenticated positive delta");
+        join = join.anchored(occurrence, atom, &prepared.limits, counters, rule.location)?;
+    }
     while let Some(row) = join.next_row(
         &mut computation,
         &prepared.limits,

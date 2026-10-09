@@ -194,6 +194,21 @@ pub(crate) struct SelectedRow<'row> {
     pub(crate) positives: Option<PositiveRows<'row>>,
 }
 
+/// One original positive occurrence restricted to an exact borrowed atom.
+/// The source's local row is resolved once, independently of join prefixes.
+pub(super) struct Anchor<'a> {
+    pub(super) occurrence: usize,
+    pub(super) atom: zetesis_core::catalog::AtomRef<'a>,
+    pub(super) row: AnchorRow,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum AnchorRow {
+    Unresolved,
+    Absent,
+    Present(usize),
+}
+
 /// One existing join cursor with a selected-row-only consumer interface. Its
 /// private cursor cannot export partial arithmetic evidence as a whole family.
 pub(crate) struct FilteredRows<'a, 'source> {
@@ -212,6 +227,46 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
             ..PositivePrefix::default()
         });
         Self { join }
+    }
+
+    /// Restrict an unstarted filtered query at one original positive occurrence.
+    /// The caller establishes coverage of its union of anchored queries. The
+    /// prepared order, scalar schedule and current-region filter stay intact;
+    /// the atom is a typed lookup key, never a source-row coordinate.
+    pub(crate) fn anchored(
+        mut self,
+        occurrence: usize,
+        atom: zetesis_core::catalog::AtomRef<'a>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        counters.work(limits, location)?;
+        let mut found = false;
+        for pattern in &self.join.plan.patterns {
+            counters.work(limits, location)?;
+            found |= pattern.source == occurrence;
+        }
+        if !found
+            || self.join.row_filter.is_none()
+            || self.join.generated
+            || self.join.coverage != super::Coverage::Selected
+            || !self.join.head_slots.is_empty()
+            || self.join.anchor.is_some()
+            || self.join.traversal != super::Traversal::Searching
+            || self.join.depth != 0
+        {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location,
+            });
+        }
+        self.join.anchor = Some(Anchor {
+            occurrence,
+            atom,
+            row: AnchorRow::Unresolved,
+        });
+        Ok(self)
     }
 
     pub(crate) fn next_row(

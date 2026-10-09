@@ -6755,49 +6755,59 @@
     "line": 415
   },
   {
+    "name": "Zetesis.StreamedConsequences.consequence_reads_change",
+    "file": "Zetesis/StreamedConsequences.lean",
+    "line": 436
+  },
+  {
+    "name": "Zetesis.StreamedConsequences.positive_changes_cover_consequences",
+    "file": "Zetesis/StreamedConsequences.lean",
+    "line": 461
+  },
+  {
     "name": "Zetesis.StreamedConsequences.fresh_of_inside",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 430
+    "line": 478
   },
   {
     "name": "Zetesis.StreamedConsequences.falsify_not_fresh",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 435
+    "line": 483
   },
   {
     "name": "Zetesis.StreamedConsequences.open_count_mono",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 449
+    "line": 497
   },
   {
     "name": "Zetesis.StreamedConsequences.falsify_decreases_open",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 459
+    "line": 507
   },
   {
     "name": "Zetesis.StreamedConsequences.steps_preserve",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 504
+    "line": 552
   },
   {
     "name": "Zetesis.StreamedConsequences.steps_bounded",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 523
+    "line": 571
   },
   {
     "name": "Zetesis.StreamedConsequences.no_unbounded_steps",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 537
+    "line": 585
   },
   {
     "name": "Zetesis.StreamedConsequences.no_unit_can_hide_violation",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 547
+    "line": 595
   },
   {
     "name": "Zetesis.StreamedConsequences.pending_after_decision_retains_answer",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 559
+    "line": 607
   },
   {
     "name": "Zetesis.StreamedConstraints.clear_append",
@@ -6810,49 +6820,54 @@
     "line": 66
   },
   {
+    "name": "Zetesis.StreamedConstraints.clear_selection",
+    "file": "Zetesis/StreamedConstraints.lean",
+    "line": 81
+  },
+  {
     "name": "Zetesis.StreamedConstraints.scan_preserves",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 79
+    "line": 97
   },
   {
     "name": "Zetesis.StreamedConstraints.enough_fuel_no_pending",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 117
+    "line": 135
   },
   {
     "name": "Zetesis.StreamedConstraints.scan_complete_iff",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 136
+    "line": 154
   },
   {
     "name": "Zetesis.StreamedConstraints.scan_violation_iff",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 156
+    "line": 174
   },
   {
     "name": "Zetesis.StreamedConstraints.completed_partition",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 178
+    "line": 196
   },
   {
     "name": "Zetesis.StreamedConstraints.partition_invariance",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 198
+    "line": 216
   },
   {
     "name": "Zetesis.StreamedConstraints.clear_iff_models",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 209
+    "line": 227
   },
   {
     "name": "Zetesis.StreamedConstraints.stable_iff_completed_partition",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 231
+    "line": 249
   },
   {
     "name": "Zetesis.StreamedConstraints.pending_can_hide_violation",
     "file": "Zetesis/StreamedConstraints.lean",
-    "line": 248
+    "line": 266
   },
   {
     "name": "Zetesis.StreamedOptimization.completed_ties_exact",

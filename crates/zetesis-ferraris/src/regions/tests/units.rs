@@ -1,4 +1,4 @@
-//! Counted witnesses remove only redundant unit scans, not pending events.
+//! Processed operands remove only redundant scans, not pending events.
 
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -67,6 +67,31 @@ fn scan<C: Count>(
     Ok(Step::Unchanged)
 }
 
+/// The complete downward scan before processed totals omitted it.
+fn scan_operands<C: Count>(
+    closure: &mut Closure<'_, C>,
+    index: &Narrower,
+    work: &mut Work<'_>,
+) -> Result<Step, Stop> {
+    let chain = &index.chains[0];
+    let mut step = Step::Unchanged;
+    for &operand in &chain.operands {
+        work.tick()?;
+        step = step.join(if chain.disjunction {
+            closure.never(operand)
+        } else {
+            closure.sure(operand)
+        });
+    }
+    Ok(step)
+}
+
+#[derive(Clone, Copy)]
+enum Teaching {
+    Unit,
+    Operands,
+}
+
 struct Attempt {
     result: Result<Step, Stop>,
     work: u64,
@@ -103,20 +128,36 @@ fn state(index: &Narrower, values: [usize; 4]) -> (Knowledge, NarrowingScratch) 
     (knowledge, scratch)
 }
 
-fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit: u64) -> Attempt {
+fn attempt(
+    index: &Narrower,
+    values: [usize; 4],
+    wide: bool,
+    scanning: bool,
+    limit: u64,
+    teaching: Teaching,
+) -> Attempt {
     fn call<C: Count>(
         closure: &mut Closure<'_, C>,
         index: &Narrower,
         scanning: bool,
         work: &mut Work<'_>,
+        teaching: Teaching,
     ) -> Result<Step, Stop> {
-        if scanning {
-            scan(closure, index, work)
-        } else {
-            closure.unit(index, 0, work)
+        match (teaching, scanning) {
+            (Teaching::Unit, true) => scan(closure, index, work),
+            (Teaching::Unit, false) => closure.unit(index, 0, work),
+            (Teaching::Operands, true) => scan_operands(closure, index, work),
+            (Teaching::Operands, false) => closure.teach_chain(index, 0, work),
         }
     }
     let (mut knowledge, mut scratch) = state(index, values);
+    if matches!(teaching, Teaching::Operands) {
+        let root = index.chains[0].root;
+        let known = compact_mut(&mut knowledge);
+        known.sure[0] ^= 1 << root;
+        known.never[0] ^= 1 << root;
+        scratch.nodes[0].1 = !index.chains[0].disjunction;
+    }
     if wide {
         knowledge = native(&knowledge);
     }
@@ -130,6 +171,7 @@ fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit:
             index,
             scanning,
             &mut work,
+            teaching,
         ),
         Width::Native(known) => call(
             &mut Closure {
@@ -139,6 +181,7 @@ fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit:
             index,
             scanning,
             &mut work,
+            teaching,
         ),
     };
     Attempt {
@@ -149,6 +192,10 @@ fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit:
     }
 }
 
+fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit: u64) -> Attempt {
+    attempt(index, values, wide, scanning, limit, Teaching::Unit)
+}
+
 fn same(left: &Attempt, right: &Attempt) {
     assert!(left.result == right.result);
     same_knowledge(&left.knowledge, &right.knowledge);
@@ -156,6 +203,60 @@ fn same(left: &Attempt, right: &Attempt) {
     assert_eq!(left.scratch.learned, right.scratch.learned);
     assert_eq!(left.scratch.heads, right.scratch.heads);
     assert_eq!(left.scratch.pending, right.scratch.pending);
+}
+
+#[test]
+fn processed_totals_preserve_downward_teaching() {
+    for disjunction in [false, true] {
+        let index = Narrower::new(&chain(disjunction));
+        // The fixture repeats node 1 in the syntax and gives atom 1 two
+        // separate nodes. Counters follow the four distinct chain leaves.
+        assert_eq!(index.chains[0].operands, [0, 1, 2, 3]);
+        let counted = if disjunction { 2 } else { 4 };
+        for mut code in 0..5usize.pow(4) {
+            let values = std::array::from_fn(|_| {
+                let value = code % 5;
+                code /= 5;
+                value
+            });
+            for wide in [false, true] {
+                let previous = attempt(&index, values, wide, true, u64::MAX, Teaching::Operands);
+                let current = attempt(&index, values, wide, false, u64::MAX, Teaching::Operands);
+                same(&current, &previous);
+                assert_eq!(previous.work, 4);
+                let complete = values.iter().all(|&value| value == counted);
+                assert_eq!(current.work, if complete { 0 } else { 4 });
+                if complete {
+                    assert!(matches!(current.result, Ok(Step::Unchanged)));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn unprocessed_operands_keep_the_charged_scan() {
+    for disjunction in [false, true] {
+        let index = Narrower::new(&chain(disjunction));
+        let counted = if disjunction { 2 } else { 4 };
+        for wide in [false, true] {
+            for last in [0, counted - 1] {
+                // The last operand is open or already known with its event
+                // pending. Both retain the full scan and its refusal points.
+                let values = [counted, counted, counted, last];
+                for limit in 0..=4 {
+                    let previous = attempt(&index, values, wide, true, limit, Teaching::Operands);
+                    let current = attempt(&index, values, wide, false, limit, Teaching::Operands);
+                    same(&current, &previous);
+                    assert_eq!(current.work, limit);
+                    assert_eq!(current.work, previous.work);
+                    if limit < 4 {
+                        assert!(current.result == Err(Stop::WorkLimit));
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -303,6 +404,188 @@ impl NarrowingQuota for Quota {
     }
 }
 
+/// h <- a and b, or h <- a or b; the body is a live chain with a parent.
+fn chain_body(disjunction: bool) -> Theory {
+    let join = if disjunction {
+        Node::or_pair
+    } else {
+        Node::and_pair
+    };
+    Theory::new(
+        3,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                join([0, 1]),
+                Node::atom(2),
+                Node::implies(2, 3),
+            ],
+            vec![],
+        )
+        .unwrap(),
+        vec![4],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+/// The asserted implication has run; both body leaves have been processed,
+/// learning the body whose event is about to run. No atom has been published
+/// to a region: these tests exercise the event before that boundary.
+fn processed_body(index: &Narrower) -> (Knowledge, NarrowingScratch) {
+    assert_eq!(index.chains[0].root, 2);
+    assert_eq!(index.chains[0].operands, [0, 1]);
+    let mut knowledge = index.knowledge();
+    let known = compact_mut(&mut knowledge);
+    if index.chains[0].disjunction {
+        known.never[0] = 0b111;
+        known.atom_never[0] = 0b11;
+        known.never_operands.add(0, 2);
+    } else {
+        known.sure[0] = 0b111;
+        known.atom_sure[0] = 0b11;
+        known.sure_operands.add(0, 2);
+    }
+    known.sure[0] |= 1 << 4;
+    known.unknown.decrement(2);
+    *known.seeded = true;
+    let mut scratch = NarrowingScratch::default();
+    scratch.prepare(3);
+    (knowledge, scratch)
+}
+
+#[test]
+fn processed_roots_keep_the_node_and_parent_permits() {
+    for disjunction in [false, true] {
+        let theory = chain_body(disjunction);
+        let index = Narrower::new(&theory);
+        let producers =
+            super::super::producers(&theory, RegionLimits::default(), &Cancellation::default())
+                .unwrap()
+                .producers
+                .expect("the implication is a producer");
+        let subject = Subject::from(OriginalSubject::new(&theory, Some(&producers)));
+        for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
+            for limit in 0..=2 {
+                let (mut knowledge, mut scratch) = processed_body(&index);
+                let mut expected = knowledge.clone();
+                let mut quota = Quota {
+                    remaining: limit,
+                    calls: 0,
+                    stop,
+                };
+                let mut work = Work::reserved(&mut quota);
+                let result = Closure {
+                    known: compact_mut(&mut knowledge),
+                    lists: &mut scratch,
+                }
+                .revisit(subject, &index, 2, !disjunction, &mut work);
+                assert_eq!(work.spent, limit);
+                work.settle();
+                let known = compact_mut(&mut expected);
+                if limit > 0 {
+                    known.unknown.decrement(0);
+                    known.unknown.decrement(1);
+                }
+                if limit == 2 {
+                    if disjunction {
+                        assert!(matches!(result, Ok(Step::Unchanged)));
+                    } else {
+                        known.sure[0] |= 1 << 3;
+                        assert!(matches!(result, Ok(Step::Changed)));
+                    }
+                } else {
+                    assert!(result == Err(stop));
+                }
+                same_knowledge(&knowledge, &expected);
+                let taught_head = !disjunction && limit == 2;
+                assert_eq!(
+                    scratch.nodes,
+                    if taught_head { vec![(3, true)] } else { vec![] }
+                );
+                assert!(scratch.learned.is_empty());
+                let woke_head = disjunction && limit > 0;
+                assert_eq!(scratch.heads, if woke_head { vec![2] } else { vec![] });
+                assert_eq!(scratch.pending, if woke_head { vec![4] } else { vec![0] });
+                assert_eq!(quota.calls, (limit + 1).min(2));
+                assert_eq!(quota.remaining, 0);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_processed_false_body_still_removes_support() {
+    let theory = chain_body(true);
+    let index = Narrower::new(&theory);
+    let producers =
+        super::super::producers(&theory, RegionLimits::default(), &Cancellation::default())
+            .unwrap()
+            .producers
+            .expect("the implication is a producer");
+    let subject = Subject::from(OriginalSubject::new(&theory, Some(&producers)));
+    let (mut knowledge, mut scratch) = processed_body(&index);
+    let mut closure = Closure {
+        known: compact_mut(&mut knowledge),
+        lists: &mut scratch,
+    };
+    let mut work = Work::new(3);
+    assert!(matches!(
+        closure.revisit(subject, &index, 2, false, &mut work),
+        Ok(Step::Unchanged)
+    ));
+    assert_eq!(work.spent, 2);
+    assert_eq!(closure.lists.next_recheck(), Some(2));
+    assert!(matches!(
+        closure.recheck(&index, &producers, 2, &mut work),
+        Ok(Step::Changed)
+    ));
+    assert_eq!(work.spent, 3);
+    assert!(bit(closure.known.atom_never, 2));
+    assert_eq!(closure.lists.nodes, [(3, false)]);
+    assert_eq!(closure.lists.learned, [2]);
+    assert!(closure.lists.heads.is_empty());
+    assert!(closure.lists.pending.iter().all(|word| *word == 0));
+}
+
+#[test]
+fn a_frozen_false_root_remains_a_constant() {
+    let theory = chain_body(true);
+    let index = Narrower::new(&theory);
+    let candidate = Interpretation::new(&theory, vec![2]).unwrap();
+    let mut workspace = EvaluationWorkspace::default();
+    let evaluation = workspace
+        .evaluate(
+            &candidate,
+            EvaluationLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    assert!(!evaluation.truth()[2]);
+    assert!(evaluation.truth()[4]);
+    let subject = Subject::from(FrozenSubject::new(&theory, evaluation.truth()));
+    let (mut knowledge, mut scratch) = processed_body(&index);
+    let mut expected = knowledge.clone();
+    let known = compact_mut(&mut expected);
+    known.unknown.decrement(0);
+    known.unknown.decrement(1);
+    let mut work = Work::new(2);
+    let result = Closure {
+        known: compact_mut(&mut knowledge),
+        lists: &mut scratch,
+    }
+    .revisit(subject, &index, 2, false, &mut work);
+    assert!(matches!(result, Ok(Step::Unchanged)));
+    assert_eq!(work.spent, 2);
+    same_knowledge(&knowledge, &expected);
+    // The falsum event still updates ranking and its unmasked parent. It
+    // neither teaches operands nor applies original-theory support pruning.
+    assert!(scratch.nodes.is_empty() && scratch.learned.is_empty() && scratch.heads.is_empty());
+    assert!(scratch.pending.iter().all(|word| *word == 0));
+}
+
 #[test]
 fn witnessed_units_keep_the_node_and_parent_permits() {
     for disjunction in [false, true] {
@@ -393,15 +676,11 @@ fn narrow(
     assert!(scratch.pending.iter().all(|word| *word == 0));
 }
 
-fn inherited(theory: &Theory, index: &Narrower, frozen: Option<&[bool]>) {
+fn inherited(theory: &Theory, index: &Narrower, frozen: Option<&[bool]>, first: bool) {
     for wide in [false, true] {
         let mut parent = Region::all_open(3);
         let disjunction = index.chains[0].disjunction;
-        assert!(if disjunction {
-            parent.hold(2)
-        } else {
-            parent.cut(2)
-        });
+        assert!(if first { parent.hold(2) } else { parent.cut(2) });
         let fresh = index.knowledge();
         let fresh = if wide { native(&fresh) } else { fresh };
         let mut knowledge = fresh.clone();
@@ -427,21 +706,25 @@ fn inherited(theory: &Theory, index: &Narrower, frozen: Option<&[bool]>) {
 }
 
 #[test]
-fn inherited_witnesses_agree_with_fresh_original_and_frozen_closure() {
+fn inherited_chain_knowledge_agrees_with_fresh_closure() {
     for disjunction in [false, true] {
         let theory = chain(disjunction);
         let index = Narrower::new(&theory);
-        inherited(&theory, &index, None);
-        for atoms in [vec![0, 1, 2], vec![0, 1]] {
-            let candidate = Interpretation::new(&theory, atoms).unwrap();
-            let mut workspace = EvaluationWorkspace::default();
-            let attempt = workspace.evaluate(
-                &candidate,
-                EvaluationLimits::default(),
-                &Cancellation::default(),
-            );
-            let evaluation = attempt.result.unwrap();
-            inherited(&theory, &index, Some(evaluation.truth()));
+        // One first decision supplies an absorbing witness; its opposite
+        // lets the child learn every operand at the same polarity.
+        for first in [false, true] {
+            inherited(&theory, &index, None, first);
+            for atoms in [vec![0, 1, 2], vec![0, 1]] {
+                let candidate = Interpretation::new(&theory, atoms).unwrap();
+                let mut workspace = EvaluationWorkspace::default();
+                let attempt = workspace.evaluate(
+                    &candidate,
+                    EvaluationLimits::default(),
+                    &Cancellation::default(),
+                );
+                let evaluation = attempt.result.unwrap();
+                inherited(&theory, &index, Some(evaluation.truth()), first);
+            }
         }
     }
 }

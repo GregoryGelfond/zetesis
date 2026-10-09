@@ -1351,6 +1351,8 @@ import Zetesis
 #print axioms Zetesis.StreamedConsequences.unit_body_unchanged
 #print axioms Zetesis.StreamedConsequences.consequence_unchanged
 #print axioms Zetesis.StreamedConsequences.completed_template_unchanged
+#print axioms Zetesis.StreamedConsequences.consequence_reads_change
+#print axioms Zetesis.StreamedConsequences.positive_changes_cover_consequences
 #print axioms Zetesis.StreamedConsequences.fresh_of_inside
 #print axioms Zetesis.StreamedConsequences.falsify_not_fresh
 #print axioms Zetesis.StreamedConsequences.open_count_mono
@@ -1362,6 +1364,7 @@ import Zetesis
 #print axioms Zetesis.StreamedConsequences.pending_after_decision_retains_answer
 #print axioms Zetesis.StreamedConstraints.clear_append
 #print axioms Zetesis.StreamedConstraints.clear_permutation
+#print axioms Zetesis.StreamedConstraints.clear_selection
 #print axioms Zetesis.StreamedConstraints.scan_preserves
 #print axioms Zetesis.StreamedConstraints.enough_fuel_no_pending
 #print axioms Zetesis.StreamedConstraints.scan_complete_iff

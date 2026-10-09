@@ -2,10 +2,12 @@
 //!
 //! A batch contains only unit consequences proved against one immutable region.
 //! It survives only extensions of both masks. A completed rule is clean only
-//! while every signed predicate it reads is unchanged. Applying its own batch
-//! therefore dirties it too; a productive scan is never a negative certificate.
+//! while its possible reads are unchanged. One newly held positive atom can
+//! instead restrict its next scan to every original occurrence of that atom.
+//! Pending deltas accumulate until the rule is scanned; a productive scan is
+//! never a negative certificate.
 
-use super::{ConstraintConsequence, PreparedConstraints, literal_atom, scan_rule};
+use super::{ConstraintConsequence, PreparedConstraints, literal_atom, scan_selected_rule};
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::{Computation, Context, Counters, StorageLease, reserve_exact};
@@ -91,6 +93,28 @@ struct Decision {
     site: ProgramSite,
 }
 
+/// Evidence from one completed unproductive rule scan. A positive delta
+/// retains every relevant change since that scan, including across passes that
+/// drain an earlier rule's units before reaching this rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Scan {
+    Full,
+    Clean,
+    PositiveDelta(usize),
+}
+
+impl Scan {
+    fn include(&mut self, change: Self) {
+        *self = match (*self, change) {
+            (Self::Full, _) | (_, Self::Full) => Self::Full,
+            (prior, Self::Clean) => prior,
+            (Self::Clean, delta) => delta,
+            (Self::PositiveDelta(a), Self::PositiveDelta(b)) if a == b => *self,
+            (Self::PositiveDelta(_), Self::PositiveDelta(_)) => Self::Full,
+        };
+    }
+}
+
 /// Only integer coordinates of this core's immutable rule and atom owners.
 /// Predicate borrows are construction scratch, never stored beside their owner.
 pub(in crate::formula_hybrid) struct Plan {
@@ -112,7 +136,7 @@ pub(in crate::formula_hybrid) struct Incremental<'source> {
     lease: StorageLease,
     plan: &'source Plan,
     changed: Vec<Change>,
-    clean: Vec<bool>,
+    scans: Vec<Scan>,
     held: Vec<u64>,
     cut: Vec<u64>,
     queued: Vec<Option<bool>>,
@@ -352,7 +376,7 @@ impl<'source> Incremental<'source> {
             lease: counters.lease(),
             plan,
             changed: Vec::new(),
-            clean: Vec::new(),
+            scans: Vec::new(),
             held: Vec::new(),
             cut: Vec::new(),
             queued: Vec::new(),
@@ -381,13 +405,13 @@ impl<'source> Incremental<'source> {
         let limits = &prepared.limits;
         reserve_field!(
             self,
-            clean,
+            scans,
             prepared.source.rules.len(),
             Context::new(computation, limits, counters, site)
         );
         for rule in &prepared.source.rules {
             counters.work(limits, rule.location)?;
-            self.clean.push(false);
+            self.scans.push(Scan::Full);
         }
         reserve_field!(
             self,
@@ -472,9 +496,9 @@ impl<'source> Incremental<'source> {
         }
         if !monotone {
             self.reset();
-            for flag in &mut self.clean {
+            for flag in &mut self.scans {
                 counters.work(limits, site)?;
-                *flag = false;
+                *flag = Scan::Full;
             }
             self.retire_pending(limits, counters)?;
         }
@@ -499,17 +523,18 @@ impl<'source> Incremental<'source> {
             self.cut[word] = cut;
         }
         if monotone {
-            for (rule, clean) in self.clean.iter_mut().enumerate() {
+            for (rule, scan) in self.scans.iter_mut().enumerate() {
                 counters.work(limits, site)?;
-                if *clean {
-                    *clean = !wakeups::changed(
+                if *scan != Scan::Full {
+                    scan.include(wakeups::classify(
                         &prepared.source.rules[rule],
                         &self.plan.dependencies
                             [self.plan.offsets[rule]..self.plan.offsets[rule + 1]],
                         &self.changed,
                         prepared,
+                        region,
                         counters,
-                    )?;
+                    )?);
                 }
             }
         }
@@ -613,15 +638,25 @@ impl<'source> Incremental<'source> {
         }
         for rule in 0..prepared.source.rules.len() {
             counters.work(&prepared.limits, prepared.source.rules[rule].location)?;
-            if self.clean[rule] {
+            if self.scans[rule] == Scan::Clean {
                 continue;
             }
-            let consequence = scan_rule(
+            let delta = match self.scans[rule] {
+                Scan::PositiveDelta(atom) => Some(atom),
+                Scan::Full => None,
+                Scan::Clean => unreachable!("clean rules were skipped"),
+            };
+            // Completion below must establish new evidence. A refusal, panic,
+            // refutation or productive scan cannot retain the old premise.
+            counters.work(&prepared.limits, prepared.source.rules[rule].location)?;
+            self.scans[rule] = Scan::Full;
+            let consequence = scan_selected_rule(
                 prepared,
                 budget,
                 counters,
                 region,
                 rule,
+                delta,
                 |consequence, context| self.record(consequence, context),
             )?;
             if consequence != ConstraintConsequence::NoConsequence {
@@ -639,7 +674,11 @@ impl<'source> Incremental<'source> {
             // Only a completed scan with no units is a negative certificate.
             // Productive rules remain dirty even if a caller ignores a returned
             // decision instead of applying it before Continue.
-            self.clean[rule] = self.pending.is_empty();
+            self.scans[rule] = if self.pending.is_empty() {
+                Scan::Clean
+            } else {
+                Scan::Full
+            };
             if let Some(consequence) = self.pop(region, &prepared.limits, counters)? {
                 return Ok(consequence);
             }

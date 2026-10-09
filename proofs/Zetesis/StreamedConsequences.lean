@@ -426,6 +426,54 @@ theorem completed_template_unchanged {I : Type v} (instances : List I)
       (literals entry) (covered entry present)).mpr witness
   exact complete entry present oldWitness
 
+/-- A newly available consequence must read an atom whose bounds changed.
+The scalar result and grounded occurrences are fixed, and the earlier instance
+has been completely checked without a consequence.
+
+Proof outline: if every occurrence read unchanged bounds, the existing
+consequence would also have existed before, contradicting the completed check.
+The law does not establish which source rows enumerate those occurrences. -/
+theorem consequence_reads_change (left right : Cube A) (changed : Atoms A)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (scalarPassed : Bool) (literals : List (Literal A))
+    (absent : ¬ HasConsequence left scalarPassed literals)
+    (present : HasConsequence right scalarPassed literals) :
+    ∃ literal ∈ literals, changed literal.atom := by
+  classical
+  apply Classical.byContradiction
+  intro missing
+  have covered : ∀ literal ∈ literals, ¬ changed literal.atom := by
+    intro literal member altered
+    exact missing ⟨literal, member, altered⟩
+  have oldWitness : HasConsequence left scalarPassed literals :=
+    (consequence_unchanged left right (fun atom => ¬ changed atom) same
+      scalarPassed literals covered).mpr present
+  exact absent oldWitness
+
+/-- After a completed negative template scan, a change read only by positive
+occurrences covers every newly available consequence through such an occurrence.
+Repeated occurrences and aliases remain in the list; any one may be the witness.
+
+The changed set can contain one atom or several. A concrete cursor must still
+cover every matching positive occurrence and retain the same scalar evaluation,
+bindings and occurrence-based unit test. Negative or double-negative readers
+do not satisfy the positive-read premise. -/
+theorem positive_changes_cover_consequences {I : Type v} (instances : List I)
+    (scalarPassed : I → Bool) (literals : I → List (Literal A))
+    (left right : Cube A) (changed : Atoms A)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (positive : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom → literal.sign = .positive)
+    (complete : ∀ entry ∈ instances,
+      ¬ HasConsequence left (scalarPassed entry) (literals entry)) :
+    ∀ entry ∈ instances, HasConsequence right (scalarPassed entry) (literals entry) →
+      ∃ literal ∈ literals entry, literal.sign = .positive ∧ changed literal.atom := by
+  intro entry member consequence
+  obtain ⟨literal, occurrence, altered⟩ :=
+    consequence_reads_change left right changed same (scalarPassed entry)
+      (literals entry) (complete entry member) consequence
+  exact ⟨literal, occurrence, positive entry member literal occurrence altered, altered⟩
+
 /-- Strengthening both bounds cannot turn a decided atom back into an open one. -/
 theorem fresh_of_inside {smaller larger : Cube A} (inside : Inside smaller larger)
     {atom : A} (fresh : smaller.Fresh atom) : larger.Fresh atom :=

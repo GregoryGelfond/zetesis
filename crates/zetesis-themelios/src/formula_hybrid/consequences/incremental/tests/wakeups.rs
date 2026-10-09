@@ -1,6 +1,6 @@
 //! Single changed atoms can be outside a completed template's possible reads.
 
-use super::super::wakeups::{Change, changed};
+use super::super::wakeups::{Change, classify};
 use super::*;
 use zetesis_core::{Sign, ValueNodeRef};
 
@@ -32,7 +32,7 @@ fn completed(owner: &HybridFormula) -> crate::ConstraintChecker<'_> {
         ConstraintConsequence::NoConsequence
     );
     assert!(state(&checker).valid);
-    assert_eq!(state(&checker).clean, [true]);
+    assert_eq!(state(&checker).scans, [Scan::Clean]);
     checker
 }
 
@@ -49,13 +49,15 @@ fn changed_group(
             changes[group].include(atom);
         }
     }
-    changed(
+    classify(
         &prepared.source.rules[0],
         &state.plan.dependencies,
         &changes,
         prepared,
+        &Region::all_open(state.queued.len()),
         counters,
     )
+    .map(|scan| scan != Scan::Clean)
 }
 
 #[test]
@@ -74,14 +76,14 @@ fn nonmatching_changes_skip_the_source_scan() {
             .incremental
             .as_mut()
             .unwrap()
-            .clean[0] = false;
+            .scans[0] = Scan::Full;
         let before = [retained.statistics(), rescanned.statistics()];
         for checker in [&mut retained, &mut rescanned] {
             assert_eq!(
                 pass(checker, &region, ConstraintRegionPass::First),
                 ConstraintConsequence::NoConsequence
             );
-            assert!(state(checker).valid && state(checker).clean[0]);
+            assert!(state(checker).valid && state(checker).scans[0] == Scan::Clean);
         }
         assert!(
             retained.statistics().work - before[0].work
@@ -101,7 +103,7 @@ fn matching_nested_changes_wake_the_source_scan() {
         assert!(
             matches!(pass(&mut checker, &region, ConstraintRegionPass::First), ConstraintConsequence::Cut { atom, .. } if atom == expected)
         );
-        assert!(!state(&checker).clean[0]);
+        assert_ne!(state(&checker).scans[0], Scan::Clean);
     }
 }
 
@@ -294,5 +296,5 @@ fn a_failed_wakeup_pass_discards_completed_evidence() {
         pass(&mut checker, &region, ConstraintRegionPass::First),
         ConstraintConsequence::NoConsequence
     );
-    assert!(state(&checker).valid && state(&checker).clean[0]);
+    assert!(state(&checker).valid && state(&checker).scans[0] == Scan::Clean);
 }

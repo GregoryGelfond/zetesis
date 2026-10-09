@@ -1,6 +1,7 @@
 mod evidence;
 mod predicates;
 use super::*;
+use crate::formula_support::RowSelection;
 use crate::{
     AdmissionOptions, ConstraintCheckCause, ConstraintCheckLimits, ExpansionLimits,
     FormulaResource, HybridFormula, prepare_formula,
@@ -141,6 +142,11 @@ fn unmapped_rows_remain_eligible() {
         index: index.lookup(),
         region: &region,
     };
+    let model = Model::from_positions(owner.atom_catalog(), []).unwrap();
+    let model_selection = ModelSelection {
+        rows: &rows,
+        model: &model,
+    };
     let mut visited = 0;
     for (predicate, atoms) in prepared.completed.source_atoms() {
         let relation = Relation::from_refs(predicate, atoms, Limits::default()).unwrap();
@@ -164,15 +170,24 @@ fn unmapped_rows_remain_eligible() {
                     )
                     .unwrap()
             );
+            assert!(
+                model_selection
+                    .permits(
+                        source,
+                        relation.row(position).unwrap(),
+                        &prepared.limits,
+                        &mut counters,
+                        prepared.source.location,
+                    )
+                    .unwrap()
+            );
             visited += 1;
         }
     }
     assert!(visited > 0);
 }
 
-#[test]
-fn row_selection_preserves_unsorted_dense_ids() {
-    let owner = owner();
+fn descending_catalog(owner: &HybridFormula) -> zetesis_core::AtomCatalog {
     let mut catalog_owner = zetesis_core::atom_interner::AtomInterner::new();
     let catalog_limits = zetesis_core::atom_interner::Limits {
         max_atoms: owner.atom_catalog().atoms().len(),
@@ -195,9 +210,22 @@ fn row_selection_preserves_unsorted_dense_ids() {
     });
     // The independent catalog publishes real occurrence IDs in descending
     // semantic order; the index must recover those IDs after its own sort.
-    let catalog = catalog_owner
+    catalog_owner
         .publish_selection_with(&positions, catalog_limits, || Ok::<_, FormulaFailure>(()))
-        .unwrap();
+        .unwrap()
+}
+
+fn with_descending_rows(
+    check: impl FnOnce(
+        &zetesis_core::AtomCatalog,
+        &SourceRows<'_>,
+        AtomLookup<'_, '_>,
+        &super::super::PreparedConstraints<'_>,
+        &mut Counters,
+    ),
+) {
+    let owner = owner();
+    let catalog = descending_catalog(&owner);
     let atoms = catalog.atoms();
     assert!(atoms.len() > 1);
     assert!(atoms.iter().zip(atoms.iter().skip(1)).all(|(a, b)| a > b));
@@ -222,50 +250,94 @@ fn row_selection_preserves_unsorted_dense_ids() {
         prepared.source.location,
     )
     .unwrap();
-    let mut saw_supported = false;
-    let mut saw_unsupported = false;
-    for held in 0..atoms.len() {
-        let mut region = Region::all_open(atoms.len());
-        assert!(region.hold(held));
-        let selection = Selection {
-            predicates: None,
-            rows: &rows,
-            index: index.lookup(),
-            region: &region,
+    check(&catalog, &rows, index.lookup(), prepared, &mut counters);
+}
+
+#[test]
+fn region_selection_preserves_unsorted_dense_ids() {
+    with_descending_rows(|catalog, rows, index, prepared, counters| {
+        let atoms = catalog.atoms();
+        let mut saw_supported = false;
+        let mut saw_unsupported = false;
+        for held in 0..atoms.len() {
+            let mut region = Region::all_open(atoms.len());
+            assert!(region.hold(held));
+            let selection = Selection {
+                predicates: None,
+                rows,
+                index,
+                region: &region,
+            };
+            let mut has_source_row = false;
+            for (predicate, source) in prepared.completed.source_atoms() {
+                let relation = Relation::from_refs(predicate, source, Limits::default()).unwrap();
+                let resolved = selection
+                    .resolve(source, &prepared.limits, counters, prepared.source.location)
+                    .unwrap();
+                for (position, atom) in source.iter().enumerate() {
+                    let permitted = selection
+                        .permits(
+                            resolved,
+                            relation.row(position).unwrap(),
+                            &prepared.limits,
+                            counters,
+                            prepared.source.location,
+                        )
+                        .unwrap();
+                    let is_held_atom = atom == atoms.at(held).unwrap();
+                    assert_eq!(permitted, is_held_atom);
+                    has_source_row |= is_held_atom;
+                }
+            }
+            saw_supported |= has_source_row;
+            saw_unsupported |= !has_source_row;
+        }
+        // The negative occurrence -p(2) is admitted by the constraint, but no
+        // source rule supports it. Its dense ID must not select another row.
+        assert!(saw_supported);
+        assert!(saw_unsupported);
+    });
+}
+
+#[test]
+fn model_selection_preserves_unsorted_dense_ids() {
+    with_descending_rows(|catalog, rows, _, prepared, counters| {
+        let atoms = catalog.atoms();
+        let model = Model::from_positions(catalog, [0, 1]).unwrap();
+        assert_eq!(
+            model.positions(),
+            &[1, 0],
+            "logical order is not dense-ID order"
+        );
+        let selection = ModelSelection {
+            rows,
+            model: &model,
         };
-        let mut has_source_row = false;
         for (predicate, source) in prepared.completed.source_atoms() {
             let relation = Relation::from_refs(predicate, source, Limits::default()).unwrap();
             let resolved = selection
-                .resolve(
-                    source,
-                    &prepared.limits,
-                    &mut counters,
-                    prepared.source.location,
-                )
+                .resolve(source, &prepared.limits, counters, prepared.source.location)
                 .unwrap();
             for (position, atom) in source.iter().enumerate() {
-                let permitted = selection
-                    .permits(
+                let selected = selection
+                    .select(
                         resolved,
+                        0,
                         relation.row(position).unwrap(),
                         &prepared.limits,
-                        &mut counters,
+                        counters,
                         prepared.source.location,
                     )
                     .unwrap();
-                let is_held_atom = atom == atoms.at(held).unwrap();
-                assert_eq!(permitted, is_held_atom);
-                has_source_row |= is_held_atom;
+                let expected = atom == atoms.at(0).unwrap() || atom == atoms.at(1).unwrap();
+                assert_eq!(selected.permits(), expected);
+                assert!(
+                    matches!(selected, RowSelection::Possible | RowSelection::Rejected),
+                    "model filtering lends eligibility, never positive row proof"
+                );
             }
         }
-        saw_supported |= has_source_row;
-        saw_unsupported |= !has_source_row;
-    }
-    // The negative occurrence -p(2) is admitted by the constraint, but no
-    // source rule supports it. Its dense ID must not select another row.
-    assert!(saw_supported);
-    assert!(saw_unsupported);
+    });
 }
 
 /// The work one checker charges to reach the core's index.
@@ -521,4 +593,52 @@ fn source_resolution_retains_refused_work_prefixes() {
         })
     ));
     assert_eq!(counters.accounting.work, 0);
+}
+
+#[test]
+fn model_lookup_refusal_is_not_row_absence() {
+    let owner = owner();
+    let model =
+        Model::from_positions(owner.atom_catalog(), 0..owner.atom_catalog().atoms().len()).unwrap();
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let prepared = checker.prepared.as_mut().unwrap();
+    let mut counters = Counters::default();
+    prepared
+        .prepare_selection(owner.core(), &mut counters)
+        .unwrap();
+    let selection = ModelSelection {
+        rows: prepared.rows.as_ref().unwrap(),
+        model: &model,
+    };
+    let (predicate, atoms) = prepared.completed.source_atoms().next().unwrap();
+    let relation = Relation::from_refs(predicate, atoms, Limits::default()).unwrap();
+    let source = selection
+        .resolve(
+            atoms,
+            &prepared.limits,
+            &mut counters,
+            prepared.source.location,
+        )
+        .unwrap();
+    let limits = FormulaLimits {
+        max_work: 1,
+        ..prepared.limits
+    };
+    let mut counters = Counters::default();
+    assert!(matches!(
+        selection.permits(
+            source,
+            relation.row(0).unwrap(),
+            &limits,
+            &mut counters,
+            prepared.source.location,
+        ),
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed: 2,
+            limit: 1,
+            ..
+        })
+    ));
+    assert_eq!(counters.accounting.work, 1);
 }

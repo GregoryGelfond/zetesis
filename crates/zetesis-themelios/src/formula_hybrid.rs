@@ -32,7 +32,7 @@ use crate::{
     ConstraintAllowance, ExpansionLimits, FormulaFailure, FormulaLimits, ProgramSite, SourceBundle,
     SourceMetadata,
 };
-use selection::{RulePredicates, Selection, SourceRows};
+use selection::{ModelSelection, RulePredicates, Selection, SourceRows};
 
 /// Capability outside the hybrid schedule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,10 +62,10 @@ struct Core {
     constraints: Option<Constraints>,
     source: Arc<Owner>,
     /// The typed index of `compiled.atoms`, set by the first checker whose
-    /// region check needs it and lent to every later checker of this core.
+    /// candidate check needs it and lent to every later checker of this core.
     index: OnceLock<CatalogIndex>,
     /// The kept source rows' positions in `compiled.atoms`, set by the first
-    /// checker whose region check needs them and lent likewise.
+    /// checker whose candidate check needs them and lent likewise.
     rows: OnceLock<selection::RowPositions>,
     /// Immutable rule dependencies and original atom groups, shared by checkers.
     incremental: OnceLock<consequences::IncrementalPlan>,
@@ -717,9 +717,9 @@ struct PreparedConstraints<'a> {
     source: &'a Constraints,
     completed: CompletedSupport<'a>,
     limits: FormulaLimits,
-    /// Original dense IDs, borrowed from the core's index on first region use
-    /// (and built there by the first checker that needs it). The final-model
-    /// path keeps its existing canonical selection lookup.
+    /// Original dense IDs, borrowed from the core's index on first candidate use
+    /// (and built there by the first checker that needs it). Final-model row
+    /// selection and complete bodies query the model's canonical true set.
     index: Option<&'a CatalogIndex>,
     /// Source occurrence IDs mapped once into the original dense catalog.
     rows: Option<SourceRows<'a>>,
@@ -961,9 +961,12 @@ impl ConstraintChecker<'_> {
     }
 
     /// Check original constraint satisfaction against an exact-catalog model.
-    /// Joins borrow completed possible support; each atom is separately read in
-    /// the supplied candidate. Shared support is never treated as candidate truth.
-    /// A violation returns early; successful satisfaction exhausts every family.
+    /// Joins borrow completed possible support. After exact source-row mapping,
+    /// positive rows absent from the supplied model are excluded before matching.
+    /// Unmapped rows retain the ordinary path. Every completed body separately
+    /// queries that same model; row selection lends no positive truth proof.
+    /// Shared support is never treated as candidate truth. A violation returns
+    /// early; successful satisfaction exhausts every necessary family.
     /// Runtime control is polled at charged source work boundaries and before
     /// publishing either verdict. Source arithmetic admission has already run.
     ///
@@ -1054,9 +1057,7 @@ impl ConstraintChecker<'_> {
             let verdict = self
                 .accounting
                 .with_cancellation(cancellation, |counters| {
-                    if matches!(candidate, Candidate::Region(..))
-                        && let Some(prepared) = &mut self.prepared
-                    {
+                    if let Some(prepared) = &mut self.prepared {
                         prepared.prepare_selection(self.owner, counters)?;
                     }
                     self.budget
@@ -1134,13 +1135,21 @@ impl ConstraintChecker<'_> {
                 continue;
             }
             prepared.prepare_rule(rule_index, budget, counters)?;
-            let selection = match candidate {
-                Candidate::Model(_) => None,
-                Candidate::Region(_, region) => Some(prepared.selection(rule_index, region)),
+            let model_selection;
+            let region_selection;
+            let filter: &dyn RowFilter = match candidate {
+                Candidate::Model(model) => {
+                    model_selection = ModelSelection {
+                        rows: prepared.rows.as_ref().expect("prepared before model scan"),
+                        model,
+                    };
+                    &model_selection
+                }
+                Candidate::Region(_, region) => {
+                    region_selection = prepared.selection(rule_index, region);
+                    &region_selection
+                }
             };
-            let filter = selection
-                .as_ref()
-                .map(|selection| selection as &dyn RowFilter);
             let queries = prepared.completed.queries(
                 crate::JoinStrategy::Indexed,
                 &prepared.limits,
@@ -1153,7 +1162,7 @@ impl ConstraintChecker<'_> {
                 .expect("prepared above")
                 .rows(
                     &queries,
-                    filter,
+                    Some(filter),
                     &computation,
                     &prepared.limits,
                     budget,

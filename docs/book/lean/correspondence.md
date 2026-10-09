@@ -1431,6 +1431,13 @@ events and contradiction handling. A set bit whose event is still pending does
 not alone justify the shortcut. The omitted scan changes charged work and
 resource-limited prefixes; no exact old work count is claimed.
 
+The same processed-count invariant permits `Closure::teach_chain` to omit a
+complete downward scan when every conjunction operand is already sure, or every
+disjunction operand is already never. Each omitted update would be unchanged.
+The root event still updates parents, ranking and support wakeups. Pending bits
+without a complete processed count retain the scan. This does not change the
+`FormulaChains` laws or discharge the concrete queue and counter obligations.
+
 The region candidate walk and frozen proper-subset queries share one
 immutable index constructed with the exact original `Theory`, built by its one
 owner when the walk first needs it. Reuse checks instance identity. Each
@@ -2077,6 +2084,15 @@ by `completed_template_unchanged`; it adds no semantic law. Canonical atom and
 component ownership, occurrence alignment, charged reads and failure invalidation
 remain implementation obligations. The Lean law does not verify the matcher.
 
+`consequence_reads_change` proves that a newly available consequence must read a
+changed atom after a completed scan found none. `positive_changes_cover_consequences`
+specializes coverage to positive occurrences when every changed read has that
+sign. Rust can restrict a later scan to one newly held atom only if it retains
+all affected occurrences, accumulates changes since the completed scan, and
+preserves scalar evaluation and the unit test. Multiple changed atoms, cuts,
+negative readers, generated bindings or uncertain completion retain a full
+scan. These laws do not verify the cursor's row coordinates or query schedule.
+
 Sharing the immutable rule-to-predicate and atom-to-predicate mappings adds no
 semantic premise. Rust must establish that the published mapping belongs to
 the exact core, covers every dependency and retains no candidate decisions.
@@ -2482,7 +2498,12 @@ map. A declined attempt retains the ordinary cursor behavior, with no certificat
 Candidate row filters neither narrow the certificate's covering domains nor
 supply source-family evidence. Their necessary conditions compose with computed
 domains while preserving each complete violation witness, as required by
-`StreamedRegions.necessary_selection_preserves_witness`. Runtime preparation and
+`StreamedRegions.necessary_selection_preserves_witness`. For a fixed final
+candidate, `StreamedConstraints.clear_selection` gives the corresponding
+complete-satisfaction law. Rust authenticates source rows and the candidate's
+catalog, then excludes mapped positive rows absent from that candidate. Unmapped
+rows keep the ordinary fallback. Every completed body still queries the model;
+this filter lends no region truth or positive-row proof. Runtime preparation and
 scratch remain charged to the checker, independently of the original admission
 receipt. Retained preparation is charged once; borrowed headers do not claim a
 second allocation. Existing laws do not verify this capture/frozen correspondence, typed

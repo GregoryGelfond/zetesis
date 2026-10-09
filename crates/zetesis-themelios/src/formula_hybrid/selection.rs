@@ -1,4 +1,4 @@
-//! Necessary region truth applied before binding and scalar evaluation.
+//! Necessary candidate truth applied before binding and scalar evaluation.
 //!
 //! Rows still belong to complete possible support. This view only maps their
 //! original occurrence positions to the admitted formula's dense IDs; it owns
@@ -12,7 +12,7 @@ pub(super) use predicates::RulePredicates;
 use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{
-    AtomLookup, AtomRow,
+    AtomLookup, AtomRow, Model,
     catalog::Atoms,
     relation::{Failure, Row},
 };
@@ -152,6 +152,98 @@ impl<'source> SourceRows<'source> {
     }
 }
 
+impl SourceRows<'_> {
+    fn resolve(
+        &self,
+        atoms: Atoms<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        // Resolve the exact occurrence map once per joined source. Equal atom
+        // or predicate contents cannot establish the position correspondence.
+        for (position, source) in self.predicates.iter().enumerate() {
+            counters.work(limits, location)?;
+            if atoms.same_occurrences(source.atoms) {
+                return Ok(position);
+            }
+        }
+        Err(FormulaFailure::SupportRelation {
+            error: Failure::Owner,
+            location,
+        })
+    }
+
+    fn position(
+        &self,
+        source: usize,
+        row: Row<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<usize>, FormulaFailure> {
+        // The join pairs this slot with its authenticated immutable relation.
+        // Reordered/repeated rows retain their original source index.
+        counters.work(limits, location)?;
+        self.predicates
+            .get(source)
+            .and_then(|source| source.positions.get(row.source_index()))
+            .copied()
+            .ok_or(FormulaFailure::SupportRelation {
+                error: Failure::Owner,
+                location,
+            })
+    }
+}
+
+/// Necessary positive membership in this final check's exact-catalog model.
+/// The caller authenticates the model's owner before preparing or lending rows.
+/// No truth from a previous region or model is retained. This filter only lends
+/// eligibility: the complete body still queries the supplied model separately.
+pub(super) struct ModelSelection<'a, 'source> {
+    pub(super) rows: &'a SourceRows<'source>,
+    pub(super) model: &'a Model,
+}
+
+impl RowFilter for ModelSelection<'_, '_> {
+    fn resolve(
+        &self,
+        atoms: Atoms<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        self.rows.resolve(atoms, limits, counters, location)
+    }
+
+    fn permits(
+        &self,
+        source: usize,
+        row: Row<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        if self
+            .rows
+            .position(source, row, limits, counters, location)?
+            .is_none()
+        {
+            // A source row excluded by original scalar admission need not have
+            // a catalog position. Keep the ordinary match/scalar/body fallback.
+            return Ok(true);
+        }
+        // Positions in a model are in logical atom order, not numeric dense-ID
+        // order. Its existing canonical selection handles aliases and signed
+        // typed identity without a new membership allocation. The map charge
+        // above precedes the source-row read; each lookup probe is charged too.
+        self.model
+            .lookup()
+            .get_with(row.atom(), || counters.work(limits, location))
+            .map(|found| found.is_some())
+    }
+}
+
 fn reserve<T>(
     values: &mut Vec<T>,
     count: usize,
@@ -268,18 +360,7 @@ impl Selection<'_, '_> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Option<usize>, FormulaFailure> {
-        // The join pairs this slot with its authenticated immutable relation.
-        // Reordered/repeated rows retain their original source index.
-        counters.work(limits, location)?;
-        self.rows
-            .predicates
-            .get(source)
-            .and_then(|source| source.positions.get(row.source_index()))
-            .copied()
-            .ok_or(FormulaFailure::SupportRelation {
-                error: Failure::Owner,
-                location,
-            })
+        self.rows.position(source, row, limits, counters, location)
     }
 }
 
@@ -467,18 +548,7 @@ impl RowFilter for Selection<'_, '_> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        // Resolve the exact occurrence map once per joined source. Equal atom
-        // or predicate contents cannot establish the position correspondence.
-        for (position, source) in self.rows.predicates.iter().enumerate() {
-            counters.work(limits, location)?;
-            if atoms.same_occurrences(source.atoms) {
-                return Ok(position);
-            }
-        }
-        Err(FormulaFailure::SupportRelation {
-            error: Failure::Owner,
-            location,
-        })
+        self.rows.resolve(atoms, limits, counters, location)
     }
 
     fn permits(

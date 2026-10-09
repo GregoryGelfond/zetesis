@@ -353,7 +353,12 @@ predicate, fixed constants or constructor shapes can establish that none of a
 constraint's occurrences can read it. Variables remain unconstrained for this
 test; several changed atoms retain predicate-level invalidation. These charged
 checks use the existing packed masks and predicate dependencies, without a table
-of ground constraints. Potentially failing arithmetic retains the sequential scan. The
+of ground constraints. After a completed scan found no deduction, one newly held
+atom can also restrict the next scan to its positive occurrences. Changes are
+accumulated until that rule is scanned; a second distinct change, a cut, a
+negative reader or generated bindings retains a full scan. Every matching
+occurrence and the ordinary body test remain required. Potentially failing
+arithmetic retains the sequential scan. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
 state the semantic premises separately from runtime error and storage handling.
 
@@ -366,7 +371,7 @@ The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/cr
 retains prepared constraints, the closed canonical base and the support
 relations (with their postings) that those constraints read; discovery and
 order indexes and other relations are released when admission closes support. Each checker has its
-own mutable state and borrows a checked dense atom lookup on its first region
+own mutable state and borrows a checked dense atom lookup on its first candidate
 operation. A prepared correspondence maps support rows to original dense atom
 IDs without copying their tuples. Refutation selects held positive rows before
 binding or scalar evaluation. In the admitted total fragment, consequences use
@@ -378,8 +383,10 @@ A necessary template test also checks whether each signed predicate
 has any held atom, or any cut atom for a default-negated literal. The latter
 uses the whole original catalog, including unsupported negative occurrences.
 These selections can retain extra work; the complete body test still establishes
-each refutation. They do not filter the separate arithmetic-admission traversal
-or the final candidate check.
+each refutation. They do not filter the separate arithmetic-admission traversal.
+The final candidate check separately selects mapped positive rows present in
+that candidate's own model. It retains unmapped rows and checks every completed
+body against the same model; earlier region decisions supply no authority.
 
 A selected join can lend evidence that every positive occurrence in its current
 body already matched a mapped, held row, or that exactly one matched occurrence

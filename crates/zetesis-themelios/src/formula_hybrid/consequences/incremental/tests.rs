@@ -1,3 +1,4 @@
+mod delta;
 mod preparation;
 mod retention;
 mod wakeups;
@@ -99,7 +100,7 @@ fn unchanged_regions_cannot_forget_unapplied_units() {
             ConstraintConsequence::Cut { .. }
         ));
     }
-    assert!(state(&checker).clean.iter().all(|clean| !clean));
+    assert!(state(&checker).scans.iter().all(|scan| *scan == Scan::Full));
 }
 
 #[test]
@@ -145,7 +146,7 @@ fn completed_rules_wake_on_each_default_polarity() {
         assert!(
             matches!(pass(&mut checker, &region, ConstraintRegionPass::First), ConstraintConsequence::Hold { atom, .. } if atom == r)
         );
-        assert!(state(&checker).clean[0]);
+        assert_eq!(state(&checker).scans[0], Scan::Clean);
         assert!(region.hold(r));
         let q = atom(&owner, "q");
         assert!(if held { region.hold(q) } else { region.cut(q) });
@@ -482,7 +483,7 @@ fn work_refusal_discards_a_partial_rule_batch() {
         );
         assert_eq!(failure.statistics.work, limit);
         assert!(!state(&checker).valid);
-        assert!(state(&checker).clean.iter().all(|clean| !clean));
+        assert!(state(&checker).scans.iter().all(|scan| *scan == Scan::Full));
         assert!(!checker.consequence_active);
         observed_partial = true;
         break;

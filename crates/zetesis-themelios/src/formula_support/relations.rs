@@ -823,6 +823,36 @@ impl<'source> Relations<'source> {
         self.find(predicate.into())?.relation.row(position)
     }
 
+    /// Preserve the original predicate-local row from a typed canonical lookup.
+    /// `rows` was resolved from this snapshot; the catalog authenticates the
+    /// source read and compares foreign atom payloads semantically.
+    pub(super) fn lookup_at(
+        &self,
+        rows: &RelationRows<'_>,
+        atom: AtomRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<usize>, FormulaFailure> {
+        let owner_bytes = rows.catalog.retained_bytes();
+        let mut checked = relation_limits(limits, counters, atom.predicate().arity(), owner_bytes);
+        checked.max_values = usize::MAX;
+        let receipt = rows
+            .catalog
+            .lookup(self.read.expect("nonempty snapshot"), atom, checked)
+            .map_err(|error| {
+                catalog_failure(
+                    error,
+                    limits,
+                    counters,
+                    self.current_bytes() - owner_bytes,
+                    location,
+                )
+            })?;
+        counters.charge_work(receipt.storage.construction_work, limits, location)?;
+        Ok(receipt.row)
+    }
+
     pub(super) fn contains(
         &self,
         key: &AtomKey<'_>,

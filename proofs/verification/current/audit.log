@@ -1411,6 +1411,10 @@
 'Zetesis.StreamedConsequences.unit_body_unchanged' depends on axioms: [propext]
 'Zetesis.StreamedConsequences.consequence_unchanged' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConsequences.completed_template_unchanged' depends on axioms: [propext, Quot.sound]
+'Zetesis.StreamedConsequences.consequence_reads_change' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.StreamedConsequences.positive_changes_cover_consequences' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.StreamedConsequences.fresh_of_inside' does not depend on any axioms
 'Zetesis.StreamedConsequences.falsify_not_fresh' depends on axioms: [propext]
 'Zetesis.StreamedConsequences.open_count_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1424,6 +1428,7 @@
  Quot.sound]
 'Zetesis.StreamedConstraints.clear_append' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConstraints.clear_permutation' depends on axioms: [propext]
+'Zetesis.StreamedConstraints.clear_selection' depends on axioms: [propext]
 'Zetesis.StreamedConstraints.scan_preserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConstraints.enough_fuel_no_pending' depends on axioms: [propext, Quot.sound]
 'Zetesis.StreamedConstraints.scan_complete_iff' depends on axioms: [propext, Quot.sound]

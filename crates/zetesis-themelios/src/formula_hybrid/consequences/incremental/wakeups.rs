@@ -1,7 +1,9 @@
 //! Necessary occurrence reads refine one changed atom, never a dense change set.
 //!
 //! This replaces the existing per-predicate flag, not the dependency owner.
-//! Multiple changed atoms keep ordinary invalidation. Slots, including repeated
+//! Multiple changed atoms keep ordinary invalidation. A singleton held atom
+//! may anchor a completed negative scan only after every potentially affected
+//! occurrence has been checked positive. Slots, including repeated
 //! names and lowered constructor temporaries, are independent wildcards here:
 //! failing a constant or constructor check excludes a read; passing proves none.
 
@@ -31,23 +33,30 @@ impl Change {
 
 /// The ordered dependency row has one group per original atom occurrence.
 /// Both it and the canonical changed IDs belong to this exact prepared core.
-pub(super) fn changed(
+/// Clean means no possible read changed; `PositiveDelta` covers all changed reads
+/// with the same newly held atom. Full declines reuse. Relevant generated frames
+/// also decline; unchanged generated rules retain their prior clean evidence.
+pub(super) fn classify(
     rule: &RuleIr,
     dependencies: &[usize],
     changes: &[Change],
     prepared: &PreparedConstraints<'_>,
+    region: &zetesis_cpu::regions::Region,
     counters: &mut Counters,
-) -> Result<bool, FormulaFailure> {
+) -> Result<super::Scan, FormulaFailure> {
     let mut groups = dependencies.iter();
+    let mut required = super::Scan::Clean;
+    let mut generated = false;
     for literal in &rule.body {
         counters.work(&prepared.limits, rule.location)?;
+        generated |= crate::formula_binding_cursor::target(literal).is_some();
         if literal_atom(literal).is_none() {
             continue;
         }
         let &group = groups.next().expect("one group per original occurrence");
         match changes[group] {
             Change::None => {}
-            Change::Several => return Ok(true),
+            Change::Several => return Ok(super::Scan::Full),
             Change::One(position) => {
                 counters.work(&prepared.limits, rule.location)?;
                 let atom = prepared
@@ -67,13 +76,27 @@ pub(super) fn changed(
                     components,
                     &mut GroundingWork::new(&prepared.limits, counters, rule.location),
                 )? {
-                    return Ok(true);
+                    if !matches!(
+                        literal_atom(literal),
+                        Some((themelios_program::program::DefaultNegation::None, _))
+                    ) || region.decision(position) != Some(true)
+                    {
+                        return Ok(super::Scan::Full);
+                    }
+                    required.include(super::Scan::PositiveDelta(position));
+                    if required == super::Scan::Full {
+                        return Ok(required);
+                    }
                 }
             }
         }
     }
     debug_assert!(groups.next().is_none());
-    Ok(false)
+    Ok(if generated && required != super::Scan::Clean {
+        super::Scan::Full
+    } else {
+        required
+    })
 }
 
 /// Only immutable constants and constructor descriptors constrain the read.

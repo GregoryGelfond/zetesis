@@ -697,3 +697,192 @@ fn an_unmapped_gap_retains_the_open_restriction() {
         });
     }
 }
+
+#[test]
+fn anchors_resolve_foreign_keys_to_local_source_rows() {
+    // Foreign canonical position 0 names p(2); the source's p(2) is local row
+    // 2. p(9) is a valid canonical atom that is absent from the source relation.
+    let mut foreign = Fixture::from_atoms([atom("p", &[2]), atom("p", &[9])], location());
+    foreign.with(location(), |keys, _, _| {
+        let atoms = keys.source_atoms().next().unwrap().1;
+        for (key, present) in [(0, true), (1, false)] {
+            let changed = atoms.at(key).unwrap();
+            let mut fixture = Fixture::from_atoms(
+                [
+                    atom("p", &[3]),
+                    atom("p", &[1]),
+                    atom("p", &[2]),
+                    atom("q", &[10]),
+                    atom("q", &[20]),
+                ],
+                location(),
+            );
+            let rule = rule(
+                vec![
+                    pattern(&mut fixture, "p", &[0]),
+                    pattern(&mut fixture, "q", &[1]),
+                ],
+                2,
+            );
+            let selection = Evidence(|row: zetesis_core::relation::Row<'_, '_>| {
+                if row.predicate().name() == "q" {
+                    RowSelection::Open {
+                        atom: 100 + row.position(),
+                    }
+                } else {
+                    RowSelection::Held
+                }
+            });
+            with_fixture(fixture, |support, computation, budget, counters| {
+                let limits = FormulaLimits::default();
+                let mut rows = Join::filtered_rule(
+                    &rule,
+                    support,
+                    Some(&selection),
+                    None,
+                    budget,
+                    Context::new(computation, &limits, counters, location()),
+                )
+                .unwrap()
+                .anchored(0, changed, &limits, counters, location())
+                .unwrap();
+                // The planner starts at the smaller q relation. Restricting p
+                // must preserve this depth and its independently bound prefix.
+                assert_eq!(
+                    rows.join
+                        .plan
+                        .patterns
+                        .iter()
+                        .map(|pattern| pattern.source)
+                        .collect::<Vec<_>>(),
+                    [1, 0]
+                );
+                let mut observed = Vec::new();
+                while let Some(row) = rows
+                    .next_row(computation, &limits, budget, counters, location())
+                    .unwrap()
+                {
+                    assert!(row.passes);
+                    assert_eq!(
+                        row.positives.as_ref().unwrap().open_in(&rule.body),
+                        Some((1, 100 + observed.len()))
+                    );
+                    observed.push(exported(&row.values, computation));
+                }
+                if present {
+                    assert_eq!(
+                        observed,
+                        [10, 20].map(|q| vec![Some(Value::Number(2)), Some(Value::Number(q))])
+                    );
+                    assert!(matches!(
+                        rows.join.anchor.as_ref().unwrap().row,
+                        super::super::AnchorRow::Present(2)
+                    ));
+                } else {
+                    assert!(observed.is_empty());
+                    assert!(matches!(
+                        rows.join.anchor.as_ref().unwrap().row,
+                        super::super::AnchorRow::Absent
+                    ));
+                }
+                // The cached local row or absence survives both q prefixes.
+                assert_eq!(
+                    rows.join
+                        .plan
+                        .patterns
+                        .iter()
+                        .map(|pattern| pattern.source)
+                        .collect::<Vec<_>>(),
+                    [1, 0]
+                );
+            });
+        }
+    });
+}
+
+#[test]
+fn an_anchor_keeps_repeated_variable_matching() {
+    let mut fixture = Fixture::from_atoms([atom("p", &[1, 2]), atom("p", &[2, 2])], location());
+    let rule = rule(vec![pattern(&mut fixture, "p", &[0, 0])], 1);
+    let selection = Evidence(|_: zetesis_core::relation::Row<'_, '_>| RowSelection::Held);
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let limits = FormulaLimits::default();
+        let atoms = support.source_atoms().next().unwrap().1;
+        for position in 0..2 {
+            let mut rows = Join::filtered_rule(
+                &rule,
+                support,
+                Some(&selection),
+                None,
+                budget,
+                Context::new(computation, &limits, counters, location()),
+            )
+            .unwrap()
+            .anchored(
+                0,
+                atoms.at(position).unwrap(),
+                &limits,
+                counters,
+                location(),
+            )
+            .unwrap();
+            let first = rows
+                .next_row(computation, &limits, budget, counters, location())
+                .unwrap();
+            if position == 0 {
+                assert!(first.is_none(), "a singleton domain is not a pattern match");
+            } else {
+                let row = first.unwrap();
+                assert!(row.passes);
+                assert_eq!(exported(&row.values, computation), [Some(Value::Number(2))]);
+            }
+            assert!(
+                rows.next_row(computation, &limits, budget, counters, location())
+                    .unwrap()
+                    .is_none()
+            );
+        }
+    });
+}
+
+#[test]
+fn refused_anchor_resolution_publishes_no_row() {
+    let mut fixture = Fixture::from_atoms([atom("p", &[1]), atom("p", &[2])], location());
+    let rule = rule(vec![pattern(&mut fixture, "p", &[0])], 1);
+    let selection = Evidence(|_: zetesis_core::relation::Row<'_, '_>| RowSelection::Held);
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let limits = FormulaLimits::default();
+        let atom = support.source_atoms().next().unwrap().1.at(1).unwrap();
+        let mut rows = Join::filtered_rule(
+            &rule,
+            support,
+            Some(&selection),
+            None,
+            budget,
+            Context::new(computation, &limits, counters, location()),
+        )
+        .unwrap()
+        .anchored(0, atom, &limits, counters, location())
+        .unwrap();
+        let stopped = FormulaLimits {
+            max_work: counters.accounting.work,
+            ..limits
+        };
+        let pattern = rows.join.plan.patterns[0];
+        assert!(matches!(
+            rows.join.prepare_probe(
+                pattern,
+                Context::new(computation, &stopped, counters, location()),
+            ),
+            Err(FormulaFailure::Limit {
+                resource: crate::FormulaResource::Work,
+                ..
+            })
+        ));
+        assert!(rows.join.probes[0].is_none());
+        assert!(matches!(
+            rows.join.anchor.as_ref().unwrap().row,
+            super::super::AnchorRow::Unresolved
+        ));
+    });
+}

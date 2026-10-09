@@ -1624,7 +1624,10 @@ impl<C: Count> Closure<'_, C> {
         step
     }
 
-    /// What a chain's own knowledge leaves its operands.
+    /// What a chain's own knowledge leaves its operands. A complete processed
+    /// count means every operand already has the required bit, so its downward
+    /// scan teaches nothing. Counts never lead bits; the root's own event,
+    /// parents and support wakeups still run even when this scan is omitted.
     fn teach_chain(
         &mut self,
         index: &Narrower,
@@ -1643,7 +1646,7 @@ impl<C: Count> Closure<'_, C> {
                 if self.known.never_operands.get(chain) + 1 == total {
                     step = step.join(self.unit(index, chain, work)?);
                 }
-            } else {
+            } else if self.known.sure_operands.get(chain) != total {
                 for &operand in operands {
                     work.tick()?;
                     step = step.join(self.sure(operand));
@@ -1652,9 +1655,11 @@ impl<C: Count> Closure<'_, C> {
         }
         if bit(self.known.never, root) {
             if disjunction {
-                for &operand in operands {
-                    work.tick()?;
-                    step = step.join(self.never(operand));
+                if self.known.never_operands.get(chain) != total {
+                    for &operand in operands {
+                        work.tick()?;
+                        step = step.join(self.never(operand));
+                    }
                 }
             } else if self.known.sure_operands.get(chain) + 1 == total {
                 step = step.join(self.unit(index, chain, work)?);

@@ -15,6 +15,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Restrict eligible lazy constraint rechecks to occurrences of a newly true
+  atom. Preserve full checks when several atoms change or the restriction
+  cannot establish complete coverage.
+- Exclude absent positive atoms before joining a candidate's final constraints,
+  using the same source-row mapping as region checks. Complete body checks and
+  reduct membership remain required.
 - Specialize positive constraints over fixed fact relations, removing repeated
   witnesses while preserving original atoms and statement identity.
 - Avoid repeating completed lazy constraint checks when a changed atom cannot

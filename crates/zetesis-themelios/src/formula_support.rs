@@ -1012,6 +1012,9 @@ pub(crate) struct Join<'a, 'source> {
     // Installed only by filtered_rule before traversal; never replaced while
     // its authenticated source slots or held prefix can be retained.
     row_filter: Option<&'a dyn RowFilter>,
+    /// An admitted selected query's one original positive occurrence. Its
+    /// immutable source row remains resolved across ordinary backtracking.
+    anchor: Option<rows::Anchor<'a>>,
     /// Current matched positives are held, except at most one mapped open pivot.
     /// Enabled only for a borrowed non-generated filtered binding; undo
     /// truncates it with that binding. No truth survives a cursor/check.
@@ -1585,6 +1588,7 @@ impl<'a, 'source> Join<'a, 'source> {
             delta,
             domains: None,
             row_filter: None,
+            anchor: None,
             positive_prefix: None,
             support,
             values,
@@ -2386,6 +2390,29 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         if self.probes[self.depth].is_none() {
             let source = self.resolutions[self.depth].rows();
+            if let Some(anchor) = &mut self.anchor
+                && anchor.occurrence == pattern.source
+            {
+                if matches!(anchor.row, rows::AnchorRow::Unresolved) {
+                    // Source/filter authentication above must complete before
+                    // an absent or singleton domain can be published.
+                    counters.work(limits, location)?;
+                    anchor.row = match source {
+                        Some(source) => self
+                            .support
+                            .lookup_at(source, anchor.atom, limits, counters, location)?
+                            .map_or(rows::AnchorRow::Absent, rows::AnchorRow::Present),
+                        None => rows::AnchorRow::Absent,
+                    };
+                }
+                let range = match anchor.row {
+                    rows::AnchorRow::Absent => 0..0,
+                    rows::AnchorRow::Present(row) => row..row + 1,
+                    rows::AnchorRow::Unresolved => unreachable!("resolved above"),
+                };
+                self.probes[self.depth] = Some(Probe::Indexed(delta::Rows::Interval(range)));
+                return Ok(());
+            }
             if let structural::Selection::Posting(posting) = self.structural_selection(
                 pattern.pattern,
                 source,

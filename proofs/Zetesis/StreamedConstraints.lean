@@ -71,6 +71,24 @@ theorem clear_permutation (test : ι → Bool) {first second : List ι}
   · intro clear occurrence member
     exact clear occurrence (same.mem_iff.mp member)
 
+/-- Selecting occurrences by a necessary condition for a true body preserves
+complete original constraint satisfaction in the fixed candidate.
+
+Proof outline: every violation passes the necessary filter. A completed filtered
+check therefore excludes all original violations; the converse follows because
+each retained occurrence belonged to the source. Evaluator agreement and complete
+source coverage remain premises of the later connection to answer sets. -/
+theorem clear_selection (test keep : ι → Bool) (source : List ι)
+    (necessary : ∀ occurrence ∈ source, test occurrence = true → keep occurrence = true) :
+    Clear test (source.filter keep) ↔ Clear test source := by
+  constructor
+  · intro clear occurrence member fired
+    have selected : occurrence ∈ source.filter keep :=
+      List.mem_filter.mpr ⟨member, necessary occurrence member fired⟩
+    exact clear occurrence selected fired
+  · intro clear occurrence selected
+    exact clear occurrence (List.mem_filter.mp selected).1
+
 /-- Every bounded scan preserves its source accounting.
 
 Proof outline: zero fuel leaves the whole list pending. An empty list completes.

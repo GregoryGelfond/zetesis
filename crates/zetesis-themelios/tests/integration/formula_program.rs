@@ -315,14 +315,9 @@ fn constructed_hybrid_check_refusal_retains_its_statement() {
     let program = Arc::new(Program::of([bounded_choice(), Rule::constraint(atom("q"))]));
     let original = Arc::downgrade(&program);
     let owner = prepare(program).ground_hybrid().unwrap();
-    let setup_work = owner
-        .checker(ConstraintCheckLimits::default())
-        .unwrap()
-        .statistics()
-        .work;
     let mut checker = owner
         .checker(ConstraintCheckLimits {
-            max_work: setup_work,
+            max_substitutions: 0,
             ..ConstraintCheckLimits::default()
         })
         .unwrap();
@@ -333,7 +328,7 @@ fn constructed_hybrid_check_refusal_retains_its_statement() {
     drop(model);
     drop(owner);
     let ConstraintCheckCause::Source(error) = failure.cause else {
-        panic!("constraint preparation needs additional source work");
+        panic!("the constraint check needs a substitution");
     };
     assert!(matches!(error.cause(), FormulaFailure::Limit { .. }));
     assert_retained_program(&error, &original);

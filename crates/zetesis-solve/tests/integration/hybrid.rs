@@ -472,8 +472,12 @@ fn cancellation_preserves_only_the_verified_prefix() {
 #[test]
 fn workers_do_not_multiply_the_substitution_ceiling() {
     // A zero ceiling refuses each check's first substitution, whatever the
-    // number of workers checking concurrently.
-    let admitted = hybrid(MONOTONE, &limits());
+    // number of workers checking concurrently. Every core model contains d,
+    // so candidate row filtering cannot skip all constraint substitutions.
+    let admitted = hybrid(
+        include_str!("../fixtures/hybrid/substitution-ceiling.lp"),
+        &limits(),
+    );
     for workers in [1, 4] {
         let config = SolveConfig {
             workers: NonZeroUsize::new(workers).unwrap(),

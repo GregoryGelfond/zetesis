@@ -51,12 +51,50 @@ fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
     );
     Model::from_positions(owner.atom_catalog(), positions).unwrap()
 }
+fn all_atoms(owner: &HybridFormula) -> Model {
+    Model::from_positions(owner.atom_catalog(), 0..owner.atom_catalog().atoms().len()).unwrap()
+}
 fn verdict(owner: &HybridFormula, selected: &[&str]) -> ConstraintVerdict {
     owner
         .checker(ConstraintCheckLimits::default())
         .unwrap()
         .check(&model(owner, selected), &Cancellation::default())
         .unwrap()
+}
+
+/// Publish immutable shared row identities before comparing checker receipts.
+/// Each compared checker must still attach and account for its own borrowed map.
+fn prepare_shared_rows(owner: &HybridFormula) {
+    let empty = model(owner, &[]);
+    let _ = owner
+        .checker(ConstraintCheckLimits::default())
+        .unwrap()
+        .check(&empty, &Cancellation::default())
+        .unwrap();
+}
+
+#[test]
+fn model_selection_skips_absent_positive_rows() {
+    let owner = admit("{p(1..8)}. :-p(X),X>0.");
+    let mut checker = owner
+        .checker(ConstraintCheckLimits {
+            max_substitutions: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let empty = model(&owner, &[]);
+    let selected = model(&owner, &["p(8)"]);
+    for candidate in [&empty, &selected, &empty] {
+        let before = checker.statistics().substitutions;
+        let verdict = checker.check(candidate, &Cancellation::default()).unwrap();
+        if candidate.positions().is_empty() {
+            assert_eq!(verdict, ConstraintVerdict::Satisfied);
+            assert_eq!(checker.statistics().substitutions, before);
+        } else {
+            assert!(matches!(verdict, ConstraintVerdict::Violated { .. }));
+            assert_eq!(checker.statistics().substitutions, before + 1);
+        }
+    }
 }
 
 #[test]
@@ -287,14 +325,14 @@ fn cancellation_preserves_the_unchecked_verdict() {
 fn each_check_has_its_own_substitution_allowance() {
     // One substitution per check under a one-substitution ceiling: the
     // ceiling bounds each check, never the number of checks.
-    let owner = admit("{p}. :-p.");
+    let owner = admit("{p;q}. :-p,not q.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 1,
             ..Default::default()
         })
         .unwrap();
-    let candidate = model(&owner, &[]);
+    let candidate = model(&owner, &["p", "q"]);
     for _ in 0..3 {
         assert_eq!(
             checker.check(&candidate, &Cancellation::default()).unwrap(),
@@ -306,14 +344,14 @@ fn each_check_has_its_own_substitution_allowance() {
 
 #[test]
 fn moving_a_checker_preserves_its_receipts() {
-    let owner = admit("{p}. :-p.");
+    let owner = admit("{p;q}. :-p,not q.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 1,
             ..Default::default()
         })
         .unwrap();
-    let candidate = model(&owner, &[]);
+    let candidate = model(&owner, &["p", "q"]);
     assert_eq!(
         checker.check(&candidate, &Cancellation::default()).unwrap(),
         ConstraintVerdict::Satisfied
@@ -341,6 +379,7 @@ fn each_check_has_its_own_work_allowance() {
     // costly; three checks under it charge what three unbounded checks do.
     let owner = admit("{p}. :-p.");
     let candidate = model(&owner, &[]);
+    prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     baseline
         .check(&candidate, &Cancellation::default())
@@ -368,11 +407,21 @@ fn a_check_is_refused_relative_to_its_own_allowance() {
     // A violating candidate stops at the first constraint; a satisfying one
     // scans both. The ceiling admits the cheap first check, so the costly
     // second check is refused against the ceiling itself, not the checker's
-    // history. Reaching the last q value makes the first allowance large
-    // enough to prepare the second join, so this tests execution work.
-    let owner = admit("{p}. {q(1..32)}. :-p,q(X). :-q(X),q(Y),X<Y.");
+    // history. The second candidate holds every q and r, so not r keeps
+    // the quadratic second family false without filtering its positive rows.
+    let owner = admit("{p;r}. {q(1..32)}. :-p,q(X). :-q(X),q(Y),X<Y,not r.");
     let violating = model(&owner, &["p", "q(32)"]);
-    let satisfying = model(&owner, &[]);
+    let satisfying = Model::from_positions(
+        owner.atom_catalog(),
+        owner
+            .atom_catalog()
+            .atoms()
+            .iter()
+            .enumerate()
+            .filter_map(|(position, atom)| (atom.predicate().name() != "p").then_some(position)),
+    )
+    .unwrap();
+    prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert!(matches!(
         baseline
@@ -420,6 +469,7 @@ fn each_check_has_its_own_scalar_allowance() {
         "../fixtures/hybrid-constraints/scalar-allowance.lp"
     ));
     let candidate = model(&owner, &["p(f(1))"]);
+    prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
         baseline
@@ -485,6 +535,8 @@ fn streamed_satisfaction_composes_with_the_retained_core() {
         "d(1..2). {p(2..3)}. :-d(X),Y=X+1,p(Y),Y>2.",
         "{p(1);p(2)}. :-#count{X:p(X)}>1. :-p(1),not p(2).",
         "{p(f(1));p(f(2))}. :-p(f(X)),X=2.",
+        "{p(f(1));p(f(2));q(1);q(2)}. :-p(f(X)),q(Y),X=Y,not q(2).",
+        "{p(1);p(\"1\");-p(1)}. :-p(X),p(Y),X=Y,not -p(X).",
         "{p(4,4);p(4,5);p(5,5)}.q(2). :-p(X,X),q(Y),X/2=Y.",
         "{p(1..3)}. X=2 :-p(X),X/2=1.",
     ] {
@@ -559,14 +611,14 @@ fn frozen_checks_reuse_speculative_column_values() {
 
 #[test]
 fn computed_domains_select_only_matching_substitutions() {
-    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
+    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     for count in 1..=2 {
-        // Omitting all candidate atoms makes checking exhaust the streamed
-        // family. Only X=4 and X=5 can satisfy its computed equality.
+        // Every positive row is present. The negative block literal keeps
+        // bodies false; only X=4 and X=5 satisfy the computed equality.
         assert_eq!(
             checker
-                .check(&model(&owner, &[]), &Cancellation::default())
+                .check(&all_atoms(&owner), &Cancellation::default())
                 .unwrap(),
             ConstraintVerdict::Satisfied
         );
@@ -576,8 +628,9 @@ fn computed_domains_select_only_matching_substitutions() {
 
 #[test]
 fn computed_selection_keeps_inclusive_work_limits() {
-    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
-    let candidate = model(&owner, &[]);
+    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
+    let candidate = all_atoms(&owner);
+    prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
         baseline
@@ -613,9 +666,9 @@ fn computed_selection_keeps_inclusive_work_limits() {
 
 #[test]
 fn retained_computed_domains_move_with_the_checker() {
-    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
+    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let candidate = model(&owner, &[]);
+    let candidate = all_atoms(&owner);
     assert_eq!(
         checker.check(&candidate, &Cancellation::default()).unwrap(),
         ConstraintVerdict::Satisfied
@@ -637,9 +690,10 @@ fn retained_computed_domains_move_with_the_checker() {
 
 #[test]
 fn checkers_sharing_an_allowance_each_check_within_it() {
-    let owner = admit("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.");
-    let candidate = model(&owner, &[]);
+    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
+    let candidate = all_atoms(&owner);
     let cancellation = Cancellation::default();
+    prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
         baseline.check(&candidate, &cancellation).unwrap(),
@@ -727,13 +781,15 @@ fn preparation_refusals_publish_their_accepted_prefix() {
 
 #[test]
 fn completed_checks_publish_before_returning() {
-    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
+    // Both checks finish a scalar-passing row. The negative literal keeps
+    // the first body false without removing its positive row from the join.
+    let owner = admit("{p(f(1));p(f(2));block}. :-p(f(X)),X>1,not block.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
     let cancellation = Cancellation::default();
     let mut checker = owner
         .checker_with_allowance(&allowance, &cancellation)
         .unwrap();
-    let satisfying = model(&owner, &["p(f(1))"]);
+    let satisfying = model(&owner, &["p(f(2))", "block"]);
     let violating = model(&owner, &["p(f(2))"]);
     for (candidate, satisfied) in [(&satisfying, true), (&violating, false)] {
         let verdict = checker.check(candidate, &cancellation).unwrap();
@@ -746,11 +802,11 @@ fn completed_checks_publish_before_returning() {
 
 #[test]
 fn refused_checks_publish_before_returning() {
-    // Both structural bindings survive the source filter. The empty candidate
-    // makes each body false, so no earlier violation can stop the scan.
-    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>0.");
+    // Both structural bindings survive model selection. The negative block
+    // literal makes each body false, so no earlier violation stops the scan.
+    let owner = admit("{p(f(1));p(f(2));block}. :-p(f(X)),X>0,not block.");
     let cancellation = Cancellation::default();
-    let candidate = model(&owner, &[]);
+    let candidate = model(&owner, &["p(f(1))", "p(f(2))", "block"]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
         baseline.check(&candidate, &cancellation).unwrap(),

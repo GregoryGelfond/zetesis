@@ -59,6 +59,15 @@ occurrence has a necessary constant or constructor mismatch. The existing law
 then applies directly. It does not prove a concrete occurrence matcher, its
 coverage across signs and scopes, or its resource and failure behavior.
 
+If a previously checked instance gains a consequence, `consequence_reads_change`
+shows that some occurrence reads changed bounds. Otherwise the unchanged-read
+law would give the same consequence before, contradicting the completed check.
+`positive_changes_cover_consequences` covers the new consequences by positive
+occurrences when all changed reads have that sign. A cursor restricted to a
+changed positive row must still enumerate every such occurrence, including
+aliases, and retain its original scalar and unit tests. The theorem does not
+identify source rows or prove that a particular changed atom is now held.
+
 These reuse laws do not prove that a concrete dirty list covers every changed
 read, that a retained batch belongs to the current owner or region, or that a
 cursor exhausted every required instance. Nor do they license advancing across

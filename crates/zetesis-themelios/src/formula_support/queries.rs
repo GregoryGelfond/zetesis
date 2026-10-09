@@ -128,6 +128,20 @@ impl<'source> Support<'source> {
             .map_err(|error| self.indexed_failure(error))
     }
 
+    pub(super) fn lookup_at(
+        &self,
+        rows: &RelationRows<'_>,
+        atom: zetesis_core::catalog::AtomRef<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<usize>, FormulaFailure> {
+        let scoped = self.indexed_limits(limits, counters, location)?;
+        self.relations
+            .lookup_at(rows, atom, &scoped, counters, location)
+            .map_err(|error| self.indexed_failure(error))
+    }
+
     /// A borrowed row owner is scoped to this query snapshot. It remains valid
     /// across join backtracking; no growing-directory index is retained.
     pub(super) fn resolve(
