@@ -175,13 +175,12 @@ fn three_choices() -> Theory {
 }
 
 #[test]
-fn frontier_byte_receipts_are_unchanged_from_the_roots_first_narrowing() {
+fn frontier_receipts_include_exact_knowledge_storage() {
     // One-candidate rounds keep one region active at a time, so the walk,
     // and every frontier receipt, is deterministic. The root is queued with
-    // no knowledge; its first narrowing creates the original theory's slot,
-    // reserved exactly, as a one-element vector was. From then on every
-    // byte figure equals the receipts recorded before the index moved to
-    // the walk's start; amortized reservation of that slot breaks them.
+    // no knowledge; its first narrowing creates exactly one reserved slot for
+    // the original theory. Receipts include its consolidated mask header and
+    // complete owned payload; amortized reservation of the slot changes them.
     let mut search = StableModels::with_region_producers(
         &three_choices(),
         nonzero(2),
@@ -200,9 +199,9 @@ fn frontier_byte_receipts_are_unchanged_from_the_roots_first_narrowing() {
         retained_bytes,
         peak_regions: 4,
         peak_capacity: 4,
-        peak_retained_bytes: 1352,
+        peak_retained_bytes: 1160,
     };
-    assert_eq!(receipts.first(), Some(&peak(3, 4, 1116)));
+    assert_eq!(receipts.first(), Some(&peak(3, 4, 972)));
     assert_eq!(receipts.last(), Some(&peak(0, 4, 408)));
 }
 
