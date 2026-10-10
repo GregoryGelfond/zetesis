@@ -653,6 +653,9 @@ import Zetesis
 #print axioms Zetesis.FormulaBounds.conj_chain_sure
 #print axioms Zetesis.FormulaBounds.conj_chain_never
 #print axioms Zetesis.FormulaBounds.conj_chain_unit
+#print axioms Zetesis.FormulaBounds.ChainEvidence.record_counts
+#print axioms Zetesis.FormulaBounds.ChainEvidence.records_counts
+#print axioms Zetesis.FormulaBounds.ChainEvidence.propagation_observations
 #print axioms Zetesis.FormulaRegions.classical_consequence_forces
 #print axioms Zetesis.FormulaRegions.classical_consequence_cuts
 #print axioms Zetesis.FormulaRegions.no_model_refutes

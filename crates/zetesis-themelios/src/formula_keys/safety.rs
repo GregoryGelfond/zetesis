@@ -22,9 +22,10 @@
 
 use std::collections::BTreeMap;
 
+use crate::scalar_arithmetic::Range;
 use themelios_program::program::{Arguments, Body, BodyElement, LiteralInner};
 use themelios_program::symbol::{Signature, Symbol, VarName};
-use themelios_program::term::{BinaryOp, Term, UnaryOp, Variable};
+use themelios_program::term::{Term, Variable};
 use zetesis_domain::{FactIndex, KeyWork, KeyedRelation, Stop, atom_signature};
 
 #[derive(Clone, Copy)]
@@ -173,14 +174,7 @@ impl<'a> Proof<'a> {
                     let Some(Value::Number(argument)) = values.pop() else {
                         return Ok(None);
                     };
-                    let low = if argument.low <= 0 && argument.high >= 0 {
-                        0
-                    } else {
-                        argument.low.abs().min(argument.high.abs())
-                    };
-                    let Some(bound) =
-                        Range::checked(low, argument.low.abs().max(argument.high.abs()))
-                    else {
+                    let Some(bound) = argument.absolute() else {
                         return Ok(None);
                     };
                     Value::Number(bound)
@@ -199,80 +193,6 @@ enum Value {
     Number(Range),
 }
 
-#[derive(Clone, Copy)]
-struct Range {
-    low: i64,
-    high: i64,
-}
-
-impl Range {
-    fn point(value: i32) -> Self {
-        Self {
-            low: i64::from(value),
-            high: i64::from(value),
-        }
-    }
-
-    fn checked(low: i64, high: i64) -> Option<Self> {
-        (low >= i64::from(i32::MIN) && high <= i64::from(i32::MAX)).then_some(Self { low, high })
-    }
-
-    fn unary(self, operator: UnaryOp) -> Option<Self> {
-        match operator {
-            UnaryOp::Negate => Self::checked(-self.high, -self.low),
-            UnaryOp::BitwiseNot => Self::checked(!self.high, !self.low),
-        }
-    }
-
-    fn binary(self, operator: BinaryOp, right: Self) -> Option<Self> {
-        match operator {
-            BinaryOp::Add => Self::checked(self.low + right.low, self.high + right.high),
-            BinaryOp::Sub => Self::checked(self.low - right.high, self.high - right.low),
-            BinaryOp::Mul => self.corners(right, |left, right| Some(left * right)),
-            BinaryOp::Div | BinaryOp::Mod
-                if (right.low <= 0 && right.high >= 0)
-                    || (self.low == i64::from(i32::MIN) && right.low <= -1 && right.high >= -1) =>
-            {
-                None
-            }
-            BinaryOp::Div => self.corners(right, |left, right| Some(left / right)),
-            BinaryOp::Mod => {
-                let magnitude = right.low.abs().max(right.high.abs()) - 1;
-                Self::checked(
-                    self.low.min(0).max(-magnitude),
-                    self.high.max(0).min(magnitude),
-                )
-            }
-            BinaryOp::Pow if right.low == right.high && right.low >= 0 => {
-                let exponent = u32::try_from(right.low).ok()?;
-                let bound = self.corners(right, |left, _| left.checked_pow(exponent))?;
-                Some(Self {
-                    low: if exponent > 0 && self.low <= 0 && self.high >= 0 {
-                        bound.low.min(0)
-                    } else {
-                        bound.low
-                    },
-                    high: bound.high,
-                })
-            }
-            BinaryOp::Pow => None,
-            BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor => {
-                Self::checked(i64::from(i32::MIN), i64::from(i32::MAX))
-            }
-        }
-    }
-
-    fn corners(self, right: Self, operation: impl Fn(i64, i64) -> Option<i64>) -> Option<Self> {
-        let corners = [
-            operation(self.low, right.low)?,
-            operation(self.low, right.high)?,
-            operation(self.high, right.low)?,
-            operation(self.high, right.high)?,
-        ];
-        Self::checked(*corners.iter().min()?, *corners.iter().max()?)
-    }
-}
-
 fn fact_range(
     facts: &FactIndex<'_>,
     signature: &Signature,
@@ -288,18 +208,9 @@ fn fact_range(
         let Symbol::Number(value) = value else {
             return Ok(None);
         };
-        let value = i64::from(*value);
         match &mut range {
-            Some(range) => {
-                range.low = range.low.min(value);
-                range.high = range.high.max(value);
-            }
-            None => {
-                range = Some(Range {
-                    low: value,
-                    high: value,
-                });
-            }
+            Some(range) => range.include(*value),
+            None => range = Some(Range::point(*value)),
         }
     }
     Ok(range)

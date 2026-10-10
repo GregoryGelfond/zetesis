@@ -44,7 +44,7 @@ impl Arrays {
     fn known<C: Count>(knowledge: &Knowledge, known: &Known<C>) -> Self {
         let mut arrays = Self::default();
         arrays.add::<u64>(known.masks.words.len(), known.masks.words.len());
-        for counters in [&known.sure_operands, &known.never_operands, &known.unknown] {
+        for counters in [&known.neutral_operands, &known.unknown] {
             arrays.add::<C>(counters.len(), counters.len());
         }
         assert_eq!(
@@ -92,7 +92,7 @@ impl Clone for MeasuredKnowledge {
 
 fn theory(atoms: usize) -> Theory {
     let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
-    // Four-operand chains populate both chain-counter arrays. All but eight
+    // Four-operand chains populate the neutral count and witness mask. All but eight
     // atoms are facts, so each size has the same bounded, complete traversal.
     // The unasserted chains affect propagation and ranking, not satisfaction.
     for first in (0..atoms).step_by(4) {
@@ -182,9 +182,9 @@ fn traversal_copies_only_live_knowledge_arrays() {
         assert_eq!(selected_stats, native_stats);
         assert_eq!(selected_leaves, native_leaves);
         assert_eq!(selected.calls, (1 << FREE_ATOMS) - 1);
-        assert_eq!(selected.nonempty_allocations, 4 * selected.calls);
+        assert_eq!(selected.nonempty_allocations, 3 * selected.calls);
         assert_eq!(selected.nonempty_allocations, native.nonempty_allocations);
-        let counter_values = atoms + 2 * narrower.chains.len();
+        let counter_values = atoms + narrower.chains.len();
         let saved_width = size_of::<usize>() - size_of::<u16>().min(size_of::<usize>());
         assert_eq!(
             native.initialized_bytes - selected.initialized_bytes,

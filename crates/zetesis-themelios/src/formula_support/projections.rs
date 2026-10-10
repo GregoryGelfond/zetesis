@@ -11,6 +11,7 @@
 
 mod domains;
 mod totality;
+pub(super) use totality::needed as needs_totality;
 
 use std::{cmp::Ordering, ops::Deref};
 

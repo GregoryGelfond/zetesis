@@ -51,14 +51,14 @@ pub struct Options {
     /// Grounding mode, independent of execution backend.
     ///
     /// `eager` instantiates every rule before solving. `lazy` instantiates on
-    /// demand: relational source joins on CPU or GPU, or, for formula inputs on
-    /// the CPU, a producer core with eligible constraints streamed and terminal
-    /// definitions (derived predicates nothing reads) reconstructed per answer.
+    /// demand: relational source joins on CPU or GPU, or, for formula inputs,
+    /// a producer core checked by the selected backend with eligible constraints
+    /// streamed on the host. Terminal definitions (derived predicates nothing
+    /// reads) can be reconstructed per answer.
     /// Objectives require complete constraint checks before scoring and disable
     /// terminal deferral. Table joins are refused. `auto` admits relational source
     /// joins where it can, else instantiates an eager base and defers terminal
-    /// definitions. Formula GPU execution needs an eager base. Grounding limits
-    /// still apply.
+    /// definitions. Resource allowances still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.

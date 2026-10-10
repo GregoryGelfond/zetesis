@@ -268,10 +268,18 @@ fn arithmetic_counts_describe_the_joined_rule() {
     let records = observer.records.borrow();
     let arithmetic = records
         .iter()
-        .find(|r| r.work.expression_nodes == Some(4))
-        .unwrap();
+        .find(|record| {
+            record
+                .location
+                .and_then(ProgramSite::statement_id)
+                .is_some_and(|statement| statement.index() == 1)
+        })
+        .expect("the original constraint has its own phase record");
     assert_eq!(arithmetic.phase, GroundingPhase::RuleInstantiation);
-    assert_eq!(arithmetic.work.expression_evaluations, Some(2));
+    // Totality prepares X+1 and 3 (four nodes). The join reuses X+1's
+    // canonical result and reads 3 again (one node), in this same rule phase.
+    assert_eq!(arithmetic.work.expression_nodes, Some(5));
+    assert_eq!(arithmetic.work.expression_evaluations, Some(3));
     assert_eq!(arithmetic.work.join_probes, Some(1));
     assert_eq!(arithmetic.work.join_rows, Some(1));
     assert_eq!(arithmetic.work.binding_snapshots, Some(0));

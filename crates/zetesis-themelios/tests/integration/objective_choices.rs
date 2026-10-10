@@ -130,6 +130,16 @@ fn signed_priorities_retain_exact_lexicographic_costs() {
 }
 
 #[test]
+fn prepared_priorities_preserve_inactive_slots() {
+    const SOURCE: &str =
+        include_str!("../fixtures/required-choice-objectives/prepared-priorities.lp");
+    // Two prepared priorities bracket an exact signed priority, a zero-weight
+    // slot and a priority with no eligible contribution. Both complete keys
+    // and the descending lexicographic order remain significant.
+    preserves_models(SOURCE, 2);
+}
+
+#[test]
 fn positive_cycles_require_an_independent_proof() {
     preserves_models(CYCLE, 1);
     preserves_models(UNPROVED_CYCLE, 0);

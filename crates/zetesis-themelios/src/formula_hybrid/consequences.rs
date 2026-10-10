@@ -177,7 +177,7 @@ fn scan(
     let eligible = if let Some(eligible) = prepared.incremental_eligible {
         eligible
     } else {
-        let eligible = incremental::eligible(prepared, counters)?;
+        let eligible = incremental::eligible(prepared, budget, counters)?;
         prepared.incremental_eligible = Some(eligible);
         eligible
     };

@@ -36,7 +36,7 @@ fn run(owner: &HybridFormula, region: &Region, shared: bool) -> Scan {
         .unwrap();
     assert_eq!(prepared.source.rules.len(), 1);
     if shared {
-        assert!(incremental::eligible(prepared, &mut counters).unwrap());
+        assert!(incremental::eligible(prepared, &mut budget(), &mut counters).unwrap());
     }
     prepared.incremental_eligible = Some(shared);
     let before = counters.accounting.work;

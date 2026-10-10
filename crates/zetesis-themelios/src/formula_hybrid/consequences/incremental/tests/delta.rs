@@ -26,7 +26,7 @@ fn scan(owner: &HybridFormula, region: &Region, delta: Option<&[usize]>) -> (Out
     prepared
         .prepare_selection(owner.core(), &mut counters)
         .unwrap();
-    assert!(eligible(prepared, &mut counters).unwrap());
+    assert!(eligible(prepared, &mut budget(), &mut counters).unwrap());
     prepared.incremental_eligible = Some(true);
     assert_eq!(prepared.source.rules.len(), 1);
     let mut outcome = Outcome {

@@ -11,9 +11,10 @@
 
 use super::{ConstraintConsequence, PreparedConstraints, literal_atom, scan_selected_rule};
 use crate::expansion::Budget;
-use crate::formula_ir::{Expression, LiteralIr, Operation};
+use crate::formula_ir::{Expression, LiteralIr, Operation, RuleIr};
 use crate::formula_support::{Computation, Context, Counters, StorageLease, reserve_exact};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
+use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::catalog::PredicateRef;
 use zetesis_cpu::regions::Region;
 
@@ -33,37 +34,98 @@ type ReadContext<'a, 'b, 'c> = Context<'a, &'a Computation<'b, 'c>>;
 /// partition, not a claim that arbitrary constructor expressions cannot fail.
 ///
 /// Actual construction, owner, work, storage and cancellation checks stay in
-/// place. Any arithmetic, range or other unsupported instruction anywhere keeps
-/// the whole partition on the original first-result path, including earlier
-/// rules whose core closure may exclude a later exceptional scalar prefix.
+/// place. A rule with sums or differences can additionally use complete source
+/// columns to establish defined arithmetic. Every rule must pass: one partial
+/// rule retains the original first-result order for the entire partition, since
+/// a core consequence can prevent a later exceptional scalar prefix.
 pub(super) fn eligible(
-    prepared: &PreparedConstraints<'_>,
+    prepared: &mut PreparedConstraints<'_>,
+    budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<bool, FormulaFailure> {
-    for rule in &prepared.source.rules {
-        for literal in &rule.body {
-            counters.work(&prepared.limits, rule.location)?;
-            let total = match literal {
-                LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) => true,
-                LiteralIr::Compare(left, _, right) => {
-                    total_expression(left, &prepared.limits, counters, rule.location)?
-                        && total_expression(right, &prepared.limits, counters, rule.location)?
+    for index in 0..prepared.source.rules.len() {
+        let rule = &prepared.source.rules[index];
+        if captured_rule(rule, &prepared.limits, counters)? {
+            continue;
+        }
+        if !bounded_rule(rule, &prepared.limits, counters)? {
+            return Ok(false);
+        }
+        // This is the same immutable preparation subsequently borrowed by
+        // execution. A declined proof retains the checked first-result route.
+        prepared.prepare_rule(index, budget, counters)?;
+        if !prepared.plans[index]
+            .as_ref()
+            .expect("prepared above")
+            .has_totality_certificate()
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn captured_rule(
+    rule: &RuleIr,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for literal in &rule.body {
+        counters.work(limits, rule.location)?;
+        let total = match literal {
+            LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) => true,
+            LiteralIr::Compare(left, _, right) => {
+                total_expression(left, limits, counters, rule.location)?
+                    && total_expression(right, limits, counters, rule.location)?
+            }
+            LiteralIr::TupleCompare(left, _, right) => {
+                let mut total = true;
+                for value in left.iter().chain(right) {
+                    total &= total_expression(value, limits, counters, rule.location)?;
                 }
-                LiteralIr::TupleCompare(left, _, right) => {
-                    let mut total = true;
-                    for value in left.iter().chain(right) {
-                        total &=
-                            total_expression(value, &prepared.limits, counters, rule.location)?;
-                    }
-                    total
+                total
+            }
+            LiteralIr::Bind { value, .. } => {
+                total_expression(value, limits, counters, rule.location)?
+            }
+            _ => false,
+        };
+        if !total {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// No new binding schedule, constructed expression or partial operator is
+/// admitted by the column proof. Ordinary comparisons retain their term order.
+fn bounded_rule(
+    rule: &RuleIr,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for literal in &rule.body {
+        counters.work(limits, rule.location)?;
+        let expressions = match literal {
+            LiteralIr::Atom(..) => continue,
+            LiteralIr::Compare(left, _, right) => std::slice::from_ref(left)
+                .iter()
+                .chain(std::slice::from_ref(right)),
+            LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right),
+            _ => return Ok(false),
+        };
+        for expression in expressions {
+            for node in &expression.nodes {
+                counters.work(limits, rule.location)?;
+                if !matches!(
+                    node,
+                    Operation::Constant(_)
+                        | Operation::Variable(_)
+                        | Operation::Unary(UnaryOp::Negate, _)
+                        | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _)
+                ) {
+                    return Ok(false);
                 }
-                LiteralIr::Bind { value, .. } => {
-                    total_expression(value, &prepared.limits, counters, rule.location)?
-                }
-                _ => false,
-            };
-            if !total {
-                return Ok(false);
             }
         }
     }

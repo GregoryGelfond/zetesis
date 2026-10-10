@@ -9,8 +9,9 @@
 //! absence. The resulting restriction is only for original candidates.
 
 mod activations;
+mod residuals;
 
-use std::collections::BTreeMap;
+use std::borrow::Cow;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateElement, FormulaNodes, FormulaParts, NodeView, Theory};
@@ -29,7 +30,7 @@ struct Key {
 }
 
 #[derive(Debug)]
-pub(super) struct Group {
+struct Group {
     priority: i32,
     activation: usize,
     weight: i32,
@@ -38,7 +39,10 @@ pub(super) struct Group {
 
 #[derive(Debug)]
 pub(super) struct Costs {
-    pub groups: Vec<Group>,
+    /// Mandatory floors, grouped by priority; conditions address `activations`.
+    pub groups: Vec<AggregateElement>,
+    /// Changed priorities only. Eligibility still addresses the exact plan.
+    levels: Vec<residuals::Level>,
     activations: FormulaParts,
 }
 
@@ -124,10 +128,13 @@ pub(super) fn prepare(
     } else {
         let activations =
             activations::prepare(&plan.original, &mut groups, &mut memory, &mut work)?;
-        Some(Costs {
-            groups,
+        Some(residuals::prepare(
+            plan,
+            &groups,
             activations,
-        })
+            &mut memory,
+            &mut work,
+        )?)
     };
     Ok((costs, work.statistics))
 }
@@ -586,61 +593,43 @@ fn combined(
                 .map_err(|error| work.error(Kind::Theory(error)))?,
         )?;
     }
-    let falsum = work.node(&mut nodes, NodeView::False)?;
-    let mut root = work.node(&mut nodes, NodeView::Implies(falsum, falsum))?;
     let copied = activations::append(&costs.activations, &mut nodes, work)?;
-    let mut priorities = BTreeMap::new();
-    for &priority in plan.levels.keys() {
-        work.tick()?;
-        priorities.insert(priority, 0_i64);
-    }
-    for (priority, cost) in incumbent.costs() {
-        work.tick()?;
-        priorities.insert(*priority, *cost);
-    }
-    for (priority, bound) in priorities {
-        let original = plan.levels.get(&priority).map_or(&[][..], Vec::as_slice);
-        let mut prepaid = work.reserve(original.len())?;
-        prepaid.resize(original.len(), 0);
-        let length = original
-            .len()
-            .checked_add(costs.groups.len())
-            .ok_or_else(|| work.error(Kind::Overflow))?;
-        let mut elements = work.reserve(length)?;
-        for group in &costs.groups {
-            work.tick()?;
-            if group.priority != priority {
-                continue;
-            }
-            for &key in &group.keys {
-                work.tick()?;
-                prepaid[key] = group.weight;
-            }
-            let activation = copied[group.activation];
-            elements.push(AggregateElement {
-                weight: group.weight,
-                condition: activation,
-            });
-        }
-        for (index, element) in original.iter().enumerate() {
-            work.tick()?;
-            let weight = element
-                .weight
-                .checked_sub(prepaid[index])
+    // Both priority lists ascend, and every prepared level belongs to the exact
+    // plan. Extra incumbent priorities leave this cursor in place.
+    let mut prepared = costs.levels.iter().peekable();
+    let root = super::bound::lexicographic(
+        &mut nodes,
+        plan.levels.keys().copied(),
+        incumbent,
+        limits,
+        work,
+        |priority, work| {
+            let Some(level) = prepared.peek().filter(|level| level.priority == priority) else {
+                return Ok(Cow::Borrowed(
+                    plan.levels.get(&priority).map_or(&[][..], Vec::as_slice),
+                ));
+            };
+            let count = level
+                .groups
+                .len()
+                .checked_add(level.residuals.len())
                 .ok_or_else(|| work.error(Kind::Overflow))?;
-            if weight != 0 {
+            let mut elements = work.reserve(count)?;
+            for group in &costs.groups[level.groups.clone()] {
+                work.tick()?;
                 elements.push(AggregateElement {
-                    weight,
-                    condition: element.condition,
+                    weight: group.weight,
+                    condition: copied[group.condition],
                 });
             }
-        }
-        let (elements, bound) =
-            super::bound::normalize::prepare(&elements, bound, falsum, &mut nodes, limits, work)?;
-        let family = super::bound::family(&mut nodes, &elements, bound, limits, work)?;
-        let suffix = work.node(&mut nodes, NodeView::And(&[family.roots()[1], root]))?;
-        root = work.node(&mut nodes, NodeView::Or(&[family.roots()[0], suffix]))?;
-    }
+            for &residual in &level.residuals {
+                work.tick()?;
+                elements.push(residual);
+            }
+            prepared.next();
+            Ok(Cow::Owned(elements))
+        },
+    )?;
     let root = work.node(&mut nodes, NodeView::And(&[exact.roots()[0], root]))?;
     let admission = (nodes.view().len() as u128) * 2 + nodes.parts().occurrences() as u128 + 1;
     work.charge(u64::try_from(admission).map_err(|_| work.error(Kind::Overflow))?)?;
@@ -679,8 +668,9 @@ impl Storage {
             bytes += previous.activations.node_capacity() as u128
                 * size_of::<zetesis_ferraris::Node>() as u128;
             bytes += previous.activations.operand_capacity() as u128 * size_of::<usize>() as u128;
-            for group in &previous.groups {
-                bytes += Self::vector_bytes(&group.keys);
+            bytes += Self::vector_bytes(&previous.levels);
+            for level in &previous.levels {
+                bytes += Self::vector_bytes(&level.residuals);
             }
         }
         let result = Self { bytes, limit };

@@ -3232,37 +3232,52 @@
   {
     "name": "Zetesis.FormulaBounds.position_in_append",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 53
+    "line": 56
   },
   {
     "name": "Zetesis.FormulaBounds.disj_chain_sure",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 77
+    "line": 80
   },
   {
     "name": "Zetesis.FormulaBounds.disj_chain_never",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 90
+    "line": 93
   },
   {
     "name": "Zetesis.FormulaBounds.disj_chain_unit",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 102
+    "line": 105
   },
   {
     "name": "Zetesis.FormulaBounds.conj_chain_sure",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 139
+    "line": 142
   },
   {
     "name": "Zetesis.FormulaBounds.conj_chain_never",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 149
+    "line": 152
   },
   {
     "name": "Zetesis.FormulaBounds.conj_chain_unit",
     "file": "Zetesis/FormulaChains.lean",
-    "line": 163
+    "line": 166
+  },
+  {
+    "name": "Zetesis.FormulaBounds.ChainEvidence.record_counts",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 223
+  },
+  {
+    "name": "Zetesis.FormulaBounds.ChainEvidence.records_counts",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 233
+  },
+  {
+    "name": "Zetesis.FormulaBounds.ChainEvidence.propagation_observations",
+    "file": "Zetesis/FormulaChains.lean",
+    "line": 248
   },
   {
     "name": "Zetesis.FormulaRegions.classical_consequence_forces",

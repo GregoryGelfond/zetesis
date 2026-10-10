@@ -573,7 +573,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// value knows nothing and is seeded in full on first use.
 ///
 /// A value is linear in the theory: a bit pair over the nodes and one over
-/// the atoms, two counters per chain and a count per atom; the worklists of
+/// the atoms, a counter and witness bit per chain and a count per atom; the worklists of
 /// a narrowing belong to the walker's [`NarrowingScratch`]. Its counters
 /// have one width, chosen when the root value is made.
 /// A split that offers one child to another worker clones it, so the
@@ -585,7 +585,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// from its parent and by narrowing with the narrower that made it.
 ///
 /// Cloning owns an independent copy. [`Clone::clone_from`] overwrites every
-/// field, reusing equal-length storage at the same counter width. The five
+/// field, reusing equal-length storage at the same counter width. The six
 /// masks occupy disjoint slices of one owned block; copying also replaces its
 /// node/atom boundaries, even when the total block length is unchanged. The
 /// destination's previous knowledge contributes no authority; the source's
@@ -694,7 +694,7 @@ impl<C: Count> Known<C> {
     /// [`Knowledge`] header is counted by its owner.
     fn retained_bytes(&self) -> u128 {
         self.masks.words.len() as u128 * size_of::<u64>() as u128
-            + [&self.sure_operands, &self.never_operands, &self.unknown]
+            + [&self.neutral_operands, &self.unknown]
                 .into_iter()
                 .map(Counters::allocated_bytes)
                 .sum::<u128>()
@@ -1124,8 +1124,7 @@ fn most_constrained<C: Count>(
 
 /// What every candidate of the region must make of each node and each
 /// atom: known to hold, known to fail, or open. One bit pair over the
-/// nodes, one over the atoms, and two counters over each chain, the
-/// operands known to hold and the operands known to fail, closed under the
+/// nodes, one over the atoms, and processed evidence for each chain, closed under the
 /// upward rules from a node's operands and the downward rules from a node's
 /// own knowledge until nothing changes: unit propagation on the theory
 /// itself, with a node shared by several parents known once for all of
@@ -1133,14 +1132,17 @@ fn most_constrained<C: Count>(
 /// `FormulaChains`). The closure is driven by a worklist: a node that
 /// learns something is revisited once, and only its parents, operands and
 /// dependent producers are read, a chain learning from an operand by one
-/// counter step.
+/// counter or witness step. A disjunction counts failing operands and records
+/// whether a holding operand was processed; a conjunction dually counts holding
+/// operands and records a failing witness. Pending events contribute neither.
 #[derive(Debug)]
 struct Known<C> {
     masks: Masks,
-    /// Per chain, the operands known to hold.
-    sure_operands: Counters<C>,
-    /// Per chain, the operands known to fail.
-    never_operands: Counters<C>,
+    /// Per chain, processed neutral operands: false for OR, true for AND.
+    /// The count preserves distinct operand-node occurrences, including nodes
+    /// that denote the same atom. Repeated identical leaves are coalesced by
+    /// chain formation. Absorbing operands use the packed witness mask instead.
+    neutral_operands: Counters<C>,
     /// Per atom, the parents of its nodes not yet known: the split ranking.
     /// A parent is counted once here and taken off once when it is
     /// revisited, so the count never goes below zero.
@@ -1154,8 +1156,7 @@ impl<C: Clone> Clone for Known<C> {
     fn clone(&self) -> Self {
         Self {
             masks: self.masks.clone(),
-            sure_operands: self.sure_operands.clone(),
-            never_operands: self.never_operands.clone(),
+            neutral_operands: self.neutral_operands.clone(),
             unknown: self.unknown.clone(),
             seeded: self.seeded,
         }
@@ -1163,8 +1164,7 @@ impl<C: Clone> Clone for Known<C> {
 
     fn clone_from(&mut self, source: &Self) {
         self.masks.clone_from(&source.masks);
-        self.sure_operands.clone_from(&source.sure_operands);
-        self.never_operands.clone_from(&source.never_operands);
+        self.neutral_operands.clone_from(&source.neutral_operands);
         self.unknown.clone_from(&source.unknown);
         self.seeded = source.seeded;
     }
@@ -1252,23 +1252,24 @@ struct KnownMut<'a, C> {
     atom_never: &'a mut [u64],
     /// Region decisions already incorporated into the closure.
     seen: &'a mut [u64],
-    sure_operands: &'a mut Counters<C>,
-    never_operands: &'a mut Counters<C>,
+    /// A processed absorbing operand: true for OR, false for AND.
+    witnessed: &'a mut [u64],
+    neutral_operands: &'a mut Counters<C>,
     unknown: &'a mut Counters<C>,
     seeded: &'a mut bool,
 }
 
 impl<C> Known<C> {
     fn borrow(&mut self) -> KnownMut<'_, C> {
-        let [sure, never, atom_sure, atom_never, seen] = self.masks.split();
+        let [sure, never, atom_sure, atom_never, seen, witnessed] = self.masks.split();
         KnownMut {
             sure,
             never,
             atom_sure,
             atom_never,
             seen,
-            sure_operands: &mut self.sure_operands,
-            never_operands: &mut self.never_operands,
+            witnessed,
+            neutral_operands: &mut self.neutral_operands,
             unknown: &mut self.unknown,
             seeded: &mut self.seeded,
         }
@@ -1324,9 +1325,8 @@ fn learn(known: &mut [u64], opposite: &[u64], index: usize) -> Step {
 impl<C: Count> Known<C> {
     fn empty(nodes: usize, chains: usize, unknown: Counters<C>) -> Self {
         Self {
-            masks: Masks::empty(nodes, unknown.len()),
-            sure_operands: Counters::zeros(chains),
-            never_operands: Counters::zeros(chains),
+            masks: Masks::empty(nodes, unknown.len(), chains),
+            neutral_operands: Counters::zeros(chains),
             unknown,
             seeded: false,
         }
@@ -1477,8 +1477,8 @@ impl<C: Count> Closure<'_, C> {
     }
 
     /// A node that learned something teaches its operands, and lets each
-    /// parent learn from it: a chain by one counter step, an implication
-    /// from this event and its other operand. A known implication can then
+    /// parent learn from it: a chain by a neutral count or absorbing witness,
+    /// an implication from this event and its other operand. A known implication can then
     /// teach the remaining open operand. A node false
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
@@ -1553,24 +1553,23 @@ impl<C: Count> Closure<'_, C> {
             ref operands,
         } = index.chains[chain];
         let total = operands.len();
-        if value {
-            self.known.sure_operands.add(chain, 1);
-        } else {
-            self.known.never_operands.add(chain, 1);
+        if value == disjunction {
+            self.known.witnessed[chain / 64] |= 1u64 << (chain % 64);
+            return Ok(if disjunction {
+                self.sure(root)
+            } else {
+                self.never(root)
+            });
         }
-        let (sure, never) = (
-            self.known.sure_operands.get(chain),
-            self.known.never_operands.get(chain),
-        );
-        Ok(match (disjunction, value) {
-            (true, true) => self.sure(root),
-            (true, false) if never == total => self.never(root),
-            (true, false) if bit(self.known.sure, root) && never + 1 == total => {
+        self.known.neutral_operands.add(chain, 1);
+        let neutral = self.known.neutral_operands.get(chain);
+        Ok(match disjunction {
+            true if neutral == total => self.never(root),
+            true if bit(self.known.sure, root) && neutral + 1 == total => {
                 self.unit(index, chain, work)?
             }
-            (false, false) => self.never(root),
-            (false, true) if sure == total => self.sure(root),
-            (false, true) if bit(self.known.never, root) && sure + 1 == total => {
+            false if neutral == total => self.sure(root),
+            false if bit(self.known.never, root) && neutral + 1 == total => {
                 self.unit(index, chain, work)?
             }
             _ => Step::Unchanged,
@@ -1595,12 +1594,7 @@ impl<C: Count> Closure<'_, C> {
         // Callers have counted all but one operand at the opposite polarity.
         // A processed witness is therefore the sole possible target, already
         // known as required. Bits precede their events, but counts never do.
-        let witnessed = if disjunction {
-            self.known.sure_operands.get(chain) != 0
-        } else {
-            self.known.never_operands.get(chain) != 0
-        };
-        if witnessed {
+        if bit(self.known.witnessed, chain) {
             return Ok(Step::Unchanged);
         }
         for &operand in operands {
@@ -1715,10 +1709,10 @@ impl<C: Count> Closure<'_, C> {
         let mut step = Step::Unchanged;
         if bit(self.known.sure, root) {
             if disjunction {
-                if self.known.never_operands.get(chain) + 1 == total {
+                if self.known.neutral_operands.get(chain) + 1 == total {
                     step = step.join(self.unit(index, chain, work)?);
                 }
-            } else if self.known.sure_operands.get(chain) != total {
+            } else if self.known.neutral_operands.get(chain) != total {
                 for &operand in operands {
                     work.tick()?;
                     step = step.join(self.sure(operand));
@@ -1729,7 +1723,7 @@ impl<C: Count> Closure<'_, C> {
             }
         } else if bit(self.known.never, root) {
             if disjunction {
-                if self.known.never_operands.get(chain) != total {
+                if self.known.neutral_operands.get(chain) != total {
                     for &operand in operands {
                         work.tick()?;
                         step = step.join(self.never(operand));
@@ -1738,7 +1732,7 @@ impl<C: Count> Closure<'_, C> {
                         }
                     }
                 }
-            } else if self.known.sure_operands.get(chain) + 1 == total {
+            } else if self.known.neutral_operands.get(chain) + 1 == total {
                 step = step.join(self.unit(index, chain, work)?);
             }
         }

@@ -1,3 +1,4 @@
+mod arithmetic;
 mod batches;
 mod delta;
 mod preparation;

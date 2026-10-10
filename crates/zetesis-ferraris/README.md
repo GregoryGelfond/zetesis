@@ -153,8 +153,11 @@ and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node
 over its operands, a *chain*, when its inner nodes have that one parent and
-are not roots; the closure keeps two counters per chain, the operands known
-to hold and known to fail, and applies the n-ary rules, a disjunction sure
+are not roots. Per chain, the closure keeps one exact neutral-operand count
+and one packed witness bit: failing operands and a holding witness for a
+disjunction, holding operands and a failing witness for a conjunction.
+These record processed events; a node's truth bit can precede its event.
+The closure applies the n-ary rules, a disjunction sure
 with one operand and impossible with all, forcing its one open operand when
 sure, and the duals for a conjunction (`FormulaChains`). Propagating a new
 decision visits its atom occurrences rather than every satisfied clause.
@@ -213,8 +216,10 @@ The [packed knowledge regressions](tests/integration/regions/packed_knowledge.rs
 carried and fresh original/frozen closure over 130 atoms and 132 nodes, including
 descendant conflicts, zero-work refusals and repeated completed closure.
 
-The three mutable occurrence-count arrays use fixed-length storage: two counts
-per chain and one unresolved-parent count per atom. Construction bounds each
+The two mutable occurrence-count arrays use fixed-length storage: one neutral
+count per chain and one unresolved-parent count per atom. The absorbing witness
+needs only a bit, because propagation asks whether one exists, never how many.
+Construction bounds each
 cell by the largest chain length or the largest initial parent count of an
 atom. The latter includes every parent occurrence of every node carrying that
 atom; distinct nodes contribute separately even when they share a parent.
@@ -226,18 +231,31 @@ admission cap and does not narrow cumulative work statistics. Knowledge clones
 retain independent arrays, with unchanged original/frozen ownership requirements.
 
 For A atoms and C chains, the counter payload on a 64-bit host is
-2(A + 2C), 4(A + 2C) or 8(A + 2C) bytes for the selected width. Header layout
-is counted by `Knowledge::retained_bytes`; masks, immutable indexes, scheduler state and
-allocator overhead are separate. A knowledge holds no worklists: they belong
+2(A + C), 4(A + C) or 8(A + C) bytes for the selected width. The witness mask
+adds 8 ceil(C / 64) bytes in the existing owned mask block; its final word can
+have padding. The other masks are unchanged. Header layout and all owned arrays
+are counted by `Knowledge::retained_bytes`; immutable indexes, scheduler state
+and allocator overhead are separate. A knowledge holds no worklists: they belong
 to the caller's `NarrowingScratch`, which each narrowing empties first and
 whose capacity serves all of a walker's narrowings. Copies retain the selected
 width. This is a storage model, not an RSS or timing result.
 Construction directly allocates the selected width, with no temporary native
 counter array; the per-cell bound is computed once from the existing compact index.
-The three nonempty arrays still require three allocations per copied Knowledge.
+The two nonempty counter arrays and combined mask block require three allocations
+per copied Knowledge.
 All count reads and updates retain the same charged propagation operations;
 storage initialization and copying remain outside that work receipt. Existing
 knowledge allocation behavior remains infallible.
+
+The processed-event representation preserves the two-count rules: the neutral
+count is exact and the witness is equivalent to a positive absorbing count.
+Chain formation coalesces repeated identical node leaves, while distinct nodes
+denoting the same atom remain separate operand events. Frozen-mask exclusion,
+contradiction stopping, ordered unit scans and split ranking are unchanged.
+The `regions::tests::units::evidence` regressions compare the changed transitions
+with the former two-count rules over open, queued and processed operands,
+including bounded work prefixes. Their scope is the transition boundary;
+complete original/frozen closure remains covered by the existing tests.
 
 The private `compact_counters_reduce_clone_payload` test reports counter and
 complete Knowledge storage for 4,096 atoms with four-operand chains. Reproduce

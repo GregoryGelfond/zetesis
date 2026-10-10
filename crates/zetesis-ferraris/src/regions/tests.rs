@@ -222,19 +222,20 @@ fn compact_adjacency_uses_less_retained_storage() {
 }
 
 #[test]
-fn retained_bytes_counts_the_seen_mask() {
-    // 130 atoms give a three-word seen mask (ceil(130/64) = 3).
+fn retained_bytes_counts_all_masks() {
+    // 130 atoms give three-word atom masks, and two chains one witness word.
     let knowledge = Knowledge {
         width: Width::Compact16(Known::empty(5, 2, Counters::zeros(130))),
     };
     let k = compact(&knowledge);
     let expected = size_of::<Knowledge>() as u128
-        + (2 * 5usize.div_ceil(64) + 3 * 130usize.div_ceil(64)) as u128 * size_of::<u64>() as u128
-        + k.sure_operands.allocated_bytes()
-        + k.never_operands.allocated_bytes()
+        + (2 * 5usize.div_ceil(64) + 3 * 130usize.div_ceil(64) + 2usize.div_ceil(64)) as u128
+            * size_of::<u64>() as u128
+        + k.neutral_operands.allocated_bytes()
         + k.unknown.allocated_bytes();
     assert_eq!(knowledge.retained_bytes(), expected);
     assert_eq!(k.masks.slices()[4].len(), 3);
+    assert_eq!(k.masks.slices()[5].len(), 1);
 }
 
 fn propagated_decisions_are_seen(frozen: bool) {

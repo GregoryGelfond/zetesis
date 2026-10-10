@@ -76,6 +76,10 @@ pub(super) fn prepare(
         work.tick()?;
         group.activation = copied[group.activation].expect("marked activation");
     }
+    // These maps end with preparation; later residual allocation overlaps the
+    // retained closure, not the temporary original-to-compact coordinates.
+    memory.retire(&needed);
+    memory.retire(&copied);
     work.statistics.nodes = parts.view().len();
     Ok(parts)
 }

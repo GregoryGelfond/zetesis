@@ -1,3 +1,5 @@
+mod numeric;
+
 use super::*;
 use crate::FormulaLimits;
 use crate::formula_ir::Prepared;

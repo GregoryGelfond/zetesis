@@ -181,8 +181,14 @@ fn frontier_receipts_include_exact_knowledge_storage() {
     // no knowledge; its first narrowing creates exactly one reserved slot for
     // the original theory. Receipts include its consolidated mask header and
     // complete owned payload; amortized reservation of the slot changes them.
-    // Each knowledge has three atom counters and two counters per choice
-    // chain: nine u16 cells, or 18 bytes, beside its masks and headers.
+    // Three atom-ranking counters and three neutral chain counters occupy six
+    // u16 cells. Ten nodes, three atoms and three chain witnesses each fit one
+    // word per mask: six words in the knowledge, plus the region's held/cut
+    // pair. Keep this payload calculation independent of retained_bytes().
+    let empty_frontier = 408;
+    let queued_payload = size_of::<zetesis_ferraris::Knowledge>() as u128
+        + 8 * size_of::<u64>() as u128
+        + 6 * size_of::<u16>() as u128;
     let mut search = StableModels::with_region_producers(
         &three_choices(),
         nonzero(2),
@@ -201,10 +207,13 @@ fn frontier_receipts_include_exact_knowledge_storage() {
         retained_bytes,
         peak_regions: 4,
         peak_capacity: 4,
-        peak_retained_bytes: 1088,
+        peak_retained_bytes: empty_frontier + 4 * queued_payload,
     };
-    assert_eq!(receipts.first(), Some(&peak(3, 4, 918)));
-    assert_eq!(receipts.last(), Some(&peak(0, 4, 408)));
+    assert_eq!(
+        receipts.first(),
+        Some(&peak(3, 4, empty_frontier + 3 * queued_payload))
+    );
+    assert_eq!(receipts.last(), Some(&peak(0, 4, empty_frontier)));
 }
 
 #[test]

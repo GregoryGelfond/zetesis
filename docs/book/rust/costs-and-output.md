@@ -94,9 +94,16 @@ scoring. Equal-cost answers remain eligible. Preparation uses checked vector
 capacities under the candidate-memory allowance, with source premises counted
 once; this account excludes unrelated owners and allocator bookkeeping.
 The fixed activation closure is prepared once in the existing n-ary formula
-representation. Each new incumbent copies only that compact closure; it does
-not rescan unrelated original formulas or add work to exact score evaluation.
-An optional bridge or bound failure leaves the ordinary exact bound available.
+representation. Preparation also compiles each changed priority's residual
+weights and releases the temporary member-to-key allocation lists. Unchanged
+priorities borrow the exact objective; the retained lower objective contains
+only activation floors and nonzero residual contributions. Both inputs use the
+same checked priority ordering, weight normalization and lexicographic compiler.
+Each improved incumbent first constructs its exact bound. Optional strengthening
+copies that bound and the compact activation closure; it does not rescan unrelated
+original formulas or recompute the allocated minima. Exact score evaluation is
+unchanged. An optional bridge or bound failure leaves the ordinary exact bound
+available.
 After an improved incumbent, that fallback still implies the preceding bound
 on original models: the required-choice lower cost never exceeds their exact
 cost. Interpretations violating the original theory need not obey that

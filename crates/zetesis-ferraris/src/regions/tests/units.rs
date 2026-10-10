@@ -14,6 +14,8 @@ use super::{
     counters::{native, same_knowledge},
 };
 
+mod evidence;
+
 fn chain(disjunction: bool) -> Theory {
     let join = if disjunction {
         Node::or_pair
@@ -120,8 +122,10 @@ fn state(index: &Narrower, values: [usize; 4]) -> (Knowledge, NarrowingScratch) 
         }
         match value {
             1 | 3 => scratch.nodes.push((operand, value == 3)),
-            2 => known.never_operands.add(0, 1),
-            4 => known.sure_operands.add(0, 1),
+            2 | 4 if (value == 4) == index.chains[0].disjunction => {
+                known.witnessed[0] |= 1;
+            }
+            2 | 4 => known.neutral_operands.add(0, 1),
             _ => {}
         }
     }
@@ -467,11 +471,11 @@ fn processed_body(index: &Narrower) -> (Knowledge, NarrowingScratch) {
     if index.chains[0].disjunction {
         known.never[0] = 0b111;
         known.atom_never[0] = 0b11;
-        known.never_operands.add(0, 2);
+        known.neutral_operands.add(0, 2);
     } else {
         known.sure[0] = 0b111;
         known.atom_sure[0] = 0b11;
-        known.sure_operands.add(0, 2);
+        known.neutral_operands.add(0, 2);
     }
     known.sure[0] |= 1 << 4;
     known.unknown.decrement(2);
@@ -648,11 +652,7 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                     }
                 }
                 if limit == 2 {
-                    if disjunction {
-                        expected_known.never_operands.add(0, 1);
-                    } else {
-                        expected_known.sure_operands.add(0, 1);
-                    }
+                    expected_known.neutral_operands.add(0, 1);
                     assert!(matches!(result, Ok(Step::Changed)));
                 } else {
                     assert!(result == Err(stop));

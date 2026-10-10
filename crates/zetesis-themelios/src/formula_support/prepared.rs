@@ -5,8 +5,8 @@ pub(super) use pattern_rows::PatternRows;
 
 use super::{
     CompletedQueries, CompletedSupport, Completion, Computation, Context, Counters, Evaluation,
-    FilteredRows, Join, RowFilter, family, order,
-    projections::{ProjectionValues, Projections},
+    FilteredRows, Join, RowFilter, order,
+    projections::{ProjectionValues, Projections, needs_totality},
 };
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
@@ -25,6 +25,12 @@ pub(crate) struct PreparedRule<'source> {
 }
 
 impl<'source> PreparedRule<'source> {
+    /// Complete source-column evidence establishes that every scalar expression
+    /// is defined on complete bindings. This excludes no resource or owner fault.
+    pub(crate) fn has_totality_certificate(&self) -> bool {
+        self.total.is_some()
+    }
+
     /// Prepare sparse slots only when the first rule survives its predicate
     /// gate. Each plan is then published independently after successful setup.
     pub(crate) fn slots(
@@ -121,7 +127,7 @@ impl<'source> PreparedRule<'source> {
         // totality once against these frozen terms and the full source carrier,
         // before any candidate filter is attached. An arithmetic decline is a
         // stable absence of this optional optimization, not a cached failure.
-        let total = if family::partial(&rule.body) {
+        let total = if needs_totality(&rule.body) {
             let mut projections =
                 Projections::new(&Context::new(&computation, limits, counters, rule.location))?;
             if projections.total_constraint(

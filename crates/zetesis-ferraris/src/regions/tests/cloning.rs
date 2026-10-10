@@ -44,8 +44,8 @@ fn refuted(theory: &Theory, narrower: &Narrower) -> Knowledge {
     knowledge
 }
 
-fn flag_addresses(knowledge: &Knowledge) -> [*const u64; 5] {
-    fn addresses<C>(known: &Known<C>) -> [*const u64; 5] {
+fn flag_addresses(knowledge: &Knowledge) -> [*const u64; 6] {
+    fn addresses<C>(known: &Known<C>) -> [*const u64; 6] {
         known.masks.slices().map(<[u64]>::as_ptr)
     }
     match &knowledge.width {

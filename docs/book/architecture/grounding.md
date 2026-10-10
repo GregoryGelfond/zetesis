@@ -374,8 +374,10 @@ including the delivered prefix, against the current region. Delivery alone is
 insufficient. Any intervening change that could enable a body occurrence
 discards this evidence; ignored units are rediscovered by a full scan.
 These checks use the existing batch and changed-atom information, without
-retaining ground constraint instances. Potentially failing arithmetic retains
-the sequential scan. The
+retaining ground constraint instances. Sums and differences can use the same
+finite totality certificate as ordinary row selection. Every streamed rule must
+have defined scalar expressions; one unproved rule keeps the entire partition
+on the sequential path, preserving its first-result diagnostic order. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
 state the semantic premises separately from runtime error and storage handling.
 
@@ -591,11 +593,15 @@ cumulative grounding work, while retained metadata uses `SupportBytes`. The
 check value reuse, owner boundaries, arithmetic failures and inclusive limits.
 
 After source-family validation, a flat constraint can establish finite totality
-from completed positive columns. Every expression must be a leaf or read one
-source variable, with no constructor, generator, structural capture or nested
-scope. A smallest covering column supplies all possible values of that variable
-in complete bindings. Each expression is checked on that whole domain, and an
-arithmetic error declines this optional certificate. Resource and owner failures
+from completed positive columns, without constructors, generators, structural
+captures or nested scopes. A smallest covering column supplies all possible
+values of each variable in complete bindings. An expression reading one variable
+is checked on that whole domain. Sums and differences reading several variables
+instead use numeric column intervals: every intermediate must fit the checked
+integer range. This overapproximates correlations and uses no scalar comparison
+as a premise. Unknown or mixed domains and possible overflow decline the
+certificate; no Cartesian table of arithmetic results is retained. The checked
+interval transfers are shared with keyed-rewrite safety. Resource and owner failures
 remain located failures. Only success for every expression permits ordinary
 prefix pruning. A reached prefix may still contain a value absent from its later
 covering column; its arithmetic failures retain the ordinary deferred handling.

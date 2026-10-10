@@ -10,6 +10,9 @@
 //! constant; checked power uses exponentiation by squaring on a nonnegative i32
 //! exponent. A negative exponent is undefined, including powers of zero or one.
 
+mod range;
+pub(crate) use range::Range;
+
 use themelios_program::term::{BinaryOp, EvalError, UnaryOp};
 
 pub(super) fn unary(operator: UnaryOp, operand: i32) -> Result<i32, EvalError> {

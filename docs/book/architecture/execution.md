@@ -105,17 +105,22 @@ parent's knowledge and the child learns only what the split decided; the
 regions still share nothing. The readings are arrays over the DAG, and the
 regions partition the space exactly, so generation has the closure route's
 shape: data-parallel work inside a region and share-nothing regions beside
-one another. The node-sure, node-never, atom-sure, atom-never and seen masks
+one another. The node-sure, node-never, atom-sure, atom-never, seen and chain-witness masks
 occupy disjoint spans of one owned word block. Narrowing splits that block once
 into borrowed slices; child copies remain independent and include every span,
-its boundaries, all three counter arrays and the seeded state. Combining the
-masks changes neither their payload nor propagation rules and work charges.
+its boundaries, both counter arrays and the seeded state. A chain counts its
+processed neutral operands exactly: false for a disjunction, true for a
+conjunction. Its witness bit records a processed operand at the opposite,
+absorbing polarity. Propagation needs that witness's existence, not its count.
+Queued events contribute neither count nor witness; this distinction preserves
+the original ordered scans and work charges.
 The counter arrays choose one width for the lifetime of a knowledge: `u16`,
 `u32` or native width, according to a bound on each cell. That bound includes
 all parent occurrences of all nodes carrying an atom, rather than the total
-size of the theory. Narrow cells reduce the bytes copied with each child;
-allocation and retained-header costs remain part of memory accounting. The
-arrays retain their existing infallible allocation boundary. A candidate-only
+size of the theory. Narrow cells reduce the bytes copied with each child.
+The witness replaces one counter per chain with one packed bit, subject to
+final-word padding. Allocation and retained-header costs remain part of memory
+accounting. The arrays retain their existing infallible allocation boundary. A candidate-only
 restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current

@@ -3,17 +3,19 @@ import Zetesis.FormulaBounds
 /-!
 # Chains of one connective read as one node
 
-A clause of `k` literals is admitted as a chain of `k − 1` binary
-disjunctions, and a body of `k` literals as a chain of conjunctions. The
-narrowing reads such a chain as one node with `k` operands: a disjunction is
+A tree of disjunctions can be read as one node over its leaves, and a tree
+of conjunctions likewise. These are laws over unfolded formula meanings;
+the native runtime stores grouped operands. A disjunction is
 sure when one operand is, never when all are, and a disjunction known to
 hold with all operands but one known to fail forces that one; a conjunction
 dually. Each of these rules is admissible in `FormulaBounds.Known`: it is a
 sequence of the binary rules along the chain, one per internal node, which is
-what the proofs below unfold by induction on the chain. The Rust narrowing
-applies the chain rules with two counters per chain, the operands known to
-hold and the operands known to fail, so a decision costs one step per
-occurrence of its atom rather than a walk to the root of every chain.
+what the proofs below unfold by induction on the chain. A chain needs an exact
+count of processed neutral operands and only the existence of a processed
+absorbing operand: false is neutral for disjunction, true for conjunction.
+`ChainEvidence.record_counts` and `records_counts` show that this smaller
+accumulator preserves the information read from two exact counts. Pending
+operand notifications are not processed evidence.
 
 A chain is any tree of one connective whose leaves are arbitrary formulas; the
 leaves are listed left to right, one per operand position, so a formula
@@ -24,8 +26,9 @@ The declarations live in the `FormulaBounds` namespace, since they extend its
 `Known` with derived rules; the module rests on `FormulaBounds` for the
 knowledge and its binary rules. That the Rust chains are such trees, maximal
 trees of one connective whose inner nodes have that one parent, and that the
-two counters count the operands known to hold and to fail, are the Rust
-obligations.
+stored evidence counts their processed operand notifications, are Rust
+obligations. The accumulator laws do not prove notification uniqueness,
+machine-word packing, counter bounds, allocation or the Rust event loop.
 -/
 
 namespace Zetesis.FormulaBounds
@@ -188,5 +191,68 @@ theorem conj_chain_unit {F : Formula α} {ls : List (Formula α)} (chain : ConjC
       have rightFails : Known T c _ false := .not_conj_right never leftHolds
       exact ihRight rightFails split (fun L hL => heldBefore L (hb ▸ List.mem_append_right _ hL))
         heldAfter
+
+/-- Processed operand evidence for one connective. A neutral operand does not
+decide the connective alone; an absorbing operand does. For disjunction these
+are false and true respectively; for conjunction they are true and false. -/
+structure ChainEvidence where
+  neutral : Nat
+  absorbing : Bool
+  deriving DecidableEq
+
+namespace ChainEvidence
+
+/-- Retain the exact neutral count and whether an absorbing operand was seen. -/
+def ofCounts (neutral absorbing : Nat) : ChainEvidence :=
+  ⟨neutral, absorbing != 0⟩
+
+/-- Process one operand notification. `true` denotes the absorbing polarity,
+not necessarily the operand's truth value. -/
+def record (evidence : ChainEvidence) (absorbing : Bool) : ChainEvidence :=
+  if absorbing then { evidence with absorbing := true }
+  else { evidence with neutral := evidence.neutral + 1 }
+
+/-- The independent two-count accumulator, before forgetting the multiplicity
+of absorbing notifications. The first coordinate counts neutral notifications. -/
+def recordCounts (counts : Nat × Nat) (absorbing : Bool) : Nat × Nat :=
+  if absorbing then (counts.1, counts.2 + 1) else (counts.1 + 1, counts.2)
+
+/-- Compressing after one processed notification gives exactly the same
+evidence as processing it in the compressed representation. A neutral event
+increments the retained count; an absorbing event makes its witness true. -/
+theorem record_counts (neutral absorbing : Nat) (event : Bool) :
+    (ofCounts neutral absorbing).record event =
+      ofCounts (recordCounts (neutral, absorbing) event).1
+        (recordCounts (neutral, absorbing) event).2 := by
+  cases event <;> simp [record, recordCounts, ofCounts]
+
+/-- Compressing the two exact counts commutes with every finite sequence of
+processed operand notifications, including repeated events. Induction applies
+`record_counts` to the next event and then preserves the remaining sequence.
+Correct counting of distinct operand occurrences is a separate caller premise. -/
+theorem records_counts (events : List Bool) (neutral absorbing : Nat) :
+    events.foldl record (ofCounts neutral absorbing) =
+      ofCounts (events.foldl recordCounts (neutral, absorbing)).1
+        (events.foldl recordCounts (neutral, absorbing)).2 := by
+  induction events generalizing neutral absorbing with
+  | nil => rfl
+  | cons event rest ih =>
+    simp only [List.foldl_cons, record_counts]
+    exact ih (recordCounts (neutral, absorbing) event).1
+      (recordCounts (neutral, absorbing) event).2
+
+/-- The compressed state preserves the three counter observations used by chain
+propagation: an absorbing witness, all operands neutral, and one operand left
+without an absorbing witness. The last condition only permits a unit scan;
+the chain's required polarity and the remaining operand still need checking. -/
+theorem propagation_observations (neutral absorbing arity : Nat) :
+    let evidence := ofCounts neutral absorbing
+    (evidence.absorbing = true ↔ absorbing ≠ 0) ∧
+      (evidence.neutral = arity ↔ neutral = arity) ∧
+      ((evidence.absorbing = false ∧ evidence.neutral + 1 = arity) ↔
+        (absorbing = 0 ∧ neutral + 1 = arity)) := by
+  simp [ofCounts]
+
+end ChainEvidence
 
 end Zetesis.FormulaBounds

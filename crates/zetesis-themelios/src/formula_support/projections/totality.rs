@@ -2,8 +2,9 @@
 //!
 //! Final emission, hybrid capture and admitted hybrid checks share this gate
 //! over the same completed source carrier. Each expression in a flat constraint
-//! is either a leaf or reads one source variable covered by an ordinary positive
-//! atom column. Successful evaluation on that entire
+//! is either a leaf, reads one source variable covered by an ordinary positive
+//! atom column, or has checked sums and differences over several numeric column
+//! bounds. Successful evaluation on that entire
 //! column domain covers every complete rule binding, including rows a scalar
 //! equality later excludes. An arithmetic failure declines the optimization;
 //! the original complete traversal remains responsible for its diagnostics.
@@ -13,6 +14,7 @@
 //! of candidate selection. Missing frozen values remain errors.
 
 use themelios_program::program::DefaultNegation;
+use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::TemplateTerm;
 
 use super::{Projections, tick};
@@ -22,14 +24,39 @@ use crate::formula_support::relations::{Postings, RelationRows};
 use crate::formula_support::{Computation, Context, Evaluation, Support};
 use crate::{ExpansionFailure, FormulaFailure};
 
+mod numeric;
+
+/// Preparation serves either partial scalar families or total arithmetic whose
+/// certificate admits incremental source checking. This does not redefine which
+/// source families require a defined witness: that remains `family::partial`.
+pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
+    let arithmetic = |expression: &Expression| {
+        expression.nodes.iter().any(|operation| {
+            matches!(
+                operation,
+                Operation::Unary(UnaryOp::Negate, _)
+                    | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _)
+            )
+        })
+    };
+    crate::formula_support::family::partial(literals)
+        || literals.iter().any(|literal| match literal {
+            LiteralIr::Compare(left, _, right) => arithmetic(left) || arithmetic(right),
+            LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(arithmetic),
+            _ => false,
+        })
+}
+
 struct Domain<'source> {
     rows: &'source RelationRows<'source>,
     column: usize,
 }
 
 impl<'a> Projections<'a> {
-    /// The caller retains Complete coverage for source-family evidence. A
-    /// successful result permits only ordinary post-admission row selection.
+    /// Use completed, candidate-independent source columns. Success establishes
+    /// scalar totality for complete positive bindings and permits post-admission
+    /// selection. Source-family evidence cursors must still traverse their
+    /// complete families.
     pub(in crate::formula_support) fn total_constraint(
         &mut self,
         rule: &'a RuleIr,
@@ -163,7 +190,7 @@ impl<'a> Projections<'a> {
             return Ok(false);
         };
         if !inputs.all(|input| input == slot) {
-            return Ok(false);
+            return numeric::total(expression, literals, support, context);
         }
         let Some(domain) = domain(slot, literals, support, context)? else {
             return Ok(false);

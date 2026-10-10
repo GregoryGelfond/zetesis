@@ -3,8 +3,9 @@
 //! The caller supplies an upper bound on every count throughout its lifetime.
 //! Narrowing supplies the largest chain length or initial per-atom parent
 //! occurrence count, retaining distinct nodes that carry the same atom. A
-//! counter is incremented once per newly learned chain operand, or decremented
-//! from its initial parent-occurrence count. The width is decided from the
+//! chain counter is incremented once per processed neutral operand; absorbing
+//! operands use a separate witness bit. A ranking counter is decremented from
+//! its initial parent-occurrence count. The width is decided from the
 //! bound when the knowledge is created ([`compact_fits`]) and never changes, so the
 //! propagation loop works on one concrete width without a per-access choice.
 //! Copies own their arrays independently; no width changes the arithmetic

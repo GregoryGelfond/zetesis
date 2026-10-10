@@ -1282,7 +1282,10 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
-        if self.coverage != Coverage::Complete || self.source_evidence || self.delta.is_some() {
+        if (self.coverage != Coverage::Complete && !projections::needs_totality(&rule.body))
+            || self.source_evidence
+            || self.delta.is_some()
+        {
             return Ok(false);
         }
         if !std::ptr::eq(self.literals, rule.body.as_slice()) {

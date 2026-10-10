@@ -27,8 +27,7 @@ fn copied_counts<A: Count, B: Count>(counts: &Counters<A>) -> Counters<B> {
 fn copied_known<A: Count, B: Count>(known: &Known<A>) -> Known<B> {
     Known {
         masks: known.masks.clone(),
-        sure_operands: copied_counts(&known.sure_operands),
-        never_operands: copied_counts(&known.never_operands),
+        neutral_operands: copied_counts(&known.neutral_operands),
         unknown: copied_counts(&known.unknown),
         seeded: known.seeded,
     }
@@ -56,14 +55,10 @@ pub(super) fn compact32(knowledge: &Knowledge) -> Knowledge {
     }
 }
 
-/// The three counter arrays of any width, as native values.
-fn counts(knowledge: &Knowledge) -> [Vec<usize>; 3] {
-    fn arrays<C: Count>(known: &Known<C>) -> [Vec<usize>; 3] {
-        [
-            values(&known.sure_operands),
-            values(&known.never_operands),
-            values(&known.unknown),
-        ]
+/// The two counter arrays of any width, as native values.
+fn counts(knowledge: &Knowledge) -> [Vec<usize>; 2] {
+    fn arrays<C: Count>(known: &Known<C>) -> [Vec<usize>; 2] {
+        [values(&known.neutral_operands), values(&known.unknown)]
     }
     match &knowledge.width {
         Width::Compact16(k) => arrays(k),
@@ -74,8 +69,10 @@ fn counts(knowledge: &Knowledge) -> [Vec<usize>; 3] {
 
 fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     assert_eq!(left.masks.slices(), right.masks.slices());
-    assert_eq!(values(&left.sure_operands), values(&right.sure_operands));
-    assert_eq!(values(&left.never_operands), values(&right.never_operands));
+    assert_eq!(
+        values(&left.neutral_operands),
+        values(&right.neutral_operands)
+    );
     assert_eq!(values(&left.unknown), values(&right.unknown));
     assert_eq!(left.seeded, right.seeded);
 }
@@ -218,13 +215,13 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
             &cancellation,
         )
         .unwrap();
-    assert_ne!(counts(&child)[..2], counts(&before)[..2]);
+    assert_ne!(counts(&child), counts(&before));
     same_knowledge(&parent, &before);
 }
 
 fn counter_bytes(knowledge: &Knowledge) -> u128 {
     fn bytes<C: Count>(known: &Known<C>) -> u128 {
-        [&known.sure_operands, &known.never_operands, &known.unknown]
+        [&known.neutral_operands, &known.unknown]
             .into_iter()
             .map(Counters::allocated_bytes)
             .sum()
@@ -240,7 +237,7 @@ fn counter_bytes(knowledge: &Knowledge) -> u128 {
 fn compact_counters_reduce_clone_payload() {
     let atoms = 4096;
     let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
-    // Disjoint four-operand chains exercise both per-chain arrays as well as
+    // Disjoint four-operand chains exercise per-chain neutral counts as well as
     // atom occurrence counts. No solving or timing claim relies on this graph.
     for first in (0..atoms).step_by(4) {
         nodes.push(Node::or_pair([first, first + 1]));
@@ -257,7 +254,7 @@ fn compact_counters_reduce_clone_payload() {
     let narrower = Narrower::new(&theory);
     let compact = narrower.knowledge();
     let native = native(&compact);
-    let values = atoms + 2 * narrower.chains.len();
+    let values = atoms + narrower.chains.len();
     let compact_bytes = counter_bytes(&compact);
     let native_bytes = counter_bytes(&native);
     let width = size_of::<u16>().min(size_of::<usize>()) as u128;
@@ -361,7 +358,7 @@ fn atom_counts_include_every_node_occurrence() {
         assert!(narrower.chains.is_empty());
         assert_eq!(narrower.counter_bound, occurrences);
         assert_bound_width(&knowledge, occurrences);
-        assert_eq!(counts(&knowledge)[2], [occurrences]);
+        assert_eq!(counts(&knowledge)[1], [occurrences]);
         let mut region = Region::all_open(1);
         assert!(region.hold(0));
         narrower
@@ -374,6 +371,6 @@ fn atom_counts_include_every_node_occurrence() {
                 &Cancellation::default(),
             )
             .unwrap();
-        assert_eq!(counts(&knowledge)[2], [0]);
+        assert_eq!(counts(&knowledge)[1], [0]);
     }
 }

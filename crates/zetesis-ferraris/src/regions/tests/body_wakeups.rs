@@ -87,8 +87,7 @@ fn same_knowledge(left: &Knowledge, right: &Knowledge) {
     let (left, right) = (super::compact(left), super::compact(right));
     assert_eq!(left.masks.slices(), right.masks.slices());
     for (left, right) in [
-        (&left.sure_operands, &right.sure_operands),
-        (&left.never_operands, &right.never_operands),
+        (&left.neutral_operands, &right.neutral_operands),
         (&left.unknown, &right.unknown),
     ] {
         assert_eq!(left.len(), right.len());
